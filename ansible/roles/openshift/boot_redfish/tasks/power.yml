@@ -1,0 +1,320 @@
+---
+- name: Resolve virtual media transfer protocol
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_transfer_protocol: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('scheme') | upper }}"
+  changed_when: false
+
+- name: Initialize Redfish virtual media insertion status
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_attached: false
+    bootwright_redfish_vmedia_resource_attached: false
+    bootwright_redfish_vmedia_task_attached: false
+    bootwright_redfish_insert_task_status:
+      attempt: 0
+      insertStatus: not attempted
+      url: ""
+      httpStatus: not attempted
+      taskState: ""
+      taskStatus: ""
+      messages: []
+      attempts: 0
+    bootwright_redfish_vmedia_status:
+      insertAttempt: 0
+      member: "{{ bootwright_redfish_vmedia_member }}"
+      status: not attempted
+      inserted: false
+      image: ""
+      imageName: ""
+      connectedVia: ""
+      mediaTypes: []
+      attempts: 0
+      requestedTransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
+      observedTransferProtocolType: ""
+      verifyCertificateStatus: not attempted
+      verifyCertificate: ""
+      securityServiceMember: "{{ bootwright_redfish_security_service_member | default('') }}"
+      securityServiceStatus: not attempted
+      httpsTransferCertVerificationSupported: false
+      httpsTransferCertVerification: ""
+      httpsTransferCertVerificationPatchStatus: not attempted
+      patchFallbackStatus: not attempted
+      insertStatus: not attempted
+      insertTaskURL: ""
+      insertTaskHTTPStatus: not attempted
+      insertTaskState: ""
+      insertTaskStatus: ""
+      insertTaskMessages: []
+      insertTaskMounted: false
+  changed_when: false
+
+- name: Refresh Redfish manager SecurityService for HTTPS file transfer
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_security_service_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - (bootwright_redfish_security_service_member | default('') | length) > 0
+
+- name: Resolve Redfish HTTPS transfer certificate verification setting
+  ansible.builtin.set_fact:
+    bootwright_redfish_security_service_https_transfer_supported: >-
+      {{
+        (bootwright_redfish_security_service_probe.status | default(0) | int) == 200
+        and
+        ('HttpsTransferCertVerification' in (bootwright_redfish_security_service_probe.json | default({})))
+      }}
+    bootwright_redfish_security_service_https_transfer_enabled: "{{ (bootwright_redfish_security_service_probe.json | default({})).HttpsTransferCertVerification | default(false) | bool }}"
+    bootwright_redfish_security_service_if_match: >-
+      {{
+        (bootwright_redfish_security_service_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_security_service_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_security_service_probe.headers | default({})).etag | default('', true), true)
+        | default('*', true)
+      }}
+  changed_when: false
+  when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+
+- name: Disable HTTPS transfer certificate verification for BMC media fetch
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_security_service_if_match }}"
+    body_format: json
+    body:
+      HttpsTransferCertVerification: false
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_security_service_https_transfer_patch
+  failed_when: false
+  changed_when: (bootwright_redfish_security_service_https_transfer_patch.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+    - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
+    - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
+
+- name: Capture Redfish HTTPS transfer certificate verification status
+  ansible.builtin.set_fact:
+    bootwright_redfish_security_service_status:
+      member: "{{ bootwright_redfish_security_service_member | default('') }}"
+      status: >-
+        {{
+          bootwright_redfish_security_service_probe.status | default('unknown')
+          if ((bootwright_redfish_vmedia_transfer_protocol == 'HTTPS') and ((bootwright_redfish_security_service_member | default('') | length) > 0))
+          else 'not attempted'
+        }}
+      httpsTransferCertVerificationSupported: "{{ bootwright_redfish_security_service_https_transfer_supported | default(false) | bool }}"
+      httpsTransferCertVerification: "{{ (bootwright_redfish_security_service_probe.json | default({})).HttpsTransferCertVerification | default('', true) }}"
+      httpsTransferCertVerificationPatchStatus: >-
+        {{
+          bootwright_redfish_security_service_https_transfer_patch.status | default('unknown')
+          if (
+            (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS')
+            and (bootwright_redfish_security_service_https_transfer_supported | default(false) | bool)
+            and (bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool)
+          )
+          else 'already disabled'
+          if (
+            (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS')
+            and (bootwright_redfish_security_service_https_transfer_supported | default(false) | bool)
+          )
+          else 'unsupported'
+          if (
+            (bootwright_redfish_vmedia_transfer_protocol == 'HTTPS')
+            and ((bootwright_redfish_security_service_member | default('') | length) > 0)
+          )
+          else 'not attempted'
+        }}
+  changed_when: false
+
+- name: Retry Redfish virtual media insertion until attached
+  ansible.builtin.include_tasks:
+    file: insert_media_attempt.yml
+    apply:
+      when: not (bootwright_redfish_vmedia_attached | bool)
+  loop: "{{ range(1, (bootwright_redfish_insert_media_retries | int) + 1) | list }}"
+  loop_control:
+    loop_var: bootwright_redfish_insert_media_attempt
+  when: not (bootwright_redfish_vmedia_attached | bool)
+
+- name: Confirm agent ISO is attached as virtual media
+  ansible.builtin.assert:
+    that:
+      - bootwright_redfish_vmedia_attached | bool
+    fail_msg: >-
+      Redfish did not attach the requested agent ISO for
+      {{ bootwright_redfish_vmedia_status.member }} after
+      {{ bootwright_redfish_vmedia_status.insertAttempt }} of
+      {{ bootwright_redfish_insert_media_retries }} InsertMedia attempt(s).
+      Expected Image={{ bootwright_component.boot.agentIso.fetchUrl }};
+      last InsertMedia HTTP status={{ bootwright_redfish_vmedia_status.insertStatus }},
+      task URL={{ bootwright_redfish_vmedia_status.insertTaskURL | default('<not reported>', true) }},
+      task HTTP status={{ bootwright_redfish_vmedia_status.insertTaskHTTPStatus }},
+      TaskState={{ bootwright_redfish_vmedia_status.insertTaskState | default('<not reported>', true) }},
+      TaskStatus={{ bootwright_redfish_vmedia_status.insertTaskStatus | default('<not reported>', true) }},
+      TaskMounted={{ bootwright_redfish_vmedia_status.insertTaskMounted | default(false) }},
+      Task messages={{ bootwright_redfish_vmedia_status.insertTaskMessages }};
+      observed
+      Inserted={{ bootwright_redfish_vmedia_status.inserted }},
+      Image={{ bootwright_redfish_vmedia_status.image | default('<not reported>', true) }},
+      ImageName={{ bootwright_redfish_vmedia_status.imageName | default('<not reported>', true) }},
+      ConnectedVia={{ bootwright_redfish_vmedia_status.connectedVia | default('<not reported>', true) }},
+      MediaTypes={{ bootwright_redfish_vmedia_status.mediaTypes }},
+      Requested TransferProtocolType={{ bootwright_redfish_vmedia_status.requestedTransferProtocolType }},
+      Observed TransferProtocolType={{ bootwright_redfish_vmedia_status.observedTransferProtocolType | default('<not reported>', true) }},
+      VerifyCertificate PATCH status={{ bootwright_redfish_vmedia_status.verifyCertificateStatus }},
+      Observed VerifyCertificate={{ bootwright_redfish_vmedia_status.verifyCertificate if (bootwright_redfish_vmedia_status.verifyCertificate | string | length) > 0 else '<not reported>' }},
+      SecurityService={{ bootwright_redfish_vmedia_status.securityServiceMember | default('<not reported>', true) }},
+      SecurityService HTTP status={{ bootwright_redfish_vmedia_status.securityServiceStatus | default('<not reported>', true) }},
+      HttpsTransferCertVerification supported={{ bootwright_redfish_vmedia_status.httpsTransferCertVerificationSupported }},
+      Observed HttpsTransferCertVerification={{ bootwright_redfish_vmedia_status.httpsTransferCertVerification if (bootwright_redfish_vmedia_status.httpsTransferCertVerification | string | length) > 0 else '<not reported>' }},
+      HttpsTransferCertVerification PATCH status={{ bootwright_redfish_vmedia_status.httpsTransferCertVerificationPatchStatus }},
+      Attach PATCH fallback status={{ bootwright_redfish_vmedia_status.patchFallbackStatus }},
+      Resource attachment match={{ bootwright_redfish_vmedia_resource_attached | default(false) }},
+      InsertMedia task attachment accepted={{ bootwright_redfish_vmedia_task_attached | default(false) }},
+      HTTP status={{ bootwright_redfish_vmedia_status.status }}.
+    success_msg: >-
+      Redfish virtual media attachment accepted on {{ bootwright_redfish_vmedia_status.member }}
+      via {{ 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},
+      with Image={{ bootwright_redfish_vmedia_status.image | default('<not reported>', true) }},
+      Inserted={{ bootwright_redfish_vmedia_status.inserted }},
+      ConnectedVia={{ bootwright_redfish_vmedia_status.connectedVia | default('<not reported>', true) }},
+      Observed TransferProtocolType={{ bootwright_redfish_vmedia_status.observedTransferProtocolType | default('<not reported>', true) }},
+      task URL={{ bootwright_redfish_vmedia_status.insertTaskURL | default('<not reported>', true) }},
+      TaskState={{ bootwright_redfish_vmedia_status.insertTaskState | default('<not reported>', true) }},
+      TaskStatus={{ bootwright_redfish_vmedia_status.insertTaskStatus | default('<not reported>', true) }},
+      TaskMounted={{ bootwright_redfish_vmedia_status.insertTaskMounted | default(false) }}.
+
+- name: Refresh Redfish system metadata before CD boot override
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_system_boot_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Resolve Redfish system PATCH precondition
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_if_match: >-
+      {{
+        (bootwright_redfish_system_boot_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_system_boot_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_system_boot_probe.headers | default({})).etag | default('', true), true)
+        | default('*', true)
+      }}
+  changed_when: false
+  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Set one-time boot to CD
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_system_if_match }}"
+    body_format: json
+    body:
+      Boot:
+        BootSourceOverrideEnabled: Once
+        BootSourceOverrideTarget: Cd
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_boot_source_patch
+  failed_when: false
+  changed_when: (bootwright_redfish_boot_source_patch.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Confirm one-time CD boot override was accepted
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_boot_source_patch.status | default(0) | int) in [200, 202, 204]
+    fail_msg: >-
+      Redfish BMC rejected one-time CD boot override for system
+      {{ bootwright_redfish_system_id }} with HTTP status
+      {{ bootwright_redfish_boot_source_patch.status | default('unknown') }}.
+      The agent ISO is attached, but the node may continue booting from disk.
+    success_msg: >-
+      Redfish one-time CD boot override accepted for system
+      {{ bootwright_redfish_system_id }}.
+  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Force power off (tolerate already-off)
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/Actions/ComputerSystem.Reset"
+    method: POST
+    body_format: json
+    body:
+      ResetType: ForceOff
+    status_code: [200, 202, 204, 409]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Wait for power state to settle
+  ansible.builtin.pause:
+    seconds: "{{ bootwright_redfish_power_settle_seconds }}"
+
+- name: Power on
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/Actions/ComputerSystem.Reset"
+    method: POST
+    body_format: json
+    body:
+      ResetType: "On"
+    status_code: [200, 202, 204]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Wait for BMC to report PowerState=On
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    method: GET
+    return_content: true
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_power_state_probe
+  until: (bootwright_redfish_power_state_probe.json.PowerState | default('')) == 'On'
+  retries: "{{ bootwright_redfish_power_state_retries }}"
+  delay: "{{ bootwright_redfish_power_state_delay_seconds }}"
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"

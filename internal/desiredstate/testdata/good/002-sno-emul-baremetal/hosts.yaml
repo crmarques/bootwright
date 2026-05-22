@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: services-host
+spec:
+  addresses:
+    - name: ssh
+      address: localhost
+    - name: bmc-lan
+      address: 192.168.132.1
+
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: provider-host-ssh
+
+  capabilities:
+    - container-runtime

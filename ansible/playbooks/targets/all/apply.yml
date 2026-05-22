@@ -1,0 +1,3 @@
+---
+- import_playbook: ../infra/apply.yml
+- import_playbook: ../clusters/apply.yml

@@ -1,0 +1,31 @@
+---
+- name: Stop boot artifact HTTP service
+  ansible.builtin.systemd_service:
+    name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Close boot artifact port on host firewall (firewalld)
+  ansible.posix.firewalld:
+    port: "{{ bootwright_component.port | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  failed_when: false
+
+- name: Remove boot artifact HTTP unit
+  ansible.builtin.file:
+    path: "/etc/systemd/system/bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
+    state: absent
+  register: bootwright_artifacts_unit_remove
+
+- name: Reload systemd after boot artifact cleanup
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: bootwright_artifacts_unit_remove.changed
+
+- name: Remove boot artifact state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_host_state_dir }}/artifacts/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    state: absent

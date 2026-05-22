@@ -1,0 +1,30 @@
+---
+- name: Wait for agent install completion when install is not already complete
+  when: not bootwright_install_already_complete
+  block:
+    - name: Wait for agent install completion
+      ansible.builtin.command:
+        argv:
+          - "{{ bootwright_openshift_install_path }}"
+          - agent
+          - wait-for
+          - install-complete
+          - --dir
+          - "{{ bootwright_install_work_dir }}"
+          - --log-level
+          - info
+      async: "{{ bootwright_install_timeout_seconds }}"
+      poll: 300
+      register: bootwright_install_wait
+      changed_when: bootwright_install_wait.rc == 0
+      delegate_to: localhost
+      become: false
+
+    - name: Record kubeconfig path
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_work_dir }}/kubeconfig.path"
+        mode: "0600"
+        content: "{{ bootwright_install_work_dir }}/auth/kubeconfig\n"
+      when: bootwright_install_wait.rc == 0
+      delegate_to: localhost
+      become: false

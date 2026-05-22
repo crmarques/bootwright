@@ -1,0 +1,21 @@
+[req]
+prompt = no
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+
+[req_distinguished_name]
+CN = {{ bootwright_component.tls.commonName }}
+
+[v3_req]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+{% for name in bootwright_component.tls.dnsNames | default([]) %}
+DNS.{{ loop.index }} = {{ name }}
+{% endfor %}
+{% for address in bootwright_component.tls.ipAddresses | default([]) %}
+IP.{{ loop.index }} = {{ address }}
+{% endfor %}

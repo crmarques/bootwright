@@ -1,0 +1,54 @@
+---
+- name: Boot selected machine when install is not already complete
+  when: not bootwright_install_already_complete
+  block:
+    - name: Read generated agent ISO path
+      ansible.builtin.slurp:
+        src: "{{ bootwright_install_work_dir }}/agent-iso.path"
+      register: bootwright_agent_iso_path_file
+      delegate_to: localhost
+      become: false
+
+    - name: Set agent ISO path
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_path: "{{ bootwright_agent_iso_path_file.content | b64decode | trim }}"
+      changed_when: false
+
+    - name: Resolve selected machine from task variable
+      ansible.builtin.set_fact:
+        bootwright_boot_components: >-
+          {{
+            bootwright_current_cluster.components
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('name', 'equalto', bootwright_task_machine_name)
+            | list
+          }}
+      when: bootwright_task_machine_name is defined
+      changed_when: false
+
+    - name: Resolve selected machine from loop variable
+      ansible.builtin.set_fact:
+        bootwright_boot_components: "{{ [bootwright_component] }}"
+      when:
+        - bootwright_task_machine_name is not defined
+        - bootwright_component is defined
+      changed_when: false
+
+    - name: Assert selected machine exists
+      ansible.builtin.assert:
+        that:
+          - bootwright_boot_components | default([]) | length == 1
+        fail_msg: >-
+          Could not resolve machine {{ bootwright_task_machine_name | default('<unset>') }}
+          for cluster {{ bootwright_current_cluster.name }}.
+
+    - name: Set selected machine component
+      ansible.builtin.set_fact:
+        bootwright_selected_component: "{{ bootwright_boot_components | first }}"
+      changed_when: false
+
+    - name: Boot selected machine via its substrate-specific driver
+      ansible.builtin.include_role:
+        name: "{{ bootwright_selected_component.bootApplyRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_selected_component }}"

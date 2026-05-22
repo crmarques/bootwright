@@ -1,0 +1,14 @@
+---
+- name: Create cluster agent ISO
+  ansible.builtin.import_tasks: create_iso.yml
+
+- name: Boot each machine via its substrate-specific driver
+  ansible.builtin.include_tasks: boot_machine.yml
+  loop: "{{ bootwright_current_cluster.components | selectattr('kind', 'equalto', 'machines') | list }}"
+  loop_control:
+    loop_var: bootwright_component
+    label: "{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }} via {{ bootwright_component.bootApplyRole }}"
+  when: not bootwright_install_already_complete
+
+- name: Wait for agent install completion
+  ansible.builtin.import_tasks: wait_install.yml

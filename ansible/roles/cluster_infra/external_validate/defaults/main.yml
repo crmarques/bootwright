@@ -1,0 +1,5 @@
+---
+# Defaults for cluster_infra/external_validate. Tunables exposed so a
+# field run can override timeouts without editing the role.
+bootwright_external_validate_bmc_timeout: 10
+bootwright_external_validate_proxy_timeout: 5

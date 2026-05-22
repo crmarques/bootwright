@@ -1,0 +1,283 @@
+---
+- name: Discover Redfish System ID
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems"
+    method: GET
+    return_content: true
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_systems_list
+  when: (bootwright_component.boot.redfish.systemId | default('') | length) == 0
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve effective Redfish System ID
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_id: >-
+      {{
+        bootwright_component.boot.redfish.systemId
+        if (bootwright_component.boot.redfish.systemId | default('') | length) > 0
+        else (bootwright_redfish_systems_list.json.Members | first)['@odata.id'] | basename
+      }}
+  changed_when: false
+
+- name: List VirtualMedia members for the target system
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vm_list
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: List Redfish managers
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Managers"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_managers_list
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: List VirtualMedia members for Redfish managers
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ item['@odata.id'] }}/VirtualMedia"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  loop: "{{ bootwright_redfish_managers_list.json.Members | default([]) }}"
+  register: bootwright_redfish_manager_vm_lists
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Initialize Redfish VirtualMedia member references
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member_refs: []
+  changed_when: false
+
+- name: Collect Redfish manager VirtualMedia member references
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member_refs: "{{ bootwright_redfish_vmedia_member_refs + (item.json.Members | default([])) }}"
+  loop: "{{ bootwright_redfish_manager_vm_lists.results | default([]) }}"
+  when: (item.status | default(0) | int) == 200
+  changed_when: false
+
+- name: Collect Redfish system VirtualMedia member references
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member_refs: "{{ bootwright_redfish_vmedia_member_refs + (bootwright_redfish_vm_list.json.Members | default([])) }}"
+  when: (bootwright_redfish_vm_list.status | default(0) | int) == 200
+  changed_when: false
+
+- name: Probe Redfish VirtualMedia members
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ item['@odata.id'] }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  loop: "{{ bootwright_redfish_vmedia_member_refs }}"
+  register: bootwright_redfish_vmedia_member_probes
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve Redfish VirtualMedia candidates
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_candidates: "{{ bootwright_redfish_vmedia_member_probes.results | default([]) | selectattr('status', 'eq', 200) | map(attribute='json') | list }}"
+  changed_when: false
+
+- name: Confirm Redfish VirtualMedia candidates were found
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_vmedia_candidates | length) > 0
+    fail_msg: >-
+      Redfish BMC did not expose any usable VirtualMedia members under
+      /redfish/v1/Managers/*/VirtualMedia or
+      /redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia.
+
+- name: Resolve VirtualMedia member
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member: >-
+      {{
+        (
+          bootwright_redfish_vmedia_candidates
+          | selectattr('@odata.id', 'search', '(?i)/Cd$|/CD1$|/CD$|/Dvd$|/DVD1$|/DVD$')
+          | map(attribute='@odata.id')
+          | list
+          | first
+        )
+        | default((bootwright_redfish_vmedia_candidates | first)['@odata.id'])
+      }}
+    bootwright_redfish_vmedia_selected: >-
+      {{
+        (
+          bootwright_redfish_vmedia_candidates
+          | selectattr('@odata.id', 'search', '(?i)/Cd$|/CD1$|/CD$|/Dvd$|/DVD1$|/DVD$')
+          | list
+          | first
+        )
+        | default(bootwright_redfish_vmedia_candidates | first)
+      }}
+  changed_when: false
+
+- name: Resolve Redfish manager member for VirtualMedia
+  ansible.builtin.set_fact:
+    bootwright_redfish_manager_member: >-
+      {{
+        (bootwright_redfish_vmedia_member | regex_replace('/VirtualMedia/.*$', ''))
+        if (bootwright_redfish_vmedia_member | regex_search('^/redfish/v1/Managers/[^/]+/VirtualMedia/'))
+        else ((bootwright_redfish_managers_list.json.Members | default([]) | map(attribute='@odata.id') | list | first) | default('', true))
+      }}
+  changed_when: false
+
+- name: Resolve Redfish manager SecurityService member
+  ansible.builtin.set_fact:
+    bootwright_redfish_security_service_member: >-
+      {{
+        bootwright_redfish_manager_member ~ '/SecurityService'
+        if (bootwright_redfish_manager_member | length) > 0
+        else ''
+      }}
+  changed_when: false
+
+- name: Resolve VirtualMedia action URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_insert_actions: "{{ bootwright_redfish_vmedia_selected | bootwright_redfish_action_descriptors('#VirtualMedia.InsertMedia') }}"
+    bootwright_redfish_vmedia_eject_actions: "{{ bootwright_redfish_vmedia_selected | bootwright_redfish_action_descriptors('#VirtualMedia.EjectMedia') }}"
+    bootwright_redfish_vmedia_vmm_control_actions: "{{ bootwright_redfish_vmedia_selected | bootwright_redfish_action_descriptors('#VirtualMedia.VmmControl') }}"
+  changed_when: false
+
+- name: Resolve VirtualMedia standard and VMM action candidates
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_standard_insert_target: "{{ (bootwright_redfish_vmedia_insert_actions | selectattr('source', 'equalto', 'standard') | map(attribute='target') | list | first) | default('', true) }}"
+    bootwright_redfish_vmedia_standard_eject_target: "{{ (bootwright_redfish_vmedia_eject_actions | selectattr('source', 'equalto', 'standard') | map(attribute='target') | list | first) | default('', true) }}"
+    bootwright_redfish_vmedia_vmm_actions: "{{ bootwright_redfish_vmedia_vmm_control_actions }}"
+  changed_when: false
+
+- name: Probe Redfish VMM ActionInfo
+  ansible.builtin.uri:
+    url: >-
+      {{
+        item.actionInfo
+        if (item.actionInfo | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ item.actionInfo)
+        if (item.actionInfo | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ item.actionInfo)
+      }}
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  loop: "{{ bootwright_redfish_vmedia_vmm_actions | selectattr('actionInfo', 'defined') | list }}"
+  register: bootwright_redfish_vmedia_vmm_action_info_probes
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - (bootwright_redfish_vmedia_standard_insert_target | length) == 0
+    - (bootwright_redfish_vmedia_vmm_actions | selectattr('actionInfo', 'defined') | list | length) > 0
+
+- name: Resolve supported Redfish VMM actions
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_vmm_supported_actions: "{{ bootwright_redfish_vmedia_vmm_actions | bootwright_redfish_vmm_control_actions((bootwright_redfish_vmedia_vmm_action_info_probes | default({})).results | default([])) }}"
+  changed_when: false
+
+- name: Resolve effective VirtualMedia action targets
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_vmm_control: "{{ (bootwright_redfish_vmedia_standard_insert_target | length) == 0 and (bootwright_redfish_vmedia_vmm_supported_actions | length) > 0 }}"
+    bootwright_redfish_vmedia_action_body_style: "{{ 'standard-insert-media' if (bootwright_redfish_vmedia_standard_insert_target | length) > 0 else 'vmm-control' if (bootwright_redfish_vmedia_vmm_supported_actions | length) > 0 else 'standard-insert-media' }}"
+    bootwright_redfish_vmedia_insert_target: >-
+      {{
+        bootwright_redfish_vmedia_standard_insert_target
+        if (bootwright_redfish_vmedia_standard_insert_target | length) > 0
+        else (bootwright_redfish_vmedia_vmm_supported_actions | map(attribute='target') | list | first)
+        if (bootwright_redfish_vmedia_vmm_supported_actions | length) > 0
+        else bootwright_redfish_vmedia_member ~ '/Actions/VirtualMedia.InsertMedia'
+      }}
+    bootwright_redfish_vmedia_eject_target: >-
+      {{
+        bootwright_redfish_vmedia_standard_eject_target
+        if (bootwright_redfish_vmedia_standard_eject_target | length) > 0
+        else (bootwright_redfish_vmedia_vmm_supported_actions | map(attribute='target') | list | first)
+        if ((bootwright_redfish_vmedia_standard_insert_target | length) == 0 and (bootwright_redfish_vmedia_vmm_supported_actions | length) > 0)
+        else bootwright_redfish_vmedia_member ~ '/Actions/VirtualMedia.EjectMedia'
+      }}
+  changed_when: false
+
+- name: Resolve VirtualMedia absolute action URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_insert_url: >-
+      {{
+        bootwright_redfish_vmedia_insert_target
+        if (bootwright_redfish_vmedia_insert_target | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_vmedia_insert_target)
+        if (bootwright_redfish_vmedia_insert_target | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_vmedia_insert_target)
+      }}
+    bootwright_redfish_vmedia_eject_url: >-
+      {{
+        bootwright_redfish_vmedia_eject_target
+        if (bootwright_redfish_vmedia_eject_target | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_vmedia_eject_target)
+        if (bootwright_redfish_vmedia_eject_target | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_vmedia_eject_target)
+      }}
+  changed_when: false
+
+- name: Resolve VirtualMedia eject request body
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_eject_body: "{{ {'VmmControlType': 'Disconnect'} if (bootwright_redfish_vmedia_vmm_control | bool) else {} }}"
+  changed_when: false
+
+- name: Eject any previously inserted virtual media (idempotent)
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_eject_url }}"
+    method: POST
+    body_format: json
+    body: "{{ bootwright_redfish_vmedia_eject_body }}"
+    status_code: [200, 202, 204, 400, 404, 409, 500]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Run virtual-media backend preparation
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.mediaPrepareRole }}"
+  when:
+    - bootwright_component.mediaPrepareRole is defined
+    - (bootwright_component.mediaPrepareRole | length) > 0

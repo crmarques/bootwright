@@ -1,0 +1,80 @@
+package cli
+
+import (
+	"io"
+
+	"github.com/spf13/cobra"
+
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
+)
+
+// Paths and Ansible --limit groups shared across scope command builders.
+// Centralised so a single edit reaches all three (check/apply/destroy).
+const (
+	preflightPlaybookPath = "playbooks/checks/preflight.yml"
+	// infraAnsibleLimit pins the inventory groups `apply infra` and
+	// `check infra` target. `bootwright_ocp_hosts` (localhost) is
+	// included so the controller-side external_validate play can run
+	// in every context input set — including bare-metal/all-external shapes
+	// like test 002 where the other two groups would otherwise be
+	// empty and ansible would abort with "no hosts to target".
+	infraAnsibleLimit   = "bootwright_provider_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
+	clusterAnsibleLimit = "bootwright_ocp_hosts:bootwright_boot_hosts"
+)
+
+// scopeCommonFlags collects the four flags shared by every scope
+// subcommand (check / apply / destroy). The pointers are bound by
+// registerScopeCommonFlags and read back from the surrounding RunE
+// closure once Cobra has populated them.
+type scopeCommonFlags struct {
+	executable   string
+	hostStateDir string
+	clusterScope string
+	output       string
+}
+
+// registerScopeCommonFlags wires the standard flag set onto cmd and
+// gates --scope on whether the scope accepts cluster-scoped filtering
+// (i.e. infra / cluster / all-for-check-apply; destroy never accepts
+// "all" because allScope.destroyPlaybook is empty).
+func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
+	f.hostStateDir = defaultHostStateDir
+	f.output = outputText
+	cmd.Flags().StringVar(&f.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+	cmd.Flags().StringVar(&f.hostStateDir, "host-state-dir", f.hostStateDir, "root-managed host runtime state directory")
+	cmd.Flags().StringVar(&f.output, "output", f.output, "output format: text|json (json is supported for --dry-run)")
+	if allowClusterScope {
+		cmd.Flags().StringVar(&f.clusterScope, "scope", "", "comma-separated ContainerCluster names to "+scopeAction+" (restricts the matching ClusterInfra/Provider sets)")
+	}
+}
+
+func printBundlePath(stdout io.Writer, bundleDir string) {
+	p := cliout.NewContinuation(stdout)
+	p.Section("Bundle")
+	p.Fields([]cliout.Field{{Key: "ansible bundle", Value: bundleDir}})
+}
+
+// scopeAllowsClusterScope reports whether the --scope flag is meaningful
+// for this command. The "all" scope has no destroyPlaybook so destroy
+// commands exclude it via destroyOnly=true; check/apply include it.
+func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {
+	switch scope.name {
+	case "cluster", "infra":
+		return true
+	case "all":
+		return !destroyOnly
+	default:
+		return false
+	}
+}
+
+func ansibleLimitForScope(name string) string {
+	switch name {
+	case "infra":
+		return infraAnsibleLimit
+	case "cluster":
+		return clusterAnsibleLimit
+	default:
+		return ""
+	}
+}

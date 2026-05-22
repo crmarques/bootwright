@@ -1,0 +1,24 @@
+---
+# External HTTP proxy probe. Picks https first (matches the order
+# host_proxy/facts.yml uses for bootwright_proxy_primary), then falls
+# back to http. Verifies TCP reachability only — an authenticated
+# GET would also exercise outbound internet from the controller,
+# which isn't required by every workflow and would mask the actual
+# "proxy is up" signal we care about.
+
+- name: Resolve proxy probe URL
+  ansible.builtin.set_fact:
+    bootwright_validate_proxy_url: >-
+      {{
+        bootwright_proxy.https
+        if (bootwright_proxy.https | default('') | length) > 0
+        else bootwright_proxy.http
+      }}
+  changed_when: false
+
+- name: "[proxy] Probe TCP {{ bootwright_validate_proxy_url | urlsplit('hostname') }}:{{ bootwright_validate_proxy_url | urlsplit('port') | default(3128, true) }}"
+  ansible.builtin.wait_for:
+    host: "{{ bootwright_validate_proxy_url | urlsplit('hostname') }}"
+    port: "{{ bootwright_validate_proxy_url | urlsplit('port') | default(3128, true) | int }}"
+    timeout: "{{ bootwright_external_validate_proxy_timeout }}"
+    state: started

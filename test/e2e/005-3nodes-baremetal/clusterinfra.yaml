@@ -1,0 +1,56 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: 3-nodes-ocp-baremetal
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      vip: 192.168.140.10
+    apiInt:
+      vip: 192.168.140.10
+    ingress:
+      vip: 192.168.140.11
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: rack1-baremetal-provider
+          name: rack1-srv1
+        networkConfig:
+          ref:
+            name: rack1-bond140-machine
+          addresses:
+            - interface: bond0.140
+              ipv4:
+                - ip: 192.168.140.20
+                  prefix-length: 24
+      - name: master-1
+        from:
+          provider: rack1-baremetal-provider
+          name: rack1-srv2
+        networkConfig:
+          ref:
+            name: rack1-bond140-machine
+          addresses:
+            - interface: bond0.140
+              ipv4:
+                - ip: 192.168.140.21
+                  prefix-length: 24
+      - name: master-2
+        from:
+          provider: rack1-baremetal-provider
+          name: rack1-srv3
+        networkConfig:
+          ref:
+            name: rack1-bond140-machine
+          addresses:
+            - interface: bond0.140
+              ipv4:
+                - ip: 192.168.140.22
+                  prefix-length: 24

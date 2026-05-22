@@ -1,0 +1,62 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: rack1-baremetal-provider
+spec:
+  machines:
+    - name: rack1-srv1
+      baremetal:
+        bootMACAddress: 52:54:00:33:11:10
+        interfaces:
+          - name: primary
+            macAddress: 52:54:00:33:11:10
+        rootDeviceHints:
+          deviceName: /dev/vda
+        bmc:
+          address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+    - name: rack1-srv2
+      baremetal:
+        bootMACAddress: 52:54:00:33:11:11
+        interfaces:
+          - name: primary
+            macAddress: 52:54:00:33:11:11
+        rootDeviceHints:
+          deviceName: /dev/vda
+        bmc:
+          address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+    - name: rack1-srv3
+      baremetal:
+        bootMACAddress: 52:54:00:33:11:12
+        interfaces:
+          - name: primary
+            macAddress: 52:54:00:33:11:12
+        rootDeviceHints:
+          deviceName: /dev/vda
+        bmc:
+          address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: host-services
+spec:
+  artifactPublishers:
+    - name: default
+      http:
+        hostRef:
+          name: services-host
+        routes:
+          redfishVirtualMedia:
+            addressName: bmc-lan

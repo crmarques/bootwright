@@ -1,0 +1,49 @@
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{ bootwright_current_cluster.name }}-{{ node.name }}
+  namespace: {{ node_namespace }}
+  labels:
+    bootwright.io/cluster: {{ bootwright_current_cluster.name }}
+    bootwright.io/node: {{ node.name }}
+    bootwright.io/role: {{ node.role }}
+    bootwright.io/managed-by: bootwright
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        bootwright.io/cluster: {{ bootwright_current_cluster.name }}
+        bootwright.io/node: {{ node.name }}
+        kubevirt.io/vm: {{ bootwright_current_cluster.name }}-{{ node.name }}
+    spec:
+      domain:
+        cpu:
+          cores: {{ node.resources.cpu }}
+        memory:
+          guest: {{ node.resources.memoryMiB }}Mi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+              bootOrder: 2
+          interfaces:
+{% for iface in node.interfaces %}
+            - name: {{ iface.name }}
+              bridge: {}
+{% if iface.macAddress | default('') | length > 0 %}
+              macAddress: "{{ iface.macAddress }}"
+{% endif %}
+{% endfor %}
+      networks:
+{% for iface in node.interfaces %}
+        - name: {{ iface.name }}
+          multus:
+            networkName: {{ iface.networkName }}
+{% endfor %}
+      volumes:
+        - name: root
+          dataVolume:
+            name: {{ bootwright_current_cluster.name }}-{{ node.name }}-root

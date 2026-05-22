@@ -1,0 +1,12 @@
+---
+- name: Fail until KubeVirt substrate is rewired to the new vars contract
+  ansible.builtin.fail:
+    msg: |
+      substrate_kubevirt apply needs migration to the v1alpha1 component
+      shape. Inputs available on `bootwright_component`:
+        from.profile  → bootwright_component.kubevirt.{clusterRef,namespace,storageClassRef}
+        networkConfig → bootwright_component.networkConfig.{ref,addresses}
+        profile       → bootwright_component.profile.{cpu,memoryMiB,diskGiB}
+        networks      → bootwright_current_cluster.networks[].substrate.kubevirt.nad
+      Rewire the existing kubeconfig + DataVolume + VirtualMachine flow
+      around these inputs when adding KubeVirt runtime support.

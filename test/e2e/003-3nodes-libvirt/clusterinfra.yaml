@@ -1,0 +1,94 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: 3-nodes-ocp-libvirt
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      providedBy:
+        loadBalancer: default
+        address: control-plane
+    apiInt:
+      providedBy:
+        loadBalancer: default
+        address: control-plane
+    ingress:
+      providedBy:
+        loadBalancer: default
+        address: apps
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: lab-libvirt-provider
+          profile: compact-control-plane
+        networkConfig:
+          ref:
+            name: cluster-3n-bridge
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.20
+                  prefix-length: 24
+        rootDeviceHints:
+          deviceName: /dev/vda
+      - name: master-1
+        from:
+          provider: lab-libvirt-provider
+          profile: compact-control-plane
+        networkConfig:
+          ref:
+            name: cluster-3n-bridge
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.21
+                  prefix-length: 24
+        rootDeviceHints:
+          deviceName: /dev/vda
+      - name: master-2
+        from:
+          provider: lab-libvirt-provider
+          profile: compact-control-plane
+        networkConfig:
+          ref:
+            name: cluster-3n-bridge
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.22
+                  prefix-length: 24
+        rootDeviceHints:
+          deviceName: /dev/vda
+
+    loadBalancers:
+      - name: default
+        from:
+          provider: lab-libvirt-provider
+          name: default
+        bindAddresses:
+          - name: control-plane
+            ip: 192.168.133.10
+          - name: apps
+            ip: 192.168.133.11
+    proxy:
+      from:
+        provider: lab-libvirt-provider
+        name: default
+      port: 3128
+      bindAddress: 0.0.0.0
+    nameResolution:
+      from:
+        provider: lab-libvirt-provider
+        name: default
+      port: 53
+      bindAddress: 192.168.133.1
+      additionalIngressHosts:
+        - console-openshift-console.apps.3-nodes-ocp-libvirt.bootwright.test
+        - oauth-openshift.apps.3-nodes-ocp-libvirt.bootwright.test

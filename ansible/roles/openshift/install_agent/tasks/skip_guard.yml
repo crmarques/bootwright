@@ -1,0 +1,42 @@
+---
+- name: Stat prior kubeconfig
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
+  register: bootwright_prior_kubeconfig_stat
+  delegate_to: localhost
+  become: false
+
+- name: Probe cluster Available status when prior kubeconfig exists
+  ansible.builtin.command:
+    argv:
+      - oc
+      - --kubeconfig
+      - "{{ bootwright_install_work_dir }}/auth/kubeconfig"
+      - --request-timeout=5s
+      - get
+      - clusterversion
+      - version
+      - -o
+      - 'jsonpath={.status.conditions[?(@.type=="Available")].status}'
+  register: bootwright_install_cluster_available
+  changed_when: false
+  failed_when: false
+  when: bootwright_prior_kubeconfig_stat.stat.exists
+  delegate_to: localhost
+  become: false
+
+- name: Determine whether install can be skipped
+  ansible.builtin.set_fact:
+    bootwright_install_already_complete: >-
+      {{
+        bootwright_prior_kubeconfig_stat.stat.exists
+        and (bootwright_install_cluster_available.stdout | default('') | trim) == 'True'
+      }}
+  changed_when: false
+
+- name: Report skipped install
+  ansible.builtin.debug:
+    msg: >-
+      Skipping install_agent for {{ bootwright_current_cluster.name }} because
+      cluster reports Available=True. Run `bootwright destroy cluster` first to force a reinstall.
+  when: bootwright_install_already_complete

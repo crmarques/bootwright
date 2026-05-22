@@ -1,0 +1,7 @@
+---
+- name: Fail until KubeVirt substrate teardown is rewired
+  ansible.builtin.fail:
+    msg: |
+      substrate_kubevirt destroy needs migration to the v1alpha1 component
+      shape. Mirror substrate_kubevirt/tasks/main.yml when adding runtime
+      support — pair the delete flow with the new component inputs.

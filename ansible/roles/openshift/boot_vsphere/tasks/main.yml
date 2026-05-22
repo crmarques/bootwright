@@ -1,0 +1,4 @@
+---
+- name: boot_vsphere is a scaffold
+  ansible.builtin.fail:
+    msg: "boot_vsphere is a scaffold; pair with substrate_vsphere when adding vSphere support."

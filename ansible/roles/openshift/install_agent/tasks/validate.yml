@@ -1,0 +1,37 @@
+---
+- name: Validate install method is agent
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_cluster.installMethod == 'agent'
+    fail_msg: "install_agent only supports installMethod=agent (got {{ bootwright_current_cluster.installMethod | default('<unset>') }})"
+
+- name: Resolve openshift-install binary
+  ansible.builtin.shell: "command -v {{ bootwright_openshift_install | quote }}"
+  args:
+    executable: /bin/sh
+  register: bootwright_install_lookup
+  changed_when: false
+  failed_when: bootwright_install_lookup.rc != 0
+  delegate_to: localhost
+  become: false
+
+- name: Set openshift-install path
+  ansible.builtin.set_fact:
+    bootwright_openshift_install_path: "{{ bootwright_install_lookup.stdout | trim }}"
+  changed_when: false
+
+- name: Verify rendered install-config exists
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_work_dir }}/install-config.yaml"
+  register: bootwright_install_config_stat
+  delegate_to: localhost
+  become: false
+
+- name: Fail when install-config is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing install-config.yaml at {{ bootwright_install_work_dir }}/install-config.yaml.
+      The bootwright CLI is expected to inline secrets via ResolveInstaller before
+      handing off to Ansible; re-run `bootwright apply cluster` (or
+      `bootwright render installer --resolve-secrets`) to regenerate it.
+  when: not bootwright_install_config_stat.stat.exists

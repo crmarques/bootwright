@@ -1,0 +1,92 @@
+---
+# Provider-host preflight. Verifies the basics Ansible needs to converge
+# the provider layer: ansible transport works, sudo is available, a
+# package manager is present, and (when rendered driver requirements
+# need it) /dev/kvm exists. Pulls in the controller-side external
+# reachability play first so an unreachable BMC / external proxy
+# surfaces in `check infra` too.
+
+- import_playbook: ../layers/cluster_infra/controller_validate.yml
+
+- name: Check provider host prerequisites
+  hosts: bootwright_provider_hosts:bootwright_boot_hosts
+  gather_subset:
+    - "!all"
+    - min
+    - env
+  become: false
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  vars:
+    bootwright_host_kvm_machines: >-
+      {{
+        bootwright_clusters | default([])
+        | map(attribute='components') | flatten
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('requiresKVM', 'defined')
+        | selectattr('requiresKVM', 'equalto', true)
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+
+  pre_tasks:
+    - name: Assert rendered vars contract
+      ansible.builtin.assert:
+        that:
+          - bootwright_environment is mapping
+          - bootwright_hosts is iterable
+          - bootwright_providers is iterable
+          - bootwright_clusters is iterable
+        fail_msg: >-
+          Rendered vars.yaml is missing required top-level facts. The
+          render contract in ansible/VARS_CONTRACT.md was changed without
+          an Ansible update, or vars.yaml was hand-edited. Re-run
+          `bootwright render installer` (or `bootwright check`) from the
+          Go binary to refresh.
+
+  tasks:
+    - name: Verify Ansible transport
+      ansible.builtin.ping:
+      changed_when: false
+
+    - name: Check passwordless sudo
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - -n
+          - "true"
+      register: bootwright_preflight_sudo
+      changed_when: false
+      failed_when: false
+
+    - name: Report sudo status
+      ansible.builtin.debug:
+        msg: >-
+          sudo={{ 'passwordless' if bootwright_preflight_sudo.rc == 0
+                  else 'password-required-or-unavailable' }}
+
+    - name: Detect package manager
+      ansible.builtin.command:
+        argv:
+          - sh
+          - -c
+          - "command -v dnf || command -v yum || command -v apt-get"
+      register: bootwright_preflight_package_manager
+      changed_when: false
+      failed_when: false
+
+    - name: Report package manager
+      ansible.builtin.debug:
+        msg: "packageManager={{ bootwright_preflight_package_manager.stdout | default('missing') }}"
+
+    - name: Check KVM device for libvirt hosts
+      ansible.builtin.stat:
+        path: /dev/kvm
+      register: bootwright_preflight_kvm
+      when: bootwright_host_kvm_machines | length > 0
+
+    - name: Report KVM status
+      ansible.builtin.debug:
+        msg: "/dev/kvm={{ bootwright_preflight_kvm.stat.exists | default(false) }}"
+      when: bootwright_host_kvm_machines | length > 0

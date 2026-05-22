@@ -1,0 +1,54 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-go@v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install Ansible
+        run: >-
+          python3 -m pip install --disable-pip-version-check
+          ansible-core==2.21.0
+
+      - name: Go format
+        run: make check-gofmt
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          "$(go env GOPATH)/bin/staticcheck" ./...
+
+      - name: Python filter tests
+        run: make python-test
+
+      - name: Ansible syntax check
+        run: make ansible-syntax-check
+
+      - name: Repository guardrails
+        run: |
+          make stale-term-check
+          make cli-file-size-check

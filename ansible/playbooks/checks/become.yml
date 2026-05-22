@@ -1,0 +1,15 @@
+---
+- name: Validate Ansible become escalation
+  hosts: "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_hosts:bootwright_boot_hosts') }}"
+  gather_facts: false
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  tasks:
+    - name: Verify become password works
+      ansible.builtin.command:
+        argv:
+          - /bin/sh
+          - -c
+          - "true"
+      changed_when: false

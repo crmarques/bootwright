@@ -1,0 +1,13 @@
+---
+# Per-component layout. `bootwright_component` is the per-loop var set
+# by the provider apply playbook.
+bootwright_squid_root: "{{ bootwright_host_state_dir }}/proxy/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+bootwright_squid_config_dir: "{{ bootwright_squid_root }}/config"
+bootwright_squid_auth_dir: "{{ bootwright_squid_root }}/auth"
+bootwright_squid_cache_dir: "{{ bootwright_squid_root }}/cache"
+bootwright_squid_logs_dir: "{{ bootwright_squid_root }}/logs"
+bootwright_squid_container_name: "bootwright-squid-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+# openEuler Squid 7.5 refuses to run as root — use the image's baked-in
+# squid user (UID 1000). Sync with the squid pin in render/components.go.
+bootwright_squid_runtime_uid: "1000"
+bootwright_squid_runtime_gid: "1000"

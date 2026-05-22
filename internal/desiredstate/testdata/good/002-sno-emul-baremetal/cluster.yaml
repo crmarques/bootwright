@@ -1,0 +1,71 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: sno-emul-baremetal
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.132.10
+    apiInt:
+      externalVip: 192.168.132.10
+    ingress:
+      externalVip: 192.168.132.11
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: rack1-baremetal-provider
+          name: rack1-srv1
+        networkConfig:
+          ref:
+            name: sno-vlan
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.132.20
+                  prefix-length: 24
+        rootDeviceHints:
+          deviceName: /dev/vda
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: sno-emul-baremetal
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+
+  controlPlane:
+    name: master
+    replicas: 1
+
+  compute:
+    - name: worker
+      replicas: 0
+
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef:
+        clusterInfra: sno-emul-baremetal
+        name: master-0

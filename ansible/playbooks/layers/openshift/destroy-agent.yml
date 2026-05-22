@@ -1,0 +1,16 @@
+---
+- name: Destroy OpenShift agent install state
+  hosts: bootwright_ocp_hosts
+  gather_subset:
+    - "!all"
+    - min
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  tasks:
+    - name: Destroy per cluster
+      ansible.builtin.include_role:
+        name: destroy_agent
+      loop: "{{ bootwright_clusters | default([]) }}"
+      loop_control:
+        loop_var: bootwright_current_cluster
+        label: "{{ bootwright_current_cluster.name }}"

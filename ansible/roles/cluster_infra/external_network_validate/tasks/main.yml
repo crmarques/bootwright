@@ -1,0 +1,40 @@
+---
+# External-LB / external-DNS diagnostics. Runs when a cluster's endpoints use
+# externalVip — the operator owns the LB and DNS records. This reports hostname
+# resolution from the provider-host vantage point without failing the apply.
+
+- name: Resolve external endpoints for this cluster
+  ansible.builtin.set_fact:
+    bootwright_external_endpoints: >-
+      {{
+        bootwright_current_cluster.endpoints
+        | selectattr('externalVip', 'defined')
+        | list
+      }}
+  changed_when: false
+
+- name: Skip when no external endpoints
+  ansible.builtin.meta: end_play
+  when: bootwright_external_endpoints | length == 0
+
+- name: Validate external endpoint DNS
+  ansible.builtin.command:
+    argv:
+      - getent
+      - hosts
+      - "{{ item.name }}.{{ bootwright_current_cluster.name }}.{{ bootwright_environment.baseDomain }}"
+  loop: "{{ bootwright_external_endpoints }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.externalVip }}"
+  changed_when: false
+  failed_when: false
+  register: bootwright_external_dns_probes
+
+- name: Report DNS probe results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.name }}.{{ bootwright_current_cluster.name }}.{{ bootwright_environment.baseDomain }}
+      {{ '→ ' ~ item.stdout if item.rc == 0 else '(no resolution; operator must add DNS to ' ~ item.item.externalVip ~ ')' }}
+  loop: "{{ bootwright_external_dns_probes.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"

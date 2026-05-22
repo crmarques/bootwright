@@ -1,0 +1,43 @@
+---
+# Controller-side reachability validation for the *narrow* set of
+# operator-owned components that Bootwright itself drives during
+# `apply infra`: external Redfish BMCs (Bootwright issues virtual-media
+# Inserts and power cycles against them) and external HTTP proxies
+# (Bootwright reaches the public registry / mirror through them).
+#
+# Operator-owned DNS resolvers and external load-balancer VIPs are
+# *not* probed during infra apply. In real scenarios the operator's
+# DNS / LB often live on networks the provider host can't reach
+# (different VLAN, firewall, jump host), so a fail-closed probe from
+# this vantage point produces false negatives. `install_agent`
+# validates controller-visible DNS immediately before boot because
+# openshift-install waits for the API from the controller host.
+#
+# Skips by design:
+#   - bmcRole == 'emulated': sushy-tools is stood up by `apply infra`;
+#     it's not reachable yet.
+#   - managed proxy components: bootwright stands up Squid; not
+#     reachable yet.
+#
+# Fail-closed: every probe registers and the role fails the play if
+# any single check fails. The operator fixes the underlying issue and
+# re-runs.
+
+- name: Run per-cluster external validation
+  ansible.builtin.include_tasks: per_cluster.yml
+  loop: "{{ bootwright_clusters | default([]) }}"
+  loop_control:
+    loop_var: bootwright_validate_cluster
+    label: "{{ bootwright_validate_cluster.name }}"
+
+- name: Run external-proxy validation
+  ansible.builtin.include_tasks: proxy.yml
+  when:
+    - bootwright_proxy is defined
+    - (bootwright_proxy.http | default('') | length) > 0 or (bootwright_proxy.https | default('') | length) > 0
+    # Skip when any cluster declares a managed proxy — that Squid
+    # will be stood up by `apply infra` and is not yet reachable.
+    - (bootwright_clusters | default([])
+       | map(attribute='components') | flatten
+       | selectattr('kind', 'equalto', 'proxy')
+       | list | length) == 0

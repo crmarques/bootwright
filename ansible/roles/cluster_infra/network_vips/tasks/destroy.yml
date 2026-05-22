@@ -1,0 +1,56 @@
+---
+# Mirror of main.yml for teardown. Consumes the same renderer-projected
+# `attachment` block per frontend — no cluster-network lookup here.
+
+- name: Resolve LB components for this cluster on this host
+  ansible.builtin.set_fact:
+    bootwright_vip_lbs: >-
+      {{
+        bootwright_current_cluster.components
+        | selectattr('kind', 'equalto', 'loadBalancer')
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Collect libvirt-attached VIP targets
+  ansible.builtin.set_fact:
+    bootwright_vip_libvirt_targets: >-
+      {{
+        bootwright_vip_lbs
+        | map(attribute='frontends')
+        | flatten
+        | selectattr('attachment', 'defined')
+        | selectattr('attachment.kind', 'equalto', 'libvirt')
+        | selectattr('vip', 'defined')
+        | rejectattr('vip', 'equalto', '')
+        | list
+      }}
+  changed_when: false
+
+- name: Detach VIPs from libvirt bridge
+  ansible.builtin.command:
+    argv:
+      - ip
+      - address
+      - del
+      - "{{ item.vip }}/{{ item.attachment.libvirt.prefix }}"
+      - dev
+      - "{{ item.attachment.libvirt.bridge }}"
+  register: bootwright_vip_unplumb
+  changed_when: bootwright_vip_unplumb.rc == 0
+  # Tolerate the address already being gone — frontends that share a
+  # VIP (e.g. api + apiInt on the same address) emit one detach entry
+  # each, and the second `ip address del` would otherwise fail
+  # "Address not found" (newer iproute2) / "Cannot assign requested
+  # address" (older). "Cannot find device" tolerates the bridge being
+  # gone too.
+  failed_when:
+    - bootwright_vip_unplumb.rc != 0
+    - "'Address not found' not in (bootwright_vip_unplumb.stderr | default(''))"
+    - "'Cannot assign requested address' not in (bootwright_vip_unplumb.stderr | default(''))"
+    - "'Cannot find device' not in (bootwright_vip_unplumb.stderr | default(''))"
+  loop: "{{ bootwright_vip_libvirt_targets }}"
+  loop_control:
+    label: "{{ item.vip }} dev {{ item.attachment.libvirt.bridge }}"

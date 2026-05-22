@@ -1,0 +1,6 @@
+---
+- import_playbook: ../../checks/become.yml
+  vars:
+    bootwright_become_check_hosts: bootwright_provider_hosts
+
+- import_playbook: ../../layers/providers/destroy.yml

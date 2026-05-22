@@ -1,0 +1,24 @@
+---
+# Per-cluster validation. Probes only what Bootwright itself drives
+# during apply: external Redfish BMCs. Operator-owned external LB
+# VIPs and external DNS resolvers are intentionally not probed here
+# — see the rationale in main.yml.
+
+- name: "[{{ bootwright_validate_cluster.name }}] Compute external probe targets"
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_machines: >-
+      {{
+        bootwright_validate_cluster.components
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('bmcRole', 'equalto', 'redfish')
+        | selectattr('boot', 'defined')
+        | list
+      }}
+  changed_when: false
+
+- name: "[{{ bootwright_validate_cluster.name }}] Validate external Redfish BMCs"
+  ansible.builtin.include_tasks: bmc.yml
+  loop: "{{ bootwright_validate_bmc_machines }}"
+  loop_control:
+    loop_var: bootwright_validate_machine
+    label: "{{ bootwright_validate_machine.name }} @ {{ bootwright_validate_machine.boot.redfish.baseUrl }}"

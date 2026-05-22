@@ -1,0 +1,28 @@
+---
+- name: Validate BMC emulator service inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.bmcEmulated is mapping
+      - bootwright_component.configConsistent | bool
+      - (bootwright_component.bmcEmulated.libvirtURI | default('') | length) > 0
+      - (bootwright_component.bmcEmulated.port | default(0) | int) > 0
+      - (bootwright_component.bmcEmulated.vmediaPort | default(0) | int) > 0
+    fail_msg: >-
+      bmc_emulated requires one provider-level BMC configuration. Check that all
+      machines grouped under provider {{ bootwright_component.providerName }}
+      use matching libvirt URI, bind address, ports, auth, and sushy version.
+
+- name: Resolve BMC emulator facts
+  ansible.builtin.import_tasks: facts.yml
+
+- name: Prepare BMC emulator host
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Configure BMC emulator credentials
+  ansible.builtin.import_tasks: credentials.yml
+
+- name: Configure sushy-emulator
+  ansible.builtin.import_tasks: sushy.yml
+
+- name: Configure vmedia HTTP service
+  ansible.builtin.import_tasks: vmedia.yml

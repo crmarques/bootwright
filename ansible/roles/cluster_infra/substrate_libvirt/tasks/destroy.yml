@@ -1,0 +1,31 @@
+---
+- name: Resolve libvirt destroy identifiers
+  ansible.builtin.set_fact:
+    bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
+    bootwright_libvirt_machine_root: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+  changed_when: false
+
+- name: Stop libvirt domain
+  community.libvirt.virt:
+    name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    state: destroyed
+  failed_when: false
+
+- name: Undefine libvirt domain
+  community.libvirt.virt:
+    command: undefine
+    name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    flags:
+      - keep_nvram
+  failed_when: false
+
+- name: Remove machine state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_libvirt_machine_root }}"
+    state: absent
+
+- name: Remove libvirt network (idempotent across machines)
+  community.libvirt.virt_net:
+    name: "{{ bootwright_libvirt_network_name }}"
+    state: absent
+  failed_when: false

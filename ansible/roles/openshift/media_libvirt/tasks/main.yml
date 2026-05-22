@@ -1,0 +1,15 @@
+---
+- name: Clean stale running virtual media before insert
+  ansible.builtin.include_tasks: eject.yml
+  vars:
+    bootwright_libvirt_media_scope: running
+    bootwright_libvirt_media_domblklist_args: []
+    bootwright_libvirt_media_change_media_arg: --live
+
+- name: Clean stale persistent virtual media before insert
+  ansible.builtin.include_tasks: eject.yml
+  vars:
+    bootwright_libvirt_media_scope: persistent
+    bootwright_libvirt_media_domblklist_args:
+      - --inactive
+    bootwright_libvirt_media_change_media_arg: --config

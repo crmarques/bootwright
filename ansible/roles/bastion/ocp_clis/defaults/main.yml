@@ -1,0 +1,8 @@
+---
+bootwright_clis_mirror_base: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
+bootwright_clis_install_dir: "/usr/local/bin"
+bootwright_clis_tmp_parent: "/tmp"
+bootwright_clis_packages:
+  - openssh-clients
+  - nmstate
+  - procps-ng

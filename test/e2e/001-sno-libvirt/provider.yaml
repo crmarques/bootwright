@@ -1,0 +1,47 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt-provider
+spec:
+  machineProfiles:
+    - name: sno
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      libvirt:
+        hostRef:
+          name: lab-host
+        uri: qemu:///system
+        bmcEmulationDefaults:
+          enabled: true
+          protocol: redfish
+          auth:
+            credentialRef:
+              name: bmc-credentials
+
+  loadBalancers:
+    - name: default
+      haProxy:
+        hostRef:
+          name: lab-host
+
+  artifactPublishers:
+    - name: default
+      http:
+        hostRef:
+          name: lab-host
+        routes:
+          clusterInstall:
+            addressName: host
+
+  proxies:
+    - name: default
+      squid:
+        hostRef:
+          name: lab-host
+
+  dns:
+    - name: default
+      dnsmasq:
+        hostRef:
+          name: lab-host

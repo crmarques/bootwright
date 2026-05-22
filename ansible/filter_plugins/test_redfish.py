@@ -1,0 +1,288 @@
+from __future__ import annotations
+
+import importlib.util
+import pathlib
+import unittest
+
+
+_HERE = pathlib.Path(__file__).resolve().parent
+_spec = importlib.util.spec_from_file_location(
+    "_bootwright_redfish_filter",
+    _HERE / "redfish.py",
+)
+assert _spec and _spec.loader, "could not locate redfish.py next to test file"
+_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+
+bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descriptors
+bootwright_redfish_action_targets = _module.bootwright_redfish_action_targets
+bootwright_redfish_vmedia_attached = _module.bootwright_redfish_vmedia_attached
+bootwright_redfish_vmm_control_actions = _module.bootwright_redfish_vmm_control_actions
+
+
+class RedfishActionDescriptors(unittest.TestCase):
+    def test_finds_top_level_and_direct_oem_actions(self):
+        resource = {
+            "Actions": {
+                "#VirtualMedia.VmmControl": {
+                    "target": "/top/oem/vmm",
+                    "@Redfish.ActionInfo": "/top/action-info",
+                },
+            },
+            "Oem": {
+                "VendorA": {
+                    "Actions": {
+                        "#VirtualMedia.VmmControl": {
+                            "target": "/vendor-a/vmm",
+                            "@Redfish.ActionInfo": "/vendor-a/action-info",
+                        },
+                    },
+                },
+                "VendorB": {
+                    "Deep": [
+                        {
+                            "Actions": {
+                                "#VirtualMedia.VmmControl": {"target": "/vendor-b/vmm"},
+                            },
+                        },
+                    ],
+                },
+            },
+        }
+
+        got = bootwright_redfish_action_descriptors(resource, "#VirtualMedia.VmmControl")
+
+        self.assertEqual(
+            got,
+            [
+                {
+                    "target": "/top/oem/vmm",
+                    "path": "Actions.#VirtualMedia.VmmControl",
+                    "source": "standard",
+                    "actionInfo": "/top/action-info",
+                },
+                {
+                    "target": "/vendor-a/vmm",
+                    "path": "Oem.VendorA.Actions.#VirtualMedia.VmmControl",
+                    "source": "oem",
+                    "actionInfo": "/vendor-a/action-info",
+                    "vendor": "VendorA",
+                },
+            ],
+        )
+        self.assertEqual(
+            bootwright_redfish_action_targets(resource, "#VirtualMedia.VmmControl"),
+            ["/top/oem/vmm", "/vendor-a/vmm"],
+        )
+
+    def test_ignores_missing_or_invalid_targets(self):
+        resource = {
+            "Actions": {
+                "#VirtualMedia.VmmControl": {},
+            },
+            "Oem": {
+                "Vendor": {
+                    "Actions": {
+                        "#VirtualMedia.VmmControl": {"target": 10},
+                    },
+                },
+            },
+        }
+
+        got = bootwright_redfish_action_descriptors(resource, "#VirtualMedia.VmmControl")
+
+        self.assertEqual(got, [])
+
+    def test_bad_input_returns_empty_list(self):
+        self.assertEqual(bootwright_redfish_action_descriptors([], "#VirtualMedia.VmmControl"), [])
+        self.assertEqual(bootwright_redfish_action_descriptors({}, ""), [])
+
+
+class RedfishVMMControlActions(unittest.TestCase):
+    def test_keeps_vmm_actions_with_compatible_action_info(self):
+        actions = [
+            {
+                "target": "/vendor-a/vmm",
+                "path": "Oem.VendorA.Actions.#VirtualMedia.VmmControl",
+                "source": "oem",
+                "actionInfo": "/vendor-a/action-info",
+                "vendor": "VendorA",
+            },
+            {
+                "target": "/vendor-b/vmm",
+                "path": "Oem.VendorB.Actions.#VirtualMedia.VmmControl",
+                "source": "oem",
+                "actionInfo": "/vendor-b/action-info",
+                "vendor": "VendorB",
+            },
+        ]
+        results = [
+            {
+                "status": 200,
+                "item": actions[0],
+                "json": {
+                    "Parameters": [
+                        {"Name": "Image", "Required": True},
+                        {
+                            "Name": "VmmControlType",
+                            "AllowableValues": ["Connect", "Disconnect"],
+                        },
+                    ],
+                },
+            },
+            {
+                "status": 200,
+                "item": actions[1],
+                "json": {
+                    "Parameters": [
+                        {"Name": "Image", "Required": True},
+                        {
+                            "Name": "VmmControlType",
+                            "AllowableValues": ["Mount", "Unmount"],
+                        },
+                    ],
+                },
+            },
+        ]
+
+        got = bootwright_redfish_vmm_control_actions(actions, results)
+
+        self.assertEqual(got, [dict(actions[0], bodyStyle="vmm-control")])
+
+    def test_rejects_unadvertised_or_unreachable_action_info(self):
+        actions = [
+            {
+                "target": "/vendor-a/vmm",
+                "path": "Oem.VendorA.Actions.#VirtualMedia.VmmControl",
+                "source": "oem",
+                "vendor": "VendorA",
+            },
+            {
+                "target": "/vendor-b/vmm",
+                "path": "Oem.VendorB.Actions.#VirtualMedia.VmmControl",
+                "source": "oem",
+                "actionInfo": "/vendor-b/action-info",
+                "vendor": "VendorB",
+            },
+        ]
+        results = [
+            {
+                "status": 404,
+                "item": actions[1],
+                "json": {},
+            },
+        ]
+
+        got = bootwright_redfish_vmm_control_actions(actions, results)
+
+        self.assertEqual(got, [])
+
+
+class RedfishVirtualMediaAttached(unittest.TestCase):
+    def test_accepts_exact_image_match(self):
+        resource = {
+            "Inserted": True,
+            "Image": "https://bastion.example:8443/agent.iso",
+            "TransferProtocolType": "HTTPS",
+        }
+
+        self.assertTrue(
+            bootwright_redfish_vmedia_attached(
+                resource,
+                "https://bastion.example:8443/agent.iso",
+                "HTTPS",
+            )
+        )
+
+    def test_accepts_bmc_image_url_with_elided_port(self):
+        resource = {
+            "Inserted": True,
+            "Image": "https://10.7.3.1/agent-ocp-nprd-01.iso",
+            "ImageName": "agent-ocp-nprd-01.iso",
+            "TransferProtocolType": "HTTPS",
+        }
+
+        self.assertTrue(
+            bootwright_redfish_vmedia_attached(
+                resource,
+                "https://10.7.3.1:8443/agent-ocp-nprd-01.iso",
+                "HTTPS",
+            )
+        )
+
+    def test_accepts_inserted_media_without_reported_image(self):
+        resource = {
+            "Inserted": True,
+            "TransferProtocolType": "HTTPS",
+        }
+
+        self.assertTrue(
+            bootwright_redfish_vmedia_attached(
+                resource,
+                "https://bastion.example:8443/agent.iso",
+                "HTTPS",
+            )
+        )
+
+    def test_rejects_wrong_host_or_protocol(self):
+        self.assertFalse(
+            bootwright_redfish_vmedia_attached(
+                {
+                    "Inserted": True,
+                    "Image": "https://other.example/agent.iso",
+                    "TransferProtocolType": "HTTPS",
+                },
+                "https://bastion.example:8443/agent.iso",
+                "HTTPS",
+            )
+        )
+        self.assertFalse(
+            bootwright_redfish_vmedia_attached(
+                {
+                    "Inserted": True,
+                    "Image": "https://bastion.example/agent.iso",
+                    "TransferProtocolType": "CIFS",
+                },
+                "https://bastion.example:8443/agent.iso",
+                "HTTPS",
+            )
+        )
+
+    def test_rejects_not_inserted_media(self):
+        self.assertFalse(
+            bootwright_redfish_vmedia_attached(
+                {
+                    "Inserted": False,
+                    "Image": "https://bastion.example:8443/agent.iso",
+                    "TransferProtocolType": "HTTPS",
+                },
+                "https://bastion.example:8443/agent.iso",
+                "HTTPS",
+            )
+        )
+
+
+class FilterRegistration(unittest.TestCase):
+    def test_filter_module_exposes_filter(self):
+        registered = _module.FilterModule().filters()
+        self.assertIn("bootwright_redfish_action_descriptors", registered)
+        self.assertIn("bootwright_redfish_action_targets", registered)
+        self.assertIn("bootwright_redfish_vmedia_attached", registered)
+        self.assertIn("bootwright_redfish_vmm_control_actions", registered)
+        self.assertIs(
+            registered["bootwright_redfish_action_descriptors"],
+            bootwright_redfish_action_descriptors,
+        )
+        self.assertIs(registered["bootwright_redfish_action_targets"], bootwright_redfish_action_targets)
+        self.assertIs(
+            registered["bootwright_redfish_vmedia_attached"],
+            bootwright_redfish_vmedia_attached,
+        )
+        self.assertIs(
+            registered["bootwright_redfish_vmm_control_actions"],
+            bootwright_redfish_vmm_control_actions,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

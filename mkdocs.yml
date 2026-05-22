@@ -1,0 +1,113 @@
+site_name: Bootwright
+site_description: Desired-state orchestration for OpenShift cluster fleets
+site_url: https://crmarques.github.io/bootwright/
+repo_url: https://github.com/crmarques/bootwright
+repo_name: crmarques/bootwright
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  logo: assets/images/logo-simple.png
+  favicon: assets/images/favicon-32.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.tabs.link
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/crmarques/bootwright
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts: concepts.md
+  - Advanced:
+      - advanced/index.md
+      - Providers: advanced/providers.md
+      - Networking and Load Balancing: advanced/networking.md
+      - Proxy and Disconnected Installs: advanced/proxy-and-disconnected.md
+      - Secrets: advanced/secrets.md
+      - Architecture: advanced/architecture.md
+  - Troubleshooting: troubleshooting.md
+
+copyright: >-
+  Bootwright is an open-source desired-state orchestrator.
+  Binding contracts live under
+  <a href="https://github.com/crmarques/bootwright/tree/main/specs"><code>/specs/</code></a>.

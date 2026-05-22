@@ -1,0 +1,15 @@
+[Unit]
+Description=Bootwright sushy-emulator ({{ bootwright_bmc_provider_name }})
+After=libvirtd.service network-online.target
+Wants=libvirtd.service network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ bootwright_bmc_root }}/venv/bin/sushy-emulator --config {{ bootwright_bmc_root }}/sushy.conf
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:{{ bootwright_bmc_root }}/sushy.log
+StandardError=append:{{ bootwright_bmc_root }}/sushy.log
+
+[Install]
+WantedBy=multi-user.target

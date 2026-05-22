@@ -1,0 +1,15 @@
+---
+- name: Validate Redfish boot inputs and stage ISO
+  ansible.builtin.import_tasks: validate_stage.yml
+
+- name: Load Redfish credentials
+  ansible.builtin.import_tasks: credentials.yml
+
+- name: Prepare Redfish virtual media
+  ansible.builtin.import_tasks: media_prepare.yml
+
+- name: Power node from virtual media
+  ansible.builtin.import_tasks: power.yml
+
+- name: Set post-boot Redfish boot device
+  ansible.builtin.import_tasks: post_boot.yml

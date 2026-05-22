@@ -1,0 +1,55 @@
+# Minimal bastion image for the 005-3nodes-baremetal e2e case.
+#
+# Bootwright installs the managed Ansible runtime, OpenShift CLIs, and provider
+# host dependencies. The image carries only bootstrap tools needed before
+# Bootwright can manage itself: a same-name non-root user, sudo, git for
+# `bootwright context init`, and base TLS/archive utilities.
+#
+# Build:
+#   podman build -t bootwright-bastion \
+#     -f test/e2e/005-3nodes-baremetal/Containerfile \
+#     --build-arg UID=$(id -u) \
+#     --build-arg GID=$(id -g) \
+#     --build-arg USER=$(id -un) \
+#     --build-arg HTTP_PROXY="${HTTP_PROXY:-}" \
+#     --build-arg HTTPS_PROXY="${HTTPS_PROXY:-}" \
+#     --build-arg NO_PROXY="${NO_PROXY:-}" \
+#     --build-arg http_proxy="${http_proxy:-}" \
+#     --build-arg https_proxy="${https_proxy:-}" \
+#     --build-arg no_proxy="${no_proxy:-}" \
+#     .
+
+FROM registry.access.redhat.com/ubi9/ubi:9.7
+
+ARG UID=1000
+ARG GID=1000
+ARG USER=bootwright
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+
+RUN dnf install -y \
+        sudo \
+        ca-certificates \
+        git \
+        tar \
+        gzip \
+        which \
+    && dnf clean all
+
+RUN if ! getent group ${GID} >/dev/null; then groupadd -g ${GID} ${USER}; fi \
+    && if ! id -u ${UID} >/dev/null 2>&1; then useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USER}; fi \
+    && install -d -m 0750 /etc/sudoers.d \
+    && printf '%s ALL=(ALL) NOPASSWD: ALL\n' "${USER}" > /etc/sudoers.d/${USER} \
+    && chmod 0440 /etc/sudoers.d/${USER}
+
+COPY --chmod=0755 bin/bootwright /usr/local/bin/bootwright
+
+USER ${USER}
+WORKDIR /home/${USER}
+ENV PATH=/usr/local/bin:/usr/bin:/bin
+
+CMD ["bash"]

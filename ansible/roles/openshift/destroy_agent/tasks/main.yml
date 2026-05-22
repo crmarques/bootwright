@@ -1,0 +1,26 @@
+---
+# Tear down the agent install state for one cluster. Runs on
+# bootwright_ocp_hosts (localhost) and removes the rendered work-dir
+# under `state-dir/runtime/<cluster>/installer/`. Per-machine
+# virtual-media cleanup is owned by the rendered boot/media driver roles.
+
+- name: Resolve installer work dir
+  ansible.builtin.set_fact:
+    bootwright_install_work_dir: "{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}/installer"
+  changed_when: false
+
+- name: Stop stale installer processes
+  ansible.builtin.include_role:
+    name: process_cleanup
+    apply:
+      delegate_to: localhost
+      become: false
+  vars:
+    bootwright_process_cleanup_pattern: "runtime/{{ bootwright_current_cluster.name }}/installer"
+
+- name: Remove installer work dir
+  ansible.builtin.file:
+    path: "{{ bootwright_install_work_dir }}"
+    state: absent
+  delegate_to: localhost
+  become: false

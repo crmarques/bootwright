@@ -1,0 +1,41 @@
+---
+# Per-cluster substrate convergence. Runs once per cluster on the
+# provider host that hosts each machine substrate. Currently iterates
+# all clusters; future scoping (`--scope a,b`) is handled by the
+# renderer reducing `bootwright_clusters` to the selected entries.
+
+- name: Apply cluster infrastructure
+  # bootwright_infra_hosts is the renderer-emitted group of hosts that
+  # back a cluster machine substrate (libvirt hostRefs today). A host
+  # not consuming any cluster substrate is not in the group, so the
+  # earlier "skip when no work" guard is no longer needed.
+  hosts: bootwright_infra_hosts
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  vars:
+    bootwright_host_machine_components: >-
+      {{
+        bootwright_clusters | default([])
+        | map(attribute='components') | flatten
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_clusters: >-
+      {{
+        bootwright_host_machine_components
+        | map(attribute='clusterName')
+        | unique | list
+      }}
+
+  tasks:
+    - name: Dispatch substrate per cluster on this host
+      ansible.builtin.include_tasks: per_cluster.yml
+      loop: "{{ bootwright_host_clusters }}"
+      loop_control:
+        loop_var: bootwright_cluster_name

@@ -1,0 +1,6 @@
+---
+bootwright_host_base_packages:
+  - python3
+  - python3-pip
+  - tar
+  - gzip

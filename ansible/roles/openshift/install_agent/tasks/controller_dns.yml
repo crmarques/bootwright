@@ -1,0 +1,69 @@
+---
+- name: Build cluster endpoint DNS probes
+  ansible.builtin.set_fact:
+    bootwright_endpoint_dns_targets: >-
+      {%- set targets = [] -%}
+      {%- for ep in bootwright_current_cluster.endpoints | selectattr('address', 'defined') | list -%}
+      {%- if ep.name == 'api' -%}
+      {%- set hostname = 'api.' ~ bootwright_current_cluster.name ~ '.' ~ bootwright_environment.baseDomain -%}
+      {%- elif ep.name in ['apiInt', 'api-int'] -%}
+      {%- set hostname = 'api-int.' ~ bootwright_current_cluster.name ~ '.' ~ bootwright_environment.baseDomain -%}
+      {%- elif ep.name == 'ingress' -%}
+      {%- set hostname = 'console-openshift-console.apps.' ~ bootwright_current_cluster.name ~ '.' ~ bootwright_environment.baseDomain -%}
+      {%- else -%}
+      {%- set hostname = ep.name ~ '.' ~ bootwright_current_cluster.name ~ '.' ~ bootwright_environment.baseDomain -%}
+      {%- endif -%}
+      {%- set _ = targets.append({'endpoint': ep.name, 'hostname': hostname, 'address': ep.address}) -%}
+      {%- endfor -%}
+      {{ targets }}
+  changed_when: false
+
+- name: Resolve cluster endpoint DNS from controller
+  ansible.builtin.command:
+    argv:
+      - getent
+      - hosts
+      - "{{ item.hostname }}"
+  loop: "{{ bootwright_endpoint_dns_targets }}"
+  loop_control:
+    label: "{{ item.hostname }} (expected {{ item.address }})"
+  register: bootwright_endpoint_dns_probes
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  delegate_to: localhost
+  become: false
+
+- name: Collect controller-side DNS failures
+  ansible.builtin.set_fact:
+    bootwright_controller_dns_failures: >-
+      {%- set failures = [] -%}
+      {%- for r in bootwright_endpoint_dns_probes.results | default([]) -%}
+      {%- set answers = (r.stdout | default('')).split() -%}
+      {%- if r.rc != 0 or r.item.address not in answers -%}
+      {%- set _ = failures.append({
+            'hostname': r.item.hostname,
+            'expected': r.item.address,
+            'got': (answers | join(', ')) or '<no resolution>',
+          }) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ failures }}
+  changed_when: false
+
+- name: Fail when cluster endpoint names are not controller-visible
+  ansible.builtin.fail:
+    msg: |-
+      Controller-side DNS preflight failed for cluster
+      {{ bootwright_current_cluster.name }}. openshift-install polls the
+      API from this host, so it must resolve every cluster endpoint
+      hostname here BEFORE we boot nodes.
+
+      Failures (hostname / expected -> got):
+      {% for f in bootwright_controller_dns_failures %}
+        - {{ f.hostname }}: {{ f.expected }} -> {{ f.got }}
+      {% endfor %}
+
+      Configure controller-visible DNS for these endpoint names, then
+      re-run `bootwright apply cluster`.
+  when: bootwright_controller_dns_failures | length > 0

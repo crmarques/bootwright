@@ -1,0 +1,3 @@
+---
+bootwright_libvirt_media_eject_retries: 10
+bootwright_libvirt_media_eject_delay_seconds: 2

@@ -1,0 +1,62 @@
+---
+# Converges one dnsmasq capability on this provider host. The renderer
+# projects `bootwright_component` with:
+#   { kind, providerName, name, hostRef, hostAddress,
+#     realisation: 'dnsmasq', hostRecords: [...], domainRecords: [...] }
+# This role writes a dnsmasq config that resolves endpoint host records
+# and apps-domain records for every cluster assigned to this DNS capability.
+
+- name: Install dnsmasq packages
+  ansible.builtin.package:
+    name:
+      - podman
+    state: present
+
+- name: Create dnsmasq state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ bootwright_dnsmasq_root }}"
+    - "{{ bootwright_dnsmasq_dropin_dir }}"
+
+- name: Render dnsmasq config
+  ansible.builtin.template:
+    src: dnsmasq.conf.j2
+    dest: "{{ bootwright_dnsmasq_root }}/dnsmasq.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_dnsmasq_config
+
+- name: Run dnsmasq container
+  containers.podman.podman_container:
+    name: "{{ bootwright_dnsmasq_container_name }}"
+    image: "{{ bootwright_component.image }}"
+    state: started
+    recreate: "{{ bootwright_dnsmasq_config.changed }}"
+    network: host
+    user: "0:0"
+    cap_add: ['NET_ADMIN']
+    restart_policy: unless-stopped
+    pull: missing
+    labels:
+      bootwright.kind: nameResolution
+      bootwright.provider: "{{ bootwright_component.providerName }}"
+      bootwright.name: "{{ bootwright_component.name }}"
+    volumes:
+      - "{{ bootwright_dnsmasq_root }}/dnsmasq.conf:/etc/dnsmasq.conf:ro,Z"
+      - "{{ bootwright_dnsmasq_dropin_dir }}:/etc/dnsmasq.d:ro,Z"
+    command:
+      - --conf-file=/etc/dnsmasq.conf
+
+- name: Open DNS port on host firewall
+  ansible.posix.firewalld:
+    port: "53/udp"
+    state: enabled
+    permanent: true
+    immediate: true
+  when: bootwright_firewalld_available | default(false)

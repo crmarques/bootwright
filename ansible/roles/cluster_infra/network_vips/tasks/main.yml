@@ -1,0 +1,58 @@
+---
+# Attaches managed-load-balancer VIPs to the cluster's L2 fabric on
+# this host. Per-cluster: `bootwright_current_cluster` is set by the
+# layer playbook. The renderer projects per-frontend `attachment` on
+# every loadBalancer component:
+#   frontends[].attachment.kind     — libvirt | physical | vsphere | kubevirt
+#   frontends[].attachment.libvirt  — { bridge, prefix } for kind=libvirt
+#
+# The role plumbs VIPs only when attachment.kind == 'libvirt'; for the
+# other kinds the VIP reaches the LB host through fabric the operator
+# owns (physical NIC, vSphere portgroup, kubevirt NAD) and needs no
+# Linux IP plumbing.
+
+- name: Resolve LB components for this cluster on this host
+  ansible.builtin.set_fact:
+    bootwright_vip_lbs: >-
+      {{
+        bootwright_current_cluster.components
+        | selectattr('kind', 'equalto', 'loadBalancer')
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Collect libvirt-attached VIP targets
+  ansible.builtin.set_fact:
+    bootwright_vip_libvirt_targets: >-
+      {{
+        bootwright_vip_lbs
+        | map(attribute='frontends')
+        | flatten
+        | selectattr('attachment', 'defined')
+        | selectattr('attachment.kind', 'equalto', 'libvirt')
+        | selectattr('vip', 'defined')
+        | rejectattr('vip', 'equalto', '')
+        | list
+      }}
+  changed_when: false
+
+- name: Attach VIPs to libvirt bridge
+  ansible.builtin.command:
+    argv:
+      - ip
+      - address
+      - add
+      - "{{ item.vip }}/{{ item.attachment.libvirt.prefix }}"
+      - dev
+      - "{{ item.attachment.libvirt.bridge }}"
+  register: bootwright_vip_plumb
+  changed_when: bootwright_vip_plumb.rc == 0
+  failed_when:
+    - bootwright_vip_plumb.rc != 0
+    - "'File exists' not in (bootwright_vip_plumb.stderr | default(''))"
+    - "'Address already assigned' not in (bootwright_vip_plumb.stderr | default(''))"
+  loop: "{{ bootwright_vip_libvirt_targets }}"
+  loop_control:
+    label: "{{ item.vip }} dev {{ item.attachment.libvirt.bridge }}"

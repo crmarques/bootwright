@@ -1,0 +1,4 @@
+---
+- name: Skip provider BMC service cleanup (bmcRole=redfish)
+  ansible.builtin.debug:
+    msg: "Provider {{ bootwright_component.providerName | default('unknown') }}: external Redfish BMCs; no host state to remove."

@@ -1,0 +1,140 @@
+---
+- name: Validate boot_redfish inputs
+  ansible.builtin.assert:
+    that:
+      - (bootwright_agent_iso_path | default('') | length) > 0
+      - (bootwright_component.boot.redfish.baseUrl | default('') | length) > 0
+      - (bootwright_component.boot.agentIso.stageHost | default('') | length) > 0
+      - (bootwright_component.boot.agentIso.stagePath | default('') | length) > 0
+      - (bootwright_component.boot.agentIso.fetchUrl | default('') | length) > 0
+    fail_msg: >-
+      boot_redfish needs install_agent to set bootwright_agent_iso_path AND
+      the renderer to project bootwright_component.boot.{redfish.baseUrl,
+      agentIso.{stageHost,stagePath,fetchUrl}}. An empty agentIso.* tuple
+      means the cluster has no reachable artifact publisher; declare one
+      InfraProvider.spec.artifactPublishers[].http and set
+      artifactPublishers[].http.routes.redfishVirtualMedia.addressName when
+      the BMC needs a distinct route.
+
+- name: Validate Redfish virtual-media ISO URL scheme
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not (bootwright_component.boot.redfish.setBootSource | default(true) | bool))
+        or
+        ((bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')
+    fail_msg: >-
+      Real Redfish virtual-media boot requires an HTTPS agent ISO fetch URL.
+      The configured URL is {{ bootwright_component.boot.agentIso.fetchUrl }},
+      which makes the BMC send an unsupported TransferProtocolType or connect
+      to the wrong service protocol. Check
+      InfraProvider.spec.artifactPublishers[].http and the selected
+      redfishVirtualMedia route.
+
+- name: Resolve agent ISO staging directory
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
+  changed_when: false
+
+- name: Probe controller-local agent ISO staging directory
+  ansible.builtin.stat:
+    path: "{{ bootwright_agent_iso_stage_dir }}"
+  register: bootwright_agent_iso_local_stage_dir
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+
+- name: Probe controller-local agent ISO staging directory write access
+  ansible.builtin.command:
+    argv:
+      - test
+      - -w
+      - "{{ bootwright_agent_iso_stage_dir }}"
+  register: bootwright_agent_iso_local_stage_dir_writable
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  when: bootwright_agent_iso_local_stage_dir.stat.isdir | default(false) | bool
+
+- name: Select agent ISO staging transport
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_stage_local: >-
+      {{
+        (bootwright_agent_iso_local_stage_dir.stat.isdir | default(false) | bool)
+        and (bootwright_agent_iso_local_stage_dir_writable.rc | default(1) | int == 0)
+      }}
+  changed_when: false
+
+- name: Stage agent ISO at the controller-local BMC fetch location
+  ansible.builtin.copy:
+    src: "{{ bootwright_agent_iso_path }}"
+    dest: "{{ bootwright_component.boot.agentIso.stagePath }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when: bootwright_agent_iso_stage_local | bool
+
+- name: Stage agent ISO at the remote BMC fetch location
+  ansible.builtin.copy:
+    src: "{{ bootwright_agent_iso_path }}"
+    dest: "{{ bootwright_component.boot.agentIso.stagePath }}"
+    owner: root
+    group: root
+    mode: "0644"
+  delegate_to: "{{ bootwright_component.boot.agentIso.stageHost }}"
+  become: true
+  when: not (bootwright_agent_iso_stage_local | bool)
+
+- name: Probe staged agent ISO fetch URL
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+    method: HEAD
+    status_code: [200, 206]
+    validate_certs: false
+    return_content: false
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_agent_iso_fetch_probe
+  delegate_to: "{{ bootwright_component.boot.agentIso.stageHost }}"
+  become: false
+  failed_when: false
+  changed_when: false
+
+- name: Probe staged agent ISO byte-range fetch
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+    method: GET
+    headers:
+      Range: bytes=0-0
+    status_code: [206]
+    validate_certs: false
+    return_content: false
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_agent_iso_range_probe
+  delegate_to: "{{ bootwright_component.boot.agentIso.stageHost }}"
+  become: false
+  failed_when: false
+  changed_when: false
+  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Confirm staged agent ISO fetch URL is reachable
+  ansible.builtin.assert:
+    that:
+      - (bootwright_agent_iso_fetch_probe.status | default(0) | int) in [200, 206]
+      - >-
+        (not (bootwright_component.boot.redfish.setBootSource | default(true) | bool))
+        or
+        ((bootwright_agent_iso_range_probe.status | default(0) | int) == 206)
+    fail_msg: >-
+      The staged agent ISO URL is not reachable from
+      {{ bootwright_component.boot.agentIso.stageHost }}:
+      {{ bootwright_component.boot.agentIso.fetchUrl }} returned HEAD status
+      {{ bootwright_agent_iso_fetch_probe.status | default('unknown') }} and
+      byte-range status
+      {{ bootwright_agent_iso_range_probe.status | default('not attempted') }}.
+      Verify the URL scheme is HTTPS for the Bootwright artifact service, byte
+      ranges return HTTP 206 for real BMCs, the advertised hostname resolves
+      from the artifact host and BMC network, and the artifact service is
+      listening on the configured port. This probe runs from the artifact host;
+      the BMC must also be able to reach the same URL.

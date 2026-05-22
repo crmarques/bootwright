@@ -1,0 +1,11 @@
+---
+# Provider-host no-op: bare-metal Redfish BMCs live off-host and are
+# reached directly from the controller during the OCP install layer
+# (see ansible/roles/openshift/boot_redfish/). Provider-host
+# convergence for bmcRole=redfish has nothing to install.
+- name: Skip provider BMC service (bmcRole=redfish lives off-host)
+  ansible.builtin.debug:
+    msg: >-
+      Provider {{ bootwright_component.providerName | default('unknown') }}: external Redfish BMCs;
+      no provider-host convergence required.
+  changed_when: false

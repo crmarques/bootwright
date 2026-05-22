@@ -1,0 +1,61 @@
+---
+# Converges one HAProxy capability on this provider host. The renderer
+# projects `bootwright_component` with:
+#   { kind, providerName, name, hostRef, hostAddress,
+#     realisation: 'haProxy', frontends: [
+#       { clusterName, name, vip, ports: [{listenPort, targetPort}], backends: [{name, address, role}] }
+#     ] }
+# Two clusters sharing the same (provider, name, hostRef) consume one
+# aggregated instance whose frontends carry their owning clusterName.
+
+- name: Install HAProxy container runtime
+  ansible.builtin.package:
+    name: podman
+    state: present
+
+- name: Enable HAProxy VIP binding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-bootwright-haproxy.conf
+    sysctl_set: true
+    reload: true
+
+- name: Create managed load balancer state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_host_state_dir }}/load-balancers/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ bootwright_host_state_dir }}/load-balancers/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/haproxy.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_haproxy_config
+
+- name: Run HAProxy container
+  containers.podman.podman_container:
+    name: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    image: "{{ bootwright_component.image }}"
+    state: started
+    recreate: "{{ bootwright_haproxy_config.changed }}"
+    network: host
+    user: "0:0"
+    restart_policy: unless-stopped
+    pull: missing
+    labels:
+      bootwright.kind: load-balancer
+      bootwright.provider: "{{ bootwright_component.providerName }}"
+      bootwright.name: "{{ bootwright_component.name }}"
+    volumes:
+      - "{{ bootwright_host_state_dir }}/load-balancers/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z"
+    command:
+      - haproxy
+      - -f
+      - /usr/local/etc/haproxy/haproxy.cfg

@@ -1,0 +1,60 @@
+---
+- name: Create cluster agent ISO when install is not already complete
+  when: not bootwright_install_already_complete
+  block:
+    - name: Remove stale installer state before ISO generation
+      ansible.builtin.file:
+        path: "{{ bootwright_install_work_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - .openshift_install_state.json
+        - .openshift_install.log
+        - agent.x86_64.iso
+        - boot-artifacts
+        - rendezvousIP
+        - auth
+        - agent-iso.path
+      delegate_to: localhost
+      become: false
+
+    - name: Create agent ISO
+      ansible.builtin.command:
+        argv:
+          - "{{ bootwright_openshift_install_path }}"
+          - agent
+          - create
+          - image
+          - --dir
+          - "{{ bootwright_install_work_dir }}"
+        chdir: "{{ bootwright_install_work_dir }}"
+      register: bootwright_iso_create
+      delegate_to: localhost
+      become: false
+      changed_when: bootwright_iso_create.rc == 0
+
+    - name: Locate generated agent ISO
+      ansible.builtin.find:
+        paths: "{{ bootwright_install_work_dir }}"
+        patterns: "agent.*.iso"
+        file_type: file
+      register: bootwright_agent_iso_find
+      delegate_to: localhost
+      become: false
+
+    - name: Assert agent ISO was generated
+      ansible.builtin.fail:
+        msg: "openshift-install did not produce an agent ISO under {{ bootwright_install_work_dir }}"
+      when: bootwright_agent_iso_find.matched == 0
+
+    - name: Set agent ISO path
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_path: "{{ bootwright_agent_iso_find.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | first }}"
+      changed_when: false
+
+    - name: Record generated agent ISO path
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_work_dir }}/agent-iso.path"
+        mode: "0600"
+        content: "{{ bootwright_agent_iso_path }}\n"
+      delegate_to: localhost
+      become: false

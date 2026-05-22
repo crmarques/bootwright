@@ -1,0 +1,8 @@
+cluster: {{ bootwright_current_cluster.name }}
+machine: {{ bootwright_component.name }}
+providerName: {{ bootwright_component.providerName }}
+bmc:
+  address: {{ bootwright_component.bmc.address }}
+  protocol: {{ bootwright_component.bmc.protocol | default('redfish') }}
+  credentialRef: {{ bootwright_component.bmc.credentialRef | default('') }}
+  disableCertificateVerification: {{ bootwright_component.bmc.disableCertificateVerification | default(false) }}

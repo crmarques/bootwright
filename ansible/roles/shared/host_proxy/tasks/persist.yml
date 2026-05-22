@@ -1,0 +1,177 @@
+---
+- name: Persist proxy settings on host
+  when: bootwright_proxy_enabled
+  block:
+    - name: Render /etc/environment proxy lines
+      ansible.builtin.blockinfile:
+        path: /etc/environment
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK bootwright-proxy"
+        block: |
+          HTTP_PROXY={{ bootwright_proxy_http_effective }}
+          HTTPS_PROXY={{ bootwright_proxy_https_effective }}
+          NO_PROXY={{ bootwright_proxy_no }}
+          http_proxy={{ bootwright_proxy_http_effective }}
+          https_proxy={{ bootwright_proxy_https_effective }}
+          no_proxy={{ bootwright_proxy_no }}
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      when: (bootwright_proxy_credentials_ref | length) == 0
+
+    - name: Render /etc/profile.d/bootwright-proxy.sh
+      ansible.builtin.copy:
+        dest: /etc/profile.d/bootwright-proxy.sh
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          export HTTP_PROXY="{{ bootwright_proxy_http_effective }}"
+          export HTTPS_PROXY="{{ bootwright_proxy_https_effective }}"
+          export NO_PROXY="{{ bootwright_proxy_no }}"
+          export http_proxy="{{ bootwright_proxy_http_effective }}"
+          export https_proxy="{{ bootwright_proxy_https_effective }}"
+          export no_proxy="{{ bootwright_proxy_no }}"
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      when: (bootwright_proxy_credentials_ref | length) == 0
+
+    # Strip bare-URL leftovers from older runs; env vars from /etc/environment
+    # beat /root/.pip/pip.conf, causing pip to skip Proxy-Authorization → 407.
+    - name: Remove stale /etc/environment proxy block when creds_ref is set
+      ansible.builtin.blockinfile:
+        path: /etc/environment
+        marker: "# {mark} ANSIBLE MANAGED BLOCK bootwright-proxy"
+        state: absent
+      failed_when: false
+      when: (bootwright_proxy_credentials_ref | length) > 0
+
+    - name: Remove stale /etc/profile.d/bootwright-proxy.sh when creds_ref is set
+      ansible.builtin.file:
+        path: /etc/profile.d/bootwright-proxy.sh
+        state: absent
+      when: (bootwright_proxy_credentials_ref | length) > 0
+
+    - name: Stat dnf.conf
+      ansible.builtin.stat:
+        path: /etc/dnf/dnf.conf
+      register: bootwright_proxy_dnf_stat
+
+    - name: Configure dnf proxy
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        regexp: '^proxy='
+        line: "proxy={{ bootwright_proxy_primary }}"
+        insertafter: '^\[main\]'
+        owner: root
+        group: root
+        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      when: bootwright_proxy_dnf_stat.stat.exists
+
+    - name: Stat yum.conf (RHEL 7 / legacy)
+      ansible.builtin.stat:
+        path: /etc/yum.conf
+      register: bootwright_proxy_yum_stat
+
+    - name: Configure yum proxy
+      ansible.builtin.lineinfile:
+        path: /etc/yum.conf
+        regexp: '^proxy='
+        line: "proxy={{ bootwright_proxy_primary }}"
+        insertafter: '^\[main\]'
+        owner: root
+        group: root
+        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      when: bootwright_proxy_yum_stat.stat.exists
+
+    - name: Ensure pip config directory
+      ansible.builtin.file:
+        path: /root/.pip
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Render pip proxy config
+      ansible.builtin.copy:
+        dest: /root/.pip/pip.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [global]
+          proxy = {{ bootwright_proxy_primary }}
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+
+    # No containers.conf.d drop-in is written: podman reads it for rootless
+    # too, so 0600 breaks non-root `podman` and 0644 leaks credentials.
+    # Containers get HTTP_PROXY via play-level bootwright_proxy_env instead.
+    - name: Remove legacy containers.conf proxy drop-in
+      ansible.builtin.file:
+        path: /etc/containers/containers.conf.d/10-bootwright-proxy.conf
+        state: absent
+
+    - name: Stat legacy containers.conf for cleanup
+      ansible.builtin.stat:
+        path: /etc/containers/containers.conf
+      register: bootwright_proxy_legacy_containers_conf
+
+    - name: Remove legacy proxy block from /etc/containers/containers.conf
+      ansible.builtin.blockinfile:
+        path: /etc/containers/containers.conf
+        marker: "# {mark} ANSIBLE MANAGED BLOCK bootwright-proxy"
+        state: absent
+      when: bootwright_proxy_legacy_containers_conf.stat.exists
+      failed_when: false
+
+    # Older versions locked containers.conf to 0600 to hide credentials;
+    # restore 0644 so non-root users can run `podman info`.
+    - name: Restore distro mode on /etc/containers/containers.conf
+      ansible.builtin.file:
+        path: /etc/containers/containers.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: bootwright_proxy_legacy_containers_conf.stat.exists
+
+    - name: Ensure systemd system.conf.d directory
+      ansible.builtin.file:
+        path: /etc/systemd/system.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render systemd default proxy environment
+      ansible.builtin.copy:
+        dest: /etc/systemd/system.conf.d/10-bootwright-proxy.conf
+        owner: root
+        group: root
+        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
+        content: |
+          [Manager]
+          DefaultEnvironment="HTTP_PROXY={{ bootwright_proxy_http_effective }}" "HTTPS_PROXY={{ bootwright_proxy_https_effective }}" "NO_PROXY={{ bootwright_proxy_no }}" "http_proxy={{ bootwright_proxy_http_effective }}" "https_proxy={{ bootwright_proxy_https_effective }}" "no_proxy={{ bootwright_proxy_no }}"
+      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      register: bootwright_proxy_systemd_dropin
+
+    - name: Reload systemd manager when proxy drop-in changed
+      ansible.builtin.systemd_service:
+        daemon_reexec: true
+      when: bootwright_proxy_systemd_dropin.changed
+
+    # Fail fast: dnf's --setopt=timeout doesn't cover TCP connect, so a
+    # silently-dropped SYN would hang the first dnf task without a probe.
+    - name: Verify proxy TCP reachability
+      ansible.builtin.wait_for:
+        host: "{{ bootwright_proxy_primary | urlsplit('hostname') }}"
+        port: "{{ bootwright_proxy_primary | urlsplit('port') | default(3128, true) }}"
+        timeout: 10
+
+# Strip prior artifacts when disabled: systemd's DefaultEnvironment keeps
+# injecting HTTPS_PROXY into sshd sessions otherwise, so later ansible runs
+# hit a now-absent proxy and fail with 407.
+- name: Remove stale proxy settings when disabled
+  ansible.builtin.import_tasks: cleanup.yml
+  when: not bootwright_proxy_enabled

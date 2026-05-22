@@ -1,0 +1,47 @@
+<domain type='kvm'>
+  <name>{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}</name>
+  <uuid>{{ bootwright_libvirt_domain_uuid }}</uuid>
+  <memory unit='MiB'>{{ bootwright_component.profile.memoryMiB }}</memory>
+  <currentMemory unit='MiB'>{{ bootwright_component.profile.memoryMiB }}</currentMemory>
+  <vcpu placement='static'>{{ bootwright_component.profile.cpu }}</vcpu>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <boot dev='hd'/>
+    <boot dev='cdrom'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <devices>
+    <emulator>{{ bootwright_libvirt_qemu_emulator }}</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ bootwright_libvirt_machine_root }}/disk.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+    <controller type='sata' index='0'/>
+{% set _ifaces = bootwright_component.interfaces | default([]) %}
+{% if _ifaces | length == 0 %}
+{% set _ifaces = [{'name': 'primary'}] %}
+{% endif %}
+{% for iface in _ifaces %}
+    <interface type='network'>
+{% if iface.macAddress | default('') | length > 0 %}
+      <mac address='{{ iface.macAddress }}'/>
+{% endif %}
+      <source network='{{ bootwright_libvirt_network_name }}'/>
+      <model type='virtio'/>
+    </interface>
+{% endfor %}
+    <serial type='pty'/>
+    <console type='pty'/>
+    <graphics type='vnc' autoport='yes' listen='127.0.0.1'/>
+  </devices>
+</domain>

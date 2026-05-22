@@ -1,0 +1,12 @@
+---
+- name: Fail until vSphere substrate support is implemented
+  ansible.builtin.fail:
+    msg: |
+      substrate_vsphere is a scaffold. Inputs available on
+      `bootwright_component`:
+        from.profile  → bootwright_component.vsphere.{vcenters,
+                          failureDomains,nodeNetworking,template}
+        networkConfig → bootwright_component.networkConfig.ref
+        networks      → bootwright_current_cluster.networks[].substrate.vsphere.portgroup
+      Implement vCenter session + clone tasks here when adding vSphere
+      runtime support.

@@ -1,0 +1,69 @@
+package desiredstate
+
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/stateview"
+)
+
+// Lookup helpers shared by normalize and validate. Pure functions —
+// no error reporting, no defaults. Callers handle missing values.
+
+func indexProviders(providers []v1alpha1.InfraProvider) map[string]v1alpha1.InfraProvider {
+	out := make(map[string]v1alpha1.InfraProvider, len(providers))
+	for _, p := range providers {
+		out[p.Metadata.Name] = p
+	}
+	return out
+}
+
+func indexHosts(hosts []v1alpha1.Host) map[string]v1alpha1.Host {
+	out := make(map[string]v1alpha1.Host, len(hosts))
+	for _, h := range hosts {
+		out[h.Metadata.Name] = h
+	}
+	return out
+}
+
+func indexNetworkConfigs(nets []v1alpha1.NetworkConfig) map[string]v1alpha1.NetworkConfig {
+	out := make(map[string]v1alpha1.NetworkConfig, len(nets))
+	for _, n := range nets {
+		out[n.Metadata.Name] = n
+	}
+	return out
+}
+
+func indexClusterInfras(items []v1alpha1.ClusterInfra) map[string]v1alpha1.ClusterInfra {
+	out := make(map[string]v1alpha1.ClusterInfra, len(items))
+	for _, ci := range items {
+		out[ci.Metadata.Name] = ci
+	}
+	return out
+}
+
+func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
+	return stateview.MachineProfile(p, name)
+}
+
+func lookupMachine(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapability, bool) {
+	return stateview.Machine(p, name)
+}
+
+func lookupLoadBalancer(p v1alpha1.InfraProvider, name string) (v1alpha1.LoadBalancerCapability, bool) {
+	return stateview.LoadBalancer(p, name)
+}
+
+func lookupProxy(p v1alpha1.InfraProvider, name string) (v1alpha1.ProxyCapability, bool) {
+	return stateview.Proxy(p, name)
+}
+
+func lookupDNS(p v1alpha1.InfraProvider, name string) (v1alpha1.DNSCapability, bool) {
+	return stateview.DNS(p, name)
+}
+
+func lookupRegistry(p v1alpha1.InfraProvider, name string) (v1alpha1.RegistryCapability, bool) {
+	return stateview.Registry(p, name)
+}
+
+func hostHasCapability(h v1alpha1.Host, want string) bool {
+	return stateview.HostHasCapability(h, want)
+}

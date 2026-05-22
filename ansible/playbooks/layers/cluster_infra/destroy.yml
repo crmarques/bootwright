@@ -1,0 +1,39 @@
+---
+- name: Destroy cluster infrastructure
+  # Mirror cluster_infra/apply.yml: target the renderer-emitted group of
+  # hosts that back a cluster machine substrate. Using
+  # bootwright_provider_hosts here would silently skip libvirt-only hosts
+  # that don't also back a provider-scoped service.
+  hosts: bootwright_infra_hosts
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+
+  vars:
+    bootwright_host_machine_components: >-
+      {{
+        bootwright_clusters | default([])
+        | map(attribute='components') | flatten
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_clusters: >-
+      {{
+        bootwright_host_machine_components
+        | map(attribute='clusterName')
+        | unique | list
+      }}
+
+  tasks:
+    - name: Skip when host has no cluster substrate
+      ansible.builtin.meta: end_host
+      when: bootwright_host_clusters | length == 0
+
+    - name: Destroy substrate per cluster on this host
+      ansible.builtin.include_tasks: per_cluster_destroy.yml
+      loop: "{{ bootwright_host_clusters }}"
+      loop_control:
+        loop_var: bootwright_cluster_name

@@ -1,0 +1,177 @@
+<p align="center">
+  <img src="images/logo-circle.png" alt="Bootwright" width="400">
+</p>
+
+# Bootwright
+
+Bootwright is a desired-state orchestrator that provisions fleets of OpenShift
+and OKD clusters from bare hardware or virtualized substrates. You describe the
+environment, providers, infrastructure, networks, and clusters with six
+declarative YAML kinds. Bootwright validates the inputs, renders deterministic
+installer artifacts, and converges each phase idempotently.
+
+**Supported distributions:** OpenShift and OKD. Vanilla Kubernetes is on the roadmap.
+
+## The problem it solves
+
+Standing up one cluster is a runbook. Standing up *many* clusters — across mixed substrates, with shared services like load balancers, DNS, mirror registries, and proxies — is a coordination problem that handwritten scripts and ad-hoc installer runs cannot keep consistent. Bootwright replaces that with a few versioned objects and an idempotent apply pipeline: declare the fleet once, converge it as many times as you need, and get the same result every time.
+
+The CLI covers the provisioning pipeline:
+
+```text
+bootwright context init lab -f ./input
+bootwright check bastion
+bootwright apply bastion --yes
+bootwright check infra
+bootwright apply infra --yes
+bootwright check cluster
+bootwright apply cluster --yes
+```
+
+<p align="center">
+  <img src="images/overview.png" alt="Bootwright overview" width="800">
+</p>
+
+## Start Here
+
+The user-facing docs are published from [`docs/`](docs/) as this [link](https://crmarques.github.io/bootwright/). Browse them in-tree or once Pages is enabled on the repo:
+
+| Audience | Start |
+| --- | --- |
+| Newcomers | [Home](docs/index.md) and [Concepts](docs/concepts.md) |
+| First context and apply flow | [Getting Started](docs/getting-started.md) |
+| Authoring real environments | [Advanced](docs/advanced/) — providers, networking, proxy/disconnected, secrets |
+| Contributors and coding agents | [Specs](specs/index.md) |
+| Architecture decisions | [ADRs](specs/adr/README.md) |
+
+Docs explain the workflow. Specs are the source of truth for API
+shape, architecture boundaries, validation rules, CLI behavior, and
+security posture.
+
+Canonical desired-state examples live under [`examples/`](examples/). E2E
+fixtures under [`test/e2e/`](test/e2e/) are runnable test assets.
+
+## Install The CLI
+
+Download the `bootwright` binary for your platform from
+[GitHub Releases](https://github.com/crmarques/bootwright/releases), then
+install it on your `PATH`:
+
+```bash
+chmod +x bootwright
+sudo install -m 0755 bootwright /usr/local/bin/bootwright
+bootwright version
+```
+
+If a release binary is not available yet, build the CLI from the repository
+root with the [`Containerfile`](Containerfile) and copy the binary out of the
+image:
+
+```bash
+export HTTP_PROXY
+export HTTPS_PROXY="${HTTP_PROXY}"
+export NO_PROXY="localhost,127.0.0.1,.local,10."
+export http_proxy="${HTTP_PROXY}"
+export https_proxy="${HTTPS_PROXY}"
+export no_proxy="${NO_PROXY}"
+
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
+  --build-arg "HTTPS_PROXY=${HTTPS_PROXY}" \
+  --build-arg "NO_PROXY=${NO_PROXY}" \
+  --build-arg "http_proxy=${http_proxy}" \
+  --build-arg "https_proxy=${https_proxy}" \
+  --build-arg "no_proxy=${no_proxy}" \
+  -t bootwright \
+  -f Containerfile \
+  .
+
+docker create --name bootwright-bin bootwright
+docker cp bootwright-bin:/usr/local/bin/bootwright ./bootwright
+docker rm bootwright-bin
+sudo install -m 0755 ./bootwright /usr/local/bin/bootwright
+bootwright version
+```
+
+## Desired-State Contract
+
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and six kinds:
+
+| Kind | Owns |
+| --- | --- |
+| `Environment` | Shared environment defaults: selected resource files, base domain, secret sources, external proxy defaults, mirror registry defaults, and component image pins |
+| `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); only ever referenced from `InfraProvider` |
+| `InfraProvider` | Named provider capability lists — `machineProfiles`, `machines`, `loadBalancers`, `artifactPublishers`, `proxies`, `dns`, `registries` — with names scoped per kind |
+| `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
+| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, selected machines under `components.machines[]`, and managed infra components |
+| `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
+
+`ContainerCluster` stays provider-neutral. Swapping from libvirt with
+Redfish emulation to real bare metal edits the substrate-owned objects:
+`InfraProvider`, `NetworkConfig`, and the cluster infrastructure machine
+bindings.
+
+Current `apply` support is explicit: libvirt with emulated Redfish BMCs and
+bare metal with Redfish virtual media are converged by the shipped Ansible
+workflows. vSphere and OpenShift Virtualization (KubeVirt) remain schema paths
+until their provider roles are converged; IPMI is not apply-supported today.
+
+## CLI
+
+```text
+bootwright context init lab -f examples/baremetal-redfish-fleet
+bootwright context validate
+bootwright context current
+bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+bootwright secret generate
+bootwright secret list
+bootwright print-env [--sensitive]
+bootwright check syntax
+bootwright check bastion
+bootwright apply bastion --yes
+bootwright check all --dry-run
+bootwright apply infra --yes
+bootwright render installer --scope demo-ocp
+bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
+bootwright apply cluster --yes
+bootwright status
+bootwright status --watch
+bootwright destroy cluster --yes
+bootwright destroy infra --yes
+bootwright destroy infra --scope http-server --yes
+```
+
+The CLI is verb-first; every subcommand picks a target. Provisioning
+targets are `bastion`, `infra`, `cluster`, and `all`. Verbs are
+`context`, `print-env`, `secret`, `check`, `status`, `render`, `apply`,
+`destroy`, and `version`. The formal CLI contract lives in
+[specs/state-model.md](specs/state-model.md#cli-contract).
+
+Human text output is designed for operators and may evolve. Use
+`--output json` where available for automation. `bootwright print-env`
+intentionally prints raw shell exports, and Ansible output remains the
+native Ansible stream.
+
+`bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
+exports concrete external CLI inputs, including
+`openshift-install/<cluster>/{install,agent}-config.yaml`, for operators who
+want to run `openshift-install` themselves. Treat that output as local runtime
+material because it contains secrets.
+
+## Repository Layout
+
+```text
+specs/      Source-of-truth definitions for humans and agents
+docs/       Human workflow documentation
+examples/   Safe-to-commit desired-state examples
+.agents/    Project-local coding-agent skills
+api/        Versioned desired-state types
+cmd/        CLI entrypoints
+internal/   Private implementation packages
+ansible/    Embedded workflow playbooks and roles
+test/       Test fixtures and end-to-end cases
+```
+
+Versioned content (specs, docs, fixtures) must stay safe to commit: no
+kubeconfigs, pull secrets, private keys, tokens, plaintext credentials,
+personal usernames, or private absolute paths.

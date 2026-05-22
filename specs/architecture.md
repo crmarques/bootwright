@@ -1,0 +1,108 @@
+# Architecture
+
+Bootwright is organized as a desired-state loader, validator, renderer, and
+idempotent apply pipeline.
+
+## Layers
+
+```text
+YAML desired state
+  -> load and strict decode
+  -> normalize defaults
+  -> validate ownership and references
+  -> render effective installer/provider inputs
+  -> apply substrate and cluster phases
+```
+
+Apply execution records a durable run ledger under the context state directory.
+The ledger is the operator-facing status source for long-running work: each
+planned task has a stable ID, dependency list, status, log path, and optional
+cluster, node, or host association. Human apply output summarizes task progress
+from that ledger while detailed external-tool output stays in per-task artifact
+logs.
+
+OpenShift agent apply is scheduled as dependency stages instead of one opaque
+cluster task: create the cluster agent ISO with `openshift-install`, boot each
+declared node through its rendered boot adapter as parallel node tasks, then
+run `openshift-install agent wait-for install-complete` after every node boot
+task has completed.
+
+The desired-state API is defined in `api/v1alpha1` and specified in
+`specs/state-model.md`.
+
+## Ownership Boundaries
+
+- `Environment` owns fleet-wide defaults, context resource selection, secret
+  sources, proxy defaults, registry mirrors, and component images.
+- `InfraProvider` owns capabilities: explicit bare-metal machines, virtual
+  machine profiles, and service capabilities.
+- `NetworkConfig` owns reusable machine-network data and NMState templates.
+- `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
+  machines, and managed infra components.
+- `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
+- `Host` owns SSH reachability to provider or service hosts.
+
+These boundaries are reflected in rendering:
+
+- `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
+  selected machine `NetworkConfig` references, endpoint VIP ownership, and
+  `ClusterInfra.platform`.
+- `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
+  `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
+  provider or generated substrate MAC inventory.
+- Infra component variables are rendered from `ClusterInfra.components` plus
+  provider service capabilities.
+
+## Providers
+
+Provider adapters should consume capability arms instead of inferring behavior
+from names. Current capability arms include:
+
+- machine profiles: `libvirt`, `vsphere`, `kubevirt`
+- explicit machines: `baremetal`
+- services: `haProxy`, `http`, `squid`, `dnsmasq`, `mirrorRegistry`
+
+Adding a substrate means adding a capability arm, validation, renderer support,
+and an apply adapter. It must not move physical facts into cluster intent.
+
+Adapters should use official CLI capabilities from the tools Bootwright drives
+before adding custom orchestration around the same operation. For example,
+OpenShift install completion remains delegated to `openshift-install agent
+wait-for install-complete`; Bootwright schedules and reports the task rather
+than reimplementing installer state polling.
+
+Provider and BMC behavior must be handled by capability discovery and
+advertised metadata before supplier-specific branching. When suppliers expose
+equivalent behavior through different Redfish action locations, OEM blocks,
+schemas, status fields, or task shapes, adapters must normalize those
+variations behind a generic resolver or typed capability. Supplier-specific
+workarounds are allowed only when discovery cannot express the behavior; keep
+them isolated, minimal, tested, and documented in the knowledge base.
+
+## Platform Rendering
+
+`ClusterInfra.spec.platform.type` drives installer platform output:
+
+- `baremetal` renders bare-metal agent install platform data.
+- `vsphere` renders vSphere platform data from selected profiles and optional
+  node networking hints.
+- `none` renders platform none for substrates where Bootwright only prepares
+  machines.
+- `external` is reserved for explicit external platform rendering.
+
+Single-node cluster topologies render installer `platform.none` unless
+`platform.type: external` is explicitly selected, because `openshift-install
+agent` rejects bare-metal and vSphere installer platform blocks for one
+control-plane and zero compute nodes. ClusterInfra still owns the substrate
+machines, endpoints, and managed components used around that installer input.
+
+## Testing
+
+Schema changes require:
+
+- focused validator tests for new and rejected fields
+- fixture updates for generated desired-state examples
+- renderer tests for install-config and agent-config output
+- fixture-generation tests proving generated input sets load and validate
+- stale-definition checks over docs, specs, examples, tests, and agent
+  knowledge when terms move between kinds

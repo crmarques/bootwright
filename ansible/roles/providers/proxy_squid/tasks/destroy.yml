@@ -1,0 +1,28 @@
+---
+- name: Remove Squid container
+  containers.podman.podman_container:
+    name: "{{ bootwright_squid_container_name }}"
+    state: absent
+
+- name: Reap orphan Squid from a leaked container instance
+  ansible.builtin.include_role:
+    name: process_cleanup
+  vars:
+    bootwright_process_cleanup_pattern: "squid.*-f /etc/squid/squid.conf"
+    bootwright_process_cleanup_require_cgroup_match: true
+    bootwright_process_cleanup_cgroup_pattern: libpod
+    bootwright_process_cleanup_mark_changed: false
+
+- name: Close Squid port on host firewall (firewalld)
+  ansible.posix.firewalld:
+    port: "{{ bootwright_component.port | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  when: bootwright_firewalld_available | default(false)
+  failed_when: false
+
+- name: Remove Squid state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_squid_root }}"
+    state: absent

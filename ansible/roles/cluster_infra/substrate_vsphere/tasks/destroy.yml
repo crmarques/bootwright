@@ -1,0 +1,6 @@
+---
+- name: Fail until vSphere substrate teardown is implemented
+  ansible.builtin.fail:
+    msg: |
+      substrate_vsphere destroy is a scaffold; pair with substrate_vsphere
+      apply when adding vSphere support (vCenter VM power-off + delete).

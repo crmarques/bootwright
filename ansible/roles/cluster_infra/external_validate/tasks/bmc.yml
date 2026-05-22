@@ -1,0 +1,47 @@
+---
+# External Redfish BMC probe. Issues an authenticated GET against
+# `/redfish/v1/Systems` (the entry point every Redfish service must
+# expose) on the renderer-normalized base URL. A 200 with a JSON body
+# proves both reachability AND that the supplied credentials
+# authenticate — what the install layer needs.
+#
+# Reads only bootwright_validate_machine.boot.redfish.{baseUrl,
+# credentialRef, validateCerts}; the renderer strips any Ironic-style
+# transport hint and trailing /Systems/<id> before projection, so this
+# task does not parse BMC URLs.
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Resolve BMC credentials path"
+  ansible.builtin.set_fact:
+    bootwright_validate_bmc_cred_path: >-
+      {{
+        (bootwright_secrets_dir ~ '/' ~ bootwright_validate_machine.boot.redfish.credentialRef)
+        if (bootwright_validate_machine.boot.redfish.credentialRef | default('') | length) > 0
+        else ''
+      }}
+  changed_when: false
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Load BMC credentials"
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: load
+  vars:
+    bootwright_creds_path: "{{ bootwright_validate_bmc_cred_path }}"
+    bootwright_creds_var: bootwright_validate_bmc_credentials
+    bootwright_creds_label: "BMC credentialRef {{ bootwright_validate_bmc_cred_path }}"
+  when: (bootwright_validate_bmc_cred_path | length) > 0
+
+- name: "[bmc {{ bootwright_validate_machine.name }}] Probe Redfish /Systems"
+  ansible.builtin.uri:
+    url: "{{ bootwright_validate_machine.boot.redfish.baseUrl }}/redfish/v1/Systems"
+    method: GET
+    return_content: false
+    validate_certs: "{{ bootwright_validate_machine.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_validate_bmc_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_validate_bmc_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_validate_bmc_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_external_validate_bmc_timeout }}"
+    status_code: 200
+  no_log: "{{ (bootwright_validate_bmc_cred_path | length) > 0 }}"
+  register: bootwright_validate_bmc_probe
+  # Failure here is fatal: include_tasks bubbles the error and the
+  # play aborts before any infra convergence runs.

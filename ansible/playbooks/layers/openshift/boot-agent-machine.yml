@@ -1,0 +1,21 @@
+---
+- name: Boot OpenShift agent machine
+  hosts: bootwright_ocp_hosts
+  gather_subset:
+    - "!all"
+    - min
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  tasks:
+    - name: Boot selected agent machine
+      ansible.builtin.include_role:
+        name: install_agent
+      vars:
+        bootwright_install_agent_action: boot_machine
+      loop: "{{ bootwright_clusters | default([]) }}"
+      loop_control:
+        loop_var: bootwright_current_cluster
+        label: "{{ bootwright_current_cluster.name }}/{{ bootwright_task_machine_name }}"
+      when:
+        - bootwright_current_cluster.installMethod == 'agent'
+        - bootwright_current_cluster.name == bootwright_task_cluster_name

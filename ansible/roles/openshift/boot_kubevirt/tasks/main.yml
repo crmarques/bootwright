@@ -1,0 +1,11 @@
+---
+- name: boot_kubevirt pending v1alpha1 migration
+  ansible.builtin.fail:
+    msg: |
+      boot_kubevirt needs migration to the v1alpha1 per-machine component
+      contract. Inputs available on bootwright_component:
+        clusterName, name, providerName
+        kubevirt.{clusterRef, namespace, storageClassRef}
+      Drive: upload agent ISO into a DataVolume via virtctl, attach it
+      as cdrom on the VirtualMachine and start it. Pair with
+      substrate_kubevirt when adding KubeVirt runtime support.

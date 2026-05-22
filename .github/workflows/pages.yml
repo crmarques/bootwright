@@ -1,0 +1,66 @@
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  publish_gate:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_publish: ${{ steps.decision.outputs.should_publish }}
+    steps:
+      - name: Decide whether to publish docs
+        id: decision
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          should_publish=false
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            should_publish=true
+          elif jq -r '.commits[]?.message // empty | split("\n")[0]' "$GITHUB_EVENT_PATH" | grep -Eq '^fix\(docs\)(!:|:)'; then
+            should_publish=true
+          fi
+
+          echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: publish_gate
+    if: needs.publish_gate.outputs.should_publish == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/configure-pages@v6.0.0
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Install docs dependencies
+        run: pip install --disable-pip-version-check -r docs/requirements.txt
+      - name: Build site
+        run: mkdocs build --strict --clean
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.0

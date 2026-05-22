@@ -1,0 +1,42 @@
+---
+- name: Destroy provider services
+  hosts: bootwright_provider_hosts
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+
+  vars:
+    bootwright_provider_service_destroy_scope: "{{ bootwright_provider_service_scope | default('') }}"
+    bootwright_host_provider_services_all: >-
+      {{
+        bootwright_provider_services | default([])
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_provider_services: >-
+      {{
+        (bootwright_host_provider_services_all
+          | selectattr('kind', 'equalto', 'artifacts')
+          | selectattr('realisation', 'equalto', 'http')
+          | list)
+        if bootwright_provider_service_destroy_scope == 'http-server'
+        else bootwright_host_provider_services_all
+      }}
+
+  tasks:
+    - name: Validate provider service destroy scope
+      ansible.builtin.assert:
+        that:
+          - bootwright_provider_service_destroy_scope in ['', 'http-server']
+        fail_msg: "unsupported provider service destroy scope {{ bootwright_provider_service_destroy_scope }}"
+
+    - name: Destroy provider service roles
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.destroyRole }}"
+        tasks_from: destroy.yml
+      loop: "{{ bootwright_host_provider_services | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"

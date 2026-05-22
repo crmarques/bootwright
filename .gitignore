@@ -1,0 +1,41 @@
+# Local runtime files
+.env
+.env.*
+*.log
+*.tmp
+*.bak
+
+# Credentials and cluster access
+*kubeconfig*
+*pull-secret*
+*.pem
+*.key
+*.crt
+*.p12
+auth/
+secrets/
+
+# Generated output
+.cache/
+.state/
+bin/
+dist/
+build/
+out/
+rendered/
+site/
+tmp/
+
+# Tooling
+.DS_Store
+.idea/
+.vscode/
+.codex/
+.claude/
+
+# Python bytecode caches (filter-plugin unit tests run with python3 -m unittest)
+__pycache__/
+*.pyc
+
+# GitOpsPackageSet workspace generated output (expanded plan, rendered repos).
+.bootwright/

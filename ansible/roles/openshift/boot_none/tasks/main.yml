@@ -1,0 +1,7 @@
+---
+- name: Skip boot driver (bootRole=none)
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      bootRole=none — no controller-driven boot action.
+  changed_when: false

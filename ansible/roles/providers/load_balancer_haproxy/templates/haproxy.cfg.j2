@@ -1,0 +1,26 @@
+global
+  maxconn 20000
+  log stdout format raw local0
+
+defaults
+  mode tcp
+  log global
+  option tcplog
+  timeout connect 10s
+  timeout client 1m
+  timeout server 1m
+
+{% for frontend in bootwright_component.frontends %}
+{% for port in frontend.ports %}
+frontend {{ frontend.clusterName }}_{{ frontend.name }}_{{ port.listenPort }}_fe
+  bind {{ frontend.vip }}:{{ port.listenPort }}
+  default_backend {{ frontend.clusterName }}_{{ frontend.name }}_{{ port.listenPort }}_be
+
+backend {{ frontend.clusterName }}_{{ frontend.name }}_{{ port.listenPort }}_be
+  balance roundrobin
+{% for backend in frontend.backends %}
+  server {{ frontend.clusterName }}_{{ backend.name }} {{ backend.address }}:{{ port.targetPort }} check
+{% endfor %}
+
+{% endfor %}
+{% endfor %}

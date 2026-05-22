@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: lab-host
+spec:
+  addresses:
+    - name: ssh
+      address: localhost
+    - name: cluster-lan
+      address: 192.168.132.1
+
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: provider-host-ssh
+
+  capabilities:
+    - libvirt
+    - container-runtime

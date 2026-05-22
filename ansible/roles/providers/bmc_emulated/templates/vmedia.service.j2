@@ -1,0 +1,15 @@
+[Unit]
+Description=Bootwright sushy vmedia HTTP ({{ bootwright_bmc_provider_name }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server {{ bootwright_bmc_vmedia_port }} --bind 127.0.0.1 --directory {{ bootwright_bmc_root }}/vmedia
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:{{ bootwright_bmc_root }}/vmedia.log
+StandardError=append:{{ bootwright_bmc_root }}/vmedia.log
+
+[Install]
+WantedBy=multi-user.target

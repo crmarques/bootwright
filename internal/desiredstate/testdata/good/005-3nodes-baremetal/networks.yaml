@@ -1,0 +1,63 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: rack1-bond140-machine
+spec:
+  machineNetwork:
+    - cidr: 192.168.140.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: eno1
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: eno2
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0
+          type: bond
+          state: up
+          link-aggregation:
+            mode: active-backup
+            options:
+              miimon: "100"
+            port:
+              - eno1
+              - eno2
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+        - name: bond0.140
+          type: vlan
+          state: up
+          vlan:
+            base-iface: bond0
+            id: 140
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.10.53
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.140.1
+            next-hop-interface: bond0.140
+            table-id: 254
+
+  physical:
+    vlan: 140

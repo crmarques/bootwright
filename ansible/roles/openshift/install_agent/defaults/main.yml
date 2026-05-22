@@ -1,0 +1,6 @@
+---
+bootwright_secrets_dir: "{{ lookup('env', 'BOOTWRIGHT_SECRETS_DIR') | default((lookup('env', 'BOOTWRIGHT_BASE_DIR') | default(lookup('env', 'HOME') ~ '/.bootwright', true)) ~ '/secrets', true) }}"
+# Path the Go renderer's ResolveInstaller writes per-cluster.
+bootwright_install_work_dir: "{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}/installer"
+bootwright_openshift_install: openshift-install
+bootwright_install_timeout_seconds: 5400

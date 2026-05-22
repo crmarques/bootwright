@@ -1,0 +1,19 @@
+no-resolv
+no-poll
+log-queries
+log-facility=-
+port=53
+conf-dir=/etc/dnsmasq.d
+{% set _bind = bootwright_component.bindAddress | default('') %}
+{% if _bind and _bind != '0.0.0.0' %}
+bind-interfaces
+listen-address={{ _bind }}
+{% else %}
+bind-dynamic
+{% endif %}
+{% for record in bootwright_component.hostRecords | default([]) %}
+host-record={{ record.name }},{{ record.address }}
+{% endfor %}
+{% for record in bootwright_component.domainRecords | default([]) %}
+address=/{{ record.name }}/{{ record.address }}
+{% endfor %}

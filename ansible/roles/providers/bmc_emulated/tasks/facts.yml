@@ -1,0 +1,17 @@
+---
+- name: Resolve BMC emulator parameters
+  ansible.builtin.set_fact:
+    bootwright_bmc_provider_name: "{{ bootwright_component.providerName }}"
+    bootwright_bmc_protocol: "{{ bootwright_component.bmcEmulated.protocol }}"
+    bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
+    bootwright_bmc_bind: "{{ bootwright_component.bmcEmulated.bindAddress }}"
+    bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
+    bootwright_bmc_vmedia_port: "{{ bootwright_component.bmcEmulated.vmediaPort }}"
+    bootwright_bmc_cred_ref: "{{ bootwright_component.bmcEmulated.credentialRef }}"
+    bootwright_sushy_tools_version: "{{ bootwright_component.bmcEmulated.sushyToolsVersion }}"
+  changed_when: false
+
+- name: Resolve BMC state paths
+  ansible.builtin.set_fact:
+    bootwright_bmc_root: "{{ bootwright_host_state_dir }}/bmc/{{ bootwright_bmc_provider_name }}"
+  changed_when: false

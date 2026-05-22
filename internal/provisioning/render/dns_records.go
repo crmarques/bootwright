@@ -1,0 +1,125 @@
+package render
+
+import (
+	"sort"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+type dnsmasqRecord struct {
+	name    string
+	address string
+}
+
+func nameResolutionRecordsVars(state v1alpha1.State, c *v1alpha1.ClusterNameResolutionComponent) ([]any, []any) {
+	if c == nil {
+		return nil, nil
+	}
+	hostRecords := []dnsmasqRecord{}
+	domainRecords := []dnsmasqRecord{}
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInfraForOCP(state, ocp)
+		if err != nil || !clusterUsesNameResolution(state, ci, c) {
+			continue
+		}
+		baseDomain := clusterBaseDomain(state, ocp)
+		if baseDomain == "" {
+			continue
+		}
+		clusterName := ocp.Metadata.Name
+		if address := endpointAddress(ci, v1alpha1.EndpointAPI); address != "" {
+			hostRecords = append(hostRecords, dnsmasqRecord{
+				name:    "api." + clusterName + "." + baseDomain,
+				address: address,
+			})
+		}
+		if address := endpointAddress(ci, v1alpha1.EndpointAPIInt); address != "" {
+			hostRecords = append(hostRecords, dnsmasqRecord{
+				name:    "api-int." + clusterName + "." + baseDomain,
+				address: address,
+			})
+		}
+		if address := endpointAddress(ci, v1alpha1.EndpointIngress); address != "" {
+			domainRecords = append(domainRecords, dnsmasqRecord{
+				name:    "apps." + clusterName + "." + baseDomain,
+				address: address,
+			})
+			if nr := ci.Spec.Components.NameResolution; nr != nil && sameFrom(nr.From, c.From) {
+				for _, host := range nr.AdditionalIngressHosts {
+					if host != "" {
+						hostRecords = append(hostRecords, dnsmasqRecord{name: host, address: address})
+					}
+				}
+			}
+		}
+	}
+	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
+}
+
+func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, c *v1alpha1.ClusterNameResolutionComponent) bool {
+	if nr := ci.Spec.Components.NameResolution; nr != nil && sameFrom(nr.From, c.From) {
+		return true
+	}
+	if c.BindAddress == "" || c.BindAddress == "0.0.0.0" || c.BindAddress == "::" {
+		return false
+	}
+	for _, name := range clusterNetworkConfigNames(ci) {
+		network, ok := findNetworkConfig(state, name)
+		if !ok {
+			continue
+		}
+		for _, server := range templateDNSServers(network) {
+			if server == c.BindAddress {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func clusterBaseDomain(state v1alpha1.State, ocp v1alpha1.ContainerCluster) string {
+	if ocp.Spec.Install.BaseDomain != "" {
+		return ocp.Spec.Install.BaseDomain
+	}
+	if env := primaryEnvironment(state); env != nil {
+		return env.Spec.BaseDomain
+	}
+	return ""
+}
+
+func sameFrom(a, b v1alpha1.From) bool {
+	return a.Provider == b.Provider && a.Name == b.Name
+}
+
+func dnsmasqRecordVars(records []dnsmasqRecord) []any {
+	if len(records) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	unique := make([]dnsmasqRecord, 0, len(records))
+	for _, record := range records {
+		if record.name == "" || record.address == "" {
+			continue
+		}
+		key := record.name + "|" + record.address
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		unique = append(unique, record)
+	}
+	sort.SliceStable(unique, func(i, j int) bool {
+		if unique[i].name != unique[j].name {
+			return unique[i].name < unique[j].name
+		}
+		return unique[i].address < unique[j].address
+	})
+	out := make([]any, 0, len(unique))
+	for _, record := range unique {
+		out = append(out, map[string]any{
+			"name":    record.name,
+			"address": record.address,
+		})
+	}
+	return out
+}

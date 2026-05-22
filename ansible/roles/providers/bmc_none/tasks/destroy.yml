@@ -1,0 +1,6 @@
+---
+- name: Skip BMC service cleanup (bmcRole=none)
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_component.clusterName }}/{{ bootwright_component.name }}
+      bmcRole=none — no provider BMC service state to remove.

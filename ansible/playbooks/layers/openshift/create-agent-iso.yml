@@ -1,0 +1,21 @@
+---
+- name: Create OpenShift agent ISO
+  hosts: bootwright_ocp_hosts
+  gather_subset:
+    - "!all"
+    - min
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  tasks:
+    - name: Create agent ISO for selected cluster
+      ansible.builtin.include_role:
+        name: install_agent
+      vars:
+        bootwright_install_agent_action: create_iso
+      loop: "{{ bootwright_clusters | default([]) }}"
+      loop_control:
+        loop_var: bootwright_current_cluster
+        label: "{{ bootwright_current_cluster.name }}"
+      when:
+        - bootwright_current_cluster.installMethod == 'agent'
+        - bootwright_current_cluster.name == bootwright_task_cluster_name

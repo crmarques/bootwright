@@ -1,0 +1,70 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: rack1-baremetal-provider
+spec:
+  machines:
+    - name: rack1-srv1
+      baremetal:
+        bootMACAddress: 00:25:90:5a:10:01
+        interfaces:
+          - name: eno1
+            macAddress: 00:25:90:5a:10:01
+          - name: eno2
+            macAddress: 00:25:90:5a:10:02
+        rootDeviceHints:
+          deviceName: /dev/sda
+        bmc:
+          address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+    - name: rack1-srv2
+      baremetal:
+        bootMACAddress: 00:25:90:5a:11:01
+        interfaces:
+          - name: eno1
+            macAddress: 00:25:90:5a:11:01
+          - name: eno2
+            macAddress: 00:25:90:5a:11:02
+        rootDeviceHints:
+          deviceName: /dev/sda
+        bmc:
+          address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+    - name: rack1-srv3
+      baremetal:
+        bootMACAddress: 00:25:90:5a:12:01
+        interfaces:
+          - name: eno1
+            macAddress: 00:25:90:5a:12:01
+          - name: eno2
+            macAddress: 00:25:90:5a:12:02
+        rootDeviceHints:
+          deviceName: /dev/sda
+        bmc:
+          address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: bastion-services
+spec:
+  artifactPublishers:
+    - name: default
+      http:
+        hostRef:
+          name: bastion
+        routes:
+          redfishVirtualMedia:
+            addressName: lab-lan
+          clusterInstall:
+            addressName: lab-lan

@@ -1,0 +1,6 @@
+---
+bootwright_mr_packages:
+  - podman
+  - apache2-utils
+  - openssl
+  - ca-certificates

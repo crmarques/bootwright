@@ -1,0 +1,12 @@
+---
+- name: No bare-metal substrate teardown required
+  ansible.builtin.debug:
+    msg: >-
+      substrate_baremetal teardown is a no-op for cluster
+      {{ bootwright_current_cluster.name }} / {{ bootwright_component.name }}; operator owns the hardware.
+  changed_when: false
+
+- name: Remove cluster baremetal state directory (idempotent)
+  ansible.builtin.file:
+    path: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/baremetal/{{ bootwright_component.name }}.yml"
+    state: absent

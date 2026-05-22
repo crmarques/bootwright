@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+from urllib.parse import urlsplit
+
+
+def bootwright_redfish_action_targets(resource, action_name):
+    return [action["target"] for action in bootwright_redfish_action_descriptors(resource, action_name)]
+
+
+def bootwright_redfish_action_descriptors(resource, action_name):
+    if not isinstance(resource, dict) or not isinstance(action_name, str) or not action_name:
+        return []
+
+    actions = []
+
+    def add_action(container, path, source, vendor=""):
+        if not isinstance(container, dict):
+            return
+        action = container.get(action_name)
+        if not isinstance(action, dict):
+            return
+        target = action.get("target")
+        if not isinstance(target, str) or not target:
+            return
+        descriptor = {
+            "target": target,
+            "path": path,
+            "source": source,
+        }
+        action_info = action.get("@Redfish.ActionInfo")
+        if isinstance(action_info, str) and action_info:
+            descriptor["actionInfo"] = action_info
+        if vendor:
+            descriptor["vendor"] = vendor
+        actions.append(descriptor)
+
+    add_action(
+        resource.get("Actions"),
+        f"Actions.{action_name}",
+        "standard",
+    )
+
+    oem = resource.get("Oem")
+    if isinstance(oem, dict):
+        for vendor, value in oem.items():
+            if not isinstance(vendor, str) or not isinstance(value, dict):
+                continue
+            add_action(
+                value.get("Actions"),
+                f"Oem.{vendor}.Actions.{action_name}",
+                "oem",
+                vendor,
+            )
+
+    return actions
+
+
+def bootwright_redfish_vmm_control_actions(actions, action_info_results):
+    if not isinstance(actions, list):
+        return []
+    if not isinstance(action_info_results, list):
+        action_info_results = []
+
+    by_target = {}
+    for result in action_info_results:
+        if not isinstance(result, dict):
+            continue
+        item = result.get("item")
+        if not isinstance(item, dict):
+            continue
+        target = item.get("target")
+        if isinstance(target, str) and target:
+            by_target[target] = result
+
+    supported = []
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        target = action.get("target")
+        action_info = action.get("actionInfo")
+        result = by_target.get(target)
+        if not isinstance(target, str) or not target:
+            continue
+        if not isinstance(action_info, str) or not action_info:
+            continue
+        if not isinstance(result, dict) or _status_code(result.get("status")) != 200:
+            continue
+        if _action_info_accepts_vmm_control(result.get("json")):
+            supported.append(dict(action, bodyStyle="vmm-control"))
+    return supported
+
+
+def bootwright_redfish_vmedia_attached(resource, expected_image, expected_protocol=""):
+    if not isinstance(resource, dict):
+        return False
+    if not _truthy(resource.get("Inserted")):
+        return False
+    if not _protocol_matches(resource.get("TransferProtocolType"), expected_protocol):
+        return False
+    return _image_matches(resource.get("Image"), expected_image)
+
+
+def _action_info_accepts_vmm_control(action_info):
+    if not isinstance(action_info, dict):
+        return False
+    parameters = action_info.get("Parameters")
+    if not isinstance(parameters, list):
+        return False
+
+    by_name = {}
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            continue
+        name = parameter.get("Name")
+        if isinstance(name, str):
+            by_name[name] = parameter
+
+    if "Image" not in by_name or "VmmControlType" not in by_name:
+        return False
+
+    values = by_name["VmmControlType"].get("AllowableValues")
+    if values is None:
+        return True
+    if not isinstance(values, list):
+        return False
+    return {"Connect", "Disconnect"}.issubset(
+        {value for value in values if isinstance(value, str)}
+    )
+
+
+def _status_code(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _truthy(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _protocol_matches(observed, expected):
+    observed_text = _string(observed).upper()
+    expected_text = _string(expected).upper()
+    return not observed_text or not expected_text or observed_text == expected_text
+
+
+def _image_matches(observed, expected):
+    observed_text = _string(observed)
+    expected_text = _string(expected)
+    if not observed_text:
+        return True
+    if observed_text == expected_text:
+        return True
+    return _url_matches_with_optional_observed_port(observed_text, expected_text)
+
+
+def _url_matches_with_optional_observed_port(observed, expected):
+    try:
+        observed_url = urlsplit(observed)
+        expected_url = urlsplit(expected)
+        observed_port = observed_url.port
+        expected_port = expected_url.port
+    except ValueError:
+        return False
+
+    if not observed_url.scheme or not expected_url.scheme:
+        return False
+    if observed_url.scheme.lower() != expected_url.scheme.lower():
+        return False
+    if (observed_url.hostname or "").lower() != (expected_url.hostname or "").lower():
+        return False
+    if observed_url.path != expected_url.path:
+        return False
+    if observed_url.query != expected_url.query:
+        return False
+    if observed_url.fragment != expected_url.fragment:
+        return False
+    return observed_port == expected_port or observed_port is None
+
+
+def _string(value):
+    return value if isinstance(value, str) else ""
+
+
+class FilterModule:
+    def filters(self):
+        return {
+            "bootwright_redfish_action_descriptors": bootwright_redfish_action_descriptors,
+            "bootwright_redfish_action_targets": bootwright_redfish_action_targets,
+            "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,
+            "bootwright_redfish_vmm_control_actions": bootwright_redfish_vmm_control_actions,
+        }

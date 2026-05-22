@@ -1,0 +1,4 @@
+---
+bootwright_squid_packages:
+  - podman
+  - httpd-tools

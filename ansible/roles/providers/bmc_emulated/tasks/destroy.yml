@@ -1,0 +1,54 @@
+---
+- name: Resolve BMC state paths
+  ansible.builtin.set_fact:
+    bootwright_bmc_provider_name: "{{ bootwright_component.providerName }}"
+    bootwright_bmc_root: "{{ bootwright_host_state_dir }}/bmc/{{ bootwright_component.providerName }}"
+    bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
+  changed_when: false
+
+- name: Stop sushy-emulator service
+  ansible.builtin.systemd_service:
+    name: "bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Close Redfish port on host firewall
+  ansible.posix.firewalld:
+    port: "{{ bootwright_bmc_port | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  failed_when: false
+
+- name: Stop vmedia HTTP service
+  ansible.builtin.systemd_service:
+    name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove sushy + vmedia systemd units
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/systemd/system/bootwright-sushy-{{ bootwright_bmc_provider_name }}.service"
+    - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+  register: bootwright_bmc_units_removed
+
+- name: Reload systemd after removing BMC units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: bootwright_bmc_units_removed.changed
+
+- name: Destroy libvirt vmedia pool
+  community.libvirt.virt_pool:
+    name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
+    state: absent
+  failed_when: false
+
+- name: Remove BMC state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_bmc_root }}"
+    state: absent

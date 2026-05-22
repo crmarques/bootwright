@@ -1,0 +1,22 @@
+package cli
+
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate"
+)
+
+func loadDesiredState(cf *commonFlags) (v1alpha1.State, error) {
+	ctx, err := cf.resolve()
+	if err != nil {
+		return v1alpha1.State{}, err
+	}
+	return desiredstate.LoadNormalizeValidate(ctx.InputPaths)
+}
+
+func loadOptionalDesiredState(cf *commonFlags) (v1alpha1.State, error) {
+	ctx, err := cf.resolve()
+	if err != nil {
+		return v1alpha1.State{}, err
+	}
+	return desiredstate.LoadNormalizeValidate(ctx.InputPaths)
+}

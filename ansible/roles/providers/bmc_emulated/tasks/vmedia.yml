@@ -1,0 +1,20 @@
+---
+- name: Write vmedia HTTP systemd unit
+  ansible.builtin.template:
+    src: vmedia.service.j2
+    dest: "/etc/systemd/system/bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_bmc_vmedia_unit
+
+- name: Reload systemd when vmedia unit changed
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: bootwright_bmc_vmedia_unit.changed
+
+- name: Ensure vmedia HTTP service is running
+  ansible.builtin.systemd_service:
+    name: "bootwright-vmedia-{{ bootwright_bmc_provider_name }}.service"
+    state: "{{ 'restarted' if bootwright_bmc_vmedia_unit.changed else 'started' }}"
+    enabled: true

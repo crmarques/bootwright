@@ -1,0 +1,17 @@
+---
+# Trusted collection dependencies. Keep this list exact-pinned: every
+# artifact URL must encode an official Ansible community or vendor namespace
+# (community.*, ansible.*, containers.*, redhat.*) and version.
+collections:
+  - name: https://galaxy.ansible.com/download/community-general-12.6.0.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/community-libvirt-2.2.0.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/containers-podman-1.20.1.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/ansible-posix-2.1.0.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/community-crypto-3.2.0.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/ansible-utils-6.0.2.tar.gz
+    type: url

@@ -1,0 +1,6 @@
+---
+- name: Resolve proxy facts
+  ansible.builtin.import_tasks: facts.yml
+
+- name: Persist host proxy configuration
+  ansible.builtin.import_tasks: persist.yml

@@ -1,0 +1,495 @@
+---
+- name: Wait before retrying Redfish virtual media insertion
+  ansible.builtin.pause:
+    seconds: "{{ bootwright_redfish_insert_media_retry_delay_seconds }}"
+  when: (bootwright_redfish_insert_media_attempt | int) > 1
+
+- name: Eject virtual media before retrying insertion
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_eject_url }}"
+    method: POST
+    body_format: json
+    body: "{{ bootwright_redfish_vmedia_eject_body }}"
+    status_code: [200, 202, 204, 400, 404, 409, 500]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: (bootwright_redfish_insert_media_attempt | int) > 1
+
+- name: Refresh virtual media metadata before PATCH operations
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_pre_patch_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve virtual media PATCH precondition
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_if_match: >-
+      {{
+        (bootwright_redfish_vmedia_pre_patch_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_vmedia_pre_patch_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_vmedia_pre_patch_probe.headers | default({})).etag | default('', true), true)
+        | default((bootwright_redfish_vmedia_selected | default({})).get('@odata.etag', ''), true)
+        | default('*', true)
+      }}
+  changed_when: false
+
+- name: Disable HTTPS certificate verification for virtual-media fetch
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_vmedia_if_match }}"
+    body_format: json
+    body:
+      VerifyCertificate: false
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_verify_certificate_patch
+  failed_when: false
+  changed_when: (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'
+
+- name: Build standard Redfish InsertMedia request body
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_media_body:
+      Image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+      Inserted: true
+      TransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
+  changed_when: false
+  when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'standard-insert-media'
+
+- name: Build Redfish VMM virtual media request body
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_media_body:
+      VmmControlType: Connect
+      Image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+  changed_when: false
+  when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'vmm-control'
+
+- name: Insert the agent ISO as virtual media
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_vmedia_insert_url }}"
+    method: POST
+    body_format: json
+    body: "{{ bootwright_redfish_insert_media_body }}"
+    status_code: [200, 202, 204]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_insert_media
+  failed_when: false
+  changed_when: (bootwright_redfish_insert_media.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve Redfish InsertMedia request status
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_request_succeeded: "{{ (bootwright_redfish_insert_media.status | default(0) | int) in [200, 202, 204] }}"
+  changed_when: false
+
+- name: Resolve Redfish InsertMedia task reference
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_task_ref: >-
+      {{
+        (
+          (bootwright_redfish_insert_media.json | default({})).get('@odata.id', '')
+          | default((bootwright_redfish_insert_media.json | default({})).get('TaskMonitor', ''), true)
+          | default(bootwright_redfish_insert_media.location | default('', true), true)
+          | default(bootwright_redfish_insert_media.Location | default('', true), true)
+          | default((bootwright_redfish_insert_media.headers | default({})).location | default('', true), true)
+          | default((bootwright_redfish_insert_media.headers | default({})).Location | default('', true), true)
+        )
+        | regex_replace('/TaskService/TaskMonitors/', '/TaskService/Tasks/')
+        | regex_replace('/Monitor$', '')
+      }}
+  changed_when: false
+
+- name: Resolve Redfish InsertMedia task URL
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_task_url: >-
+      {{
+        bootwright_redfish_insert_task_ref
+        if (bootwright_redfish_insert_task_ref | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_insert_task_ref)
+        if (bootwright_redfish_insert_task_ref | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_insert_task_ref)
+        if (bootwright_redfish_insert_task_ref | length) > 0
+        else ''
+      }}
+  changed_when: false
+
+- name: Wait for Redfish InsertMedia task to complete
+  ansible.builtin.uri:
+    url: "{{ bootwright_redfish_insert_task_url }}"
+    method: GET
+    return_content: true
+    status_code: [200, 202, 204]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_insert_task_probe
+  until:
+    - >-
+      (
+        ((bootwright_redfish_insert_task_probe.json | default({})).TaskState | default('', true) | length) > 0
+        and
+        ((bootwright_redfish_insert_task_probe.json | default({})).TaskState in bootwright_redfish_task_terminal_states)
+      )
+      or
+      (
+        ((bootwright_redfish_insert_task_probe.json | default({})).TaskState | default('', true) | length) == 0
+        and
+        (bootwright_redfish_insert_task_probe.status | default(0) | int) != 202
+      )
+  retries: "{{ bootwright_redfish_insert_task_retries }}"
+  delay: "{{ bootwright_redfish_insert_task_delay_seconds }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_insert_request_succeeded | bool
+    - bootwright_redfish_insert_task_url | length > 0
+
+- name: Capture Redfish InsertMedia task status
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_task_status:
+      attempt: "{{ bootwright_redfish_insert_media_attempt }}"
+      insertStatus: "{{ bootwright_redfish_insert_media.status | default('unknown') }}"
+      url: "{{ bootwright_redfish_insert_task_url }}"
+      httpStatus: >-
+        {{
+          bootwright_redfish_insert_task_probe.status | default('unknown')
+          if ((bootwright_redfish_insert_request_succeeded | bool) and (bootwright_redfish_insert_task_url | length) > 0)
+          else 'not attempted'
+        }}
+      taskState: >-
+        {{
+          (bootwright_redfish_insert_task_probe.json | default({})).TaskState | default('', true)
+          if ((bootwright_redfish_insert_request_succeeded | bool) and (bootwright_redfish_insert_task_url | length) > 0)
+          else ''
+        }}
+      taskStatus: >-
+        {{
+          (bootwright_redfish_insert_task_probe.json | default({})).TaskStatus | default('', true)
+          if ((bootwright_redfish_insert_request_succeeded | bool) and (bootwright_redfish_insert_task_url | length) > 0)
+          else ''
+        }}
+      messages: >-
+        {{
+          (bootwright_redfish_insert_task_probe.json | default({})).Messages | default([])
+          if ((bootwright_redfish_insert_request_succeeded | bool) and (bootwright_redfish_insert_task_url | length) > 0)
+          else []
+        }}
+      attempts: >-
+        {{
+          bootwright_redfish_insert_task_probe.attempts | default(0)
+          if ((bootwright_redfish_insert_request_succeeded | bool) and (bootwright_redfish_insert_task_url | length) > 0)
+          else 0
+        }}
+  changed_when: false
+
+- name: Resolve Redfish InsertMedia task result
+  ansible.builtin.set_fact:
+    bootwright_redfish_insert_task_succeeded: >-
+      {{
+        (bootwright_redfish_insert_request_succeeded | bool)
+        and
+        (
+          (bootwright_redfish_insert_task_url | length) == 0
+          or
+          (
+            (bootwright_redfish_insert_task_status.httpStatus | int) in [200, 204]
+            and
+            (
+              (bootwright_redfish_insert_task_status.taskState | length) == 0
+              or
+              bootwright_redfish_insert_task_status.taskState == 'Completed'
+            )
+            and
+            (
+              (bootwright_redfish_insert_task_status.taskStatus | length) == 0
+              or
+              bootwright_redfish_insert_task_status.taskStatus == 'OK'
+            )
+          )
+        )
+      }}
+    bootwright_redfish_insert_task_mounted: >-
+      {{
+        (bootwright_redfish_insert_request_succeeded | bool)
+        and
+        (
+          (bootwright_redfish_insert_task_status.httpStatus | int) in [200, 204]
+        )
+        and
+        (
+          (bootwright_redfish_insert_task_status.taskState | default('', true)) == 'Completed'
+        )
+        and
+        (
+          (bootwright_redfish_insert_task_status.taskStatus | default('', true)) == 'OK'
+        )
+        and
+        (
+          (
+            (bootwright_redfish_insert_task_status.messages | default([]))
+            | string
+            | lower
+          )
+          | regex_search('virtualmediamounted|virtual media is successfully mounted')
+        ) is not none
+      }}
+  changed_when: false
+
+- name: Probe virtual media after failed InsertMedia task
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_failed_task_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: not (bootwright_redfish_insert_task_succeeded | bool)
+
+- name: Probe virtual media after mounted InsertMedia task
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_mounted_task_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_insert_task_succeeded | bool
+    - bootwright_redfish_insert_task_mounted | bool
+
+- name: Wait for virtual media to report inserted agent ISO
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_insert_probe
+  until:
+    - >-
+      (bootwright_redfish_vmedia_insert_probe.json | default({}))
+      | bootwright_redfish_vmedia_attached(
+        bootwright_component.boot.agentIso.fetchUrl,
+        bootwright_redfish_vmedia_transfer_protocol
+      )
+  retries: "{{ bootwright_redfish_vmedia_insert_retries }}"
+  delay: "{{ bootwright_redfish_vmedia_insert_delay_seconds }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_insert_task_succeeded | bool
+    - not (bootwright_redfish_insert_task_mounted | bool)
+
+- name: Resolve virtual media probe after InsertMedia
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_probe: >-
+      {{
+        bootwright_redfish_vmedia_mounted_task_probe
+        if (bootwright_redfish_insert_task_mounted | bool)
+        else bootwright_redfish_vmedia_insert_probe
+        if (bootwright_redfish_insert_task_succeeded | bool)
+        else bootwright_redfish_vmedia_failed_task_probe
+      }}
+  changed_when: false
+
+- name: Resolve virtual media PATCH fallback precondition
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_patch_if_match: >-
+      {{
+        (bootwright_redfish_vmedia_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_vmedia_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_vmedia_probe.headers | default({})).etag | default('', true), true)
+        | default(bootwright_redfish_vmedia_if_match, true)
+        | default('*', true)
+      }}
+  changed_when: false
+  when: not (bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool)
+
+- name: Resolve virtual media PATCH fallback attempt
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_patch_attempted: >-
+      {{
+        not (bootwright_redfish_vmedia_vmm_control | default(false) | bool)
+        and
+        not (bootwright_redfish_insert_task_mounted | default(false) | bool)
+        and
+        not (bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool)
+      }}
+  changed_when: false
+
+- name: Patch virtual media attachment when InsertMedia action is not reflected
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_vmedia_patch_if_match }}"
+    body_format: json
+    body: "{{ bootwright_redfish_insert_media_body }}"
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_patch_insert
+  failed_when: false
+  changed_when: (bootwright_redfish_vmedia_patch_insert.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: bootwright_redfish_vmedia_patch_attempted | bool
+
+- name: Wait for virtual media to report inserted agent ISO after PATCH fallback
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_patch_probe
+  until:
+    - >-
+      (bootwright_redfish_vmedia_patch_probe.json | default({}))
+      | bootwright_redfish_vmedia_attached(
+        bootwright_component.boot.agentIso.fetchUrl,
+        bootwright_redfish_vmedia_transfer_protocol
+      )
+  retries: "{{ bootwright_redfish_vmedia_insert_retries }}"
+  delay: "{{ bootwright_redfish_vmedia_insert_delay_seconds }}"
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_vmedia_patch_attempted | bool
+    - not (bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool)
+    - (bootwright_redfish_vmedia_patch_insert.status | default(0) | int) in [200, 202, 204]
+
+- name: Resolve virtual media probe after PATCH fallback
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_probe: >-
+      {{
+        bootwright_redfish_vmedia_patch_probe
+        if (
+          (bootwright_redfish_vmedia_patch_probe is defined)
+          and not (bootwright_redfish_vmedia_patch_probe.skipped | default(false) | bool)
+        )
+        else bootwright_redfish_vmedia_probe
+      }}
+  changed_when: false
+
+- name: Capture virtual media attachment status
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_status:
+      insertAttempt: "{{ bootwright_redfish_insert_media_attempt }}"
+      member: "{{ bootwright_redfish_vmedia_member }}"
+      status: "{{ bootwright_redfish_vmedia_probe.status | default('unknown') }}"
+      inserted: "{{ bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool }}"
+      image: "{{ bootwright_redfish_vmedia_probe.json.Image | default('', true) }}"
+      imageName: "{{ bootwright_redfish_vmedia_probe.json.ImageName | default('', true) }}"
+      connectedVia: "{{ bootwright_redfish_vmedia_probe.json.ConnectedVia | default('', true) }}"
+      mediaTypes: "{{ bootwright_redfish_vmedia_probe.json.MediaTypes | default([]) }}"
+      attempts: "{{ bootwright_redfish_vmedia_probe.attempts | default(1) }}"
+      requestedTransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
+      observedTransferProtocolType: "{{ bootwright_redfish_vmedia_probe.json.TransferProtocolType | default('', true) }}"
+      verifyCertificateStatus: "{{ bootwright_redfish_vmedia_verify_certificate_patch.status | default('unknown') if bootwright_redfish_vmedia_transfer_protocol == 'HTTPS' else 'not attempted' }}"
+      verifyCertificate: "{{ bootwright_redfish_vmedia_probe.json.VerifyCertificate | default('') }}"
+      securityServiceMember: "{{ bootwright_redfish_security_service_status.member | default('', true) }}"
+      securityServiceStatus: "{{ bootwright_redfish_security_service_status.status | default('not attempted') }}"
+      httpsTransferCertVerificationSupported: "{{ bootwright_redfish_security_service_status.httpsTransferCertVerificationSupported | default(false) | bool }}"
+      httpsTransferCertVerification: "{{ bootwright_redfish_security_service_status.httpsTransferCertVerification | default('', true) }}"
+      httpsTransferCertVerificationPatchStatus: "{{ bootwright_redfish_security_service_status.httpsTransferCertVerificationPatchStatus | default('not attempted') }}"
+      patchFallbackStatus: "{{ bootwright_redfish_vmedia_patch_insert.status | default('unknown') if (bootwright_redfish_vmedia_patch_attempted | bool) else 'not attempted' }}"
+      insertStatus: "{{ bootwright_redfish_insert_task_status.insertStatus | default('unknown') }}"
+      insertTaskURL: "{{ bootwright_redfish_insert_task_status.url | default('') }}"
+      insertTaskHTTPStatus: "{{ bootwright_redfish_insert_task_status.httpStatus | default('not attempted') }}"
+      insertTaskState: "{{ bootwright_redfish_insert_task_status.taskState | default('', true) }}"
+      insertTaskStatus: "{{ bootwright_redfish_insert_task_status.taskStatus | default('', true) }}"
+      insertTaskMessages: "{{ bootwright_redfish_insert_task_status.messages | default([]) }}"
+      insertTaskMounted: "{{ bootwright_redfish_insert_task_mounted | default(false) | bool }}"
+  changed_when: false
+
+- name: Resolve virtual media attachment sources
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_resource_attached: >-
+      {{
+        (bootwright_redfish_vmedia_probe.json | default({}))
+        | bootwright_redfish_vmedia_attached(
+          bootwright_component.boot.agentIso.fetchUrl,
+          bootwright_redfish_vmedia_transfer_protocol
+        )
+      }}
+    bootwright_redfish_vmedia_task_attached: >-
+      {{
+        (bootwright_redfish_insert_task_succeeded | bool)
+        and
+        (bootwright_redfish_insert_task_mounted | bool)
+        and
+        (
+          not (bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool)
+          or
+          (
+            (bootwright_redfish_vmedia_probe.json | default({}))
+            | bootwright_redfish_vmedia_attached(
+              bootwright_component.boot.agentIso.fetchUrl,
+              bootwright_redfish_vmedia_transfer_protocol
+            )
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Resolve virtual media attachment result
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_attached: "{{ (bootwright_redfish_vmedia_resource_attached | bool) or (bootwright_redfish_vmedia_task_attached | bool) }}"
+  changed_when: false
