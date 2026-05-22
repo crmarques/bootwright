@@ -19,6 +19,7 @@ Error and constraint knowledge extracted from code history. Match the reported s
 | OpenShift install | Disconnected install fails TLS; agent never reaches SSH; image pull x509 error | [disconnected-trust-bundle-policy.md](disconnected-trust-bundle-policy.md) |
 | OpenShift install | Mirror push x509 SAN mismatch after self-signed cert spec change | [self-signed-cert-drift.md](self-signed-cert-drift.md) |
 | OpenShift install | Agent ISO cache stale; `cannot generate ISO image due to configuration errors` | [openshift-agent-iso-cache.md](openshift-agent-iso-cache.md) |
+| OpenShift install | `Missing install-config.yaml`; `Fail when install-config is missing`; boot task after successful ISO generation | [openshift-install-config-consumed.md](openshift-install-config-consumed.md) |
 | OpenShift install | `SQUASHFS error: Unable to read page`; `Unable to read fragment cache entry`; agent API never initializes after virtual media eject | [openshift-agent-iso-squashfs-detach.md](openshift-agent-iso-squashfs-detach.md) |
 | OpenShift install | `v2GetClusterNotFound`; `Writing image to disk: 100%`; node boots agent ISO again | [openshift-agent-iso-reboot-loop.md](openshift-agent-iso-reboot-loop.md) |
 | OpenShift install | `Only platform none and external supports 1 ControlPlane and 0 Compute nodes`; SNO renders `platform.baremetal` | [openshift-sno-platform-none.md](openshift-sno-platform-none.md) |

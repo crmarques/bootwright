@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -161,6 +162,9 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		_ = workflow.SaveRunLedger(stateDir, ledger)
 		return ledger, nil
 	}
+	outputMu := &sync.Mutex{}
+	taskStdout := &applyTaskOutputWriter{mu: outputMu, w: stdout}
+	taskStderr := &applyTaskOutputWriter{mu: outputMu, w: stderr}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -206,12 +210,12 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 				firstErr = err
 				cancel()
 			}
-			printApplyTaskStart(stdout, ledger, task.entry.ID)
+			printApplyTaskStart(taskStdout, ledger, task.entry.ID)
 			if opts.AskBecomePass {
-				output.NewContinuation(stderr).BlankLine()
+				output.NewContinuation(taskStderr).BlankLine()
 			}
 			go func(task applyTask) {
-				events <- runOneApplyTask(ctx, stderr, stateDir, ledger.RunID, opts, task)
+				events <- runOneApplyTask(ctx, taskStdout, taskStderr, stateDir, ledger.RunID, opts, task)
 			}(task)
 		}
 		if firstErr != nil && running == 0 {
@@ -242,7 +246,7 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			firstErr = saveErr
 			cancel()
 		}
-		printApplyTaskResult(stdout, ledger, event.id)
+		printApplyTaskResult(taskStdout, ledger, event.id)
 	}
 
 	if firstErr != nil {
@@ -264,7 +268,7 @@ func taskSlotAvailable(task applyTask, runningRedfish, redfishLimit int) bool {
 	return runningRedfish < redfishLimit
 }
 
-func runOneApplyTask(ctx context.Context, stderr io.Writer, stateDir, runID string, opts workflow.RunOptions, task applyTask) applyTaskResult {
+func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir, runID string, opts workflow.RunOptions, task applyTask) applyTaskResult {
 	renderDir := filepath.Join(stateDir, "workflow", "runs", runID, task.entry.ID, "render")
 	taskOpts := opts
 	taskOpts.State = task.state
@@ -275,13 +279,25 @@ func runOneApplyTask(ctx context.Context, stderr io.Writer, stateDir, runID stri
 	taskOpts.ArtifactsBaseName = task.entry.ID
 	taskOpts.ResolveInstaller = false
 	taskOpts.Label = task.entry.Label
-	runner := ansible.CommandRunner{Stdout: io.Discard, Stderr: io.Discard}
-	if taskOpts.AskBecomePass {
-		runner.Stdout = stderr
-		runner.Stderr = stderr
-	}
+	runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 	result, err := workflow.Run(ctx, taskOpts, runner, nil)
 	return applyTaskResult{id: task.entry.ID, skipped: result.Skipped, err: err}
+}
+
+type applyTaskOutputWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (w *applyTaskOutputWriter) Write(p []byte) (int, error) {
+	if w == nil || w.w == nil {
+		return len(p), nil
+	}
+	if w.mu != nil {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+	}
+	return w.w.Write(p)
 }
 
 func applyClusterNames(state v1alpha1.State) []string {

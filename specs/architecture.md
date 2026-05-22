@@ -18,8 +18,8 @@ Apply execution records a durable run ledger under the context state directory.
 The ledger is the operator-facing status source for long-running work: each
 planned task has a stable ID, dependency list, status, log path, and optional
 cluster, node, or host association. Human apply output summarizes task progress
-from that ledger while detailed external-tool output stays in per-task artifact
-logs.
+from that ledger. Ansible stdout/stderr streams pass through to the terminal
+without Bootwright decoration and are also tee'd into per-task artifact logs.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
 cluster task: create the cluster agent ISO with `openshift-install`, boot each

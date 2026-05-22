@@ -866,6 +866,61 @@ func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
 	}
 }
 
+func TestInstallAgentValidatesActionBeforeInputs(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/main.yml")
+	selectIdx := findAnsibleTask(t, tasks, "Select agent install action")
+	validateActionIdx := findAnsibleTask(t, tasks, "Validate selected agent install action")
+	validateInputsIdx := findAnsibleTask(t, tasks, "Validate installer inputs")
+	runIdx := findAnsibleTask(t, tasks, "Run selected agent install action")
+	if !(selectIdx < validateActionIdx && validateActionIdx < validateInputsIdx && validateInputsIdx < runIdx) {
+		t.Fatalf("install_agent must select and validate action before validating action-specific inputs")
+	}
+}
+
+func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/validate.yml")
+	installStat := tasks[findAnsibleTask(t, tasks, "Verify rendered install-config exists")]
+	installFail := tasks[findAnsibleTask(t, tasks, "Fail when install-config is missing")]
+	isoPathStat := tasks[findAnsibleTask(t, tasks, "Verify generated agent ISO path exists")]
+	isoPathFail := tasks[findAnsibleTask(t, tasks, "Fail when generated agent ISO path is missing")]
+
+	if got, _ := installStat["when"].(string); got != "bootwright_install_agent_action_effective in ['run', 'create_iso']" {
+		t.Fatalf("install-config stat when got %v", installStat["when"])
+	}
+	when, ok := installFail["when"].(string)
+	if !ok {
+		t.Fatalf("install-config failure when got %v", installFail["when"])
+	}
+	for _, want := range []string{
+		"bootwright_install_agent_action_effective in ['run', 'create_iso']",
+		"not bootwright_install_config_stat.stat.exists",
+	} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("install-config failure when missing %q: %v", want, installFail["when"])
+		}
+	}
+	failBody := fmt.Sprint(installFail["ansible.builtin.fail"])
+	if strings.Contains(failBody, "--resolve-secrets") || !strings.Contains(failBody, "--sensitive") {
+		t.Fatalf("install-config failure message must mention --sensitive and not removed --resolve-secrets: %v", installFail["ansible.builtin.fail"])
+	}
+
+	if got, _ := isoPathStat["when"].(string); got != "bootwright_install_agent_action_effective == 'boot_machine'" {
+		t.Fatalf("agent ISO path stat when got %v", isoPathStat["when"])
+	}
+	when, ok = isoPathFail["when"].(string)
+	if !ok {
+		t.Fatalf("agent ISO path failure when got %v", isoPathFail["when"])
+	}
+	for _, want := range []string{
+		"bootwright_install_agent_action_effective == 'boot_machine'",
+		"not bootwright_agent_iso_path_stat.stat.exists",
+	} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("agent ISO path failure when missing %q: %v", want, isoPathFail["when"])
+		}
+	}
+}
+
 func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{

@@ -1,4 +1,15 @@
 ---
+- name: Select agent install action
+  ansible.builtin.set_fact:
+    bootwright_install_agent_action_effective: "{{ bootwright_install_agent_action | default('run') }}"
+  changed_when: false
+
+- name: Validate selected agent install action
+  ansible.builtin.assert:
+    that:
+      - bootwright_install_agent_action_effective in ['run', 'create_iso', 'boot_machine', 'wait_install']
+    fail_msg: "Unsupported install_agent action {{ bootwright_install_agent_action_effective }}"
+
 - name: Validate installer inputs
   ansible.builtin.import_tasks: validate.yml
 
@@ -10,17 +21,6 @@
 
 - name: Check existing install state
   ansible.builtin.import_tasks: skip_guard.yml
-
-- name: Select agent install action
-  ansible.builtin.set_fact:
-    bootwright_install_agent_action_effective: "{{ bootwright_install_agent_action | default('run') }}"
-  changed_when: false
-
-- name: Validate selected agent install action
-  ansible.builtin.assert:
-    that:
-      - bootwright_install_agent_action_effective in ['run', 'create_iso', 'boot_machine', 'wait_install']
-    fail_msg: "Unsupported install_agent action {{ bootwright_install_agent_action_effective }}"
 
 - name: Run selected agent install action
   ansible.builtin.include_tasks: "{{ bootwright_install_agent_action_effective }}.yml"

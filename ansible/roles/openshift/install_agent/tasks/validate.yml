@@ -26,6 +26,7 @@
   register: bootwright_install_config_stat
   delegate_to: localhost
   become: false
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']
 
 - name: Fail when install-config is missing
   ansible.builtin.fail:
@@ -33,5 +34,21 @@
       Missing install-config.yaml at {{ bootwright_install_work_dir }}/install-config.yaml.
       The bootwright CLI is expected to inline secrets via ResolveInstaller before
       handing off to Ansible; re-run `bootwright apply cluster` (or
-      `bootwright render installer --resolve-secrets`) to regenerate it.
-  when: not bootwright_install_config_stat.stat.exists
+      `bootwright render installer --sensitive`) to regenerate it.
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso'] and not bootwright_install_config_stat.stat.exists
+
+- name: Verify generated agent ISO path exists
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_work_dir }}/agent-iso.path"
+  register: bootwright_agent_iso_path_stat
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_agent_action_effective == 'boot_machine'
+
+- name: Fail when generated agent ISO path is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing agent-iso.path at {{ bootwright_install_work_dir }}/agent-iso.path.
+      The create-agent-iso task must complete before boot-machine tasks can
+      boot nodes.
+  when: bootwright_install_agent_action_effective == 'boot_machine' and not bootwright_agent_iso_path_stat.stat.exists

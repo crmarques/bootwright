@@ -33,7 +33,7 @@ func printApplyTaskStart(stdout io.Writer, ledger workflow.RunLedger, id string)
 	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
 		Status: output.StatusWarn,
 		Label:  applyTaskDisplayLabel(task.Label),
-		Detail: "running; log " + task.LogPath,
+		Detail: "running",
 	}})
 }
 
@@ -54,9 +54,6 @@ func printApplyTaskResult(stdout io.Writer, ledger workflow.RunLedger, id string
 	case workflow.TaskStatusBlocked:
 		status = output.StatusSkip
 		detail = task.SkippedReason
-	}
-	if task.LogPath != "" {
-		detail = strings.TrimSpace(detail + "; log " + task.LogPath)
 	}
 	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
 		Status: status,

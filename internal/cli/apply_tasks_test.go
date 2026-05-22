@@ -1,6 +1,17 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/workflow"
+)
 
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
@@ -96,6 +107,69 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	for i, want := range wantBootIDs {
 		if wait.entry.Dependencies[i] != want {
 			t.Fatalf("wait dep %d = %s, want %s", i, wait.entry.Dependencies[i], want)
+		}
+	}
+}
+
+func TestRunApplyTaskGraphStreamsAnsibleOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "fake-ansible-playbook")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
+echo ansible-stdout-line
+echo ansible-stderr-line >&2
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible-playbook: %v", err)
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+		}},
+	}
+	stateDir := filepath.Join(dir, "state")
+	task := applyTask{
+		entry: workflow.TaskLedgerEntry{
+			ID:     "provider",
+			Kind:   applyTaskKindProvider,
+			Label:  "provider services",
+			Status: workflow.TaskStatusPending,
+		},
+		playbook: "playbooks/layers/providers/apply.yml",
+		state:    state,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	ledger, err := runApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+		State:             state,
+		StateDir:          stateDir,
+		SecretsDir:        filepath.Join(dir, "secrets"),
+		HostStateDir:      filepath.Join(dir, "host-state"),
+		Executable:        executable,
+		BundleDir:         filepath.Join(dir, "bundle"),
+		ArtifactsBaseName: "provider",
+	}, infraScope, "", []applyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1})
+	if err != nil {
+		t.Fatalf("runApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "ansible-stdout-line") {
+		t.Fatalf("stdout missing live ansible output:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "ansible-stderr-line") {
+		t.Fatalf("stderr missing live ansible output:\n%s", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "log "+stateDir) {
+		t.Fatalf("stdout should not point normal progress at the ansible log:\n%s", stdout.String())
+	}
+	logPath := taskLogPath(stateDir, ledger.RunID, "provider")
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read ansible output log: %v", err)
+	}
+	for _, want := range []string{"ansible-stdout-line", "ansible-stderr-line"} {
+		if !strings.Contains(string(logData), want) {
+			t.Fatalf("ansible output log missing %q:\n%s", want, string(logData))
 		}
 	}
 }
