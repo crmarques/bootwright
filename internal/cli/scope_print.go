@@ -157,7 +157,7 @@ func printDestroyClustersPreview(w io.Writer, stateDir string, state v1alpha1.St
 	runtimeRoot := filepath.Join(stateDir, "runtime")
 	var items []output.Item
 	for _, name := range names {
-		items = append(items, output.Item{Label: "cluster " + name, Detail: "installer dir " + filepath.Join(runtimeRoot, name, "installer")})
+		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(runtimeRoot, name)})
 	}
 	p.List(items)
 	p.Warning("destroy cluster", "does not power off VMs, undefine networks, or remove provider services; run destroy infra for that")

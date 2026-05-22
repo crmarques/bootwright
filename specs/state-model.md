@@ -679,6 +679,7 @@ bootwright apply infra --yes
 bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
 bootwright apply cluster --yes
+bootwright apply cluster --override --yes
 bootwright status
 bootwright status --watch
 bootwright destroy cluster --yes
@@ -697,6 +698,11 @@ Apply commands may execute independent tasks concurrently. Operators can tune
 task scheduling with `--parallelism`, `--parallelism-per-host`, and
 `--parallelism-redfish`; `0` for `--parallelism` lets Bootwright pick the
 current default.
+`bootwright apply cluster --override` forces OpenShift agent install tasks to
+run even when local runtime kubeconfig state reports that the target cluster is
+already available. It is for reinstalling after the operator has reset or
+replaced the target machines; it does not wipe disks, destroy substrate
+machines, power off nodes, or remove provider services.
 Every apply writes `<state-dir>/workflow/current-apply.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task

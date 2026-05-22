@@ -208,6 +208,7 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | --- | --- |
 | `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
 | `bootwright_task_machine_name` | ClusterInfra machine component name selected for one node boot task |
+| `bootwright_install_override` | Optional boolean from `bootwright apply cluster --override`; when true the install role ignores prior local kubeconfig availability |
 
 The OpenShift agent role uses those vars to create one cluster ISO, boot one
 machine per scheduler task, and run the final installer wait after all node

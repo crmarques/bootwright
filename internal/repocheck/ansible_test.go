@@ -853,6 +853,32 @@ func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 	}
 }
 
+func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
+	body := readRepoFile(t, "ansible/roles/openshift/install_agent/tasks/skip_guard.yml")
+	for _, want := range []string{
+		"not (bootwright_install_override | default(false) | bool)",
+		"bootwright_install_already_complete",
+		"bootwright_install_cluster_available.stdout",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("skip guard missing %q", want)
+		}
+	}
+}
+
+func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
+	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
+	for _, want := range []string{
+		"bootwright_cluster_runtime_dir: \"{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}\"",
+		"bootwright_process_cleanup_pattern: \"runtime/{{ bootwright_current_cluster.name }}/\"",
+		"path: \"{{ bootwright_cluster_runtime_dir }}\"",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("destroy_agent missing %q", want)
+		}
+	}
+}
+
 func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_base/tasks/main.yml")
 	binaryIdx := findAnsibleTask(t, tasks, "Detect firewall-cmd binary")

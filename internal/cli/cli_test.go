@@ -1001,6 +1001,24 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 }
 
+func TestApplyClusterOverrideDryRunPassesInstallOverride(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--override")
+	if code != 0 {
+		t.Fatalf("apply cluster override dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_install_override=true") {
+		t.Fatalf("extra vars missing install override: %+v", report.ExtraVars)
+	}
+	if !slices.Contains(report.Command, "bootwright_install_override=true") {
+		t.Fatalf("command missing install override: %+v", report.Command)
+	}
+}
+
 func TestStatusWatchStopsWhenNoRunLedgerExists(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "status", "--watch", "--watch-interval", "1ms")

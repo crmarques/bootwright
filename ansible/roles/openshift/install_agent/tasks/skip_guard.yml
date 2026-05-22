@@ -21,7 +21,9 @@
   register: bootwright_install_cluster_available
   changed_when: false
   failed_when: false
-  when: bootwright_prior_kubeconfig_stat.stat.exists
+  when:
+    - bootwright_prior_kubeconfig_stat.stat.exists
+    - not (bootwright_install_override | default(false) | bool)
   delegate_to: localhost
   become: false
 
@@ -29,7 +31,8 @@
   ansible.builtin.set_fact:
     bootwright_install_already_complete: >-
       {{
-        bootwright_prior_kubeconfig_stat.stat.exists
+        not (bootwright_install_override | default(false) | bool)
+        and bootwright_prior_kubeconfig_stat.stat.exists
         and (bootwright_install_cluster_available.stdout | default('') | trim) == 'True'
       }}
   changed_when: false
