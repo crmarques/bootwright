@@ -40,20 +40,21 @@ func SystemTempEnv() map[string]string {
 }
 
 type RunSpec struct {
-	Executable        string
-	AnsibleCfg        string
-	RolesPath         string
-	CollectionsPath   string
-	FilterPluginsPath string
-	Inventory         string
-	Playbook          string
-	Limit             string
-	ExtraVars         string
-	ExtraVarPairs     []string
-	ArtifactsDir      string
-	Check             bool
-	AskBecomePass     bool
-	UseControllingTTY bool
+	Executable         string
+	AnsibleCfg         string
+	RolesPath          string
+	CollectionsPath    string
+	FilterPluginsPath  string
+	Inventory          string
+	Playbook           string
+	Limit              string
+	ExtraVars          string
+	ExtraVarPairs      []string
+	ArtifactsDir       string
+	Check              bool
+	AskBecomePass      bool
+	BecomePasswordFile string
+	UseControllingTTY  bool
 }
 
 type Runner interface {
@@ -86,7 +87,9 @@ func (r CommandRunner) Command(spec RunSpec) []string {
 	if spec.Check {
 		args = append(args, "--check")
 	}
-	if spec.AskBecomePass {
+	if spec.BecomePasswordFile != "" {
+		args = append(args, "--become-password-file", spec.BecomePasswordFile)
+	} else if spec.AskBecomePass {
 		args = append(args, "--ask-become-pass")
 	}
 	return args

@@ -9,6 +9,7 @@ import (
 
 func TestHumanOutputUsesOutputPackage(t *testing.T) {
 	allowed := map[string]bool{
+		"become_password.go":   true,
 		"command_tty_linux.go": true,
 		"context.go":           true,
 		"output/output.go":     true,

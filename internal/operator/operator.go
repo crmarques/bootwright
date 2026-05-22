@@ -209,9 +209,9 @@ func SudoPackageInstallCmd(args []string, preserveProxyEnv bool) []string {
 const SudoPreservedProxyVars = "HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy"
 
 // BootstrapPlan computes the controller bootstrap sequence: optionally
-// install python3.12, create a venv at venvDir, install pinned pip,
-// and install pinned ansible-core. venvBin returns the absolute path of a
-// venv binary so the plan stays free of cli-package path helpers.
+// install python3.12, recreate the venv when it is not pinned, then
+// install pinned pip and ansible-core. venvBin returns the absolute path
+// of a venv binary so the plan stays free of cli-package path helpers.
 func BootstrapPlan(venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool) ([]BootstrapStep, error) {
 	return BootstrapPlanWith(DefaultProcessDeps, venvDir, venvBin, preserveProxyEnv, rootManagedVenv)
 }
@@ -243,23 +243,21 @@ func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name strin
 		python = "python3.12"
 	}
 	venvPython := venvBin("python")
-	venvMissing := !pythonAtLeast312(deps, venvPython)
-	if venvMissing {
-		venvCmd := []string{python, "-m", "venv", venvDir}
+	venvPinned := pythonAtLeast312(deps, venvPython) &&
+		pythonPipVersion(deps, venvPython) == pipPin &&
+		pythonPackageVersion(deps, venvPython, "ansible-core") == pin
+	if !venvPinned {
+		venvCmd := []string{python, "-m", "venv", "--clear", venvDir}
 		if rootManagedVenv {
 			venvCmd = rootManagedCmdWith(deps, venvCmd, preserveProxyEnv)
 		}
 		steps = append(steps, bootstrapStep("create ansible-core venv at "+venvDir, venvCmd))
-	}
-	if venvMissing || pipVersion(deps, venvBin("pip")) != pipPin {
-		pipCmd := []string{venvBin("pip"), "install", "pip==" + pipPin}
+		pipCmd := []string{venvPython, "-m", "pip", "install", "pip==" + pipPin}
 		if rootManagedVenv {
 			pipCmd = rootManagedCmdWith(deps, pipCmd, preserveProxyEnv)
 		}
 		steps = append(steps, bootstrapStep("install pip=="+pipPin+" in venv", pipCmd))
-	}
-	if venvMissing || pythonPackageVersion(deps, venvPython, "ansible-core") != pin {
-		ansibleCmd := []string{venvBin("pip"), "install", "ansible-core==" + pin}
+		ansibleCmd := []string{venvPython, "-m", "pip", "install", "ansible-core==" + pin}
 		if rootManagedVenv {
 			ansibleCmd = rootManagedCmdWith(deps, ansibleCmd, preserveProxyEnv)
 		}
@@ -275,8 +273,8 @@ func bootstrapStep(label string, cmd []string) BootstrapStep {
 	return BootstrapStep{Label: label, Cmd: cmd}
 }
 
-func pipVersion(deps ProcessDeps, pipBin string) string {
-	out, err := deps.CommandOutput(pipBin, "--version")
+func pythonPipVersion(deps ProcessDeps, pythonBin string) string {
+	out, err := deps.CommandOutput(pythonBin, "-m", "pip", "--version")
 	if err != nil {
 		return ""
 	}

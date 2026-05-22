@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -20,6 +21,28 @@ func TestCommandRunnerIncludesAskBecomePass(t *testing.T) {
 	if got := command[len(command)-1]; got != "--ask-become-pass" {
 		t.Fatalf("last arg got %q, want --ask-become-pass; command=%v", got, command)
 	}
+}
+
+func TestCommandRunnerUsesBecomePasswordFile(t *testing.T) {
+	command := CommandRunner{}.Command(RunSpec{
+		Inventory:          "inventory.yaml",
+		Playbook:           "playbook.yml",
+		ExtraVars:          "vars.yml",
+		AskBecomePass:      true,
+		BecomePasswordFile: "/tmp/bootwright-become",
+	})
+	if slices.Contains(command, "--ask-become-pass") {
+		t.Fatalf("command must not ask interactively when password file is set: %v", command)
+	}
+	for i, arg := range command {
+		if arg == "--become-password-file" {
+			if i+1 >= len(command) || command[i+1] != "/tmp/bootwright-become" {
+				t.Fatalf("password file arg missing value: %v", command)
+			}
+			return
+		}
+	}
+	t.Fatalf("command missing --become-password-file: %v", command)
 }
 
 func TestCommandRunnerSavesCombinedOutputLogOnFailure(t *testing.T) {

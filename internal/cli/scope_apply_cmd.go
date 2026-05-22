@@ -95,9 +95,6 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if limits.Parallelism <= 0 {
 			limits.Parallelism = autoParallelism(len(tasks))
 		}
-		if plan.askBecomePass && limits.Parallelism > 1 {
-			limits.Parallelism = 1
-		}
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
@@ -125,6 +122,15 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if !dryRun && !plan.noRemoteWork {
 			printWorkflowStart(stdout, scope.name, plan.selected, plan.askBecomePass)
 		}
+		becomePasswordFile := ""
+		if !dryRun && !plan.noRemoteWork && plan.askBecomePass {
+			path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
+			if err != nil {
+				return failErr(1, err)
+			}
+			defer cleanup()
+			becomePasswordFile = path
+		}
 		reporter := newWorkflowReporter(stdout)
 		if plan.askBecomePass {
 			reporter.WithPromptGap(stderr)
@@ -140,22 +146,23 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			reporter.BundleReady(bundle)
 		}
 		runOpts := workflow.RunOptions{
-			State:             plan.state,
-			StateDir:          ctx.StateDir,
-			SecretsDir:        ctx.SecretsDir,
-			HostStateDir:      flags.hostStateDir,
-			Executable:        flags.executable,
-			BundleDir:         bundle.Dir,
-			Playbook:          scope.applyPlaybook,
-			Limit:             plan.limit,
-			ExtraVarPairs:     plan.extraVarPairs,
-			ArtifactsBaseName: scope.artifactsBaseName,
-			Check:             check,
-			AskBecomePass:     plan.askBecomePass,
-			UseControllingTTY: useControllingTTYForWorkflow(plan.selected, plan.askBecomePass),
-			DryRun:            dryRun,
-			ResolveInstaller:  plan.targetsClusters,
-			Label:             scope.name + " apply",
+			State:              plan.state,
+			StateDir:           ctx.StateDir,
+			SecretsDir:         ctx.SecretsDir,
+			HostStateDir:       flags.hostStateDir,
+			Executable:         flags.executable,
+			BundleDir:          bundle.Dir,
+			Playbook:           scope.applyPlaybook,
+			Limit:              plan.limit,
+			ExtraVarPairs:      plan.extraVarPairs,
+			ArtifactsBaseName:  scope.artifactsBaseName,
+			Check:              check,
+			AskBecomePass:      plan.askBecomePass && becomePasswordFile == "",
+			BecomePasswordFile: becomePasswordFile,
+			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && becomePasswordFile == ""),
+			DryRun:             dryRun,
+			ResolveInstaller:   plan.targetsClusters,
+			Label:              scope.name + " apply",
 		}
 		if dryRun {
 			reporter.DryRunTasks(scope.name+" apply", taskLedgerEntries(tasks), limits)

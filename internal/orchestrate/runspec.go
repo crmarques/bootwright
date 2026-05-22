@@ -13,20 +13,21 @@ import (
 )
 
 type RunSpecConfig struct {
-	Executable        string
-	BundleDir         string
-	StateDir          string
-	SecretsDir        string
-	HostStateDir      string
-	InventoryPath     string
-	VarsPath          string
-	Playbook          string
-	Limit             string
-	ArtifactsDir      string
-	ExtraVarPairs     []string
-	Check             bool
-	AskBecomePass     bool
-	UseControllingTTY bool
+	Executable         string
+	BundleDir          string
+	StateDir           string
+	SecretsDir         string
+	HostStateDir       string
+	InventoryPath      string
+	VarsPath           string
+	Playbook           string
+	Limit              string
+	ArtifactsDir       string
+	ExtraVarPairs      []string
+	Check              bool
+	AskBecomePass      bool
+	BecomePasswordFile string
+	UseControllingTTY  bool
 }
 
 func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
@@ -49,20 +50,21 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)
 	return ansible.RunSpec{
-		Executable:        cfg.Executable,
-		AnsibleCfg:        filepath.Join(cfg.BundleDir, embedded.AnsibleCfgRelPath),
-		RolesPath:         embedded.RolesPath(cfg.BundleDir),
-		CollectionsPath:   filepath.Join(cfg.BundleDir, embedded.CollectionsRelPath),
-		FilterPluginsPath: filepath.Join(cfg.BundleDir, embedded.FilterPluginsRelPath),
-		Inventory:         cfg.InventoryPath,
-		Playbook:          filepath.Join(cfg.BundleDir, cfg.Playbook),
-		Limit:             cfg.Limit,
-		ExtraVars:         cfg.VarsPath,
-		ExtraVarPairs:     pairs,
-		ArtifactsDir:      cfg.ArtifactsDir,
-		Check:             cfg.Check,
-		AskBecomePass:     cfg.AskBecomePass,
-		UseControllingTTY: cfg.UseControllingTTY,
+		Executable:         cfg.Executable,
+		AnsibleCfg:         filepath.Join(cfg.BundleDir, embedded.AnsibleCfgRelPath),
+		RolesPath:          embedded.RolesPath(cfg.BundleDir),
+		CollectionsPath:    filepath.Join(cfg.BundleDir, embedded.CollectionsRelPath),
+		FilterPluginsPath:  filepath.Join(cfg.BundleDir, embedded.FilterPluginsRelPath),
+		Inventory:          cfg.InventoryPath,
+		Playbook:           filepath.Join(cfg.BundleDir, cfg.Playbook),
+		Limit:              cfg.Limit,
+		ExtraVars:          cfg.VarsPath,
+		ExtraVarPairs:      pairs,
+		ArtifactsDir:       cfg.ArtifactsDir,
+		Check:              cfg.Check,
+		AskBecomePass:      cfg.AskBecomePass,
+		BecomePasswordFile: cfg.BecomePasswordFile,
+		UseControllingTTY:  cfg.UseControllingTTY,
 	}, nil
 }
 

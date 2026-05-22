@@ -330,7 +330,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenv(t *testing.T) {
 		outputs: map[string][]byte{
 			"python3.12":      []byte("Python 3.12.4"),
 			venvBin("python"): []byte("Python 3.12.4"),
-			commandOutputKey(venvBin("pip"), "--version"):                            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false)
@@ -342,25 +342,32 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenv(t *testing.T) {
 	}
 }
 
-func TestBootstrapPlanWithDepsInstallsOnlyOutdatedPinnedPackages(t *testing.T) {
+func TestBootstrapPlanWithDepsRecreatesOutdatedPinnedVenv(t *testing.T) {
 	venvBin := func(name string) string { return "/venv/bin/" + name }
 	got, err := BootstrapPlanWith(fakeProcessDeps{
 		paths: map[string]bool{"python3.12": true},
 		outputs: map[string][]byte{
 			"python3.12":      []byte("Python 3.12.4"),
 			venvBin("python"): []byte("Python 3.12.4"),
-			commandOutputKey(venvBin("pip"), "--version"):                            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.19.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("got %d steps, want 1: %+v", len(got), got)
+	want := [][]string{
+		{"python3.12", "-m", "venv", "--clear", "/venv"},
+		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.1"},
+		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.21.0"},
 	}
-	if !reflect.DeepEqual(got[0].Cmd, []string{"/venv/bin/pip", "install", "ansible-core==2.21.0"}) {
-		t.Fatalf("step = %v", got[0].Cmd)
+	if len(got) != len(want) {
+		t.Fatalf("got %d steps, want %d: %+v", len(got), len(want), got)
+	}
+	for i, step := range got {
+		if !reflect.DeepEqual(step.Cmd, want[i]) {
+			t.Fatalf("step %d = %v, want %v", i, step.Cmd, want[i])
+		}
 	}
 }
 

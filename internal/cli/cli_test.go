@@ -952,7 +952,7 @@ func TestStatusJSONIncludesApplyLedger(t *testing.T) {
 
 func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	initTestContext(t, "005-3nodes-baremetal")
-	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--ask-become-pass=true")
 	if code != 0 {
 		t.Fatalf("apply dry-run json exited %d, stderr=%q", code, stderr)
 	}
@@ -962,6 +962,9 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
+	}
+	if report.ApplyPlan.Limits.Parallelism != 4 {
+		t.Fatalf("parallelism = %d, want 4 with one reusable become password", report.ApplyPlan.Limits.Parallelism)
 	}
 	tasks := report.ApplyPlan.Tasks
 	if len(tasks) != 5 {

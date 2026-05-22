@@ -143,6 +143,26 @@ func TestRunPassesControllingTTYToRunner(t *testing.T) {
 	}
 }
 
+func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
+	runner := &fakeRunner{}
+	_, err := Run(context.Background(), RunOptions{
+		State:              minimalState(),
+		StateDir:           t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		HostStateDir:       "/var/lib/bootwright",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/clusters/apply.yml",
+		ArtifactsBaseName:  "clusters",
+		BecomePasswordFile: "/tmp/bootwright-become",
+	}, runner, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if runner.lastSpec.BecomePasswordFile != "/tmp/bootwright-become" {
+		t.Fatalf("BecomePasswordFile = %q, want /tmp/bootwright-become", runner.lastSpec.BecomePasswordFile)
+	}
+}
+
 func TestRunPropagatesRunnerError(t *testing.T) {
 	runner := &fakeRunner{runReturns: errors.New("boom")}
 	_, err := Run(context.Background(), RunOptions{

@@ -39,11 +39,12 @@ type RunOptions struct {
 	ExtraVarPairs []string
 	// ArtifactsBaseName names the per-run subdirectory under the render
 	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
-	ArtifactsBaseName string
-	Check             bool
-	AskBecomePass     bool
-	UseControllingTTY bool
-	DryRun            bool
+	ArtifactsBaseName  string
+	Check              bool
+	AskBecomePass      bool
+	BecomePasswordFile string
+	UseControllingTTY  bool
+	DryRun             bool
 	// ResolveInstaller, when true and the run is not a dry-run, writes
 	// per-cluster effective install-config.yaml / agent-config.yaml with
 	// real secret material inlined under <state-dir>/runtime/<cluster>/installer/
@@ -102,20 +103,21 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		}
 	}
 	spec, err := orchestrate.NewRunSpec(orchestrate.RunSpecConfig{
-		Executable:        opts.Executable,
-		BundleDir:         opts.BundleDir,
-		StateDir:          opts.StateDir,
-		SecretsDir:        opts.SecretsDir,
-		HostStateDir:      opts.HostStateDir,
-		InventoryPath:     result.InventoryPath,
-		VarsPath:          result.VarsPath,
-		Playbook:          opts.Playbook,
-		Limit:             opts.Limit,
-		ExtraVarPairs:     opts.ExtraVarPairs,
-		ArtifactsDir:      filepath.Join(result.ArtifactsDir, opts.ArtifactsBaseName),
-		Check:             opts.Check,
-		AskBecomePass:     opts.AskBecomePass,
-		UseControllingTTY: opts.UseControllingTTY,
+		Executable:         opts.Executable,
+		BundleDir:          opts.BundleDir,
+		StateDir:           opts.StateDir,
+		SecretsDir:         opts.SecretsDir,
+		HostStateDir:       opts.HostStateDir,
+		InventoryPath:      result.InventoryPath,
+		VarsPath:           result.VarsPath,
+		Playbook:           opts.Playbook,
+		Limit:              opts.Limit,
+		ExtraVarPairs:      opts.ExtraVarPairs,
+		ArtifactsDir:       filepath.Join(result.ArtifactsDir, opts.ArtifactsBaseName),
+		Check:              opts.Check,
+		AskBecomePass:      opts.AskBecomePass,
+		BecomePasswordFile: opts.BecomePasswordFile,
+		UseControllingTTY:  opts.UseControllingTTY,
 	})
 	if err != nil {
 		return RunResult{Render: result}, err
