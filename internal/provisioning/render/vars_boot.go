@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -159,6 +160,54 @@ func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, iso
 	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts/%s-%s/%s", publisher.ProviderName, publisher.Capability.Name, isoBasename)
 	fetchURL = fmt.Sprintf("%s://%s:%d/%s", artifactURLScheme, artifactURLHost(hostAddr), port, isoBasename)
 	return hostRef, stagePath, fetchURL
+}
+
+func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) []any {
+	clusterName := ocp.Metadata.Name
+	targets := map[string]map[string]any{}
+	var keys []string
+	for _, m := range ci.Spec.Components.Machines {
+		boot := machineBootVars(state, ci, m, clusterName)
+		if boot == nil {
+			continue
+		}
+		iso, ok := boot["agentIso"].(map[string]any)
+		if !ok {
+			continue
+		}
+		stageHost, _ := iso["stageHost"].(string)
+		stagePath, _ := iso["stagePath"].(string)
+		fetchURL, _ := iso["fetchUrl"].(string)
+		if stageHost == "" || stagePath == "" || fetchURL == "" {
+			continue
+		}
+		redfish, _ := boot["redfish"].(map[string]any)
+		requiresBMCFetchChecks, _ := redfish["setBootSource"].(bool)
+		key := stageHost + "\x00" + stagePath + "\x00" + fetchURL
+		target, ok := targets[key]
+		if !ok {
+			keys = append(keys, key)
+			target = map[string]any{
+				"stageHost":         stageHost,
+				"stagePath":         stagePath,
+				"fetchUrl":          fetchURL,
+				"requiresHTTPS":     requiresBMCFetchChecks,
+				"requiresByteRange": requiresBMCFetchChecks,
+			}
+			targets[key] = target
+			continue
+		}
+		if requiresBMCFetchChecks {
+			target["requiresHTTPS"] = true
+			target["requiresByteRange"] = true
+		}
+	}
+	sort.Strings(keys)
+	out := make([]any, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, targets[key])
+	}
+	return out
 }
 
 func normalizeRedfishURL(addr string) (baseURL, systemID string) {

@@ -1057,12 +1057,12 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{Parallelism: 2}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: "providerServices", Label: "provider services", Status: workflow.TaskStatusOK},
 		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"provider"}},
-		{ID: "boot.sno-libvirt.master-0", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt/master-0", Cluster: "sno-libvirt", Node: "master-0", Dependencies: []string{"iso.sno-libvirt"}},
-		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"boot.sno-libvirt.master-0"}},
+		{ID: "boot.sno-libvirt", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt nodes", Cluster: "sno-libvirt", Dependencies: []string{"iso.sno-libvirt"}},
+		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"boot.sno-libvirt"}},
 	}, now)
 	ledger.MarkOK("provider", now.Add(time.Second))
 	ledger.MarkOK("iso.sno-libvirt", now.Add(2*time.Second))
-	ledger.MarkRunning("boot.sno-libvirt.master-0", "/tmp/boot.log", now.Add(3*time.Second))
+	ledger.MarkRunning("boot.sno-libvirt", "/tmp/boot.log", now.Add(3*time.Second))
 	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
@@ -1074,7 +1074,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"Current apply", "apply-test", "Progress", "Boot sno-libvirt/master-0", "0/1 nodes booted", "bootwright status --watch"} {
+	for _, want := range []string{"Current apply", "apply-test", "Progress", "Boot sno-libvirt nodes", "0/1 boot stages done", "bootwright status --watch"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("status output missing %q:\n%s", want, stdout)
 		}
@@ -1197,8 +1197,8 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
 	}
-	if report.ApplyPlan.Limits.Parallelism != 5 {
-		t.Fatalf("parallelism = %d, want 5 safe-auto tasks", report.ApplyPlan.Limits.Parallelism)
+	if report.ApplyPlan.Limits.Parallelism != 3 {
+		t.Fatalf("parallelism = %d, want 3 safe-auto tasks", report.ApplyPlan.Limits.Parallelism)
 	}
 	if report.ApplyPlan.Limits.ParallelismPerHost != 1 {
 		t.Fatalf("per-host parallelism = %d, want 1 safety lock", report.ApplyPlan.Limits.ParallelismPerHost)
@@ -1207,43 +1207,40 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 		t.Fatalf("redfish parallelism = %d, want 3 node boot tasks", report.ApplyPlan.Limits.ParallelismRedfish)
 	}
 	tasks := report.ApplyPlan.Tasks
-	if len(tasks) != 5 {
-		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
+	if len(tasks) != 3 {
+		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
-	bootTasks := map[string]workflow.TaskLedgerEntry{}
+	var bootTask *workflow.TaskLedgerEntry
 	for _, task := range tasks {
 		if task.Kind == workflow.ApplyTaskKindNodeBoot {
-			bootTasks[task.ID] = task
+			task := task
+			bootTask = &task
 		}
 	}
-	for _, id := range []string{
-		"boot.3-nodes-ocp-baremetal.master-0",
-		"boot.3-nodes-ocp-baremetal.master-1",
-		"boot.3-nodes-ocp-baremetal.master-2",
-	} {
-		task, ok := bootTasks[id]
-		if !ok {
-			t.Fatalf("missing boot task %s in %+v", id, tasks)
-		}
-		if len(task.Dependencies) != 1 || task.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
-			t.Fatalf("%s deps = %v, want iso.3-nodes-ocp-baremetal", id, task.Dependencies)
-		}
-		if task.Node == "" {
-			t.Fatalf("%s missing node field", id)
-		}
-		if len(task.ResourceKeys) != 1 {
-			t.Fatalf("%s resource keys = %v, want one Redfish key", id, task.ResourceKeys)
-		}
-		if task.ClusterLogPath == "" || !strings.Contains(task.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "install.log")) {
-			t.Fatalf("%s cluster log path = %q", id, task.ClusterLogPath)
-		}
+	if bootTask == nil {
+		t.Fatalf("missing boot task in %+v", tasks)
+	}
+	if bootTask.ID != "boot.3-nodes-ocp-baremetal" {
+		t.Fatalf("boot task = %s, want boot.3-nodes-ocp-baremetal", bootTask.ID)
+	}
+	if len(bootTask.Dependencies) != 1 || bootTask.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
+		t.Fatalf("boot deps = %v, want iso.3-nodes-ocp-baremetal", bootTask.Dependencies)
+	}
+	if bootTask.Node != "" {
+		t.Fatalf("boot node field = %q, want empty stage-level task", bootTask.Node)
+	}
+	if len(bootTask.ResourceKeys) != 3 {
+		t.Fatalf("boot resource keys = %v, want three Redfish keys", bootTask.ResourceKeys)
+	}
+	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "install.log")) {
+		t.Fatalf("boot cluster log path = %q", bootTask.ClusterLogPath)
 	}
 	wait := tasks[len(tasks)-1]
 	if wait.ID != "wait.3-nodes-ocp-baremetal" {
 		t.Fatalf("last task = %s, want wait.3-nodes-ocp-baremetal", wait.ID)
 	}
-	if len(wait.Dependencies) != 3 {
-		t.Fatalf("wait deps = %v, want three boot tasks", wait.Dependencies)
+	if len(wait.Dependencies) != 1 || wait.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
+		t.Fatalf("wait deps = %v, want boot.3-nodes-ocp-baremetal", wait.Dependencies)
 	}
 }
 

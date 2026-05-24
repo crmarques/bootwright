@@ -115,3 +115,11 @@
         content: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}\n"
       delegate_to: localhost
       become: false
+
+    - name: Set local generated agent ISO path
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_local_path: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
+      changed_when: false
+
+    - name: Publish generated agent ISO
+      ansible.builtin.import_tasks: publish_iso.yml

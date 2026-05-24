@@ -37,8 +37,8 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "infra.sno-libvirt.lab-host" {
 		t.Fatalf("iso deps = %v, want infra.sno-libvirt.lab-host", tasks[2].Entry.Dependencies)
 	}
-	if tasks[3].Entry.ID != "boot.sno-libvirt.master-0" {
-		t.Fatalf("fourth task = %s, want boot.sno-libvirt.master-0", tasks[3].Entry.ID)
+	if tasks[3].Entry.ID != "boot.sno-libvirt" {
+		t.Fatalf("fourth task = %s, want boot.sno-libvirt", tasks[3].Entry.ID)
 	}
 	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "iso.sno-libvirt" {
 		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[3].Entry.Dependencies)
@@ -46,8 +46,8 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if tasks[4].Entry.ID != "wait.sno-libvirt" {
 		t.Fatalf("fifth task = %s, want wait.sno-libvirt", tasks[4].Entry.ID)
 	}
-	if len(tasks[4].Entry.Dependencies) != 1 || tasks[4].Entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[4].Entry.Dependencies)
+	if len(tasks[4].Entry.Dependencies) != 1 || tasks[4].Entry.Dependencies[0] != "boot.sno-libvirt" {
+		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[4].Entry.Dependencies)
 	}
 }
 
@@ -63,8 +63,8 @@ func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
 	if len(tasks[0].Entry.Dependencies) != 0 {
 		t.Fatalf("cluster-only iso deps = %v, want none", tasks[0].Entry.Dependencies)
 	}
-	if tasks[1].Entry.ID != "boot.sno-libvirt.master-0" {
-		t.Fatalf("task = %s, want boot.sno-libvirt.master-0", tasks[1].Entry.ID)
+	if tasks[1].Entry.ID != "boot.sno-libvirt" {
+		t.Fatalf("task = %s, want boot.sno-libvirt", tasks[1].Entry.ID)
 	}
 	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "iso.sno-libvirt" {
 		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[1].Entry.Dependencies)
@@ -72,48 +72,39 @@ func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
 	if tasks[2].Entry.ID != "wait.sno-libvirt" {
 		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[2].Entry.Dependencies)
+	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "boot.sno-libvirt" {
+		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[2].Entry.Dependencies)
 	}
 }
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
 	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
-	if len(tasks) != 5 {
-		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
+	if len(tasks) != 3 {
+		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
-	wantBootIDs := []string{
-		"boot.3-nodes-ocp-baremetal.master-0",
-		"boot.3-nodes-ocp-baremetal.master-1",
-		"boot.3-nodes-ocp-baremetal.master-2",
+	boot := tasks[1]
+	if boot.Entry.ID != "boot.3-nodes-ocp-baremetal" {
+		t.Fatalf("boot task = %s, want boot.3-nodes-ocp-baremetal", boot.Entry.ID)
 	}
-	for i, want := range wantBootIDs {
-		task := tasks[i+1]
-		if task.Entry.ID != want {
-			t.Fatalf("boot task %d = %s, want %s", i, task.Entry.ID, want)
-		}
-		if task.Entry.Kind != workflow.ApplyTaskKindNodeBoot {
-			t.Fatalf("boot task kind = %s, want %s", task.Entry.Kind, workflow.ApplyTaskKindNodeBoot)
-		}
-		if len(task.Entry.Dependencies) != 1 || task.Entry.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
-			t.Fatalf("boot deps = %v, want iso.3-nodes-ocp-baremetal", task.Entry.Dependencies)
-		}
-		if len(task.Entry.ResourceKeys) != 1 {
-			t.Fatalf("boot resource keys = %v, want one Redfish key", task.Entry.ResourceKeys)
-		}
+	if boot.Entry.Kind != workflow.ApplyTaskKindNodeBoot {
+		t.Fatalf("boot task kind = %s, want %s", boot.Entry.Kind, workflow.ApplyTaskKindNodeBoot)
 	}
-	wait := tasks[4]
+	if len(boot.Entry.Dependencies) != 1 || boot.Entry.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
+		t.Fatalf("boot deps = %v, want iso.3-nodes-ocp-baremetal", boot.Entry.Dependencies)
+	}
+	if len(boot.Entry.ResourceKeys) != 3 {
+		t.Fatalf("boot resource keys = %v, want three Redfish keys", boot.Entry.ResourceKeys)
+	}
+	if boot.RedfishSlots != 3 {
+		t.Fatalf("boot RedfishSlots = %d, want 3", boot.RedfishSlots)
+	}
+	wait := tasks[2]
 	if wait.Entry.ID != "wait.3-nodes-ocp-baremetal" {
 		t.Fatalf("wait task = %s, want wait.3-nodes-ocp-baremetal", wait.Entry.ID)
 	}
-	if len(wait.Entry.Dependencies) != len(wantBootIDs) {
-		t.Fatalf("wait deps = %v, want %v", wait.Entry.Dependencies, wantBootIDs)
-	}
-	for i, want := range wantBootIDs {
-		if wait.Entry.Dependencies[i] != want {
-			t.Fatalf("wait dep %d = %s, want %s", i, wait.Entry.Dependencies[i], want)
-		}
+	if len(wait.Entry.Dependencies) != 1 || wait.Entry.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
+		t.Fatalf("wait deps = %v, want boot.3-nodes-ocp-baremetal", wait.Entry.Dependencies)
 	}
 }
 

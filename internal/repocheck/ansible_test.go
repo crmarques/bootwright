@@ -84,6 +84,38 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/playbooks/layers/openshift/boot-agent-machine.yml")
+	if len(plays) != 1 {
+		t.Fatalf("boot-agent-machine play count = %d, want 1", len(plays))
+	}
+	play := plays[0]
+	if got := play["hosts"]; got != "bootwright_agent_node_hosts" {
+		t.Fatalf("boot-agent-machine hosts = %v, want bootwright_agent_node_hosts", got)
+	}
+	rawTasks, ok := play["tasks"].([]any)
+	if !ok {
+		t.Fatalf("boot-agent-machine play missing tasks: %v", play)
+	}
+	tasks := make([]map[string]any, 0, len(rawTasks))
+	for _, raw := range rawTasks {
+		task, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("task is not a map: %v", raw)
+		}
+		tasks = append(tasks, task)
+	}
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve selected cluster")
+	bootIdx := findAnsibleTask(t, tasks, "Boot selected agent machine")
+	if !(resolveIdx < bootIdx) {
+		t.Fatalf("boot playbook must resolve the per-node cluster before including install_agent")
+	}
+	if _, ok := tasks[bootIdx]["loop"]; ok {
+		t.Fatalf("boot playbook must not loop serially over nodes: %v", tasks[bootIdx])
+	}
+	assertIncludeRoleName(t, tasks[bootIdx], "install_agent")
+}
+
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/main.yml")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
@@ -559,26 +591,25 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 }
 
-func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/validate_stage.yml")
-	validateIdx := findAnsibleTask(t, tasks, "Validate boot_redfish inputs")
-	schemeIdx := findAnsibleTask(t, tasks, "Validate Redfish virtual-media ISO URL scheme")
+func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml")
+	validateIdx := findAnsibleTask(t, tasks, "Validate agent ISO publish target")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
 	createDirIdx := findAnsibleTask(t, tasks, "Create agent ISO staging directory")
 	stageIdx := findAnsibleTask(t, tasks, "Stage agent ISO at the BMC fetch location")
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(validateIdx < schemeIdx && schemeIdx < dirIdx && dirIdx < createDirIdx && createDirIdx < stageIdx && stageIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
-		t.Fatalf("boot_redfish must validate URL scheme, stage the ISO, and probe fetch reachability before Redfish insertion")
+	if !(validateIdx < dirIdx && dirIdx < createDirIdx && createDirIdx < stageIdx && stageIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+		t.Fatalf("install_agent must validate the target, stage the ISO, and probe fetch reachability before node boot")
 	}
 
-	schemeAssert, ok := tasks[schemeIdx]["ansible.builtin.assert"].(map[string]any)
+	targetAssert, ok := tasks[validateIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no assert body", tasks[schemeIdx]["name"])
+		t.Fatalf("%s has no assert body", tasks[validateIdx]["name"])
 	}
-	if !stringListContains(schemeAssert["that"], "(not (bootwright_component.boot.redfish.setBootSource | default(true) | bool)) or ((bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')") {
-		t.Fatalf("real Redfish ISO URL scheme guard must require HTTPS while allowing emulated Redfish, got %v", schemeAssert["that"])
+	if !stringListContains(targetAssert["that"], "(not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool)) or ((bootwright_agent_iso_publish_target.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')") {
+		t.Fatalf("real Redfish ISO URL scheme guard must require HTTPS while allowing emulated Redfish, got %v", targetAssert["that"])
 	}
 
 	stageDir, ok := tasks[createDirIdx]["ansible.builtin.file"].(map[string]any)
@@ -588,7 +619,7 @@ func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if got := stageDir["path"]; got != "{{ bootwright_agent_iso_stage_dir }}" {
 		t.Fatalf("stage directory path got %v", got)
 	}
-	if got := tasks[createDirIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
+	if got := tasks[createDirIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
 		t.Fatalf("stage directory delegate got %v", got)
 	}
 	if got := tasks[createDirIdx]["become"]; got != true {
@@ -599,13 +630,13 @@ func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no copy body", tasks[stageIdx]["name"])
 	}
-	if got := stageCopy["src"]; got != "{{ bootwright_agent_iso_path }}" {
+	if got := stageCopy["src"]; got != "{{ bootwright_agent_iso_local_path }}" {
 		t.Fatalf("stage copy source got %v", got)
 	}
-	if got := stageCopy["dest"]; got != "{{ bootwright_component.boot.agentIso.stagePath }}" {
+	if got := stageCopy["dest"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
 		t.Fatalf("stage destination got %v", got)
 	}
-	if got := tasks[stageIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
+	if got := tasks[stageIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
 		t.Fatalf("stage copy delegate got %v", got)
 	}
 	if got := tasks[stageIdx]["become"]; got != true {
@@ -616,13 +647,13 @@ func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri body", tasks[fetchProbeIdx]["name"])
 	}
-	if got := fetchProbe["url"]; got != "{{ bootwright_component.boot.agentIso.fetchUrl }}" {
+	if got := fetchProbe["url"]; got != "{{ bootwright_agent_iso_publish_target.fetchUrl }}" {
 		t.Fatalf("fetch URL probe target got %v", got)
 	}
 	if got := fetchProbe["method"]; got != "HEAD" {
 		t.Fatalf("fetch URL probe must avoid downloading the ISO, got method=%v", got)
 	}
-	if got := tasks[fetchProbeIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
+	if got := tasks[fetchProbeIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
 		t.Fatalf("fetch URL probe delegate got %v", got)
 	}
 	if got := fetchProbe["validate_certs"]; got != false {
@@ -642,7 +673,7 @@ func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if got := rangeProbe["status_code"]; !intListEqual(got, []int{206}) {
 		t.Fatalf("range probe must require HTTP 206, got %v", got)
 	}
-	if got := tasks[rangeProbeIdx]["when"]; got != "bootwright_component.boot.redfish.setBootSource | default(true) | bool" {
+	if got := tasks[rangeProbeIdx]["when"]; got != "bootwright_agent_iso_publish_target.requiresByteRange | default(false) | bool" {
 		t.Fatalf("range probe must only be required for real BMCs, got when=%v", got)
 	}
 	fetchConfirm, ok := tasks[fetchConfirmIdx]["ansible.builtin.assert"].(map[string]any)
@@ -652,7 +683,7 @@ func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !stringListContains(fetchConfirm["that"], "(bootwright_agent_iso_fetch_probe.status | default(0) | int) in [200, 206]") {
 		t.Fatalf("fetch URL confirmation must reject unreachable staged ISOs, got %v", fetchConfirm["that"])
 	}
-	if !stringListContains(fetchConfirm["that"], "(not (bootwright_component.boot.redfish.setBootSource | default(true) | bool)) or ((bootwright_agent_iso_range_probe.status | default(0) | int) == 206)") {
+	if !stringListContains(fetchConfirm["that"], "(not (bootwright_agent_iso_publish_target.requiresByteRange | default(false) | bool)) or ((bootwright_agent_iso_range_probe.status | default(0) | int) == 206)") {
 		t.Fatalf("fetch URL confirmation must require byte ranges for real BMCs, got %v", fetchConfirm["that"])
 	}
 }
@@ -909,18 +940,15 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 		t.Fatalf("install-config failure message must mention --sensitive and not removed --resolve-secrets: %v", installFail["ansible.builtin.fail"])
 	}
 
-	if got, _ := isoPathStat["when"].(string); got != "bootwright_install_agent_action_effective == 'boot_machine'" {
+	if !stringListContains(isoPathStat["when"], "bootwright_install_agent_action_effective == 'boot_machine'") {
 		t.Fatalf("agent ISO path stat when got %v", isoPathStat["when"])
-	}
-	when, ok = isoPathFail["when"].(string)
-	if !ok {
-		t.Fatalf("agent ISO path failure when got %v", isoPathFail["when"])
 	}
 	for _, want := range []string{
 		"bootwright_install_agent_action_effective == 'boot_machine'",
+		"not bootwright_install_already_complete",
 		"not bootwright_agent_iso_path_stat.stat.exists",
 	} {
-		if !strings.Contains(when, want) {
+		if !stringListContains(isoPathFail["when"], want) {
 			t.Fatalf("agent ISO path failure when missing %q: %v", want, isoPathFail["when"])
 		}
 	}
@@ -933,8 +961,10 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	userIdx := findAnsibleTask(t, tasks, "Resolve SSH transfer user")
 	transferIdx := findAnsibleTask(t, tasks, "Transfer generated agent ISO to local runtime state")
 	recordIdx := findAnsibleTask(t, tasks, "Record local generated agent ISO path")
-	if !(localDirIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx) {
-		t.Fatalf("install_agent must prepare the local directory, resolve transfer user, transfer ISO, then record the local path")
+	setLocalIdx := findAnsibleTask(t, tasks, "Set local generated agent ISO path")
+	publishIdx := findAnsibleTask(t, tasks, "Publish generated agent ISO")
+	if !(localDirIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx && recordIdx < setLocalIdx && setLocalIdx < publishIdx) {
+		t.Fatalf("install_agent must transfer, record, and publish the local ISO path in order")
 	}
 
 	if got := tasks[userIdx]["become"]; got != false {

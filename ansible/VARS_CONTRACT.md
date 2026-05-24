@@ -44,6 +44,12 @@ bootwright_clusters:
       - name: ingress
         address: 192.168.133.11
         providedBy: { loadBalancer: apps, address: apps-ip }
+    agentIsoPublishTargets:
+      - stageHost: services-host
+        stagePath: "{{ bootwright_host_state_dir }}/artifacts/lab-provider-default/agent-prod-3node.iso"
+        fetchUrl: https://192.168.133.1:8443/agent-prod-3node.iso
+        requiresHTTPS: true
+        requiresByteRange: true
     networks:
       - name: rack1-bonded-machine
         cidr: 192.168.133.0/24
@@ -219,9 +225,10 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | Fact | Shape |
 | --- | --- |
 | `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
-| `bootwright_task_machine_name` | ClusterInfra machine component name selected for one node boot task |
+| `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
+| `bootwright_agent_node_machine_name` | ClusterInfra machine component name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_install_override` | Optional boolean from `bootwright apply cluster --override`; when true the install role ignores prior local kubeconfig availability |
 
-The OpenShift agent role uses those vars to create one cluster ISO, boot one
-machine per scheduler task, and run the final installer wait after all node
-boot tasks have completed.
+The OpenShift agent role uses those vars to create and publish one cluster ISO,
+boot all selected node pseudo-hosts through Ansible host fanout, and run the
+final installer wait after the boot-stage task has completed.

@@ -26,14 +26,15 @@ func Vars(state v1alpha1.State) map[string]any {
 			continue
 		}
 		entry := map[string]any{
-			"name":          ocp.Metadata.Name,
-			"installMode":   v1alpha1.InstallMode(ocp),
-			"installMethod": ocp.Spec.Install.Method,
-			"baseDomain":    environmentBaseDomain(env),
-			"endpoints":     endpointsVars(ci),
-			"networks":      clusterNetworksVars(state, ci),
-			"components":    componentsVars(state, ci, ocp),
-			"nodes":         nodesVars(ocp),
+			"name":                   ocp.Metadata.Name,
+			"installMode":            v1alpha1.InstallMode(ocp),
+			"installMethod":          ocp.Spec.Install.Method,
+			"baseDomain":             environmentBaseDomain(env),
+			"endpoints":              endpointsVars(ci),
+			"networks":               clusterNetworksVars(state, ci),
+			"components":             componentsVars(state, ci, ocp),
+			"nodes":                  nodesVars(ocp),
+			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)

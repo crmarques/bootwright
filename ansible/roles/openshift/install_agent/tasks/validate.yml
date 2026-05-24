@@ -12,11 +12,13 @@
   register: bootwright_install_lookup
   changed_when: false
   failed_when: bootwright_install_lookup.rc != 0
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
 
 - name: Set openshift-install path
   ansible.builtin.set_fact:
     bootwright_openshift_install_path: "{{ bootwright_install_lookup.stdout | trim }}"
   changed_when: false
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso', 'wait_install']
 
 - name: Verify rendered install-config exists
   ansible.builtin.stat:
@@ -39,7 +41,9 @@
   register: bootwright_agent_iso_path_stat
   delegate_to: localhost
   become: false
-  when: bootwright_install_agent_action_effective == 'boot_machine'
+  when:
+    - bootwright_install_agent_action_effective == 'boot_machine'
+    - not bootwright_install_already_complete
 
 - name: Fail when generated agent ISO path is missing
   ansible.builtin.fail:
@@ -47,4 +51,7 @@
       Missing agent-iso.path at {{ bootwright_install_local_work_dir }}/agent-iso.path.
       The create-agent-iso task must complete before boot-machine tasks can
       boot nodes.
-  when: bootwright_install_agent_action_effective == 'boot_machine' and not bootwright_agent_iso_path_stat.stat.exists
+  when:
+    - bootwright_install_agent_action_effective == 'boot_machine'
+    - not bootwright_install_already_complete
+    - not bootwright_agent_iso_path_stat.stat.exists

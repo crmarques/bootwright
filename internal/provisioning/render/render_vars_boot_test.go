@@ -278,6 +278,32 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	}
 }
 
+func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := render.Vars(state)
+	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
+	targets := cluster["agentIsoPublishTargets"].([]any)
+	if len(targets) != 1 {
+		t.Fatalf("agentIsoPublishTargets = %v, want one shared target", targets)
+	}
+	target := targets[0].(map[string]any)
+	wants := map[string]any{
+		"stageHost":         "bastion",
+		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts/bastion-services-default/agent-3-nodes-ocp-baremetal.iso",
+		"fetchUrl":          "https://192.168.140.5:8443/agent-3-nodes-ocp-baremetal.iso",
+		"requiresHTTPS":     true,
+		"requiresByteRange": true,
+	}
+	for k, want := range wants {
+		if got := target[k]; got != want {
+			t.Errorf("agentIsoPublishTargets[0].%s got %v, want %v", k, got, want)
+		}
+	}
+}
+
 func TestBareMetalArtifactFetchURLUsesPublisherPort(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {

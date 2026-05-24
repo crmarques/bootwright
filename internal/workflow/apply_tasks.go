@@ -47,6 +47,7 @@ type ApplyTask struct {
 	Playbook      string
 	Limit         string
 	Forks         int
+	RedfishSlots  int
 	ExtraVarPairs []string
 	State         v1alpha1.State
 }
@@ -162,33 +163,36 @@ func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
 				State:         clusterState,
 			})
-			bootTaskIDs := []string{}
-			for _, machineName := range applyClusterMachineNames(state, name) {
-				taskID := "boot." + name + "." + machineName
-				bootTaskIDs = append(bootTaskIDs, taskID)
+			machineNames := applyClusterMachineNames(state, name)
+			bootTaskID := ""
+			if len(machineNames) > 0 {
+				bootTaskID = "boot." + name
+				resourceKeys := make([]string, 0, len(machineNames))
+				for _, machineName := range machineNames {
+					resourceKeys = append(resourceKeys, applyNodeRedfishResource(state, name, machineName))
+				}
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
-						ID:           taskID,
+						ID:           bootTaskID,
 						Kind:         ApplyTaskKindNodeBoot,
-						Label:        "boot " + name + "/" + machineName,
+						Label:        "boot " + name + " nodes",
 						Cluster:      name,
-						Node:         machineName,
-						ResourceKeys: []string{applyNodeRedfishResource(state, name, machineName)},
+						ResourceKeys: resourceKeys,
 						Status:       TaskStatusPending,
 						Dependencies: []string{isoTaskID},
 					},
-					Playbook: applyBootMachinePlaybook,
-					Limit:    render.GroupOCPHosts + ":" + render.GroupBootHosts,
-					ExtraVarPairs: []string{
-						"bootwright_task_cluster_name=" + name,
-						"bootwright_task_machine_name=" + machineName,
-					},
-					State: clusterState,
-					Forks: 1,
+					Playbook:      applyBootMachinePlaybook,
+					Limit:         render.AgentNodeGroupName(name),
+					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+					State:         clusterState,
+					Forks:         len(machineNames),
+					RedfishSlots:  len(machineNames),
 				})
 			}
-			waitDeps := append([]string(nil), bootTaskIDs...)
-			if len(waitDeps) == 0 {
+			waitDeps := []string{}
+			if bootTaskID != "" {
+				waitDeps = append(waitDeps, bootTaskID)
+			} else {
 				waitDeps = append(waitDeps, isoTaskID)
 			}
 			tasks = append(tasks, ApplyTask{
@@ -292,11 +296,16 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			if started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
 				continue
 			}
+			redfishSlots := taskRedfishSlots(task, redfishLimit)
+			taskToRun := task
+			if task.Entry.Kind == ApplyTaskKindNodeBoot {
+				taskToRun.Forks = redfishSlots
+			}
 			started[task.Entry.ID] = true
 			startedAny = true
 			running++
 			if task.Entry.Kind == ApplyTaskKindNodeBoot {
-				runningRedfish++
+				runningRedfish += redfishSlots
 			}
 			acquireTaskResources(task, runningResources)
 			logPath := TaskLogPath(stateDir, ledger.RunID, task.Entry.ID)
@@ -323,7 +332,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			stdoutWriter, stderrWriter := applyTaskWriters(task, taskStdout, taskStderr, clusterLogs, multiClusterOutput)
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- runOneApplyTask(ctx, taskOut, taskErr, stateDir, ledger.RunID, opts, task)
-			}(task, stdoutWriter, stderrWriter)
+			}(taskToRun, stdoutWriter, stderrWriter)
 		}
 		if firstErr != nil && running == 0 {
 			break
@@ -334,7 +343,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		event := <-events
 		running--
 		if taskByID[event.id].Entry.Kind == ApplyTaskKindNodeBoot {
-			runningRedfish--
+			runningRedfish -= taskRedfishSlots(taskByID[event.id], redfishLimit)
 		}
 		releaseTaskResources(taskByID[event.id], runningResources)
 		completed++
@@ -413,7 +422,21 @@ func taskSlotAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {
 	if task.Entry.Kind != ApplyTaskKindNodeBoot {
 		return true
 	}
-	return runningRedfish < redfishLimit
+	return runningRedfish+taskRedfishSlots(task, redfishLimit) <= redfishLimit
+}
+
+func taskRedfishSlots(task ApplyTask, redfishLimit int) int {
+	if task.Entry.Kind != ApplyTaskKindNodeBoot {
+		return 0
+	}
+	slots := task.RedfishSlots
+	if slots < 1 {
+		slots = 1
+	}
+	if redfishLimit > 0 && slots > redfishLimit {
+		return redfishLimit
+	}
+	return slots
 }
 
 func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {
@@ -694,7 +717,11 @@ func nodeBootTaskCount(tasks []ApplyTask) int {
 	count := 0
 	for _, task := range tasks {
 		if task.Entry.Kind == ApplyTaskKindNodeBoot {
-			count++
+			if task.RedfishSlots > 0 {
+				count += task.RedfishSlots
+			} else {
+				count++
+			}
 		}
 	}
 	return count

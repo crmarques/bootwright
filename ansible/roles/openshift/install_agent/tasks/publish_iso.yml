@@ -1,0 +1,7 @@
+---
+- name: Publish generated agent ISO for BMC fetch
+  ansible.builtin.include_tasks: publish_iso_target.yml
+  loop: "{{ bootwright_current_cluster.agentIsoPublishTargets | default([]) }}"
+  loop_control:
+    loop_var: bootwright_agent_iso_publish_target
+    label: "{{ bootwright_agent_iso_publish_target.fetchUrl }}"

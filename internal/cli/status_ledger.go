@@ -151,7 +151,7 @@ func applyLedgerTaskKindLabel(kind string) string {
 }
 
 func applyNodeBootSummary(total int, counts map[workflow.TaskStatus]int) string {
-	parts := []string{fmt.Sprintf("%d/%d nodes booted", counts[workflow.TaskStatusOK], total)}
+	parts := []string{fmt.Sprintf("%d/%d boot stages done", counts[workflow.TaskStatusOK], total)}
 	for _, status := range []workflow.TaskStatus{
 		workflow.TaskStatusRunning,
 		workflow.TaskStatusReady,

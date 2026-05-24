@@ -1,5 +1,5 @@
 ---
-- name: Validate Redfish boot inputs and stage ISO
+- name: Validate Redfish boot inputs
   ansible.builtin.import_tasks: validate_stage.yml
 
 - name: Load Redfish credentials

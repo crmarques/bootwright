@@ -14,6 +14,18 @@
         bootwright_agent_iso_path: "{{ bootwright_agent_iso_path_file.content | b64decode | trim }}"
       changed_when: false
 
+    - name: Resolve selected machine from agent node host variable
+      ansible.builtin.set_fact:
+        bootwright_boot_components: >-
+          {{
+            bootwright_current_cluster.components
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('name', 'equalto', bootwright_agent_node_machine_name)
+            | list
+          }}
+      when: bootwright_agent_node_machine_name is defined
+      changed_when: false
+
     - name: Resolve selected machine from task variable
       ansible.builtin.set_fact:
         bootwright_boot_components: >-
@@ -39,7 +51,7 @@
         that:
           - bootwright_boot_components | default([]) | length == 1
         fail_msg: >-
-          Could not resolve machine {{ bootwright_task_machine_name | default('<unset>') }}
+          Could not resolve machine {{ bootwright_agent_node_machine_name | default(bootwright_task_machine_name | default('<unset>')) }}
           for cluster {{ bootwright_current_cluster.name }}.
 
     - name: Set selected machine component

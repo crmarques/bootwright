@@ -1,6 +1,6 @@
 ---
-- name: Boot OpenShift agent machine
-  hosts: bootwright_ocp_hosts
+- name: Boot OpenShift agent machines
+  hosts: bootwright_agent_node_hosts
   gather_subset:
     - "!all"
     - min
@@ -14,15 +14,25 @@
         tasks_from: facts
 
   tasks:
+    - name: Resolve selected cluster
+      ansible.builtin.set_fact:
+        bootwright_current_cluster: "{{ (bootwright_clusters | default([]) | selectattr('name', 'equalto', bootwright_agent_node_cluster_name) | list | first) | default({}) }}"
+      changed_when: false
+
+    - name: Validate selected cluster
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_cluster is mapping
+          - bootwright_current_cluster.name | default('') == bootwright_agent_node_cluster_name
+        fail_msg: >-
+          Could not resolve cluster {{ bootwright_agent_node_cluster_name | default('<unset>') }}
+          for agent node host {{ inventory_hostname }}.
+
     - name: Boot selected agent machine
       ansible.builtin.include_role:
         name: install_agent
       vars:
         bootwright_install_agent_action: boot_machine
-      loop: "{{ bootwright_clusters | default([]) }}"
-      loop_control:
-        loop_var: bootwright_current_cluster
-        label: "{{ bootwright_current_cluster.name }}/{{ bootwright_task_machine_name }}"
       when:
         - bootwright_current_cluster.installMethod == 'agent'
         - bootwright_current_cluster.name == bootwright_task_cluster_name

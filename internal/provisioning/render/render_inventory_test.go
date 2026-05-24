@@ -33,6 +33,7 @@ func TestInventoryStructure(t *testing.T) {
 		"bootwright_boot_hosts",
 		"bootwright_bastion_hosts",
 		"bootwright_ocp_hosts",
+		"bootwright_agent_node_hosts",
 	} {
 		if _, ok := children[group].(map[string]any); !ok {
 			t.Fatalf("inventory missing required group %q (found groups: %v)", group, mapKeys(children))
@@ -177,6 +178,9 @@ func TestHostGroupCountsBareMetalManagedArtifacts(t *testing.T) {
 	if got := counts[render.GroupOCPHosts]; got != 1 {
 		t.Errorf("%s: want 1 for bastion host, got %d", render.GroupOCPHosts, got)
 	}
+	if got := counts[render.GroupAgentNodeHosts]; got != 1 {
+		t.Errorf("%s: want 1 for one agent node host, got %d", render.GroupAgentNodeHosts, got)
+	}
 }
 
 func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
@@ -194,15 +198,41 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 	if got := counts[render.GroupBootHosts]; got != 1 {
 		t.Errorf("%s: want 1 for Redfish artifact staging, got %d", render.GroupBootHosts, got)
 	}
+	if got := counts[render.GroupAgentNodeHosts]; got != 3 {
+		t.Errorf("%s: want 3 for agent node fanout, got %d", render.GroupAgentNodeHosts, got)
+	}
 
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	if len(hosts) != 1 {
-		t.Fatalf("inventory hosts = %v, want only bastion", hosts)
+	if len(hosts) != 4 {
+		t.Fatalf("inventory hosts = %v, want bastion plus three agent node aliases", hosts)
 	}
-	if _, ok := hosts["bastion"]; !ok {
-		t.Fatalf("inventory hosts = %v, want bastion", hosts)
+	for _, name := range []string{
+		"bastion",
+		"3-nodes-ocp-baremetal__master-0",
+		"3-nodes-ocp-baremetal__master-1",
+		"3-nodes-ocp-baremetal__master-2",
+	} {
+		if _, ok := hosts[name]; !ok {
+			t.Fatalf("inventory hosts = %v, want %s", hosts, name)
+		}
+	}
+	node := hosts["3-nodes-ocp-baremetal__master-0"].(map[string]any)
+	if got := node["ansible_host"]; got != "bastion.bootwright.test" {
+		t.Fatalf("agent node ansible_host = %v, want bastion SSH address", got)
+	}
+	if got := node["bootwright_agent_node_cluster_name"]; got != "3-nodes-ocp-baremetal" {
+		t.Fatalf("agent node cluster var = %v", got)
+	}
+	if got := node["bootwright_agent_node_machine_name"]; got != "master-0" {
+		t.Fatalf("agent node machine var = %v", got)
+	}
+	children := all["children"].(map[string]any)
+	groupName := render.AgentNodeGroupName("3-nodes-ocp-baremetal")
+	groupHosts := children[groupName].(map[string]any)["hosts"].(map[string]any)
+	if len(groupHosts) != 3 {
+		t.Fatalf("%s hosts = %v, want three node aliases", groupName, groupHosts)
 	}
 }
 
