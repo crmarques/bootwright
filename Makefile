@@ -58,7 +58,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-gofmt python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build container-build sync-bundle test validate plan check check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/workflow/. The current observed max (init.go ~391) is the
@@ -139,6 +139,7 @@ test:
 check: check-gofmt
 	$(GO) vet ./...
 	$(GO) test ./...
+	$(MAKE) go-test-clean-checkout
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
 	$(MAKE) stale-term-check
@@ -146,6 +147,30 @@ check: check-gofmt
 
 check-gofmt:
 	@test -z "$$(gofmt -l $(GOFMT_FILES))" || { gofmt -l $(GOFMT_FILES); exit 1; }
+
+go-test-clean-checkout:
+	@tmp=$$(mktemp -d); \
+	work=$$tmp/work; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$work"; \
+	tar \
+		--exclude='./.git' \
+		--exclude='./$(BIN_DIR)' \
+		--exclude='./$(STATE_DIR)' \
+		--exclude='./dist' \
+		--exclude='./build' \
+		--exclude='./out' \
+		--exclude='./rendered' \
+		--exclude='./tmp' \
+		--exclude='./.cache' \
+		--exclude='./$(EMBED_BUNDLE_DIR)' \
+		-cf "$$tmp/source.tar" .; \
+	tar -xf "$$tmp/source.tar" -C "$$work"; \
+	mkdir -p "$$work/$(EMBED_BUNDLE_DIR)"; \
+	cp "$(EMBED_BUNDLE_DIR)/.gitignore" "$(EMBED_BUNDLE_DIR)/PLACEHOLDER" "$$work/$(EMBED_BUNDLE_DIR)/"; \
+	mkdir -p "$$tmp/go-build-cache" "$$tmp/go-tmp"; \
+	cd "$$work"; \
+	GOCACHE="$$tmp/go-build-cache" GOTMPDIR="$$tmp/go-tmp" $(GO) test ./...
 
 # Filter-plugin unit tests use only stdlib unittest so the check works
 # on any Python 3 install without a venv. If pytest is installed

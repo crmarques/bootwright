@@ -883,7 +883,7 @@ func TestControllerCLIInstallCommandCopiesArgs(t *testing.T) {
 	}
 }
 
-func TestRunControllerCLIInstallUsesPreparedBecomePasswordFile(t *testing.T) {
+func TestRunControllerCLIInstallWithBundleUsesPreparedBecomePasswordFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")
 	}
@@ -916,12 +916,13 @@ test "$found" -eq 1
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	bundleDir := t.TempDir()
 	spec := operator.CLIInstallSpec{
 		OCPReleaseVersion: "4.21.12",
 		InstallDir:        "/usr/local/bin",
 		Executable:        fakeAnsible,
 	}
-	err := runControllerCLIInstall(
+	err := runControllerCLIInstallWithBundle(
 		context.Background(),
 		strings.NewReader("secret\n"),
 		&stdout,
@@ -935,9 +936,10 @@ test "$found" -eq 1
 			"BOOTWRIGHT_TEST_PASSWORD_BODY": passwordBodyPath,
 		},
 		true,
+		bundleDir,
 	)
 	if err != nil {
-		t.Fatalf("runControllerCLIInstall: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		t.Fatalf("runControllerCLIInstallWithBundle: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if got := stderr.String(); got != "\nBECOME password: " {
 		t.Fatalf("stderr prompt = %q, want BECOME password prompt only", got)

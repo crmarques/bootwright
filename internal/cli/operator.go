@@ -60,6 +60,10 @@ func runControllerCLIInstall(ctx context.Context, stdin io.Reader, stdout io.Wri
 		return err
 	}
 	defer cleanup()
+	return runControllerCLIInstallWithBundle(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir)
+}
+
+func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
 	spec.BundleDir = bundleDir
 	inventoryPath := filepath.Join(bundleDir, controllerCLIBastionInventory)
 	inventoryBody, err := controllerCLIBastionInventoryBody(state, secretsDir)
