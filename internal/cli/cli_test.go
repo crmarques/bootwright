@@ -436,6 +436,58 @@ func TestContextInitYesReplacesImportedInputs(t *testing.T) {
 	}
 }
 
+func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	home := t.TempDir()
+	baseDir := filepath.Join(home, "ctx")
+	t.Setenv("HOME", home)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	importedPath := filepath.Join(baseDir, contextstore.InputDirName, "environment.yaml")
+	before, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  bastion:\n    hostRef: bastion\n\n  secrets:\n")
+	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--base-dir", baseDir, "--yes")
+	if code == 0 {
+		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "field bastion not found") {
+		t.Fatalf("stderr missing strict decode error: %q", stderr)
+	}
+	after, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("invalid replacement changed existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestContextInitYesRejectsSelfImportFromInputDir(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	home := t.TempDir()
+	baseDir := filepath.Join(home, "ctx")
+	t.Setenv("HOME", home)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	inputDir := filepath.Join(baseDir, contextstore.InputDirName)
+	_, stderr, code = runCLI(t, "context", "init", "test", "-f", inputDir, "--base-dir", baseDir, "--yes")
+	if code == 0 {
+		t.Fatal("context init --yes self-import unexpectedly succeeded")
+	}
+	if !strings.Contains(stderr, "must not be inside target input directory") {
+		t.Fatalf("stderr does not reject self-import: %q", stderr)
+	}
+}
+
 func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	_, stderr, code := runCLI(t, "secret", "generate")

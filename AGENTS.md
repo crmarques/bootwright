@@ -38,6 +38,11 @@ making changes, load only the specs that match the user request.
   centralized `internal/cli/output` component. Keep the documented raw-output
   exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
   process passthrough such as Ansible streams.
+- After completing the intended edit set for any implementation request that
+  changes repo-tracked files, run `make check` once before handoff. Do not run
+  it repeatedly during the same request unless later edits can invalidate the
+  previous result. If `make check` cannot run or fails, report the blocker
+  instead of a successful handoff.
 - Before completing implementation work, use the
   `/.agents/skills/implementation-validation/` skill.
 

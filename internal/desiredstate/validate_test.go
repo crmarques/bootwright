@@ -81,6 +81,13 @@ spec:
 			wantSubstring: "field capabilities not found",
 		},
 		{
+			name: "environment-bastion-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  secrets:\n",
+				"  bastion:\n    hostRef: bastion\n\n  secrets:\n", 1)},
+			wantSubstring: "field bastion not found",
+		},
+		{
 			name: "infraprovider-networkref-rejected",
 			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
 				"interfaces:\n          - { name: primary, macAddress: 52:54:00:32:11:10 }",

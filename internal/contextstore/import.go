@@ -11,10 +11,126 @@ import (
 )
 
 func ImportInputs(paths []string, inputDir string, replace bool) ([]string, error) {
+	prepared, err := PrepareInputImport(paths, inputDir, replace)
+	if err != nil {
+		return nil, err
+	}
+	defer prepared.Cancel()
+	return prepared.Commit()
+}
+
+type PreparedInputImport struct {
+	inputDir   string
+	stagingDir string
+	paths      []string
+	committed  bool
+}
+
+func PrepareInputImport(paths []string, inputDir string, replace bool) (*PreparedInputImport, error) {
+	inputDir, err := cleanPath(inputDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := rejectInputSourcesInside(paths, inputDir); err != nil {
+		return nil, err
+	}
 	files, err := discoverInputFiles(paths)
 	if err != nil {
 		return nil, err
 	}
+	if err := rejectInputFilesInside(files, inputDir); err != nil {
+		return nil, err
+	}
+	targetDir := inputDir
+	stagingDir := ""
+	if replace {
+		if err := os.MkdirAll(filepath.Dir(inputDir), 0o700); err != nil {
+			return nil, fmt.Errorf("create %s: %w", filepath.Dir(inputDir), err)
+		}
+		targetDir, err = os.MkdirTemp(filepath.Dir(inputDir), "."+filepath.Base(inputDir)+"-import-")
+		if err != nil {
+			return nil, fmt.Errorf("create temporary input import under %s: %w", filepath.Dir(inputDir), err)
+		}
+		if err := os.Chmod(targetDir, 0o700); err != nil {
+			_ = os.RemoveAll(targetDir)
+			return nil, fmt.Errorf("chmod %s: %w", targetDir, err)
+		}
+		stagingDir = targetDir
+	}
+	copied, err := importInputFiles(files, targetDir, replace)
+	if err != nil {
+		if replace {
+			_ = os.RemoveAll(targetDir)
+		}
+		return nil, err
+	}
+	if replace {
+		copied = rewriteImportedPaths(copied, targetDir, inputDir)
+	}
+	return &PreparedInputImport{
+		inputDir:   inputDir,
+		stagingDir: stagingDir,
+		paths:      copied,
+	}, nil
+}
+
+func (p *PreparedInputImport) ValidationPaths() []string {
+	if p.stagingDir != "" {
+		return []string{p.stagingDir}
+	}
+	return []string{p.inputDir}
+}
+
+func (p *PreparedInputImport) ImportedPaths() []string {
+	return append([]string(nil), p.paths...)
+}
+
+func (p *PreparedInputImport) Commit() ([]string, error) {
+	if p.stagingDir == "" {
+		p.committed = true
+		return p.ImportedPaths(), nil
+	}
+
+	var backupDir string
+	if _, err := os.Stat(p.inputDir); err == nil {
+		createdBackup, err := os.MkdirTemp(filepath.Dir(p.inputDir), "."+filepath.Base(p.inputDir)+"-backup-")
+		if err != nil {
+			return nil, fmt.Errorf("create temporary input backup under %s: %w", filepath.Dir(p.inputDir), err)
+		}
+		if err := os.Remove(createdBackup); err != nil {
+			return nil, fmt.Errorf("prepare temporary input backup %s: %w", createdBackup, err)
+		}
+		if err := os.Rename(p.inputDir, createdBackup); err != nil {
+			return nil, fmt.Errorf("backup %s: %w", p.inputDir, err)
+		}
+		backupDir = createdBackup
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("stat %s: %w", p.inputDir, err)
+	}
+
+	if err := os.Rename(p.stagingDir, p.inputDir); err != nil {
+		if backupDir != "" {
+			_ = os.Rename(backupDir, p.inputDir)
+		}
+		return nil, fmt.Errorf("replace %s: %w", p.inputDir, err)
+	}
+	if backupDir != "" {
+		if err := os.RemoveAll(backupDir); err != nil {
+			return nil, fmt.Errorf("remove temporary input backup %s: %w", backupDir, err)
+		}
+	}
+	p.committed = true
+	return p.ImportedPaths(), nil
+}
+
+func (p *PreparedInputImport) Cancel() {
+	if p.committed || p.stagingDir == "" {
+		return
+	}
+	_ = os.RemoveAll(p.stagingDir)
+}
+
+func importInputFiles(files []inputFile, inputDir string, replace bool) ([]string, error) {
 	if replace {
 		if err := os.RemoveAll(inputDir); err != nil {
 			return nil, fmt.Errorf("replace %s: %w", inputDir, err)
@@ -47,6 +163,58 @@ func ImportInputs(paths []string, inputDir string, replace bool) ([]string, erro
 	}
 	sort.Strings(copied)
 	return copied, nil
+}
+
+func rejectInputSourcesInside(paths []string, inputDir string) error {
+	for _, raw := range paths {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		path, err := cleanPath(raw)
+		if err != nil {
+			return err
+		}
+		if pathWithinOrSame(path, inputDir) {
+			return fmt.Errorf("import source %s must not be inside target input directory %s", path, inputDir)
+		}
+	}
+	return nil
+}
+
+func rejectInputFilesInside(files []inputFile, inputDir string) error {
+	for _, file := range files {
+		path, err := cleanPath(file.Path)
+		if err != nil {
+			return err
+		}
+		if pathWithinOrSame(path, inputDir) {
+			return fmt.Errorf("import source %s must not be inside target input directory %s", path, inputDir)
+		}
+	}
+	return nil
+}
+
+func pathWithinOrSame(path, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func rewriteImportedPaths(paths []string, fromRoot, toRoot string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		rel, err := filepath.Rel(fromRoot, path)
+		if err != nil {
+			out = append(out, filepath.Join(toRoot, filepath.Base(path)))
+			continue
+		}
+		out = append(out, filepath.Join(toRoot, rel))
+	}
+	sort.Strings(out)
+	return out
 }
 
 type inputFile struct {

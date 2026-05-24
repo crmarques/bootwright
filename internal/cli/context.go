@@ -62,12 +62,17 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 		if _, exists := store.Contexts[name]; exists && !yes {
 			return failf(1, "context %q already exists; rerun with --yes to update it", name)
 		}
-		copied, err := contextstore.ImportInputs(files, ctx.InputDir, yes)
+		prepared, err := contextstore.PrepareInputImport(files, ctx.InputDir, yes)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if _, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths); err != nil {
+		defer prepared.Cancel()
+		if _, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths()); err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
+		}
+		copied, err := prepared.Commit()
+		if err != nil {
+			return failErr(1, err)
 		}
 		if err := contextstore.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)

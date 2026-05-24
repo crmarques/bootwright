@@ -13,12 +13,9 @@ changed=0
 absent_checks=0
 tmp_files=()
 
-cleanup() {
-  for tmp in "${tmp_files[@]}"; do
-    rm -f "$tmp"
-  done
-}
-trap cleanup EXIT
+trap 'for tmp in "${tmp_files[@]}"; do
+  rm -f "$tmp"
+done' EXIT
 
 if [ "$state_arg" = "--live" ]; then
   domstate=$(virsh -c "$uri" domstate "$domain" 2>/dev/null || true)

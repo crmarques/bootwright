@@ -50,5 +50,10 @@ not scan or bulk-load the full knowledge directory.
   process passthrough such as Ansible streams.
 - `v1alpha1` can break cleanly: do not add migrations, aliases, compatibility
   shims, or legacy examples.
+- After completing the intended edit set for any implementation request that
+  changes repo-tracked files, run `make check` once before handoff. Do not run
+  it repeatedly during the same request unless later edits can invalidate the
+  previous result. If `make check` cannot run or fails, report the blocker
+  instead of a successful handoff.
 - Before completing implementation work, run the validation required by the
   applicable skills and report anything that could not be run.

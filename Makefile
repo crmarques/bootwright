@@ -4,6 +4,7 @@ COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
 STATE_DIR ?= .state
+CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp
 CONTAINER_IMAGE ?= bootwright
 CONTAINERFILE ?= Containerfile
 CONTAINER_CACHE_DIR ?= .cache/container-build
@@ -28,6 +29,7 @@ ANSIBLE_SRC_DIR = ansible
 EMBED_BUNDLE_DIR = internal/embedded/bundle
 ANSIBLE_GALAXY ?= $(shell command -v ansible-galaxy 2>/dev/null)
 COLLECTIONS_REQUIREMENTS = $(ANSIBLE_SRC_DIR)/collections/requirements.yml
+COLLECTIONS_LOCK = $(ANSIBLE_SRC_DIR)/collections/requirements.lock.yml
 EMBED_COLLECTIONS_DIR = $(EMBED_BUNDLE_DIR)/collections
 EMBED_COLLECTIONS_ABS_DIR = $(abspath $(EMBED_COLLECTIONS_DIR))
 COLLECTIONS_STAMP = $(EMBED_COLLECTIONS_DIR)/.stamp
@@ -38,7 +40,8 @@ ANSIBLE_GALAXY_ENV = \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
 GOFMT_FILES = $(shell find . -path './internal/embedded/bundle' -prune -o -name '*.go' -print)
 ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/cluster_infra:ansible/roles/openshift
-ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=internal/embedded/bundle/collections ANSIBLE_FILTER_PLUGINS=ansible/filter_plugins
+ANSIBLE_SYNTAX_FILTER_PLUGINS = $(STATE_DIR)/ansible-syntax/filter_plugins
+ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=internal/embedded/bundle/collections ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	ansible/playbooks/checks/become.yml \
 	ansible/playbooks/checks/preflight.yml \
@@ -78,6 +81,9 @@ build: $(BIN_DIR) sync-bundle
 
 container-build:
 	@test -n "$(CONTAINER_CACHE_DIR)" || { printf '%s\n' 'CONTAINER_CACHE_DIR must not be empty'; exit 1; }
+	@test -n "$(CONTAINER_CACHE_NEXT_DIR)" || { printf '%s\n' 'CONTAINER_CACHE_NEXT_DIR must not be empty'; exit 1; }
+	@case "$(CONTAINER_CACHE_DIR)" in /|.|..|/*|../*|*/../*|*/..) printf 'refusing to remove unsafe CONTAINER_CACHE_DIR: %s\n' "$(CONTAINER_CACHE_DIR)"; exit 1;; esac
+	@case "$(CONTAINER_CACHE_NEXT_DIR)" in /|.|..|/*|../*|*/../*|*/..) printf 'refusing to remove unsafe CONTAINER_CACHE_NEXT_DIR: %s\n' "$(CONTAINER_CACHE_NEXT_DIR)"; exit 1;; esac
 	mkdir -p $(CONTAINER_CACHE_DIR)
 	rm -rf $(CONTAINER_CACHE_NEXT_DIR)
 	DOCKER_BUILDKIT=1 $(DOCKER) buildx build --load \
@@ -111,8 +117,8 @@ sync-bundle: $(COLLECTIONS_STAMP)
 	@find $(EMBED_BUNDLE_DIR) -type f -name 'test_*.py' -delete
 	@find $(EMBED_BUNDLE_DIR) -type d -name '__pycache__' -prune -exec rm -rf {} +
 
-# Galaxy download is gated on requirements.yml — only re-runs when it changes.
-$(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS)
+# Galaxy download is gated on requirements.yml and its lock metadata.
+$(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS) $(COLLECTIONS_LOCK)
 	@test -n "$(ANSIBLE_GALAXY)" || { printf '%s\n' 'ansible-galaxy not found in PATH; install Ansible or set ANSIBLE_GALAXY=/path/to/ansible-galaxy'; exit 1; }
 	@rm -rf $(EMBED_COLLECTIONS_DIR)/ansible_collections
 	@$(ANSIBLE_GALAXY_ENV) $(ANSIBLE_GALAXY) collection install --no-deps -r $(COLLECTIONS_REQUIREMENTS) -p $(EMBED_COLLECTIONS_ABS_DIR) >/dev/null
@@ -149,6 +155,11 @@ python-test:
 	@cd ansible/filter_plugins && python3 -m unittest discover -v
 
 ansible-syntax-check: check-e2e-deps
+	@test -n "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" || { printf '%s\n' 'ANSIBLE_SYNTAX_FILTER_PLUGINS must not be empty'; exit 1; }
+	@case "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" in */ansible-syntax/filter_plugins) ;; *) printf 'refusing to refresh unsafe ANSIBLE_SYNTAX_FILTER_PLUGINS: %s\n' "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)"; exit 1;; esac
+	@rm -rf $(ANSIBLE_SYNTAX_FILTER_PLUGINS)
+	@mkdir -p $(ANSIBLE_SYNTAX_FILTER_PLUGINS)
+	@find ansible/filter_plugins -maxdepth 1 -type f -name '*.py' ! -name 'test_*.py' -exec install -m 0644 {} $(ANSIBLE_SYNTAX_FILTER_PLUGINS)/ \;
 	@for playbook in $(ANSIBLE_SYNTAX_PLAYBOOKS); do \
 		$(ANSIBLE_SYNTAX_ENV) $(ANSIBLE_PLAYBOOK) --syntax-check -i localhost, "$$playbook"; \
 	done
@@ -208,12 +219,20 @@ e2e: check-e2e-case check-e2e-deps build
 	HOME=$(E2E_HOME) $(E2E_APPLY_ALL) $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
 
 clean:
-	rm -rf $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp
+	@test -n "$(BIN_DIR)" || { printf '%s\n' 'BIN_DIR must not be empty'; exit 1; }
+	@test -n "$(STATE_DIR)" || { printf '%s\n' 'STATE_DIR must not be empty'; exit 1; }
+	@test -n "$(EMBED_BUNDLE_DIR)" || { printf '%s\n' 'EMBED_BUNDLE_DIR must not be empty'; exit 1; }
+	@for p in $(CLEAN_PATHS) $(EMBED_BUNDLE_DIR); do \
+		case "$$p" in /|.|..|/*|../*|*/../*|*/..) printf 'refusing to clean unsafe path: %s\n' "$$p"; exit 1;; esac; \
+	done
+	@for p in $(CLEAN_PATHS); do rm -rf "$$p"; done
 	@find $(EMBED_BUNDLE_DIR) -mindepth 1 -maxdepth 1 \
 		! -name PLACEHOLDER ! -name .gitignore -exec rm -rf {} +
 
 clean-e2e-state: check-e2e-case
-	$(E2E_CLEAN) $(E2E_BASE_DIR)
+	@test -n "$(E2E_BASE_DIR)" || { printf '%s\n' 'E2E_BASE_DIR must not be empty'; exit 1; }
+	@case "$(E2E_BASE_DIR)" in /tmp/bootwright-*) ;; *) printf 'refusing to clean E2E_BASE_DIR outside /tmp/bootwright-*: %s\n' "$(E2E_BASE_DIR)"; exit 1;; esac
+	$(E2E_CLEAN) "$(E2E_BASE_DIR)"
 
 help:
 	@printf '%s\n' \

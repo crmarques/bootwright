@@ -1,7 +1,6 @@
 ---
-# Trusted collection dependencies. Keep this list exact-pinned: every
-# artifact URL must encode an official Ansible community or vendor namespace
-# (community.*, ansible.*, containers.*, redhat.*) and version.
+# Trusted collection dependencies. Keep this list exact-pinned and keep
+# requirements.lock.yml aligned with the embedded collection manifests.
 collections:
   - name: https://galaxy.ansible.com/download/community-general-12.6.0.tar.gz
     type: url

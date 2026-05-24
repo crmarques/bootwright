@@ -55,6 +55,21 @@
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_disk_boot_patch
   failed_when: false
-  changed_when: false
+  changed_when: (bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Confirm subsequent disk boot override was accepted
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]
+    fail_msg: >-
+      Redfish BMC rejected subsequent disk boot override for system
+      {{ bootwright_redfish_system_id }} with HTTP status
+      {{ bootwright_redfish_disk_boot_patch.status | default('unknown') }}.
+      The node booted from the live ISO, but future reboots may keep using
+      the virtual media boot path instead of disk.
+    success_msg: >-
+      Redfish subsequent disk boot override accepted for system
+      {{ bootwright_redfish_system_id }}.

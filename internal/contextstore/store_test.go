@@ -3,6 +3,7 @@ package contextstore
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -80,6 +81,23 @@ func TestImportInputsCollisionAndReplace(t *testing.T) {
 	}
 	if string(body) != "two\n" {
 		t.Fatalf("imported body = %q", string(body))
+	}
+}
+
+func TestImportInputsRejectsSourceInsideTarget(t *testing.T) {
+	inputDir := filepath.Join(t.TempDir(), "input-files")
+	if err := os.MkdirAll(inputDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, "environment.yaml"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ImportInputs([]string{inputDir}, inputDir, true)
+	if err == nil {
+		t.Fatal("self-import unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "must not be inside target input directory") {
+		t.Fatalf("error %q does not reject self-import", err)
 	}
 }
 
