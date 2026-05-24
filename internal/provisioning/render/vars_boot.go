@@ -11,7 +11,7 @@ import (
 )
 
 const emulatedVmediaOffset = 1
-const agentISOPublishTokenExpr = "{{ bootwright_agent_iso_publish_token }}"
+const agentISOPublishTokenExpr = "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"
 
 func emulatedBMCListenPorts(l *v1alpha1.MachineProfileLibvirtProvisioner) (port, vmediaPort int) {
 	port = v1alpha1.DefaultBMCEmulationStartPort

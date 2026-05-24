@@ -77,8 +77,8 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "lab-host",
-			wantStagePath: "{{ bootwright_host_state_dir }}/bmc/lab-libvirt-provider/vmedia/{{ bootwright_agent_iso_publish_token }}/agent-sno-libvirt.iso",
-			wantFetchURL:  "http://127.0.0.1:8001/{{ bootwright_agent_iso_publish_token }}/agent-sno-libvirt.iso",
+			wantStagePath: "{{ bootwright_host_state_dir }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
+			wantFetchURL:  "http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 		},
 		{
 			fixture:       "002-sno-emul-baremetal",
@@ -87,8 +87,8 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "services-host",
-			wantStagePath: "{{ bootwright_host_state_dir }}/artifacts/host-services-default/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso",
-			wantFetchURL:  "https://192.168.132.1:8443/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso",
+			wantStagePath: "{{ bootwright_host_state_dir }}/artifacts/host-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
+			wantFetchURL:  "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
 		},
 	}
 
@@ -269,11 +269,11 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	wantStagePath := "{{ bootwright_host_state_dir }}/artifacts/host-services-default/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso"
+	wantStagePath := "{{ bootwright_host_state_dir }}/artifacts/host-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso"
 	if got := iso["stagePath"]; got != wantStagePath {
 		t.Errorf("agentIso.stagePath got %v, want %q", got, wantStagePath)
 	}
-	if got := iso["fetchUrl"]; got != "https://192.168.132.1:8443/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso" {
+	if got := iso["fetchUrl"]; got != "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
 		t.Errorf("agentIso.fetchUrl got %v, want ContainerCluster-based ISO name", got)
 	}
 }
@@ -292,8 +292,8 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 	target := targets[0].(map[string]any)
 	wants := map[string]any{
 		"stageHost":         "bastion",
-		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts/bastion-services-default/{{ bootwright_agent_iso_publish_token }}/agent-3-nodes-ocp-baremetal.iso",
-		"fetchUrl":          "https://192.168.140.5:8443/{{ bootwright_agent_iso_publish_token }}/agent-3-nodes-ocp-baremetal.iso",
+		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts/bastion-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
+		"fetchUrl":          "https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
 		"requiresHTTPS":     true,
 		"requiresByteRange": true,
 	}
@@ -301,6 +301,20 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 		if got := target[k]; got != want {
 			t.Errorf("agentIsoPublishTargets[0].%s got %v, want %v", k, got, want)
 		}
+	}
+}
+
+func TestVarsUseSafeAgentISOPublishTokenPlaceholder(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	body := fmt.Sprint(render.Vars(state)["bootwright_clusters"])
+	if strings.Contains(body, "{{ bootwright_agent_iso_publish_token }}") {
+		t.Fatalf("bootwright_clusters must not contain an undefined Ansible token expression: %s", body)
+	}
+	if !strings.Contains(body, "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__") {
+		t.Fatalf("bootwright_clusters missing publish token placeholder: %s", body)
 	}
 }
 
@@ -316,7 +330,7 @@ func TestBareMetalArtifactFetchURLUsesPublisherPort(t *testing.T) {
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	if got := iso["fetchUrl"]; got != "https://192.168.132.1:9443/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso" {
+	if got := iso["fetchUrl"]; got != "https://192.168.132.1:9443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
 		t.Errorf("agentIso.fetchUrl got %v, want configured artifact HTTP port", got)
 	}
 
@@ -349,7 +363,7 @@ func TestBareMetalArtifactFetchURLDerivesHostAddress(t *testing.T) {
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	if got := iso["fetchUrl"]; got != "https://192.168.132.1:8443/{{ bootwright_agent_iso_publish_token }}/agent-sno-emul-baremetal.iso" {
+	if got := iso["fetchUrl"]; got != "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
 		t.Errorf("agentIso.fetchUrl got %v, want derived host address", got)
 	}
 }

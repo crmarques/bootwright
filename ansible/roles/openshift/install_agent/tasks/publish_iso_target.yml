@@ -1,11 +1,17 @@
 ---
+- name: Resolve agent ISO publish target
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_stage_path: "{{ bootwright_agent_iso_publish_target.stagePath | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
+    bootwright_agent_iso_fetch_url: "{{ bootwright_agent_iso_publish_target.fetchUrl | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
+  changed_when: false
+
 - name: Validate agent ISO publish target
   ansible.builtin.assert:
     that:
       - (bootwright_agent_iso_path | default('') | length) > 0
       - (bootwright_agent_iso_publish_target.stageHost | default('') | length) > 0
-      - (bootwright_agent_iso_publish_target.stagePath | default('') | length) > 0
-      - (bootwright_agent_iso_publish_target.fetchUrl | default('') | length) > 0
+      - (bootwright_agent_iso_stage_path | default('') | length) > 0
+      - (bootwright_agent_iso_fetch_url | default('') | length) > 0
       - >-
         (bootwright_agent_iso_publish_target.stageHost == (bootwright_host_name | default(inventory_hostname)))
         or
@@ -13,14 +19,15 @@
       - >-
         (not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool))
         or
-        ((bootwright_agent_iso_publish_target.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')
+        ((bootwright_agent_iso_fetch_url | ansible.builtin.urlsplit('scheme') | lower) == 'https')
     fail_msg: >-
       Invalid agent ISO publish target for {{ bootwright_current_cluster.name }}:
-      {{ bootwright_agent_iso_publish_target }}.
+      stagePath={{ bootwright_agent_iso_stage_path }},
+      fetchUrl={{ bootwright_agent_iso_fetch_url }}.
 
 - name: Resolve agent ISO staging directory
   ansible.builtin.set_fact:
-    bootwright_agent_iso_stage_dir: "{{ bootwright_agent_iso_publish_target.stagePath | dirname }}"
+    bootwright_agent_iso_stage_dir: "{{ bootwright_agent_iso_stage_path | dirname }}"
   changed_when: false
 
 - name: Determine agent ISO publish locality
@@ -43,7 +50,7 @@
     argv:
       - ln
       - "{{ bootwright_agent_iso_path }}"
-      - "{{ bootwright_agent_iso_publish_target.stagePath }}"
+      - "{{ bootwright_agent_iso_stage_path }}"
   register: bootwright_agent_iso_stage_link
   failed_when: false
   changed_when: bootwright_agent_iso_stage_link.rc == 0
@@ -62,7 +69,7 @@
       - -g
       - root
       - "{{ bootwright_agent_iso_path }}"
-      - "{{ bootwright_agent_iso_publish_target.stagePath }}"
+      - "{{ bootwright_agent_iso_stage_path }}"
   changed_when: true
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
@@ -73,7 +80,7 @@
 - name: Copy agent ISO to the BMC fetch host
   ansible.builtin.copy:
     src: "{{ bootwright_agent_iso_local_path }}"
-    dest: "{{ bootwright_agent_iso_publish_target.stagePath }}"
+    dest: "{{ bootwright_agent_iso_stage_path }}"
     owner: root
     group: root
     mode: "0600"
@@ -83,7 +90,7 @@
 
 - name: Restrict staged agent ISO permissions
   ansible.builtin.file:
-    path: "{{ bootwright_agent_iso_publish_target.stagePath }}"
+    path: "{{ bootwright_agent_iso_stage_path }}"
     owner: root
     group: root
     mode: "0600"
@@ -92,7 +99,7 @@
 
 - name: Probe staged agent ISO fetch URL
   ansible.builtin.uri:
-    url: "{{ bootwright_agent_iso_publish_target.fetchUrl }}"
+    url: "{{ bootwright_agent_iso_fetch_url }}"
     method: HEAD
     status_code: [200, 206]
     validate_certs: false
@@ -106,7 +113,7 @@
 
 - name: Probe staged agent ISO byte-range fetch
   ansible.builtin.uri:
-    url: "{{ bootwright_agent_iso_publish_target.fetchUrl }}"
+    url: "{{ bootwright_agent_iso_fetch_url }}"
     method: GET
     headers:
       Range: bytes=0-0
@@ -132,7 +139,7 @@
     fail_msg: >-
       The staged agent ISO URL is not reachable from
       {{ bootwright_agent_iso_publish_target.stageHost }}:
-      {{ bootwright_agent_iso_publish_target.fetchUrl }} returned HEAD status
+      {{ bootwright_agent_iso_fetch_url }} returned HEAD status
       {{ bootwright_agent_iso_fetch_probe.status | default('unknown') }} and
       byte-range status
       {{ bootwright_agent_iso_range_probe.status | default('not attempted') }}.

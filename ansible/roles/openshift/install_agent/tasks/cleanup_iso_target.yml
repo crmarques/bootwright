@@ -1,7 +1,12 @@
 ---
+- name: Resolve staged agent ISO publish path
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_publish_stage_path: "{{ bootwright_agent_iso_publish_target.stagePath | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
+  changed_when: false
+
 - name: Resolve staged agent ISO publish directory
   ansible.builtin.set_fact:
-    bootwright_agent_iso_publish_stage_dir: "{{ bootwright_agent_iso_publish_target.stagePath | dirname }}"
+    bootwright_agent_iso_publish_stage_dir: "{{ bootwright_agent_iso_publish_stage_path | dirname }}"
   changed_when: false
 
 - name: Validate staged agent ISO publish directory

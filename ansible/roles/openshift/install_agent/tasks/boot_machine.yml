@@ -61,6 +61,24 @@
         bootwright_selected_component: "{{ bootwright_boot_components | first }}"
       changed_when: false
 
+    - name: Resolve selected machine agent ISO target
+      ansible.builtin.set_fact:
+        bootwright_selected_component: >-
+          {{
+            bootwright_selected_component | combine({
+              'boot': bootwright_selected_component.boot | combine({
+                'agentIso': bootwright_selected_component.boot.agentIso | combine({
+                  'stagePath': bootwright_selected_component.boot.agentIso.stagePath | default('') | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token),
+                  'fetchUrl': bootwright_selected_component.boot.agentIso.fetchUrl | default('') | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)
+                })
+              })
+            }, recursive=true)
+          }}
+      changed_when: false
+      when:
+        - bootwright_selected_component.boot is defined
+        - bootwright_selected_component.boot.agentIso is defined
+
     - name: Boot selected machine via its substrate-specific driver
       ansible.builtin.include_role:
         name: "{{ bootwright_selected_component.bootApplyRole }}"

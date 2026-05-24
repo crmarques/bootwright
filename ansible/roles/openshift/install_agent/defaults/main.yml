@@ -5,3 +5,4 @@ bootwright_install_work_dir: "{{ bootwright_host_state_dir }}/runtime/{{ bootwri
 bootwright_openshift_install: openshift-install
 bootwright_install_timeout_seconds: 5400
 bootwright_install_publish_probe_timeout: 60
+bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"

@@ -593,6 +593,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 
 func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve agent ISO publish target")
 	validateIdx := findAnsibleTask(t, tasks, "Validate agent ISO publish target")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
 	localityIdx := findAnsibleTask(t, tasks, "Determine agent ISO publish locality")
@@ -604,8 +605,18 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+	if !(resolveIdx < validateIdx && validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
 		t.Fatalf("install_agent must validate the target, stage the ISO, and probe fetch reachability before node boot")
+	}
+
+	resolveFact, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[resolveIdx]["name"])
+	}
+	for _, key := range []string{"bootwright_agent_iso_stage_path", "bootwright_agent_iso_fetch_url"} {
+		if !strings.Contains(fmt.Sprint(resolveFact[key]), "replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)") {
+			t.Fatalf("%s must substitute the generated publish token, got %v", key, resolveFact[key])
+		}
 	}
 
 	targetAssert, ok := tasks[validateIdx]["ansible.builtin.assert"].(map[string]any)
@@ -615,10 +626,16 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_path | default('') | length) > 0") {
 		t.Fatalf("publish target validation must require the generated ISO path, got %v", targetAssert["that"])
 	}
+	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_stage_path | default('') | length) > 0") {
+		t.Fatalf("publish target validation must require the resolved stage path, got %v", targetAssert["that"])
+	}
+	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_fetch_url | default('') | length) > 0") {
+		t.Fatalf("publish target validation must require the resolved fetch URL, got %v", targetAssert["that"])
+	}
 	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_publish_target.stageHost == (bootwright_host_name | default(inventory_hostname))) or ((bootwright_agent_iso_local_path | default('') | length) > 0)") {
 		t.Fatalf("cross-host publish must require a controller-side transfer copy, got %v", targetAssert["that"])
 	}
-	if !stringListContains(targetAssert["that"], "(not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool)) or ((bootwright_agent_iso_publish_target.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')") {
+	if !stringListContains(targetAssert["that"], "(not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool)) or ((bootwright_agent_iso_fetch_url | ansible.builtin.urlsplit('scheme') | lower) == 'https')") {
 		t.Fatalf("real Redfish ISO URL scheme guard must require HTTPS while allowing emulated Redfish, got %v", targetAssert["that"])
 	}
 
@@ -640,7 +657,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no command body", tasks[linkIdx]["name"])
 	}
-	for _, want := range []string{"ln", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_publish_target.stagePath }}"} {
+	for _, want := range []string{"ln", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_stage_path }}"} {
 		if !stringListContains(stageLink["argv"], want) {
 			t.Fatalf("same-host stage link command missing %q: %v", want, stageLink["argv"])
 		}
@@ -659,7 +676,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no command body", tasks[sameHostCopyIdx]["name"])
 	}
-	for _, want := range []string{"install", "-m", "0600", "-o", "root", "-g", "root", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_publish_target.stagePath }}"} {
+	for _, want := range []string{"install", "-m", "0600", "-o", "root", "-g", "root", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_stage_path }}"} {
 		if !stringListContains(sameHostCopy["argv"], want) {
 			t.Fatalf("same-host stage copy command missing %q: %v", want, sameHostCopy["argv"])
 		}
@@ -681,7 +698,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if got := crossHostCopy["src"]; got != "{{ bootwright_agent_iso_local_path }}" {
 		t.Fatalf("stage copy source got %v", got)
 	}
-	if got := crossHostCopy["dest"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
+	if got := crossHostCopy["dest"]; got != "{{ bootwright_agent_iso_stage_path }}" {
 		t.Fatalf("stage destination got %v", got)
 	}
 	if got := tasks[crossHostCopyIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
@@ -698,7 +715,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no file body", tasks[restrictIdx]["name"])
 	}
-	if got := restrict["path"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
+	if got := restrict["path"]; got != "{{ bootwright_agent_iso_stage_path }}" {
 		t.Fatalf("restrict path got %v", got)
 	}
 
@@ -706,7 +723,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri body", tasks[fetchProbeIdx]["name"])
 	}
-	if got := fetchProbe["url"]; got != "{{ bootwright_agent_iso_publish_target.fetchUrl }}" {
+	if got := fetchProbe["url"]; got != "{{ bootwright_agent_iso_fetch_url }}" {
 		t.Fatalf("fetch URL probe target got %v", got)
 	}
 	if got := fetchProbe["method"]; got != "HEAD" {
@@ -724,6 +741,9 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	}
 	if got := rangeProbe["method"]; got != "GET" {
 		t.Fatalf("range probe must issue a byte-range GET, got method=%v", got)
+	}
+	if got := rangeProbe["url"]; got != "{{ bootwright_agent_iso_fetch_url }}" {
+		t.Fatalf("range probe target got %v", got)
 	}
 	headers, ok := rangeProbe["headers"].(map[string]any)
 	if !ok || headers["Range"] != "bytes=0-0" {
@@ -744,6 +764,35 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	}
 	if !stringListContains(fetchConfirm["that"], "(not (bootwright_agent_iso_publish_target.requiresByteRange | default(false) | bool)) or ((bootwright_agent_iso_range_probe.status | default(0) | int) == 206)") {
 		t.Fatalf("fetch URL confirmation must require byte ranges for real BMCs, got %v", fetchConfirm["that"])
+	}
+}
+
+func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
+	defaults := readRepoFile(t, "ansible/roles/openshift/install_agent/defaults/main.yml")
+	if !strings.Contains(defaults, `bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"`) {
+		t.Fatalf("install_agent defaults must define the publish token placeholder")
+	}
+
+	cleanupTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/cleanup_iso_target.yml")
+	resolveCleanup := cleanupTasks[findAnsibleTask(t, cleanupTasks, "Resolve staged agent ISO publish path")]
+	cleanupFact, ok := resolveCleanup["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", resolveCleanup["name"])
+	}
+	if !strings.Contains(fmt.Sprint(cleanupFact["bootwright_agent_iso_publish_stage_path"]), "replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)") {
+		t.Fatalf("cleanup must resolve the tokenized stage path, got %v", cleanupFact)
+	}
+
+	bootTopTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/boot_machine.yml")
+	bootTasks := nestedAnsibleTasks(t, bootTopTasks[findAnsibleTask(t, bootTopTasks, "Boot selected machine when install is not already complete")], "block")
+	resolveBoot := bootTasks[findAnsibleTask(t, bootTasks, "Resolve selected machine agent ISO target")]
+	bootFact, ok := resolveBoot["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", resolveBoot["name"])
+	}
+	body := fmt.Sprint(bootFact["bootwright_selected_component"])
+	if !strings.Contains(body, "replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)") {
+		t.Fatalf("boot_machine must resolve tokenized agent ISO URLs before boot role dispatch, got %v", body)
 	}
 }
 
