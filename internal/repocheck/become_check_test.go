@@ -42,7 +42,7 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 		path  string
 		hosts string
 	}{
-		{"ansible/playbooks/targets/clusters/apply.yml", "bootwright_boot_hosts"},
+		{"ansible/playbooks/targets/clusters/apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
 		{"ansible/playbooks/targets/infra/apply.yml", "bootwright_provider_hosts:bootwright_infra_hosts"},
 		{"ansible/playbooks/targets/infra/destroy.yml", "bootwright_provider_hosts:bootwright_infra_hosts"},
 		{"ansible/playbooks/targets/infra/destroy-http-server.yml", "bootwright_provider_hosts"},

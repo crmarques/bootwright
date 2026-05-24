@@ -16,9 +16,10 @@ import (
 // that back a provider-scoped service (LB, DNS, proxy, registry,
 // artifacts) land in `bootwright_provider_hosts`. A host that does
 // both lives in both groups — Ansible group membership can overlap.
-// The OCP-install layer runs against `bootwright_ocp_hosts`
-// (currently just localhost — `openshift-install agent` is
-// controller-driven).
+// The OCP-install layer runs against `bootwright_ocp_hosts`, which is
+// the Environment-declared bastion Host. Even when Bootwright itself is
+// running on that same machine, Ansible still connects through
+// Host.spec.ssh.address rather than a local inventory shortcut.
 //
 // Two groups instead of one is deliberate: the cluster_infra layer
 // playbook targets `bootwright_infra_hosts` directly and no longer
@@ -28,7 +29,8 @@ func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 	infraHostSet := infraReferencedHosts(state)
 	serviceHostSet := serviceReferencedHosts(state)
 	bootHostSet := bootReferencedHosts(state)
-	allHostSet := mergeHostSets(mergeHostSets(infraHostSet, serviceHostSet), bootHostSet)
+	ocpHostSet := ocpReferencedHosts(state)
+	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, serviceHostSet), bootHostSet), ocpHostSet)
 
 	var env *v1alpha1.Environment
 	if len(state.Environments) > 0 {
@@ -60,11 +62,8 @@ func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 				GroupProviderHosts: map[string]any{"hosts": hostsAsEmptyMap(serviceHostSet)},
 				GroupInfraHosts:    map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
 				GroupBootHosts:     map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
-				GroupOCPHosts: map[string]any{
-					"hosts": map[string]any{
-						"localhost": map[string]any{"ansible_connection": "local"},
-					},
-				},
+				GroupBastionHosts:  map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+				GroupOCPHosts:      map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
 			},
 		},
 	}
@@ -78,6 +77,7 @@ const (
 	GroupProviderHosts = "bootwright_provider_hosts"
 	GroupInfraHosts    = "bootwright_infra_hosts"
 	GroupBootHosts     = "bootwright_boot_hosts"
+	GroupBastionHosts  = "bootwright_bastion_hosts"
 	GroupOCPHosts      = "bootwright_ocp_hosts"
 )
 
@@ -85,23 +85,35 @@ const (
 // group for the given state. Used to detect an ansible-playbook
 // invocation that would target only empty groups (which fails with
 // "no hosts to target") and skip it instead. `bootwright_ocp_hosts`
-// always contains localhost, so its count is always 1.
+// contains the Environment-declared bastion Host for valid loaded
+// state.
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	return map[string]int{
 		GroupInfraHosts:    len(infraReferencedHosts(state)),
 		GroupProviderHosts: len(serviceReferencedHosts(state)),
 		GroupBootHosts:     len(bootReferencedHosts(state)),
-		GroupOCPHosts:      1,
+		GroupBastionHosts:  len(ocpReferencedHosts(state)),
+		GroupOCPHosts:      len(ocpReferencedHosts(state)),
 	}
 }
 
 func HostGroupMembers(state v1alpha1.State) map[string][]string {
+	ocpHosts := sortedHostSet(ocpReferencedHosts(state))
 	return map[string][]string{
 		GroupInfraHosts:    sortedHostSet(infraReferencedHosts(state)),
 		GroupProviderHosts: sortedHostSet(serviceReferencedHosts(state)),
 		GroupBootHosts:     sortedHostSet(bootReferencedHosts(state)),
-		GroupOCPHosts:      []string{"localhost"},
+		GroupBastionHosts:  ocpHosts,
+		GroupOCPHosts:      ocpHosts,
 	}
+}
+
+func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	if env := primaryEnvironment(state); env != nil && env.Spec.Bastion != nil && env.Spec.Bastion.HostRef != "" {
+		out[env.Spec.Bastion.HostRef] = true
+	}
+	return out
 }
 
 // infraReferencedHosts returns the hosts that back a profile-based

@@ -531,20 +531,17 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 }
 
-func TestBootRedfishStagesLocalArtifactBeforeRemoteSSH(t *testing.T) {
+func TestBootRedfishStagesArtifactThroughDeclaredStageHost(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/validate_stage.yml")
 	validateIdx := findAnsibleTask(t, tasks, "Validate boot_redfish inputs")
 	schemeIdx := findAnsibleTask(t, tasks, "Validate Redfish virtual-media ISO URL scheme")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
-	probeIdx := findAnsibleTask(t, tasks, "Probe controller-local agent ISO staging directory")
-	writeProbeIdx := findAnsibleTask(t, tasks, "Probe controller-local agent ISO staging directory write access")
-	selectIdx := findAnsibleTask(t, tasks, "Select agent ISO staging transport")
-	localIdx := findAnsibleTask(t, tasks, "Stage agent ISO at the controller-local BMC fetch location")
-	remoteIdx := findAnsibleTask(t, tasks, "Stage agent ISO at the remote BMC fetch location")
+	createDirIdx := findAnsibleTask(t, tasks, "Create agent ISO staging directory")
+	stageIdx := findAnsibleTask(t, tasks, "Stage agent ISO at the BMC fetch location")
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(validateIdx < schemeIdx && schemeIdx < dirIdx && dirIdx < probeIdx && probeIdx < writeProbeIdx && writeProbeIdx < selectIdx && selectIdx < localIdx && localIdx < remoteIdx && remoteIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+	if !(validateIdx < schemeIdx && schemeIdx < dirIdx && dirIdx < createDirIdx && createDirIdx < stageIdx && stageIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
 		t.Fatalf("boot_redfish must validate URL scheme, stage the ISO, and probe fetch reachability before Redfish insertion")
 	}
 
@@ -556,72 +553,35 @@ func TestBootRedfishStagesLocalArtifactBeforeRemoteSSH(t *testing.T) {
 		t.Fatalf("real Redfish ISO URL scheme guard must require HTTPS while allowing emulated Redfish, got %v", schemeAssert["that"])
 	}
 
-	probe, ok := tasks[probeIdx]["ansible.builtin.stat"].(map[string]any)
+	stageDir, ok := tasks[createDirIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no stat body", tasks[probeIdx]["name"])
+		t.Fatalf("%s has no file body", tasks[createDirIdx]["name"])
 	}
-	if got := probe["path"]; got != "{{ bootwright_agent_iso_stage_dir }}" {
-		t.Fatalf("local stage probe path got %v", got)
+	if got := stageDir["path"]; got != "{{ bootwright_agent_iso_stage_dir }}" {
+		t.Fatalf("stage directory path got %v", got)
 	}
-	if got := tasks[probeIdx]["delegate_to"]; got != "localhost" {
-		t.Fatalf("local stage probe must run on localhost, got %v", got)
+	if got := tasks[createDirIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
+		t.Fatalf("stage directory delegate got %v", got)
 	}
-	if got := tasks[probeIdx]["become"]; got != false {
-		t.Fatalf("local stage probe must not become, got %v", got)
-	}
-	if got := tasks[probeIdx]["failed_when"]; got != false {
-		t.Fatalf("local stage probe must allow remote fallback, got failed_when=%v", got)
+	if got := tasks[createDirIdx]["become"]; got != true {
+		t.Fatalf("stage directory must use remote become, got %v", got)
 	}
 
-	writeProbe, ok := tasks[writeProbeIdx]["ansible.builtin.command"].(map[string]any)
+	stageCopy, ok := tasks[stageIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no command body", tasks[writeProbeIdx]["name"])
+		t.Fatalf("%s has no copy body", tasks[stageIdx]["name"])
 	}
-	writeArgv, ok := writeProbe["argv"].([]any)
-	if !ok || len(writeArgv) != 3 || writeArgv[0] != "test" || writeArgv[1] != "-w" || writeArgv[2] != "{{ bootwright_agent_iso_stage_dir }}" {
-		t.Fatalf("local write probe argv got %v", writeProbe["argv"])
+	if got := stageCopy["src"]; got != "{{ bootwright_agent_iso_path }}" {
+		t.Fatalf("stage copy source got %v", got)
 	}
-	if got := tasks[writeProbeIdx]["delegate_to"]; got != "localhost" {
-		t.Fatalf("local write probe must run on localhost, got %v", got)
+	if got := stageCopy["dest"]; got != "{{ bootwright_component.boot.agentIso.stagePath }}" {
+		t.Fatalf("stage destination got %v", got)
 	}
-	if got := tasks[writeProbeIdx]["become"]; got != false {
-		t.Fatalf("local write probe must not become, got %v", got)
+	if got := tasks[stageIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
+		t.Fatalf("stage copy delegate got %v", got)
 	}
-	if got := tasks[writeProbeIdx]["failed_when"]; got != false {
-		t.Fatalf("local write probe must allow remote fallback, got failed_when=%v", got)
-	}
-	if got := tasks[writeProbeIdx]["when"]; got != "bootwright_agent_iso_local_stage_dir.stat.isdir | default(false) | bool" {
-		t.Fatalf("local write probe condition got %v", got)
-	}
-
-	localCopy, ok := tasks[localIdx]["ansible.builtin.copy"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s has no copy body", tasks[localIdx]["name"])
-	}
-	if got := localCopy["dest"]; got != "{{ bootwright_component.boot.agentIso.stagePath }}" {
-		t.Fatalf("local stage destination got %v", got)
-	}
-	if _, ok := localCopy["owner"]; ok {
-		t.Fatalf("local stage copy must not require chown without become: %v", localCopy)
-	}
-	if _, ok := localCopy["group"]; ok {
-		t.Fatalf("local stage copy must not require chgrp without become: %v", localCopy)
-	}
-	if got := tasks[localIdx]["delegate_to"]; got != "localhost" {
-		t.Fatalf("local stage copy must run on localhost, got %v", got)
-	}
-	if got := tasks[localIdx]["become"]; got != false {
-		t.Fatalf("local stage copy must not use local become, got %v", got)
-	}
-	if got := tasks[localIdx]["when"]; got != "bootwright_agent_iso_stage_local | bool" {
-		t.Fatalf("local stage copy condition got %v", got)
-	}
-
-	if got := tasks[remoteIdx]["delegate_to"]; got != "{{ bootwright_component.boot.agentIso.stageHost }}" {
-		t.Fatalf("remote stage fallback delegate got %v", got)
-	}
-	if got := tasks[remoteIdx]["when"]; got != "not (bootwright_agent_iso_stage_local | bool)" {
-		t.Fatalf("remote stage fallback condition got %v", got)
+	if got := tasks[stageIdx]["become"]; got != true {
+		t.Fatalf("stage copy must use remote become, got %v", got)
 	}
 
 	fetchProbe, ok := tasks[fetchProbeIdx]["ansible.builtin.uri"].(map[string]any)

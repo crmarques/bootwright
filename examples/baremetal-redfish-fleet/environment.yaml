@@ -5,6 +5,9 @@ metadata:
 spec:
   baseDomain: example.test
 
+  bastion:
+    hostRef: services-host
+
   resources:
     - hosts.yaml
     - networks.yaml

@@ -56,6 +56,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		if env.Spec.BaseDomain == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
+		errs = append(errs, validateEnvironmentBastion(env, state)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
 		errs = append(errs, validateEnvironmentProxy(env)...)
@@ -64,6 +65,24 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentNTPSources(env)...)
 	}
 	return errs
+}
+
+func validateEnvironmentBastion(env v1alpha1.Environment, state v1alpha1.State) []string {
+	owner := fmt.Sprintf("Environment/%s spec.bastion", env.Metadata.Name)
+	if env.Spec.Bastion == nil {
+		return []string{owner + " is required"}
+	}
+	if env.Spec.Bastion.HostRef == "" {
+		return []string{owner + ".hostRef is required"}
+	}
+	host, ok := indexHosts(state.Hosts)[env.Spec.Bastion.HostRef]
+	if !ok {
+		return []string{fmt.Sprintf("%s.hostRef %q does not resolve to a Host", owner, env.Spec.Bastion.HostRef)}
+	}
+	if v1alpha1.HostSSHAddress(host) == "" {
+		return []string{fmt.Sprintf("%s.hostRef %q resolves to Host/%s without a usable spec.ssh address", owner, env.Spec.Bastion.HostRef, host.Metadata.Name)}
+	}
+	return nil
 }
 
 func validateEnvironmentResources(env v1alpha1.Environment) []string {

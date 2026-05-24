@@ -81,11 +81,18 @@ spec:
 			wantSubstring: "field capabilities not found",
 		},
 		{
-			name: "environment-bastion-rejected",
+			name: "environment-missing-bastion-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  secrets:\n",
-				"  bastion:\n    hostRef: bastion\n\n  secrets:\n", 1)},
-			wantSubstring: "field bastion not found",
+				"  bastion:\n    hostRef: services-host\n\n",
+				"", 1)},
+			wantSubstring: "spec.bastion is required",
+		},
+		{
+			name: "environment-bastion-host-ref-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"hostRef: services-host",
+				"hostRef: missing-host", 1)},
+			wantSubstring: `spec.bastion.hostRef "missing-host" does not resolve to a Host`,
 		},
 		{
 			name: "infraprovider-networkref-rejected",
@@ -314,6 +321,28 @@ func TestEnvironmentSecretEmptyEntryDeclaresContextMaterial(t *testing.T) {
 	spec := state.Environments[0].Spec.Secrets["openshift-pull-secret"]
 	if spec.File != "" || spec.Generated != nil {
 		t.Fatalf("openshift-pull-secret = %+v, want context-local empty source", spec)
+	}
+}
+
+func TestEnvironmentProxyUseForDefaultsTrue(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", `  proxy:
+    httpProxy: http://proxy.bootwright.test:3128
+
+  secrets:
+`, 1)
+	writeFiles(t, dir, files)
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	useFor := state.Environments[0].Spec.Proxy.UseFor
+	if useFor.Bootwright == nil || !*useFor.Bootwright {
+		t.Fatalf("proxy.useFor.bootwright = %v, want default true", useFor.Bootwright)
+	}
+	if useFor.ClusterInstall == nil || !*useFor.ClusterInstall {
+		t.Fatalf("proxy.useFor.clusterInstall = %v, want default true", useFor.ClusterInstall)
 	}
 }
 
@@ -955,10 +984,25 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
+  bastion:
+    hostRef: services-host
+
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key: { file: ~/ssh.pub }
+    provider-host-ssh: { file: ~/ssh }
     vcenter-credentials: { file: ~/vcenter }
+`,
+		"hosts.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata: { name: services-host }
+spec:
+  addresses:
+    - { name: ssh, address: 192.168.133.1 }
+  ssh:
+    addressName: ssh
+    keyRef: { name: provider-host-ssh }
+  capabilities: [container-runtime]
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -1098,6 +1142,9 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
+  bastion:
+    hostRef: services-host
+
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key: { file: ~/ssh.pub }
@@ -1113,6 +1160,9 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
+  bastion:
+    hostRef: services-host
+
   resources:
 `)
 	for _, resource := range resources {

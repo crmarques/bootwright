@@ -8,13 +8,23 @@ authors.
 
 | Fact | Shape |
 | --- | --- |
-| `bootwright_environment` | environment defaults, proxy, mirror, component image declarations |
+| `bootwright_environment` | environment defaults, bastion hostRef, proxy, mirror, component image declarations |
 | `bootwright_hosts` | host SSH endpoints and capability tags |
 | `bootwright_providers` | provider capability inventory |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
 | `bootwright_provider_services` | provider-host service instances with rendered role names |
 | `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
+
+## Environment Shape
+
+```yaml
+bootwright_environment:
+  name: lab
+  baseDomain: example.test
+  bastion:
+    hostRef: lab-host
+```
 
 ## Cluster Shape
 

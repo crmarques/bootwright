@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -66,7 +65,7 @@ func TestCollectBastionChecksUsesInjectedUID(t *testing.T) {
 	}
 }
 
-func TestClusterPreflightListsInstallerToolsAlphabetically(t *testing.T) {
+func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 	deps := preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
@@ -86,9 +85,8 @@ func TestClusterPreflightListsInstallerToolsAlphabetically(t *testing.T) {
 			tools = append(tools, check.Name)
 		}
 	}
-	want := []string{"kubectl", "oc", "openshift-install"}
-	if !reflect.DeepEqual(tools, want) {
-		t.Fatalf("installer tools = %#v, want %#v", tools, want)
+	if len(tools) != 0 {
+		t.Fatalf("installer tools = %#v, want none; installer CLIs run on the bastion host", tools)
 	}
 }
 
@@ -147,7 +145,7 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	t.Fatalf("missing provider-host SSH key check for clusters phase: %+v", checks)
 }
 
-func TestClusterPreflightRejectsMismatchedOCPCLIRelease(t *testing.T) {
+func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 	deps := preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
 			return "/usr/local/bin/" + name, nil
@@ -172,12 +170,10 @@ func TestClusterPreflightRejectsMismatchedOCPCLIRelease(t *testing.T) {
 	checks := collectPreflightChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "clusters"}}, true, "/context/secrets", "/host-state", deps)
 
 	for _, name := range []string{"oc", "openshift-install"} {
-		check := findPreflightCheck(t, checks, name)
-		if check.Status != "FAIL" {
-			t.Fatalf("%s check status = %s, want FAIL: %+v", name, check.Status, check)
-		}
-		if !strings.Contains(check.Evidence, "want 4.21.15") {
-			t.Fatalf("%s evidence = %q, want requested release", name, check.Evidence)
+		for _, check := range checks {
+			if check.Name == name {
+				t.Fatalf("local %s preflight check still present; installer CLIs run on the bastion host: %+v", name, checks)
+			}
 		}
 	}
 }

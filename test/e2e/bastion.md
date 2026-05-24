@@ -7,9 +7,11 @@ points here when the operator chooses the host-bastion mode.
 
 ## Requirements
 
-The bastion is a Linux machine you SSH into and run `bootwright` from. It must be
-able to reach every provider host the case declares in `provider.yaml` over
-SSH (including `localhost` when the bastion is itself the provider host).
+The bastion is a Linux machine you SSH into and run `bootwright` from. It must
+be able to reach the Host selected by `environment.yaml` and every provider host
+the case declares in `provider.yaml` over SSH. Use the declared
+`Host.spec.ssh.addressName` address for the bastion Host; Bootwright does not
+replace it with `localhost` just because the CLI is running there.
 
 - A non-root user with `sudo`.
 - `bin/bootwright` available in `$PATH`.
@@ -58,8 +60,8 @@ ssh -i ~/.ssh/bootwright-ssh-key -o StrictHostKeyChecking=accept-new \
   <provider-user>@<provider-host> true
 ```
 
-When the bastion is also the provider host (the default for the reference
-cases), `<provider-host>` is `localhost`:
+When the bastion is also the provider host in a reference case, use the address
+that the case declares for that Host:
 
 ```bash
 touch ~/.ssh/authorized_keys

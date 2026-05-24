@@ -85,6 +85,9 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 		"name":       env.Metadata.Name,
 		"baseDomain": env.Spec.BaseDomain,
 	}
+	if env.Spec.Bastion != nil && env.Spec.Bastion.HostRef != "" {
+		out["bastion"] = map[string]any{"hostRef": env.Spec.Bastion.HostRef}
+	}
 	if env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {
 		mirror := map[string]any{}
 		if env.Spec.Registries.Mirror.URL != "" {

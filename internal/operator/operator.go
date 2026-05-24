@@ -1,5 +1,5 @@
-// Package operator owns the controller-side bootstrap and OpenShift
-// CLI installation domain. Inputs are state + path parameters; outputs
+// Package operator owns local bootstrap planning and bastion-side OpenShift
+// CLI installation planning. Inputs are state + path parameters; outputs
 // are plans (slices of BootstrapStep) and command specs. Side-effectful
 // runners live in the calling CLI layer so this package stays testable
 // without process exec.
@@ -30,7 +30,7 @@ type BootstrapStep struct {
 	Cmd   []string
 }
 
-// CLIInstallSpec captures the inputs to the controller CLI install
+// CLIInstallSpec captures the inputs to the bastion CLI install
 // playbook (downloading openshift-install / oc / kubectl into the
 // requested install directory at the pinned OCP release version).
 type CLIInstallSpec struct {
@@ -55,7 +55,7 @@ var DefaultProcessDeps = ProcessDeps{
 }
 
 // PlannedCommand returns the ansible-playbook invocation the CLI will
-// run to materialise the controller-side OpenShift CLIs. The returned
+// run to materialise the bastion-side OpenShift CLIs. The returned
 // argv is fully resolved (absolute paths against BundleDir) so callers
 // can echo it on dry-run and pass it straight to exec.Command.
 func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {

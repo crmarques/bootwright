@@ -60,7 +60,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 	cf := addCommonFlags(cmd)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned commands without executing them")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
-	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the sudo password when controller CLI install needs root; defaults to false when bootwright runs as root, true otherwise")
+	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
@@ -106,7 +106,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		switch {
 		case cliSpec != nil:
 			cliInstallEnv := controllerCLIAnsibleEnv(cliSpec.BundleDir)
-			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLILocalInventory), cliInstallEnv, askBecomePass)
+			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIBastionInventory), cliInstallEnv, askBecomePass)
 			p.CommandLine("install OCP CLIs "+cliSpec.OCPReleaseVersion+" into "+cliSpec.InstallDir, cliInstallCommand)
 		default:
 			p.Status(output.StatusSkip, "install OCP CLIs", "no openshift.release.version declared in state")
@@ -121,7 +121,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			return err
 		}
 		if cliSpec != nil {
-			if err := runControllerCLIInstall(c.Context(), stdin, stdout, stderr, *cliSpec, proxyEnv, askBecomePass); err != nil {
+			if err := runControllerCLIInstall(c.Context(), stdin, stdout, stderr, state, ctx.SecretsDir, *cliSpec, proxyEnv, askBecomePass); err != nil {
 				return failErr(1, err)
 			}
 		}

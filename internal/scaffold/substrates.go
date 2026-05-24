@@ -8,6 +8,7 @@ var Substrates = map[Provider]Substrate{
 	ProviderEmulatedBareMetal: {
 		ProviderNameSuffix: "libvirt",
 		NetworkNameSuffix:  "bridge",
+		BastionHostRef:     "lab-host",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
@@ -143,6 +144,7 @@ spec:
 	ProviderBareMetal: {
 		ProviderNameSuffix: "bare-metal",
 		NetworkNameSuffix:  "vlan",
+		BastionHostRef:     "services-host",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
@@ -227,12 +229,28 @@ spec:
 	ProviderVSphere: {
 		ProviderNameSuffix: "vsphere",
 		NetworkNameSuffix:  "portgroup",
-		EnvExtraSecrets: `    vcenter-credentials:
+		BastionHostRef:     "bastion",
+		EnvExtraSecrets: `    provider-host-ssh:
+      file: ~/.ssh/id_rsa
+    vcenter-credentials:
       file: ../secrets/vcenter-credentials
 `,
-		HostsYAML: `# No Host CRs needed for a pure vSphere workspace — Bootwright drives
-# the substrate via vCenter, not over SSH. Add Hosts here only when
-# you also want to run host-resident services (LB/proxy/DNS/registry).
+		HostsYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: bastion
+spec:
+  addresses:
+    - name: ssh
+      address: bastion.example.test       # change to the bastion host's address
+
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: provider-host-ssh
+
+  capabilities:
+    - container-runtime
 `,
 		NetworkConnectivity: `  vsphere:
     portgroup: ocp-install              # vSphere portgroup fronting this network
@@ -293,11 +311,28 @@ spec:
 	ProviderKubeVirt: {
 		ProviderNameSuffix: "kubevirt",
 		NetworkNameSuffix:  "nad",
-		EnvExtraSecrets: `    cnv-cluster-kubeconfig:
+		BastionHostRef:     "bastion",
+		EnvExtraSecrets: `    provider-host-ssh:
+      file: ~/.ssh/id_rsa
+    cnv-cluster-kubeconfig:
       file: ~/.kube/cnv-cluster.kubeconfig
 `,
-		HostsYAML: `# No Host CRs needed for a KubeVirt workspace — the substrate is
-# driven via the CNV cluster's Kubernetes API.
+		HostsYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: bastion
+spec:
+  addresses:
+    - name: ssh
+      address: bastion.example.test       # change to the bastion host's address
+
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: provider-host-ssh
+
+  capabilities:
+    - container-runtime
 `,
 		NetworkConnectivity: `  kubevirt:
     nad: ocp-install                    # NetworkAttachmentDefinition on the host cluster

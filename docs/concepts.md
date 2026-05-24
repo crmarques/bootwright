@@ -17,7 +17,7 @@ instead of compact inline maps.
 
 | Kind | Ownership boundary |
 | --- | --- |
-| `Environment` | Fleet-wide defaults, selected resource files, secret sources, proxy defaults, mirrors, component images |
+| `Environment` | Fleet-wide defaults, bastion host selection, selected resource files, secret sources, proxy defaults, mirrors, component images |
 | `Host` | SSH access to a machine that can run substrate or service actions |
 | `InfraProvider` | Capability inventory: bare-metal machines, virtual machine profiles, service implementations |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
@@ -34,11 +34,19 @@ ContainerCluster.nodes[*].machineRef
 
 ClusterInfra machines
   -> NetworkConfig
+
+Environment.bastion.hostRef
+  -> Host
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
 the exact cluster infrastructure machine that backs it. In v1 all nodes in one
 cluster must reference the same `ClusterInfra`.
+
+The environment-selected bastion Host is where Bootwright runs bastion setup
+and OpenShift installer actions. Ansible connects through the Host SSH address
+declared in desired state, even when that address reaches the machine running
+the CLI.
 
 ## NMState Templates
 

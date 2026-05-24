@@ -20,8 +20,8 @@ install mode (connected vs. disconnected) is documented in each case's
 Current cases:
 
 - `001-sno-libvirt` — Bootwright CLI runs inside a UBI9
-  container; libvirt host is the same machine, reached as `localhost` via
-  `podman run --network host`; one SNO cluster.
+  container; the environment bastion points at the libvirt host on the same
+  machine through the fixture's declared Host SSH address; one SNO cluster.
 - `002-sno-emul-baremetal` — single-node bare-metal shape backed by
   emulated services.
 - `003-3nodes-libvirt` — same bastion/provider shape with one compact

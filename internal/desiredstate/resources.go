@@ -191,6 +191,12 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindClusterInfra, node.MachineRef.ClusterInfra)
 		}
 	}
+	for _, env := range state.Environments {
+		if env.Spec.Bastion != nil {
+			require(fmt.Sprintf("Environment/%s spec.bastion.hostRef", env.Metadata.Name),
+				v1alpha1.KindHost, env.Spec.Bastion.HostRef)
+		}
+	}
 	if len(errs) == 0 {
 		return nil
 	}

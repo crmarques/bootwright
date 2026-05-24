@@ -32,8 +32,8 @@ defaults. That keeps provider swaps and release changes explicit.
 
 ## Apply Workflow
 
-`apply bastion` prepares controller-side tools. Scoped apply targets then run
-through the rendered Ansible bundle:
+`apply bastion` prepares tools on the Environment-selected bastion Host. Scoped
+apply targets then run through the rendered Ansible bundle:
 
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.

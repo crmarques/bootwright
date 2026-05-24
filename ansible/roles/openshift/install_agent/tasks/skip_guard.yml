@@ -3,8 +3,6 @@
   ansible.builtin.stat:
     path: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
   register: bootwright_prior_kubeconfig_stat
-  delegate_to: localhost
-  become: false
 
 - name: Probe cluster Available status when prior kubeconfig exists
   ansible.builtin.command:
@@ -24,8 +22,6 @@
   when:
     - bootwright_prior_kubeconfig_stat.stat.exists
     - not (bootwright_install_override | default(false) | bool)
-  delegate_to: localhost
-  become: false
 
 - name: Determine whether install can be skipped
   ansible.builtin.set_fact:

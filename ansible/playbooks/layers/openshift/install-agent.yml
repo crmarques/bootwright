@@ -1,14 +1,14 @@
 ---
-# OpenShift install layer. Runs on the controller (`bootwright_ocp_hosts`
-# is typically just `localhost`) and drives the agent installer per
-# cluster. Rendered boot driver roles dispatch per machine and may
-# call into provider-host services (BMC, libvirt) over SSH.
+# OpenShift install layer. Runs on the declared bastion host and drives the
+# agent installer per cluster. Rendered boot driver roles dispatch per machine
+# and may call into provider-host services (BMC, libvirt) over SSH.
 
 - name: Install clusters via openshift-install agent
   hosts: bootwright_ocp_hosts
   gather_subset:
     - "!all"
     - min
+  become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
   tasks:

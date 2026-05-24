@@ -25,10 +25,10 @@ selects multiple `ContainerCluster` objects, Bootwright keeps Ansible output in
 logs and prints per-cluster install log paths plus high-level progress instead.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
-cluster task: create the cluster agent ISO with `openshift-install`, boot each
-declared node through its rendered boot adapter as parallel node tasks, then
-run `openshift-install agent wait-for install-complete` after every node boot
-task has completed.
+cluster task on the Environment-selected bastion Host: create the cluster agent
+ISO with `openshift-install`, boot each declared node through its rendered boot
+adapter as parallel node tasks, then run `openshift-install agent wait-for
+install-complete` after every node boot task has completed.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
 for host-level work. Provider and cluster-infrastructure playbooks use
@@ -43,15 +43,16 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 
 ## Ownership Boundaries
 
-- `Environment` owns fleet-wide defaults, context resource selection, secret
-  sources, proxy defaults, registry mirrors, and component images.
+- `Environment` owns fleet-wide defaults, bastion host selection, context
+  resource selection, secret sources, proxy defaults, registry mirrors, and
+  component images.
 - `InfraProvider` owns capabilities: explicit bare-metal machines, virtual
   machine profiles, and service capabilities.
 - `NetworkConfig` owns reusable machine-network data and NMState templates.
 - `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
   machines, and managed infra components.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
-- `Host` owns SSH reachability to provider or service hosts.
+- `Host` owns SSH reachability to the bastion plus provider or service hosts.
 
 These boundaries are reflected in rendering:
 

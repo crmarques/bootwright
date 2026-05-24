@@ -4,7 +4,7 @@
   block:
     - name: Read generated agent ISO path
       ansible.builtin.slurp:
-        src: "{{ bootwright_install_work_dir }}/agent-iso.path"
+        src: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
       register: bootwright_agent_iso_path_file
       delegate_to: localhost
       become: false

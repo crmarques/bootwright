@@ -9,7 +9,8 @@ mode.
 ## Requirements
 
 - Linux host with Podman.
-- A non-root user that can SSH to `localhost` and escalate with `sudo`.
+- A non-root user that can SSH to the address declared on the selected bastion
+  Host and escalate with `sudo`.
 - `bin/bootwright` built from this repository (`make build`).
 - An OpenShift pull secret JSON at
   `~/.bootwright/secrets/openshift-pull-secret` on the host.

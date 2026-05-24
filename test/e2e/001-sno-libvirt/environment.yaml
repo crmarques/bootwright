@@ -5,6 +5,9 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
+  bastion:
+    hostRef: lab-host
+
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key:

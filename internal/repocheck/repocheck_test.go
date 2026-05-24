@@ -73,7 +73,6 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"networkRef",
 		"infrastructureRef",
 		"clusterInstallMode",
-		"Environment.spec.bastion",
 		"bootInterface",
 		"serviceAddresses",
 		"serviceAddressNames",
@@ -103,7 +102,6 @@ func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {
 	rejected := []string{
 		"machines[*].provisioner",
 		"components.artifacts",
-		"Environment.spec.bastion",
 		"networkRef",
 		"clusterInstallMode",
 		"serviceAddresses",
@@ -380,8 +378,6 @@ func assertNoRetiredDesiredStateFields(t *testing.T, name, body string) {
 		kind, _ := doc["kind"].(string)
 		spec, _ := doc["spec"].(map[string]any)
 		switch kind {
-		case "Environment":
-			rejectMapKey(t, name, kind, "spec.bastion", spec, "bastion")
 		case "Host":
 			rejectMapKey(t, name, kind, "spec.serviceAddresses", spec, "serviceAddresses")
 			rejectMapKey(t, name, kind, "spec.serviceAddressNames", spec, "serviceAddressNames")

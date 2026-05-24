@@ -4,6 +4,7 @@
   gather_subset:
     - "!all"
     - min
+  become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
   tasks:

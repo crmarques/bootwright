@@ -17,8 +17,6 @@
       poll: 300
       register: bootwright_install_wait
       changed_when: bootwright_install_wait.rc == 0
-      delegate_to: localhost
-      become: false
 
     - name: Record kubeconfig path
       ansible.builtin.copy:
@@ -26,5 +24,51 @@
         mode: "0600"
         content: "{{ bootwright_install_work_dir }}/auth/kubeconfig\n"
       when: bootwright_install_wait.rc == 0
+
+    - name: Create local installer auth directory
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}/auth"
+        state: directory
+        mode: "0700"
       delegate_to: localhost
       become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Fetch kubeconfig to local runtime state
+      ansible.builtin.fetch:
+        src: "{{ bootwright_install_work_dir }}/auth/kubeconfig"
+        dest: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+        flat: true
+      when: bootwright_install_wait.rc == 0
+
+    - name: Restrict local kubeconfig permissions
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Fetch kubeadmin password to local runtime state
+      ansible.builtin.fetch:
+        src: "{{ bootwright_install_work_dir }}/auth/kubeadmin-password"
+        dest: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+        flat: true
+      when: bootwright_install_wait.rc == 0
+
+    - name: Restrict local kubeadmin password permissions
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Record local kubeconfig path
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_local_work_dir }}/kubeconfig.path"
+        mode: "0600"
+        content: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig\n"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0

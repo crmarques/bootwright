@@ -14,8 +14,6 @@
         - rendezvousIP
         - auth
         - agent-iso.path
-      delegate_to: localhost
-      become: false
 
     - name: Create agent ISO
       ansible.builtin.command:
@@ -28,8 +26,6 @@
           - "{{ bootwright_install_work_dir }}"
         chdir: "{{ bootwright_install_work_dir }}"
       register: bootwright_iso_create
-      delegate_to: localhost
-      become: false
       changed_when: bootwright_iso_create.rc == 0
 
     - name: Locate generated agent ISO
@@ -38,8 +34,6 @@
         patterns: "agent.*.iso"
         file_type: file
       register: bootwright_agent_iso_find
-      delegate_to: localhost
-      become: false
 
     - name: Assert agent ISO was generated
       ansible.builtin.fail:
@@ -56,5 +50,25 @@
         dest: "{{ bootwright_install_work_dir }}/agent-iso.path"
         mode: "0600"
         content: "{{ bootwright_agent_iso_path }}\n"
+
+    - name: Create local installer artifact directory
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch generated agent ISO to local runtime state
+      ansible.builtin.fetch:
+        src: "{{ bootwright_agent_iso_path }}"
+        dest: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
+        flat: true
+
+    - name: Record local generated agent ISO path
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+        mode: "0600"
+        content: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}\n"
       delegate_to: localhost
       become: false

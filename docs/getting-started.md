@@ -21,37 +21,6 @@ sudo install -m 0755 bootwright /usr/local/bin/bootwright
 bootwright version
 ```
 
-If a release binary is not available yet, build the CLI from the repository
-root with the
-[`Containerfile`](https://github.com/crmarques/bootwright/blob/main/Containerfile)
-and copy the binary out of the image:
-
-```bash
-export HTTP_PROXY
-export HTTPS_PROXY="${HTTP_PROXY}"
-export NO_PROXY="localhost,127.0.0.1,.local,10."
-export http_proxy="${HTTP_PROXY}"
-export https_proxy="${HTTPS_PROXY}"
-export no_proxy="${NO_PROXY}"
-
-DOCKER_BUILDKIT=1 docker build \
-  --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
-  --build-arg "HTTPS_PROXY=${HTTPS_PROXY}" \
-  --build-arg "NO_PROXY=${NO_PROXY}" \
-  --build-arg "http_proxy=${http_proxy}" \
-  --build-arg "https_proxy=${https_proxy}" \
-  --build-arg "no_proxy=${no_proxy}" \
-  -t bootwright \
-  -f Containerfile \
-  .
-
-docker create --name bootwright-bin bootwright
-docker cp bootwright-bin:/usr/local/bin/bootwright ./bootwright
-docker rm bootwright-bin
-sudo install -m 0755 ./bootwright /usr/local/bin/bootwright
-bootwright version
-```
-
 ## 1. Prepare Input Files
 
 Start from an example, copy it to a working directory, then edit the copy for
@@ -82,6 +51,8 @@ container-cluster.yaml ContainerCluster
 Edit these first:
 
 - `Environment.spec.baseDomain` and `Environment.spec.secrets`.
+- `Environment.spec.bastion.hostRef`, which selects the Host Ansible uses for
+  bastion and installer actions.
 - `Host.spec.addresses[]` and SSH key references for provider/service hosts.
 - Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`.
 - Machine CIDRs and NMState templates in `networks.yaml`.
@@ -94,16 +65,17 @@ unless the cluster intent itself changes.
 
 ## 2. Verify SSH Access
 
-Bootwright uses SSH to reach provider and service hosts. Test the same key and
-user before importing the context:
+Bootwright uses SSH to reach the environment bastion plus provider and service
+hosts. Test the same key, user, and Host address values before importing the
+context:
 
 ```text
-ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@localhost" true
 ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${BASTION_ADDRESS}" true
 ```
 
-Run the first command when the provider host is local. Run the second when the
-provider or artifact publisher is reached through a bastion address.
+Use the exact address you declare in `Host.spec.addresses[]` for the selected
+bastion Host. Bootwright will use that address even when the CLI runs on the
+same server.
 
 ## 3. Import A Context
 

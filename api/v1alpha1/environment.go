@@ -12,6 +12,7 @@ type Environment struct {
 
 type EnvironmentSpec struct {
 	BaseDomain      string                                   `yaml:"baseDomain" json:"baseDomain"`
+	Bastion         *EnvironmentBastionSpec                  `yaml:"bastion,omitempty" json:"bastion,omitempty"`
 	Resources       []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	Proxy           *EnvironmentProxySpec                    `yaml:"proxy,omitempty" json:"proxy,omitempty"`
 	Registries      *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
@@ -26,6 +27,10 @@ type EnvironmentSpec struct {
 	// (option 42 entries that are not IPs are dropped at render time
 	// since the option encodes IPv4 addresses only).
 	NTPSources []string `yaml:"ntpSources,omitempty" json:"ntpSources,omitempty"`
+}
+
+type EnvironmentBastionSpec struct {
+	HostRef string `yaml:"hostRef" json:"hostRef"`
 }
 
 type EnvironmentSecretSpec struct {

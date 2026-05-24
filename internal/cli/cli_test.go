@@ -452,12 +452,12 @@ func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.
 	}
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
-	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  bastion:\n    hostRef: bastion\n\n  secrets:\n")
+	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  retiredField: true\n\n  secrets:\n")
 	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--base-dir", baseDir, "--yes")
 	if code == 0 {
 		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
 	}
-	if !strings.Contains(stderr, "field bastion not found") {
+	if !strings.Contains(stderr, "field retiredField not found") {
 		t.Fatalf("stderr missing strict decode error: %q", stderr)
 	}
 	after, err := os.ReadFile(importedPath)
@@ -777,23 +777,45 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	}
 }
 
-func TestControllerCLILocalInventoryUsesLocalConnection(t *testing.T) {
-	body := controllerCLILocalInventoryBody()
-	for _, want := range []string{
-		"ansible_connection=local",
-		"ansible_python_interpreter=/usr/bin/python3",
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("controller CLI inventory missing %q: %q", want, body)
-		}
+func TestControllerCLIBastionInventoryUsesHostSSHAddress(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Hosts[0].Spec.Addresses[0].Address = "bastion.example.test"
+	state.Environments[0].Spec.Secrets["provider-host-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+
+	body, err := controllerCLIBastionInventoryBody(state, "/context/secrets")
+	if err != nil {
+		t.Fatalf("controllerCLIBastionInventoryBody: %v", err)
 	}
 	for _, reject := range []string{
+		"ansible_connection",
+		"ansible_connection=local",
+		"localhost",
 		"ansible_become_",
 		"ansible_pipelining",
 	} {
 		if strings.Contains(body, reject) {
-			t.Fatalf("controller CLI inventory should not set %q: %q", reject, body)
+			t.Fatalf("controller CLI bastion inventory should not contain %q: %q", reject, body)
 		}
+	}
+
+	var inv map[string]any
+	if err := yaml.Unmarshal([]byte(body), &inv); err != nil {
+		t.Fatalf("decode inventory: %v\n%s", err, body)
+	}
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	bastion := hosts["lab-host"].(map[string]any)
+	if got := bastion["ansible_host"]; got != "bastion.example.test" {
+		t.Fatalf("ansible_host = %v, want Host.spec.ssh.address", got)
+	}
+	if got := bastion["ansible_ssh_private_key_file"]; got != "/context/secrets/provider-host-ssh" {
+		t.Fatalf("ansible_ssh_private_key_file = %v, want resolved Host keyRef path", got)
+	}
+
+	children := all["children"].(map[string]any)
+	groupHosts := children[render.GroupBastionHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := groupHosts["lab-host"]; !ok {
+		t.Fatalf("%s hosts = %v, want lab-host", render.GroupBastionHosts, groupHosts)
 	}
 }
 
@@ -808,66 +830,40 @@ func TestControllerCLIAnsibleEnvForcesSystemTemps(t *testing.T) {
 			t.Fatalf("%s = %q, want /tmp", key, got)
 		}
 	}
-	cmd := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, env, true)
-	for _, want := range []string{
-		"ANSIBLE_LOCAL_TEMP=/tmp",
-		"ANSIBLE_REMOTE_TEMP=/tmp",
-		"ANSIBLE_REMOTE_TMP=/tmp",
-	} {
-		if !slices.Contains(cmd, want) {
-			t.Fatalf("controller CLI sudo command missing %q: %v", want, cmd)
-		}
-	}
 }
 
-func TestControllerCLIInstallCommandPromptsForSudoWhenRequested(t *testing.T) {
-	ansibleEnv := map[string]string{
-		"ANSIBLE_CONFIG":           "/bundle/ansible.cfg",
-		"ANSIBLE_ROLES_PATH":       "/bundle/roles/bastion:/bundle/roles/shared",
-		"ANSIBLE_COLLECTIONS_PATH": "/bundle/collections",
-		"ANSIBLE_FILTER_PLUGINS":   "/bundle/filter_plugins",
-	}
-	got := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, ansibleEnv, true)
+func TestControllerCLIInstallCommandPromptsForBecomeWhenRequested(t *testing.T) {
+	got := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, nil, true)
 	want := []string{
-		"sudo",
-		"--preserve-env=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy",
-		"env",
-		"ANSIBLE_CONFIG=/bundle/ansible.cfg",
-		"ANSIBLE_ROLES_PATH=/bundle/roles/bastion:/bundle/roles/shared",
-		"ANSIBLE_COLLECTIONS_PATH=/bundle/collections",
-		"ANSIBLE_FILTER_PLUGINS=/bundle/filter_plugins",
 		"/venv/bin/ansible-playbook",
 		"play.yml",
+		"--ask-become-pass",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("controller CLI sudo command mismatch\n got %v\nwant %v", got, want)
+		t.Fatalf("controller CLI command mismatch\n got %v\nwant %v", got, want)
 	}
 }
 
-func TestControllerCLIInstallCommandUsesNonInteractiveSudoWhenPromptDisabled(t *testing.T) {
+func TestControllerCLIInstallCommandLeavesArgsUnwrappedWhenPromptDisabled(t *testing.T) {
 	got := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, nil, false)
 	want := []string{
-		"sudo",
-		"-n",
-		"--preserve-env=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy",
-		"env",
 		"/venv/bin/ansible-playbook",
 		"play.yml",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("controller CLI sudo command mismatch\n got %v\nwant %v", got, want)
+		t.Fatalf("controller CLI command mismatch\n got %v\nwant %v", got, want)
 	}
 }
 
-func TestControllerCLIInstallCommandSkipsSudoAsRoot(t *testing.T) {
+func TestControllerCLIInstallCommandCopiesArgs(t *testing.T) {
 	args := []string{"/venv/bin/ansible-playbook", "play.yml"}
-	got := controllerCLIInstallCommandForUID(0, args, nil, true)
+	got := controllerCLIInstallCommandForUID(0, args, nil, false)
 	if !reflect.DeepEqual(got, args) {
-		t.Fatalf("root controller CLI command got %v, want %v", got, args)
+		t.Fatalf("controller CLI command got %v, want %v", got, args)
 	}
 	got[0] = "changed"
 	if args[0] == "changed" {
-		t.Fatal("root controller CLI command aliases input args")
+		t.Fatal("controller CLI command aliases input args")
 	}
 }
 

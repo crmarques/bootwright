@@ -50,8 +50,6 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  delegate_to: localhost
-  become: false
   when: bootwright_node_dns_targets | length > 0
 
 - name: Collect node-side DNS failures

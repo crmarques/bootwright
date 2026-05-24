@@ -13,11 +13,11 @@ import (
 const (
 	preflightPlaybookPath = "playbooks/checks/preflight.yml"
 	// infraAnsibleLimit pins the inventory groups `apply infra` and
-	// `check infra` target. `bootwright_ocp_hosts` (localhost) is
-	// included so the controller-side external_validate play can run
-	// in every context input set — including bare-metal/all-external shapes
-	// like test 002 where the other two groups would otherwise be
-	// empty and ansible would abort with "no hosts to target".
+	// `check infra` target. `bootwright_ocp_hosts` is included so
+	// bastion-side external_validate can run in every context input set,
+	// including bare-metal/all-external shapes like test 002 where the
+	// other two groups would otherwise be empty and ansible would abort
+	// with "no hosts to target".
 	infraAnsibleLimit   = "bootwright_provider_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
 	clusterAnsibleLimit = "bootwright_ocp_hosts:bootwright_boot_hosts"
 )

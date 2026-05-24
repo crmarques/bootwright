@@ -18,7 +18,7 @@ const (
 	checkGroupSecretMaterial  = "Secret material"
 )
 
-func collectBastionChecks(state v1alpha1.State, hostStateDir string, deps preflightDeps) []preflightCheck {
+func collectBastionChecks(state v1alpha1.State, _ string, deps preflightDeps) []preflightCheck {
 	checks := []preflightCheck{
 		pythonVersionCheck(deps),
 		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
@@ -26,13 +26,6 @@ func collectBastionChecks(state v1alpha1.State, hostStateDir string, deps prefli
 	}
 	if deps.uid() != 0 {
 		checks = append(checks, binaryCheck(checkGroupControllerTools, "sudo", nil, "install sudo on PATH or run bootwright as root", deps))
-	}
-	if releaseVersion := operator.StateOpenShiftReleaseVersion(state); releaseVersion != "" {
-		checks = append(checks,
-			binaryCheck(checkGroupInstallerTools, "kubectl", openshiftInstallSearchDirs(hostStateDir), "bootwright apply bastion", deps),
-			ocpCLIVersionCheck(checkGroupInstallerTools, "oc", openshiftInstallSearchDirs(hostStateDir), releaseVersion, "bootwright apply bastion", deps),
-			openshiftInstallVersionCheck(checkGroupInstallerTools, openshiftInstallSearchDirs(hostStateDir), releaseVersion, "bootwright apply bastion", deps),
-		)
 	}
 	return checks
 }
@@ -78,7 +71,7 @@ var defaultPreflightDeps = preflightDeps{
 	uid: os.Getuid,
 }
 
-func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, hostStateDir string, deps preflightDeps) []preflightCheck {
+func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, _ string, deps preflightDeps) []preflightCheck {
 	checks := []preflightCheck{
 		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
 		binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
@@ -87,12 +80,6 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
 	if phaseInScope("clusters", selected, hasState) {
-		releaseVersion := operator.StateOpenShiftReleaseVersion(state)
-		checks = append(checks,
-			binaryCheck(checkGroupInstallerTools, "kubectl", openshiftInstallSearchDirs(hostStateDir), "bootwright apply bastion", deps),
-			ocpCLIVersionCheck(checkGroupInstallerTools, "oc", openshiftInstallSearchDirs(hostStateDir), releaseVersion, "bootwright apply bastion", deps),
-			openshiftInstallVersionCheck(checkGroupInstallerTools, openshiftInstallSearchDirs(hostStateDir), releaseVersion, "bootwright apply bastion", deps),
-		)
 		if stateNeedsKubeVirt(state) {
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
 		}

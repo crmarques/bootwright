@@ -1,0 +1,17 @@
+---
+- name: Create remote installer work directory
+  ansible.builtin.file:
+    path: "{{ bootwright_install_work_dir }}"
+    state: directory
+    mode: "0700"
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']
+
+- name: Stage effective installer inputs on bastion
+  ansible.builtin.copy:
+    src: "{{ bootwright_install_local_work_dir }}/{{ item }}"
+    dest: "{{ bootwright_install_work_dir }}/{{ item }}"
+    mode: "0600"
+  loop:
+    - install-config.yaml
+    - agent-config.yaml
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']

@@ -21,6 +21,14 @@ func Normalize(state *v1alpha1.State) {
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {
+	if env.Spec.Proxy != nil {
+		if env.Spec.Proxy.UseFor.Bootwright == nil {
+			env.Spec.Proxy.UseFor.Bootwright = v1alpha1.BoolPtr(true)
+		}
+		if env.Spec.Proxy.UseFor.ClusterInstall == nil {
+			env.Spec.Proxy.UseFor.ClusterInstall = v1alpha1.BoolPtr(true)
+		}
+	}
 	for name, secret := range env.Spec.Secrets {
 		if secret.Generated == nil {
 			continue

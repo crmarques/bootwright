@@ -16,6 +16,22 @@ func Environment(state v1alpha1.State) *v1alpha1.Environment {
 	return &state.Environments[0]
 }
 
+func BastionHostName(state v1alpha1.State) string {
+	env := Environment(state)
+	if env == nil || env.Spec.Bastion == nil {
+		return ""
+	}
+	return env.Spec.Bastion.HostRef
+}
+
+func BastionHost(state v1alpha1.State) (v1alpha1.Host, bool) {
+	name := BastionHostName(state)
+	if name == "" {
+		return v1alpha1.Host{}, false
+	}
+	return Host(state, name)
+}
+
 func Provider(state v1alpha1.State, name string) (v1alpha1.InfraProvider, bool) {
 	for _, provider := range state.InfraProviders {
 		if provider.Metadata.Name == name {

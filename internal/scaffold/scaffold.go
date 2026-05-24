@@ -50,10 +50,11 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		return nil, fmt.Errorf("unknown provider %q (known: %s)", kind, strings.Join(known, ", "))
 	}
 	data := templateData{
-		Cluster:    clusterName,
-		ProviderID: clusterName + "-" + s.ProviderNameSuffix,
-		NetworkID:  clusterName + "-" + s.NetworkNameSuffix,
-		BootDevice: s.BootDevice,
+		Cluster:        clusterName,
+		ProviderID:     clusterName + "-" + s.ProviderNameSuffix,
+		NetworkID:      clusterName + "-" + s.NetworkNameSuffix,
+		BastionHostRef: s.BastionHostRef,
+		BootDevice:     s.BootDevice,
 	}
 	resolved, err := resolveSubstrateFragments(s, data)
 	if err != nil {
@@ -163,6 +164,7 @@ func ApplySupport(kind Provider) support.DispatchSupport {
 type Substrate struct {
 	ProviderNameSuffix   string
 	NetworkNameSuffix    string
+	BastionHostRef       string
 	EnvExtraSecrets      string
 	HostsYAML            string
 	NetworkConnectivity  string
@@ -177,13 +179,14 @@ type Substrate struct {
 }
 
 type templateData struct {
-	Cluster    string
-	ProviderID string
-	NetworkID  string
-	Substrate  Substrate
-	HostsYAML  string
-	EnvSecrets string
-	BootDevice string
+	Cluster        string
+	ProviderID     string
+	NetworkID      string
+	BastionHostRef string
+	Substrate      Substrate
+	HostsYAML      string
+	EnvSecrets     string
+	BootDevice     string
 }
 
 type namedTemplate struct {
@@ -220,6 +223,9 @@ metadata:
   name: {{.Cluster}}
 spec:
   baseDomain: example.test              # change to a domain you own
+
+  bastion:
+    hostRef: {{.BastionHostRef}}
 
   secrets:
     openshift-pull-secret:

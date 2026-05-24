@@ -36,47 +36,17 @@
     bootwright_agent_iso_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
   changed_when: false
 
-- name: Probe controller-local agent ISO staging directory
-  ansible.builtin.stat:
+- name: Create agent ISO staging directory
+  ansible.builtin.file:
     path: "{{ bootwright_agent_iso_stage_dir }}"
-  register: bootwright_agent_iso_local_stage_dir
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  failed_when: false
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ bootwright_component.boot.agentIso.stageHost }}"
+  become: true
 
-- name: Probe controller-local agent ISO staging directory write access
-  ansible.builtin.command:
-    argv:
-      - test
-      - -w
-      - "{{ bootwright_agent_iso_stage_dir }}"
-  register: bootwright_agent_iso_local_stage_dir_writable
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  failed_when: false
-  when: bootwright_agent_iso_local_stage_dir.stat.isdir | default(false) | bool
-
-- name: Select agent ISO staging transport
-  ansible.builtin.set_fact:
-    bootwright_agent_iso_stage_local: >-
-      {{
-        (bootwright_agent_iso_local_stage_dir.stat.isdir | default(false) | bool)
-        and (bootwright_agent_iso_local_stage_dir_writable.rc | default(1) | int == 0)
-      }}
-  changed_when: false
-
-- name: Stage agent ISO at the controller-local BMC fetch location
-  ansible.builtin.copy:
-    src: "{{ bootwright_agent_iso_path }}"
-    dest: "{{ bootwright_component.boot.agentIso.stagePath }}"
-    mode: "0644"
-  delegate_to: localhost
-  become: false
-  when: bootwright_agent_iso_stage_local | bool
-
-- name: Stage agent ISO at the remote BMC fetch location
+- name: Stage agent ISO at the BMC fetch location
   ansible.builtin.copy:
     src: "{{ bootwright_agent_iso_path }}"
     dest: "{{ bootwright_component.boot.agentIso.stagePath }}"
@@ -85,7 +55,6 @@
     mode: "0644"
   delegate_to: "{{ bootwright_component.boot.agentIso.stageHost }}"
   become: true
-  when: not (bootwright_agent_iso_stage_local | bool)
 
 - name: Probe staged agent ISO fetch URL
   ansible.builtin.uri:

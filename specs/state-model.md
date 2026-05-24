@@ -32,6 +32,9 @@ metadata:
 spec:
   baseDomain: example.test
 
+  bastion:
+    hostRef: lab-host
+
   resources:
     - hosts.yaml
     - networks.yaml
@@ -96,6 +99,11 @@ Rules:
   every discovered YAML file.
 - A listed file is loaded as a complete YAML file; every Bootwright resource
   referenced by any selected resource must also be selected.
+- `bastion.hostRef` is required and references the `Host` used for
+  bastion-side Bootwright and OpenShift installer actions. Ansible connects to
+  the referenced Host through `Host.spec.ssh.addressName` and the matching
+  `Host.spec.addresses[].address`. It does not synthesize `localhost` when the
+  CLI happens to run on the same machine.
 - `secrets` declares names, not bytes. An empty entry resolves to
   `<context>/secrets/<name>` and must be populated with `bootwright secret set`
   before the consuming workflow runs. `file:` resolves to the declared local
@@ -104,10 +112,10 @@ Rules:
   `bootwright secret generate`.
 - `proxy.httpProxy`, `proxy.httpsProxy`, and `proxy.noProxy` keep installer
   field names.
-- `proxy.useFor.bootwright` applies to Bootwright runtime actions. Omitted
-  means `true`.
-- `proxy.useFor.clusterInstall` renders the proxy into installer input.
-  Omitted means `true`.
+- `proxy.useFor.bootwright` applies to Bootwright runtime actions. When
+  `proxy` is declared and this flag is omitted, it defaults to `true`.
+- `proxy.useFor.clusterInstall` renders the proxy into installer input. When
+  `proxy` is declared and this flag is omitted, it defaults to `true`.
 - A managed proxy component and an external environment proxy URL are mutually
   exclusive for the same loaded state.
 - `install.mode: disconnected` on any `ContainerCluster` requires mirror trust

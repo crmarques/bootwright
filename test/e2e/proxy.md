@@ -14,6 +14,9 @@ proxy:
     clusterInstall: true
 ```
 
+When `proxy` is declared, omitted `useFor.bootwright` and
+`useFor.clusterInstall` values default to `true`.
+
 Managed proxy services live in `ClusterInfra.spec.components.proxy` and are
 selected from `InfraProvider.spec.proxies[]`. Do not configure an
 external proxy URL and a managed proxy component in the same loaded state.

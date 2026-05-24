@@ -31,6 +31,7 @@ func TestInventoryStructure(t *testing.T) {
 		"bootwright_provider_hosts",
 		"bootwright_infra_hosts",
 		"bootwright_boot_hosts",
+		"bootwright_bastion_hosts",
 		"bootwright_ocp_hosts",
 	} {
 		if _, ok := children[group].(map[string]any); !ok {
@@ -38,13 +39,15 @@ func TestInventoryStructure(t *testing.T) {
 		}
 	}
 
-	ocp := children["bootwright_ocp_hosts"].(map[string]any)
-	hosts, ok := ocp["hosts"].(map[string]any)
-	if !ok {
-		t.Fatalf("bootwright_ocp_hosts missing hosts: %v", ocp)
-	}
-	if _, ok := hosts["localhost"]; !ok {
-		t.Fatalf("bootwright_ocp_hosts must include localhost (openshift-install is controller-driven): %v", hosts)
+	for _, group := range []string{"bootwright_ocp_hosts", "bootwright_bastion_hosts"} {
+		grp := children[group].(map[string]any)
+		hosts, ok := grp["hosts"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing hosts: %v", group, grp)
+		}
+		if _, ok := hosts["lab-host"]; !ok {
+			t.Fatalf("%s must include Environment.spec.bastion.hostRef: %v", group, hosts)
+		}
 	}
 
 	provHosts, ok := children["bootwright_provider_hosts"].(map[string]any)["hosts"].(map[string]any)
@@ -60,6 +63,38 @@ func TestInventoryStructure(t *testing.T) {
 		if _, ok := host["ansible_become"]; ok {
 			t.Fatalf("inventory host %q should not force become; playbooks own privilege escalation: %v", name, host)
 		}
+	}
+	labHost := allHosts["lab-host"].(map[string]any)
+	if got := labHost["ansible_host"]; got != "localhost" {
+		t.Fatalf("bastion ansible_host = %v, want Host.spec.ssh.address", got)
+	}
+	if _, ok := labHost["ansible_connection"]; ok {
+		t.Fatalf("bastion inventory must use SSH, not ansible_connection=local: %v", labHost)
+	}
+}
+
+func TestInventoryUsesBastionHostSSHAddress(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Hosts[0].Spec.Addresses[0].Address = "bastion.example.test"
+
+	inv := render.Inventory(state, "")
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	bastion := hosts["lab-host"].(map[string]any)
+	if got := bastion["ansible_host"]; got != "bastion.example.test" {
+		t.Fatalf("bastion ansible_host = %v, want declared Host SSH address", got)
+	}
+	if _, ok := bastion["ansible_connection"]; ok {
+		t.Fatalf("bastion inventory must not use local connection for SSH address %q: %v", bastion["ansible_host"], bastion)
+	}
+
+	children := all["children"].(map[string]any)
+	groupHosts := children[render.GroupBastionHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := groupHosts["lab-host"]; !ok {
+		t.Fatalf("%s hosts = %v, want lab-host", render.GroupBastionHosts, groupHosts)
 	}
 }
 
@@ -140,7 +175,7 @@ func TestHostGroupCountsBareMetalManagedArtifacts(t *testing.T) {
 		t.Errorf("%s: want 1 for Redfish artifact staging, got %d", render.GroupBootHosts, got)
 	}
 	if got := counts[render.GroupOCPHosts]; got != 1 {
-		t.Errorf("%s: localhost must always count as 1, got %d", render.GroupOCPHosts, got)
+		t.Errorf("%s: want 1 for bastion host, got %d", render.GroupOCPHosts, got)
 	}
 }
 

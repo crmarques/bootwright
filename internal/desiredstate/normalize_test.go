@@ -30,6 +30,29 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	}
 }
 
+func TestNormalizeDefaultsEnvironmentProxyUseFor(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Proxy: &v1alpha1.EnvironmentProxySpec{
+					HTTPProxy: "http://proxy.example.test:3128",
+				},
+			},
+		}},
+	}
+
+	Normalize(&state)
+
+	useFor := state.Environments[0].Spec.Proxy.UseFor
+	if useFor.Bootwright == nil || !*useFor.Bootwright {
+		t.Fatalf("UseFor.Bootwright = %v, want true", useFor.Bootwright)
+	}
+	if useFor.ClusterInstall == nil || !*useFor.ClusterInstall {
+		t.Fatalf("UseFor.ClusterInstall = %v, want true", useFor.ClusterInstall)
+	}
+}
+
 func TestNormalizeDefaultsArtifactHTTPPort(t *testing.T) {
 	state := v1alpha1.State{
 		InfraProviders: []v1alpha1.InfraProvider{{

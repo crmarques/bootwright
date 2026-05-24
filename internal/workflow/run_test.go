@@ -62,6 +62,16 @@ func minimalState() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Bastion: &v1alpha1.EnvironmentBastionSpec{HostRef: "bastion"},
+			},
+		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
+			Spec: v1alpha1.HostSpec{
+				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "bastion.example.test"}},
+				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			},
 		}},
 	}
 }
@@ -300,7 +310,7 @@ func TestLimitMatchesNoHostsTable(t *testing.T) {
 	}{
 		{"empty limit", "", false},
 		{"whitespace limit", "   ", false},
-		{"ocp group always has localhost", render.GroupOCPHosts, false},
+		{"ocp group has the declared bastion host", render.GroupOCPHosts, false},
 		{"only empty groups", render.GroupProviderHosts + ":" + render.GroupInfraHosts, true},
 		{"unknown group", "no_such_group", true},
 		{"mix of empty and non-empty", render.GroupProviderHosts + ":" + render.GroupOCPHosts, false},
