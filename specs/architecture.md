@@ -14,15 +14,16 @@ YAML desired state
   -> apply substrate and cluster phases
 ```
 
-Apply execution records a durable run ledger under the context state directory.
-The ledger is the operator-facing status source for long-running work: each
-planned task has a stable ID, dependency list, status, log path, and optional
-cluster, node, or host association. Human apply output summarizes task progress
-from that ledger. When an apply selects one `ContainerCluster`, Ansible
-stdout/stderr streams pass through to the terminal without Bootwright
-decoration and are also tee'd into per-task artifact logs. When an apply
-selects multiple `ContainerCluster` objects, Bootwright keeps Ansible output in
-logs and prints per-cluster install log paths plus high-level progress instead.
+Apply execution records a durable run ledger under the context state directory
+and a short-lived local lease for the process updating it. The ledger is the
+operator-facing status source for long-running work: each planned task has a
+stable ID, dependency list, status, log path, and optional cluster, node, or
+host association. Human apply output summarizes task progress from that ledger.
+When an apply selects one `ContainerCluster`, Ansible stdout/stderr streams
+pass through to the terminal without Bootwright decoration and are also tee'd
+into per-task artifact logs. When an apply selects multiple `ContainerCluster`
+objects, Bootwright keeps Ansible output in logs and prints per-cluster install
+log paths plus high-level progress instead.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
 cluster task on the Environment-selected bastion Host: create the cluster agent

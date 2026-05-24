@@ -220,9 +220,25 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	if err := SaveRunLedger(stateDir, ledger); err != nil {
 		return ledger, err
 	}
+	lease := NewRunLease(runID, startedAt)
+	if err := SaveRunLease(stateDir, lease); err != nil {
+		ledger.Finish(RunStatusFailed, time.Now())
+		_ = SaveRunLedger(stateDir, ledger)
+		return ledger, err
+	}
+	stopLeaseHeartbeat := startRunLeaseHeartbeat(ctx, stateDir, lease)
+	finishRun := func(status RunStatus) error {
+		stopLeaseHeartbeat()
+		ledger.Finish(status, time.Now())
+		if err := SaveRunLedger(stateDir, ledger); err != nil {
+			return err
+		}
+		return RemoveRunLease(stateDir)
+	}
 	multiClusterOutput := len(ledger.ClusterNames()) > 1
 	clusterLogs, err := openApplyClusterLogs(stateDir, ledger)
 	if err != nil {
+		_ = finishRun(RunStatusFailed)
 		return ledger, err
 	}
 	defer clusterLogs.Close()
@@ -240,8 +256,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		}
 	}
 	if len(tasks) == 0 {
-		ledger.Finish(RunStatusOK, time.Now())
-		_ = SaveRunLedger(stateDir, ledger)
+		_ = finishRun(RunStatusOK)
 		if reporter != nil {
 			reporter.RunSummary(ledger)
 		}
@@ -351,21 +366,47 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	}
 
 	if firstErr != nil {
-		ledger.Finish(RunStatusFailed, time.Now())
-		_ = SaveRunLedger(stateDir, ledger)
+		_ = finishRun(RunStatusFailed)
 		if reporter != nil {
 			reporter.RunSummary(ledger)
 		}
 		return ledger, firstErr
 	}
-	ledger.Finish(RunStatusOK, time.Now())
-	if err := SaveRunLedger(stateDir, ledger); err != nil {
+	if err := finishRun(RunStatusOK); err != nil {
 		return ledger, err
 	}
 	if reporter != nil {
 		reporter.RunSummary(ledger)
 	}
 	return ledger, nil
+}
+
+func startRunLeaseHeartbeat(ctx context.Context, stateDir string, lease RunLease) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(ApplyLeaseHeartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				lease.HeartbeatAt = now.UTC()
+				_ = SaveRunLease(stateDir, lease)
+			}
+		}
+	}()
+	stopped := false
+	return func() {
+		if stopped {
+			return
+		}
+		stopped = true
+		cancel()
+		<-done
+	}
 }
 
 func taskSlotAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {

@@ -116,13 +116,14 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 	}
 
 	ledger, ledgerFound, ledgerErr := workflow.LoadRunLedger(ctx.StateDir)
-	printApplyLedgerStatus(p, ledger, ledgerFound, ledgerErr)
+	printApplyLedgerStatus(p, ctx.StateDir, ledger, ledgerFound, ledgerErr)
 
 	p.Section("Next steps")
 	var items []cliout.Item
 	hints := nextStepHints(stateLoaded, state, ctx.StateDir, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
-		hints = ledgerNextSteps(ledger, hints)
+		activity, _ := workflow.AssessRunActivity(ctx.StateDir, ledger, time.Now())
+		hints = ledgerNextSteps(ledger, activity, hints)
 	}
 	if ledgerErr != nil {
 		hints = append([]string{"inspect apply ledger: " + ledgerErr.Error()}, hints...)
@@ -149,6 +150,10 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, host
 		ledger, found, err := workflow.LoadRunLedger(contextState.StateDir)
 		if err != nil || !found || ledger.Terminal() {
 			return nil
+		}
+		activity, err := workflow.AssessRunActivity(contextState.StateDir, ledger, time.Now())
+		if err != nil || activity.State == workflow.RunActivityStale {
+			return err
 		}
 		timer := time.NewTimer(interval)
 		select {

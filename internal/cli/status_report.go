@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"sort"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
@@ -16,10 +17,11 @@ type statusReport struct {
 	Clusters []statusCluster `json:"clusters"`
 	// Shared lists provider service capabilities that two or more clusters
 	// reference. Each entry maps to one Ansible-converged host instance.
-	Shared    []statusShared      `json:"shared"`
-	Secrets   []secretListEntry   `json:"secrets"`
-	NextSteps []string            `json:"nextSteps"`
-	ApplyRun  *workflow.RunLedger `json:"applyRun,omitempty"`
+	Shared           []statusShared          `json:"shared"`
+	Secrets          []secretListEntry       `json:"secrets"`
+	NextSteps        []string                `json:"nextSteps"`
+	ApplyRun         *workflow.RunLedger     `json:"applyRun,omitempty"`
+	ApplyRunActivity *statusApplyRunActivity `json:"applyRunActivity,omitempty"`
 }
 
 type statusShared struct {
@@ -36,6 +38,11 @@ type statusContext struct {
 	StateDir     string `json:"stateDir"`
 	SecretsDir   string `json:"secretsDir"`
 	HostStateDir string `json:"hostStateDir"`
+}
+
+type statusApplyRunActivity struct {
+	State  string `json:"state"`
+	Detail string `json:"detail,omitempty"`
 }
 
 type statusDesired struct {
@@ -106,7 +113,9 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 	}
 	if ledger, ok, err := workflow.LoadRunLedger(ctx.StateDir); err == nil && ok {
 		report.ApplyRun = &ledger
-		report.NextSteps = ledgerNextSteps(ledger, report.NextSteps)
+		activity, _ := workflow.AssessRunActivity(ctx.StateDir, ledger, time.Now())
+		report.ApplyRunActivity = &statusApplyRunActivity{State: string(activity.State), Detail: activity.Detail}
+		report.NextSteps = ledgerNextSteps(ledger, activity, report.NextSteps)
 	} else if err != nil {
 		report.NextSteps = append([]string{"inspect apply ledger: " + err.Error()}, report.NextSteps...)
 	}

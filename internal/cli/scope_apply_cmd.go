@@ -109,12 +109,8 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
-			existing, ok, err := workflow.LoadRunLedger(ctx.StateDir)
-			if err != nil {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.StateDir); err != nil {
 				return failErr(1, err)
-			}
-			if ok && existing.Active() {
-				return failf(1, "apply run %s is still running; inspect it with bootwright status --watch", existing.RunID)
 			}
 			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, flags.hostStateDir); err != nil {
 				return err

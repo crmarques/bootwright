@@ -1066,6 +1066,9 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
+	if err := workflow.SaveRunLease(ctx.StateDir, workflow.NewRunLease("apply-test", time.Now().UTC())); err != nil {
+		t.Fatalf("SaveRunLease: %v", err)
+	}
 
 	stdout, stderr, code := runCLI(t, "status")
 	if code != 0 {
@@ -1075,6 +1078,30 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("status output missing %q:\n%s", want, stdout)
 		}
+	}
+}
+
+func TestStatusReportsStaleApplyLedger(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt"},
+	}, now)
+	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+
+	stdout, stderr, code := runCLI(t, "status")
+	if code != 0 {
+		t.Fatalf("status exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"apply-stale", "Lease", "apply lease is missing", "next apply or destroy will mark it cancelled"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("status output missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "bootwright status --watch") {
+		t.Fatalf("stale apply status should not recommend watch:\n%s", stdout)
 	}
 }
 
@@ -1097,6 +1124,63 @@ func TestStatusJSONIncludesApplyLedger(t *testing.T) {
 	}
 	if report.ApplyRun == nil || report.ApplyRun.RunID != "apply-json" {
 		t.Fatalf("apply run missing from report: %+v", report.ApplyRun)
+	}
+	if report.ApplyRunActivity == nil || report.ApplyRunActivity.State == "" {
+		t.Fatalf("apply run activity missing from report: %+v", report.ApplyRunActivity)
+	}
+}
+
+func TestReconcileCurrentApplyCancelsStaleLedger(t *testing.T) {
+	stateDir := t.TempDir()
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt"},
+	}, now)
+	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := reconcileCurrentApplyBeforeMutation(&stdout, stateDir); err != nil {
+		t.Fatalf("reconcileCurrentApplyBeforeMutation: %v", err)
+	}
+	loaded, ok, err := workflow.LoadRunLedger(stateDir)
+	if err != nil {
+		t.Fatalf("LoadRunLedger: %v", err)
+	}
+	if !ok || loaded.Status != workflow.RunStatusCancelled || loaded.Tasks[0].Status != workflow.TaskStatusCancelled {
+		t.Fatalf("ledger was not cancelled: ok=%v ledger=%+v", ok, loaded)
+	}
+	if !strings.Contains(stdout.String(), "stale apply") || !strings.Contains(stdout.String(), "marked apply-stale cancelled") {
+		t.Fatalf("stdout missing stale apply warning:\n%s", stdout.String())
+	}
+}
+
+func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
+	stateDir := t.TempDir()
+	now := time.Now().UTC()
+	ledger := workflow.NewRunLedger("apply-active", "cluster", "", workflow.ConcurrencyLimits{}, nil, now)
+	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+	if err := workflow.SaveRunLease(stateDir, workflow.NewRunLease("apply-active", now)); err != nil {
+		t.Fatalf("SaveRunLease: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	err := reconcileCurrentApplyBeforeMutation(&stdout, stateDir)
+	if err == nil || !strings.Contains(err.Error(), "apply run apply-active is still running") {
+		t.Fatalf("expected active apply error, got %v", err)
+	}
+	loaded, _, err := workflow.LoadRunLedger(stateDir)
+	if err != nil {
+		t.Fatalf("LoadRunLedger: %v", err)
+	}
+	if loaded.Status != workflow.RunStatusRunning {
+		t.Fatalf("active ledger status changed to %s", loaded.Status)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("active ledger should not print stale warning:\n%s", stdout.String())
 	}
 }
 
@@ -1189,6 +1273,22 @@ func TestStatusWatchStopsWhenNoRunLedgerExists(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Current apply") {
 		t.Fatalf("status --watch output missing Current apply:\n%s", stdout)
+	}
+}
+
+func TestStatusWatchStopsWhenApplyLedgerIsStale(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	ledger := workflow.NewRunLedger("apply-stale-watch", "cluster", "", workflow.ConcurrencyLimits{}, nil, time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC))
+	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+
+	stdout, stderr, code := runCLI(t, "status", "--watch", "--watch-interval", "1ms")
+	if code != 0 {
+		t.Fatalf("status --watch exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "apply-stale-watch") || !strings.Contains(stdout, "apply lease is missing") {
+		t.Fatalf("status --watch output missing stale apply:\n%s", stdout)
 	}
 }
 

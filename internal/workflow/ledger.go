@@ -12,7 +12,13 @@ import (
 	"github.com/crmarques/bootwright/internal/safefs"
 )
 
-const LedgerRelativePath = "workflow/current-apply.json"
+const (
+	LedgerRelativePath = "workflow/current-apply.json"
+	LeaseRelativePath  = "workflow/current-apply.lease.json"
+
+	ApplyLeaseStaleAfter        = 2 * time.Minute
+	ApplyLeaseHeartbeatInterval = 15 * time.Second
+)
 
 type RunStatus string
 
@@ -51,6 +57,28 @@ type RunLedger struct {
 	EndedAt   *time.Time        `json:"endedAt,omitempty"`
 	Limits    ConcurrencyLimits `json:"limits"`
 	Tasks     []TaskLedgerEntry `json:"tasks"`
+}
+
+type RunLease struct {
+	RunID       string    `json:"runId"`
+	Hostname    string    `json:"hostname,omitempty"`
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"startedAt"`
+	HeartbeatAt time.Time `json:"heartbeatAt"`
+}
+
+type RunActivityState string
+
+const (
+	RunActivityTerminal RunActivityState = "terminal"
+	RunActivityActive   RunActivityState = "active"
+	RunActivityStale    RunActivityState = "stale"
+)
+
+type RunActivity struct {
+	State  RunActivityState
+	Detail string
+	Lease  *RunLease
 }
 
 type TaskLedgerEntry struct {
@@ -99,6 +127,10 @@ func LedgerPath(stateDir string) string {
 	return filepath.Join(stateDir, LedgerRelativePath)
 }
 
+func LeasePath(stateDir string) string {
+	return filepath.Join(stateDir, LeaseRelativePath)
+}
+
 func LoadRunLedger(stateDir string) (RunLedger, bool, error) {
 	path := LedgerPath(stateDir)
 	data, err := os.ReadFile(path)
@@ -113,6 +145,64 @@ func LoadRunLedger(stateDir string) (RunLedger, bool, error) {
 		return RunLedger{}, true, fmt.Errorf("decode apply ledger %s: %w", path, err)
 	}
 	return ledger, true, nil
+}
+
+func NewRunLease(runID string, now time.Time) RunLease {
+	hostname, _ := os.Hostname()
+	now = now.UTC()
+	return RunLease{
+		RunID:       runID,
+		Hostname:    hostname,
+		PID:         os.Getpid(),
+		StartedAt:   now,
+		HeartbeatAt: now,
+	}
+}
+
+func LoadRunLease(stateDir string) (RunLease, bool, error) {
+	path := LeasePath(stateDir)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return RunLease{}, false, nil
+	}
+	if err != nil {
+		return RunLease{}, false, fmt.Errorf("read apply lease: %w", err)
+	}
+	var lease RunLease
+	if err := json.Unmarshal(data, &lease); err != nil {
+		return RunLease{}, true, fmt.Errorf("decode apply lease %s: %w", path, err)
+	}
+	return lease, true, nil
+}
+
+func SaveRunLease(stateDir string, lease RunLease) error {
+	path := LeasePath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create apply lease directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("chmod apply lease directory: %w", err)
+	}
+	data, err := json.MarshalIndent(lease, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode apply lease: %w", err)
+	}
+	data = append(data, '\n')
+	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write apply lease: %w", err)
+	}
+	return nil
+}
+
+func RemoveRunLease(stateDir string) error {
+	err := os.Remove(LeasePath(stateDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("remove apply lease: %w", err)
+	}
+	return nil
 }
 
 func SaveRunLedger(stateDir string, ledger RunLedger) error {
@@ -145,6 +235,52 @@ func (l RunLedger) Terminal() bool {
 
 func (l RunLedger) Active() bool {
 	return l.Status == RunStatusRunning
+}
+
+func AssessRunActivity(stateDir string, ledger RunLedger, now time.Time) (RunActivity, error) {
+	if !ledger.Active() {
+		return RunActivity{State: RunActivityTerminal}, nil
+	}
+	lease, found, err := LoadRunLease(stateDir)
+	if err != nil {
+		return RunActivity{}, err
+	}
+	if !found {
+		if !ledger.StartedAt.IsZero() && now.UTC().Sub(ledger.StartedAt.UTC()) <= ApplyLeaseStaleAfter {
+			return RunActivity{State: RunActivityActive, Detail: "apply lease is missing but run started recently"}, nil
+		}
+		return RunActivity{State: RunActivityStale, Detail: "apply lease is missing"}, nil
+	}
+	if lease.RunID != ledger.RunID {
+		return RunActivity{State: RunActivityStale, Detail: fmt.Sprintf("apply lease belongs to %s", lease.RunID), Lease: &lease}, nil
+	}
+	if lease.HeartbeatAt.IsZero() {
+		return RunActivity{State: RunActivityStale, Detail: "apply lease has no heartbeat", Lease: &lease}, nil
+	}
+	if now.UTC().Sub(lease.HeartbeatAt.UTC()) > ApplyLeaseStaleAfter {
+		return RunActivity{State: RunActivityStale, Detail: "apply lease heartbeat is stale", Lease: &lease}, nil
+	}
+	return RunActivity{State: RunActivityActive, Detail: "apply lease heartbeat is fresh", Lease: &lease}, nil
+}
+
+func CancelRunLedger(stateDir string, ledger RunLedger, reason string, now time.Time) (RunLedger, error) {
+	for i := range ledger.Tasks {
+		if taskTerminal(ledger.Tasks[i].Status) {
+			continue
+		}
+		ledger.Tasks[i].Status = TaskStatusCancelled
+		t := now.UTC()
+		ledger.Tasks[i].EndedAt = &t
+		ledger.Tasks[i].SkippedReason = reason
+	}
+	ledger.Finish(RunStatusCancelled, now)
+	if err := SaveRunLedger(stateDir, ledger); err != nil {
+		return ledger, err
+	}
+	if err := RemoveRunLease(stateDir); err != nil {
+		return ledger, err
+	}
+	return ledger, nil
 }
 
 func (l RunLedger) ProgressCounts() []ProgressCount {

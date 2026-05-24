@@ -70,7 +70,10 @@ If an apply fails with an active-run message, inspect the current ledger:
 bootwright status --watch
 ```
 
-Start a new apply only after the previous run reaches a terminal state.
+Start a new apply only after the previous run reaches a terminal state. If the
+previous Bootwright process exited without updating the ledger, `status` reports
+a stale lease and the next `apply` or `destroy` marks that run cancelled before
+continuing.
 
 ## SSH Or Artifact Fetch Failures
 

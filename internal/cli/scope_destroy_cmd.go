@@ -104,6 +104,11 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			}
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
+		if !dryRun {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.StateDir); err != nil {
+				return failErr(1, err)
+			}
+		}
 		if httpServerOnly {
 			printDestroyHTTPServerPreview(stdout, plan.state)
 		} else {

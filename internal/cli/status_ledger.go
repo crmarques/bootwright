@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
-func printApplyLedgerStatus(p *cliout.Printer, ledger workflow.RunLedger, found bool, loadErr error) {
+func printApplyLedgerStatus(p *cliout.Printer, stateDir string, ledger workflow.RunLedger, found bool, loadErr error) {
 	p.Section("Current apply")
 	if loadErr != nil {
 		p.Status(cliout.StatusWarn, "Apply ledger", loadErr.Error())
@@ -32,12 +32,33 @@ func printApplyLedgerStatus(p *cliout.Printer, ledger workflow.RunLedger, found 
 	if ledger.EndedAt != nil {
 		p.Fields([]cliout.Field{{Key: "Ended", Value: ledger.EndedAt.Format(time.RFC3339)}})
 	}
+	if ledger.Active() {
+		printApplyRunActivity(p, stateDir, ledger)
+	}
 	p.Section("Progress")
 	p.Progress("Tasks", progressFields(ledger))
 	printApplyLedgerRunning(p, ledger)
 	printApplyLedgerClusters(p, ledger)
 	printApplyLedgerBlocked(p, ledger)
 	printApplyLedgerFailures(p, ledger)
+}
+
+func printApplyRunActivity(p *cliout.Printer, stateDir string, ledger workflow.RunLedger) {
+	activity, err := workflow.AssessRunActivity(stateDir, ledger, time.Now())
+	if err != nil {
+		p.Status(cliout.StatusWarn, "Lease", err.Error())
+		return
+	}
+	switch activity.State {
+	case workflow.RunActivityActive:
+		detail := activity.Detail
+		if activity.Lease != nil {
+			detail = fmt.Sprintf("%s; pid %d heartbeat %s", detail, activity.Lease.PID, activity.Lease.HeartbeatAt.Format(time.RFC3339))
+		}
+		p.Status(cliout.StatusRunning, "Lease", detail)
+	case workflow.RunActivityStale:
+		p.Status(cliout.StatusWarn, "Lease", activity.Detail+"; next apply or destroy will mark it cancelled")
+	}
 }
 
 func printApplyLedgerRunning(p *cliout.Printer, ledger workflow.RunLedger) {
@@ -214,9 +235,12 @@ func progressFields(ledger workflow.RunLedger) []cliout.ProgressField {
 	return fields
 }
 
-func ledgerNextSteps(ledger workflow.RunLedger, existing []string) []string {
+func ledgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, existing []string) []string {
 	switch ledger.Status {
 	case workflow.RunStatusRunning:
+		if activity.State == workflow.RunActivityStale {
+			return append([]string{fmt.Sprintf("bootwright apply %s --yes", ledger.Target)}, existing...)
+		}
 		return append([]string{"bootwright status --watch"}, existing...)
 	case workflow.RunStatusFailed:
 		hints := []string{fmt.Sprintf("bootwright apply %s --yes", ledger.Target)}

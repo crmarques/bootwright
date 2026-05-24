@@ -156,7 +156,9 @@ converges provider hosts, substrate state, and managed infra components.
 `openshift-install agent wait-for install-complete`.
 
 Use `bootwright status --watch` while an apply is running. A new apply is
-blocked while the previous apply ledger is still active.
+blocked while the previous apply ledger has a fresh process lease. If an
+interrupted process leaves only a stale ledger, the next `apply` or `destroy`
+marks it cancelled before continuing.
 
 ## Export External CLI Inputs
 

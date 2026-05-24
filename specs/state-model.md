@@ -742,14 +742,20 @@ IDs, task dependencies, task statuses, timestamps, and per-task
 `<state-dir>/workflow/runs/<run>/clusters/<cluster>/install.log`. Task statuses
 are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`, `failed`, and
 `cancelled`.
+While an apply process is active, Bootwright also refreshes
+`<state-dir>/workflow/current-apply.lease.json`. Mutating workflow commands
+must block when the current apply ledger has a fresh lease. If the ledger still
+says `running` but its lease is missing or stale, the next `apply` or `destroy`
+marks that previous run `cancelled` before continuing.
 `bootwright status` reads local context state without contacting provider
 hosts, BMCs, or clusters. Text output summarizes desired-state load status,
 declared secret material presence, installer freshness, the current apply,
 progress counts, running work, cluster task state, blocked work, failures, and
-next steps.
+next steps. It reports whether a running apply lease is fresh or stale.
 `bootwright status --watch` refreshes the same readable view until the current
-apply reaches a terminal state. `bootwright status --output json` includes the
-full current apply ledger when present.
+apply reaches a terminal state or its lease is stale.
+`bootwright status --output json` includes the full current apply ledger and
+activity state when present.
 `destroy infra --scope http-server` is a reserved destroy-only scope that
 removes only the generated artifact HTTP service used for BMC agent ISO fetches.
 Filtered `apply infra --scope` and `apply all --scope` fail before rendering
