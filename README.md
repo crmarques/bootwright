@@ -33,7 +33,7 @@ bootwright apply cluster --yes
 ```
 
 <p align="center">
-  <img src="images/overview.png" alt="Bootwright overview" width="800">
+  <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
 </p>
 
 ## Start Here

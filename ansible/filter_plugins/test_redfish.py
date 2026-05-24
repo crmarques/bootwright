@@ -197,15 +197,15 @@ class RedfishVirtualMediaAttached(unittest.TestCase):
     def test_accepts_bmc_image_url_with_elided_port(self):
         resource = {
             "Inserted": True,
-            "Image": "https://10.7.3.1/agent-ocp-nprd-01.iso",
-            "ImageName": "agent-ocp-nprd-01.iso",
+            "Image": "https://artifact.example.test/agent-managed-cluster.iso",
+            "ImageName": "agent-managed-cluster.iso",
             "TransferProtocolType": "HTTPS",
         }
 
         self.assertTrue(
             bootwright_redfish_vmedia_attached(
                 resource,
-                "https://10.7.3.1:8443/agent-ocp-nprd-01.iso",
+                "https://artifact.example.test:8443/agent-managed-cluster.iso",
                 "HTTPS",
             )
         )

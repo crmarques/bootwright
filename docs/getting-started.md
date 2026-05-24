@@ -21,13 +21,21 @@ sudo install -m 0755 bootwright /usr/local/bin/bootwright
 bootwright version
 ```
 
+Configure Bash completion for your user shell:
+
+```bash
+mkdir -p "${HOME}/.local/share/bash-completion/completions"
+bootwright completion bash > "${HOME}/.local/share/bash-completion/completions/bootwright"
+source "${HOME}/.local/share/bash-completion/completions/bootwright"
+```
+
 ## 1. Prepare Input Files
 
 Start from an example, copy it to a working directory, then edit the copy for
 your environment:
 
 ```text
-ls -l <input-dir>
+ls -l <input-files-dir>
 ```
 
 Canonical input examples live under
@@ -82,7 +90,7 @@ same server.
 Create the context from the edited directory:
 
 ```text
-bootwright context init ocp-nprd-01 -f examples/sno-libvirt-redfish
+bootwright context init lab -f <input-files-dir>
 bootwright context validate
 bootwright context current
 bootwright secret list

@@ -32,7 +32,7 @@ Copy an example to a working directory before editing it for a real
 environment, then import that copy:
 
 ```text
-bootwright context init ocp-nprd-01 -f <working-copy>
+bootwright context init lab -f <working-copy>
 bootwright secret list
 bootwright render installer --scope <cluster-name>
 bootwright render --output-dir ./rendered --scope <cluster-name> --sensitive
