@@ -48,7 +48,7 @@ func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger w
 	}
 	successfulClusters := map[string]bool{}
 	for _, task := range ledger.Tasks {
-		if task.Kind == applyTaskKindInstallWait && task.Status == workflow.TaskStatusOK && task.Cluster != "" {
+		if task.Kind == workflow.ApplyTaskKindInstallWait && task.Status == workflow.TaskStatusOK && task.Cluster != "" {
 			successfulClusters[task.Cluster] = true
 		}
 	}

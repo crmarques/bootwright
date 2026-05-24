@@ -1,5 +1,7 @@
 package cli
 
+import "github.com/crmarques/bootwright/internal/workflow"
+
 type scopeSpec struct {
 	name              string
 	short             string
@@ -41,4 +43,8 @@ func (s scopeSpec) phases() []Phase {
 		out = append(out, phases[name])
 	}
 	return out
+}
+
+func (s scopeSpec) applyTarget() workflow.ApplyTarget {
+	return workflow.ApplyTarget{Name: s.name, PhaseNames: append([]string(nil), s.phaseNames...)}
 }

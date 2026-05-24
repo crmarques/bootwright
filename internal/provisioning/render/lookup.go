@@ -96,13 +96,6 @@ func clusterNodesForCI(state v1alpha1.State, ci v1alpha1.ClusterInfra) map[strin
 	return stateview.ClusterNodesForInfra(state, ci)
 }
 
-func clusterNameForCI(state v1alpha1.State, ci v1alpha1.ClusterInfra) string {
-	if ocp, ok := clusterForCI(state, ci); ok {
-		return ocp.Metadata.Name
-	}
-	return ci.Metadata.Name
-}
-
 func clusterForCI(state v1alpha1.State, ci v1alpha1.ClusterInfra) (v1alpha1.ContainerCluster, bool) {
 	return stateview.ClusterForInfra(state, ci)
 }

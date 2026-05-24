@@ -147,12 +147,14 @@ bootwright_clusters:
 ## Provider Service Shape
 
 Provider playbooks consume `bootwright_provider_services[]` instead of scanning
-cluster components and hardcoding role names. The renderer emits one aggregated
-service instance per `(kind, providerName, name, hostRef)`. Every service has
+cluster components and hardcoding role names. Go resolves shared service
+identity as `(kind, providerName, name)` before rendering; host placement and
+ports are conflict fields, and mergeable overlays are unioned in the resolved
+graph. The renderer then emits one aggregated Ansible service instance with
 `hostRef`, `applyRole`, and `destroyRole`; the service role consumes the rest of
 the flat component fields. Mergeable fields such as HAProxy `frontends`,
-dnsmasq records, and BMC `machines` carry per-cluster entries inside the list
-items.
+dnsmasq records, dnsmasq `additionalIngressHosts`, and BMC `machines` carry
+per-cluster entries or graph-unioned values.
 
 ```yaml
 bootwright_provider_services:

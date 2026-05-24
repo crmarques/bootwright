@@ -449,7 +449,7 @@ func TestSharedProviderServiceConflictsRejectIncompatiblePorts(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected shared proxy port conflict, got nil")
 	}
-	want := "shared provider service proxy rack/default on Host/services-host has conflicting port"
+	want := "shared provider service proxy rack/default has conflicting port"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}

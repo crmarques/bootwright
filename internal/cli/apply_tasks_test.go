@@ -15,71 +15,71 @@ import (
 
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := planApplyTasks(allScope, state)
+	tasks := workflow.PlanApplyTasks(allScope.applyTarget(), state)
 	if len(tasks) != 5 {
 		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
 	}
-	if tasks[0].entry.ID != "provider.lab-host" {
-		t.Fatalf("first task = %s, want provider.lab-host", tasks[0].entry.ID)
+	if tasks[0].Entry.ID != "provider.lab-host" {
+		t.Fatalf("first task = %s, want provider.lab-host", tasks[0].Entry.ID)
 	}
-	if tasks[0].entry.Host != "lab-host" || len(tasks[0].entry.ResourceKeys) != 1 {
-		t.Fatalf("provider host/resources = %q/%v, want lab-host with resource key", tasks[0].entry.Host, tasks[0].entry.ResourceKeys)
+	if tasks[0].Entry.Host != "lab-host" || len(tasks[0].Entry.ResourceKeys) != 1 {
+		t.Fatalf("provider host/resources = %q/%v, want lab-host with resource key", tasks[0].Entry.Host, tasks[0].Entry.ResourceKeys)
 	}
-	if tasks[1].entry.ID != "infra.sno-libvirt.lab-host" {
-		t.Fatalf("second task = %s, want infra.sno-libvirt.lab-host", tasks[1].entry.ID)
+	if tasks[1].Entry.ID != "infra.sno-libvirt.lab-host" {
+		t.Fatalf("second task = %s, want infra.sno-libvirt.lab-host", tasks[1].Entry.ID)
 	}
-	if len(tasks[1].entry.Dependencies) != 1 || tasks[1].entry.Dependencies[0] != "provider.lab-host" {
-		t.Fatalf("infra deps = %v, want provider.lab-host", tasks[1].entry.Dependencies)
+	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "provider.lab-host" {
+		t.Fatalf("infra deps = %v, want provider.lab-host", tasks[1].Entry.Dependencies)
 	}
-	if tasks[2].entry.ID != "iso.sno-libvirt" {
-		t.Fatalf("third task = %s, want iso.sno-libvirt", tasks[2].entry.ID)
+	if tasks[2].Entry.ID != "iso.sno-libvirt" {
+		t.Fatalf("third task = %s, want iso.sno-libvirt", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].entry.Dependencies) != 1 || tasks[2].entry.Dependencies[0] != "infra.sno-libvirt.lab-host" {
-		t.Fatalf("iso deps = %v, want infra.sno-libvirt.lab-host", tasks[2].entry.Dependencies)
+	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "infra.sno-libvirt.lab-host" {
+		t.Fatalf("iso deps = %v, want infra.sno-libvirt.lab-host", tasks[2].Entry.Dependencies)
 	}
-	if tasks[3].entry.ID != "boot.sno-libvirt.master-0" {
-		t.Fatalf("fourth task = %s, want boot.sno-libvirt.master-0", tasks[3].entry.ID)
+	if tasks[3].Entry.ID != "boot.sno-libvirt.master-0" {
+		t.Fatalf("fourth task = %s, want boot.sno-libvirt.master-0", tasks[3].Entry.ID)
 	}
-	if len(tasks[3].entry.Dependencies) != 1 || tasks[3].entry.Dependencies[0] != "iso.sno-libvirt" {
-		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[3].entry.Dependencies)
+	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "iso.sno-libvirt" {
+		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[3].Entry.Dependencies)
 	}
-	if tasks[4].entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("fifth task = %s, want wait.sno-libvirt", tasks[4].entry.ID)
+	if tasks[4].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("fifth task = %s, want wait.sno-libvirt", tasks[4].Entry.ID)
 	}
-	if len(tasks[4].entry.Dependencies) != 1 || tasks[4].entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[4].entry.Dependencies)
+	if len(tasks[4].Entry.Dependencies) != 1 || tasks[4].Entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
+		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[4].Entry.Dependencies)
 	}
 }
 
 func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := planApplyTasks(clusterScope, state)
+	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
-	if tasks[0].entry.ID != "iso.sno-libvirt" {
-		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].entry.ID)
+	if tasks[0].Entry.ID != "iso.sno-libvirt" {
+		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].Entry.ID)
 	}
-	if len(tasks[0].entry.Dependencies) != 0 {
-		t.Fatalf("cluster-only iso deps = %v, want none", tasks[0].entry.Dependencies)
+	if len(tasks[0].Entry.Dependencies) != 0 {
+		t.Fatalf("cluster-only iso deps = %v, want none", tasks[0].Entry.Dependencies)
 	}
-	if tasks[1].entry.ID != "boot.sno-libvirt.master-0" {
-		t.Fatalf("task = %s, want boot.sno-libvirt.master-0", tasks[1].entry.ID)
+	if tasks[1].Entry.ID != "boot.sno-libvirt.master-0" {
+		t.Fatalf("task = %s, want boot.sno-libvirt.master-0", tasks[1].Entry.ID)
 	}
-	if len(tasks[1].entry.Dependencies) != 1 || tasks[1].entry.Dependencies[0] != "iso.sno-libvirt" {
-		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[1].entry.Dependencies)
+	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "iso.sno-libvirt" {
+		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[1].Entry.Dependencies)
 	}
-	if tasks[2].entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[2].entry.ID)
+	if tasks[2].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("task = %s, want wait.sno-libvirt", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].entry.Dependencies) != 1 || tasks[2].entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[2].entry.Dependencies)
+	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "boot.sno-libvirt.master-0" {
+		t.Fatalf("wait deps = %v, want boot.sno-libvirt.master-0", tasks[2].Entry.Dependencies)
 	}
 }
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := planApplyTasks(clusterScope, state)
+	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
 	if len(tasks) != 5 {
 		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
 	}
@@ -90,37 +90,37 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	}
 	for i, want := range wantBootIDs {
 		task := tasks[i+1]
-		if task.entry.ID != want {
-			t.Fatalf("boot task %d = %s, want %s", i, task.entry.ID, want)
+		if task.Entry.ID != want {
+			t.Fatalf("boot task %d = %s, want %s", i, task.Entry.ID, want)
 		}
-		if task.entry.Kind != applyTaskKindNodeBoot {
-			t.Fatalf("boot task kind = %s, want %s", task.entry.Kind, applyTaskKindNodeBoot)
+		if task.Entry.Kind != workflow.ApplyTaskKindNodeBoot {
+			t.Fatalf("boot task kind = %s, want %s", task.Entry.Kind, workflow.ApplyTaskKindNodeBoot)
 		}
-		if len(task.entry.Dependencies) != 1 || task.entry.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
-			t.Fatalf("boot deps = %v, want iso.3-nodes-ocp-baremetal", task.entry.Dependencies)
+		if len(task.Entry.Dependencies) != 1 || task.Entry.Dependencies[0] != "iso.3-nodes-ocp-baremetal" {
+			t.Fatalf("boot deps = %v, want iso.3-nodes-ocp-baremetal", task.Entry.Dependencies)
 		}
-		if len(task.entry.ResourceKeys) != 1 {
-			t.Fatalf("boot resource keys = %v, want one Redfish key", task.entry.ResourceKeys)
+		if len(task.Entry.ResourceKeys) != 1 {
+			t.Fatalf("boot resource keys = %v, want one Redfish key", task.Entry.ResourceKeys)
 		}
 	}
 	wait := tasks[4]
-	if wait.entry.ID != "wait.3-nodes-ocp-baremetal" {
-		t.Fatalf("wait task = %s, want wait.3-nodes-ocp-baremetal", wait.entry.ID)
+	if wait.Entry.ID != "wait.3-nodes-ocp-baremetal" {
+		t.Fatalf("wait task = %s, want wait.3-nodes-ocp-baremetal", wait.Entry.ID)
 	}
-	if len(wait.entry.Dependencies) != len(wantBootIDs) {
-		t.Fatalf("wait deps = %v, want %v", wait.entry.Dependencies, wantBootIDs)
+	if len(wait.Entry.Dependencies) != len(wantBootIDs) {
+		t.Fatalf("wait deps = %v, want %v", wait.Entry.Dependencies, wantBootIDs)
 	}
 	for i, want := range wantBootIDs {
-		if wait.entry.Dependencies[i] != want {
-			t.Fatalf("wait dep %d = %s, want %s", i, wait.entry.Dependencies[i], want)
+		if wait.Entry.Dependencies[i] != want {
+			t.Fatalf("wait dep %d = %s, want %s", i, wait.Entry.Dependencies[i], want)
 		}
 	}
 }
 
 func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := planApplyTasks(clusterScope, state)
-	limits := resolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
+	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
+	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
 	if limits.Parallelism != len(tasks) {
 		t.Fatalf("global parallelism = %d, want %d", limits.Parallelism, len(tasks))
 	}
@@ -131,7 +131,7 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 		t.Fatalf("redfish parallelism = %d, want 3 node boot tasks", limits.ParallelismRedfish)
 	}
 
-	limited := resolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{
+	limited := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{
 		Parallelism:        2,
 		ParallelismPerHost: 8,
 		ParallelismRedfish: 2,
@@ -159,19 +159,19 @@ echo ansible-stderr-line >&2
 		}},
 	}
 	stateDir := filepath.Join(dir, "state")
-	task := applyTask{
-		entry: workflow.TaskLedgerEntry{
+	task := workflow.ApplyTask{
+		Entry: workflow.TaskLedgerEntry{
 			ID:     "provider",
-			Kind:   applyTaskKindProvider,
+			Kind:   workflow.ApplyTaskKindProvider,
 			Label:  "provider services",
 			Status: workflow.TaskStatusPending,
 		},
-		playbook: "playbooks/layers/providers/apply.yml",
-		state:    state,
+		Playbook: "playbooks/layers/providers/apply.yml",
+		State:    state,
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	ledger, err := runApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
@@ -179,9 +179,9 @@ echo ansible-stderr-line >&2
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",
-	}, infraScope, "", []applyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1})
+	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil)
 	if err != nil {
-		t.Fatalf("runApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "ansible-stdout-line") {
 		t.Fatalf("stdout missing live ansible output:\n%s", stdout.String())
@@ -192,7 +192,7 @@ echo ansible-stderr-line >&2
 	if strings.Contains(stdout.String(), "log "+stateDir) {
 		t.Fatalf("stdout should not point normal progress at the ansible log:\n%s", stdout.String())
 	}
-	logPath := taskLogPath(stateDir, ledger.RunID, "provider")
+	logPath := workflow.TaskLogPath(stateDir, ledger.RunID, "provider")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read ansible output log: %v", err)
@@ -228,35 +228,35 @@ echo "ansible stderr ${cluster}" >&2
 		}},
 	}
 	stateDir := filepath.Join(dir, "state")
-	tasks := []applyTask{
+	tasks := []workflow.ApplyTask{
 		{
-			entry: workflow.TaskLedgerEntry{
+			Entry: workflow.TaskLedgerEntry{
 				ID:      "iso.cluster-a",
-				Kind:    applyTaskKindClusterISO,
+				Kind:    workflow.ApplyTaskKindClusterISO,
 				Label:   "iso cluster-a",
 				Cluster: "cluster-a",
 				Status:  workflow.TaskStatusPending,
 			},
-			playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
-			extraVarPairs: []string{"bootwright_task_cluster_name=cluster-a"},
-			state:         state,
+			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
+			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-a"},
+			State:         state,
 		},
 		{
-			entry: workflow.TaskLedgerEntry{
+			Entry: workflow.TaskLedgerEntry{
 				ID:      "iso.cluster-b",
-				Kind:    applyTaskKindClusterISO,
+				Kind:    workflow.ApplyTaskKindClusterISO,
 				Label:   "iso cluster-b",
 				Cluster: "cluster-b",
 				Status:  workflow.TaskStatusPending,
 			},
-			playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
-			extraVarPairs: []string{"bootwright_task_cluster_name=cluster-b"},
-			state:         state,
+			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
+			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-b"},
+			State:         state,
 		},
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	ledger, err := runApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
@@ -264,9 +264,9 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "cluster",
-	}, clusterScope, "", tasks, workflow.ConcurrencyLimits{})
+	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr))
 	if err != nil {
-		t.Fatalf("runApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "ansible stdout") || strings.Contains(stderr.String(), "ansible stderr") {
 		t.Fatalf("multi-cluster output streamed ansible to terminal\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
@@ -277,7 +277,7 @@ echo "ansible stderr ${cluster}" >&2
 		}
 	}
 	for _, cluster := range []string{"cluster-a", "cluster-b"} {
-		logPath := applyClusterLogPath(stateDir, ledger.RunID, cluster)
+		logPath := workflow.ApplyClusterLogPath(stateDir, ledger.RunID, cluster)
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("read cluster log %s: %v", logPath, err)
@@ -317,35 +317,35 @@ rmdir "$lock_dir"
 	}
 	lockDir := filepath.Join(dir, "same-host.lock")
 	stateDir := filepath.Join(dir, "state")
-	tasks := []applyTask{
+	tasks := []workflow.ApplyTask{
 		{
-			entry: workflow.TaskLedgerEntry{
+			Entry: workflow.TaskLedgerEntry{
 				ID:           "provider.a",
-				Kind:         applyTaskKindProvider,
+				Kind:         workflow.ApplyTaskKindProvider,
 				Label:        "provider services a",
 				ResourceKeys: []string{"host:provider-01:mutating"},
 				Status:       workflow.TaskStatusPending,
 			},
-			playbook:      "playbooks/layers/providers/apply.yml",
-			extraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
-			state:         state,
+			Playbook:      "playbooks/layers/providers/apply.yml",
+			ExtraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
+			State:         state,
 		},
 		{
-			entry: workflow.TaskLedgerEntry{
+			Entry: workflow.TaskLedgerEntry{
 				ID:           "provider.b",
-				Kind:         applyTaskKindProvider,
+				Kind:         workflow.ApplyTaskKindProvider,
 				Label:        "provider services b",
 				ResourceKeys: []string{"host:provider-01:mutating"},
 				Status:       workflow.TaskStatusPending,
 			},
-			playbook:      "playbooks/layers/providers/apply.yml",
-			extraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
-			state:         state,
+			Playbook:      "playbooks/layers/providers/apply.yml",
+			ExtraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
+			State:         state,
 		},
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if _, err := runApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	if _, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
@@ -353,7 +353,7 @@ rmdir "$lock_dir"
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",
-	}, infraScope, "", tasks, workflow.ConcurrencyLimits{}); err != nil {
-		t.Fatalf("runApplyTaskGraph should serialize same resource key: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}, infraScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil); err != nil {
+		t.Fatalf("workflow.RunApplyTaskGraph should serialize same resource key: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }

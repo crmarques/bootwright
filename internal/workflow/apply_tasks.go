@@ -1,4 +1,4 @@
-package cli
+package workflow
 
 import (
 	"context"
@@ -13,27 +13,42 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ansible"
-	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/stategraph"
-	"github.com/crmarques/bootwright/internal/workflow"
 )
 
 const (
-	applyTaskKindProvider     = "providerServices"
-	applyTaskKindClusterInfra = "clusterInfra"
-	applyTaskKindClusterISO   = "clusterISO"
-	applyTaskKindNodeBoot     = "nodeBoot"
-	applyTaskKindInstallWait  = "installWait"
+	ApplyTaskKindProvider     = "providerServices"
+	ApplyTaskKindClusterInfra = "clusterInfra"
+	ApplyTaskKindClusterISO   = "clusterISO"
+	ApplyTaskKindNodeBoot     = "nodeBoot"
+	ApplyTaskKindInstallWait  = "installWait"
+
+	ApplyPhaseProvider = "provider"
+	ApplyPhaseCluster  = "cluster"
+	ApplyPhaseClusters = "clusters"
 )
 
-type applyTask struct {
-	entry         workflow.TaskLedgerEntry
-	playbook      string
-	limit         string
-	forks         int
-	extraVarPairs []string
-	state         v1alpha1.State
+const (
+	applyProviderPlaybook     = "playbooks/layers/providers/apply.yml"
+	applyClusterInfraPlaybook = "playbooks/layers/cluster_infra/apply.yml"
+	applyCreateISOPlaybook    = "playbooks/layers/openshift/create-agent-iso.yml"
+	applyBootMachinePlaybook  = "playbooks/layers/openshift/boot-agent-machine.yml"
+	applyWaitInstallPlaybook  = "playbooks/layers/openshift/wait-agent-install.yml"
+)
+
+type ApplyTarget struct {
+	Name       string
+	PhaseNames []string
+}
+
+type ApplyTask struct {
+	Entry         TaskLedgerEntry
+	Playbook      string
+	Limit         string
+	Forks         int
+	ExtraVarPairs []string
+	State         v1alpha1.State
 }
 
 type applyTaskResult struct {
@@ -42,156 +57,167 @@ type applyTaskResult struct {
 	err     error
 }
 
-func planApplyTasks(scope scopeSpec, state v1alpha1.State) []applyTask {
+type ApplyReporter interface {
+	RunStart(ledger RunLedger)
+	ClusterLogPaths(ledger RunLedger)
+	StageSnapshot(ledger RunLedger)
+	AnsibleExecutionStart()
+	TaskStart(ledger RunLedger, id string)
+	TaskResult(ledger RunLedger, id string)
+	RunSummary(ledger RunLedger)
+	PromptGap()
+}
+
+func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 	phaseSet := map[string]bool{}
-	for _, phase := range scope.phases() {
-		phaseSet[phase.Name] = true
+	for _, phase := range target.PhaseNames {
+		phaseSet[phase] = true
 	}
-	var tasks []applyTask
+	var tasks []ApplyTask
 	providerTaskIDs := []string{}
-	if phaseSet["provider"] {
+	if phaseSet[ApplyPhaseProvider] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
 			taskID := "provider." + host
 			providerTaskIDs = append(providerTaskIDs, taskID)
-			tasks = append(tasks, applyTask{
-				entry: workflow.TaskLedgerEntry{
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
 					ID:           taskID,
-					Kind:         applyTaskKindProvider,
+					Kind:         ApplyTaskKindProvider,
 					Label:        "provider services " + host,
 					Host:         host,
 					ResourceKeys: []string{hostMutationResource(host)},
-					Status:       workflow.TaskStatusPending,
+					Status:       TaskStatusPending,
 				},
-				playbook: phases["provider"].ApplyPlaybook,
-				limit:    host,
-				forks:    1,
-				state:    state,
+				Playbook: applyProviderPlaybook,
+				Limit:    host,
+				Forks:    1,
+				State:    state,
 			})
 		}
 	}
 	infraDepsByCluster := map[string][]string{}
 	clusterNames := applyClusterNames(state)
 	for _, name := range clusterNames {
-		if phaseSet["cluster"] {
+		if phaseSet[ApplyPhaseCluster] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
 			deps := append([]string(nil), providerTaskIDs...)
 			if len(infraHosts) == 0 {
 				taskID := "infra." + name
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
-				tasks = append(tasks, applyTask{
-					entry: workflow.TaskLedgerEntry{
+				tasks = append(tasks, ApplyTask{
+					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         applyTaskKindClusterInfra,
+						Kind:         ApplyTaskKindClusterInfra,
 						Label:        "infra " + name,
 						Cluster:      name,
-						Status:       workflow.TaskStatusPending,
+						Status:       TaskStatusPending,
 						Dependencies: deps,
 					},
-					playbook: phases["cluster"].ApplyPlaybook,
-					limit:    render.GroupInfraHosts,
-					state:    clusterState,
+					Playbook: applyClusterInfraPlaybook,
+					Limit:    render.GroupInfraHosts,
+					State:    clusterState,
 				})
 				continue
 			}
 			for _, host := range infraHosts {
 				taskID := "infra." + name + "." + host
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
-				tasks = append(tasks, applyTask{
-					entry: workflow.TaskLedgerEntry{
+				tasks = append(tasks, ApplyTask{
+					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         applyTaskKindClusterInfra,
+						Kind:         ApplyTaskKindClusterInfra,
 						Label:        "infra " + name + " on " + host,
 						Cluster:      name,
 						Host:         host,
 						ResourceKeys: []string{hostMutationResource(host)},
-						Status:       workflow.TaskStatusPending,
+						Status:       TaskStatusPending,
 						Dependencies: deps,
 					},
-					playbook: phases["cluster"].ApplyPlaybook,
-					limit:    host,
-					forks:    1,
-					state:    clusterState,
+					Playbook: applyClusterInfraPlaybook,
+					Limit:    host,
+					Forks:    1,
+					State:    clusterState,
 				})
 			}
 		}
 	}
 	for _, name := range clusterNames {
 		deps := append([]string(nil), infraDepsByCluster[name]...)
-		if phaseSet["clusters"] {
+		if phaseSet[ApplyPhaseClusters] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			isoTaskID := "iso." + name
-			tasks = append(tasks, applyTask{
-				entry: workflow.TaskLedgerEntry{
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
 					ID:           isoTaskID,
-					Kind:         applyTaskKindClusterISO,
+					Kind:         ApplyTaskKindClusterISO,
 					Label:        "iso " + name,
 					Cluster:      name,
-					Status:       workflow.TaskStatusPending,
+					Status:       TaskStatusPending,
 					Dependencies: deps,
 				},
-				playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
-				limit:         render.GroupOCPHosts,
-				forks:         1,
-				extraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-				state:         clusterState,
+				Playbook:      applyCreateISOPlaybook,
+				Limit:         render.GroupOCPHosts,
+				Forks:         1,
+				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+				State:         clusterState,
 			})
 			bootTaskIDs := []string{}
 			for _, machineName := range applyClusterMachineNames(state, name) {
 				taskID := "boot." + name + "." + machineName
 				bootTaskIDs = append(bootTaskIDs, taskID)
-				tasks = append(tasks, applyTask{
-					entry: workflow.TaskLedgerEntry{
+				tasks = append(tasks, ApplyTask{
+					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         applyTaskKindNodeBoot,
+						Kind:         ApplyTaskKindNodeBoot,
 						Label:        "boot " + name + "/" + machineName,
 						Cluster:      name,
 						Node:         machineName,
 						ResourceKeys: []string{applyNodeRedfishResource(state, name, machineName)},
-						Status:       workflow.TaskStatusPending,
+						Status:       TaskStatusPending,
 						Dependencies: []string{isoTaskID},
 					},
-					playbook: "playbooks/layers/openshift/boot-agent-machine.yml",
-					limit:    render.GroupOCPHosts + ":" + render.GroupBootHosts,
-					extraVarPairs: []string{
+					Playbook: applyBootMachinePlaybook,
+					Limit:    render.GroupOCPHosts + ":" + render.GroupBootHosts,
+					ExtraVarPairs: []string{
 						"bootwright_task_cluster_name=" + name,
 						"bootwright_task_machine_name=" + machineName,
 					},
-					state: clusterState,
-					forks: 1,
+					State: clusterState,
+					Forks: 1,
 				})
 			}
 			waitDeps := append([]string(nil), bootTaskIDs...)
 			if len(waitDeps) == 0 {
 				waitDeps = append(waitDeps, isoTaskID)
 			}
-			tasks = append(tasks, applyTask{
-				entry: workflow.TaskLedgerEntry{
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
 					ID:           "wait." + name,
-					Kind:         applyTaskKindInstallWait,
+					Kind:         ApplyTaskKindInstallWait,
 					Label:        "wait install " + name,
 					Cluster:      name,
-					Status:       workflow.TaskStatusPending,
+					Status:       TaskStatusPending,
 					Dependencies: waitDeps,
 				},
-				playbook:      "playbooks/layers/openshift/wait-agent-install.yml",
-				limit:         render.GroupOCPHosts,
-				forks:         1,
-				extraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-				state:         clusterState,
+				Playbook:      applyWaitInstallPlaybook,
+				Limit:         render.GroupOCPHosts,
+				Forks:         1,
+				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+				State:         clusterState,
 			})
 		}
 	}
 	return tasks
 }
 
-func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir string, opts workflow.RunOptions, scope scopeSpec, clusterScope string, tasks []applyTask, limits workflow.ConcurrencyLimits) (workflow.RunLedger, error) {
+func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter) (RunLedger, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
-	limits = resolveApplyConcurrencyLimits(limits, tasks)
-	tasks = annotateApplyTaskClusterLogPaths(stateDir, runID, tasks)
-	ledger := workflow.NewRunLedger(runID, scope.name, clusterScope, limits, taskLedgerEntries(tasks), startedAt)
-	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+	limits = ResolveApplyConcurrencyLimits(limits, tasks)
+	tasks = AnnotateApplyTaskClusterLogPaths(stateDir, runID, tasks)
+	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
+	if err := SaveRunLedger(stateDir, ledger); err != nil {
 		return ledger, err
 	}
 	multiClusterOutput := len(ledger.ClusterNames()) > 1
@@ -200,17 +226,25 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		return ledger, err
 	}
 	defer clusterLogs.Close()
-	printApplyRunStart(stdout, ledger)
+	if reporter != nil {
+		reporter.RunStart(ledger)
+	}
 	if multiClusterOutput {
-		printApplyClusterLogPaths(stdout, ledger)
-		printApplyStageSnapshot(stdout, ledger)
+		if reporter != nil {
+			reporter.ClusterLogPaths(ledger)
+			reporter.StageSnapshot(ledger)
+		}
 	} else {
-		printApplyAnsibleExecutionStart(stdout)
+		if reporter != nil {
+			reporter.AnsibleExecutionStart()
+		}
 	}
 	if len(tasks) == 0 {
-		ledger.Finish(workflow.RunStatusOK, time.Now())
-		_ = workflow.SaveRunLedger(stateDir, ledger)
-		printApplyRunSummary(stdout, ledger)
+		ledger.Finish(RunStatusOK, time.Now())
+		_ = SaveRunLedger(stateDir, ledger)
+		if reporter != nil {
+			reporter.RunSummary(ledger)
+		}
 		return ledger, nil
 	}
 	outputMu := &sync.Mutex{}
@@ -220,9 +254,9 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	taskByID := map[string]applyTask{}
+	taskByID := map[string]ApplyTask{}
 	for _, task := range tasks {
-		taskByID[task.entry.ID] = task
+		taskByID[task.Entry.ID] = task
 	}
 	parallelism := limits.Parallelism
 	redfishLimit := limits.ParallelismRedfish
@@ -240,33 +274,39 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			if running >= parallelism {
 				break
 			}
-			if started[task.entry.ID] || !taskReady(ledger, task.entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
+			if started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
 				continue
 			}
-			started[task.entry.ID] = true
+			started[task.Entry.ID] = true
 			startedAny = true
 			running++
-			if task.entry.Kind == applyTaskKindNodeBoot {
+			if task.Entry.Kind == ApplyTaskKindNodeBoot {
 				runningRedfish++
 			}
 			acquireTaskResources(task, runningResources)
-			logPath := taskLogPath(stateDir, ledger.RunID, task.entry.ID)
-			ledger.MarkReady(task.entry.ID)
-			ledger.MarkRunning(task.entry.ID, logPath, time.Now())
-			if err := workflow.SaveRunLedger(stateDir, ledger); err != nil && firstErr == nil {
+			logPath := TaskLogPath(stateDir, ledger.RunID, task.Entry.ID)
+			ledger.MarkReady(task.Entry.ID)
+			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
+			if err := SaveRunLedger(stateDir, ledger); err != nil && firstErr == nil {
 				firstErr = err
 				cancel()
 			}
 			if multiClusterOutput {
-				printApplyStageSnapshot(taskStdout, ledger)
+				if reporter != nil {
+					reporter.StageSnapshot(ledger)
+				}
 			} else {
-				printApplyTaskStart(taskStdout, ledger, task.entry.ID)
+				if reporter != nil {
+					reporter.TaskStart(ledger, task.Entry.ID)
+				}
 			}
 			if opts.AskBecomePass && !multiClusterOutput {
-				output.NewContinuation(taskStderr).BlankLine()
+				if reporter != nil {
+					reporter.PromptGap()
+				}
 			}
 			stdoutWriter, stderrWriter := applyTaskWriters(task, taskStdout, taskStderr, clusterLogs, multiClusterOutput)
-			go func(task applyTask, taskOut, taskErr io.Writer) {
+			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- runOneApplyTask(ctx, taskOut, taskErr, stateDir, ledger.RunID, opts, task)
 			}(task, stdoutWriter, stderrWriter)
 		}
@@ -278,7 +318,7 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		}
 		event := <-events
 		running--
-		if taskByID[event.id].entry.Kind == applyTaskKindNodeBoot {
+		if taskByID[event.id].Entry.Kind == ApplyTaskKindNodeBoot {
 			runningRedfish--
 		}
 		releaseTaskResources(taskByID[event.id], runningResources)
@@ -294,41 +334,49 @@ func runApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		} else {
 			ledger.MarkOK(event.id, time.Now())
 		}
-		saveErr := workflow.SaveRunLedger(stateDir, ledger)
+		saveErr := SaveRunLedger(stateDir, ledger)
 		if saveErr != nil && firstErr == nil {
 			firstErr = saveErr
 			cancel()
 		}
 		if multiClusterOutput {
-			printApplyStageSnapshot(taskStdout, ledger)
+			if reporter != nil {
+				reporter.StageSnapshot(ledger)
+			}
 		} else {
-			printApplyTaskResult(taskStdout, ledger, event.id)
+			if reporter != nil {
+				reporter.TaskResult(ledger, event.id)
+			}
 		}
 	}
 
 	if firstErr != nil {
-		ledger.Finish(workflow.RunStatusFailed, time.Now())
-		_ = workflow.SaveRunLedger(stateDir, ledger)
-		printApplyRunSummary(stdout, ledger)
+		ledger.Finish(RunStatusFailed, time.Now())
+		_ = SaveRunLedger(stateDir, ledger)
+		if reporter != nil {
+			reporter.RunSummary(ledger)
+		}
 		return ledger, firstErr
 	}
-	ledger.Finish(workflow.RunStatusOK, time.Now())
-	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+	ledger.Finish(RunStatusOK, time.Now())
+	if err := SaveRunLedger(stateDir, ledger); err != nil {
 		return ledger, err
 	}
-	printApplyRunSummary(stdout, ledger)
+	if reporter != nil {
+		reporter.RunSummary(ledger)
+	}
 	return ledger, nil
 }
 
-func taskSlotAvailable(task applyTask, runningRedfish, redfishLimit int) bool {
-	if task.entry.Kind != applyTaskKindNodeBoot {
+func taskSlotAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {
+	if task.Entry.Kind != ApplyTaskKindNodeBoot {
 		return true
 	}
 	return runningRedfish < redfishLimit
 }
 
-func taskResourcesAvailable(task applyTask, running map[string]int) bool {
-	for _, key := range task.entry.ResourceKeys {
+func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {
+	for _, key := range task.Entry.ResourceKeys {
 		if key == "" {
 			continue
 		}
@@ -339,16 +387,16 @@ func taskResourcesAvailable(task applyTask, running map[string]int) bool {
 	return true
 }
 
-func acquireTaskResources(task applyTask, running map[string]int) {
-	for _, key := range task.entry.ResourceKeys {
+func acquireTaskResources(task ApplyTask, running map[string]int) {
+	for _, key := range task.Entry.ResourceKeys {
 		if key != "" {
 			running[key]++
 		}
 	}
 }
 
-func releaseTaskResources(task applyTask, running map[string]int) {
-	for _, key := range task.entry.ResourceKeys {
+func releaseTaskResources(task ApplyTask, running map[string]int) {
+	for _, key := range task.Entry.ResourceKeys {
 		if key == "" {
 			continue
 		}
@@ -359,21 +407,21 @@ func releaseTaskResources(task applyTask, running map[string]int) {
 	}
 }
 
-func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir, runID string, opts workflow.RunOptions, task applyTask) applyTaskResult {
-	renderDir := filepath.Join(stateDir, "workflow", "runs", runID, task.entry.ID, "render")
+func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
+	renderDir := filepath.Join(stateDir, "workflow", "runs", runID, task.Entry.ID, "render")
 	taskOpts := opts
-	taskOpts.State = task.state
+	taskOpts.State = task.State
 	taskOpts.RenderDir = renderDir
-	taskOpts.Playbook = task.playbook
-	taskOpts.Limit = task.limit
-	taskOpts.ExtraVarPairs = append(append([]string(nil), opts.ExtraVarPairs...), task.extraVarPairs...)
-	taskOpts.ArtifactsBaseName = task.entry.ID
+	taskOpts.Playbook = task.Playbook
+	taskOpts.Limit = task.Limit
+	taskOpts.ExtraVarPairs = append(append([]string(nil), opts.ExtraVarPairs...), task.ExtraVarPairs...)
+	taskOpts.ArtifactsBaseName = task.Entry.ID
 	taskOpts.ResolveInstaller = false
-	taskOpts.Label = task.entry.Label
-	taskOpts.Forks = task.forks
+	taskOpts.Label = task.Entry.Label
+	taskOpts.Forks = task.Forks
 	runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
-	result, err := workflow.Run(ctx, taskOpts, runner, nil)
-	return applyTaskResult{id: task.entry.ID, skipped: result.Skipped, err: err}
+	result, err := Run(ctx, taskOpts, runner, nil)
+	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }
 
 type applyTaskOutputWriter struct {
@@ -397,14 +445,14 @@ type applyClusterLogSet struct {
 	writers map[string]io.Writer
 }
 
-func openApplyClusterLogs(stateDir string, ledger workflow.RunLedger) (*applyClusterLogSet, error) {
+func openApplyClusterLogs(stateDir string, ledger RunLedger) (*applyClusterLogSet, error) {
 	names := ledger.ClusterNames()
 	logs := &applyClusterLogSet{writers: map[string]io.Writer{}}
 	if len(names) <= 1 {
 		return logs, nil
 	}
 	for _, name := range names {
-		path := applyClusterLogPath(stateDir, ledger.RunID, name)
+		path := ApplyClusterLogPath(stateDir, ledger.RunID, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			logs.Close()
 			return nil, fmt.Errorf("create cluster log directory: %w", err)
@@ -452,14 +500,14 @@ func (s *applyClusterLogSet) Close() error {
 	return firstErr
 }
 
-func applyTaskWriters(task applyTask, stdout io.Writer, stderr io.Writer, clusterLogs *applyClusterLogSet, multiClusterOutput bool) (io.Writer, io.Writer) {
+func applyTaskWriters(task ApplyTask, stdout io.Writer, stderr io.Writer, clusterLogs *applyClusterLogSet, multiClusterOutput bool) (io.Writer, io.Writer) {
 	if !multiClusterOutput {
 		return stdout, stderr
 	}
-	if task.entry.Cluster == "" {
+	if task.Entry.Cluster == "" {
 		return io.Discard, io.Discard
 	}
-	writer := clusterLogs.Writer(task.entry.Cluster)
+	writer := clusterLogs.Writer(task.Entry.Cluster)
 	return writer, writer
 }
 
@@ -536,33 +584,33 @@ func hostMutationResource(host string) string {
 	return "host:" + host + ":mutating"
 }
 
-func taskLedgerEntries(tasks []applyTask) []workflow.TaskLedgerEntry {
-	entries := make([]workflow.TaskLedgerEntry, 0, len(tasks))
+func TaskLedgerEntries(tasks []ApplyTask) []TaskLedgerEntry {
+	entries := make([]TaskLedgerEntry, 0, len(tasks))
 	for _, task := range tasks {
-		entries = append(entries, task.entry)
+		entries = append(entries, task.Entry)
 	}
 	return entries
 }
 
-func annotateApplyTaskClusterLogPaths(stateDir, runID string, tasks []applyTask) []applyTask {
-	out := make([]applyTask, len(tasks))
+func AnnotateApplyTaskClusterLogPaths(stateDir, runID string, tasks []ApplyTask) []ApplyTask {
+	out := make([]ApplyTask, len(tasks))
 	copy(out, tasks)
 	for i := range out {
-		if out[i].entry.Cluster != "" {
-			out[i].entry.ClusterLogPath = applyClusterLogPath(stateDir, runID, out[i].entry.Cluster)
+		if out[i].Entry.Cluster != "" {
+			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(stateDir, runID, out[i].Entry.Cluster)
 		}
 	}
 	return out
 }
 
-func taskReady(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) bool {
+func taskReady(ledger RunLedger, task TaskLedgerEntry) bool {
 	for _, dep := range task.Dependencies {
 		depTask, ok := ledger.Task(dep)
 		if !ok {
 			return false
 		}
 		switch depTask.Status {
-		case workflow.TaskStatusOK, workflow.TaskStatusSkipped:
+		case TaskStatusOK, TaskStatusSkipped:
 			continue
 		default:
 			return false
@@ -582,7 +630,7 @@ func autoParallelism(taskCount int) int {
 	return taskCount
 }
 
-func resolveApplyConcurrencyLimits(limits workflow.ConcurrencyLimits, tasks []applyTask) workflow.ConcurrencyLimits {
+func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) ConcurrencyLimits {
 	autoGlobal := autoParallelism(len(tasks))
 	if limits.Parallelism <= 0 || limits.Parallelism > autoGlobal {
 		limits.Parallelism = autoGlobal
@@ -601,25 +649,25 @@ func resolveApplyConcurrencyLimits(limits workflow.ConcurrencyLimits, tasks []ap
 	return limits
 }
 
-func nodeBootTaskCount(tasks []applyTask) int {
+func nodeBootTaskCount(tasks []ApplyTask) int {
 	count := 0
 	for _, task := range tasks {
-		if task.entry.Kind == applyTaskKindNodeBoot {
+		if task.Entry.Kind == ApplyTaskKindNodeBoot {
 			count++
 		}
 	}
 	return count
 }
 
-func taskLogPath(stateDir, runID, taskID string) string {
+func TaskLogPath(stateDir, runID, taskID string) string {
 	return filepath.Join(stateDir, "workflow", "runs", runID, taskID, "render", "ansible", "artifacts", taskID, ansible.OutputLogName)
 }
 
-func applyClusterLogPath(stateDir, runID, cluster string) string {
+func ApplyClusterLogPath(stateDir, runID, cluster string) string {
 	return filepath.Join(stateDir, "workflow", "runs", runID, "clusters", cluster, "install.log")
 }
 
-func ansibleForksForLimit(state v1alpha1.State, limit string) int {
+func AnsibleForksForLimit(state v1alpha1.State, limit string) int {
 	members := render.HostGroupMembers(state)
 	selected := map[string]bool{}
 	addAll := func(hosts []string) {

@@ -10,7 +10,6 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
 )
 
 const (
@@ -56,7 +55,6 @@ func loadEffectiveStateFreshness(current v1alpha1.State, stateDir string) effect
 }
 
 func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
-	render.ApplySharedOverlays(&state)
 	for i := range state.Environments {
 		state.Environments[i].SourcePath = ""
 	}

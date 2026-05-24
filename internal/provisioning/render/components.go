@@ -1,6 +1,9 @@
 package render
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/support"
+)
 
 // versionLookupDate is the freshness stamp on the pinned versions
 // below. Bump whenever a pin is updated.
@@ -8,11 +11,7 @@ const versionLookupDate = "2026-05-21"
 const currentVersionLookupDate = "2026-05-21"
 
 const (
-	defaultSushyToolsVersion     = "2.2.0"
-	defaultHAProxyVersion        = "3.3.10"
-	defaultMirrorRegistryVersion = "3.1.1"
-	defaultSquidVersion          = "7.5-oe2403sp3"
-	defaultDnsmasqVersion        = "2.92_p2"
+	defaultSushyToolsVersion = "2.2.0"
 )
 
 type ComponentPin struct {
@@ -36,16 +35,16 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 		pins = append(pins, ComponentPin{Name: "sushy-tools", Version: defaultSushyToolsVersion, Source: "https://pypi.org/project/sushy-tools/", LookupDate: versionLookupDate})
 	}
 	if usesManagedHAProxy(state) {
-		pins = append(pins, ComponentPin{Name: v1alpha1.ComponentImageTypeHAProxy, Version: defaultHAProxyVersion, Source: "https://hub.docker.com/_/haproxy", LookupDate: versionLookupDate})
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
 	}
 	if usesManagedMirrorRegistry(state) {
-		pins = append(pins, ComponentPin{Name: v1alpha1.ComponentImageTypeMirrorRegistry, Version: defaultMirrorRegistryVersion, Source: "https://hub.docker.com/_/registry", LookupDate: versionLookupDate})
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
 	}
 	if usesManagedProxy(state) {
-		pins = append(pins, ComponentPin{Name: v1alpha1.ComponentImageTypeSquid, Version: defaultSquidVersion, Source: "https://hub.docker.com/r/openeuler/squid", LookupDate: versionLookupDate})
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotProxy, "squid")
 	}
 	if usesManagedDNS(state) {
-		pins = append(pins, ComponentPin{Name: v1alpha1.ComponentImageTypeDnsmasq, Version: defaultDnsmasqVersion, Source: "https://hub.docker.com/r/dockurr/dnsmasq", LookupDate: currentVersionLookupDate})
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{
@@ -56,6 +55,19 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 		})
 	}
 	return pins
+}
+
+func appendServicePin(pins []ComponentPin, kind, realisation string) []ComponentPin {
+	image, ok := support.ServiceImagePin(kind, realisation)
+	if !ok {
+		return pins
+	}
+	return append(pins, ComponentPin{
+		Name:       image.Type,
+		Version:    image.Version,
+		Source:     image.Source,
+		LookupDate: image.LookupDate,
+	})
 }
 
 func openshiftInstallVersions(state v1alpha1.State) []string {

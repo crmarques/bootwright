@@ -10,7 +10,7 @@ environment, providers, infrastructure, networks, and clusters with six
 declarative YAML kinds. Bootwright validates the inputs, renders deterministic
 installer artifacts, and converges each phase idempotently.
 
-**Supported distributions:** OpenShift and OKD. Vanilla Kubernetes is on the roadmap.
+**Supported distributions:** OpenShift and OKD.
 
 ## The problem it solves
 

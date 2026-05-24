@@ -5,12 +5,14 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/stategraph"
 )
 
 const providerServiceKindBMC = "bmc"
 
 func providerServicesVars(state v1alpha1.State) []any {
 	builder := newProviderServiceBuilder()
+	services := stategraph.ResolveProviderServices(state)
 	for _, ocp := range state.ContainerClusters {
 		ci, err := clusterInfraForOCP(state, ocp)
 		if err != nil {
@@ -24,6 +26,7 @@ func providerServicesVars(state v1alpha1.State) []any {
 			if component["hostRef"] == nil || component["applyRole"] == nil {
 				continue
 			}
+			applyServiceGraphMerges(component, services)
 			builder.Add(component, ocp.Metadata.Name)
 		}
 	}
@@ -33,6 +36,17 @@ func providerServicesVars(state v1alpha1.State) []any {
 		}
 	}
 	return builder.Services()
+}
+
+func applyServiceGraphMerges(component map[string]any, services stategraph.ProviderServiceGraph) {
+	id := stategraph.ProviderServiceIdentity{
+		Kind:         stringMapValue(component, "kind"),
+		ProviderName: stringMapValue(component, "providerName"),
+		Name:         stringMapValue(component, "name"),
+	}
+	if values := services.MergedStringField(id, "additionalIngressHosts"); len(values) > 0 {
+		component["additionalIngressHosts"] = values
+	}
 }
 
 func providerHostSetupsVars(state v1alpha1.State) []any {

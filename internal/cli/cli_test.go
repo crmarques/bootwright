@@ -885,7 +885,6 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		}
 		stale := state
 		stale.ContainerClusters[0].Spec.Distribution.Release.Version = "4.99.0"
-		render.ApplySharedOverlays(&stale)
 		data, err := yaml.Marshal(stale)
 		if err != nil {
 			t.Fatalf("marshal stale state: %v", err)
@@ -906,9 +905,9 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{Parallelism: 2}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: "providerServices", Label: "provider services", Status: workflow.TaskStatusOK},
-		{ID: "iso.sno-libvirt", Kind: applyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"provider"}},
-		{ID: "boot.sno-libvirt.master-0", Kind: applyTaskKindNodeBoot, Label: "boot sno-libvirt/master-0", Cluster: "sno-libvirt", Node: "master-0", Dependencies: []string{"iso.sno-libvirt"}},
-		{ID: "wait.sno-libvirt", Kind: applyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"boot.sno-libvirt.master-0"}},
+		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"provider"}},
+		{ID: "boot.sno-libvirt.master-0", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt/master-0", Cluster: "sno-libvirt", Node: "master-0", Dependencies: []string{"iso.sno-libvirt"}},
+		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"boot.sno-libvirt.master-0"}},
 	}, now)
 	ledger.MarkOK("provider", now.Add(time.Second))
 	ledger.MarkOK("iso.sno-libvirt", now.Add(2*time.Second))
@@ -978,7 +977,7 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 	bootTasks := map[string]workflow.TaskLedgerEntry{}
 	for _, task := range tasks {
-		if task.Kind == applyTaskKindNodeBoot {
+		if task.Kind == workflow.ApplyTaskKindNodeBoot {
 			bootTasks[task.ID] = task
 		}
 	}

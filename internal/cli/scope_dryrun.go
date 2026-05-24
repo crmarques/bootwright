@@ -54,7 +54,7 @@ type scopeDryRunApply struct {
 	Tasks     []workflow.TaskLedgerEntry `json:"tasks"`
 }
 
-func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []applyTask, forks int) error {
+func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
 	ctx := cf.ctx
 	bundleDir, err := resolveBundleDir(ctx.StateDir)
 	if err != nil {
@@ -112,7 +112,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		report.ApplyPlan = &scopeDryRunApply{
 			RunStatus: string(workflow.RunStatusRunning),
 			Limits:    limits,
-			Tasks:     taskLedgerEntries(tasks),
+			Tasks:     workflow.TaskLedgerEntries(tasks),
 		}
 	}
 	return output.JSON(stdout, report)

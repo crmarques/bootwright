@@ -6,7 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
+	"github.com/crmarques/bootwright/internal/stategraph"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
@@ -114,7 +114,7 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 }
 
 func buildStatusShared(state v1alpha1.State) []statusShared {
-	groups := render.SharedComponents(state)
+	groups := stategraph.ResolveProviderServices(state).SharedServices()
 	out := make([]statusShared, 0, len(groups))
 	for _, g := range groups {
 		out = append(out, statusShared{

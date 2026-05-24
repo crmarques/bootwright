@@ -17,7 +17,7 @@ func TestClusterAccessSummariesUseRuntimeAuthPaths(t *testing.T) {
 	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "wait.sno-libvirt", Kind: applyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusOK},
+		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusOK},
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 
@@ -67,7 +67,7 @@ func TestClusterAccessSummariesRequireSuccessfulInstallWait(t *testing.T) {
 	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "wait.sno-libvirt", Kind: applyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusSkipped},
+		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusSkipped},
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 

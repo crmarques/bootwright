@@ -112,48 +112,104 @@ type ServiceKey struct {
 }
 
 type ServiceSupport struct {
-	Key         ServiceKey
-	ApplyRole   string
-	DestroyRole string
-	Status      Status
-	Summary     string
+	Key               ServiceKey
+	ApplyRole         string
+	DestroyRole       string
+	HostCapabilities  []string
+	ConflictFields    []string
+	MergeStringFields []string
+	Image             ServiceImage
+	Status            Status
+	Summary           string
+}
+
+type ServiceImage struct {
+	Category   string
+	Type       string
+	Repository string
+	Version    string
+	Source     string
+	LookupDate string
 }
 
 var serviceSupport = map[ServiceKey]ServiceSupport{
 	{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: "haProxy"}: {
-		Key:         ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: "haProxy"},
-		ApplyRole:   "load_balancer_haproxy",
-		DestroyRole: "load_balancer_haproxy",
-		Status:      StatusSupported,
-		Summary:     "HAProxy managed load balancer",
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: "haProxy"},
+		ApplyRole:        "load_balancer_haproxy",
+		DestroyRole:      "load_balancer_haproxy",
+		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "capabilityName"},
+		Image: ServiceImage{
+			Category:   v1alpha1.ComponentImageCategoryLoadBalancer,
+			Type:       v1alpha1.ComponentImageTypeHAProxy,
+			Repository: "docker.io/library/haproxy",
+			Version:    "3.3.10",
+			Source:     "https://hub.docker.com/_/haproxy",
+			LookupDate: "2026-05-21",
+		},
+		Status:  StatusSupported,
+		Summary: "HAProxy managed load balancer",
 	},
 	{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: "http"}: {
-		Key:         ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: "http"},
-		ApplyRole:   "artifacts_http",
-		DestroyRole: "artifacts_http",
-		Status:      StatusSupported,
-		Summary:     "HTTP generated artifact publisher",
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: "http"},
+		ApplyRole:        "artifacts_http",
+		DestroyRole:      "artifacts_http",
+		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		Status:           StatusSupported,
+		Summary:          "HTTP generated artifact publisher",
 	},
 	{Kind: v1alpha1.ComponentSlotProxy, Realisation: "squid"}: {
-		Key:         ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: "squid"},
-		ApplyRole:   "proxy_squid",
-		DestroyRole: "proxy_squid",
-		Status:      StatusSupported,
-		Summary:     "Squid managed proxy",
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: "squid"},
+		ApplyRole:        "proxy_squid",
+		DestroyRole:      "proxy_squid",
+		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		Image: ServiceImage{
+			Category:   v1alpha1.ComponentImageCategoryProxy,
+			Type:       v1alpha1.ComponentImageTypeSquid,
+			Repository: "docker.io/openeuler/squid",
+			Version:    "7.5-oe2403sp3",
+			Source:     "https://hub.docker.com/r/openeuler/squid",
+			LookupDate: "2026-05-21",
+		},
+		Status:  StatusSupported,
+		Summary: "Squid managed proxy",
 	},
 	{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: "dnsmasq"}: {
-		Key:         ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: "dnsmasq"},
-		ApplyRole:   "dns_dnsmasq",
-		DestroyRole: "dns_dnsmasq",
-		Status:      StatusSupported,
-		Summary:     "dnsmasq managed name resolution",
+		Key:               ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: "dnsmasq"},
+		ApplyRole:         "dns_dnsmasq",
+		DestroyRole:       "dns_dnsmasq",
+		HostCapabilities:  []string{v1alpha1.HostCapabilityContainerRuntime},
+		ConflictFields:    []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		MergeStringFields: []string{"additionalIngressHosts"},
+		Image: ServiceImage{
+			Category:   v1alpha1.ComponentImageCategoryDNS,
+			Type:       v1alpha1.ComponentImageTypeDnsmasq,
+			Repository: "docker.io/dockurr/dnsmasq",
+			Version:    "2.92_p2",
+			Source:     "https://hub.docker.com/r/dockurr/dnsmasq",
+			LookupDate: "2026-05-21",
+		},
+		Status:  StatusSupported,
+		Summary: "dnsmasq managed name resolution",
 	},
 	{Kind: v1alpha1.ComponentSlotRegistry, Realisation: "mirrorRegistry"}: {
-		Key:         ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: "mirrorRegistry"},
-		ApplyRole:   "mirror_registry",
-		DestroyRole: "mirror_registry",
-		Status:      StatusSupported,
-		Summary:     "registry managed mirror",
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: "mirrorRegistry"},
+		ApplyRole:        "mirror_registry",
+		DestroyRole:      "mirror_registry",
+		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		Image: ServiceImage{
+			Category:   v1alpha1.ComponentImageCategoryRegistry,
+			Type:       v1alpha1.ComponentImageTypeMirrorRegistry,
+			Repository: "docker.io/library/registry",
+			Version:    "3.1.1",
+			Source:     "https://hub.docker.com/_/registry",
+			LookupDate: "2026-05-21",
+		},
+		Status:  StatusSupported,
+		Summary: "registry managed mirror",
 	},
 }
 
@@ -205,6 +261,27 @@ func LookupService(kind, realisation string) ServiceSupport {
 		Status:  StatusUnknown,
 		Summary: "service realisation is not in Bootwright's apply support registry",
 	}
+}
+
+func ServiceHostCapabilities(kind, realisation string) []string {
+	return append([]string(nil), LookupService(kind, realisation).HostCapabilities...)
+}
+
+func ServiceConflictFields(kind, realisation string) []string {
+	fields := LookupService(kind, realisation).ConflictFields
+	if len(fields) == 0 {
+		return []string{"hostRef", "realisation", "applyRole", "destroyRole"}
+	}
+	return append([]string(nil), fields...)
+}
+
+func ServiceMergeStringFields(kind, realisation string) []string {
+	return append([]string(nil), LookupService(kind, realisation).MergeStringFields...)
+}
+
+func ServiceImagePin(kind, realisation string) (ServiceImage, bool) {
+	image := LookupService(kind, realisation).Image
+	return image, image.Type != ""
 }
 
 func Entries() []DispatchSupport {

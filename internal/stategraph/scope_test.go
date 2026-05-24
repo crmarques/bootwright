@@ -27,15 +27,10 @@ func TestSharedDestroyConflictsDetectsProviderServiceConsumers(t *testing.T) {
 }
 
 func TestSharedDestroyConflictsUsesLoadBalancerComponentName(t *testing.T) {
-	state := v1alpha1.State{
-		ClusterInfras: []v1alpha1.ClusterInfra{
-			clusterInfraWithLoadBalancer("infra-a", "machines-a", "control-plane"),
-			clusterInfraWithLoadBalancer("infra-b", "machines-b", "apps"),
-		},
-		ContainerClusters: []v1alpha1.ContainerCluster{
-			containerCluster("cluster-a", "infra-a"),
-			containerCluster("cluster-b", "infra-b"),
-		},
+	state := stateWithSharedDNS()
+	state.ClusterInfras = []v1alpha1.ClusterInfra{
+		clusterInfraWithLoadBalancer("infra-a", "machines-a", "control-plane"),
+		clusterInfraWithLoadBalancer("infra-b", "machines-b", "apps"),
 	}
 	if conflicts := SharedDestroyConflicts(state, []string{"cluster-a"}); len(conflicts) != 0 {
 		t.Fatalf("different local load balancer names must not conflict: %#v", conflicts)
@@ -68,10 +63,30 @@ func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 
 func stateWithSharedDNS() v1alpha1.State {
 	return v1alpha1.State{
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "service-host"},
+			Spec: v1alpha1.HostSpec{
+				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+			},
+		}},
 		InfraProviders: []v1alpha1.InfraProvider{
 			{Metadata: v1alpha1.Metadata{Name: "machines-a"}},
 			{Metadata: v1alpha1.Metadata{Name: "machines-b"}},
-			{Metadata: v1alpha1.Metadata{Name: "services"}},
+			{
+				Metadata: v1alpha1.Metadata{Name: "services"},
+				Spec: v1alpha1.InfraProviderSpec{
+					DNS: []v1alpha1.DNSCapability{{
+						Name:    "default",
+						Dnsmasq: &v1alpha1.DnsmasqCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+					}},
+					LoadBalancers: []v1alpha1.LoadBalancerCapability{{
+						Name:    "default",
+						HAProxy: &v1alpha1.HAProxyCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+					}},
+				},
+			},
 		},
 		ClusterInfras: []v1alpha1.ClusterInfra{
 			clusterInfra("infra-a", "machines-a"),

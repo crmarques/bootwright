@@ -626,6 +626,10 @@ Bootwright renders:
 - Provider or generated machine MACs into matching NMState interfaces when
   present.
 - Managed non-machine components from `ClusterInfra.spec.components`.
+- Shared provider service identities, consumers, host placement, conflict
+  fields, and mergeable overlays from the resolved service graph. Mergeable
+  overlays are rendered into generated Ansible vars without mutating authored
+  desired state.
 - Generated artifact publisher components when a cluster needs agent ISO or
   boot-artifact publication.
 

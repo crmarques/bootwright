@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
+	"github.com/crmarques/bootwright/internal/stategraph"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
@@ -192,7 +193,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, stateDir string
 }
 
 func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
-	groups := render.SharedComponents(state)
+	groups := stategraph.ResolveProviderServices(state).SharedServices()
 	if len(groups) == 0 {
 		return
 	}

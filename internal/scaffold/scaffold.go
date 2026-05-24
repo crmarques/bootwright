@@ -20,9 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/support"
 )
 
-// Provider is the substrate identifier used by internal scaffold fixtures. The
-// string values match historical fixture values; renaming one is a test-data
-// compatibility change.
+// Provider is the substrate identifier used by internal scaffold fixtures.
 type Provider string
 
 const (

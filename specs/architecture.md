@@ -64,6 +64,13 @@ These boundaries are reflected in rendering:
 - Infra component variables are rendered from `ClusterInfra.components` plus
   provider service capabilities.
 
+Shared provider services are resolved through one service graph before
+validation, rendering, status, or scoped apply checks make decisions about
+them. The graph owns service identity `(kind, provider, name)`, consuming
+clusters, host placement, conflict fields, and mergeable overlay fields.
+Rendering consumes the resolved graph and does not patch authored desired
+state to make shared services converge.
+
 ## Providers
 
 Provider adapters should consume capability arms instead of inferring behavior

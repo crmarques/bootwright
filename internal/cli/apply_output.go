@@ -9,6 +9,47 @@ import (
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
+type applyReporter struct {
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func newApplyReporter(stdout, stderr io.Writer) *applyReporter {
+	return &applyReporter{stdout: stdout, stderr: stderr}
+}
+
+func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
+	printApplyRunStart(r.stdout, ledger)
+}
+
+func (r *applyReporter) ClusterLogPaths(ledger workflow.RunLedger) {
+	printApplyClusterLogPaths(r.stdout, ledger)
+}
+
+func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
+	printApplyStageSnapshot(r.stdout, ledger)
+}
+
+func (r *applyReporter) AnsibleExecutionStart() {
+	printApplyAnsibleExecutionStart(r.stdout)
+}
+
+func (r *applyReporter) TaskStart(ledger workflow.RunLedger, id string) {
+	printApplyTaskStart(r.stdout, ledger, id)
+}
+
+func (r *applyReporter) TaskResult(ledger workflow.RunLedger, id string) {
+	printApplyTaskResult(r.stdout, ledger, id)
+}
+
+func (r *applyReporter) RunSummary(ledger workflow.RunLedger) {
+	printApplyRunSummary(r.stdout, ledger)
+}
+
+func (r *applyReporter) PromptGap() {
+	output.NewContinuation(r.stderr).BlankLine()
+}
+
 func printApplyRunStart(stdout io.Writer, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	p.Section("Apply run")
@@ -143,18 +184,18 @@ func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
 		Status: output.StatusDone,
 		Label:  "Render inputs",
 	}}
-	if applyLedgerHasAnyKind(ledger, applyTaskKindClusterISO, applyTaskKindNodeBoot, applyTaskKindInstallWait) {
+	if applyLedgerHasAnyKind(ledger, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait) {
 		lines = append(lines, output.TaskLine{Status: output.StatusDone, Label: "Resolve installer inputs"})
 	}
 	for _, stage := range []struct {
 		label string
 		kinds []string
 	}{
-		{label: "Provider services", kinds: []string{applyTaskKindProvider}},
-		{label: "Cluster infrastructure", kinds: []string{applyTaskKindClusterInfra}},
-		{label: "Create agent ISOs", kinds: []string{applyTaskKindClusterISO}},
-		{label: "Boot nodes", kinds: []string{applyTaskKindNodeBoot}},
-		{label: "Wait for installs", kinds: []string{applyTaskKindInstallWait}},
+		{label: "Provider services", kinds: []string{workflow.ApplyTaskKindProvider}},
+		{label: "Cluster infrastructure", kinds: []string{workflow.ApplyTaskKindClusterInfra}},
+		{label: "Create agent ISOs", kinds: []string{workflow.ApplyTaskKindClusterISO}},
+		{label: "Boot nodes", kinds: []string{workflow.ApplyTaskKindNodeBoot}},
+		{label: "Wait for installs", kinds: []string{workflow.ApplyTaskKindInstallWait}},
 	} {
 		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
 		if ok {

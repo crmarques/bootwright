@@ -1,6 +1,9 @@
 package render
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/support"
+)
 
 func managedComponentImage(state v1alpha1.State, category, typ, fallback string) string {
 	env := primaryEnvironment(state)
@@ -29,37 +32,30 @@ func componentPinVersion(state v1alpha1.State, name, fallback string) string {
 }
 
 func managedHAProxyImage(state v1alpha1.State) string {
-	return managedComponentImage(
-		state,
-		v1alpha1.ComponentImageCategoryLoadBalancer,
-		v1alpha1.ComponentImageTypeHAProxy,
-		"docker.io/library/haproxy:"+componentPinVersion(state, v1alpha1.ComponentImageTypeHAProxy, defaultHAProxyVersion),
-	)
+	return managedServiceImage(state, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
 }
 
 func managedMirrorRegistryImage(state v1alpha1.State) string {
-	return managedComponentImage(
-		state,
-		v1alpha1.ComponentImageCategoryRegistry,
-		v1alpha1.ComponentImageTypeMirrorRegistry,
-		"docker.io/library/registry:"+componentPinVersion(state, v1alpha1.ComponentImageTypeMirrorRegistry, defaultMirrorRegistryVersion),
-	)
+	return managedServiceImage(state, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
 }
 
 func managedSquidImage(state v1alpha1.State) string {
-	return managedComponentImage(
-		state,
-		v1alpha1.ComponentImageCategoryProxy,
-		v1alpha1.ComponentImageTypeSquid,
-		"docker.io/openeuler/squid:"+componentPinVersion(state, v1alpha1.ComponentImageTypeSquid, defaultSquidVersion),
-	)
+	return managedServiceImage(state, v1alpha1.ComponentSlotProxy, "squid")
 }
 
 func managedDnsmasqImage(state v1alpha1.State) string {
+	return managedServiceImage(state, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
+}
+
+func managedServiceImage(state v1alpha1.State, kind, realisation string) string {
+	image, ok := support.ServiceImagePin(kind, realisation)
+	if !ok {
+		return ""
+	}
 	return managedComponentImage(
 		state,
-		v1alpha1.ComponentImageCategoryDNS,
-		v1alpha1.ComponentImageTypeDnsmasq,
-		"docker.io/dockurr/dnsmasq:"+componentPinVersion(state, v1alpha1.ComponentImageTypeDnsmasq, defaultDnsmasqVersion),
+		image.Category,
+		image.Type,
+		image.Repository+":"+componentPinVersion(state, image.Type, image.Version),
 	)
 }

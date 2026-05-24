@@ -21,6 +21,11 @@ The render step merges the six kinds into concrete outputs:
 - provider variables from `InfraProvider`, `Host`, and
   `ClusterInfra.components`
 
+Shared provider services are resolved once as a service graph. Validation,
+rendering, status, and scoped apply checks use the same service identities and
+consumer list, so a partial `apply infra --scope` cannot silently narrow a
+service another cluster still depends on.
+
 The important boundary is ownership. Physical machine facts do not move into
 cluster intent, and cluster release intent does not move into environment
 defaults. That keeps provider swaps and release changes explicit.

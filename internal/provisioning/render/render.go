@@ -80,7 +80,6 @@ func All(stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
 // AllOn is All parameterised on FileSystem so tests can assert mode
 // invariants without touching disk. Production callers use All.
 func AllOn(fs FileSystem, stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	ApplySharedOverlays(&state)
 	result := Result{
 		EffectiveStatePath: filepath.Join(stateDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(stateDir, "bootwright.lock.yaml"),
@@ -160,7 +159,6 @@ func ResolveInstaller(stateDir, secretsDir string, state v1alpha1.State) (Result
 // tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk. Production callers use ResolveInstaller.
 func ResolveInstallerOn(fs FileSystem, stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	ApplySharedOverlays(&state)
 	result := Result{InstallerAssets: InstallerAssets(stateDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
@@ -194,7 +192,6 @@ func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, err
 }
 
 func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	ApplySharedOverlays(&state)
 	result := Result{
 		EffectiveStatePath: filepath.Join(outputDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(outputDir, "bootwright.lock.yaml"),

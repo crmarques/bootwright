@@ -98,14 +98,15 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,
 		}
-		tasks := planApplyTasks(scope, plan.state)
-		limits = resolveApplyConcurrencyLimits(limits, tasks)
-		dryRunTasks := annotateApplyTaskClusterLogPaths(ctx.StateDir, "dry-run", tasks)
+		applyTarget := scope.applyTarget()
+		tasks := workflow.PlanApplyTasks(applyTarget, plan.state)
+		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
+		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(ctx.StateDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, ansibleForksForLimit(plan.state, plan.limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
 			existing, ok, err := workflow.LoadRunLedger(ctx.StateDir)
@@ -160,7 +161,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			BundleDir:          bundle.Dir,
 			Playbook:           scope.applyPlaybook,
 			Limit:              plan.limit,
-			Forks:              ansibleForksForLimit(plan.state, plan.limit),
+			Forks:              workflow.AnsibleForksForLimit(plan.state, plan.limit),
 			ExtraVarPairs:      plan.extraVarPairs,
 			ArtifactsBaseName:  scope.artifactsBaseName,
 			Check:              check,
@@ -173,7 +174,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
-			reporter.DryRunTasks(scope.name+" apply", taskLedgerEntries(dryRunTasks), limits)
+			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
 			result, err := workflow.RenderOnly(ctx.StateDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
@@ -195,7 +196,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 				return failErr(1, err)
 			}
 		}
-		ledger, err := runApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, scope, flags.clusterScope, tasks, limits)
+		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr))
 		if err != nil {
 			return failErr(1, err)
 		}

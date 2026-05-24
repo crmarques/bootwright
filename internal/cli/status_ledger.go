@@ -80,7 +80,7 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 	nodeTotal := 0
 	for _, task := range tasks {
 		status = applyLedgerTaskStatus(status, task.Status)
-		if task.Kind == applyTaskKindNodeBoot {
+		if task.Kind == workflow.ApplyTaskKindNodeBoot {
 			nodeTotal++
 			nodeCounts[task.Status]++
 			continue
@@ -92,7 +92,7 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 		otherParts = append(otherParts, applyLedgerTaskKindLabel(task.Kind)+" "+string(task.Status))
 	}
 	parts := make([]string, 0, len(tasks))
-	for _, kind := range []string{applyTaskKindClusterInfra, applyTaskKindClusterISO} {
+	for _, kind := range []string{workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO} {
 		if taskStatus, ok := kindStatuses[kind]; ok {
 			parts = append(parts, applyLedgerTaskKindLabel(kind)+" "+string(taskStatus))
 		}
@@ -100,8 +100,8 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 	if nodeTotal > 0 {
 		parts = append(parts, applyNodeBootSummary(nodeTotal, nodeCounts))
 	}
-	if taskStatus, ok := kindStatuses[applyTaskKindInstallWait]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(applyTaskKindInstallWait)+" "+string(taskStatus))
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindInstallWait]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindInstallWait)+" "+string(taskStatus))
 	}
 	parts = append(parts, otherParts...)
 	return status, strings.Join(parts, ", ")
@@ -109,7 +109,7 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 
 func applyLedgerKnownClusterKind(kind string) bool {
 	switch kind {
-	case applyTaskKindClusterInfra, applyTaskKindClusterISO, applyTaskKindInstallWait:
+	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait:
 		return true
 	default:
 		return false
@@ -118,11 +118,11 @@ func applyLedgerKnownClusterKind(kind string) bool {
 
 func applyLedgerTaskKindLabel(kind string) string {
 	switch kind {
-	case applyTaskKindClusterInfra:
+	case workflow.ApplyTaskKindClusterInfra:
 		return "infra"
-	case applyTaskKindClusterISO:
+	case workflow.ApplyTaskKindClusterISO:
 		return "ISO"
-	case applyTaskKindInstallWait:
+	case workflow.ApplyTaskKindInstallWait:
 		return "install wait"
 	default:
 		return kind

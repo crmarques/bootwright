@@ -36,6 +36,23 @@ func TestValidateScopedApplySharedServicesAllowsAllConsumers(t *testing.T) {
 
 func cliStateWithSharedDNS() v1alpha1.State {
 	return v1alpha1.State{
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "service-host"},
+			Spec: v1alpha1.HostSpec{
+				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+			},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "services"},
+			Spec: v1alpha1.InfraProviderSpec{
+				DNS: []v1alpha1.DNSCapability{{
+					Name:    "default",
+					Dnsmasq: &v1alpha1.DnsmasqCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+				}},
+			},
+		}},
 		ClusterInfras: []v1alpha1.ClusterInfra{
 			cliClusterInfraWithDNS("infra-a", "machines-a"),
 			cliClusterInfraWithDNS("infra-b", "machines-b"),

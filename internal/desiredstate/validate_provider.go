@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/support"
 )
 
 func validateProviders(state v1alpha1.State) []string {
@@ -287,7 +288,7 @@ func validateServiceLoadBalancer(p v1alpha1.InfraProvider, lb v1alpha1.LoadBalan
 	if lb.HAProxy == nil {
 		return []string{fmt.Sprintf("%s must set exactly one of {haProxy}", prefix)}
 	}
-	return validateHostRefCapability(prefix+".haProxy.hostRef", lb.HAProxy.HostRef, hosts, v1alpha1.HostCapabilityContainerRuntime)
+	return validateServiceHostRef(prefix+".haProxy.hostRef", lb.HAProxy.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
 }
 
 func validateServiceArtifactPublisher(p v1alpha1.InfraProvider, publisher v1alpha1.ArtifactPublisherCapability, hosts map[string]v1alpha1.Host) []string {
@@ -295,7 +296,7 @@ func validateServiceArtifactPublisher(p v1alpha1.InfraProvider, publisher v1alph
 	if publisher.HTTP == nil {
 		return []string{fmt.Sprintf("%s must set exactly one of {http}", prefix)}
 	}
-	errs := validateHostRefCapability(prefix+".http.hostRef", publisher.HTTP.HostRef, hosts, v1alpha1.HostCapabilityContainerRuntime)
+	errs := validateServiceHostRef(prefix+".http.hostRef", publisher.HTTP.HostRef, hosts, v1alpha1.ComponentSlotArtifacts, "http")
 	if publisher.HTTP.Port < 0 || publisher.HTTP.Port > 65535 {
 		errs = append(errs, fmt.Sprintf("%s.http.port %d out of range", prefix, publisher.HTTP.Port))
 	}
@@ -322,7 +323,7 @@ func validateServiceProxy(p v1alpha1.InfraProvider, proxy v1alpha1.ProxyCapabili
 	if proxy.Squid == nil {
 		return []string{fmt.Sprintf("%s must set exactly one of {squid}", prefix)}
 	}
-	return validateHostRefCapability(prefix+".squid.hostRef", proxy.Squid.HostRef, hosts, v1alpha1.HostCapabilityContainerRuntime)
+	return validateServiceHostRef(prefix+".squid.hostRef", proxy.Squid.HostRef, hosts, v1alpha1.ComponentSlotProxy, "squid")
 }
 
 func validateServiceDNS(p v1alpha1.InfraProvider, d v1alpha1.DNSCapability, hosts map[string]v1alpha1.Host) []string {
@@ -330,7 +331,7 @@ func validateServiceDNS(p v1alpha1.InfraProvider, d v1alpha1.DNSCapability, host
 	if d.Dnsmasq == nil {
 		return []string{fmt.Sprintf("%s must set exactly one of {dnsmasq}", prefix)}
 	}
-	return validateHostRefCapability(prefix+".dnsmasq.hostRef", d.Dnsmasq.HostRef, hosts, v1alpha1.HostCapabilityContainerRuntime)
+	return validateServiceHostRef(prefix+".dnsmasq.hostRef", d.Dnsmasq.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
 }
 
 func validateServiceRegistry(p v1alpha1.InfraProvider, r v1alpha1.RegistryCapability, hosts map[string]v1alpha1.Host) []string {
@@ -338,7 +339,19 @@ func validateServiceRegistry(p v1alpha1.InfraProvider, r v1alpha1.RegistryCapabi
 	if r.MirrorRegistry == nil {
 		return []string{fmt.Sprintf("%s must set exactly one of {mirrorRegistry}", prefix)}
 	}
-	return validateHostRefCapability(prefix+".mirrorRegistry.hostRef", r.MirrorRegistry.HostRef, hosts, v1alpha1.HostCapabilityContainerRuntime)
+	return validateServiceHostRef(prefix+".mirrorRegistry.hostRef", r.MirrorRegistry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
+}
+
+func validateServiceHostRef(owner string, ref v1alpha1.LocalObjectReference, hosts map[string]v1alpha1.Host, kind, realisation string) []string {
+	var errs []string
+	capabilities := support.ServiceHostCapabilities(kind, realisation)
+	if len(capabilities) == 0 {
+		return validateHostRefCapability(owner, ref, hosts, "")
+	}
+	for _, capability := range capabilities {
+		errs = append(errs, validateHostRefCapability(owner, ref, hosts, capability)...)
+	}
+	return errs
 }
 
 func validateHostRefCapability(owner string, ref v1alpha1.LocalObjectReference, hosts map[string]v1alpha1.Host, want string) []string {
@@ -349,7 +362,7 @@ func validateHostRefCapability(owner string, ref v1alpha1.LocalObjectReference, 
 	if !ok {
 		return []string{fmt.Sprintf("%s %q does not match any Host", owner, ref.Name)}
 	}
-	if !hostHasCapability(host, want) {
+	if want != "" && !hostHasCapability(host, want) {
 		return []string{fmt.Sprintf("%s %q lacks capability %q (Host.spec.capabilities)", owner, ref.Name, want)}
 	}
 	return nil
