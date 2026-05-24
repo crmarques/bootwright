@@ -14,6 +14,10 @@ func prepareBecomePasswordFile(in io.Reader, prompt io.Writer) (string, func(), 
 	if err != nil {
 		return "", nil, err
 	}
+	return writeBecomePasswordFile(password)
+}
+
+func writeBecomePasswordFile(password string) (string, func(), error) {
 	if password == "" {
 		return "", nil, errors.New("BECOME password cannot be empty")
 	}

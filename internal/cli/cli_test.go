@@ -902,6 +902,136 @@ func TestControllerCLIInstallCommandCopiesArgs(t *testing.T) {
 	}
 }
 
+func TestRunBootstrapPlanRefreshesSudoWithOneBecomePassword(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+		t.Fatalf("mkdir fake bin: %v", err)
+	}
+	passwordLog := filepath.Join(dir, "passwords")
+	fakeSudo := filepath.Join(fakeBin, "sudo")
+	if err := os.WriteFile(fakeSudo, []byte(`#!/bin/sh
+validate=0
+noninteractive=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -S)
+      shift
+      ;;
+    -p)
+      shift 2
+      ;;
+    -v)
+      validate=1
+      shift
+      ;;
+    -n)
+      noninteractive=1
+      shift
+      ;;
+    --preserve-env=*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+if [ "$validate" -eq 1 ]; then
+  IFS= read -r password
+  printf '%s\n' "$password" >> "$BOOTWRIGHT_TEST_PASSWORD_LOG"
+  test "$password" = secret
+  exit $?
+fi
+if [ "$noninteractive" -ne 1 ]; then
+  printf '%s\n' 'interactive sudo was not disabled' >&2
+  exit 23
+fi
+exec "$@"
+`), 0o755); err != nil {
+		t.Fatalf("write fake sudo: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	plan := []operator.BootstrapStep{
+		{Label: "first root step", Cmd: []string{"sudo", "sh", "-c", "printf first"}},
+		{Label: "second root step", Cmd: []string{"sudo", "sh", "-c", "printf second"}},
+	}
+	err := runBootstrapPlan(
+		context.Background(),
+		strings.NewReader("unused\n"),
+		&stdout,
+		&stderr,
+		plan,
+		map[string]string{"BOOTWRIGHT_TEST_PASSWORD_LOG": passwordLog},
+		"secret",
+		true,
+	)
+	if err != nil {
+		t.Fatalf("runBootstrapPlan: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want no sudo prompt", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "$ sudo -n sh -c 'printf first'") || !strings.Contains(got, "first") || !strings.Contains(got, "second") {
+		t.Fatalf("stdout missing noninteractive sudo command or step output:\n%s", got)
+	}
+	body, err := os.ReadFile(passwordLog)
+	if err != nil {
+		t.Fatalf("read password log: %v", err)
+	}
+	if got := string(body); got != "secret\nsecret\n" {
+		t.Fatalf("password refreshes = %q, want two refreshes with one collected password", got)
+	}
+}
+
+func TestRunBootstrapPlanDisablesInteractiveSudoWhenBecomePromptDisabled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+		t.Fatalf("mkdir fake bin: %v", err)
+	}
+	fakeSudo := filepath.Join(fakeBin, "sudo")
+	if err := os.WriteFile(fakeSudo, []byte(`#!/bin/sh
+if [ "$1" != "-n" ]; then
+  printf '%s\n' 'sudo was allowed to prompt' >&2
+  exit 24
+fi
+shift
+exec "$@"
+`), 0o755); err != nil {
+		t.Fatalf("write fake sudo: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runBootstrapPlan(
+		context.Background(),
+		strings.NewReader("unused\n"),
+		&stdout,
+		&stderr,
+		[]operator.BootstrapStep{{Label: "root step", Cmd: []string{"sudo", "sh", "-c", "printf ok"}}},
+		nil,
+		"",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("runBootstrapPlan: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "$ sudo -n sh -c 'printf ok'") || !strings.Contains(got, "ok") {
+		t.Fatalf("stdout missing noninteractive sudo command or output:\n%s", got)
+	}
+}
+
 func TestRunControllerCLIInstallWithBundleUsesPreparedBecomePasswordFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")

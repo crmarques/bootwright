@@ -115,11 +115,32 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if !yes && !confirm(stdin, stdout, "Continue with bootstrap? [y/N] (default: no): ") {
 			return failErr(1, errors.New("bootstrap aborted"))
 		}
-		if err := runBootstrapPlan(c.Context(), stdin, stdout, stderr, plan, proxyEnv); err != nil {
+		becomePassword := ""
+		becomePasswordFile := ""
+		if askBecomePass && (bootstrapPlanNeedsSudo(plan) || cliSpec != nil) {
+			output.NewContinuation(stderr).BlankLine()
+			password, err := readBecomePassword(stdin, stderr)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if password == "" {
+				return failErr(1, errors.New("BECOME password cannot be empty"))
+			}
+			becomePassword = password
+			if cliSpec != nil {
+				path, cleanup, err := writeBecomePasswordFile(password)
+				if err != nil {
+					return failErr(1, err)
+				}
+				defer cleanup()
+				becomePasswordFile = path
+			}
+		}
+		if err := runBootstrapPlan(c.Context(), stdin, stdout, stderr, plan, proxyEnv, becomePassword, askBecomePass); err != nil {
 			return err
 		}
 		if cliSpec != nil {
-			if err := runControllerCLIInstall(c.Context(), stdin, stdout, stderr, state, ctx.SecretsDir, *cliSpec, proxyEnv, askBecomePass); err != nil {
+			if err := runControllerCLIInstallWithBecomePasswordFile(c.Context(), stdin, stdout, stderr, state, ctx.SecretsDir, *cliSpec, proxyEnv, askBecomePass, becomePasswordFile); err != nil {
 				return failErr(1, err)
 			}
 		}

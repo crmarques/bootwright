@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ansible"
@@ -27,24 +28,67 @@ func controllerBootstrapPlan(preserveProxyEnv bool) ([]operator.BootstrapStep, e
 	return operator.BootstrapPlan(ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
 }
 
-func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []operator.BootstrapStep, extraEnv map[string]string) error {
+func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []operator.BootstrapStep, extraEnv map[string]string, becomePassword string, askBecomePass bool) error {
 	if len(plan) == 0 {
 		return nil
 	}
 	p := output.NewContinuation(stdout)
 	p.Section("Run")
 	for _, step := range plan {
-		p.CommandLine(step.Label, step.Cmd)
-		run := exec.CommandContext(ctx, step.Cmd[0], step.Cmd[1:]...)
+		cmd := bootstrapRunCommand(step.Cmd, becomePassword, askBecomePass)
+		p.CommandLine(step.Label, cmd)
+		env := operator.MergeBootstrapEnv(os.Environ(), extraEnv)
+		if isSudoCommand(step.Cmd) && becomePassword != "" {
+			if err := refreshBootstrapSudo(ctx, stderr, env, becomePassword); err != nil {
+				return failErr(1, fmt.Errorf("refresh sudo credentials for %q: %w", step.Label, err))
+			}
+		}
+		run := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 		run.Stdout = stdout
 		run.Stderr = stderr
 		run.Stdin = stdin
-		run.Env = operator.MergeBootstrapEnv(os.Environ(), extraEnv)
+		run.Env = env
 		if err := run.Run(); err != nil {
 			return failErr(1, fmt.Errorf("bootstrap step %q: %w", step.Label, err))
 		}
 	}
 	return nil
+}
+
+func bootstrapPlanNeedsSudo(plan []operator.BootstrapStep) bool {
+	for _, step := range plan {
+		if isSudoCommand(step.Cmd) {
+			return true
+		}
+	}
+	return false
+}
+
+func bootstrapRunCommand(args []string, becomePassword string, askBecomePass bool) []string {
+	if !isSudoCommand(args) {
+		return append([]string(nil), args...)
+	}
+	if becomePassword != "" || !askBecomePass {
+		return sudoWithNonInteractiveFlag(args)
+	}
+	return append([]string(nil), args...)
+}
+
+func isSudoCommand(args []string) bool {
+	return len(args) > 0 && args[0] == "sudo"
+}
+
+func sudoWithNonInteractiveFlag(args []string) []string {
+	out := []string{args[0], "-n"}
+	return append(out, args[1:]...)
+}
+
+func refreshBootstrapSudo(ctx context.Context, stderr io.Writer, env []string, password string) error {
+	cmd := exec.CommandContext(ctx, "sudo", "-S", "-p", "", "-v")
+	cmd.Stdin = strings.NewReader(password + "\n")
+	cmd.Stderr = stderr
+	cmd.Env = env
+	return cmd.Run()
 }
 
 // planControllerCLIInstall is the CLI-side wrapper that supplies the
@@ -54,16 +98,20 @@ func planControllerCLIInstall(state v1alpha1.State, installDir string) *operator
 	return operator.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), ansibleVenvBin)
 }
 
-func runControllerCLIInstall(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool) error {
+func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {
 	bundleDir, cleanup, err := extractControllerCLIBundle()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	return runControllerCLIInstallWithBundle(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir)
+	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, becomePasswordFile)
 }
 
 func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
+	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, "")
+}
+
+func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
 	spec.BundleDir = bundleDir
 	inventoryPath := filepath.Join(bundleDir, controllerCLIBastionInventory)
 	inventoryBody, err := controllerCLIBastionInventoryBody(state, secretsDir)
@@ -80,8 +128,7 @@ func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, std
 	for k, v := range extraEnv {
 		ansibleEnv[k] = v
 	}
-	becomePasswordFile := ""
-	if askBecomePass {
+	if askBecomePass && becomePasswordFile == "" {
 		output.NewContinuation(stderr).BlankLine()
 		path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
 		if err != nil {
