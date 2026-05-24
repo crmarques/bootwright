@@ -220,6 +220,42 @@ func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	}
 }
 
+func TestGitHubActionsUseCommitSHARefs(t *testing.T) {
+	root := filepath.Join(repoRoot(t), ".github", "workflows")
+	usesRE := regexp.MustCompile(`\buses:\s*([^#\s]+)`)
+	shaRE := regexp.MustCompile(`^[0-9a-f]{40}$`)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".yml" {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(readRepoFile(t, rel), "\n") {
+			match := usesRE.FindStringSubmatch(line)
+			if match == nil {
+				continue
+			}
+			action := match[1]
+			if strings.HasPrefix(action, "./") {
+				continue
+			}
+			at := strings.LastIndex(action, "@")
+			if at < 0 || !shaRE.MatchString(action[at+1:]) {
+				t.Fatalf("%s:%d uses mutable action ref %q; pin to a full commit SHA", rel, i+1, action)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan workflows: %v", err)
+	}
+}
+
 func TestAnsibleCollectionLockMatchesEmbeddedManifest(t *testing.T) {
 	if !repoFileExists(t, "internal/embedded/bundle/collections/ansible_collections") {
 		t.Skip("embedded collection bundle has not been synced")

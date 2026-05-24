@@ -14,6 +14,20 @@
         bootwright_agent_iso_path: "{{ bootwright_agent_iso_path_file.content | b64decode | trim }}"
       changed_when: false
 
+    - name: Read agent ISO publish token
+      ansible.builtin.slurp:
+        src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+      register: bootwright_agent_iso_publish_token_file
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Set agent ISO publish token
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_publish_token: "{{ bootwright_agent_iso_publish_token_file.content | b64decode | trim }}"
+      changed_when: false
+      no_log: true
+
     - name: Resolve selected machine from agent node host variable
       ansible.builtin.set_fact:
         bootwright_boot_components: >-

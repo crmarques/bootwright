@@ -157,10 +157,10 @@
   ansible.builtin.uri:
     url: "https://127.0.0.1:{{ bootwright_component.port | int }}/"
     method: GET
-    status_code: 200
+    status_code: 404
     validate_certs: false
     return_content: false
   register: bootwright_artifacts_ready
   retries: 30
   delay: 1
-  until: bootwright_artifacts_ready.status == 200
+  until: bootwright_artifacts_ready.status == 404

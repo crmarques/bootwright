@@ -25,7 +25,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "0700"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
 
@@ -35,7 +35,7 @@
     dest: "{{ bootwright_agent_iso_publish_target.stagePath }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: "0600"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
 

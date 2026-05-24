@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/managedroot"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"go.yaml.in/yaml/v3"
 )
@@ -188,7 +189,11 @@ func ResolveInstallerOn(fs FileSystem, stateDir, secretsDir string, state v1alph
 }
 
 func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ToolInputsOn(defaultFS, outputDir, secretsDir, state)
+	cleanOutputDir, err := managedroot.Ensure(outputDir, stateDirMode)
+	if err != nil {
+		return Result{}, err
+	}
+	return ToolInputsOn(defaultFS, cleanOutputDir, secretsDir, state)
 }
 
 func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {

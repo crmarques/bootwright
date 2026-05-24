@@ -21,7 +21,8 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._range = None
         path = self.translate_path(self.path)
         if os.path.isdir(path):
-            return super().send_head()
+            self.send_error(404, "File not found")
+            return None
 
         try:
             source = open(path, "rb")

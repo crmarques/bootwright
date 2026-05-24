@@ -780,6 +780,25 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	}
 }
 
+func TestRenderOutputDirRejectsNonEmptyUnmarkedDirectory(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	outputDir := filepath.Join(t.TempDir(), "rendered")
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "existing.txt"), []byte("data\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt", "--sensitive")
+	if code == 0 {
+		t.Fatal("render --output-dir accepted a non-empty unmarked output directory")
+	}
+	if !strings.Contains(stderr, "not marked as Bootwright-owned") {
+		t.Fatalf("stderr does not explain managed root rejection: %q", stderr)
+	}
+}
+
 func TestControllerCLIBastionInventoryUsesHostSSHAddress(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	state.Hosts[0].Spec.Addresses[0].Address = "bastion.example.test"

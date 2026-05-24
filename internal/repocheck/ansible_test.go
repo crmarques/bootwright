@@ -751,13 +751,16 @@ func TestArtifactsHTTPServiceSupportsRangeRequests(t *testing.T) {
 		"ssl.SSLError",
 		"Connection\", \"close",
 		"close_connection",
+		"send_error(404",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("artifact HTTP helper must support TLS byte ranges; missing %q", want)
 		}
 	}
-	if strings.Contains(script, "super().copyfile") {
-		t.Fatalf("artifact HTTP helper must guard full-file streaming instead of delegating to SimpleHTTPRequestHandler.copyfile")
+	for _, rejected := range []string{"super().copyfile", "super().send_head"} {
+		if strings.Contains(script, rejected) {
+			t.Fatalf("artifact HTTP helper must not delegate sensitive artifact serving through %s", rejected)
+		}
 	}
 	tlsTemplate := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-openssl.cnf.j2")
 	for _, want := range []string{"subjectAltName", "bootwright_component.tls.dnsNames", "bootwright_component.tls.ipAddresses"} {
@@ -789,6 +792,9 @@ func TestArtifactsHTTPServiceSupportsRangeRequests(t *testing.T) {
 	}
 	if got := waitURI["validate_certs"]; got != false {
 		t.Fatalf("artifact readiness probe must allow self-signed certs, got %v", got)
+	}
+	if got := waitURI["status_code"]; got != 404 {
+		t.Fatalf("artifact readiness probe must expect directory listing rejection, got %v", got)
 	}
 }
 

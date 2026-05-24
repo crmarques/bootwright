@@ -47,6 +47,8 @@
         | default((bootwright_redfish_vmedia_selected | default({})).get('@odata.etag', ''), true)
         | default('*', true)
       }}
+    bootwright_redfish_vmedia_verify_certificate_supported: "{{ 'VerifyCertificate' in (bootwright_redfish_vmedia_pre_patch_probe.json | default({})) }}"
+    bootwright_redfish_vmedia_verify_certificate_original: "{{ (bootwright_redfish_vmedia_pre_patch_probe.json | default({})).VerifyCertificate | default(false) | bool }}"
   changed_when: false
 
 - name: Disable HTTPS certificate verification for virtual-media fetch

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/managedroot"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"go.yaml.in/yaml/v3"
 )
@@ -65,6 +66,9 @@ func NewContext(name, baseDir string) (Context, error) {
 	}
 	baseDir, err := cleanPath(baseDir)
 	if err != nil {
+		return Context{}, err
+	}
+	if _, err := managedroot.ValidateTarget(baseDir); err != nil {
 		return Context{}, err
 	}
 	inputDir := filepath.Join(baseDir, InputDirName)
@@ -146,6 +150,9 @@ func Current(store Store) (Context, error) {
 		return Context{}, fmt.Errorf("current context %q is not defined", store.Current)
 	}
 	ctx.Name = store.Current
+	if err := ValidateContext(ctx); err != nil {
+		return Context{}, err
+	}
 	return ctx, nil
 }
 
@@ -159,6 +166,12 @@ func Names(store Store) []string {
 }
 
 func EnsureDirs(ctx Context) error {
+	if err := ValidateContext(ctx); err != nil {
+		return err
+	}
+	if err := EnsureBaseDir(ctx); err != nil {
+		return err
+	}
 	for _, dir := range []string{ctx.BaseDir, ctx.InputDir, ctx.StateDir, ctx.SecretsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
@@ -170,18 +183,56 @@ func EnsureDirs(ctx Context) error {
 	return nil
 }
 
+func EnsureBaseDir(ctx Context) error {
+	if err := ValidateContext(ctx); err != nil {
+		return err
+	}
+	_, err := managedroot.Ensure(ctx.BaseDir, 0o700)
+	return err
+}
+
 func SafePurgeBaseDir(ctx Context) error {
+	if err := ValidateContext(ctx); err != nil {
+		return err
+	}
+	baseDir, err := managedroot.Require(ctx.BaseDir)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(baseDir)
+}
+
+func ValidateContext(ctx Context) error {
+	if err := ValidateName(ctx.Name); err != nil {
+		return err
+	}
 	baseDir, err := cleanPath(ctx.BaseDir)
 	if err != nil {
 		return err
 	}
-	if baseDir == string(filepath.Separator) {
-		return errors.New("refusing to purge filesystem root")
+	if _, err := managedroot.ValidatePath(baseDir); err != nil {
+		return err
 	}
-	if home, err := os.UserHomeDir(); err == nil && baseDir == filepath.Clean(home) {
-		return fmt.Errorf("refusing to purge home directory %s", baseDir)
+	want := map[string]string{
+		"inputDir":   filepath.Join(baseDir, InputDirName),
+		"stateDir":   filepath.Join(baseDir, StateDirName),
+		"secretsDir": filepath.Join(baseDir, SecretsDirName),
 	}
-	return os.RemoveAll(baseDir)
+	got := map[string]string{
+		"inputDir":   ctx.InputDir,
+		"stateDir":   ctx.StateDir,
+		"secretsDir": ctx.SecretsDir,
+	}
+	for field, raw := range got {
+		clean, err := cleanPath(raw)
+		if err != nil {
+			return fmt.Errorf("context %q %s: %w", ctx.Name, field, err)
+		}
+		if clean != want[field] {
+			return fmt.Errorf("context %q %s must be %s, got %s", ctx.Name, field, want[field], clean)
+		}
+	}
+	return nil
 }
 
 func cleanPath(path string) (string, error) {

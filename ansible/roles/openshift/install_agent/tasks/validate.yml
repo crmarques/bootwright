@@ -55,3 +55,25 @@
     - bootwright_install_agent_action_effective == 'boot_machine'
     - not bootwright_install_already_complete
     - not bootwright_agent_iso_path_stat.stat.exists
+
+- name: Verify generated agent ISO publish token exists
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+  register: bootwright_agent_iso_publish_token_stat
+  delegate_to: localhost
+  become: false
+  when:
+    - bootwright_install_agent_action_effective == 'boot_machine'
+    - not bootwright_install_already_complete
+
+- name: Fail when generated agent ISO publish token is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing agent-iso-publish-token at
+      {{ bootwright_install_local_work_dir }}/agent-iso-publish-token.
+      The create-agent-iso task must complete before boot-machine tasks can
+      boot nodes.
+  when:
+    - bootwright_install_agent_action_effective == 'boot_machine'
+    - not bootwright_install_already_complete
+    - not bootwright_agent_iso_publish_token_stat.stat.exists

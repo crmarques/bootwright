@@ -46,8 +46,8 @@ bootwright_clusters:
         providedBy: { loadBalancer: apps, address: apps-ip }
     agentIsoPublishTargets:
       - stageHost: services-host
-        stagePath: "{{ bootwright_host_state_dir }}/artifacts/lab-provider-default/agent-prod-3node.iso"
-        fetchUrl: https://192.168.133.1:8443/agent-prod-3node.iso
+        stagePath: "{{ bootwright_host_state_dir }}/artifacts/lab-provider-default/{{ bootwright_agent_iso_publish_token }}/agent-prod-3node.iso"
+        fetchUrl: https://192.168.133.1:8443/{{ bootwright_agent_iso_publish_token }}/agent-prod-3node.iso
         requiresHTTPS: true
         requiresByteRange: true
     networks:

@@ -35,9 +35,12 @@ func selectResourceFiles(files []string) ([]string, v1alpha1.Environment, bool, 
 		if err != nil {
 			return nil, env, true, err
 		}
-		info, err := os.Stat(path)
+		info, err := os.Lstat(path)
 		if err != nil {
 			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q: stat %s: %w", env.Metadata.Name, i, ref, path, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q must not be a symlink", env.Metadata.Name, i, ref)
 		}
 		if info.IsDir() {
 			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q must name a YAML file, got directory %s", env.Metadata.Name, i, ref, path)

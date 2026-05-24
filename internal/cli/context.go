@@ -62,6 +62,9 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 		if _, exists := store.Contexts[name]; exists && !yes {
 			return failf(1, "context %q already exists; rerun with --yes to update it", name)
 		}
+		if err := contextstore.EnsureBaseDir(ctx); err != nil {
+			return failErr(1, err)
+		}
 		prepared, err := contextstore.PrepareInputImport(files, ctx.InputDir, yes)
 		if err != nil {
 			return failErr(1, err)

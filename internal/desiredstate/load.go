@@ -86,9 +86,12 @@ func discoverFiles(paths []string) ([]string, error) {
 		if strings.TrimSpace(input) == "" {
 			return nil, errors.New("empty -f path is not allowed")
 		}
-		info, err := os.Stat(input)
+		info, err := os.Lstat(input)
 		if err != nil {
 			return nil, fmt.Errorf("stat %s: %w", input, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("input source %s must not be a symlink", input)
 		}
 		if !info.IsDir() {
 			if !isYAMLFile(input) {
@@ -115,6 +118,12 @@ func discoverFiles(paths []string) ([]string, error) {
 					if _, skip := nonWorkspaceDirs[base]; skip {
 						return filepath.SkipDir
 					}
+				}
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				if isYAMLFile(path) {
+					return fmt.Errorf("input file %s must not be a symlink", path)
 				}
 				return nil
 			}

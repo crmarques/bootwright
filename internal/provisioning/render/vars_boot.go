@@ -11,6 +11,7 @@ import (
 )
 
 const emulatedVmediaOffset = 1
+const agentISOPublishTokenExpr = "{{ bootwright_agent_iso_publish_token }}"
 
 func emulatedBMCListenPorts(l *v1alpha1.MachineProfileLibvirtProvisioner) (port, vmediaPort int) {
 	port = v1alpha1.DefaultBMCEmulationStartPort
@@ -111,8 +112,8 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 		},
 		"agentIso": map[string]any{
 			"stageHost": hostRef,
-			"stagePath": fmt.Sprintf("%s/%s", stageDir, isoBasename),
-			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s", vmediaPort, isoBasename),
+			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
+			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vmediaPort, agentISOPublishTokenExpr, isoBasename),
 		},
 		"media": map[string]any{
 			"libvirt": map[string]any{
@@ -157,8 +158,8 @@ func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, iso
 		return "", "", ""
 	}
 	port := artifactHTTPPort(publisher.Capability.HTTP)
-	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts/%s-%s/%s", publisher.ProviderName, publisher.Capability.Name, isoBasename)
-	fetchURL = fmt.Sprintf("%s://%s:%d/%s", artifactURLScheme, artifactURLHost(hostAddr), port, isoBasename)
+	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts/%s-%s/%s/%s", publisher.ProviderName, publisher.Capability.Name, agentISOPublishTokenExpr, isoBasename)
+	fetchURL = fmt.Sprintf("%s://%s:%d/%s/%s", artifactURLScheme, artifactURLHost(hostAddr), port, agentISOPublishTokenExpr, isoBasename)
 	return hostRef, stagePath, fetchURL
 }
 

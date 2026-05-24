@@ -32,7 +32,9 @@ bmc_password_file="${BOOTWRIGHT_REDFISH_PASSWORD_FILE:-${BMC_PASSWORD_FILE:-}}"
 bmc_credentials_ref=""
 provider_disable_certificate_verification=""
 redfish_ca=""
-redfish_insecure=1
+redfish_insecure=0
+redfish_tls_explicit=0
+redfish_tls_reason="default"
 prompt_for_password=1
 redfish_insert_attempt=1
 redfish_eject_first=0
@@ -71,6 +73,7 @@ Options:
   --security-uri URI              Manager SecurityService URI; auto-detected from ansible-output.log when possible
   --bmc-user USER                 Redfish username
   --bmc-password-file PATH        File containing password or username:password
+  --redfish-insecure              Disable Redfish BMC TLS certificate verification
   --redfish-secure                Verify the Redfish BMC TLS certificate
   --redfish-ca PATH               CA bundle for Redfish BMC TLS verification
   --no-redfish-insert             Skip the diagnostic InsertMedia attempt
@@ -321,12 +324,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --redfish-secure)
       redfish_insecure=0
+      redfish_tls_explicit=1
+      redfish_tls_reason="explicit_secure"
+      shift
+      ;;
+    --redfish-insecure)
+      redfish_insecure=1
+      redfish_tls_explicit=1
+      redfish_tls_reason="explicit_insecure"
       shift
       ;;
     --redfish-ca)
       [[ $# -ge 2 ]] || die "--redfish-ca needs a value"
       redfish_ca=$2
       redfish_insecure=0
+      redfish_tls_explicit=1
+      redfish_tls_reason="explicit_ca"
       shift 2
       ;;
     --no-redfish-insert)
@@ -969,6 +982,27 @@ normalize_base_url() {
     fi
     bmc_url=${bmc_url%/}
   fi
+}
+
+resolve_redfish_tls_mode() {
+  if [[ "${redfish_tls_explicit}" -eq 1 ]]; then
+    return 0
+  fi
+  case "${provider_disable_certificate_verification}" in
+    true)
+      redfish_insecure=1
+      redfish_tls_reason="desired_state_disableCertificateVerification"
+      append_note "redfish_tls_verification=disabled_from_desired_state"
+      ;;
+    false)
+      redfish_insecure=0
+      redfish_tls_reason="desired_state_verify"
+      ;;
+    *)
+      redfish_insecure=0
+      redfish_tls_reason="default_secure"
+      ;;
+  esac
 }
 
 load_password() {
@@ -1905,6 +1939,7 @@ write_summary() {
     printf 'redfish_user=%s\n' "${bmc_user:+provided}"
     printf 'redfish_password=%s\n' "${bmc_password:+provided}"
     printf 'redfish_tls_verification=%s\n' "$([[ "${redfish_insecure}" -eq 1 ]] && printf 'disabled_for_diagnostics' || printf 'enabled')"
+    printf 'redfish_tls_reason=%s\n' "${redfish_tls_reason}"
     printf 'redfish_insert_attempt=%s\n' "$([[ "${redfish_insert_attempt}" -eq 1 ]] && printf 'enabled' || printf 'disabled')"
     printf 'redfish_eject_first=%s\n' "$([[ "${redfish_eject_first}" -eq 1 ]] && printf 'enabled' || printf 'disabled')"
     printf 'state_change_consent=%s\n' "$([[ "${state_change_yes}" -eq 1 ]] && printf 'yes' || printf 'no')"
@@ -1934,6 +1969,7 @@ record_iso_url "${iso_url}"
 normalize_base_url
 discover_from_desired_state
 normalize_base_url
+resolve_redfish_tls_mode
 load_password
 prepare_auth_config
 discover_iso_path

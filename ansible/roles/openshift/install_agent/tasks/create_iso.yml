@@ -121,5 +121,20 @@
         bootwright_agent_iso_local_path: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
       changed_when: false
 
+    - name: Generate agent ISO publish token
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_publish_token: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_lowercase,digits') }}"
+      changed_when: false
+      no_log: true
+
+    - name: Record agent ISO publish token
+      ansible.builtin.copy:
+        dest: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+        mode: "0600"
+        content: "{{ bootwright_agent_iso_publish_token }}\n"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
     - name: Publish generated agent ISO
       ansible.builtin.import_tasks: publish_iso.yml

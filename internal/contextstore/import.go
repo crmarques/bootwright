@@ -232,9 +232,12 @@ func discoverInputFiles(paths []string) ([]inputFile, error) {
 		if raw == "" {
 			return nil, errors.New("empty -f path is not allowed")
 		}
-		info, err := os.Stat(raw)
+		info, err := os.Lstat(raw)
 		if err != nil {
 			return nil, fmt.Errorf("stat %s: %w", raw, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("input source %s must not be a symlink", raw)
 		}
 		if !info.IsDir() {
 			if !isYAML(raw) {
@@ -251,6 +254,12 @@ func discoverInputFiles(paths []string) ([]inputFile, error) {
 			if entry.IsDir() {
 				if path != root && strings.HasPrefix(entry.Name(), ".") {
 					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				if isYAML(path) {
+					return fmt.Errorf("input file %s must not be a symlink", path)
 				}
 				return nil
 			}
@@ -280,6 +289,16 @@ func discoverInputFiles(paths []string) ([]inputFile, error) {
 }
 
 func copyFile(src, dst string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", src, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("input file %s must not be a symlink", src)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("input file %s must be a regular file", src)
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", src, err)

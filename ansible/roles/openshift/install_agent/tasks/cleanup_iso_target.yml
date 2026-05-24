@@ -1,0 +1,21 @@
+---
+- name: Resolve staged agent ISO publish directory
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_publish_stage_dir: "{{ bootwright_agent_iso_publish_target.stagePath | dirname }}"
+  changed_when: false
+
+- name: Validate staged agent ISO publish directory
+  ansible.builtin.assert:
+    that:
+      - (bootwright_agent_iso_publish_stage_dir | length) > 1
+      - bootwright_agent_iso_publish_token in bootwright_agent_iso_publish_stage_dir
+    fail_msg: >-
+      Refusing to clean unsafe agent ISO publish directory
+      {{ bootwright_agent_iso_publish_stage_dir }}.
+
+- name: Remove staged agent ISO publish directory
+  ansible.builtin.file:
+    path: "{{ bootwright_agent_iso_publish_stage_dir }}"
+    state: absent
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true

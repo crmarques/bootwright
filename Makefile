@@ -128,6 +128,7 @@ $(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS) $(COLLECTIONS_LOCK)
 		-name tests -o -name docs -o -name examples -o -name changelogs \
 		-o -name .github -o -name .azure-pipelines -o -name ci \
 		\) -exec rm -rf {} +
+	@$(GO) test ./internal/repocheck -run TestAnsibleCollectionLockMatchesEmbeddedManifest
 	@touch $@
 
 $(BIN_DIR):
