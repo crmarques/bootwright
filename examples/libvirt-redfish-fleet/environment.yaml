@@ -6,7 +6,7 @@ spec:
   baseDomain: example.test
 
   bastion:
-    hostRef: lab-host
+    hostRef: services-host
 
   resources:
     - hosts.yaml

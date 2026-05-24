@@ -926,6 +926,69 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 	}
 }
 
+func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
+	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/create_iso.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")
+	localDirIdx := findAnsibleTask(t, tasks, "Create local installer artifact directory")
+	userIdx := findAnsibleTask(t, tasks, "Resolve SSH transfer user")
+	transferIdx := findAnsibleTask(t, tasks, "Transfer generated agent ISO to local runtime state")
+	recordIdx := findAnsibleTask(t, tasks, "Record local generated agent ISO path")
+	if !(localDirIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx) {
+		t.Fatalf("install_agent must prepare the local directory, resolve transfer user, transfer ISO, then record the local path")
+	}
+
+	if got := tasks[userIdx]["become"]; got != false {
+		t.Fatalf("transfer user detection must run without become, got %v", got)
+	}
+	userCommand, ok := tasks[userIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[userIdx]["name"])
+	}
+	if !stringListContains(userCommand["argv"], "id") || !stringListContains(userCommand["argv"], "-un") {
+		t.Fatalf("transfer user detection must resolve the SSH user with id -un, got %v", userCommand["argv"])
+	}
+
+	transferTasks := nestedAnsibleTasks(t, tasks[transferIdx], "block")
+	tempIdx := findAnsibleTask(t, transferTasks, "Create remote agent ISO transfer file")
+	stageIdx := findAnsibleTask(t, transferTasks, "Stage generated agent ISO for unprivileged transfer")
+	fetchIdx := findAnsibleTask(t, transferTasks, "Fetch generated agent ISO to local runtime state")
+	chmodIdx := findAnsibleTask(t, transferTasks, "Restrict local generated agent ISO permissions")
+	if !(tempIdx < stageIdx && stageIdx < fetchIdx && fetchIdx < chmodIdx) {
+		t.Fatalf("agent ISO transfer block must create temp file, stage readable copy, fetch, then restrict local permissions")
+	}
+
+	stageCommand, ok := transferTasks[stageIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", transferTasks[stageIdx]["name"])
+	}
+	for _, want := range []string{"install", "-m", "0600", "-o", "{{ bootwright_iso_transfer_user.stdout | trim }}", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_transfer_file.path }}"} {
+		if !stringListContains(stageCommand["argv"], want) {
+			t.Fatalf("agent ISO staging command missing %q: %v", want, stageCommand["argv"])
+		}
+	}
+
+	fetch, ok := transferTasks[fetchIdx]["ansible.builtin.fetch"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no fetch body", transferTasks[fetchIdx]["name"])
+	}
+	if got := transferTasks[fetchIdx]["become"]; got != false {
+		t.Fatalf("large ISO fetch must run without become, got %v", got)
+	}
+	if got := fetch["src"]; got != "{{ bootwright_agent_iso_transfer_file.path }}" {
+		t.Fatalf("large ISO fetch must read the unprivileged transfer file, got %v", got)
+	}
+
+	cleanupTasks := nestedAnsibleTasks(t, tasks[transferIdx], "always")
+	cleanupIdx := findAnsibleTask(t, cleanupTasks, "Remove remote agent ISO transfer file")
+	cleanup, ok := cleanupTasks[cleanupIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", cleanupTasks[cleanupIdx]["name"])
+	}
+	if cleanup["path"] != "{{ bootwright_agent_iso_transfer_file.path }}" || cleanup["state"] != "absent" {
+		t.Fatalf("agent ISO transfer cleanup got %v", cleanup)
+	}
+}
+
 func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{
@@ -1118,6 +1181,23 @@ func readAnsiblePlays(t *testing.T, rel string) []map[string]any {
 		t.Fatalf("%s: decode YAML: %v", rel, err)
 	}
 	return plays
+}
+
+func nestedAnsibleTasks(t *testing.T, task map[string]any, key string) []map[string]any {
+	t.Helper()
+	raw, ok := task[key].([]any)
+	if !ok {
+		t.Fatalf("%s has no %s task list", task["name"], key)
+	}
+	tasks := make([]map[string]any, 0, len(raw))
+	for i, item := range raw {
+		child, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("%s %s[%d] is not a task map", task["name"], key, i)
+		}
+		tasks = append(tasks, child)
+	}
+	return tasks
 }
 
 func hasHostProxyFactsImport(tasks []any) bool {

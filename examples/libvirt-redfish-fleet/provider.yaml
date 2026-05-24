@@ -10,7 +10,7 @@ spec:
       diskGiB: 120
       libvirt:
         hostRef:
-          name: lab-host
+          name: services-host
         uri: qemu:///system
         bmcEmulationDefaults:
           enabled: true
@@ -23,10 +23,10 @@ spec:
     - name: default
       haProxy:
         hostRef:
-          name: lab-host
+          name: services-host
 
   artifactPublishers:
     - name: default
       http:
         hostRef:
-          name: lab-host
+          name: services-host

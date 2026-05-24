@@ -14,6 +14,7 @@ Error and constraint knowledge extracted from code history. Match the reported s
 | Ansible / roles | `bootwright_current_cluster is undefined`; dynamic role import fails | [ansible-dynamic-role-dispatch.md](ansible-dynamic-role-dispatch.md) |
 | Ansible / runtime | `Module result deserialization failed`; `rc=-15`; cleanup killed Ansible wrapper | [ansible-module-wrapper-pkill.md](ansible-module-wrapper-pkill.md) |
 | Ansible / runtime | `Could not install packages due to an OSError`; `[Errno 2] No such file or directory`; `install ansible-core` | [ansible-managed-venv-rebuild.md](ansible-managed-venv-rebuild.md) |
+| Ansible / transfer | `Fetch generated agent ISO to local runtime state`; large file fetch appears stuck; `.openshift_install.log` idle after ISO generation | [ansible-fetch-become-large-file.md](ansible-fetch-become-large-file.md) |
 | Ansible / packages | `Failed to download metadata for repo`; `Cannot download repomd.xml`; `All mirrors were tried` | [ansible-dnf-unavailable-repo.md](ansible-dnf-unavailable-repo.md) |
 | Provider / BMC | Apply hangs at BMC wait tasks; port already in use after provider rename | [stale-bmc-port-wait-hang.md](stale-bmc-port-wait-hang.md) |
 | OpenShift install | Disconnected install fails TLS; agent never reaches SSH; image pull x509 error | [disconnected-trust-bundle-policy.md](disconnected-trust-bundle-policy.md) |

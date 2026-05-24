@@ -59,11 +59,54 @@
       delegate_to: localhost
       become: false
 
-    - name: Fetch generated agent ISO to local runtime state
-      ansible.builtin.fetch:
-        src: "{{ bootwright_agent_iso_path }}"
-        dest: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
-        flat: true
+    - name: Resolve SSH transfer user
+      ansible.builtin.command:
+        argv:
+          - id
+          - -un
+      register: bootwright_iso_transfer_user
+      changed_when: false
+      become: false
+
+    - name: Transfer generated agent ISO to local runtime state
+      block:
+        - name: Create remote agent ISO transfer file
+          ansible.builtin.tempfile:
+            state: file
+            suffix: ".iso"
+          register: bootwright_agent_iso_transfer_file
+
+        - name: Stage generated agent ISO for unprivileged transfer
+          ansible.builtin.command:
+            argv:
+              - install
+              - -m
+              - "0600"
+              - -o
+              - "{{ bootwright_iso_transfer_user.stdout | trim }}"
+              - "{{ bootwright_agent_iso_path }}"
+              - "{{ bootwright_agent_iso_transfer_file.path }}"
+          changed_when: true
+
+        - name: Fetch generated agent ISO to local runtime state
+          ansible.builtin.fetch:
+            src: "{{ bootwright_agent_iso_transfer_file.path }}"
+            dest: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
+            flat: true
+          become: false
+
+        - name: Restrict local generated agent ISO permissions
+          ansible.builtin.file:
+            path: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
+            mode: "0600"
+          delegate_to: localhost
+          become: false
+      always:
+        - name: Remove remote agent ISO transfer file
+          ansible.builtin.file:
+            path: "{{ bootwright_agent_iso_transfer_file.path }}"
+            state: absent
+          when: bootwright_agent_iso_transfer_file is defined and bootwright_agent_iso_transfer_file.path is defined
 
     - name: Record local generated agent ISO path
       ansible.builtin.copy:

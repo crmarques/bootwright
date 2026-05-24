@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Host
 metadata:
-  name: lab-host
+  name: services-host
 spec:
   addresses:
     - name: ssh
