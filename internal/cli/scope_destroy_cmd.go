@@ -35,7 +35,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
   # Destroy only specific clusters
   bootwright destroy %[1]s --scope managed-01 --yes`, scope.name),
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible commands without executing them")
 	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
@@ -72,7 +72,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		// per (provider, name), so destroying a shared instance breaks
 		// the unscoped consumers silently.
 		if scope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !httpServerOnly {
-			selectedNames, err := clusterNamesForTarget(state, scope.name, flags.clusterScope)
+			selectedNames, err := clusterNamesForTarget(state, flags.clusterScope)
 			if err != nil {
 				return failErr(1, err)
 			}

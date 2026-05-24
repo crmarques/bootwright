@@ -30,7 +30,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
   # Print the planned Ansible command without executing it
   bootwright check %[1]s --dry-run`, scope.name),
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, false), "check")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

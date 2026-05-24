@@ -15,7 +15,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
-		names, err := clusterNamesForTarget(state, target, scope)
+		names, err := clusterNamesForTarget(state, scope)
 		if err != nil {
 			return state, err
 		}
@@ -28,7 +28,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 	}
 }
 
-func clusterNamesForTarget(state v1alpha1.State, target, scope string) ([]string, error) {
+func clusterNamesForTarget(state v1alpha1.State, scope string) ([]string, error) {
 	if strings.TrimSpace(scope) != "" {
 		names, err := parseClusterScope(scope)
 		if err != nil {
@@ -108,7 +108,7 @@ func validateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 	if strings.TrimSpace(scope) == "" || (target != "infra" && target != "all") {
 		return nil
 	}
-	selectedNames, err := clusterNamesForTarget(state, target, scope)
+	selectedNames, err := clusterNamesForTarget(state, scope)
 	if err != nil {
 		return err
 	}

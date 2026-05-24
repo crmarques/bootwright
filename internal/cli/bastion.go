@@ -6,11 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 )
 
-func newBastionCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 	hostStateDir := defaultHostStateDir
 	cmd := &cobra.Command{
 		Use:   "check",
@@ -19,21 +18,21 @@ func newBastionCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Example: `  # Check the bastion has the runtime + CLIs the current context needs
   bootwright check bastion`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
-		state, err := loadDesiredState(cf)
+		_, err := loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
 		output.New(stdout).Command("bastion check")
-		return runBastionChecks(stdout, stderr, state, hostStateDir)
+		return runBastionChecks(stdout)
 	}
 	return cmd
 }
 
-func runBastionChecks(stdout io.Writer, _ io.Writer, state v1alpha1.State, hostStateDir string) error {
-	checks := collectBastionChecks(state, hostStateDir, defaultPreflightDeps)
+func runBastionChecks(stdout io.Writer) error {
+	checks := collectBastionChecks(defaultPreflightDeps)
 	return renderCheckResults(stdout, "bastion check", checks)
 }
 
@@ -57,7 +56,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
   # Apply non-interactively when passwordless sudo is available
   bootwright apply bastion --ask-become-pass=false --yes`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned commands without executing them")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
@@ -105,8 +104,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		}
 		switch {
 		case cliSpec != nil:
-			cliInstallEnv := controllerCLIAnsibleEnv(cliSpec.BundleDir)
-			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIBastionInventory), cliInstallEnv, askBecomePass)
+			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIBastionInventory), askBecomePass, "")
 			p.CommandLine("install OCP CLIs "+cliSpec.OCPReleaseVersion+" into "+cliSpec.InstallDir, cliInstallCommand)
 		default:
 			p.Status(output.StatusSkip, "install OCP CLIs", "no openshift.release.version declared in state")

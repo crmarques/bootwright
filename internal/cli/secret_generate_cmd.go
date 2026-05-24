@@ -21,7 +21,7 @@ func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 		Example: `  # Materialize every "generated:" secret declared by the current context
   bootwright secret generate`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()
 		if err != nil {

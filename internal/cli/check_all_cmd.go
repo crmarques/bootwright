@@ -26,7 +26,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   # Print the planned Ansible preflight command without executing
   bootwright check all --dry-run`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
@@ -36,7 +36,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		outputpkg(stdout).Command("all check")
-		if err := runBastionChecks(stdout, stderr, state, hostStateDir); err != nil {
+		if err := runBastionChecks(stdout); err != nil {
 			return err
 		}
 		ctx := cf.ctx

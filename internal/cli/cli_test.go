@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/contextstore"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/operator"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/scaffold"
 	"github.com/crmarques/bootwright/internal/workflow"
@@ -833,7 +836,7 @@ func TestControllerCLIAnsibleEnvForcesSystemTemps(t *testing.T) {
 }
 
 func TestControllerCLIInstallCommandPromptsForBecomeWhenRequested(t *testing.T) {
-	got := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, nil, true)
+	got := controllerCLIInstallCommand([]string{"/venv/bin/ansible-playbook", "play.yml"}, true, "")
 	want := []string{
 		"/venv/bin/ansible-playbook",
 		"play.yml",
@@ -844,8 +847,21 @@ func TestControllerCLIInstallCommandPromptsForBecomeWhenRequested(t *testing.T) 
 	}
 }
 
+func TestControllerCLIInstallCommandUsesBecomePasswordFile(t *testing.T) {
+	got := controllerCLIInstallCommand([]string{"/venv/bin/ansible-playbook", "play.yml"}, true, "/tmp/bootwright-become")
+	want := []string{
+		"/venv/bin/ansible-playbook",
+		"play.yml",
+		"--become-password-file",
+		"/tmp/bootwright-become",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("controller CLI command mismatch\n got %v\nwant %v", got, want)
+	}
+}
+
 func TestControllerCLIInstallCommandLeavesArgsUnwrappedWhenPromptDisabled(t *testing.T) {
-	got := controllerCLIInstallCommandForUID(1000, []string{"/venv/bin/ansible-playbook", "play.yml"}, nil, false)
+	got := controllerCLIInstallCommand([]string{"/venv/bin/ansible-playbook", "play.yml"}, false, "")
 	want := []string{
 		"/venv/bin/ansible-playbook",
 		"play.yml",
@@ -857,13 +873,98 @@ func TestControllerCLIInstallCommandLeavesArgsUnwrappedWhenPromptDisabled(t *tes
 
 func TestControllerCLIInstallCommandCopiesArgs(t *testing.T) {
 	args := []string{"/venv/bin/ansible-playbook", "play.yml"}
-	got := controllerCLIInstallCommandForUID(0, args, nil, false)
+	got := controllerCLIInstallCommand(args, false, "")
 	if !reflect.DeepEqual(got, args) {
 		t.Fatalf("controller CLI command got %v, want %v", got, args)
 	}
 	got[0] = "changed"
 	if args[0] == "changed" {
 		t.Fatal("controller CLI command aliases input args")
+	}
+}
+
+func TestRunControllerCLIInstallUsesPreparedBecomePasswordFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakeAnsible := filepath.Join(dir, "ansible-playbook")
+	argsPath := filepath.Join(dir, "args")
+	passwordPath := filepath.Join(dir, "password-path")
+	passwordBodyPath := filepath.Join(dir, "password-body")
+	if err := os.WriteFile(fakeAnsible, []byte(`#!/bin/sh
+printf '%s\n' "$@" > "$BOOTWRIGHT_TEST_ARGS"
+found=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --ask-become-pass)
+      exit 21
+      ;;
+    --become-password-file)
+      shift
+      found=1
+      printf '%s\n' "$1" > "$BOOTWRIGHT_TEST_PASSWORD_PATH"
+      cat "$1" > "$BOOTWRIGHT_TEST_PASSWORD_BODY"
+      ;;
+  esac
+  shift
+done
+test "$found" -eq 1
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	spec := operator.CLIInstallSpec{
+		OCPReleaseVersion: "4.21.12",
+		InstallDir:        "/usr/local/bin",
+		Executable:        fakeAnsible,
+	}
+	err := runControllerCLIInstall(
+		context.Background(),
+		strings.NewReader("secret\n"),
+		&stdout,
+		&stderr,
+		loadFixtureState(t, "001-sno-libvirt"),
+		t.TempDir(),
+		spec,
+		map[string]string{
+			"BOOTWRIGHT_TEST_ARGS":          argsPath,
+			"BOOTWRIGHT_TEST_PASSWORD_PATH": passwordPath,
+			"BOOTWRIGHT_TEST_PASSWORD_BODY": passwordBodyPath,
+		},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("runControllerCLIInstall: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "\nBECOME password: " {
+		t.Fatalf("stderr prompt = %q, want BECOME password prompt only", got)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatalf("read recorded args: %v", err)
+	}
+	if strings.Contains(string(args), "--ask-become-pass") {
+		t.Fatalf("actual ansible command should not ask interactively:\n%s", args)
+	}
+	if !strings.Contains(string(args), "--become-password-file\n") {
+		t.Fatalf("actual ansible command missing --become-password-file:\n%s", args)
+	}
+	passwordBody, err := os.ReadFile(passwordBodyPath)
+	if err != nil {
+		t.Fatalf("read recorded password body: %v", err)
+	}
+	if string(passwordBody) != "secret\n" {
+		t.Fatalf("password body = %q, want secret newline", passwordBody)
+	}
+	passwordFile, err := os.ReadFile(passwordPath)
+	if err != nil {
+		t.Fatalf("read recorded password path: %v", err)
+	}
+	if _, err := os.Stat(strings.TrimSpace(string(passwordFile))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("prepared password file was not cleaned up: %v", err)
 	}
 }
 

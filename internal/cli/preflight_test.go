@@ -57,7 +57,7 @@ func TestCollectBastionChecksUsesInjectedUID(t *testing.T) {
 		},
 		uid: func() int { return 0 },
 	}
-	checks := collectBastionChecks(loadFixtureState(t, "001-sno-libvirt"), "/host-state", deps)
+	checks := collectBastionChecks(deps)
 	for _, check := range checks {
 		if check.Name == "sudo" {
 			t.Fatalf("sudo check should be skipped for injected root UID: %+v", checks)
@@ -213,17 +213,6 @@ func TestClusterCheckLimitIncludesBootHosts(t *testing.T) {
 			t.Fatalf("cluster limit %q missing %q", limit, want)
 		}
 	}
-}
-
-func findPreflightCheck(t *testing.T, checks []preflightCheck, name string) preflightCheck {
-	t.Helper()
-	for _, check := range checks {
-		if check.Name == name {
-			return check
-		}
-	}
-	t.Fatalf("missing preflight check %q: %+v", name, checks)
-	return preflightCheck{}
 }
 
 func writeExecutable(t *testing.T, path string) {

@@ -35,7 +35,7 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(outputFormat); err != nil {
 			return failErr(2, err)

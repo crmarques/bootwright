@@ -72,7 +72,7 @@ type commonFlags struct {
 	ctx contextstore.Context
 }
 
-func addCommonFlags(cmd *cobra.Command) *commonFlags {
+func addCommonFlags() *commonFlags {
 	return &commonFlags{}
 }
 

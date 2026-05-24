@@ -40,7 +40,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
   # Apply when passwordless sudo is available on provider hosts
   bootwright apply %[1]s --ask-become-pass=false --yes`, scope.name),
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print a plan only; does not run readiness checks or Ansible")
 	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
@@ -131,6 +131,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		becomePasswordFile := ""
 		if !dryRun && !plan.noRemoteWork && plan.askBecomePass {
+			cliout.NewContinuation(stderr).BlankLine()
 			path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
 			if err != nil {
 				return failErr(1, err)

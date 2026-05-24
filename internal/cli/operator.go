@@ -76,7 +76,17 @@ func runControllerCLIInstall(ctx context.Context, stdin io.Reader, stdout io.Wri
 	for k, v := range extraEnv {
 		ansibleEnv[k] = v
 	}
-	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIBastionInventory), ansibleEnv, askBecomePass)
+	becomePasswordFile := ""
+	if askBecomePass {
+		output.NewContinuation(stderr).BlankLine()
+		path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		becomePasswordFile = path
+	}
+	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIBastionInventory), askBecomePass, becomePasswordFile)
 	env := operator.MergeBootstrapEnv(os.Environ(), ansibleEnv)
 	run := runCommandWithControllingTTY
 	if err := run(ctx, stdin, stdout, stderr, args, env); err != nil {
@@ -120,13 +130,11 @@ func controllerCLIAnsibleEnv(bundleDir string) map[string]string {
 	return env
 }
 
-func controllerCLIInstallCommand(args []string, ansibleEnv map[string]string, askBecomePass bool) []string {
-	return controllerCLIInstallCommandForUID(os.Getuid(), args, ansibleEnv, askBecomePass)
-}
-
-func controllerCLIInstallCommandForUID(_ int, args []string, _ map[string]string, askBecomePass bool) []string {
+func controllerCLIInstallCommand(args []string, askBecomePass bool, becomePasswordFile string) []string {
 	out := append([]string(nil), args...)
-	if askBecomePass {
+	if becomePasswordFile != "" {
+		out = append(out, "--become-password-file", becomePasswordFile)
+	} else if askBecomePass {
 		out = append(out, "--ask-become-pass")
 	}
 	return out

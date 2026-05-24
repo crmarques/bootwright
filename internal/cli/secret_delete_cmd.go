@@ -23,7 +23,7 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the delete confirmation prompt")
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
 		ctx, err := cf.resolve()
 		if err != nil {

@@ -18,7 +18,7 @@ func newPrintEnvCmd(stdout io.Writer) *cobra.Command {
 		Example: `  eval "$(bootwright print-env)"
   eval "$(bootwright print-env --sensitive)"`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow printing secret material such as proxy credentials")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		ctx, err := cf.resolve()

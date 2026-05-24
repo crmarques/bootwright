@@ -88,7 +88,7 @@ exec "$@"
 		nil,
 		&stdout,
 		&stderr,
-		controllerCLIInstallCommandForUID(1000, []string{"/bin/true"}, nil, false),
+		controllerCLIInstallCommand([]string{"/bin/true"}, false, ""),
 		env,
 	)
 	if err != nil {

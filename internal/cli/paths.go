@@ -14,10 +14,6 @@ const (
 	ansibleVenvDirName  = "ansible-venv"
 )
 
-func openshiftInstallSearchDirs(_ string) []string {
-	return []string{defaultControllerCLIInstallDir()}
-}
-
 func defaultControllerCLIInstallDir() string {
 	return "/usr/local/bin"
 }

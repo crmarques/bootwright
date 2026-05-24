@@ -20,7 +20,7 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newCheckSyntaxCmd(stdout),
-		retargetCommand(newBastionCheckCmd(stdout, stderr), "bastion", "Verify bastion dependencies"),
+		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
 		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
 		retargetCommand(newScopeCheckCmd(clusterScope, stdout, stderr), "cluster", "Check cluster install prerequisites"),
 		newCheckAllCmd(stdout, stderr),
@@ -70,7 +70,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   # Render placeholder installer files into the context state-dir
   bootwright render installer`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "write concrete tool input files to this directory")
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render with --output-dir")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")

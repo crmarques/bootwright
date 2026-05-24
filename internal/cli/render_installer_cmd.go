@@ -35,7 +35,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
   # Machine-readable output for CI
   bootwright render installer --output json`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective install-config.yaml/agent-config.yaml under each cluster's runtime installer directory (state-dir/runtime/<cluster>/installer/) with secret material inlined for direct openshift-install consumption (mode 0600)")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
@@ -49,7 +49,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 		}
 		ctx := cf.ctx
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-		names, err := clusterNamesForTarget(state, "all", clusterScope)
+		names, err := clusterNamesForTarget(state, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -87,7 +87,7 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	}
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-	names, err := clusterNamesForTarget(state, "all", clusterScope)
+	names, err := clusterNamesForTarget(state, clusterScope)
 	if err != nil {
 		return failErr(1, err)
 	}

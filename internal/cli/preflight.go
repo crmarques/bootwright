@@ -18,7 +18,7 @@ const (
 	checkGroupSecretMaterial  = "Secret material"
 )
 
-func collectBastionChecks(state v1alpha1.State, _ string, deps preflightDeps) []preflightCheck {
+func collectBastionChecks(deps preflightDeps) []preflightCheck {
 	checks := []preflightCheck{
 		pythonVersionCheck(deps),
 		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
@@ -132,49 +132,6 @@ func binaryCheck(group, name string, extraDirs []string, remediation string, dep
 		return failCheck(group, name, "not found", "Required command is unavailable to this workflow", remediation)
 	}
 	return okCheck(group, name, path)
-}
-
-func ocpCLIVersionCheck(group, name string, extraDirs []string, wantVersion, remediation string, deps preflightDeps) preflightCheck {
-	return binaryExactVersionCheck(group, name, extraDirs, wantVersion, remediation, deps, parseOCClientVersion, "version", "--client")
-}
-
-func openshiftInstallVersionCheck(group string, extraDirs []string, wantVersion, remediation string, deps preflightDeps) preflightCheck {
-	return binaryExactVersionCheck(group, "openshift-install", extraDirs, wantVersion, remediation, deps, parseOpenShiftInstallVersion, "version")
-}
-
-func binaryExactVersionCheck(group, name string, extraDirs []string, wantVersion, remediation string, deps preflightDeps, parse func(string) string, args ...string) preflightCheck {
-	if strings.TrimSpace(wantVersion) == "" {
-		return binaryCheck(group, name, extraDirs, remediation, deps)
-	}
-	path, err := deps.lookPath(name, extraDirs)
-	if err != nil {
-		if remediation == "" {
-			remediation = "install " + name + " on PATH"
-		}
-		return failCheck(group, name, "not found", "Required command is unavailable to this workflow", remediation)
-	}
-	out, err := deps.commandOutput(path, args...)
-	if err != nil {
-		return failCheck(group, name, path+" version probe failed", "Installed OpenShift CLI version could not be verified", remediation)
-	}
-	gotVersion := parse(string(out))
-	if gotVersion == "" {
-		return failCheck(group, name, path+" version could not be parsed", "Installed OpenShift CLI version could not be verified", remediation)
-	}
-	if gotVersion != wantVersion {
-		return failCheck(group, name, path+" is "+gotVersion+"; want "+wantVersion, "Installed OpenShift CLI version does not match requested release", remediation)
-	}
-	return okCheck(group, name, path+" ("+gotVersion+")")
-}
-
-func parseOCClientVersion(out string) string {
-	for _, line := range strings.Split(out, "\n") {
-		key, value, ok := strings.Cut(line, ":")
-		if ok && strings.TrimSpace(key) == "Client Version" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func parseOpenShiftInstallVersion(out string) string {

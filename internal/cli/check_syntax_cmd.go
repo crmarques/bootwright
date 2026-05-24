@@ -26,7 +26,7 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
   # Machine-readable output for CI
   bootwright check syntax --output json`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {

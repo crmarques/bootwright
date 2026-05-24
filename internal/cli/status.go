@@ -49,7 +49,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
   # Machine-readable output for CI
   bootwright status --output json`,
 	}
-	cf := addCommonFlags(cmd)
+	cf := addCommonFlags()
 	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.Flags().BoolVar(&watch, "watch", false, "refresh status until the current apply run reaches a terminal state")
