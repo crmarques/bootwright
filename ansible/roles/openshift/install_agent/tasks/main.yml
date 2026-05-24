@@ -19,9 +19,6 @@
 - name: Prepare controller endpoint DNS
   ansible.builtin.import_tasks: controller_dns.yml
 
-- name: Validate node endpoint DNS
-  ansible.builtin.import_tasks: node_dns.yml
-
 - name: Check existing install state
   ansible.builtin.import_tasks: skip_guard.yml
 
