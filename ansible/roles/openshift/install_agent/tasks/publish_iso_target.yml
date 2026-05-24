@@ -2,10 +2,14 @@
 - name: Validate agent ISO publish target
   ansible.builtin.assert:
     that:
-      - (bootwright_agent_iso_local_path | default('') | length) > 0
+      - (bootwright_agent_iso_path | default('') | length) > 0
       - (bootwright_agent_iso_publish_target.stageHost | default('') | length) > 0
       - (bootwright_agent_iso_publish_target.stagePath | default('') | length) > 0
       - (bootwright_agent_iso_publish_target.fetchUrl | default('') | length) > 0
+      - >-
+        (bootwright_agent_iso_publish_target.stageHost == (bootwright_host_name | default(inventory_hostname)))
+        or
+        ((bootwright_agent_iso_local_path | default('') | length) > 0)
       - >-
         (not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool))
         or
@@ -19,6 +23,11 @@
     bootwright_agent_iso_stage_dir: "{{ bootwright_agent_iso_publish_target.stagePath | dirname }}"
   changed_when: false
 
+- name: Determine agent ISO publish locality
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_stage_local_to_install_host: "{{ bootwright_agent_iso_publish_target.stageHost == (bootwright_host_name | default(inventory_hostname)) }}"
+  changed_when: false
+
 - name: Create agent ISO staging directory
   ansible.builtin.file:
     path: "{{ bootwright_agent_iso_stage_dir }}"
@@ -29,10 +38,52 @@
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
 
-- name: Stage agent ISO at the BMC fetch location
+- name: Link agent ISO at the BMC fetch location
+  ansible.builtin.command:
+    argv:
+      - ln
+      - "{{ bootwright_agent_iso_path }}"
+      - "{{ bootwright_agent_iso_publish_target.stagePath }}"
+  register: bootwright_agent_iso_stage_link
+  failed_when: false
+  changed_when: bootwright_agent_iso_stage_link.rc == 0
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true
+  when: bootwright_agent_iso_stage_local_to_install_host | bool
+
+- name: Copy agent ISO within the BMC fetch host
+  ansible.builtin.command:
+    argv:
+      - install
+      - -m
+      - "0600"
+      - -o
+      - root
+      - -g
+      - root
+      - "{{ bootwright_agent_iso_path }}"
+      - "{{ bootwright_agent_iso_publish_target.stagePath }}"
+  changed_when: true
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true
+  when:
+    - bootwright_agent_iso_stage_local_to_install_host | bool
+    - bootwright_agent_iso_stage_link.rc | default(1) != 0
+
+- name: Copy agent ISO to the BMC fetch host
   ansible.builtin.copy:
     src: "{{ bootwright_agent_iso_local_path }}"
     dest: "{{ bootwright_agent_iso_publish_target.stagePath }}"
+    owner: root
+    group: root
+    mode: "0600"
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true
+  when: not (bootwright_agent_iso_stage_local_to_install_host | bool)
+
+- name: Restrict staged agent ISO permissions
+  ansible.builtin.file:
+    path: "{{ bootwright_agent_iso_publish_target.stagePath }}"
     owner: root
     group: root
     mode: "0600"

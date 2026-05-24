@@ -595,18 +595,28 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml")
 	validateIdx := findAnsibleTask(t, tasks, "Validate agent ISO publish target")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
+	localityIdx := findAnsibleTask(t, tasks, "Determine agent ISO publish locality")
 	createDirIdx := findAnsibleTask(t, tasks, "Create agent ISO staging directory")
-	stageIdx := findAnsibleTask(t, tasks, "Stage agent ISO at the BMC fetch location")
+	linkIdx := findAnsibleTask(t, tasks, "Link agent ISO at the BMC fetch location")
+	sameHostCopyIdx := findAnsibleTask(t, tasks, "Copy agent ISO within the BMC fetch host")
+	crossHostCopyIdx := findAnsibleTask(t, tasks, "Copy agent ISO to the BMC fetch host")
+	restrictIdx := findAnsibleTask(t, tasks, "Restrict staged agent ISO permissions")
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(validateIdx < dirIdx && dirIdx < createDirIdx && createDirIdx < stageIdx && stageIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+	if !(validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
 		t.Fatalf("install_agent must validate the target, stage the ISO, and probe fetch reachability before node boot")
 	}
 
 	targetAssert, ok := tasks[validateIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s has no assert body", tasks[validateIdx]["name"])
+	}
+	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_path | default('') | length) > 0") {
+		t.Fatalf("publish target validation must require the generated ISO path, got %v", targetAssert["that"])
+	}
+	if !stringListContains(targetAssert["that"], "(bootwright_agent_iso_publish_target.stageHost == (bootwright_host_name | default(inventory_hostname))) or ((bootwright_agent_iso_local_path | default('') | length) > 0)") {
+		t.Fatalf("cross-host publish must require a controller-side transfer copy, got %v", targetAssert["that"])
 	}
 	if !stringListContains(targetAssert["that"], "(not (bootwright_agent_iso_publish_target.requiresHTTPS | default(false) | bool)) or ((bootwright_agent_iso_publish_target.fetchUrl | ansible.builtin.urlsplit('scheme') | lower) == 'https')") {
 		t.Fatalf("real Redfish ISO URL scheme guard must require HTTPS while allowing emulated Redfish, got %v", targetAssert["that"])
@@ -626,21 +636,70 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 		t.Fatalf("stage directory must use remote become, got %v", got)
 	}
 
-	stageCopy, ok := tasks[stageIdx]["ansible.builtin.copy"].(map[string]any)
+	stageLink, ok := tasks[linkIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no copy body", tasks[stageIdx]["name"])
+		t.Fatalf("%s has no command body", tasks[linkIdx]["name"])
 	}
-	if got := stageCopy["src"]; got != "{{ bootwright_agent_iso_local_path }}" {
+	for _, want := range []string{"ln", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_publish_target.stagePath }}"} {
+		if !stringListContains(stageLink["argv"], want) {
+			t.Fatalf("same-host stage link command missing %q: %v", want, stageLink["argv"])
+		}
+	}
+	if got := tasks[linkIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
+		t.Fatalf("stage link delegate got %v", got)
+	}
+	if got := tasks[linkIdx]["become"]; got != true {
+		t.Fatalf("stage link must use remote become, got %v", got)
+	}
+	if got := tasks[linkIdx]["when"]; got != "bootwright_agent_iso_stage_local_to_install_host | bool" {
+		t.Fatalf("stage link when got %v", got)
+	}
+
+	sameHostCopy, ok := tasks[sameHostCopyIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command body", tasks[sameHostCopyIdx]["name"])
+	}
+	for _, want := range []string{"install", "-m", "0600", "-o", "root", "-g", "root", "{{ bootwright_agent_iso_path }}", "{{ bootwright_agent_iso_publish_target.stagePath }}"} {
+		if !stringListContains(sameHostCopy["argv"], want) {
+			t.Fatalf("same-host stage copy command missing %q: %v", want, sameHostCopy["argv"])
+		}
+	}
+	if got := tasks[sameHostCopyIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
+		t.Fatalf("same-host stage copy delegate got %v", got)
+	}
+	if !stringListContains(tasks[sameHostCopyIdx]["when"], "bootwright_agent_iso_stage_local_to_install_host | bool") {
+		t.Fatalf("same-host stage copy must require same-host publishing, got %v", tasks[sameHostCopyIdx]["when"])
+	}
+	if !stringListContains(tasks[sameHostCopyIdx]["when"], "bootwright_agent_iso_stage_link.rc | default(1) != 0") {
+		t.Fatalf("same-host stage copy must only run after hard-link fallback, got %v", tasks[sameHostCopyIdx]["when"])
+	}
+
+	crossHostCopy, ok := tasks[crossHostCopyIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no copy body", tasks[crossHostCopyIdx]["name"])
+	}
+	if got := crossHostCopy["src"]; got != "{{ bootwright_agent_iso_local_path }}" {
 		t.Fatalf("stage copy source got %v", got)
 	}
-	if got := stageCopy["dest"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
+	if got := crossHostCopy["dest"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
 		t.Fatalf("stage destination got %v", got)
 	}
-	if got := tasks[stageIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
+	if got := tasks[crossHostCopyIdx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
 		t.Fatalf("stage copy delegate got %v", got)
 	}
-	if got := tasks[stageIdx]["become"]; got != true {
+	if got := tasks[crossHostCopyIdx]["become"]; got != true {
 		t.Fatalf("stage copy must use remote become, got %v", got)
+	}
+	if got := tasks[crossHostCopyIdx]["when"]; got != "not (bootwright_agent_iso_stage_local_to_install_host | bool)" {
+		t.Fatalf("cross-host stage copy when got %v", got)
+	}
+
+	restrict, ok := tasks[restrictIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", tasks[restrictIdx]["name"])
+	}
+	if got := restrict["path"]; got != "{{ bootwright_agent_iso_publish_target.stagePath }}" {
+		t.Fatalf("restrict path got %v", got)
 	}
 
 	fetchProbe, ok := tasks[fetchProbeIdx]["ansible.builtin.uri"].(map[string]any)
@@ -923,8 +982,8 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/validate.yml")
 	installStat := tasks[findAnsibleTask(t, tasks, "Verify rendered install-config exists")]
 	installFail := tasks[findAnsibleTask(t, tasks, "Fail when install-config is missing")]
-	isoPathStat := tasks[findAnsibleTask(t, tasks, "Verify generated agent ISO path exists")]
-	isoPathFail := tasks[findAnsibleTask(t, tasks, "Fail when generated agent ISO path is missing")]
+	tokenStat := tasks[findAnsibleTask(t, tasks, "Verify generated agent ISO publish token exists")]
+	tokenFail := tasks[findAnsibleTask(t, tasks, "Fail when generated agent ISO publish token is missing")]
 
 	if got, _ := installStat["when"].(string); got != "bootwright_install_agent_action_effective in ['run', 'create_iso']" {
 		t.Fatalf("install-config stat when got %v", installStat["when"])
@@ -946,16 +1005,19 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 		t.Fatalf("install-config failure message must mention --sensitive and not removed --resolve-secrets: %v", installFail["ansible.builtin.fail"])
 	}
 
-	if !stringListContains(isoPathStat["when"], "bootwright_install_agent_action_effective == 'boot_machine'") {
-		t.Fatalf("agent ISO path stat when got %v", isoPathStat["when"])
+	if findAnsibleTaskIndex(tasks, "Verify generated agent ISO path exists") >= 0 {
+		t.Fatalf("boot action must not require a local ISO path marker")
+	}
+	if !stringListContains(tokenStat["when"], "bootwright_install_agent_action_effective == 'boot_machine'") {
+		t.Fatalf("agent ISO token stat when got %v", tokenStat["when"])
 	}
 	for _, want := range []string{
 		"bootwright_install_agent_action_effective == 'boot_machine'",
 		"not bootwright_install_already_complete",
-		"not bootwright_agent_iso_path_stat.stat.exists",
+		"not bootwright_agent_iso_publish_token_stat.stat.exists",
 	} {
-		if !stringListContains(isoPathFail["when"], want) {
-			t.Fatalf("agent ISO path failure when missing %q: %v", want, isoPathFail["when"])
+		if !stringListContains(tokenFail["when"], want) {
+			t.Fatalf("agent ISO token failure when missing %q: %v", want, tokenFail["when"])
 		}
 	}
 }
@@ -964,17 +1026,42 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/create_iso.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")
 	localDirIdx := findAnsibleTask(t, tasks, "Create local installer artifact directory")
+	previousTokenIdx := findAnsibleTask(t, tasks, "Read previous agent ISO publish token")
+	previousCleanupIdx := findAnsibleTask(t, tasks, "Remove previous staged agent ISO publish directories")
+	decisionIdx := findAnsibleTask(t, tasks, "Determine whether local agent ISO transfer is needed")
 	userIdx := findAnsibleTask(t, tasks, "Resolve SSH transfer user")
 	transferIdx := findAnsibleTask(t, tasks, "Transfer generated agent ISO to local runtime state")
 	recordIdx := findAnsibleTask(t, tasks, "Record local generated agent ISO path")
 	setLocalIdx := findAnsibleTask(t, tasks, "Set local generated agent ISO path")
 	publishIdx := findAnsibleTask(t, tasks, "Publish generated agent ISO")
-	if !(localDirIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx && recordIdx < setLocalIdx && setLocalIdx < publishIdx) {
-		t.Fatalf("install_agent must transfer, record, and publish the local ISO path in order")
+	removeLocalIdx := findAnsibleTask(t, tasks, "Remove local generated agent ISO transfer copy")
+	if !(localDirIdx < previousTokenIdx && previousTokenIdx < previousCleanupIdx && previousCleanupIdx < decisionIdx && decisionIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx && recordIdx < setLocalIdx && setLocalIdx < publishIdx && publishIdx < removeLocalIdx) {
+		t.Fatalf("install_agent must clean stale publish state, transfer only when needed, publish, then remove local ISO copies")
+	}
+
+	if got := tasks[previousTokenIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("previous token read must run locally, got %v", got)
+	}
+	if got := tasks[previousTokenIdx]["failed_when"]; got != false {
+		t.Fatalf("previous token read must tolerate absent state, got %v", got)
+	}
+	if got := tasks[previousCleanupIdx]["ansible.builtin.include_tasks"]; got != "cleanup_iso_target.yml" {
+		t.Fatalf("previous publish cleanup must reuse cleanup_iso_target.yml, got %v", got)
+	}
+
+	decision, ok := tasks[decisionIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[decisionIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(decision["bootwright_agent_iso_requires_local_copy"]), "rejectattr('stageHost', 'equalto', bootwright_host_name | default(inventory_hostname))") {
+		t.Fatalf("local copy decision must only require transfer for off-host publish targets, got %v", decision)
 	}
 
 	if got := tasks[userIdx]["become"]; got != false {
 		t.Fatalf("transfer user detection must run without become, got %v", got)
+	}
+	if got := tasks[userIdx]["when"]; got != "bootwright_agent_iso_requires_local_copy | bool" {
+		t.Fatalf("transfer user detection must only run when a local copy is needed, got %v", got)
 	}
 	userCommand, ok := tasks[userIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -982,6 +1069,9 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	}
 	if !stringListContains(userCommand["argv"], "id") || !stringListContains(userCommand["argv"], "-un") {
 		t.Fatalf("transfer user detection must resolve the SSH user with id -un, got %v", userCommand["argv"])
+	}
+	if got := tasks[transferIdx]["when"]; got != "bootwright_agent_iso_requires_local_copy | bool" {
+		t.Fatalf("agent ISO transfer must only run when a local copy is needed, got %v", got)
 	}
 
 	transferTasks := nestedAnsibleTasks(t, tasks[transferIdx], "block")
@@ -1022,6 +1112,65 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	}
 	if cleanup["path"] != "{{ bootwright_agent_iso_transfer_file.path }}" || cleanup["state"] != "absent" {
 		t.Fatalf("agent ISO transfer cleanup got %v", cleanup)
+	}
+
+	if got := tasks[setLocalIdx]["when"]; got != "bootwright_agent_iso_requires_local_copy | bool" {
+		t.Fatalf("local ISO path fact must only be set when transfer ran, got %v", got)
+	}
+	removeLocal, ok := tasks[removeLocalIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", tasks[removeLocalIdx]["name"])
+	}
+	if got := removeLocal["path"]; got != "{{ bootwright_agent_iso_local_path | default('') }}" {
+		t.Fatalf("local ISO cleanup path got %v", got)
+	}
+	if got := tasks[removeLocalIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("local ISO cleanup must run locally, got %v", got)
+	}
+}
+
+func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T) {
+	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	recordIdx := findAnsibleTask(t, tasks, "Record local kubeconfig path")
+	findRemoteIdx := findAnsibleTask(t, tasks, "Find remote generated agent ISO files")
+	removeRemoteIdx := findAnsibleTask(t, tasks, "Remove remote generated agent ISO files")
+	removeBootArtifactsIdx := findAnsibleTask(t, tasks, "Remove remote generated boot artifacts")
+	findLocalIdx := findAnsibleTask(t, tasks, "Find local generated agent ISO files")
+	removeLocalIdx := findAnsibleTask(t, tasks, "Remove local generated agent ISO files")
+	removeRemotePathIdx := findAnsibleTask(t, tasks, "Remove remote agent ISO path record")
+	removeLocalPathIdx := findAnsibleTask(t, tasks, "Remove local agent ISO path record")
+	if !(recordIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
+		t.Fatalf("wait_install must fetch credentials before removing generated ISO artifacts")
+	}
+
+	remoteFind, ok := tasks[findRemoteIdx]["ansible.builtin.find"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no find body", tasks[findRemoteIdx]["name"])
+	}
+	if remoteFind["paths"] != "{{ bootwright_install_work_dir }}" || remoteFind["patterns"] != "agent.*.iso" {
+		t.Fatalf("remote ISO cleanup find got %v", remoteFind)
+	}
+	bootArtifacts, ok := tasks[removeBootArtifactsIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", tasks[removeBootArtifactsIdx]["name"])
+	}
+	if bootArtifacts["path"] != "{{ bootwright_install_work_dir }}/boot-artifacts" || bootArtifacts["state"] != "absent" {
+		t.Fatalf("boot artifact cleanup got %v", bootArtifacts)
+	}
+	if got := tasks[findLocalIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("local ISO cleanup find must run locally, got %v", got)
+	}
+	if got := tasks[removeLocalIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("local ISO cleanup must run locally, got %v", got)
+	}
+	if got := tasks[removeLocalPathIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("local ISO path cleanup must run locally, got %v", got)
+	}
+	for _, idx := range []int{findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
+		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
+			t.Fatalf("%s must only clean after successful wait, got when=%v", tasks[idx]["name"], got)
+		}
 	}
 }
 

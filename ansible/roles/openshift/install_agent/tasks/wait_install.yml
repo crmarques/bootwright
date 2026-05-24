@@ -72,6 +72,64 @@
       delegate_to: localhost
       become: false
       when: bootwright_install_wait.rc == 0
+
+    - name: Find remote generated agent ISO files
+      ansible.builtin.find:
+        paths: "{{ bootwright_install_work_dir }}"
+        patterns: "agent.*.iso"
+        file_type: file
+      register: bootwright_remote_agent_iso_cleanup_find
+      when: bootwright_install_wait.rc == 0
+
+    - name: Remove remote generated agent ISO files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ bootwright_remote_agent_iso_cleanup_find.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: bootwright_install_wait.rc == 0
+
+    - name: Remove remote generated boot artifacts
+      ansible.builtin.file:
+        path: "{{ bootwright_install_work_dir }}/boot-artifacts"
+        state: absent
+      when: bootwright_install_wait.rc == 0
+
+    - name: Find local generated agent ISO files
+      ansible.builtin.find:
+        paths: "{{ bootwright_install_local_work_dir }}"
+        patterns: "agent.*.iso"
+        file_type: file
+      register: bootwright_local_agent_iso_cleanup_find
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Remove local generated agent ISO files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ bootwright_local_agent_iso_cleanup_find.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Remove remote agent ISO path record
+      ansible.builtin.file:
+        path: "{{ bootwright_install_work_dir }}/agent-iso.path"
+        state: absent
+      when: bootwright_install_wait.rc == 0
+
+    - name: Remove local agent ISO path record
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
   always:
     - name: Read agent ISO publish token for cleanup
       ansible.builtin.slurp:

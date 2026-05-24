@@ -2,18 +2,6 @@
 - name: Boot selected machine when install is not already complete
   when: not bootwright_install_already_complete
   block:
-    - name: Read generated agent ISO path
-      ansible.builtin.slurp:
-        src: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
-      register: bootwright_agent_iso_path_file
-      delegate_to: localhost
-      become: false
-
-    - name: Set agent ISO path
-      ansible.builtin.set_fact:
-        bootwright_agent_iso_path: "{{ bootwright_agent_iso_path_file.content | b64decode | trim }}"
-      changed_when: false
-
     - name: Read agent ISO publish token
       ansible.builtin.slurp:
         src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"

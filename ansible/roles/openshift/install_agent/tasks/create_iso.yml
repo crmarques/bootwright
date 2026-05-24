@@ -2,6 +2,86 @@
 - name: Create cluster agent ISO when install is not already complete
   when: not bootwright_install_already_complete
   block:
+    - name: Create local installer artifact directory
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Read previous agent ISO publish token
+      ansible.builtin.slurp:
+        src: "{{ bootwright_install_local_work_dir }}/agent-iso-publish-token"
+      register: bootwright_previous_agent_iso_publish_token_file
+      delegate_to: localhost
+      become: false
+      failed_when: false
+      no_log: true
+      when: (bootwright_current_cluster.agentIsoPublishTargets | default([]) | length) > 0
+
+    - name: Set previous agent ISO publish token
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_publish_token: "{{ bootwright_previous_agent_iso_publish_token_file.content | b64decode | trim }}"
+      changed_when: false
+      no_log: true
+      when:
+        - bootwright_previous_agent_iso_publish_token_file is defined
+        - (bootwright_previous_agent_iso_publish_token_file.content | default('') | length) > 0
+
+    - name: Remove previous staged agent ISO publish directories
+      ansible.builtin.include_tasks: cleanup_iso_target.yml
+      loop: "{{ bootwright_current_cluster.agentIsoPublishTargets | default([]) }}"
+      loop_control:
+        loop_var: bootwright_agent_iso_publish_target
+        label: "{{ bootwright_agent_iso_publish_target.stagePath }}"
+      when: (bootwright_agent_iso_publish_token | default('') | length) > 0
+
+    - name: Find stale local agent ISO copies
+      ansible.builtin.find:
+        paths: "{{ bootwright_install_local_work_dir }}"
+        patterns: "agent.*.iso"
+        file_type: file
+      register: bootwright_stale_local_agent_iso_find
+      delegate_to: localhost
+      become: false
+
+    - name: Remove stale local agent ISO copies
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ bootwright_stale_local_agent_iso_find.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Remove stale local agent ISO metadata
+      ansible.builtin.file:
+        path: "{{ bootwright_install_local_work_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - agent-iso.path
+        - agent-iso-publish-token
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Find stale remote agent ISO files
+      ansible.builtin.find:
+        paths: "{{ bootwright_install_work_dir }}"
+        patterns: "agent.*.iso"
+        file_type: file
+      register: bootwright_stale_remote_agent_iso_find
+
+    - name: Remove stale remote agent ISO files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ bootwright_stale_remote_agent_iso_find.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+
     - name: Remove stale installer state before ISO generation
       ansible.builtin.file:
         path: "{{ bootwright_install_work_dir }}/{{ item }}"
@@ -51,13 +131,18 @@
         mode: "0600"
         content: "{{ bootwright_agent_iso_path }}\n"
 
-    - name: Create local installer artifact directory
-      ansible.builtin.file:
-        path: "{{ bootwright_install_local_work_dir }}"
-        state: directory
-        mode: "0700"
-      delegate_to: localhost
-      become: false
+    - name: Determine whether local agent ISO transfer is needed
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_requires_local_copy: >-
+          {{
+            (
+              bootwright_current_cluster.agentIsoPublishTargets | default([])
+              | rejectattr('stageHost', 'equalto', bootwright_host_name | default(inventory_hostname))
+              | list
+              | length
+            ) > 0
+          }}
+      changed_when: false
 
     - name: Resolve SSH transfer user
       ansible.builtin.command:
@@ -67,6 +152,7 @@
       register: bootwright_iso_transfer_user
       changed_when: false
       become: false
+      when: bootwright_agent_iso_requires_local_copy | bool
 
     - name: Transfer generated agent ISO to local runtime state
       block:
@@ -107,12 +193,13 @@
             path: "{{ bootwright_agent_iso_transfer_file.path }}"
             state: absent
           when: bootwright_agent_iso_transfer_file is defined and bootwright_agent_iso_transfer_file.path is defined
+      when: bootwright_agent_iso_requires_local_copy | bool
 
     - name: Record local generated agent ISO path
       ansible.builtin.copy:
         dest: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
         mode: "0600"
-        content: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}\n"
+        content: "{{ (bootwright_install_local_work_dir ~ '/' ~ (bootwright_agent_iso_path | basename)) if (bootwright_agent_iso_requires_local_copy | bool) else bootwright_agent_iso_path }}\n"
       delegate_to: localhost
       become: false
 
@@ -120,6 +207,7 @@
       ansible.builtin.set_fact:
         bootwright_agent_iso_local_path: "{{ bootwright_install_local_work_dir }}/{{ bootwright_agent_iso_path | basename }}"
       changed_when: false
+      when: bootwright_agent_iso_requires_local_copy | bool
 
     - name: Generate agent ISO publish token
       ansible.builtin.set_fact:
@@ -138,3 +226,11 @@
 
     - name: Publish generated agent ISO
       ansible.builtin.import_tasks: publish_iso.yml
+
+    - name: Remove local generated agent ISO transfer copy
+      ansible.builtin.file:
+        path: "{{ bootwright_agent_iso_local_path | default('') }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      when: (bootwright_agent_iso_local_path | default('') | length) > 0
