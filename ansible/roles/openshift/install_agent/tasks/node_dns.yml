@@ -58,13 +58,15 @@
       {%- set failures = [] -%}
       {%- for r in bootwright_node_dns_probes.results | default([]) -%}
       {%- set answers = (r.stdout | default('')).split() | select('match', '^[0-9.]+$') | list -%}
+      {%- set probe_error = (r.stderr | default('') | trim) -%}
+      {%- set got = ('<probe error: ' ~ probe_error ~ '>') if (r.rc != 0 and probe_error != '') else ((answers | join(', ')) or '<no answer>') -%}
       {%- if r.item.kind == 'positive' -%}
       {%- if r.rc != 0 or r.item.address not in answers -%}
       {%- set _ = failures.append({
             'dnsServer': r.item.dnsServer,
             'hostname': r.item.hostname,
             'expected': r.item.address,
-            'got': (answers | join(', ')) or '<no answer>',
+            'got': got,
             'kind': 'missing-or-wrong',
           }) -%}
       {%- endif -%}
