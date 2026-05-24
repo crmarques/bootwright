@@ -17,6 +17,12 @@
   become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: host_proxy
+        tasks_from: facts
+
   vars:
     bootwright_host_machine_components: >-
       {{

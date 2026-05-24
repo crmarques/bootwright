@@ -56,6 +56,34 @@ func TestClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
 	}
 }
 
+func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
+	for _, path := range []string{
+		"ansible/playbooks/checks/become.yml",
+		"ansible/playbooks/checks/preflight.yml",
+		"ansible/playbooks/layers/cluster_infra/apply.yml",
+		"ansible/playbooks/layers/openshift/boot-agent-machine.yml",
+		"ansible/playbooks/layers/openshift/create-agent-iso.yml",
+		"ansible/playbooks/layers/openshift/destroy-agent.yml",
+		"ansible/playbooks/layers/openshift/install-agent.yml",
+		"ansible/playbooks/layers/openshift/wait-agent-install.yml",
+		"ansible/playbooks/layers/providers/apply.yml",
+	} {
+		for _, play := range readAnsiblePlays(t, path) {
+			env, _ := play["environment"].(string)
+			if !strings.Contains(env, "bootwright_proxy_env") {
+				continue
+			}
+			preTasks, ok := play["pre_tasks"].([]any)
+			if !ok {
+				t.Fatalf("%s play %q uses bootwright_proxy_env without pre_tasks", path, play["name"])
+			}
+			if !hasHostProxyFactsImport(preTasks) {
+				t.Fatalf("%s play %q must import host_proxy facts before proxied tasks", path, play["name"])
+			}
+		}
+	}
+}
+
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/main.yml")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
@@ -1081,6 +1109,35 @@ func readAnsibleTasks(t *testing.T, rel string) []map[string]any {
 		t.Fatalf("%s: decode YAML: %v", rel, err)
 	}
 	return tasks
+}
+
+func readAnsiblePlays(t *testing.T, rel string) []map[string]any {
+	t.Helper()
+	var plays []map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, rel)), &plays); err != nil {
+		t.Fatalf("%s: decode YAML: %v", rel, err)
+	}
+	return plays
+}
+
+func hasHostProxyFactsImport(tasks []any) bool {
+	for _, raw := range tasks {
+		task, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if task["name"] != "Resolve proxy environment" {
+			continue
+		}
+		importRole, ok := task["ansible.builtin.import_role"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if importRole["name"] == "host_proxy" && importRole["tasks_from"] == "facts" {
+			return true
+		}
+	}
+	return false
 }
 
 func findAnsibleTask(t *testing.T, tasks []map[string]any, name string) int {

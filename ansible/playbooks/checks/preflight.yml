@@ -17,20 +17,12 @@
   become: false
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
-  vars:
-    bootwright_host_kvm_machines: >-
-      {{
-        bootwright_clusters | default([])
-        | map(attribute='components') | flatten
-        | selectattr('kind', 'equalto', 'machines')
-        | selectattr('requiresKVM', 'defined')
-        | selectattr('requiresKVM', 'equalto', true)
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
-        | list
-      }}
-
   pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: host_proxy
+        tasks_from: facts
+
     - name: Assert rendered vars contract
       ansible.builtin.assert:
         that:
@@ -44,6 +36,19 @@
           an Ansible update, or vars.yaml was hand-edited. Re-run
           `bootwright render installer` (or `bootwright check`) from the
           Go binary to refresh.
+
+  vars:
+    bootwright_host_kvm_machines: >-
+      {{
+        bootwright_clusters | default([])
+        | map(attribute='components') | flatten
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('requiresKVM', 'defined')
+        | selectattr('requiresKVM', 'equalto', true)
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
 
   tasks:
     - name: Verify Ansible transport
