@@ -143,6 +143,26 @@ func TestRunPassesControllingTTYToRunner(t *testing.T) {
 	}
 }
 
+func TestRunPassesForksToRunner(t *testing.T) {
+	runner := &fakeRunner{}
+	_, err := Run(context.Background(), RunOptions{
+		State:             minimalState(),
+		StateDir:          t.TempDir(),
+		SecretsDir:        t.TempDir(),
+		HostStateDir:      "/var/lib/bootwright",
+		BundleDir:         t.TempDir(),
+		Playbook:          "playbooks/targets/clusters/apply.yml",
+		ArtifactsBaseName: "clusters",
+		Forks:             9,
+	}, runner, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if runner.lastSpec.Forks != 9 {
+		t.Fatalf("RunSpec.Forks = %d, want 9", runner.lastSpec.Forks)
+	}
+}
+
 func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
 	runner := &fakeRunner{}
 	_, err := Run(context.Background(), RunOptions{
@@ -284,13 +304,48 @@ func TestLimitMatchesNoHostsTable(t *testing.T) {
 		{"only empty groups", render.GroupProviderHosts + ":" + render.GroupInfraHosts, true},
 		{"unknown group", "no_such_group", true},
 		{"mix of empty and non-empty", render.GroupProviderHosts + ":" + render.GroupOCPHosts, false},
+		{"literal inventory host", "lab-host", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := LimitMatchesNoHosts(tc.limit, state); got != tc.want {
+			testState := state
+			if tc.limit == "lab-host" {
+				testState = stateWithInfraHost("lab-host")
+			}
+			if got := LimitMatchesNoHosts(tc.limit, testState); got != tc.want {
 				t.Fatalf("LimitMatchesNoHosts(%q) = %v, want %v", tc.limit, got, tc.want)
 			}
 		})
+	}
+}
+
+func stateWithInfraHost(hostName string) v1alpha1.State {
+	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				MachineProfiles: []v1alpha1.MachineProfileCapability{{
+					Name: "profile",
+					Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
+						HostRef: v1alpha1.LocalObjectReference{Name: hostName},
+					},
+				}},
+			},
+		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{
+			Metadata: v1alpha1.Metadata{Name: "infra"},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Components: v1alpha1.ClusterComponents{
+					Machines: []v1alpha1.ClusterMachineComponent{{
+						Name: "master-0",
+						From: v1alpha1.From{Provider: "provider", Profile: "profile"},
+					}},
+				},
+			},
+		}},
 	}
 }
 

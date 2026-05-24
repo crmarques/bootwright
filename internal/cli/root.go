@@ -23,6 +23,13 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		Short: "Desired-state OpenShift fleet provisioning",
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
 			"to drive OpenShift cluster lifecycle.",
+		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
+  bootwright secret list
+  bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+  bootwright secret generate
+  bootwright check syntax
+  bootwright apply infra --dry-run
+  bootwright apply cluster --dry-run`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

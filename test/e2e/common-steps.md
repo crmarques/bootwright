@@ -81,7 +81,7 @@ machine infrastructure, the managed load balancer (see
 machine-control integration (Redfish for bare metal or libvirt with emulated
 Redfish), and
 managed Squid (see [proxy.md](proxy.md)) when declared. The case's
-`provider.yaml` capabilities and `clusterinfra.yaml`'s
+`provider.yaml` capabilities and `cluster-infra.yaml`'s
 `components.<X>.from` references together decide which of these
 apply.
 
@@ -145,7 +145,7 @@ tail -f "$BOOTWRIGHT_STATE_DIR/runtime/$CLUSTER/installer/.openshift_install.log
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
-per-machine overlays in `clusterinfra.yaml` under
+per-machine overlays in `cluster-infra.yaml` under
 `spec.components.machines[].networkConfig.addresses[]`. Then watch the agent
 or bootkube journals:
 

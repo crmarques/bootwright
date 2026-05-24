@@ -54,19 +54,21 @@ type RunLedger struct {
 }
 
 type TaskLedgerEntry struct {
-	ID            string     `json:"id"`
-	Kind          string     `json:"kind"`
-	Label         string     `json:"label"`
-	Cluster       string     `json:"cluster,omitempty"`
-	Node          string     `json:"node,omitempty"`
-	Host          string     `json:"host,omitempty"`
-	Status        TaskStatus `json:"status"`
-	Dependencies  []string   `json:"dependencies,omitempty"`
-	StartedAt     *time.Time `json:"startedAt,omitempty"`
-	EndedAt       *time.Time `json:"endedAt,omitempty"`
-	LogPath       string     `json:"logPath,omitempty"`
-	Failure       string     `json:"failure,omitempty"`
-	SkippedReason string     `json:"skippedReason,omitempty"`
+	ID             string     `json:"id"`
+	Kind           string     `json:"kind"`
+	Label          string     `json:"label"`
+	Cluster        string     `json:"cluster,omitempty"`
+	Node           string     `json:"node,omitempty"`
+	Host           string     `json:"host,omitempty"`
+	ResourceKeys   []string   `json:"resourceKeys,omitempty"`
+	Status         TaskStatus `json:"status"`
+	Dependencies   []string   `json:"dependencies,omitempty"`
+	StartedAt      *time.Time `json:"startedAt,omitempty"`
+	EndedAt        *time.Time `json:"endedAt,omitempty"`
+	LogPath        string     `json:"logPath,omitempty"`
+	ClusterLogPath string     `json:"clusterLogPath,omitempty"`
+	Failure        string     `json:"failure,omitempty"`
+	SkippedReason  string     `json:"skippedReason,omitempty"`
 }
 
 type ProgressCount struct {

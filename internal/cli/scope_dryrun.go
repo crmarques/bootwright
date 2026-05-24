@@ -15,6 +15,8 @@ type scopeDryRunReport struct {
 	Target           string            `json:"target"`
 	Action           string            `json:"action"`
 	DryRun           bool              `json:"dryRun"`
+	PlanOnly         bool              `json:"planOnly"`
+	ReadinessChecks  string            `json:"readinessChecks"`
 	Phases           []string          `json:"phases"`
 	StateDir         string            `json:"stateDir"`
 	SecretsDir       string            `json:"secretsDir"`
@@ -52,7 +54,7 @@ type scopeDryRunApply struct {
 	Tasks     []workflow.TaskLedgerEntry `json:"tasks"`
 }
 
-func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []applyTask) error {
+func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []applyTask, forks int) error {
 	ctx := cf.ctx
 	bundleDir, err := resolveBundleDir(ctx.StateDir)
 	if err != nil {
@@ -68,6 +70,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		BundleDir:         bundleDir,
 		Playbook:          playbook,
 		Limit:             limit,
+		Forks:             forks,
 		ExtraVarPairs:     extraVarPairs,
 		ArtifactsBaseName: artifactsBaseName,
 		Check:             check,
@@ -83,6 +86,8 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		Target:           scope.name,
 		Action:           action,
 		DryRun:           true,
+		PlanOnly:         true,
+		ReadinessChecks:  "not run; run bootwright check " + scope.name,
 		Phases:           selectedPhaseNames(selected),
 		StateDir:         ctx.StateDir,
 		SecretsDir:       ctx.SecretsDir,

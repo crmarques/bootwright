@@ -88,7 +88,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 
 		p := output.New(stdout)
 		p.Command("bastion apply")
-		p.Section("Controller")
+		p.Section("Plan")
 		fields := []output.Field{{Key: "ansible-core target", Value: "managed venv at " + ansibleVenvDir()}}
 		if summary := proxySummary(proxyEnv); summary != "" {
 			fields = append(fields, output.Field{Key: "proxy", Value: summary})
@@ -96,7 +96,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			fields = append(fields, output.Field{Key: "proxy", Value: "none"})
 		}
 		p.Fields(fields)
-		p.Section("Planned actions")
+		p.Section("Bootwright prerequisites")
 		if len(plan) == 0 {
 			p.Status(output.StatusSkip, "controller runtime", "already installed")
 		}

@@ -95,6 +95,15 @@ func HostGroupCounts(state v1alpha1.State) map[string]int {
 	}
 }
 
+func HostGroupMembers(state v1alpha1.State) map[string][]string {
+	return map[string][]string{
+		GroupInfraHosts:    sortedHostSet(infraReferencedHosts(state)),
+		GroupProviderHosts: sortedHostSet(serviceReferencedHosts(state)),
+		GroupBootHosts:     sortedHostSet(bootReferencedHosts(state)),
+		GroupOCPHosts:      []string{"localhost"},
+	}
+}
+
 // infraReferencedHosts returns the hosts that back a profile-based
 // machine substrate. Bare-metal `machines[]` entries are reached over
 // BMC from the controller, and vsphere / kubevirt guests live on

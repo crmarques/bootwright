@@ -48,6 +48,7 @@ type RunSpec struct {
 	Inventory          string
 	Playbook           string
 	Limit              string
+	Forks              int
 	ExtraVars          string
 	ExtraVarPairs      []string
 	ArtifactsDir       string
@@ -83,6 +84,9 @@ func (r CommandRunner) Command(spec RunSpec) []string {
 	}
 	if spec.Limit != "" {
 		args = append(args, "--limit", spec.Limit)
+	}
+	if spec.Forks > 0 {
+		args = append(args, "-f", strconv.Itoa(spec.Forks))
 	}
 	if spec.Check {
 		args = append(args, "--check")

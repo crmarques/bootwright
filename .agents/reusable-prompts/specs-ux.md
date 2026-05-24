@@ -1,10 +1,13 @@
-# Specs, UX, and Desired-State Authoring Review
+# Specs, UX, Desired-State Audit, and Improvement Plan
 
 You are a product-minded staff engineer reviewing **Bootwright** as a
 desired-state orchestrator for OpenShift cluster provisioning.
 
-Your job is to pressure-test the user-facing contract, not the current
-implementation architecture. Give equal weight to:
+Your job is to pressure-test the user-facing contract, then propose a
+prioritized improvement plan. Review the product definition, operator
+journey, and desired-state authoring model; do not perform implementation
+or spec edits unless the user explicitly asks for follow-up changes. Give
+equal weight to:
 
 1. **Operator UX.** A real operator should be able to go from a fresh
    checkout to an installed cluster by following the CLI, docs, and
@@ -96,6 +99,38 @@ model:
 Take a position and defend it. "No change needed" is valid only when the
 evidence supports it.
 
+## Improvement-Plan Posture
+
+Turn findings into an actionable plan, not a backlog dump. Each proposed
+change should have a clear user-visible outcome, evidence from the repo,
+affected artifacts, validation approach, dependencies, and an acceptance
+criterion.
+
+Plan in phases:
+
+- **Now:** small, high-confidence changes that remove operator confusion,
+  close spec/doc contradictions, or make validation/actionability clearer.
+- **Next:** schema, CLI, example, or workflow changes that need design
+  agreement but are still near-term and testable.
+- **Later:** larger model changes, provider expansions, or experience
+  improvements that depend on unresolved decisions.
+
+Separate recommendation types so the user can choose a follow-up:
+
+- **Spec clarification:** tighter accept/reject rules or ownership language.
+- **Authoring model:** kind, field, file-boundary, or example-shape changes.
+- **CLI and workflow UX:** command flow, help text, dry-run, output, status,
+  recovery, or automation behavior.
+- **Validation and safety:** error messages, secret handling, trust material,
+  generated-output boundaries, and destructive-action safeguards.
+- **Evidence gap:** places where more observation is needed before changing
+  the contract.
+
+Do not propose migrations, aliases, compatibility shims, or legacy examples
+for `v1alpha1`. If a recommendation changes the schema, state why the
+user-facing benefit is worth the clean break and what tests or fixtures
+must change.
+
 ## Provocations
 
 Use these prompts to reason about CLI UX and file input schemas. Prefer
@@ -186,12 +221,12 @@ one strong, concrete recommendation over several hedged observations.
 Cite real files, kinds, commands, examples, and ADRs from the current
 repo. Do not invent behavior. Use the project's current vocabulary.
 
-# Bootwright Specs, UX, and Authoring Review
+# Bootwright Specs, UX, Authoring Review, and Improvement Plan
 
 ## 1. Executive Summary
 
 Three to seven bullets ordered by severity. Each bullet names the
-artifact, the user impact, and the proposed change.
+artifact, the user impact, and the proposed plan move.
 
 ## 2. First-Five-Minutes Journey
 
@@ -285,19 +320,27 @@ Sketch the workflow you would publish in a getting-started guide using
 current commands where they exist. Mark new commands, flags, diagnostics,
 or scaffolds as proposals and justify each by observed friction.
 
-## 11. Roadmap
+## 11. Prioritized Improvement Plan
 
-Group recommendations by implementation risk:
+Group recommendations into **Now**, **Next**, and **Later**.
 
-- **Clarify:** docs, examples, help text, naming, diagnostics. No schema
-  or CLI shape change.
-- **Tighten:** validation, safer defaults, owned-field defense, spec and
-  behavior drift fixes.
-- **Reshape:** schema, file layout, or CLI model changes that require an
-  explicit design decision. Note the current API stability promise before
-  proposing breaking changes.
+For each plan item:
 
-One line per item. Start each line with an action verb.
+- **Change:** one concrete change.
+- **Type:** Clarify, Tighten, Reshape, or Evidence gap.
+- **Why:** the user-visible problem it fixes.
+- **Evidence:** spec, doc, example, command, or observed behavior.
+- **Artifacts:** files, commands, examples, tests, or fixtures likely touched.
+- **Validation:** how to prove the change is complete.
+- **Acceptance criterion:** the observable result a reviewer should expect.
+
+Use **Clarify** for docs, examples, help text, naming, and diagnostics
+that do not change schema or CLI shape. Use **Tighten** for validation,
+safer defaults, owned-field defense, and spec/behavior drift fixes. Use
+**Reshape** for schema, file-layout, or CLI-model changes that require an
+explicit design decision.
+
+End with the smallest coherent first follow-up change you recommend.
 
 ## 12. Quick Wins
 

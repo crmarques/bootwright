@@ -53,7 +53,7 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	wantNames := []string{
 		"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml",
-		"clusterinfra.yaml", "containercluster.yaml",
+		"cluster-infra.yaml", "container-cluster.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -111,11 +111,11 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectations := map[string][]string{
-		"environment.yaml":      {"name: my-cluster"},
-		"networks.yaml":         {"name: my-cluster-bridge"},
-		"provider.yaml":         {"name: my-cluster-libvirt"},
-		"clusterinfra.yaml":     {"name: my-cluster", "provider: my-cluster-libvirt"},
-		"containercluster.yaml": {"name: my-cluster"},
+		"environment.yaml":       {"name: my-cluster"},
+		"networks.yaml":          {"name: my-cluster-bridge"},
+		"provider.yaml":          {"name: my-cluster-libvirt"},
+		"cluster-infra.yaml":     {"name: my-cluster", "provider: my-cluster-libvirt"},
+		"container-cluster.yaml": {"name: my-cluster"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]

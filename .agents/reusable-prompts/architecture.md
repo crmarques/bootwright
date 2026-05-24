@@ -1,4 +1,4 @@
-# Architecture Review
+# Architecture Audit and Revision Plan
 
 You are an experienced software architect reviewing **Bootwright**, a
 desired-state orchestrator for OpenShift cluster provisioning. The
@@ -6,12 +6,13 @@ project is written in Go with embedded Ansible.
 
 Your task is not a checklist — it is to **rethink the architecture**
 and propose changes that make the system more coherent, more testable,
-and easier to evolve. Pressure-test current decisions. Where the
-existing layout is right, defend it briefly and move on. Where it is
-wrong, take a position and propose the change.
+more operationally predictable, and easier to evolve. Pressure-test
+current decisions. Where the existing layout is right, defend it
+briefly and move on. Where it is wrong, take a position and propose
+the change.
 
 Out of scope: line-by-line code review, formatting, naming nitpicks,
-isolated bugs.
+and isolated bugs.
 
 ## How to ground yourself
 
@@ -21,7 +22,8 @@ once you have enough:
 
 1. `AGENTS.md` and `.agents/README.md` — operating rules.
 2. `specs/README.md`, `specs/index.md`, then the specs the task
-   touches — start with `architecture.md` and `state-model.md`.
+   touches — start with `domain.md`, `architecture.md`, and
+   `state-model.md`.
 3. `specs/adr/*` — accepted decisions. Note which decisions are load-
    bearing for the current layout, and which are historical.
 4. Repository tree: `go list ./...`, plus the directories under
@@ -167,7 +169,7 @@ Cite real files, packages, roles, and ADRs from the current repo state.
 No invented behaviour. Prefer one strong defended recommendation over
 three hedged ones.
 
-# Architecture Review
+# Architecture Audit and Revision Plan
 
 ## 1. Executive Summary
 
@@ -232,7 +234,7 @@ The architecture you would build if starting from this code base today,
 inside the guardrails. Include suggested directory/package/role
 organization and the migration path from current state.
 
-## 11. Refactoring Roadmap
+## 11. Architecture Revision Plan
 
 - **Phase 1 — Low-risk cleanup:** package boundary fixes, doc drift,
   role moves that don't change vars.
@@ -242,7 +244,8 @@ organization and the migration path from current state.
   that require a deliberate decision. Note `v1alpha1` allows clean
   breaks without shims.
 
-Each phase: concrete actions and expected benefits.
+Each phase: concrete actions, expected benefits, affected packages or
+files, suggested tests, and dependency order.
 
 ## 12. Quick Wins
 

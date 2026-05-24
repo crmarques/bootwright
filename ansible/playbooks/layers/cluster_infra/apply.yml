@@ -10,6 +10,7 @@
   # not consuming any cluster substrate is not in the group, so the
   # earlier "skip when no work" guard is no longer needed.
   hosts: bootwright_infra_hosts
+  strategy: free
   gather_subset:
     - "!all"
     - min

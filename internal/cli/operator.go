@@ -62,7 +62,7 @@ func runControllerCLIInstall(ctx context.Context, stdin io.Reader, stdout io.Wri
 		return fmt.Errorf("write controller-clis inventory: %w", err)
 	}
 	p := output.NewContinuation(stdout)
-	p.Section("Run")
+	p.Section("Ansible execution")
 	p.List([]output.Item{{Label: "install OCP CLIs " + spec.OCPReleaseVersion, Detail: spec.InstallDir}})
 	ansibleEnv := controllerCLIAnsibleEnv(bundleDir)
 	for k, v := range extraEnv {

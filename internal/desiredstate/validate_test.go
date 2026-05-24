@@ -28,6 +28,26 @@ func TestGoodFixtures(t *testing.T) {
 	}
 }
 
+func TestCanonicalExamples(t *testing.T) {
+	examplesRoot := filepath.Join("..", "..", "examples")
+	entries, err := os.ReadDir(examplesRoot)
+	if err != nil {
+		t.Fatalf("read examples: %v", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+		})
+	}
+}
+
 func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	_, err := LoadNormalizeValidate([]string{filepath.Join("testdata/good", "005-3nodes-baremetal")})
 	if err != nil {
@@ -206,46 +226,42 @@ spec:
 	}
 }
 
-func TestInstallerOverridesRejectBootwrightOwnedRenderedFields(t *testing.T) {
+func TestRemovedContainerClusterInstallFieldsRejectStrictDecode(t *testing.T) {
 	tests := []struct {
 		name          string
-		overrideYAML  string
+		fieldYAML     string
 		wantSubstring string
 	}{
 		{
-			name: "proxy",
-			overrideYAML: `    installConfigOverrides:
+			name: "baseDomain",
+			fieldYAML: `    baseDomain: cluster.example.test
+`,
+			wantSubstring: "field baseDomain not found",
+		},
+		{
+			name: "imageDigestSources",
+			fieldYAML: `    imageDigestSources:
+      - source: quay.io/openshift-release-dev/ocp-release
+        mirrors:
+          - registry.example.test:5000/ocp-release
+`,
+			wantSubstring: "field imageDigestSources not found",
+		},
+		{
+			name: "installConfigOverrides",
+			fieldYAML: `    installConfigOverrides:
       proxy:
         httpProxy: http://proxy.example.test:3128
 `,
-			wantSubstring: "install.installConfigOverrides[proxy] is owned by Bootwright",
+			wantSubstring: "field installConfigOverrides not found",
 		},
 		{
-			name: "networking cluster network",
-			overrideYAML: `    installConfigOverrides:
-      networking:
-        clusterNetwork:
-          - cidr: 10.130.0.0/14
-            hostPrefix: 23
-`,
-			wantSubstring: "install.installConfigOverrides[networking.clusterNetwork] is owned by Bootwright",
-		},
-		{
-			name: "baremetal provisioning network",
-			overrideYAML: `    installConfigOverrides:
-      platform:
-        baremetal:
-          provisioningNetwork: Managed
-`,
-			wantSubstring: "install.installConfigOverrides[platform.baremetal.provisioningNetwork] is owned by Bootwright",
-		},
-		{
-			name: "agent ntp sources",
-			overrideYAML: `    agentConfigOverrides:
+			name: "agentConfigOverrides",
+			fieldYAML: `    agentConfigOverrides:
       additionalNTPSources:
         - ntp.example.test
 `,
-			wantSubstring: "install.agentConfigOverrides[additionalNTPSources] is owned by Bootwright",
+			wantSubstring: "field agentConfigOverrides not found",
 		},
 	}
 	for _, tc := range tests {
@@ -254,7 +270,7 @@ func TestInstallerOverridesRejectBootwrightOwnedRenderedFields(t *testing.T) {
 			files := newBaselineFiles()
 			files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 				"    pullSecretRef: { name: openshift-pull-secret }\n",
-				"    pullSecretRef: { name: openshift-pull-secret }\n"+tc.overrideYAML, 1)
+				"    pullSecretRef: { name: openshift-pull-secret }\n"+tc.fieldYAML, 1)
 			writeFiles(t, dir, files)
 			_, err := LoadNormalizeValidate([]string{dir})
 			if err == nil {

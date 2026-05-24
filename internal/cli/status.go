@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -108,6 +109,7 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 	}
 
 	if stateLoaded {
+		printSecretStatus(p, ctx.SecretsDir, state)
 		printClusterStatus(p, state, ctx.StateDir)
 		printSharedStatus(p, state)
 	}
@@ -117,7 +119,7 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 
 	p.Section("Next steps")
 	var items []cliout.Item
-	hints := nextStepHints(stateLoaded, state, ctx.StateDir)
+	hints := nextStepHints(stateLoaded, state, ctx.StateDir, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
 		hints = ledgerNextSteps(ledger, hints)
 	}
@@ -208,9 +210,35 @@ func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
 	}
 }
 
-func nextStepHints(stateLoaded bool, state v1alpha1.State, stateDir string) []string {
+func printSecretStatus(p *cliout.Printer, secretsDir string, state v1alpha1.State) {
+	entries, err := declaredSecretEntries(secretsDir, state)
+	if err != nil {
+		p.Section("Secret material")
+		p.Status(cliout.StatusFail, "declared secrets", err.Error())
+		return
+	}
+	if len(entries) == 0 {
+		return
+	}
+	p.Section("Secret material")
+	for _, entry := range entries {
+		status := cliout.StatusOK
+		detail := entry.Type + " " + strings.Join(entry.Paths, ", ")
+		if !entry.Present {
+			status = cliout.StatusFail
+			if entry.Detail != "" {
+				detail = entry.Detail
+			}
+		}
+		p.Status(status, entry.Name, detail)
+	}
+}
+
+func nextStepHints(stateLoaded bool, state v1alpha1.State, stateDir string, secretsDir string) []string {
 	if stateLoaded {
-		hints := []string{"bootwright check bastion"}
+		hints := []string{"bootwright secret list"}
+		hints = append(hints, secretNextStepHints(state, secretsDir)...)
+		hints = append(hints, "bootwright check bastion")
 		needsInstaller := clustersNeedingInstallerRender(state, stateDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints,
@@ -227,8 +255,42 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, stateDir string) []st
 	}
 	return []string{
 		"edit desired-state YAML under the context input-files directory",
+		"bootwright secret list",
 		"bootwright check all",
 	}
+}
+
+func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
+	entries, err := declaredSecretEntries(secretsDir, state)
+	if err != nil {
+		return nil
+	}
+	generatedMissing := false
+	contextMissing := ""
+	for _, entry := range entries {
+		if entry.Present {
+			continue
+		}
+		if strings.HasPrefix(entry.Type, "generated:") {
+			generatedMissing = true
+			continue
+		}
+		if entry.Type == "context" && contextMissing == "" {
+			contextMissing = entry.Name
+		}
+	}
+	var hints []string
+	if generatedMissing {
+		hints = append(hints, "bootwright secret generate")
+	}
+	if contextMissing != "" {
+		if contextMissing == v1alpha1.DefaultPullSecretName {
+			hints = append(hints, "bootwright secret set "+contextMissing+" --pull-secret <path>")
+		} else {
+			hints = append(hints, "bootwright secret set "+contextMissing+" --from-file <path>")
+		}
+	}
+	return hints
 }
 
 func clustersNeedingInstallerRender(state v1alpha1.State, stateDir string) []string {

@@ -53,6 +53,9 @@ func TestNameResolutionRecordsIgnoreUnmatchedResolverConsumers(t *testing.T) {
 
 func dnsRecordsState(externalResolver string) v1alpha1.State {
 	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{
 			{
 				Metadata: v1alpha1.Metadata{Name: "managed-net"},
@@ -118,7 +121,6 @@ func dnsRecordsContainerCluster(name, infra, machine string) v1alpha1.ContainerC
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Install: v1alpha1.OCPInstallSpec{BaseDomain: "example.test"},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: machine,
 				MachineRef: v1alpha1.NodeMachineRef{

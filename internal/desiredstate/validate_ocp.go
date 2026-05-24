@@ -2,7 +2,6 @@ package desiredstate
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -37,7 +36,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 			errs = append(errs, validateNodes(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
 		}
-		errs = append(errs, validateInstallOverrides(ocp)...)
+		errs = append(errs, validateInstallRefs(ocp)...)
 	}
 	return errs
 }
@@ -175,103 +174,13 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
 }
 
-var (
-	installOverrideForbiddenKeys        = setFromOwnedKeys(v1alpha1.OwnedFields().InstallConfigKeys)
-	installOverrideForbiddenNestedPaths = v1alpha1.OwnedFields().InstallConfigPaths
-	agentConfigForbiddenKeys            = setFromOwnedKeys(v1alpha1.OwnedFields().AgentConfigKeys)
-)
-
-func setFromOwnedKeys(keys []string) map[string]bool {
-	out := make(map[string]bool, len(keys))
-	for _, k := range keys {
-		out[k] = true
-	}
-	return out
-}
-
-var sensitiveOverrideKeys = []string{"password", "token", "secret", "apikey", "credential"}
-
-func validateInstallOverrides(ocp v1alpha1.ContainerCluster) []string {
+func validateInstallRefs(ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
-	for k := range ocp.Spec.Install.InstallConfigOverrides {
-		if installOverrideForbiddenKeys[k] {
-			errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.installConfigOverrides[%s] is owned by Bootwright and cannot be overridden", ocp.Metadata.Name, k))
-		}
-	}
-	errs = append(errs, validateSensitiveOverridePaths(fmt.Sprintf("ContainerCluster/%s install.installConfigOverrides", ocp.Metadata.Name), ocp.Spec.Install.InstallConfigOverrides)...)
-	for _, path := range installOverrideForbiddenNestedPaths {
-		if hasNestedKey(ocp.Spec.Install.InstallConfigOverrides, path) {
-			errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.installConfigOverrides[%s] is owned by Bootwright and cannot be overridden", ocp.Metadata.Name, path))
-		}
-	}
-	for k := range ocp.Spec.Install.AgentConfigOverrides {
-		if agentConfigForbiddenKeys[k] {
-			errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.agentConfigOverrides[%s] is owned by Bootwright and cannot be overridden", ocp.Metadata.Name, k))
-		}
-	}
-	errs = append(errs, validateSensitiveOverridePaths(fmt.Sprintf("ContainerCluster/%s install.agentConfigOverrides", ocp.Metadata.Name), ocp.Spec.Install.AgentConfigOverrides)...)
-	for _, src := range ocp.Spec.Install.ImageDigestSources {
-		errs = append(errs, validateImageDigestSource(fmt.Sprintf("ContainerCluster/%s install.imageDigestSources[%s]", ocp.Metadata.Name, src.Source), src)...)
-	}
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef.name is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
 	}
 	if ocp.Spec.Install.SSHKeyRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.sshKeyRef.name is required (inheritable from Environment)", ocp.Metadata.Name))
 	}
-	if ocp.Spec.Install.BaseDomain == "" {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.baseDomain is required (inheritable from Environment)", ocp.Metadata.Name))
-	}
 	return errs
-}
-
-func validateSensitiveOverridePaths(owner string, value any) []string {
-	var errs []string
-	var walk func(path string, current any)
-	walk = func(path string, current any) {
-		switch typed := current.(type) {
-		case map[string]any:
-			for key, value := range typed {
-				next := key
-				if path != "" {
-					next = path + "." + key
-				}
-				lower := strings.ToLower(key)
-				for _, sub := range sensitiveOverrideKeys {
-					if strings.Contains(lower, sub) {
-						errs = append(errs, fmt.Sprintf("%s[%s] looks like a sensitive value; use SecretRef instead", owner, next))
-						break
-					}
-				}
-				walk(next, value)
-			}
-		case []any:
-			for i, value := range typed {
-				next := fmt.Sprintf("[%d]", i)
-				if path != "" {
-					next = fmt.Sprintf("%s[%d]", path, i)
-				}
-				walk(next, value)
-			}
-		}
-	}
-	walk("", value)
-	return errs
-}
-
-func hasNestedKey(m map[string]any, path string) bool {
-	parts := strings.Split(path, ".")
-	var cursor any = m
-	for _, key := range parts {
-		current, ok := cursor.(map[string]any)
-		if !ok {
-			return false
-		}
-		next, ok := current[key]
-		if !ok {
-			return false
-		}
-		cursor = next
-	}
-	return true
 }

@@ -2,24 +2,20 @@ package v1alpha1
 
 // OwnedInstallerFields is the source of truth for fields Bootwright
 // writes into the generated install-config.yaml and agent-config.yaml.
-// The validator pulls its installer-override denylist from this
-// registry so adding a new owned key here automatically closes the
-// override hatch — no duplicate list to keep in sync.
 //
 // When the renderer learns to write a new field, list it here.
 // When it stops owning a field, remove it from here.
 type OwnedInstallerFields struct {
 	// InstallConfigKeys are top-level keys in install-config.yaml that
-	// Bootwright derives. installConfigOverrides[<key>] is rejected.
+	// Bootwright derives.
 	InstallConfigKeys []string
 
 	// InstallConfigPaths are dotted paths inside install-config.yaml
-	// that Bootwright derives. The validator rejects any override that
-	// sets a value along these paths.
+	// that Bootwright derives.
 	InstallConfigPaths []string
 
 	// AgentConfigKeys are top-level keys in agent-config.yaml that
-	// Bootwright derives. agentConfigOverrides[<key>] is rejected.
+	// Bootwright derives.
 	AgentConfigKeys []string
 }
 

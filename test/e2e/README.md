@@ -8,8 +8,8 @@ environment.yaml       Environment
 hosts.yaml             Host
 provider.yaml          InfraProvider
 networks.yaml          NetworkConfig
-clusterinfra.yaml      ClusterInfra
-containercluster.yaml  ContainerCluster
+cluster-infra.yaml     ClusterInfra
+container-cluster.yaml ContainerCluster
 ```
 
 ## Cases

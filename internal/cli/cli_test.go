@@ -127,7 +127,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		{
 			name: "apply infra dry-run",
 			args: []string{"apply", "infra", "--dry-run", "--ask-become-pass=false"},
-			want: []string{"Bootwright: infra apply", "Apply plan", "Workflow", "planned task(s)", "Provider services", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: infra apply", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Provider services", "Rendered artifacts", "Bundle"},
 		},
 	}
 	for _, tc := range tests {
@@ -590,7 +590,7 @@ func TestContextPrintEnvNoProxy(t *testing.T) {
       bootwright: true
       clusterInstall: true
 `, "")
-	replaceInFile(t, filepath.Join(ctx.InputDir, "clusterinfra.yaml"), `    proxy:
+	replaceInFile(t, filepath.Join(ctx.InputDir, "cluster-infra.yaml"), `    proxy:
       from:
         provider: lab-libvirt-provider
         name: default
@@ -963,8 +963,14 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
 	}
-	if report.ApplyPlan.Limits.Parallelism != 4 {
-		t.Fatalf("parallelism = %d, want 4 with one reusable become password", report.ApplyPlan.Limits.Parallelism)
+	if report.ApplyPlan.Limits.Parallelism != 5 {
+		t.Fatalf("parallelism = %d, want 5 safe-auto tasks", report.ApplyPlan.Limits.Parallelism)
+	}
+	if report.ApplyPlan.Limits.ParallelismPerHost != 1 {
+		t.Fatalf("per-host parallelism = %d, want 1 safety lock", report.ApplyPlan.Limits.ParallelismPerHost)
+	}
+	if report.ApplyPlan.Limits.ParallelismRedfish != 3 {
+		t.Fatalf("redfish parallelism = %d, want 3 node boot tasks", report.ApplyPlan.Limits.ParallelismRedfish)
 	}
 	tasks := report.ApplyPlan.Tasks
 	if len(tasks) != 5 {
@@ -990,6 +996,12 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 		}
 		if task.Node == "" {
 			t.Fatalf("%s missing node field", id)
+		}
+		if len(task.ResourceKeys) != 1 {
+			t.Fatalf("%s resource keys = %v, want one Redfish key", id, task.ResourceKeys)
+		}
+		if task.ClusterLogPath == "" || !strings.Contains(task.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "install.log")) {
+			t.Fatalf("%s cluster log path = %q", id, task.ClusterLogPath)
 		}
 	}
 	wait := tasks[len(tasks)-1]

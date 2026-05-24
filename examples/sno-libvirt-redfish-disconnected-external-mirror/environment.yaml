@@ -1,0 +1,35 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: sno-libvirt
+spec:
+  baseDomain: example.test
+
+  resources:
+    - hosts.yaml
+    - networks.yaml
+    - provider.yaml
+    - cluster-infra.yaml
+    - container-cluster.yaml
+
+  secrets:
+    openshift-pull-secret:
+    cluster-admin-pub-key:
+      file: ~/.ssh/bootwright-ssh-key.pub
+    provider-host-ssh:
+      file: ~/.ssh/bootwright-ssh-key
+    bmc-credentials:
+      generated:
+        credentials:
+          username: admin
+    mirror-registry-credentials:
+    mirror-registry-ca:
+      file: ./mirror-registry-ca.crt
+
+  registries:
+    mirror:
+      url: registry.example.test:5000
+      credentialsRef:
+        name: mirror-registry-credentials
+      trustBundleRef:
+        name: mirror-registry-ca

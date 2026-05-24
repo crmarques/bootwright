@@ -102,7 +102,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
 		if httpServerOnly {
 			printDestroyHTTPServerPreview(stdout, plan.state)

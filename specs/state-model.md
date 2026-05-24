@@ -36,8 +36,8 @@ spec:
     - hosts.yaml
     - networks.yaml
     - provider.yaml
-    - clusterinfra.yaml
-    - containercluster.yaml
+    - cluster-infra.yaml
+    - container-cluster.yaml
 
   secrets:
     openshift-pull-secret:
@@ -112,6 +112,10 @@ Rules:
   exclusive for the same loaded state.
 - `install.mode: disconnected` on any `ContainerCluster` requires mirror trust
   material and either an external mirror URL or a managed registry component.
+- `registries.imageDigestSources[]`, when set, renders into installer
+  `imageDigestSources`. Each entry requires `source` and at least one
+  `mirrors[]` value. `sourcePolicy`, when set, must be `NeverContactSource`
+  or `AllowContactingSource`.
 - `componentImages` is a closed override map for Bootwright-managed component
   images. Each `local` or `public` reference must be pinned to an explicit
   version tag or digest; omitted tags, non-version tags, and `:latest` are
@@ -182,6 +186,11 @@ Rules:
 
 - `install.mode` defaults to `connected`.
 - `install.method` defaults to `agent`; other methods are not accepted yet.
+- `install.baseDomain`, `install.imageDigestSources`,
+  `install.installConfigOverrides`, and `install.agentConfigOverrides` are not
+  user API. Base domain belongs to `Environment.spec.baseDomain`; registry
+  mirror sources belong to `Environment.spec.registries.imageDigestSources`;
+  rendered installer files are Bootwright-owned generated output.
 - `distribution.type` is `openshift` or `okd`; omitted means `openshift`.
 - OpenShift requires either `release.version` or `release.image`.
 - `release.image`, when set, must be pinned to an explicit version tag or
@@ -627,7 +636,8 @@ Validation rejects:
 - Unknown fields and unsupported kinds.
 - Any old network reference field under providers, machines, or endpoints.
 - Any old cluster-to-infra top-level reference on `ContainerCluster`.
-- Removed user-authored fields from earlier API shapes.
+- Removed `ContainerCluster.spec.install` fields: `baseDomain`,
+  `imageDigestSources`, `installConfigOverrides`, and `agentConfigOverrides`.
 - Multiple `ClusterInfra` references inside one `ContainerCluster`.
 - `ContainerCluster` node references that do not resolve to a selected machine.
 - OpenShift clusters without a pull secret reference after normalization.
@@ -666,11 +676,12 @@ aspect as `OK` or `MISSING`.
 Primary commands:
 
 ```text
-bootwright context init lab -f ./input
+bootwright context init lab -f ./examples/sno-libvirt-redfish
 bootwright context validate
 bootwright context use lab
 bootwright print-env [--sensitive]
 bootwright secret list
+bootwright secret set openshift-pull-secret --pull-secret <path>
 bootwright secret generate
 bootwright check syntax
 bootwright render installer --scope <cluster>
@@ -692,12 +703,21 @@ grouped into sections, status labels, artifact groups, summaries, and
 actionable check remediation.
 Commands that support `--output json` expose the stable automation surface and
 must emit only JSON on stdout. Shell-export commands such as
-`bootwright print-env` intentionally emit only `export ...` lines, and Ansible
-stdout/stderr streams are passed through without Bootwright decoration.
+`bootwright print-env` intentionally emit only `export ...` lines.
 Apply commands may execute independent tasks concurrently. Operators can tune
 task scheduling with `--parallelism`, `--parallelism-per-host`, and
-`--parallelism-redfish`; `0` for `--parallelism` lets Bootwright pick the
-current default.
+`--parallelism-redfish`; `0` for any of those flags means Bootwright uses the
+maximum safe automatic value. Explicit limits only reduce automatic
+concurrency; provider-host and Redfish safety locks still apply.
+`apply <target> --dry-run` is a plan-only render and command preview. It does
+not run host, tool, secret, BMC, or cluster readiness checks and does not run
+Ansible; operators must run `bootwright check <target>` for readiness.
+When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
+to the terminal between Bootwright prerequisite output and the Bootwright
+summary. When an apply selects two or more `ContainerCluster` objects,
+Bootwright does not stream live Ansible output to the terminal; it prints a
+`Logs` section with one install log path per cluster and keeps task output in
+the task artifact log plus the owning cluster log.
 `bootwright apply cluster --override` forces OpenShift agent install tasks to
 run even when local runtime kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
@@ -706,11 +726,15 @@ machines, power off nodes, or remove provider services.
 Every apply writes `<state-dir>/workflow/current-apply.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task
-`ansible-output.log` paths. Task statuses are `pending`, `ready`, `running`,
-`blocked`, `skipped`, `ok`, `failed`, and `cancelled`.
-`bootwright status` reads the ledger without contacting provider hosts, BMCs,
-or clusters. Text output summarizes the current apply, progress counts,
-running work, cluster task state, blocked work, failures, and next steps.
+`ansible-output.log` paths. Cluster-owned tasks also record
+`<state-dir>/workflow/runs/<run>/clusters/<cluster>/install.log`. Task statuses
+are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`, `failed`, and
+`cancelled`.
+`bootwright status` reads local context state without contacting provider
+hosts, BMCs, or clusters. Text output summarizes desired-state load status,
+declared secret material presence, installer freshness, the current apply,
+progress counts, running work, cluster task state, blocked work, failures, and
+next steps.
 `bootwright status --watch` refreshes the same readable view until the current
 apply reaches a terminal state. `bootwright status --output json` includes the
 full current apply ledger when present.

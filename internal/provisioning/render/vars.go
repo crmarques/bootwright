@@ -29,7 +29,7 @@ func Vars(state v1alpha1.State) map[string]any {
 			"name":          ocp.Metadata.Name,
 			"installMode":   v1alpha1.InstallMode(ocp),
 			"installMethod": ocp.Spec.Install.Method,
-			"baseDomain":    ocp.Spec.Install.BaseDomain,
+			"baseDomain":    environmentBaseDomain(env),
 			"endpoints":     endpointsVars(ci),
 			"networks":      clusterNetworksVars(state, ci),
 			"components":    componentsVars(state, ci, ocp),

@@ -22,6 +22,7 @@ type RunSpecConfig struct {
 	VarsPath           string
 	Playbook           string
 	Limit              string
+	Forks              int
 	ArtifactsDir       string
 	ExtraVarPairs      []string
 	Check              bool
@@ -58,6 +59,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		Inventory:          cfg.InventoryPath,
 		Playbook:           filepath.Join(cfg.BundleDir, cfg.Playbook),
 		Limit:              cfg.Limit,
+		Forks:              cfg.Forks,
 		ExtraVars:          cfg.VarsPath,
 		ExtraVarPairs:      pairs,
 		ArtifactsDir:       cfg.ArtifactsDir,

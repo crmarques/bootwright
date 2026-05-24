@@ -11,8 +11,8 @@ Key files:
 | `hosts.yaml` | `Host` |
 | `provider.yaml` | `InfraProvider` |
 | `networks.yaml` | `NetworkConfig` |
-| `clusterinfra.yaml` | `ClusterInfra` |
-| `containercluster.yaml` | `ContainerCluster` |
+| `cluster-infra.yaml` | `ClusterInfra` |
+| `container-cluster.yaml` | `ContainerCluster` |
 
 The cluster node binds to `ClusterInfra.components.machines[master-0]`, which
 uses the `sno-bridge` network template and a per-host static IP overlay.

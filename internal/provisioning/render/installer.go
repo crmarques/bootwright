@@ -85,9 +85,10 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 		return nil, err
 	}
 	platformKind := clusterPlatformKind(ci, ocp)
+	env := primaryEnvironment(state)
 	base := map[string]any{
 		"apiVersion": "v1",
-		"baseDomain": ocp.Spec.Install.BaseDomain,
+		"baseDomain": environmentBaseDomain(env),
 		"metadata":   map[string]any{"name": ocp.Metadata.Name},
 		"compute": []any{
 			map[string]any{
@@ -108,7 +109,6 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 		base["additionalTrustBundle"] = secrets.TrustBundle
 		base["additionalTrustBundlePolicy"] = "Always"
 	}
-	env := primaryEnvironment(state)
 	if mirrors := imageDigestSourcesConfig(installerImageDigestSources(state, ci, ocp, env)); len(mirrors) > 0 {
 		base["imageDigestSources"] = mirrors
 	}
@@ -116,7 +116,7 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 	if pc := installerProxyConfig(eff, secrets, managedURL); pc != nil {
 		base["proxy"] = pc
 	}
-	return mergeYAMLMaps(base, ocp.Spec.Install.InstallConfigOverrides), nil
+	return base, nil
 }
 
 // AgentConfig renders the agent-config.yaml for the OpenShift agent
@@ -145,5 +145,12 @@ func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[strin
 		}
 		base["additionalNTPSources"] = ntp
 	}
-	return mergeYAMLMaps(base, ocp.Spec.Install.AgentConfigOverrides), nil
+	return base, nil
+}
+
+func environmentBaseDomain(env *v1alpha1.Environment) string {
+	if env == nil {
+		return ""
+	}
+	return env.Spec.BaseDomain
 }

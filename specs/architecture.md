@@ -18,14 +18,25 @@ Apply execution records a durable run ledger under the context state directory.
 The ledger is the operator-facing status source for long-running work: each
 planned task has a stable ID, dependency list, status, log path, and optional
 cluster, node, or host association. Human apply output summarizes task progress
-from that ledger. Ansible stdout/stderr streams pass through to the terminal
-without Bootwright decoration and are also tee'd into per-task artifact logs.
+from that ledger. When an apply selects one `ContainerCluster`, Ansible
+stdout/stderr streams pass through to the terminal without Bootwright
+decoration and are also tee'd into per-task artifact logs. When an apply
+selects multiple `ContainerCluster` objects, Bootwright keeps Ansible output in
+logs and prints per-cluster install log paths plus high-level progress instead.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
 cluster task: create the cluster agent ISO with `openshift-install`, boot each
 declared node through its rendered boot adapter as parallel node tasks, then
 run `openshift-install agent wait-for install-complete` after every node boot
 task has completed.
+
+Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
+for host-level work. Provider and cluster-infrastructure playbooks use
+Ansible-native host parallelism, while Bootwright enforces resource locks before
+launching concurrent playbooks: one mutating task per provider host until roles
+are classified more finely, and one task per Redfish system or BMC target.
+Different clusters may provision concurrently whenever they do not share locked
+hosts or BMC targets.
 
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.

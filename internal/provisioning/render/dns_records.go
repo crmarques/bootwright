@@ -22,7 +22,7 @@ func nameResolutionRecordsVars(state v1alpha1.State, c *v1alpha1.ClusterNameReso
 		if err != nil || !clusterUsesNameResolution(state, ci, c) {
 			continue
 		}
-		baseDomain := clusterBaseDomain(state, ocp)
+		baseDomain := clusterBaseDomain(state)
 		if baseDomain == "" {
 			continue
 		}
@@ -77,10 +77,7 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, c
 	return false
 }
 
-func clusterBaseDomain(state v1alpha1.State, ocp v1alpha1.ContainerCluster) string {
-	if ocp.Spec.Install.BaseDomain != "" {
-		return ocp.Spec.Install.BaseDomain
-	}
+func clusterBaseDomain(state v1alpha1.State) string {
 	if env := primaryEnvironment(state); env != nil {
 		return env.Spec.BaseDomain
 	}

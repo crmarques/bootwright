@@ -61,7 +61,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped check commands"))
 			}
 			selected := phasesForState(scope.phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "check", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "check", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
 		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, flags.hostStateDir); err != nil {
 			return err

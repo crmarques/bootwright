@@ -28,7 +28,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		Use:   "apply",
 		Short: "Apply " + scope.name + " desired state",
 		Args:  cobra.NoArgs,
-		Example: fmt.Sprintf(`  # Preview the plan without changing anything
+		Example: fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
   bootwright apply %[1]s --dry-run
 
   # Apply non-interactively (skip the confirmation prompt)
@@ -41,7 +41,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
   bootwright apply %[1]s --ask-become-pass=false --yes`, scope.name),
 	}
 	cf := addCommonFlags(cmd)
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible commands without executing them")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print a plan only; does not run readiness checks or Ansible")
 	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
@@ -49,9 +49,9 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 	if scope.name == "cluster" {
 		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior runtime state reports an existing available cluster")
 	}
-	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto)")
-	cmd.Flags().IntVar(&perHost, "parallelism-per-host", 4, "maximum concurrent apply tasks per provider host")
-	cmd.Flags().IntVar(&redfish, "parallelism-redfish", 8, "maximum concurrent Redfish boot tasks")
+	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
+	cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
+	cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
@@ -99,14 +99,13 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			ParallelismRedfish: redfish,
 		}
 		tasks := planApplyTasks(scope, plan.state)
-		if limits.Parallelism <= 0 {
-			limits.Parallelism = autoParallelism(len(tasks))
-		}
+		limits = resolveApplyConcurrencyLimits(limits, tasks)
+		dryRunTasks := annotateApplyTaskClusterLogPaths(ctx.StateDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, tasks)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, ansibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
 			existing, ok, err := workflow.LoadRunLedger(ctx.StateDir)
@@ -161,6 +160,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			BundleDir:          bundle.Dir,
 			Playbook:           scope.applyPlaybook,
 			Limit:              plan.limit,
+			Forks:              ansibleForksForLimit(plan.state, plan.limit),
 			ExtraVarPairs:      plan.extraVarPairs,
 			ArtifactsBaseName:  scope.artifactsBaseName,
 			Check:              check,
@@ -172,7 +172,8 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			Label:              scope.name + " apply",
 		}
 		if dryRun {
-			reporter.DryRunTasks(scope.name+" apply", taskLedgerEntries(tasks), limits)
+			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
+			reporter.DryRunTasks(scope.name+" apply", taskLedgerEntries(dryRunTasks), limits)
 			result, err := workflow.RenderOnly(ctx.StateDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
@@ -197,9 +198,6 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		ledger, err := runApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, scope, flags.clusterScope, tasks, limits)
 		if err != nil {
 			return failErr(1, err)
-		}
-		if !dryRun && !plan.noRemoteWork {
-			printWorkflowEnd(stdout, scope.name+" apply")
 		}
 		printRenderResult(stdout, renderResult)
 		printBundlePath(stdout, bundle.Dir)

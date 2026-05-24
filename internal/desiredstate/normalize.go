@@ -1,10 +1,6 @@
 package desiredstate
 
-import (
-	"strings"
-
-	"github.com/crmarques/bootwright/api/v1alpha1"
-)
+import "github.com/crmarques/bootwright/api/v1alpha1"
 
 // Normalize applies defaults in-place. Pure transformation: no
 // diagnostics, no rejections; that work belongs to Validate.
@@ -125,9 +121,6 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 		ocp.Spec.Install.Method = v1alpha1.OCPInstallMethodAgent
 	}
 	applyEnvironmentInstallDefaults(ocp, env)
-	if env != nil {
-		applyDisconnectedDigestSources(ocp, env)
-	}
 	for i := range ocp.Spec.Nodes {
 		node := &ocp.Spec.Nodes[i]
 		if node.MachineRef.Name == "" {
@@ -140,9 +133,6 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 	if env == nil {
 		return
 	}
-	if ocp.Spec.Install.BaseDomain == "" {
-		ocp.Spec.Install.BaseDomain = env.Spec.BaseDomain
-	}
 	if v1alpha1.DistributionType(*ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
 		ocp.Spec.Install.PullSecretRef = v1alpha1.SecretRef{Name: v1alpha1.DefaultPullSecretName}
 	}
@@ -154,63 +144,6 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 		ocp.Spec.Install.AdditionalTrustBundleRef.Name == "" {
 		ocp.Spec.Install.AdditionalTrustBundleRef = registries.Mirror.TrustBundleRef
 	}
-}
-
-func applyDisconnectedDigestSources(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Environment) {
-	if env == nil || v1alpha1.InstallMode(*ocp) != v1alpha1.InstallModeDisconnected {
-		return
-	}
-	registries := env.Spec.Registries
-	if registries == nil {
-		return
-	}
-	ocp.Spec.Install.ImageDigestSources = mergeImageDigestSources(
-		ocp.Spec.Install.ImageDigestSources,
-		deriveDisconnectedReleaseSources(*ocp, registries),
-	)
-	for i := range ocp.Spec.Install.ImageDigestSources {
-		if ocp.Spec.Install.ImageDigestSources[i].SourcePolicy == "" {
-			ocp.Spec.Install.ImageDigestSources[i].SourcePolicy = v1alpha1.ImageSourcePolicyNever
-		}
-	}
-}
-
-func deriveDisconnectedReleaseSources(ocp v1alpha1.ContainerCluster, registries *v1alpha1.EnvironmentRegistriesSpec) []v1alpha1.ImageDigestSource {
-	out := append([]v1alpha1.ImageDigestSource(nil), registries.ImageDigestSources...)
-	known := map[string]bool{}
-	for _, src := range out {
-		known[src.Source] = true
-	}
-	mirrorURL := ""
-	if registries.Mirror != nil {
-		mirrorURL = strings.TrimRight(registries.Mirror.URL, "/")
-	}
-	if mirrorURL == "" {
-		return out
-	}
-	for _, src := range v1alpha1.DefaultReleaseImageDigestSources(ocp, mirrorURL) {
-		if known[src.Source] {
-			continue
-		}
-		out = append(out, src)
-	}
-	return out
-}
-
-func mergeImageDigestSources(existing, derived []v1alpha1.ImageDigestSource) []v1alpha1.ImageDigestSource {
-	out := append([]v1alpha1.ImageDigestSource(nil), existing...)
-	known := map[string]bool{}
-	for _, src := range out {
-		known[src.Source] = true
-	}
-	for _, src := range derived {
-		if known[src.Source] {
-			continue
-		}
-		out = append(out, src)
-		known[src.Source] = true
-	}
-	return out
 }
 
 func primaryEnvironment(state *v1alpha1.State) *v1alpha1.Environment {

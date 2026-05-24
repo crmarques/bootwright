@@ -88,7 +88,10 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, 
 }
 
 func installerImageDigestSources(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []v1alpha1.ImageDigestSource {
-	out := append([]v1alpha1.ImageDigestSource(nil), ocp.Spec.Install.ImageDigestSources...)
+	var out []v1alpha1.ImageDigestSource
+	if env != nil && env.Spec.Registries != nil {
+		out = append(out, env.Spec.Registries.ImageDigestSources...)
+	}
 	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
 		return out
 	}
@@ -208,21 +211,6 @@ func pullSecretPlaceholder(ref string) string {
 
 func secretRefPlaceholder(kind, ref string) string {
 	return fmt.Sprintf("<bootwright-%s-ref:%s>", kind, ref)
-}
-
-// mergeYAMLMaps merges base + override, recursing into nested maps.
-func mergeYAMLMaps(base map[string]any, override map[string]any) map[string]any {
-	out := cloneYAMLMap(base)
-	for k, v := range override {
-		if bMap, ok := out[k].(map[string]any); ok {
-			if oMap, ok := v.(map[string]any); ok {
-				out[k] = mergeYAMLMaps(bMap, oMap)
-				continue
-			}
-		}
-		out[k] = cloneYAMLValue(v)
-	}
-	return out
 }
 
 func cloneYAMLMap(in map[string]any) map[string]any {

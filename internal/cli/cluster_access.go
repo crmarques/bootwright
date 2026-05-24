@@ -60,11 +60,9 @@ func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger w
 		assets[asset.ClusterName] = asset
 	}
 	names := make([]string, 0, len(successfulClusters))
-	clusters := map[string]v1alpha1.ContainerCluster{}
 	for _, cluster := range state.ContainerClusters {
 		if successfulClusters[cluster.Metadata.Name] {
 			names = append(names, cluster.Metadata.Name)
-			clusters[cluster.Metadata.Name] = cluster
 		}
 	}
 	sort.Strings(names)
@@ -74,7 +72,7 @@ func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger w
 		if !ok {
 			continue
 		}
-		baseDomain := clusterAccessBaseDomain(state, clusters[name])
+		baseDomain := clusterAccessBaseDomain(state)
 		if baseDomain == "" {
 			continue
 		}
@@ -91,10 +89,7 @@ func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger w
 	return out
 }
 
-func clusterAccessBaseDomain(state v1alpha1.State, cluster v1alpha1.ContainerCluster) string {
-	if baseDomain := strings.TrimSpace(cluster.Spec.Install.BaseDomain); baseDomain != "" {
-		return baseDomain
-	}
+func clusterAccessBaseDomain(state v1alpha1.State) string {
 	if env := stateview.Environment(state); env != nil {
 		return strings.TrimSpace(env.Spec.BaseDomain)
 	}

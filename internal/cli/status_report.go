@@ -17,6 +17,7 @@ type statusReport struct {
 	// Shared lists provider service capabilities that two or more clusters
 	// reference. Each entry maps to one Ansible-converged host instance.
 	Shared    []statusShared      `json:"shared"`
+	Secrets   []secretListEntry   `json:"secrets"`
 	NextSteps []string            `json:"nextSteps"`
 	ApplyRun  *workflow.RunLedger `json:"applyRun,omitempty"`
 }
@@ -88,7 +89,7 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 		},
 		Clusters:  []statusCluster{},
 		Shared:    []statusShared{},
-		NextSteps: nextStepHints(stateLoaded, state, ctx.StateDir),
+		NextSteps: nextStepHints(stateLoaded, state, ctx.StateDir, ctx.SecretsDir),
 	}
 	if loadErr != nil {
 		report.Desired.LoadError = loadErr.Error()
@@ -101,6 +102,7 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 		report.Desired.ContainerClusters = len(state.ContainerClusters)
 		report.Clusters = buildStatusClusters(state, ctx.StateDir)
 		report.Shared = buildStatusShared(state)
+		report.Secrets, _ = declaredSecretEntries(ctx.SecretsDir, state)
 	}
 	if ledger, ok, err := workflow.LoadRunLedger(ctx.StateDir); err == nil && ok {
 		report.ApplyRun = &ledger

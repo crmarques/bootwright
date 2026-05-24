@@ -39,7 +39,7 @@ type File struct {
 	Body string
 }
 
-// Workspace renders the five YAML files for one cluster against the
+// Workspace renders the six YAML files for one cluster against the
 // substrate matching `kind`. Returns an error when `kind` does not
 // match any registered substrate. The substrate fragments may
 // themselves contain `{{.ProviderID}}` / `{{.NetworkID}}`
@@ -198,8 +198,8 @@ var allTemplates = []namedTemplate{
 	{name: "hosts.yaml", tmpl: mustTmpl("hosts", hostsTmpl)},
 	{name: "networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
 	{name: "provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
-	{name: "clusterinfra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
-	{name: "containercluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
+	{name: "cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
+	{name: "container-cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 }
 
 func mustTmpl(name, body string) *template.Template {

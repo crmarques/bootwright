@@ -6,6 +6,17 @@ the runnable host-specific test assets.
 
 Current examples:
 
+- `sno-libvirt-redfish`: minimal single-node OpenShift cluster on a libvirt
+  provider with Redfish BMC emulation. Start here for the smallest safe
+  six-file input shape.
+- `sno-libvirt-redfish-external-proxy`: the minimal SNO shape with an
+  operator-owned external proxy.
+- `sno-libvirt-redfish-managed-proxy`: the minimal SNO shape with a
+  Bootwright-managed Squid proxy.
+- `sno-libvirt-redfish-disconnected-external-mirror`: disconnected install
+  using an operator-owned external mirror registry.
+- `sno-libvirt-redfish-managed-registry`: disconnected install using a
+  Bootwright-managed mirror registry component.
 - `libvirt-redfish-fleet`: compact three-node OpenShift cluster on a libvirt
   provider with Redfish BMC emulation and Bootwright-provisioned HAProxy VIPs.
 - `baremetal-redfish-fleet`: the same `Environment` and `ContainerCluster`
@@ -22,9 +33,10 @@ environment, then import that copy:
 
 ```text
 bootwright context init ocp-nprd-01 -f <working-copy>
-bootwright render installer --scope demo-ocp
-bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
+bootwright secret list
+bootwright render installer --scope <cluster-name>
+bootwright render --output-dir ./rendered --scope <cluster-name> --sensitive
 ```
 
 The external CLI export writes OpenShift installer files under
-`./rendered/openshift-install/demo-ocp/`.
+`./rendered/openshift-install/<cluster-name>/`.

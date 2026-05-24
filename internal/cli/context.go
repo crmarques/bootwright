@@ -43,7 +43,7 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 		Use:   "init <ctx-name>",
 		Short: "Create a context from desired-state input files",
 		Args:  cobra.ExactArgs(1),
-		Example: `  bootwright context init lab -f ./test/e2e/001-sno-libvirt
+		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
   bootwright context init lab -f ./input --base-dir /srv/bootwright/lab --yes`,
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")

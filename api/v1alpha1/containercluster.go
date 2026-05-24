@@ -20,15 +20,11 @@ type ContainerClusterSpec struct {
 }
 
 type OCPInstallSpec struct {
-	Method                   string              `yaml:"method,omitempty" json:"method,omitempty"`
-	Mode                     string              `yaml:"mode,omitempty" json:"mode,omitempty"`
-	BaseDomain               string              `yaml:"baseDomain,omitempty" json:"baseDomain,omitempty"`
-	PullSecretRef            SecretRef           `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	SSHKeyRef                SecretRef           `yaml:"sshKeyRef,omitempty" json:"sshKeyRef,omitempty"`
-	AdditionalTrustBundleRef SecretRef           `yaml:"additionalTrustBundleRef,omitempty" json:"additionalTrustBundleRef,omitempty"`
-	ImageDigestSources       []ImageDigestSource `yaml:"imageDigestSources,omitempty" json:"imageDigestSources,omitempty"`
-	InstallConfigOverrides   map[string]any      `yaml:"installConfigOverrides,omitempty" json:"installConfigOverrides,omitempty"`
-	AgentConfigOverrides     map[string]any      `yaml:"agentConfigOverrides,omitempty" json:"agentConfigOverrides,omitempty"`
+	Method                   string    `yaml:"method,omitempty" json:"method,omitempty"`
+	Mode                     string    `yaml:"mode,omitempty" json:"mode,omitempty"`
+	PullSecretRef            SecretRef `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
+	SSHKeyRef                SecretRef `yaml:"sshKeyRef,omitempty" json:"sshKeyRef,omitempty"`
+	AdditionalTrustBundleRef SecretRef `yaml:"additionalTrustBundleRef,omitempty" json:"additionalTrustBundleRef,omitempty"`
 }
 
 type DistributionSpec struct {

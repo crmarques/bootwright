@@ -5,7 +5,7 @@ emulated service hosts.
 
 Physical facts such as boot MAC, interface MAC, BMC address, and root-device
 hints live in `provider.yaml`. The selected cluster machine and static IP live
-in `clusterinfra.yaml`.
+in `cluster-infra.yaml`.
 
 The desired state uses `ClusterInfra.spec.platform.type: baremetal` with
 `provisioningNetwork: disabled` to describe the machine-control path. Because

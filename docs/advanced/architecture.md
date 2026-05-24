@@ -41,6 +41,12 @@ Every apply writes a current run ledger under the context state directory.
 or clusters, and `bootwright status --watch` follows it until the run reaches a
 terminal state.
 
+When one cluster is selected, Bootwright streams raw Ansible output to the
+terminal and keeps the same output in per-task logs. When multiple clusters are
+selected, Bootwright runs independent cluster DAG tasks concurrently where
+resource locks allow it, prints one install log path per cluster, and keeps the
+terminal focused on high-level apply progress.
+
 ## External CLI Inputs
 
 `bootwright render --output-dir <dir> --scope <cluster> --sensitive` writes the

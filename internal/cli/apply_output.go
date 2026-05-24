@@ -16,7 +16,11 @@ func printApplyRunStart(stdout io.Writer, ledger workflow.RunLedger) {
 		{Key: "Run", Value: ledger.RunID},
 		{Key: "Target", Value: ledger.Target},
 		{Key: "Tasks", Value: fmt.Sprintf("%d", len(ledger.Tasks))},
-		{Key: "Parallelism", Value: fmt.Sprintf("%d", ledger.Limits.Parallelism)},
+		{Key: "Parallelism", Value: fmt.Sprintf("%d task(s), %d per host, %d Redfish",
+			ledger.Limits.Parallelism,
+			ledger.Limits.ParallelismPerHost,
+			ledger.Limits.ParallelismRedfish,
+		)},
 	}
 	if ledger.Scope != "" {
 		fields = append(fields, output.Field{Key: "Scope", Value: ledger.Scope})
@@ -25,13 +29,33 @@ func printApplyRunStart(stdout io.Writer, ledger workflow.RunLedger) {
 	printApplyProgress(stdout, ledger)
 }
 
+func printApplyAnsibleExecutionStart(stdout io.Writer) {
+	output.NewContinuation(stdout).Section("Ansible execution")
+}
+
+func printApplyClusterLogPaths(stdout io.Writer, ledger workflow.RunLedger) {
+	paths := applyClusterLogPaths(ledger)
+	if len(paths) == 0 {
+		return
+	}
+	p := output.NewContinuation(stdout)
+	p.Section("Logs")
+	fields := make([]output.Field, 0, len(paths))
+	for _, cluster := range ledger.ClusterNames() {
+		if path := paths[cluster]; path != "" {
+			fields = append(fields, output.Field{Key: cluster, Value: path})
+		}
+	}
+	p.Fields(fields)
+}
+
 func printApplyTaskStart(stdout io.Writer, ledger workflow.RunLedger, id string) {
 	task, ok := ledger.Task(id)
 	if !ok {
 		return
 	}
 	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
-		Status: output.StatusWarn,
+		Status: output.StatusRunning,
 		Label:  applyTaskDisplayLabel(task.Label),
 		Detail: "running",
 	}})
@@ -63,6 +87,39 @@ func printApplyTaskResult(stdout io.Writer, ledger workflow.RunLedger, id string
 	printApplyProgress(stdout, ledger)
 }
 
+func printApplyStageSnapshot(stdout io.Writer, ledger workflow.RunLedger) {
+	output.NewContinuation(stdout).Tasks(applyStageLines(ledger))
+}
+
+func printApplyRunSummary(stdout io.Writer, ledger workflow.RunLedger) {
+	p := output.NewContinuation(stdout)
+	p.Section("Summary")
+	status := output.StatusOK
+	detail := "complete"
+	switch ledger.Status {
+	case workflow.RunStatusFailed:
+		status = output.StatusFail
+		detail = "failed"
+	case workflow.RunStatusRunning:
+		status = output.StatusRunning
+		detail = "running"
+	case workflow.RunStatusCancelled:
+		status = output.StatusSkip
+		detail = "cancelled"
+	}
+	p.Status(status, ledger.Target+" apply", detail)
+	var lines []output.TaskLine
+	for _, cluster := range ledger.ClusterNames() {
+		clusterStatus, clusterDetail := applyClusterSummary(ledger.TasksForCluster(cluster))
+		lines = append(lines, output.TaskLine{
+			Status: clusterStatus,
+			Label:  cluster,
+			Detail: clusterDetail,
+		})
+	}
+	p.Tasks(lines)
+}
+
 func printApplyProgress(stdout io.Writer, ledger workflow.RunLedger) {
 	var fields []output.ProgressField
 	for _, count := range ledger.ProgressCounts() {
@@ -71,10 +128,106 @@ func printApplyProgress(stdout io.Writer, ledger workflow.RunLedger) {
 	output.NewContinuation(stdout).Progress("Progress", fields)
 }
 
+func applyClusterLogPaths(ledger workflow.RunLedger) map[string]string {
+	paths := map[string]string{}
+	for _, task := range ledger.Tasks {
+		if task.Cluster != "" && task.ClusterLogPath != "" {
+			paths[task.Cluster] = task.ClusterLogPath
+		}
+	}
+	return paths
+}
+
+func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
+	lines := []output.TaskLine{{
+		Status: output.StatusDone,
+		Label:  "Render inputs",
+	}}
+	if applyLedgerHasAnyKind(ledger, applyTaskKindClusterISO, applyTaskKindNodeBoot, applyTaskKindInstallWait) {
+		lines = append(lines, output.TaskLine{Status: output.StatusDone, Label: "Resolve installer inputs"})
+	}
+	for _, stage := range []struct {
+		label string
+		kinds []string
+	}{
+		{label: "Provider services", kinds: []string{applyTaskKindProvider}},
+		{label: "Cluster infrastructure", kinds: []string{applyTaskKindClusterInfra}},
+		{label: "Create agent ISOs", kinds: []string{applyTaskKindClusterISO}},
+		{label: "Boot nodes", kinds: []string{applyTaskKindNodeBoot}},
+		{label: "Wait for installs", kinds: []string{applyTaskKindInstallWait}},
+	} {
+		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
+		if ok {
+			lines = append(lines, output.TaskLine{Status: status, Label: stage.label, Detail: detail})
+		}
+	}
+	return lines
+}
+
+func applyLedgerHasAnyKind(ledger workflow.RunLedger, kinds ...string) bool {
+	kindSet := map[string]bool{}
+	for _, kind := range kinds {
+		kindSet[kind] = true
+	}
+	for _, task := range ledger.Tasks {
+		if kindSet[task.Kind] {
+			return true
+		}
+	}
+	return false
+}
+
+func applyStageStatus(ledger workflow.RunLedger, kinds ...string) (output.Status, string, bool) {
+	kindSet := map[string]bool{}
+	for _, kind := range kinds {
+		kindSet[kind] = true
+	}
+	counts := map[workflow.TaskStatus]int{}
+	total := 0
+	for _, task := range ledger.Tasks {
+		if !kindSet[task.Kind] {
+			continue
+		}
+		total++
+		counts[task.Status]++
+	}
+	if total == 0 {
+		return output.StatusPending, "", false
+	}
+	done := counts[workflow.TaskStatusOK] + counts[workflow.TaskStatusSkipped]
+	running := counts[workflow.TaskStatusRunning] + counts[workflow.TaskStatusReady]
+	failed := counts[workflow.TaskStatusFailed] + counts[workflow.TaskStatusBlocked] + counts[workflow.TaskStatusCancelled]
+	pending := counts[workflow.TaskStatusPending]
+	detail := ""
+	if total > 1 {
+		parts := []string{fmt.Sprintf("%d/%d done", done, total)}
+		if running > 0 {
+			parts = append(parts, fmt.Sprintf("%d running", running))
+		}
+		if pending > 0 {
+			parts = append(parts, fmt.Sprintf("%d pending", pending))
+		}
+		if failed > 0 {
+			parts = append(parts, fmt.Sprintf("%d failed", failed))
+		}
+		detail = strings.Join(parts, ", ")
+	}
+	switch {
+	case failed > 0:
+		return output.StatusFail, detail, true
+	case done == total:
+		return output.StatusDone, detail, true
+	case running > 0 || done > 0:
+		return output.StatusRunning, detail, true
+	default:
+		return output.StatusPending, detail, true
+	}
+}
+
 func applyTaskDisplayLabel(label string) string {
 	switch {
-	case label == "provider services":
-		return "Provider services"
+	case label == "provider services" || strings.HasPrefix(label, "provider services "):
+		return "Provider services" + strings.TrimPrefix(label, "provider services")
 	case strings.HasPrefix(label, "infra "):
 		return "Infra " + strings.TrimPrefix(label, "infra ")
 	case strings.HasPrefix(label, "install "):

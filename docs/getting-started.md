@@ -63,8 +63,10 @@ ls -l <input-dir>
 
 Canonical input examples live under
 [`examples/`](https://github.com/crmarques/bootwright/tree/main/examples).
-Use `libvirt-redfish-fleet` for a lab with emulated Redfish BMCs, or
-`baremetal-redfish-fleet` for real bare-metal hosts with Redfish virtual media.
+Use `sno-libvirt-redfish` for the smallest single-node lab with emulated
+Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab, or
+`baremetal-redfish-fleet` for real bare-metal hosts with Redfish virtual
+media.
 
 The copied directory should contain the six desired-state kinds:
 
@@ -108,9 +110,10 @@ provider or artifact publisher is reached through a bastion address.
 Create the context from the edited directory:
 
 ```text
-bootwright context init ocp-nprd-01 -f <input-dir>
+bootwright context init ocp-nprd-01 -f examples/sno-libvirt-redfish
 bootwright context validate
 bootwright context current
+bootwright secret list
 ```
 
 By default, Bootwright writes the context under
@@ -128,8 +131,7 @@ secrets directory. Run the commands that match the names declared in
 
 ```text
 bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pull-secret.json"
-bootwright secret set proxy-credentials --username "${PROXY_USER}" --password "${PROXY_PASS}"
-bootwright secret set bmc-credentials --username "${BMC_USER}" --password "${BMC_PASS}"
+bootwright secret generate
 bootwright secret list
 ```
 
@@ -138,10 +140,12 @@ Get the OpenShift pull secret from
 `--password-stdin` for credentials on shared shells; `--password` is useful
 when credentials already come from protected environment variables.
 
-If your desired state declares `generated:` secrets, materialize them with:
+For non-generated credentials declared by your desired state, use `secret set`
+with a protected input source:
 
 ```text
-bootwright secret generate
+printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
+printf '%s\n' "${PROXY_PASS}" | bootwright secret set proxy-credentials --username "${PROXY_USER}" --password-stdin
 ```
 
 ## 5. Export Runtime Environment
@@ -156,6 +160,7 @@ environment. `--sensitive` is required when proxy credentials would be printed.
 ## 6. Check And Apply
 
 ```text
+bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
 bootwright check infra

@@ -19,7 +19,11 @@ Standing up one cluster is a runbook. Standing up *many* clusters — across mix
 The CLI covers the provisioning pipeline:
 
 ```text
-bootwright context init lab -f ./input
+bootwright context init lab -f examples/sno-libvirt-redfish
+bootwright secret list
+bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+bootwright secret generate
+bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
 bootwright check infra
@@ -119,9 +123,10 @@ until their provider roles are converged; IPMI is not apply-supported today.
 ## CLI
 
 ```text
-bootwright context init lab -f examples/baremetal-redfish-fleet
+bootwright context init lab -f examples/sno-libvirt-redfish
 bootwright context validate
 bootwright context current
+bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret list
@@ -149,8 +154,10 @@ targets are `bastion`, `infra`, `cluster`, and `all`. Verbs are
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports, and Ansible output remains the
-native Ansible stream.
+intentionally prints raw shell exports. Single-cluster apply runs stream native
+Ansible output; multi-cluster apply runs keep Ansible output in per-task and
+per-cluster logs while the terminal shows cluster log paths and high-level
+progress.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

@@ -36,6 +36,7 @@ type RunOptions struct {
 	BundleDir     string
 	Playbook      string
 	Limit         string
+	Forks         int
 	ExtraVarPairs []string
 	// ArtifactsBaseName names the per-run subdirectory under the render
 	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
@@ -112,6 +113,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		VarsPath:           result.VarsPath,
 		Playbook:           opts.Playbook,
 		Limit:              opts.Limit,
+		Forks:              opts.Forks,
 		ExtraVarPairs:      opts.ExtraVarPairs,
 		ArtifactsDir:       filepath.Join(result.ArtifactsDir, opts.ArtifactsBaseName),
 		Check:              opts.Check,
@@ -173,12 +175,19 @@ func LimitMatchesNoHosts(limit string, state v1alpha1.State) bool {
 		return false
 	}
 	counts := render.HostGroupCounts(state)
+	members := render.HostGroupMembers(state)
+	hostSet := map[string]bool{}
+	for _, hosts := range members {
+		for _, host := range hosts {
+			hostSet[host] = true
+		}
+	}
 	for _, group := range strings.Split(limit, ":") {
 		group = strings.TrimSpace(group)
 		if group == "" {
 			continue
 		}
-		if counts[group] > 0 {
+		if counts[group] > 0 || hostSet[group] {
 			return false
 		}
 	}

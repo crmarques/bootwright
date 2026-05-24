@@ -105,6 +105,29 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 	}
 }
 
+func TestAllSucceedsForCanonicalExamples(t *testing.T) {
+	examplesRoot := filepath.Join("..", "..", "..", "examples")
+	entries, err := os.ReadDir(examplesRoot)
+	if err != nil {
+		t.Fatalf("read examples: %v", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		t.Run(name, func(t *testing.T) {
+			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+			if _, err := render.All(t.TempDir(), t.TempDir(), state); err != nil {
+				t.Fatalf("render.All: %v", err)
+			}
+		})
+	}
+}
+
 // TestAllTightensLooseStateDirMode verifies render.All chmods a
 // pre-existing state directory that was created with looser permissions
 // back down to 0700. The Chmod-after-MkdirAll sequence in render.go is
@@ -252,7 +275,6 @@ func TestInstallerConfigUsesOKDReleaseImageForDisconnectedMirror(t *testing.T) {
 	ocp.Spec.Distribution.Release = v1alpha1.ReleaseSpec{Image: "quay.io/okd/scos-release:4.20.0-okd-scos.13"}
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	ocp.Spec.Install.PullSecretRef = v1alpha1.SecretRef{}
-	ocp.Spec.Install.ImageDigestSources = nil
 
 	cfg, err := render.InstallerConfig(state, ocp)
 	if err != nil {
@@ -377,6 +399,9 @@ func TestAgentConfigRendersProviderRootDeviceHints(t *testing.T) {
 
 func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
+		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "vsphere-net"},
 			Spec: v1alpha1.NetworkConfigSpec{
@@ -444,7 +469,6 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Install: v1alpha1.OCPInstallSpec{BaseDomain: "example.test"},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname:   "master-0",
 				Role:       v1alpha1.NodeRoleMaster,

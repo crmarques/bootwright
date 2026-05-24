@@ -45,6 +45,24 @@ func TestCommandRunnerUsesBecomePasswordFile(t *testing.T) {
 	t.Fatalf("command missing --become-password-file: %v", command)
 }
 
+func TestCommandRunnerIncludesForks(t *testing.T) {
+	command := CommandRunner{}.Command(RunSpec{
+		Inventory: "inventory.yaml",
+		Playbook:  "playbook.yml",
+		ExtraVars: "vars.yml",
+		Forks:     7,
+	})
+	for i, arg := range command {
+		if arg == "-f" {
+			if i+1 >= len(command) || command[i+1] != "7" {
+				t.Fatalf("forks arg missing value: %v", command)
+			}
+			return
+		}
+	}
+	t.Fatalf("command missing forks flag: %v", command)
+}
+
 func TestCommandRunnerSavesCombinedOutputLogOnFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")

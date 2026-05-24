@@ -14,6 +14,9 @@ type Status string
 
 const (
 	StatusOK      Status = "OK"
+	StatusDone    Status = "DONE"
+	StatusRunning Status = "RUNNING"
+	StatusPending Status = "PENDING"
 	StatusMissing Status = "MISSING"
 	StatusFail    Status = "FAIL"
 	StatusWarn    Status = "WARN"
@@ -272,8 +275,12 @@ func (p *Printer) CommandLine(label string, args []string) {
 func (p *Printer) statusLabel(status Status) string {
 	label := "[" + string(status) + "]"
 	switch status {
-	case StatusOK:
+	case StatusOK, StatusDone:
 		return p.style(label, color.FgGreen)
+	case StatusRunning:
+		return p.style(label, color.FgYellow)
+	case StatusPending:
+		return p.style(label, color.FgHiBlack)
 	case StatusMissing:
 		return p.style(label, color.Bold, color.FgYellow)
 	case StatusFail:
