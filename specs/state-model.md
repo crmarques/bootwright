@@ -738,10 +738,11 @@ machines, power off nodes, or remove provider services.
 Every apply writes `<state-dir>/workflow/current-apply.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task
-`ansible-output.log` paths. Cluster-owned tasks also record
-`<state-dir>/workflow/runs/<run>/clusters/<cluster>/install.log`. Task statuses
-are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`, `failed`, and
-`cancelled`.
+`ansible-output.log` paths under the root-managed runtime directory.
+Cluster-owned tasks also record
+`/var/lib/bootwright/contexts/<context>/workflow/runs/<run>/clusters/<cluster>/install.log`.
+Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
+`failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes
 `<state-dir>/workflow/current-apply.lease.json`. Mutating workflow commands
 must block when the current apply ledger has a fresh lease. If the ledger still
@@ -766,8 +767,8 @@ Generated output boundaries:
 
 - User-authored YAML lives under `<base-dir>/input-files/`.
 - Placeholder installer output lives under `<base-dir>/state/installer/<cluster>/`.
-- Secret-inlined runtime installer output lives under
-  `<base-dir>/state/runtime/<cluster>/installer/`.
+- Bootwright-managed secret-inlined runtime installer output lives under
+  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
 - External tool input exports written by
   `bootwright render --output-dir <dir> --sensitive` live under the
   requested output directory and include

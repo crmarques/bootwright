@@ -57,9 +57,12 @@ Generated output boundaries are part of the safety contract:
 
 - User-authored YAML lives under `<base-dir>/input-files/`.
 - Placeholder installer output lives under `<base-dir>/state/installer/<cluster>/`.
-- Secret-inlined runtime installer output lives under
-  `<base-dir>/state/runtime/<cluster>/installer/`, with restrictive file modes, and
-  must never be versioned.
+- Bootwright-managed secret-inlined runtime installer output lives under
+  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
+  restrictive file modes, and must never be versioned.
+- Bootwright-managed apply logs that can include external tool output live under
+  `/var/lib/bootwright/contexts/<context>/workflow/`, with restrictive file
+  modes, and must never be versioned.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined
   `openshift-install` configs, under `<dir>` with restrictive file modes. The

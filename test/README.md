@@ -103,6 +103,6 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 ## Logs And Artifacts
 
 Generated state defaults to `~/bootwright/<context>/state`; the Makefile e2e
-targets use `/tmp/bootwright-<case>/state`. Apply and destroy logs are written
-under `ansible/artifacts/<phase>/ansible-output.log` inside that state
-directory. Failed phases print the relevant log path.
+targets use `/tmp/bootwright-<case>/state`. Apply task logs are written under
+`/var/lib/bootwright/contexts/<context>/workflow/`. Failed phases print the
+relevant log path.

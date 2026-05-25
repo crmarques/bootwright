@@ -14,7 +14,8 @@ import (
 func TestClusterAccessSummariesUseRuntimeAuthPaths(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	stateDir := filepath.Join(t.TempDir(), "state")
-	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, state)}
+	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
+	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, runtimeDir, state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusOK},
@@ -26,8 +27,8 @@ func TestClusterAccessSummariesUseRuntimeAuthPaths(t *testing.T) {
 		t.Fatalf("summaries = %+v, want one cluster", summaries)
 	}
 	summary := summaries[0]
-	kubeconfigPath := filepath.Join(stateDir, "runtime", "sno-libvirt", "installer", "auth", "kubeconfig")
-	passwordPath := filepath.Join(stateDir, "runtime", "sno-libvirt", "installer", "auth", "kubeadmin-password")
+	kubeconfigPath := filepath.Join(runtimeDir, "runtime", "sno-libvirt", "installer", "auth", "kubeconfig")
+	passwordPath := filepath.Join(runtimeDir, "runtime", "sno-libvirt", "installer", "auth", "kubeadmin-password")
 	if summary.KubeconfigPath != kubeconfigPath {
 		t.Fatalf("kubeconfig path = %q, want %q", summary.KubeconfigPath, kubeconfigPath)
 	}
@@ -64,7 +65,7 @@ func TestClusterAccessSummariesUseRuntimeAuthPaths(t *testing.T) {
 func TestClusterAccessSummariesRequireSuccessfulInstallWait(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	stateDir := filepath.Join(t.TempDir(), "state")
-	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, state)}
+	result := render.Result{InstallerAssets: render.InstallerAssets(stateDir, filepath.Join(t.TempDir(), "runtime-root"), state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusSkipped},

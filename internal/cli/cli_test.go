@@ -661,6 +661,9 @@ func TestContextPrintEnvNoProxy(t *testing.T) {
 	if !strings.Contains(stdout, "export BOOTWRIGHT_INPUT_DIR="+ctx.InputDir+"\n") {
 		t.Fatalf("stdout missing input dir export:\n%s", stdout)
 	}
+	if !strings.Contains(stdout, "export BOOTWRIGHT_RUNTIME_DIR="+controllerRuntimeDir(ctx.Name)+"\n") {
+		t.Fatalf("stdout missing runtime dir export:\n%s", stdout)
+	}
 	if strings.Contains(stdout, "HTTP_PROXY") {
 		t.Fatalf("stdout unexpectedly contains proxy export:\n%s", stdout)
 	}
@@ -1167,7 +1170,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("fresh", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		report, err := buildStatusReport(cf, defaultHostStateDir)
@@ -1180,7 +1183,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("stale", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		stale := state

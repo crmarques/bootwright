@@ -1226,7 +1226,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{
-		"bootwright_cluster_runtime_dir: \"{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}\"",
+		"bootwright_cluster_runtime_dir: \"{{ (bootwright_runtime_dir | default(lookup('env', 'BOOTWRIGHT_RUNTIME_DIR') | default(bootwright_host_state_dir, true), true)) }}/runtime/{{ bootwright_current_cluster.name }}\"",
 		"bootwright_process_cleanup_pattern: \"runtime/{{ bootwright_current_cluster.name }}/\"",
 		"path: \"{{ bootwright_cluster_runtime_dir }}\"",
 	} {

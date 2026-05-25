@@ -93,9 +93,9 @@ When proxy credentials would be embedded in those exports, rerun it as
 
 - Plaintext credentials, kubeconfigs, pull secrets, private keys,
   tokens.
-- Effective install / agent configs with resolved secrets (these live
-  under `runtime/<cluster>/installer/` with mode `0600` and are never
-  committed).
+- Effective install / agent configs with resolved secrets (these live under
+  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/` with
+  mode `0600` and are never committed).
 - Generated self-signed cert/key material outside the local secrets
   directory.
 

@@ -16,6 +16,7 @@ type RunSpecConfig struct {
 	Executable         string
 	BundleDir          string
 	StateDir           string
+	RuntimeDir         string
 	SecretsDir         string
 	HostStateDir       string
 	InventoryPath      string
@@ -36,6 +37,10 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve state dir: %w", err)
 	}
+	runtimeDirAbs, err := filepath.Abs(cfg.RuntimeDir)
+	if err != nil {
+		return ansible.RunSpec{}, fmt.Errorf("resolve runtime dir: %w", err)
+	}
 	secretsDirAbs, err := filepath.Abs(cfg.SecretsDir)
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve secrets dir: %w", err)
@@ -46,6 +51,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	}
 	pairs := []string{
 		"bootwright_state_dir=" + stateDirAbs,
+		"bootwright_runtime_dir=" + runtimeDirAbs,
 		"bootwright_secrets_dir=" + secretsDirAbs,
 		"bootwright_host_state_dir=" + hostStateDirAbs,
 	}

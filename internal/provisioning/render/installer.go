@@ -30,11 +30,11 @@ type InstallerAsset struct {
 	EffectiveAgentConfigPath   string
 }
 
-func InstallerAssets(stateDir string, state v1alpha1.State) []InstallerAsset {
+func InstallerAssets(stateDir, runtimeDir string, state v1alpha1.State) []InstallerAsset {
 	assets := make([]InstallerAsset, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
 		dir := filepath.Join(stateDir, InstallerRelativeDir, ocp.Metadata.Name)
-		workDir := filepath.Join(stateDir, RuntimeRelativeDir, ocp.Metadata.Name, "installer")
+		workDir := filepath.Join(runtimeDir, RuntimeRelativeDir, ocp.Metadata.Name, "installer")
 		assets = append(assets, InstallerAsset{
 			ClusterName:                ocp.Metadata.Name,
 			Method:                     ocp.Spec.Install.Method,

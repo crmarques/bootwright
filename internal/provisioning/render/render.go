@@ -11,11 +11,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// File modes for everything the renderer writes. State directories
-// and per-cluster work dirs are owner-only because they hold rendered
-// install-config copies (which inline pull-secret material after
-// ResolveInstaller); the YAML files themselves are written 0600 for
-// the same reason.
+// File modes for everything the renderer writes. State directories and
+// runtime work dirs are owner-only because they hold rendered install-config
+// copies; the YAML files themselves are written 0600 for the same reason.
 const (
 	stateDirMode  os.FileMode = 0o700
 	stateFileMode os.FileMode = 0o600
@@ -69,25 +67,25 @@ type Result struct {
 	InstallerAssets    []InstallerAsset
 }
 
-// All writes effective-state, lock, Ansible inventory + vars, and per-
-// cluster install-config + agent-config (placeholders for secrets).
-// `stateDir` is the bootwright state directory; `secretsDir` is the
-// local secrets dir. Uses the default os-backed FileSystem; tests use
-// AllOn to inject a substitute.
-func All(stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return AllOn(defaultFS, stateDir, secretsDir, state)
+// All writes effective-state, lock, Ansible inventory + vars, and
+// per-cluster install-config + agent-config placeholders. `stateDir` is the
+// Bootwright context state directory, `runtimeDir` is the root-managed local
+// runtime directory, and `secretsDir` is the local secrets dir. Uses the
+// default os-backed FileSystem; tests use AllOn to inject a substitute.
+func All(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return AllOn(defaultFS, stateDir, runtimeDir, secretsDir, state)
 }
 
-// AllOn is All parameterised on FileSystem so tests can assert mode
-// invariants without touching disk. Production callers use All.
-func AllOn(fs FileSystem, stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
+// AllOn is All parameterised on FileSystem so tests can assert mode invariants
+// without touching disk. Production callers use All.
+func AllOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{
 		EffectiveStatePath: filepath.Join(stateDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(stateDir, "bootwright.lock.yaml"),
 		InventoryPath:      filepath.Join(stateDir, "ansible", "inventory.yaml"),
 		VarsPath:           filepath.Join(stateDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(stateDir, "ansible", "artifacts"),
-		InstallerAssets:    InstallerAssets(stateDir, state),
+		InstallerAssets:    InstallerAssets(stateDir, runtimeDir, state),
 	}
 	dirs := []string{stateDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
@@ -152,23 +150,25 @@ func ensureStateDir(fs FileSystem, dir string) error {
 // secret material inlined under each cluster's runtime work dir.
 // Placeholder copies under the state installer dir are left untouched.
 // Uses the default os-backed FileSystem; tests use ResolveInstallerOn.
-func ResolveInstaller(stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerOn(defaultFS, stateDir, secretsDir, state)
+func ResolveInstaller(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ResolveInstallerOn(defaultFS, stateDir, runtimeDir, secretsDir, state)
 }
 
 // ResolveInstallerOn is ResolveInstaller parameterised on FileSystem so
 // tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk. Production callers use ResolveInstaller.
-func ResolveInstallerOn(fs FileSystem, stateDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	result := Result{InstallerAssets: InstallerAssets(stateDir, state)}
+func ResolveInstallerOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	result := Result{InstallerAssets: InstallerAssets(stateDir, runtimeDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
 		secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
-		if err := ensureStateDir(fs, asset.WorkDir); err != nil {
-			return result, err
+		for _, dir := range runtimeInstallerDirs(runtimeDir, asset) {
+			if err := ensureStateDir(fs, dir); err != nil {
+				return result, err
+			}
 		}
 		installConfig, err := InstallerConfigWithSecrets(state, ocp, secrets)
 		if err != nil {
@@ -186,6 +186,11 @@ func ResolveInstallerOn(fs FileSystem, stateDir, secretsDir string, state v1alph
 		}
 	}
 	return result, nil
+}
+
+func runtimeInstallerDirs(runtimeDir string, asset InstallerAsset) []string {
+	clusterDir := filepath.Dir(asset.WorkDir)
+	return []string{runtimeDir, filepath.Join(runtimeDir, RuntimeRelativeDir), clusterDir, asset.WorkDir}
 }
 
 func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {

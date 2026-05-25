@@ -1,6 +1,7 @@
 ---
 bootwright_secrets_dir: "{{ lookup('env', 'BOOTWRIGHT_SECRETS_DIR') | default((lookup('env', 'BOOTWRIGHT_BASE_DIR') | default(lookup('env', 'HOME') ~ '/.bootwright', true)) ~ '/secrets', true) }}"
-bootwright_install_local_work_dir: "{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}/installer"
+bootwright_runtime_dir: "{{ lookup('env', 'BOOTWRIGHT_RUNTIME_DIR') | default(bootwright_host_state_dir, true) }}"
+bootwright_install_local_work_dir: "{{ bootwright_runtime_dir }}/runtime/{{ bootwright_current_cluster.name }}/installer"
 bootwright_install_work_dir: "{{ bootwright_host_state_dir }}/runtime/{{ bootwright_current_cluster.name }}/installer"
 bootwright_openshift_install: openshift-install
 bootwright_install_timeout_seconds: 5400

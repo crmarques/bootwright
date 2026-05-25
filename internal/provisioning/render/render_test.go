@@ -48,8 +48,9 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 			}
 
 			stateDir := t.TempDir()
+			runtimeDir := t.TempDir()
 			secretsDir := t.TempDir() // empty — All() must not consult it
-			result, err := render.All(stateDir, secretsDir, state)
+			result, err := render.All(stateDir, runtimeDir, secretsDir, state)
 			if err != nil {
 				t.Fatalf("render.All: %v", err)
 			}
@@ -63,10 +64,8 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 				assertFileMode(t, path, 0o600)
 			}
 			// The state directory and every subdir under it hold
-			// rendered artifacts that contain (or will contain after
-			// ResolveInstaller) secret material. Mode 0700 is the
-			// security boundary the comment on render.go:55-58 calls
-			// out — keep these assertions as the invariant.
+			// operator-facing rendered artifacts. Mode 0700 keeps
+			// local state private and matches the runtime boundary.
 			assertDirMode(t, stateDir, 0o700)
 			assertDirMode(t, filepath.Dir(result.InventoryPath), 0o700)
 			assertDirMode(t, result.ArtifactsDir, 0o700)
@@ -121,7 +120,7 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadNormalizeValidate: %v", err)
 			}
-			if _, err := render.All(t.TempDir(), t.TempDir(), state); err != nil {
+			if _, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state); err != nil {
 				t.Fatalf("render.All: %v", err)
 			}
 		})
@@ -146,7 +145,7 @@ func TestAllTightensLooseStateDirMode(t *testing.T) {
 		t.Fatalf("seed loose mode: %v", err)
 	}
 	secretsDir := t.TempDir()
-	if _, err := render.All(stateDir, secretsDir, state); err != nil {
+	if _, err := render.All(stateDir, t.TempDir(), secretsDir, state); err != nil {
 		t.Fatalf("render.All: %v", err)
 	}
 	assertDirMode(t, stateDir, 0o700)
@@ -165,11 +164,11 @@ func TestAllIsStableAcrossRuns(t *testing.T) {
 	first := t.TempDir()
 	second := t.TempDir()
 	secretsDir := t.TempDir()
-	a, err := render.All(first, secretsDir, state)
+	a, err := render.All(first, t.TempDir(), secretsDir, state)
 	if err != nil {
 		t.Fatalf("first All: %v", err)
 	}
-	b, err := render.All(second, secretsDir, state)
+	b, err := render.All(second, t.TempDir(), secretsDir, state)
 	if err != nil {
 		t.Fatalf("second All: %v", err)
 	}

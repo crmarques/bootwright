@@ -19,6 +19,7 @@ type scopeDryRunReport struct {
 	ReadinessChecks  string            `json:"readinessChecks"`
 	Phases           []string          `json:"phases"`
 	StateDir         string            `json:"stateDir"`
+	RuntimeDir       string            `json:"runtimeDir"`
 	SecretsDir       string            `json:"secretsDir"`
 	HostStateDir     string            `json:"hostStateDir"`
 	BundleDir        string            `json:"bundleDir"`
@@ -56,6 +57,7 @@ type scopeDryRunApply struct {
 
 func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
 	ctx := cf.ctx
+	runtimeDir := controllerRuntimeDir(ctx.Name)
 	bundleDir, err := resolveBundleDir(ctx.StateDir)
 	if err != nil {
 		return failErr(1, err)
@@ -64,6 +66,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 	runResult, err := workflow.Run(cmd.Context(), workflow.RunOptions{
 		State:             state,
 		StateDir:          ctx.StateDir,
+		RuntimeDir:        runtimeDir,
 		SecretsDir:        ctx.SecretsDir,
 		HostStateDir:      flags.hostStateDir,
 		Executable:        flags.executable,
@@ -90,6 +93,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		ReadinessChecks:  "not run; run bootwright check " + scope.name,
 		Phases:           selectedPhaseNames(selected),
 		StateDir:         ctx.StateDir,
+		RuntimeDir:       runtimeDir,
 		SecretsDir:       ctx.SecretsDir,
 		HostStateDir:     flags.hostStateDir,
 		BundleDir:        bundleDir,

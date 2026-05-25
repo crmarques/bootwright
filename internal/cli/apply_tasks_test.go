@@ -150,6 +150,7 @@ echo ansible-stderr-line >&2
 		}},
 	}
 	stateDir := filepath.Join(dir, "state")
+	runtimeDir := filepath.Join(dir, "runtime-root")
 	task := workflow.ApplyTask{
 		Entry: workflow.TaskLedgerEntry{
 			ID:     "provider",
@@ -165,6 +166,7 @@ echo ansible-stderr-line >&2
 	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
+		RuntimeDir:        runtimeDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
 		HostStateDir:      filepath.Join(dir, "host-state"),
 		Executable:        executable,
@@ -183,7 +185,7 @@ echo ansible-stderr-line >&2
 	if strings.Contains(stdout.String(), "log "+stateDir) {
 		t.Fatalf("stdout should not point normal progress at the ansible log:\n%s", stdout.String())
 	}
-	logPath := workflow.TaskLogPath(stateDir, ledger.RunID, "provider")
+	logPath := workflow.TaskLogPath(runtimeDir, ledger.RunID, "provider")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read ansible output log: %v", err)
@@ -219,6 +221,7 @@ echo "ansible stderr ${cluster}" >&2
 		}},
 	}
 	stateDir := filepath.Join(dir, "state")
+	runtimeDir := filepath.Join(dir, "runtime-root")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -250,6 +253,7 @@ echo "ansible stderr ${cluster}" >&2
 	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
+		RuntimeDir:        runtimeDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
 		HostStateDir:      filepath.Join(dir, "host-state"),
 		Executable:        executable,
@@ -268,7 +272,7 @@ echo "ansible stderr ${cluster}" >&2
 		}
 	}
 	for _, cluster := range []string{"cluster-a", "cluster-b"} {
-		logPath := workflow.ApplyClusterLogPath(stateDir, ledger.RunID, cluster)
+		logPath := workflow.ApplyClusterLogPath(runtimeDir, ledger.RunID, cluster)
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("read cluster log %s: %v", logPath, err)
@@ -308,6 +312,7 @@ rmdir "$lock_dir"
 	}
 	lockDir := filepath.Join(dir, "same-host.lock")
 	stateDir := filepath.Join(dir, "state")
+	runtimeDir := filepath.Join(dir, "runtime-root")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -339,6 +344,7 @@ rmdir "$lock_dir"
 	if _, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
 		State:             state,
 		StateDir:          stateDir,
+		RuntimeDir:        runtimeDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
 		HostStateDir:      filepath.Join(dir, "host-state"),
 		Executable:        executable,

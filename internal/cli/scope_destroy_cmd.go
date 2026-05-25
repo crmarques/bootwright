@@ -54,6 +54,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if err != nil {
 			return failErr(1, err)
 		}
+		runtimeDir := controllerRuntimeDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
@@ -112,7 +113,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if httpServerOnly {
 			printDestroyHTTPServerPreview(stdout, plan.state)
 		} else {
-			printDestroyPreview(stdout, scope, ctx.StateDir, plan.state)
+			printDestroyPreview(stdout, scope, runtimeDir, plan.state)
 		}
 		printDestroySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
 		if !dryRun && !yes && !plan.noRemoteWork {
@@ -141,6 +142,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		runResult, err := workflow.Run(c.Context(), workflow.RunOptions{
 			State:             plan.state,
 			StateDir:          ctx.StateDir,
+			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
 			HostStateDir:      flags.hostStateDir,
 			Executable:        flags.executable,

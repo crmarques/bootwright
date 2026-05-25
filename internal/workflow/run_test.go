@@ -83,6 +83,7 @@ func TestRunDryRunDoesNotInvokeRunner(t *testing.T) {
 	result, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          stateDir,
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		Executable:        "ansible-playbook",
@@ -116,6 +117,7 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	if _, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          stateDir,
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -138,6 +140,7 @@ func TestRunPassesControllingTTYToRunner(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          t.TempDir(),
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -158,6 +161,7 @@ func TestRunPassesForksToRunner(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          t.TempDir(),
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -178,6 +182,7 @@ func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:              minimalState(),
 		StateDir:           t.TempDir(),
+		RuntimeDir:         t.TempDir(),
 		SecretsDir:         t.TempDir(),
 		HostStateDir:       "/var/lib/bootwright",
 		BundleDir:          t.TempDir(),
@@ -198,6 +203,7 @@ func TestRunPropagatesRunnerError(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          t.TempDir(),
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -215,6 +221,7 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          t.TempDir(),
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -242,6 +249,7 @@ func TestRunRenderFailureSurfaces(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          stateFile, // file, not directory
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),
@@ -275,6 +283,7 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 	result, err := Run(context.Background(), RunOptions{
 		State:             minimalState(),
 		StateDir:          t.TempDir(),
+		RuntimeDir:        t.TempDir(),
 		SecretsDir:        t.TempDir(),
 		HostStateDir:      "/var/lib/bootwright",
 		BundleDir:         t.TempDir(),

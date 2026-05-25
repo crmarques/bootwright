@@ -86,6 +86,7 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 		{Key: "context", Value: ctx.Name},
 		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "state-dir", Value: ctx.StateDir},
+		{Key: "runtime-dir", Value: controllerRuntimeDir(ctx.Name)},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 		{Key: "host-state-dir", Value: hostStateDir},
 	})

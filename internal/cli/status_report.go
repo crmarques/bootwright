@@ -36,6 +36,7 @@ type statusContext struct {
 	Name         string `json:"name"`
 	InputDir     string `json:"inputDir"`
 	StateDir     string `json:"stateDir"`
+	RuntimeDir   string `json:"runtimeDir"`
 	SecretsDir   string `json:"secretsDir"`
 	HostStateDir string `json:"hostStateDir"`
 }
@@ -87,6 +88,7 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 			Name:         ctx.Name,
 			InputDir:     ctx.InputDir,
 			StateDir:     ctx.StateDir,
+			RuntimeDir:   controllerRuntimeDir(ctx.Name),
 			SecretsDir:   ctx.SecretsDir,
 			HostStateDir: hostStateDir,
 		},

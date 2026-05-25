@@ -14,6 +14,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 
@@ -29,6 +30,7 @@ import (
 type RunOptions struct {
 	State         v1alpha1.State
 	StateDir      string
+	RuntimeDir    string
 	RenderDir     string
 	SecretsDir    string
 	HostStateDir  string
@@ -38,6 +40,7 @@ type RunOptions struct {
 	Limit         string
 	Forks         int
 	ExtraVarPairs []string
+	ArtifactsRoot string
 	// ArtifactsBaseName names the per-run subdirectory under the render
 	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
 	ArtifactsBaseName  string
@@ -48,7 +51,7 @@ type RunOptions struct {
 	DryRun             bool
 	// ResolveInstaller, when true and the run is not a dry-run, writes
 	// per-cluster effective install-config.yaml / agent-config.yaml with
-	// real secret material inlined under <state-dir>/runtime/<cluster>/installer/
+	// real secret material inlined under RuntimeDir/runtime/<cluster>/installer/
 	// before invoking ansible-playbook. Required for any apply path that
 	// targets the openshift install_agent role.
 	ResolveInstaller bool
@@ -84,6 +87,9 @@ type Reporter interface {
 // already wired by the caller. Accepts the ansible.Runner interface so
 // tests can substitute a fake that records calls without exec'ing.
 func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter Reporter) (RunResult, error) {
+	if strings.TrimSpace(opts.RuntimeDir) == "" {
+		return RunResult{}, errors.New("runtime dir is required")
+	}
 	if reporter != nil {
 		reporter.RenderStart()
 	}
@@ -91,7 +97,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if renderDir == "" {
 		renderDir = opts.StateDir
 	}
-	result, err := render.All(renderDir, opts.SecretsDir, opts.State)
+	result, err := render.All(renderDir, opts.RuntimeDir, opts.SecretsDir, opts.State)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -99,14 +105,19 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		if reporter != nil {
 			reporter.ResolveInstallerStart()
 		}
-		if _, err := render.ResolveInstaller(opts.StateDir, opts.SecretsDir, opts.State); err != nil {
+		if _, err := render.ResolveInstaller(opts.StateDir, opts.RuntimeDir, opts.SecretsDir, opts.State); err != nil {
 			return RunResult{Render: result}, err
 		}
+	}
+	artifactsRoot := opts.ArtifactsRoot
+	if artifactsRoot == "" {
+		artifactsRoot = result.ArtifactsDir
 	}
 	spec, err := orchestrate.NewRunSpec(orchestrate.RunSpecConfig{
 		Executable:         opts.Executable,
 		BundleDir:          opts.BundleDir,
 		StateDir:           opts.StateDir,
+		RuntimeDir:         opts.RuntimeDir,
 		SecretsDir:         opts.SecretsDir,
 		HostStateDir:       opts.HostStateDir,
 		InventoryPath:      result.InventoryPath,
@@ -115,7 +126,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		Limit:              opts.Limit,
 		Forks:              opts.Forks,
 		ExtraVarPairs:      opts.ExtraVarPairs,
-		ArtifactsDir:       filepath.Join(result.ArtifactsDir, opts.ArtifactsBaseName),
+		ArtifactsDir:       filepath.Join(artifactsRoot, opts.ArtifactsBaseName),
 		Check:              opts.Check,
 		AskBecomePass:      opts.AskBecomePass,
 		BecomePasswordFile: opts.BecomePasswordFile,
@@ -197,15 +208,15 @@ func LimitMatchesNoHosts(limit string, state v1alpha1.State) bool {
 // RenderOnly executes the render half of a Run without producing a
 // RunSpec or invoking ansible. Used by `bootwright render installer` and
 // other read-only previews.
-func RenderOnly(stateDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.All(stateDir, secretsDir, state)
+func RenderOnly(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.All(stateDir, runtimeDir, secretsDir, state)
 }
 
 // ResolveInstaller renders effective install-config/agent-config copies
 // with secret material inlined. Used by `bootwright render installer
 // --sensitive`.
-func ResolveInstaller(stateDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.ResolveInstaller(stateDir, secretsDir, state)
+func ResolveInstaller(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.ResolveInstaller(stateDir, runtimeDir, secretsDir, state)
 }
 
 func RenderToolInputs(outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {

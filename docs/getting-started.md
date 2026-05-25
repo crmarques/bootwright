@@ -198,7 +198,7 @@ This does not destroy cluster nodes or the rest of the infrastructure.
 - Placeholder installer output lives under
   `<base-dir>/state/installer/<cluster>/`.
 - Secret-inlined runtime installer output lives under
-  `<base-dir>/state/runtime/<cluster>/installer/`.
+  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
 - `render --output-dir <dir> --sensitive` writes secret-inlined external tool
   inputs under the requested directory; keep it local and unversioned.
 
@@ -209,7 +209,7 @@ user kubeconfig:
 
 ```text
 export CLUSTER=<cluster-name>
-export SRC_KUBECONFIG="${BOOTWRIGHT_STATE_DIR}/runtime/${CLUSTER}/installer/auth/kubeconfig"
+export SRC_KUBECONFIG="${BOOTWRIGHT_RUNTIME_DIR}/runtime/${CLUSTER}/installer/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 
@@ -217,7 +217,8 @@ mkdir -p "${HOME}/.kube"
 touch "${HOME}/.kube/config"
 chmod 0600 "${HOME}/.kube/config"
 
-cp "${SRC_KUBECONFIG}" "${TMP_KUBECONFIG}"
+sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" \
+  "${SRC_KUBECONFIG}" "${TMP_KUBECONFIG}"
 CTX="$(oc --kubeconfig "${TMP_KUBECONFIG}" config current-context)"
 oc --kubeconfig "${TMP_KUBECONFIG}" config rename-context "${CTX}" "${CLUSTER}-admin"
 KUBECONFIG="${HOME}/.kube/config:${TMP_KUBECONFIG}" oc config view --flatten > "${TMP_MERGED}"

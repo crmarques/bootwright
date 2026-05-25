@@ -64,7 +64,8 @@ func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
 
 	fs := &recordingFS{}
 	stateDir := "/synthetic/state"
-	if _, err := render.AllOn(fs, stateDir, "/synthetic/secrets", state); err != nil {
+	runtimeDir := "/synthetic/runtime-root"
+	if _, err := render.AllOn(fs, stateDir, runtimeDir, "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -105,7 +106,7 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	if _, err := render.AllOn(fs, "/synthetic/state", "/synthetic/secrets", state); err != nil {
+	if _, err := render.AllOn(fs, "/synthetic/state", "/synthetic/runtime-root", "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -128,6 +129,60 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 		parent := filepath.Dir(w.path)
 		if !slices.Contains(dirs, parent) {
 			t.Errorf("WriteAtomic(%q) parent %q was not declared via MkdirAll (mode would inherit umask)", w.path, parent)
+		}
+	}
+}
+
+func TestResolveInstallerWritesEffectiveFilesUnderRuntimeDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "bootwright-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretsDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(secretsDir, "openshift-pull-secret"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secretsDir, "proxy-credentials"), []byte("proxy:secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	fs := &recordingFS{}
+	stateDir := "/synthetic/state"
+	runtimeDir := "/var/lib/bootwright/contexts/lab"
+	if _, err := render.ResolveInstallerOn(fs, stateDir, runtimeDir, secretsDir, state); err != nil {
+		t.Fatalf("ResolveInstallerOn: %v", err)
+	}
+
+	var paths []string
+	for _, w := range fs.writes {
+		paths = append(paths, w.path)
+		if w.mode != wantStateFileMode {
+			t.Errorf("WriteAtomic(%q) mode %#o, want %#o", w.path, w.mode, wantStateFileMode)
+		}
+	}
+	for _, want := range []string{
+		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "install-config.yaml"),
+		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "agent-config.yaml"),
+	} {
+		if !slices.Contains(paths, want) {
+			t.Fatalf("effective installer writes = %v, missing %s", paths, want)
+		}
+	}
+	for _, forbidden := range []string{
+		filepath.Join(stateDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "install-config.yaml"),
+		filepath.Join(stateDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "agent-config.yaml"),
+	} {
+		if slices.Contains(paths, forbidden) {
+			t.Fatalf("effective installer output leaked under state dir: %s", forbidden)
 		}
 	}
 }

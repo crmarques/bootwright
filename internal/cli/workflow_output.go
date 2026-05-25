@@ -47,7 +47,7 @@ func (r *workflowReporter) RenderStart() {
 
 func (r *workflowReporter) ResolveInstallerStart() {
 	r.ensure()
-	r.printer.List([]output.Item{{Label: "Resolve installer secrets", Detail: "write runtime installer files with restricted permissions"}})
+	r.printer.List([]output.Item{{Label: "Resolve installer secrets", Detail: "write root-managed runtime installer files"}})
 }
 
 func (r *workflowReporter) DryRunCommand(label string, command []string) {

@@ -21,7 +21,7 @@ stable ID, dependency list, status, log path, and optional cluster, node, or
 host association. Human apply output summarizes task progress from that ledger.
 When an apply selects one `ContainerCluster`, Ansible stdout/stderr streams
 pass through to the terminal without Bootwright decoration and are also tee'd
-into per-task artifact logs. When an apply selects multiple `ContainerCluster`
+into root-managed per-task artifact logs. When an apply selects multiple `ContainerCluster`
 objects, Bootwright keeps Ansible output in logs and prints per-cluster install
 log paths plus high-level progress instead.
 

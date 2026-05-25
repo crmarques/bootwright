@@ -8,6 +8,7 @@ import (
 const (
 	bootwrightBaseDirEnv    = "BOOTWRIGHT_BASE_DIR"
 	bootwrightStateDirEnv   = "BOOTWRIGHT_STATE_DIR"
+	bootwrightRuntimeDirEnv = "BOOTWRIGHT_RUNTIME_DIR"
 	bootwrightSecretsDirEnv = "BOOTWRIGHT_SECRETS_DIR"
 
 	defaultHostStateDir = "/var/lib/bootwright"
@@ -20,6 +21,10 @@ func defaultControllerCLIInstallDir() string {
 
 func ansibleVenvDir() string {
 	return filepath.Join(defaultHostStateDir, ansibleVenvDirName)
+}
+
+func controllerRuntimeDir(contextName string) string {
+	return filepath.Join(defaultHostStateDir, "contexts", contextName)
 }
 
 func ansibleVenvBin(name string) string {

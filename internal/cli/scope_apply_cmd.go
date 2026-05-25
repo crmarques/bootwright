@@ -61,6 +61,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
+		runtimeDir := controllerRuntimeDir(ctx.Name)
 		if strictSecrets {
 			if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
 				return e
@@ -101,7 +102,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		applyTarget := scope.applyTarget()
 		tasks := workflow.PlanApplyTasks(applyTarget, plan.state)
 		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
-		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(ctx.StateDir, "dry-run", tasks)
+		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(runtimeDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
@@ -152,6 +153,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		runOpts := workflow.RunOptions{
 			State:              plan.state,
 			StateDir:           ctx.StateDir,
+			RuntimeDir:         runtimeDir,
 			SecretsDir:         ctx.SecretsDir,
 			HostStateDir:       flags.hostStateDir,
 			Executable:         flags.executable,
@@ -172,7 +174,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
-			result, err := workflow.RenderOnly(ctx.StateDir, ctx.SecretsDir, plan.state)
+			result, err := workflow.RenderOnly(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -183,13 +185,13 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if reporter != nil {
 			reporter.RenderStart()
 		}
-		renderResult, err := workflow.RenderOnly(ctx.StateDir, ctx.SecretsDir, plan.state)
+		renderResult, err := workflow.RenderOnly(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state)
 		if err != nil {
 			return failErr(1, err)
 		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
-			if _, err := workflow.ResolveInstaller(ctx.StateDir, ctx.SecretsDir, plan.state); err != nil {
+			if _, err := workflow.ResolveInstaller(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state); err != nil {
 				return failErr(1, err)
 			}
 		}

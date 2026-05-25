@@ -1,7 +1,7 @@
 ---
 - name: Resolve cluster runtime dirs
   ansible.builtin.set_fact:
-    bootwright_cluster_runtime_dir: "{{ bootwright_state_dir }}/runtime/{{ bootwright_current_cluster.name }}"
+    bootwright_cluster_runtime_dir: "{{ (bootwright_runtime_dir | default(lookup('env', 'BOOTWRIGHT_RUNTIME_DIR') | default(bootwright_host_state_dir, true), true)) }}/runtime/{{ bootwright_current_cluster.name }}"
     bootwright_cluster_remote_runtime_dir: "{{ bootwright_host_state_dir }}/runtime/{{ bootwright_current_cluster.name }}"
   changed_when: false
 
@@ -21,4 +21,3 @@
     path: "{{ bootwright_cluster_runtime_dir }}"
     state: absent
   delegate_to: localhost
-  become: false

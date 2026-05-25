@@ -48,6 +48,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
+		runtimeDir := controllerRuntimeDir(ctx.Name)
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " check"}})
 		}
@@ -81,6 +82,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		_, err = workflow.Run(c.Context(), workflow.RunOptions{
 			State:             state,
 			StateDir:          ctx.StateDir,
+			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
 			HostStateDir:      flags.hostStateDir,
 			Executable:        flags.executable,

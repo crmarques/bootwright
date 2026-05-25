@@ -106,6 +106,5 @@ If cases are copied and edited under another parent directory, pass that parent
 as `E2E_DIR=<path>` to the `make` targets.
 
 Generated state defaults to `~/bootwright/<context>/state`; the Makefile e2e
-targets use `/tmp/bootwright-<case>/state`. Failed phases print the Ansible log
-path, usually under `ansible/artifacts/<phase>/ansible-output.log` inside that
-state directory.
+targets use `/tmp/bootwright-<case>/state`. Failed apply phases print the
+Ansible log path under `/var/lib/bootwright/contexts/<context>/workflow/`.

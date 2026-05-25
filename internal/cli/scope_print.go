@@ -132,18 +132,18 @@ var askBecomePassDefault = func() bool { return os.Geteuid() != 0 }
 // preview is concise on purpose: the user can read the YAML for full
 // detail. The output differs by scope because the two destroy targets
 // remove very different things: `destroy cluster` removes only the
-// per-cluster installer work dir on the controller; `destroy infra`
+// root-managed per-cluster installer work dir on the controller; `destroy infra`
 // tears down VMs, networks, and provider services on provider hosts.
-func printDestroyPreview(w io.Writer, scope scopeSpec, stateDir string, state v1alpha1.State) {
+func printDestroyPreview(w io.Writer, scope scopeSpec, runtimeDir string, state v1alpha1.State) {
 	switch scope.name {
 	case "cluster":
-		printDestroyClustersPreview(w, stateDir, state)
+		printDestroyClustersPreview(w, runtimeDir, state)
 	case "infra":
 		printDestroyInfraPreview(w, state)
 	}
 }
 
-func printDestroyClustersPreview(w io.Writer, stateDir string, state v1alpha1.State) {
+func printDestroyClustersPreview(w io.Writer, runtimeDir string, state v1alpha1.State) {
 	if len(state.ContainerClusters) == 0 {
 		return
 	}
@@ -154,7 +154,7 @@ func printDestroyClustersPreview(w io.Writer, stateDir string, state v1alpha1.St
 		names = append(names, c.Metadata.Name)
 	}
 	sort.Strings(names)
-	runtimeRoot := filepath.Join(stateDir, "runtime")
+	runtimeRoot := filepath.Join(runtimeDir, "runtime")
 	var items []output.Item
 	for _, name := range names {
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(runtimeRoot, name)})

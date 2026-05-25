@@ -6,7 +6,8 @@ customization. Return there at the end for bastion-side teardown.
 
 These steps assume the env vars from the bastion doc are exported:
 `$CASE`, `$BOOTWRIGHT_BASE_DIR`, `$BOOTWRIGHT_INPUT_DIR`,
-`$BOOTWRIGHT_STATE_DIR`, and `$BOOTWRIGHT_SECRETS_DIR`.
+`$BOOTWRIGHT_STATE_DIR`, `$BOOTWRIGHT_RUNTIME_DIR`, and
+`$BOOTWRIGHT_SECRETS_DIR`.
 If `print-env` was blocked because proxy credentials would be printed,
 run the `proxy-credentials` `secret set` command below first, then export the
 vars with `bootwright print-env --sensitive`.
@@ -112,10 +113,11 @@ bootwright apply cluster --yes
 ```
 
 `apply cluster` materializes
-`runtime/<cluster>/installer/{install,agent}-config.yaml` with secret
-material inlined (mode `0600`) — the form `openshift-install` consumes.
-The runtime tree never leaves local state. It then renders the agent
-installer assets, boots every cluster node through the provider's
+`$BOOTWRIGHT_RUNTIME_DIR/runtime/<cluster>/installer/{install,agent}-config.yaml`
+with secret material inlined (mode `0600`) — the form `openshift-install`
+consumes. It stages those files under
+`/var/lib/bootwright/runtime/<cluster>/installer/` on the bastion. It then
+renders the agent installer assets, boots every cluster node through the provider's
 machine-control path (Redfish virtual media for bare metal, or emulated
 Redfish on libvirt), and waits for
 `openshift-install agent wait-for install-complete`.
@@ -141,7 +143,7 @@ to disk. Open a second shell on the bastion to follow it:
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-tail -f "$BOOTWRIGHT_STATE_DIR/runtime/$CLUSTER/installer/.openshift_install.log"
+sudo tail -f "/var/lib/bootwright/runtime/$CLUSTER/installer/.openshift_install.log"
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
@@ -161,7 +163,11 @@ ssh -i ~/.ssh/bootwright-ssh-key core@<node-ip> \
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-export KUBECONFIG="$BOOTWRIGHT_STATE_DIR/runtime/$CLUSTER/installer/auth/kubeconfig"
+export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
+sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" \
+  "$BOOTWRIGHT_RUNTIME_DIR/runtime/$CLUSTER/installer/auth/kubeconfig" \
+  "$TMP_KUBECONFIG"
+export KUBECONFIG="$TMP_KUBECONFIG"
 
 oc get nodes
 oc get clusterversion
@@ -178,7 +184,7 @@ To keep the cluster in the user's default kube contexts, merge the generated
 kubeconfig after the install:
 
 ```bash
-export SRC_KUBECONFIG="$BOOTWRIGHT_STATE_DIR/runtime/$CLUSTER/installer/auth/kubeconfig"
+export SRC_KUBECONFIG="$BOOTWRIGHT_RUNTIME_DIR/runtime/$CLUSTER/installer/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 
@@ -186,7 +192,7 @@ mkdir -p "$HOME/.kube"
 touch "$HOME/.kube/config"
 chmod 0600 "$HOME/.kube/config"
 
-cp "$SRC_KUBECONFIG" "$TMP_KUBECONFIG"
+sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" "$SRC_KUBECONFIG" "$TMP_KUBECONFIG"
 CTX=$(oc --kubeconfig "$TMP_KUBECONFIG" config current-context)
 oc --kubeconfig "$TMP_KUBECONFIG" config rename-context "$CTX" "$CLUSTER-admin"
 KUBECONFIG="$HOME/.kube/config:$TMP_KUBECONFIG" oc config view --flatten > "$TMP_MERGED"

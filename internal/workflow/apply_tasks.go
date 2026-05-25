@@ -218,8 +218,11 @@ func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter) (RunLedger, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
+	if strings.TrimSpace(opts.RuntimeDir) == "" {
+		return RunLedger{}, fmt.Errorf("runtime dir is required")
+	}
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
-	tasks = AnnotateApplyTaskClusterLogPaths(stateDir, runID, tasks)
+	tasks = AnnotateApplyTaskClusterLogPaths(opts.RuntimeDir, runID, tasks)
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	if err := SaveRunLedger(stateDir, ledger); err != nil {
 		return ledger, err
@@ -240,7 +243,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		return RemoveRunLease(stateDir)
 	}
 	multiClusterOutput := len(ledger.ClusterNames()) > 1
-	clusterLogs, err := openApplyClusterLogs(stateDir, ledger)
+	clusterLogs, err := openApplyClusterLogs(opts.RuntimeDir, ledger)
 	if err != nil {
 		_ = finishRun(RunStatusFailed)
 		return ledger, err
@@ -308,7 +311,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 				runningRedfish += redfishSlots
 			}
 			acquireTaskResources(task, runningResources)
-			logPath := TaskLogPath(stateDir, ledger.RunID, task.Entry.ID)
+			logPath := TaskLogPath(opts.RuntimeDir, ledger.RunID, task.Entry.ID)
 			ledger.MarkReady(task.Entry.ID)
 			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
 			if err := SaveRunLedger(stateDir, ledger); err != nil && firstErr == nil {
@@ -483,6 +486,7 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, st
 	taskOpts.ResolveInstaller = false
 	taskOpts.Label = task.Entry.Label
 	taskOpts.Forks = task.Forks
+	taskOpts.ArtifactsRoot = filepath.Join(opts.RuntimeDir, "workflow", "runs", runID, "tasks", task.Entry.ID, "artifacts")
 	runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 	result, err := Run(ctx, taskOpts, runner, nil)
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
@@ -509,14 +513,14 @@ type applyClusterLogSet struct {
 	writers map[string]io.Writer
 }
 
-func openApplyClusterLogs(stateDir string, ledger RunLedger) (*applyClusterLogSet, error) {
+func openApplyClusterLogs(runtimeDir string, ledger RunLedger) (*applyClusterLogSet, error) {
 	names := ledger.ClusterNames()
 	logs := &applyClusterLogSet{writers: map[string]io.Writer{}}
 	if len(names) <= 1 {
 		return logs, nil
 	}
 	for _, name := range names {
-		path := ApplyClusterLogPath(stateDir, ledger.RunID, name)
+		path := ApplyClusterLogPath(runtimeDir, ledger.RunID, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			logs.Close()
 			return nil, fmt.Errorf("create cluster log directory: %w", err)
@@ -656,12 +660,12 @@ func TaskLedgerEntries(tasks []ApplyTask) []TaskLedgerEntry {
 	return entries
 }
 
-func AnnotateApplyTaskClusterLogPaths(stateDir, runID string, tasks []ApplyTask) []ApplyTask {
+func AnnotateApplyTaskClusterLogPaths(runtimeDir, runID string, tasks []ApplyTask) []ApplyTask {
 	out := make([]ApplyTask, len(tasks))
 	copy(out, tasks)
 	for i := range out {
 		if out[i].Entry.Cluster != "" {
-			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(stateDir, runID, out[i].Entry.Cluster)
+			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(runtimeDir, runID, out[i].Entry.Cluster)
 		}
 	}
 	return out
@@ -727,12 +731,12 @@ func nodeBootTaskCount(tasks []ApplyTask) int {
 	return count
 }
 
-func TaskLogPath(stateDir, runID, taskID string) string {
-	return filepath.Join(stateDir, "workflow", "runs", runID, taskID, "render", "ansible", "artifacts", taskID, ansible.OutputLogName)
+func TaskLogPath(runtimeDir, runID, taskID string) string {
+	return filepath.Join(runtimeDir, "workflow", "runs", runID, "tasks", taskID, "artifacts", taskID, ansible.OutputLogName)
 }
 
-func ApplyClusterLogPath(stateDir, runID, cluster string) string {
-	return filepath.Join(stateDir, "workflow", "runs", runID, "clusters", cluster, "install.log")
+func ApplyClusterLogPath(runtimeDir, runID, cluster string) string {
+	return filepath.Join(runtimeDir, "workflow", "runs", runID, "clusters", cluster, "install.log")
 }
 
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {

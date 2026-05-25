@@ -40,6 +40,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			return err
 		}
 		ctx := cf.ctx
+		runtimeDir := controllerRuntimeDir(ctx.Name)
 		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, hostStateDir); err != nil {
 			return err
 		}
@@ -58,6 +59,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		_, err = workflow.Run(c.Context(), workflow.RunOptions{
 			State:             state,
 			StateDir:          ctx.StateDir,
+			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
 			HostStateDir:      hostStateDir,
 			Executable:        executable,
