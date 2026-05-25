@@ -22,6 +22,29 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	}
 }
 
+func TestValidateScopedApplySharedServicesFailsForInfraAndAllSharedKinds(t *testing.T) {
+	state := cliStateWithAllSharedProviderServices()
+	for _, target := range []string{"infra", "all"} {
+		t.Run(target, func(t *testing.T) {
+			err := validateScopedApplySharedServices(state, target, "cluster-a")
+			if err == nil {
+				t.Fatal("expected shared service conflict, got nil")
+			}
+			for _, fragment := range []string{
+				"artifacts services/default",
+				"loadBalancer services/default",
+				"nameResolution services/default",
+				"proxy services/default",
+				"registry services/default",
+			} {
+				if !strings.Contains(err.Error(), fragment) {
+					t.Fatalf("%s error %q missing %q", target, err, fragment)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateScopedApplySharedServicesAllowsClusterScope(t *testing.T) {
 	if err := validateScopedApplySharedServices(cliStateWithSharedDNS(), "cluster", "cluster-a"); err != nil {
 		t.Fatalf("cluster apply scope should not validate provider services: %v", err)
@@ -62,6 +85,44 @@ func cliStateWithSharedDNS() v1alpha1.State {
 			cliContainerCluster("cluster-b", "infra-b"),
 		},
 	}
+}
+
+func cliStateWithAllSharedProviderServices() v1alpha1.State {
+	state := cliStateWithSharedDNS()
+	state.InfraProviders[0].Spec.ArtifactPublishers = []v1alpha1.ArtifactPublisherCapability{{
+		Name: "default",
+		HTTP: &v1alpha1.ArtifactHTTPCapability{HostRef: v1alpha1.LocalObjectReference{
+			Name: "service-host",
+		}},
+	}}
+	state.InfraProviders[0].Spec.LoadBalancers = []v1alpha1.LoadBalancerCapability{{
+		Name:    "default",
+		HAProxy: &v1alpha1.HAProxyCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+	}}
+	state.InfraProviders[0].Spec.Proxies = []v1alpha1.ProxyCapability{{
+		Name:  "default",
+		Squid: &v1alpha1.SquidCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+	}}
+	state.InfraProviders[0].Spec.Registries = []v1alpha1.RegistryCapability{{
+		Name:           "default",
+		MirrorRegistry: &v1alpha1.MirrorRegistryCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+	}}
+	for i := range state.ClusterInfras {
+		state.ClusterInfras[i].Spec.Components.LoadBalancers = []v1alpha1.ClusterLoadBalancerComponent{{
+			Name: "default",
+			From: v1alpha1.From{Provider: "services", Name: "default"},
+		}}
+		state.ClusterInfras[i].Spec.Components.Proxy = &v1alpha1.ClusterComponentRef{
+			From: v1alpha1.From{Provider: "services", Name: "default"},
+		}
+		state.ClusterInfras[i].Spec.Components.Registry = &v1alpha1.ClusterComponentRef{
+			From: v1alpha1.From{Provider: "services", Name: "default"},
+		}
+	}
+	for i := range state.ContainerClusters {
+		state.ContainerClusters[i].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+	}
+	return state
 }
 
 func cliClusterInfraWithDNS(name, machineProvider string) v1alpha1.ClusterInfra {

@@ -304,6 +304,85 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 	}
 }
 
+func TestInstallerAssetsAreClusterScopedForMultipleClusters(t *testing.T) {
+	state := twoClusterBareMetalPublicationState(t)
+	stateDir := "/state"
+	runtimeDir := "/runtime-root"
+
+	assets := render.InstallerAssets(stateDir, runtimeDir, state)
+	if len(assets) != 2 {
+		t.Fatalf("installer assets got %d, want 2", len(assets))
+	}
+
+	seenDirs := map[string]bool{}
+	for _, asset := range assets {
+		wantDir := filepath.Join(stateDir, "installer", asset.ClusterName)
+		wantWorkDir := filepath.Join(runtimeDir, "runtime", asset.ClusterName, "installer")
+		if asset.Dir != wantDir {
+			t.Errorf("%s Dir got %q, want %q", asset.ClusterName, asset.Dir, wantDir)
+		}
+		if asset.WorkDir != wantWorkDir {
+			t.Errorf("%s WorkDir got %q, want %q", asset.ClusterName, asset.WorkDir, wantWorkDir)
+		}
+		if asset.InstallConfigPath != filepath.Join(wantDir, "install-config.yaml") {
+			t.Errorf("%s install-config path got %q", asset.ClusterName, asset.InstallConfigPath)
+		}
+		if asset.EffectiveInstallConfigPath != filepath.Join(wantWorkDir, "install-config.yaml") {
+			t.Errorf("%s effective install-config path got %q", asset.ClusterName, asset.EffectiveInstallConfigPath)
+		}
+		if seenDirs[asset.Dir] || seenDirs[asset.WorkDir] {
+			t.Fatalf("cluster %s reused installer directory: %+v", asset.ClusterName, assets)
+		}
+		seenDirs[asset.Dir] = true
+		seenDirs[asset.WorkDir] = true
+	}
+}
+
+func TestBareMetalMultiClusterPublicationUsesUniqueClusterISOsOnSharedHTTPRoot(t *testing.T) {
+	state := twoClusterBareMetalPublicationState(t)
+	vars := render.Vars(state)
+	clusters := clustersByName(t, vars)
+
+	roots := map[string]bool{}
+	isoNames := map[string]bool{}
+	for _, clusterName := range []string{"sno-emul-baremetal", "sno-emul-baremetal-b"} {
+		cluster := clusters[clusterName]
+		targets := cluster["agentIsoPublishTargets"].([]any)
+		if len(targets) != 1 {
+			t.Fatalf("%s publish targets = %v, want one", clusterName, targets)
+		}
+		target := targets[0].(map[string]any)
+		machine := firstMachineComponent(t, cluster)
+		iso := machine["boot"].(map[string]any)["agentIso"].(map[string]any)
+		if iso["stagePath"] != target["stagePath"] || iso["fetchUrl"] != target["fetchUrl"] {
+			t.Fatalf("%s machine boot ISO target does not match publish target: machine=%v target=%v", clusterName, iso, target)
+		}
+
+		wantISO := "agent-" + clusterName + ".iso"
+		stagePath := target["stagePath"].(string)
+		fetchURL := target["fetchUrl"].(string)
+		if !strings.HasSuffix(stagePath, "/"+wantISO) {
+			t.Errorf("%s stagePath got %q, want suffix %q", clusterName, stagePath, wantISO)
+		}
+		if !strings.HasSuffix(fetchURL, "/"+wantISO) {
+			t.Errorf("%s fetchUrl got %q, want suffix %q", clusterName, fetchURL, wantISO)
+		}
+		if isoNames[wantISO] {
+			t.Fatalf("ISO basename %q was reused", wantISO)
+		}
+		isoNames[wantISO] = true
+
+		root := strings.Split(stagePath, "/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/")[0]
+		roots[root] = true
+		if root != "{{ bootwright_host_state_dir }}/artifacts/host-services-default" {
+			t.Errorf("%s publish root got %q", clusterName, root)
+		}
+	}
+	if len(roots) != 1 {
+		t.Fatalf("clusters should share one artifact HTTP service root, got %v", roots)
+	}
+}
+
 func TestVarsUseSafeAgentISOPublishTokenPlaceholder(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
@@ -506,6 +585,19 @@ func TestProviderServicesAggregateSharedArtifactPublisher(t *testing.T) {
 	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifacts)
 	if got := service["consumingClusters"].([]string); strings.Join(got, ",") != "sno-emul-baremetal,sno-emul-baremetal-b" {
 		t.Fatalf("artifact consumingClusters got %v", got)
+	}
+	for k, want := range map[string]any{
+		"providerName": "host-services",
+		"name":         "default",
+		"hostRef":      "services-host",
+		"realisation":  "http",
+	} {
+		if got := service[k]; got != want {
+			t.Fatalf("artifact service %s got %v, want %v", k, got, want)
+		}
+	}
+	if _, ok := service["clusterName"]; ok {
+		t.Fatalf("shared artifact service must not carry one top-level clusterName: %v", service)
 	}
 }
 
@@ -724,4 +816,14 @@ func providerServiceKindCounts(services []any) map[string]int {
 		counts[service["kind"].(string)]++
 	}
 	return counts
+}
+
+func clustersByName(t *testing.T, vars map[string]any) map[string]map[string]any {
+	t.Helper()
+	out := map[string]map[string]any{}
+	for _, raw := range vars["bootwright_clusters"].([]any) {
+		cluster := raw.(map[string]any)
+		out[cluster["name"].(string)] = cluster
+	}
+	return out
 }
