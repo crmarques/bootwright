@@ -168,3 +168,28 @@
       when:
         - bootwright_agent_iso_publish_cleanup_token_file is defined
         - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
+
+- name: Stat local kubeadmin password
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+  register: bootwright_local_kubeadmin_password_stat
+  delegate_to: localhost
+  become: false
+
+- name: Ensure context secrets directory exists for kubeadmin password
+  ansible.builtin.file:
+    path: "{{ bootwright_secrets_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: bootwright_local_kubeadmin_password_stat.stat.exists
+
+- name: Save kubeadmin password to context secrets
+  ansible.builtin.copy:
+    src: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+    dest: "{{ bootwright_secrets_dir }}/{{ bootwright_current_cluster.name }}-kubeadmin-password"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: bootwright_local_kubeadmin_password_stat.stat.exists

@@ -1253,10 +1253,37 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	}
 }
 
+func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	saveIdx := findAnsibleTask(t, tasks, "Save kubeadmin password to context secrets")
+	save, ok := tasks[saveIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no copy body", tasks[saveIdx]["name"])
+	}
+	if got := save["src"]; got != "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password" {
+		t.Fatalf("kubeadmin password source got %v", got)
+	}
+	if got := save["dest"]; got != "{{ bootwright_secrets_dir }}/{{ bootwright_current_cluster.name }}-kubeadmin-password" {
+		t.Fatalf("kubeadmin password secret dest got %v", got)
+	}
+	if got := save["mode"]; got != "0600" {
+		t.Fatalf("kubeadmin password secret mode got %v", got)
+	}
+	if got := tasks[saveIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("kubeadmin password save must be local, got %v", got)
+	}
+	if got := tasks[saveIdx]["become"]; got != false {
+		t.Fatalf("kubeadmin password local save should not become remotely, got %v", got)
+	}
+	if got := tasks[saveIdx]["when"]; got != "bootwright_local_kubeadmin_password_stat.stat.exists" {
+		t.Fatalf("kubeadmin password save when got %v", got)
+	}
+}
+
 func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{
-		"bootwright_cluster_runtime_dir: \"{{ (bootwright_runtime_dir | default(lookup('env', 'BOOTWRIGHT_RUNTIME_DIR') | default(bootwright_host_state_dir, true), true)) }}/runtime/{{ bootwright_current_cluster.name }}\"",
+		"bootwright_cluster_runtime_dir: \"{{ (bootwright_runtime_dir | default(bootwright_host_state_dir, true)) }}/runtime/{{ bootwright_current_cluster.name }}\"",
 		"bootwright_process_cleanup_pattern: \"runtime/{{ bootwright_current_cluster.name }}/\"",
 		"path: \"{{ bootwright_cluster_runtime_dir }}\"",
 	} {

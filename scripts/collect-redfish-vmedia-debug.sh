@@ -10,11 +10,11 @@ cluster_dir_explicit=0
 output_parent=""
 bootwright_cli="${BOOTWRIGHT_BIN:-}"
 bootwright_context="${BOOTWRIGHT_CONTEXT:-}"
-bootwright_base_dir="${BOOTWRIGHT_BASE_DIR:-}"
-bootwright_input_dir="${BOOTWRIGHT_INPUT_DIR:-}"
-bootwright_state_dir="${BOOTWRIGHT_STATE_DIR:-}"
-bootwright_secrets_dir="${BOOTWRIGHT_SECRETS_DIR:-}"
-bootwright_host_state_dir="${BOOTWRIGHT_HOST_STATE_DIR:-/var/lib/bootwright}"
+discovered_context_dir=""
+context_input_dir=""
+context_state_dir=""
+context_secrets_dir=""
+bootwright_root_dir="/var/lib/bootwright"
 context_source=""
 iso_url="${BOOTWRIGHT_ISO_URL:-}"
 iso_path="${BOOTWRIGHT_AGENT_ISO_PATH:-${BOOTWRIGHT_ISO_PATH:-}}"
@@ -55,14 +55,12 @@ Usage:
 
 Context Discovery:
   The collector uses --cluster-dir first. When omitted, it reads
-  BOOTWRIGHT_BASE_DIR from an existing eval "\$(bootwright print-env --sensitive)"
-  environment. If that is unset, it runs bootwright print-env --sensitive for
-  the current Bootwright context and reads the exported context paths.
+  BOOTWRIGHT_CONTEXT or runs bootwright print-env --sensitive, then derives the
+  fixed context path from /var/lib/bootwright/contexts/<context>.
 
 Options:
   --cluster-dir PATH              Bootwright context/base directory that contains state/
   --bootwright PATH               bootwright binary to use for current-context discovery
-  --host-state-dir PATH           Provider host state dir; default: ${bootwright_host_state_dir}
   --output-dir PATH               Directory where the debug bundle directory is created
   --iso-path PATH                 Staged agent ISO file or directory containing agent-*.iso
   --iso-url URL                   Agent ISO URL; auto-detected from ansible-output.log when possible
@@ -84,8 +82,7 @@ Options:
   -h, --help                      Show this help
 
 Environment:
-  BOOTWRIGHT_BIN, BOOTWRIGHT_CONTEXT, BOOTWRIGHT_BASE_DIR, BOOTWRIGHT_STATE_DIR
-  BOOTWRIGHT_HOST_STATE_DIR, BOOTWRIGHT_AGENT_ISO_PATH, BOOTWRIGHT_ISO_PATH
+  BOOTWRIGHT_BIN, BOOTWRIGHT_CONTEXT, BOOTWRIGHT_AGENT_ISO_PATH, BOOTWRIGHT_ISO_PATH
   BOOTWRIGHT_REDFISH_USER, BOOTWRIGHT_REDFISH_PASSWORD, BOOTWRIGHT_REDFISH_PASSWORD_FILE
   BOOTWRIGHT_REDFISH_BASE_URL, BOOTWRIGHT_REDFISH_SYSTEM_URI
   BOOTWRIGHT_REDFISH_VMEDIA_URI, BOOTWRIGHT_ISO_URL
@@ -169,7 +166,7 @@ apply_bootwright_export_line() {
   key=${BASH_REMATCH[1]}
   raw=${BASH_REMATCH[2]}
   case "${key}" in
-    BOOTWRIGHT_CONTEXT|BOOTWRIGHT_BASE_DIR|BOOTWRIGHT_INPUT_DIR|BOOTWRIGHT_STATE_DIR|BOOTWRIGHT_SECRETS_DIR|HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)
+    BOOTWRIGHT_CONTEXT|HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)
       ;;
     *)
       return 0
@@ -180,18 +177,6 @@ apply_bootwright_export_line() {
   case "${key}" in
     BOOTWRIGHT_CONTEXT)
       bootwright_context=${bootwright_context:-${value}}
-      ;;
-    BOOTWRIGHT_BASE_DIR)
-      bootwright_base_dir=${bootwright_base_dir:-${value}}
-      ;;
-    BOOTWRIGHT_INPUT_DIR)
-      bootwright_input_dir=${bootwright_input_dir:-${value}}
-      ;;
-    BOOTWRIGHT_STATE_DIR)
-      bootwright_state_dir=${bootwright_state_dir:-${value}}
-      ;;
-    BOOTWRIGHT_SECRETS_DIR)
-      bootwright_secrets_dir=${bootwright_secrets_dir:-${value}}
       ;;
     HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy)
       export "${key}=${value}"
@@ -216,33 +201,25 @@ load_bootwright_print_env() {
 }
 
 resolve_context_dir() {
-  local state_parent
-
   if [[ "${cluster_dir_explicit}" -eq 1 ]]; then
     context_source="--cluster-dir"
-  elif [[ -n "${bootwright_base_dir}" ]]; then
-    cluster_dir=${bootwright_base_dir}
-    context_source="BOOTWRIGHT_BASE_DIR"
-  elif [[ -n "${bootwright_state_dir}" ]]; then
-    state_parent=$(dirname "${bootwright_state_dir}")
-    cluster_dir=${state_parent}
-    context_source="BOOTWRIGHT_STATE_DIR"
+  elif [[ -n "${bootwright_context}" ]]; then
+    cluster_dir="${bootwright_root_dir}/contexts/${bootwright_context}"
+    context_source="BOOTWRIGHT_CONTEXT"
   else
-    load_bootwright_print_env || die "could not discover current Bootwright context; pass --cluster-dir, eval \"\$(bootwright print-env --sensitive)\", or install bootwright in PATH"
-    if [[ -n "${bootwright_base_dir}" ]]; then
-      cluster_dir=${bootwright_base_dir}
-    elif [[ -n "${bootwright_state_dir}" ]]; then
-      cluster_dir=$(dirname "${bootwright_state_dir}")
+    load_bootwright_print_env || die "could not discover current Bootwright context; pass --cluster-dir, set BOOTWRIGHT_CONTEXT, or install bootwright in PATH"
+    if [[ -n "${bootwright_context}" ]]; then
+      cluster_dir="${bootwright_root_dir}/contexts/${bootwright_context}"
     fi
   fi
 
-  [[ -n "${cluster_dir}" ]] || die "current Bootwright context did not provide BOOTWRIGHT_BASE_DIR"
-  [[ -d "${cluster_dir}" ]] || die "context/base directory does not exist: ${cluster_dir}"
+  [[ -n "${cluster_dir}" ]] || die "current Bootwright context could not be resolved"
+  [[ -d "${cluster_dir}" ]] || die "context directory does not exist: ${cluster_dir}"
   cluster_dir=$(cd "${cluster_dir}" && pwd -P)
-  bootwright_base_dir=${bootwright_base_dir:-${cluster_dir}}
-  bootwright_input_dir=${bootwright_input_dir:-${cluster_dir}/input-files}
-  bootwright_state_dir=${bootwright_state_dir:-${cluster_dir}/state}
-  bootwright_secrets_dir=${bootwright_secrets_dir:-${cluster_dir}/secrets}
+  discovered_context_dir=${discovered_context_dir:-${cluster_dir}}
+  context_input_dir=${context_input_dir:-${cluster_dir}/input-files}
+  context_state_dir=${context_state_dir:-${cluster_dir}/state}
+  context_secrets_dir=${context_secrets_dir:-${cluster_dir}/secrets}
 }
 
 cleanup() {
@@ -269,11 +246,6 @@ while [[ $# -gt 0 ]]; do
     --output-dir)
       [[ $# -ge 2 ]] || die "--output-dir needs a value"
       output_parent=$2
-      shift 2
-      ;;
-    --host-state-dir)
-      [[ $# -ge 2 ]] || die "--host-state-dir needs a value"
-      bootwright_host_state_dir=$2
       shift 2
       ;;
     --iso-path)
@@ -670,8 +642,8 @@ redfish_transfer_protocol() {
 
 candidate_iso_roots() {
   printf '%s\n' \
-    "${bootwright_host_state_dir}/artifacts" \
-    "${bootwright_host_state_dir}/bmc" \
+    "${bootwright_root_dir}/artifacts-server" \
+    "${bootwright_root_dir}/bmc" \
     "${cluster_dir}/state" \
     "${cluster_dir}"
 }
@@ -811,7 +783,7 @@ discover_from_desired_state() {
   local key value
 
   have python3 || return 0
-  discovery=$(python3 - "${cluster_dir}" "${bootwright_input_dir}" "${bootwright_state_dir}" "${bmc_url}" "${system_uri}" <<'PY' 2>/dev/null || true
+  discovery=$(python3 - "${cluster_dir}" "${context_input_dir}" "${context_state_dir}" "${bmc_url}" "${system_uri}" <<'PY' 2>/dev/null || true
 import os
 import re
 import sys
@@ -968,8 +940,8 @@ PY
     esac
   done <<<"${discovery}"
 
-  if [[ -z "${bmc_password_file}" && -n "${bmc_credentials_ref}" && -f "${bootwright_secrets_dir}/${bmc_credentials_ref}" ]]; then
-    bmc_password_file="${bootwright_secrets_dir}/${bmc_credentials_ref}"
+  if [[ -z "${bmc_password_file}" && -n "${bmc_credentials_ref}" && -f "${context_secrets_dir}/${bmc_credentials_ref}" ]]; then
+    bmc_password_file="${context_secrets_dir}/${bmc_credentials_ref}"
     append_note "redfish_credentials_ref_loaded=${bmc_credentials_ref}"
   fi
 }
@@ -1265,28 +1237,28 @@ copy_host_artifact_files() {
   local phase=$1
   local rel src
 
-  if [[ -d "${bootwright_host_state_dir}/artifacts" ]]; then
+  if [[ -d "${bootwright_root_dir}/artifacts-server" ]]; then
     while IFS= read -r -d '' src; do
       case "${src}" in
         *.iso|*.img|*.qcow2|*.raw)
           continue
           ;;
       esac
-      rel=${src#"${bootwright_host_state_dir}/"}
+      rel=${src#"${bootwright_root_dir}/"}
       copy_text_file "${src}" "${work_dir}/files/host-state-${phase}/${rel}"
-    done < <(find "${bootwright_host_state_dir}/artifacts" -maxdepth 6 -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' -o -name '*.crt' -o -name 'openssl.cnf' -o -name '*.service' \) -print0 2>/dev/null)
+    done < <(find "${bootwright_root_dir}/artifacts-server" -maxdepth 6 -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' -o -name '*.crt' -o -name 'openssl.cnf' -o -name '*.service' \) -print0 2>/dev/null)
   fi
 
-  if [[ -d "${bootwright_host_state_dir}/bmc" ]]; then
+  if [[ -d "${bootwright_root_dir}/bmc" ]]; then
     while IFS= read -r -d '' src; do
       case "${src}" in
         *.iso|*.img|*.qcow2|*.raw|*.key|*.pem|*.p12|*.pfx)
           continue
           ;;
       esac
-      rel=${src#"${bootwright_host_state_dir}/"}
+      rel=${src#"${bootwright_root_dir}/"}
       copy_text_file "${src}" "${work_dir}/files/host-state-${phase}/${rel}"
-    done < <(find "${bootwright_host_state_dir}/bmc" -maxdepth 6 -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' -o -name '*.crt' -o -name 'openssl.cnf' -o -name '*.service' \) -print0 2>/dev/null)
+    done < <(find "${bootwright_root_dir}/bmc" -maxdepth 6 -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' -o -name '*.crt' -o -name 'openssl.cnf' -o -name '*.service' \) -print0 2>/dev/null)
   fi
 }
 
@@ -1419,11 +1391,11 @@ collect_system() {
     run_cmd firewall_cmd_state firewall-cmd --state
     run_cmd firewall_cmd_list_all firewall-cmd --list-all
   fi
-  if [[ -d "${bootwright_host_state_dir}/artifacts" ]]; then
-    run_cmd bootwright_host_artifacts_find find "${bootwright_host_state_dir}/artifacts" -maxdepth 4 -type f -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n'
+  if [[ -d "${bootwright_root_dir}/artifacts-server" ]]; then
+    run_cmd bootwright_host_artifacts_find find "${bootwright_root_dir}/artifacts-server" -maxdepth 4 -type f -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n'
   fi
-  if [[ -d "${bootwright_host_state_dir}/bmc" ]]; then
-    run_cmd bootwright_host_bmc_find find "${bootwright_host_state_dir}/bmc" -maxdepth 5 -type f -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n'
+  if [[ -d "${bootwright_root_dir}/bmc" ]]; then
+    run_cmd bootwright_host_bmc_find find "${bootwright_root_dir}/bmc" -maxdepth 5 -type f -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n'
   fi
   copy_host_artifact_files before_redfish
 
@@ -1917,9 +1889,9 @@ write_summary() {
     printf 'context_source=%s\n' "${context_source:-unknown}"
     printf 'bootwright_context=%s\n' "${bootwright_context:-not detected}"
     printf 'cluster_dir=%s\n' "${cluster_dir}"
-    printf 'bootwright_input_dir=%s\n' "${bootwright_input_dir:-not detected}"
-    printf 'bootwright_state_dir=%s\n' "${bootwright_state_dir:-not detected}"
-    printf 'bootwright_host_state_dir=%s\n' "${bootwright_host_state_dir}"
+    printf 'context_input_dir=%s\n' "${context_input_dir:-not detected}"
+    printf 'context_state_dir=%s\n' "${context_state_dir:-not detected}"
+    printf 'bootwright_root_dir=%s\n' "${bootwright_root_dir}"
     printf 'iso_url=%s\n' "${iso_url:-not detected}"
     printf 'iso_urls:\n'
     if [[ -s "${iso_urls_file}" ]]; then

@@ -10,7 +10,6 @@ import (
 )
 
 func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
-	hostStateDir := defaultHostStateDir
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Check controller dependencies",
@@ -19,7 +18,6 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
   bootwright check bastion`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		_, err := loadDesiredState(cf)
 		if err != nil {

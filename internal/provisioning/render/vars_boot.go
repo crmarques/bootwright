@@ -158,7 +158,7 @@ func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, iso
 		return "", "", ""
 	}
 	port := artifactHTTPPort(publisher.Capability.HTTP)
-	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts/%s-%s/%s/%s", publisher.ProviderName, publisher.Capability.Name, agentISOPublishTokenExpr, isoBasename)
+	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts-server/%s/%s", agentISOPublishTokenExpr, isoBasename)
 	fetchURL = fmt.Sprintf("%s://%s:%d/%s/%s", artifactURLScheme, artifactURLHost(hostAddr), port, agentISOPublishTokenExpr, isoBasename)
 	return hostRef, stagePath, fetchURL
 }

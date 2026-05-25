@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -13,8 +14,7 @@ import (
 )
 
 const (
-	bootwrightContextEnv  = "BOOTWRIGHT_CONTEXT"
-	bootwrightInputDirEnv = "BOOTWRIGHT_INPUT_DIR"
+	bootwrightContextEnv = "BOOTWRIGHT_CONTEXT"
 )
 
 func newContextCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
@@ -24,6 +24,7 @@ func newContextCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newContextInitCmd(stdout),
+		newContextUpdateCmd(stdout),
 		newContextUseCmd(stdout),
 		newContextListCmd(stdout),
 		newContextCurrentCmd(stdout),
@@ -37,21 +38,19 @@ func newContextCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 
 func newContextInitCmd(stdout io.Writer) *cobra.Command {
 	var files []string
-	var baseDir string
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "init <ctx-name>",
 		Short: "Create a context from desired-state input files",
 		Args:  cobra.ExactArgs(1),
 		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
-  bootwright context init lab -f ./input --base-dir /srv/bootwright/lab --yes`,
+  bootwright context init lab -f ./input --yes`,
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
-	cmd.Flags().StringVar(&baseDir, "base-dir", "", "context base directory (default: ~/bootwright/<ctx-name>)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "replace imported input files and update an existing context")
+	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context directory")
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
 		name := args[0]
-		ctx, err := contextstore.NewContext(name, baseDir)
+		ctx, err := contextstore.NewContext(name)
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -59,32 +58,32 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if _, exists := store.Contexts[name]; exists && !yes {
-			return failf(1, "context %q already exists; rerun with --yes to update it", name)
+		if contextstore.Contains(store, name) && !yes {
+			return failf(1, "context %q already exists; rerun with --yes to replace it or `bootwright context update %s -f <path>` to refresh inputs", name, name)
 		}
-		if err := contextstore.EnsureBaseDir(ctx); err != nil {
-			return failErr(1, err)
-		}
-		prepared, err := contextstore.PrepareInputImport(files, ctx.InputDir, yes)
+		prepared, err := contextstore.PrepareContextImport(name, files)
 		if err != nil {
 			return failErr(1, err)
 		}
 		defer prepared.Cancel()
-		if _, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths()); err != nil {
+		state, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths())
+		if err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
 		}
-		copied, err := prepared.Commit()
-		if err != nil {
+		if err := enforceBastionLocality(state); err != nil {
 			return failErr(1, err)
 		}
-		if err := contextstore.EnsureDirs(ctx); err != nil {
+		copied, err := prepared.Commit(yes)
+		if err != nil {
 			return failErr(1, err)
 		}
 		bundle, bundleSkipped, err := prepareInitialBundle(ctx.StateDir)
 		if err != nil {
 			return failErr(1, err)
 		}
-		store.Contexts[name] = ctx
+		if err := contextstore.Add(&store, name); err != nil {
+			return failErr(2, err)
+		}
 		store.Current = name
 		if err := contextstore.Save(registry, store); err != nil {
 			return failErr(1, err)
@@ -109,6 +108,79 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
+func newContextUpdateCmd(stdout io.Writer) *cobra.Command {
+	var files []string
+	cmd := &cobra.Command{
+		Use:   "update <ctx-name>",
+		Short: "Update desired-state input files for an existing context",
+		Args:  cobra.ExactArgs(1),
+		Example: `  bootwright context update lab -f ./input
+  bootwright context update lab -f ./environment.yaml -f ./hosts.yaml`,
+	}
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
+	cmd.RunE = func(_ *cobra.Command, args []string) error {
+		name := args[0]
+		ctx, err := contextstore.NewContext(name)
+		if err != nil {
+			return failErr(2, err)
+		}
+		registry, store, err := loadContextStore()
+		if err != nil {
+			return failErr(1, err)
+		}
+		if !contextstore.Contains(store, name) {
+			return failf(1, "context %q not found", name)
+		}
+		info, err := os.Stat(ctx.BaseDir)
+		if err != nil {
+			return failErr(1, fmt.Errorf("context %q directory is not ready at %s: %w", name, ctx.BaseDir, err))
+		}
+		if !info.IsDir() {
+			return failErr(1, fmt.Errorf("context %q path is not a directory: %s", name, ctx.BaseDir))
+		}
+		prepared, err := contextstore.PrepareInputImport(files, ctx.InputDir, true)
+		if err != nil {
+			return failErr(1, err)
+		}
+		defer prepared.Cancel()
+		state, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths())
+		if err != nil {
+			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
+		}
+		if err := enforceBastionLocality(state); err != nil {
+			return failErr(1, err)
+		}
+		copied, err := prepared.Commit()
+		if err != nil {
+			return failErr(1, err)
+		}
+		bundle, bundleSkipped, err := prepareInitialBundle(ctx.StateDir)
+		if err != nil {
+			return failErr(1, err)
+		}
+		if err := contextstore.Save(registry, store); err != nil {
+			return failErr(1, err)
+		}
+		p := output.New(stdout)
+		p.Command("context update")
+		p.Section("Context")
+		p.Fields(contextFields(ctx))
+		p.Section("Imported inputs")
+		p.Artifacts([]output.ArtifactGroup{{Paths: copied}})
+		p.Section("Runtime")
+		if bundleSkipped {
+			p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
+		} else if bundle.Reused {
+			p.Status(output.StatusOK, "Ansible bundle", "cache current at "+bundle.Dir)
+		} else {
+			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
+		}
+		p.Summary(output.StatusOK, name, "context input files updated")
+		return nil
+	}
+	return cmd
+}
+
 func newContextUseCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "use <ctx-name>",
@@ -124,7 +196,7 @@ func newContextUseCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if _, ok := store.Contexts[name]; !ok {
+		if !contextstore.Contains(store, name) {
 			return failf(1, "context %q not found", name)
 		}
 		store.Current = name
@@ -156,7 +228,8 @@ func newContextListCmd(stdout io.Writer) *cobra.Command {
 			} else {
 				label = "  " + label
 			}
-			items = append(items, output.Item{Label: label, Detail: store.Contexts[name].BaseDir})
+			ctx, _ := contextstore.NewContext(name)
+			items = append(items, output.Item{Label: label, Detail: ctx.BaseDir})
 		}
 		p := output.New(stdout)
 		p.Command("context list")
@@ -214,18 +287,18 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		ctx, ok := store.Contexts[name]
-		if !ok {
+		if !contextstore.Contains(store, name) {
 			return failf(1, "context %q not found", name)
+		}
+		ctx, err := contextstore.NewContext(name)
+		if err != nil {
+			return failErr(2, err)
 		}
 		ctx.Name = name
 		if purge && !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
 			return failErr(1, errors.New("context delete aborted"))
 		}
-		delete(store.Contexts, name)
-		if store.Current == name {
-			store.Current = ""
-		}
+		contextstore.Remove(&store, name)
 		if err := contextstore.Save(registry, store); err != nil {
 			return failErr(1, err)
 		}
@@ -267,9 +340,10 @@ func loadContextStore() (string, contextstore.Store, error) {
 func contextFields(ctx contextstore.Context) []output.Field {
 	return []output.Field{
 		{Key: "name", Value: ctx.Name},
-		{Key: "base-dir", Value: ctx.BaseDir},
+		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "state-dir", Value: ctx.StateDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
+		{Key: "runtime-dir", Value: ctx.RuntimeDir},
 	}
 }

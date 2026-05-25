@@ -25,7 +25,7 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the delete confirmation prompt")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
-		ctx, err := cf.resolve()
+		ctx, err := cf.resolveLocalOnly()
 		if err != nil {
 			return failErr(1, err)
 		}

@@ -3,16 +3,12 @@ package cli
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/crmarques/bootwright/internal/contextstore"
 )
 
 const (
-	bootwrightBaseDirEnv    = "BOOTWRIGHT_BASE_DIR"
-	bootwrightStateDirEnv   = "BOOTWRIGHT_STATE_DIR"
-	bootwrightRuntimeDirEnv = "BOOTWRIGHT_RUNTIME_DIR"
-	bootwrightSecretsDirEnv = "BOOTWRIGHT_SECRETS_DIR"
-
-	defaultHostStateDir = "/var/lib/bootwright"
-	ansibleVenvDirName  = "ansible-venv"
+	ansibleVenvDirName = "ansible-venv"
 )
 
 func defaultControllerCLIInstallDir() string {
@@ -20,11 +16,15 @@ func defaultControllerCLIInstallDir() string {
 }
 
 func ansibleVenvDir() string {
-	return filepath.Join(defaultHostStateDir, ansibleVenvDirName)
+	return filepath.Join(contextstore.RootDir(), ansibleVenvDirName)
 }
 
 func controllerRuntimeDir(contextName string) string {
-	return filepath.Join(defaultHostStateDir, "contexts", contextName)
+	ctx, err := contextstore.NewContext(contextName)
+	if err != nil {
+		return filepath.Join(contextstore.RootDir(), "contexts", contextName)
+	}
+	return ctx.BaseDir
 }
 
 func ansibleVenvBin(name string) string {

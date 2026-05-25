@@ -5,9 +5,10 @@ description: Import, validate, and converge a Bootwright context.
 
 # Getting Started
 
-Bootwright runs from a named context. The context points at the desired-state
-YAML you edited for your environment and stores local state, generated runtime
-files, and secret material outside the repo.
+Bootwright runs from a named context on the declared bastion host. The context
+points at the desired-state YAML you edited for your environment and stores
+local state, generated runtime files, and secret material outside the repo under
+`/var/lib/bootwright`.
 
 ## 0. Install The CLI
 
@@ -96,12 +97,14 @@ bootwright context current
 bootwright secret list
 ```
 
-By default, Bootwright writes the context under
-`~/bootwright/<context-name>/`. The imported authoring copy lives at
-`<base-dir>/input-files/`.
+Bootwright records only the selected context names in
+`~/.bootwright/contexts.yaml`. Context data lives under
+`/var/lib/bootwright/contexts/<context-name>/`, and the imported authoring copy
+lives at `input-files/` inside that directory.
 
-Re-run `context init` with `--yes` after changing the source input directory
-and wanting to replace the imported copy.
+Re-run `context init` with `--yes` to replace the entire context directory, or
+use `bootwright context update lab -f <input-files-dir>` to replace only
+`input-files/` while preserving secrets, state, and runtime data.
 
 ## 4. Set Secrets
 
@@ -134,8 +137,8 @@ printf '%s\n' "${PROXY_PASS}" | bootwright secret set proxy-credentials --userna
 eval "$(bootwright print-env --sensitive)"
 ```
 
-`print-env` exports the active context paths and any configured proxy
-environment. `--sensitive` is required when proxy credentials would be printed.
+`print-env` exports `BOOTWRIGHT_CONTEXT` and any configured proxy environment.
+`--sensitive` is required when proxy credentials would be printed.
 
 ## 6. Check And Apply
 
@@ -195,9 +198,10 @@ This does not destroy cluster nodes or the rest of the infrastructure.
 
 ## Output Boundaries
 
-- Authored YAML lives under `<base-dir>/input-files/`.
+- Authored YAML lives under
+  `/var/lib/bootwright/contexts/<context>/input-files/`.
 - Placeholder installer output lives under
-  `<base-dir>/state/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
 - Secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
 - `render --output-dir <dir> --sensitive` writes secret-inlined external tool
@@ -210,7 +214,8 @@ user kubeconfig:
 
 ```text
 export CLUSTER=<cluster-name>
-export SRC_KUBECONFIG="${BOOTWRIGHT_RUNTIME_DIR}/runtime/${CLUSTER}/installer/auth/kubeconfig"
+export BOOTWRIGHT_CONTEXT="$(bootwright context current --short)"
+export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/runtime/${CLUSTER}/installer/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 

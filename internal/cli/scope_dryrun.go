@@ -21,7 +21,7 @@ type scopeDryRunReport struct {
 	StateDir         string            `json:"stateDir"`
 	RuntimeDir       string            `json:"runtimeDir"`
 	SecretsDir       string            `json:"secretsDir"`
-	HostStateDir     string            `json:"hostStateDir"`
+	ContextDir       string            `json:"contextDir"`
 	BundleDir        string            `json:"bundleDir"`
 	Playbook         string            `json:"playbook"`
 	Limit            string            `json:"limit,omitempty"`
@@ -68,7 +68,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		StateDir:          ctx.StateDir,
 		RuntimeDir:        runtimeDir,
 		SecretsDir:        ctx.SecretsDir,
-		HostStateDir:      flags.hostStateDir,
+		HostStateDir:      ctx.BaseDir,
 		Executable:        flags.executable,
 		BundleDir:         bundleDir,
 		Playbook:          playbook,
@@ -95,7 +95,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		StateDir:         ctx.StateDir,
 		RuntimeDir:       runtimeDir,
 		SecretsDir:       ctx.SecretsDir,
-		HostStateDir:     flags.hostStateDir,
+		ContextDir:       ctx.BaseDir,
 		BundleDir:        bundleDir,
 		Playbook:         playbook,
 		Limit:            limit,

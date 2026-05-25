@@ -210,8 +210,8 @@ func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	for _, want := range []string{
 		"CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp",
 		"refusing to clean unsafe path",
-		"refusing to clean E2E_BASE_DIR outside /tmp/bootwright-*",
-		"$(E2E_CLEAN) \"$(E2E_BASE_DIR)\"",
+		"refusing to clean E2E_CONTEXT_DIR outside /var/lib/bootwright/contexts",
+		"$(E2E_CLEAN) \"$(E2E_CONTEXT_DIR)\"",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Makefile missing cleanup guard fragment %q", want)

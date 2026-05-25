@@ -66,7 +66,8 @@ export CASE=<case-directory>
 BASTION_IMAGE=bootwright-bastion:$CASE
 BASTION_NAME=bootwright-bastion-$CASE
 BASTION_HOME="/home/$(id -un)"
-E2E_BASE_DIR="/tmp/.bootwright-e2e/$CASE"
+E2E_REGISTRY_DIR="/tmp/.bootwright-e2e/$CASE/home"
+E2E_ROOT_DIR="/tmp/.bootwright-e2e/$CASE/var-lib"
 PROXY_RUN_ARGS=()
 if [ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${NO_PROXY:-}${http_proxy:-}${https_proxy:-}${no_proxy:-}" ]; then
   PROXY_RUN_ARGS=(
@@ -80,8 +81,8 @@ if [ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${NO_PROXY:-}${http_proxy:-}${https_prox
 fi
 
 podman rm -f "$BASTION_NAME" 2>/dev/null || true
-rm -rf "$E2E_BASE_DIR"
-install -d -m 0700 "$E2E_BASE_DIR/secrets"
+rm -rf "/tmp/.bootwright-e2e/$CASE"
+install -d -m 0700 "$E2E_REGISTRY_DIR" "$E2E_ROOT_DIR"
 
 podman build -t "$BASTION_IMAGE" \
   -f test/e2e/$CASE/Containerfile \
@@ -101,7 +102,8 @@ podman run -dit --name "$BASTION_NAME" \
   --userns=keep-id \
   "${PROXY_RUN_ARGS[@]}" \
   -v "$HOME/.ssh:$BASTION_HOME/.ssh:z" \
-  -v "$E2E_BASE_DIR:$BASTION_HOME/.bootwright:Z" \
+  -v "$E2E_REGISTRY_DIR:$BASTION_HOME/.bootwright:Z" \
+  -v "$E2E_ROOT_DIR:/var/lib/bootwright:Z" \
   -v "$HOME/.bootwright/secrets/openshift-pull-secret:$BASTION_HOME/pull-secret.json:ro,z" \
   -v "$PWD:/work:z" \
   "$BASTION_IMAGE"
@@ -113,13 +115,11 @@ The repo is mounted read-write at `/work` inside the bastion.
 
 ## Inside The Bastion
 
-Set the e2e case name, initialize a context from the mounted fixture, then
-export the context path variables the rest of the case relies on:
+Set the e2e case name and initialize a context from the mounted fixture:
 
 ```bash
 export CASE=<case-directory>
-export BASE_DIR="$HOME/.bootwright/$CASE"
-bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --base-dir "$BASE_DIR" --yes
+bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --yes
 bootwright context validate
 eval "$(bootwright print-env)"
 ```

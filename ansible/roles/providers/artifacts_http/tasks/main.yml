@@ -14,10 +14,10 @@
 
 - name: Resolve boot artifact paths
   ansible.builtin.set_fact:
-    bootwright_artifacts_state_dir: "{{ bootwright_host_state_dir }}/artifacts/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
-    bootwright_artifacts_tls_dir: "{{ bootwright_host_state_dir }}/artifacts/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls"
-    bootwright_artifacts_tls_cert_path: "{{ bootwright_host_state_dir }}/artifacts/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls/server.crt"
-    bootwright_artifacts_tls_key_path: "{{ bootwright_host_state_dir }}/artifacts/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls/server.key"
+    bootwright_artifacts_state_dir: "{{ bootwright_host_state_dir }}/artifacts-server"
+    bootwright_artifacts_tls_dir: "{{ bootwright_host_state_dir }}/artifacts-server/tls"
+    bootwright_artifacts_tls_cert_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.crt"
+    bootwright_artifacts_tls_key_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.key"
   changed_when: false
 
 - name: Install boot artifact TLS tooling

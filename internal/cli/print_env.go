@@ -37,11 +37,6 @@ func newPrintEnvCmd(stdout io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		writeShellExport(stdout, bootwrightContextEnv, ctx.Name)
-		writeShellExport(stdout, bootwrightBaseDirEnv, ctx.BaseDir)
-		writeShellExport(stdout, bootwrightInputDirEnv, ctx.InputDir)
-		writeShellExport(stdout, bootwrightStateDirEnv, ctx.StateDir)
-		writeShellExport(stdout, bootwrightRuntimeDirEnv, controllerRuntimeDir(ctx.Name))
-		writeShellExport(stdout, bootwrightSecretsDirEnv, ctx.SecretsDir)
 		writeProxyShellExports(stdout, proxyEnv)
 		return nil
 	}

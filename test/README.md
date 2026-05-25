@@ -45,7 +45,7 @@ make clean-e2e-state CASE=001-sno-libvirt
 The user-facing equivalent is plain `bootwright`:
 
 ```text
-bootwright context init <case> -f test/e2e/<case> --base-dir /tmp/bootwright-<case> --yes
+bootwright context init <case> -f test/e2e/<case> --yes
 bootwright check bastion
 bootwright check infra --dry-run
 bootwright check all --dry-run
@@ -75,10 +75,9 @@ Apply, destroy, and remove generated state for every fixture:
 set -euo pipefail
 for case_dir in test/e2e/[0-9]*; do
   case_name=$(basename "$case_dir")
-  base_dir="/tmp/bootwright-$case_name"
 
   make e2e CASE="$case_name"
-  bin/bootwright context init "$case_name" -f "$case_dir" --base-dir "$base_dir" --yes
+  bin/bootwright context init "$case_name" -f "$case_dir" --yes
   bin/bootwright destroy cluster --yes
   bin/bootwright destroy infra --yes
   make clean-e2e-state CASE="$case_name"
@@ -102,7 +101,7 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 
 ## Logs And Artifacts
 
-Generated state defaults to `~/bootwright/<context>/state`; the Makefile e2e
-targets use `/tmp/bootwright-<case>/state`. Apply task logs are written under
+Generated state lives under `/var/lib/bootwright/contexts/<context>/state`.
+Apply task logs are written under
 `/var/lib/bootwright/contexts/<context>/workflow/`. Failed phases print the
 relevant log path.

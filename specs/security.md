@@ -60,15 +60,30 @@ images, mirror URLs, and non-secret cluster addresses.
 
 Generated output boundaries are part of the safety contract:
 
-- User-authored YAML lives under `<base-dir>/input-files/`.
-- Placeholder installer output lives under `<base-dir>/state/installer/<cluster>/`.
+- The context registry is the only user-home state:
+  `~/.bootwright/contexts.yaml`, containing only the current context name and a
+  list of context names.
+- Context data is root-managed under `/var/lib/bootwright/contexts/<context>/`.
+  Commands that read or write that tree re-exec through `sudo` when not already
+  running as root.
+- User-authored YAML lives under
+  `/var/lib/bootwright/contexts/<context>/input-files/`.
+- Placeholder installer output lives under
+  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
   Placeholder `openshift/` Secret manifests carry redacted data only.
+- Context-local secrets live under
+  `/var/lib/bootwright/contexts/<context>/secrets/`; `secret show` prints a
+  named context-local secret as raw bytes and must not read external `file:`
+  sources.
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
   restrictive file modes, and must never be versioned.
 - Bootwright-managed apply logs that can include external tool output live under
   `/var/lib/bootwright/contexts/<context>/workflow/`, with restrictive file
   modes, and must never be versioned.
+- The generated OpenShift kubeadmin password is copied into
+  `/var/lib/bootwright/contexts/<context>/secrets/<cluster>-kubeadmin-password`
+  with mode `0600` after a successful agent install.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined
   `openshift-install` configs and optional `openshift/` manifests, under

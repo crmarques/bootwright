@@ -28,7 +28,6 @@ const (
 // closure once Cobra has populated them.
 type scopeCommonFlags struct {
 	executable   string
-	hostStateDir string
 	clusterScope string
 	output       string
 }
@@ -38,10 +37,8 @@ type scopeCommonFlags struct {
 // (i.e. infra / cluster / all-for-check-apply; destroy never accepts
 // "all" because allScope.destroyPlaybook is empty).
 func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
-	f.hostStateDir = defaultHostStateDir
 	f.output = outputText
 	cmd.Flags().StringVar(&f.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
-	cmd.Flags().StringVar(&f.hostStateDir, "host-state-dir", f.hostStateDir, "root-managed host runtime state directory")
 	cmd.Flags().StringVar(&f.output, "output", f.output, "output format: text|json (json is supported for --dry-run)")
 	if allowClusterScope {
 		cmd.Flags().StringVar(&f.clusterScope, "scope", "", "comma-separated ContainerCluster names to "+scopeAction+" (restricts the matching ClusterInfra/Provider sets)")

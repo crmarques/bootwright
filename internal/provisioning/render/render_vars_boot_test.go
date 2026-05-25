@@ -87,7 +87,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "services-host",
-			wantStagePath: "{{ bootwright_host_state_dir }}/artifacts/host-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
+			wantStagePath: "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
 			wantFetchURL:  "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
 		},
 	}
@@ -269,7 +269,7 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	wantStagePath := "{{ bootwright_host_state_dir }}/artifacts/host-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso"
+	wantStagePath := "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso"
 	if got := iso["stagePath"]; got != wantStagePath {
 		t.Errorf("agentIso.stagePath got %v, want %q", got, wantStagePath)
 	}
@@ -292,7 +292,7 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 	target := targets[0].(map[string]any)
 	wants := map[string]any{
 		"stageHost":         "bastion",
-		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts/bastion-services-default/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
+		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
 		"fetchUrl":          "https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
 		"requiresHTTPS":     true,
 		"requiresByteRange": true,
@@ -374,7 +374,7 @@ func TestBareMetalMultiClusterPublicationUsesUniqueClusterISOsOnSharedHTTPRoot(t
 
 		root := strings.Split(stagePath, "/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/")[0]
 		roots[root] = true
-		if root != "{{ bootwright_host_state_dir }}/artifacts/host-services-default" {
+		if root != "{{ bootwright_host_state_dir }}/artifacts-server" {
 			t.Errorf("%s publish root got %q", clusterName, root)
 		}
 	}

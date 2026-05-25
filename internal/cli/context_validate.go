@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/contextstore"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/locality"
 )
 
 func newContextValidateCmd(stdout io.Writer) *cobra.Command {
@@ -69,10 +70,17 @@ func ensureContextReady(ctx contextstore.Context) error {
 
 func validateContextChecks(ctx contextstore.Context) []output.Check {
 	checks := contextReadinessChecks(ctx)
-	if _, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths); err != nil {
+	state, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths)
+	if err != nil {
 		checks = append(checks, missingContextCheck("desired state", err.Error(), "fix context input files and rerun bootwright context validate"))
 	} else {
 		checks = append(checks, okContextCheck("desired state", "loads, normalizes, and validates"))
+		result := locality.CheckBastion(state, bastionLocalityPolicy)
+		if result.OK {
+			checks = append(checks, okContextCheck("bastion locality", result.Evidence))
+		} else {
+			checks = append(checks, missingContextCheck("bastion locality", result.Evidence, "run bootwright on the Host selected by Environment.spec.bastion.hostRef"))
+		}
 	}
 	return checks
 }
@@ -85,10 +93,12 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 		checks = append(checks, okContextCheck("name", ctx.Name))
 	}
 	checks = append(checks,
-		dirContextCheck("base-dir", ctx.BaseDir),
+		dirContextCheck("context-dir", ctx.BaseDir),
 		dirContextCheck("input-dir", ctx.InputDir),
 		dirContextCheck("state-dir", ctx.StateDir),
 		dirContextCheck("secrets-dir", ctx.SecretsDir),
+		dirContextCheck("runtime-dir", ctx.RuntimeDir),
+		dirContextCheck("workflow-dir", ctx.WorkflowDir),
 		secretsDirModeCheck(ctx.SecretsDir),
 	)
 	return checks

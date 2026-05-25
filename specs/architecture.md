@@ -25,6 +25,15 @@ into root-managed per-task artifact logs. When an apply selects multiple `Contai
 objects, Bootwright keeps Ansible output in logs and prints per-cluster install
 log paths plus high-level progress instead.
 
+For now, context-backed CLI commands are bastion-local: the selected
+`Environment.spec.bastion.hostRef` must resolve to the machine running
+Bootwright. The check is centralized behind an internal runtime-locality policy
+so future controller or remote execution can relax that requirement without
+rewriting command handlers. Commands that need context data re-exec through
+`sudo` when necessary and store all runtime state under
+`/var/lib/bootwright`; only the context registry remains in
+`~/.bootwright/contexts.yaml`.
+
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
 cluster task on the Environment-selected bastion Host: create the cluster agent
 ISO with `openshift-install`, boot each declared node through its rendered boot

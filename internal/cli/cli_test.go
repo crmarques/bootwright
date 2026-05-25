@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -24,6 +25,12 @@ import (
 	"github.com/crmarques/bootwright/internal/scaffold"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
+
+func TestMain(m *testing.M) {
+	localRootGate.enabled = false
+	bastionLocalityPolicy.RequireBastion = false
+	os.Exit(m.Run())
+}
 
 func TestHubCommandsNotAdvertised(t *testing.T) {
 	for _, args := range [][]string{
@@ -312,9 +319,8 @@ func TestApplyRejectsSchemaOnlyDispatchBeforeAnsible(t *testing.T) {
 		}
 	}
 
-	baseDir := filepath.Join(t.TempDir(), "ctx")
-	t.Setenv("HOME", t.TempDir())
-	stdout, stderr, code := runCLI(t, "context", "init", "kubevirt-lab", "-f", dir, "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "kubevirt-lab", "-f", dir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -331,14 +337,12 @@ func TestContextInitPreparesAnsibleBundle(t *testing.T) {
 	if _, err := os.Stat(filepath.Join("..", "..", "internal", "embedded", "bundle", "ansible.cfg")); err != nil {
 		t.Skip("embedded bundle has not been synced")
 	}
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"))
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.NewContext("test", baseDir)
+	ctx, err := contextstore.NewContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,33 +377,37 @@ func TestContextInitHelpUsesYesForReplacement(t *testing.T) {
 }
 
 func TestContextInitRejectsOldConsentFlag(t *testing.T) {
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
+	setTestHomeAndRoot(t)
 	oldFlag := "--" + "force"
-	_, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "--base-dir", baseDir, oldFlag)
+	_, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), oldFlag)
 	if code == 0 {
 		t.Fatalf("context init %s unexpectedly succeeded", oldFlag)
 	}
 	if !strings.Contains(stderr, "unknown flag: "+oldFlag) {
 		t.Fatalf("stderr does not reject %s: %q", oldFlag, stderr)
 	}
+
+	_, stderr, code = runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "--base-dir", t.TempDir())
+	if code == 0 {
+		t.Fatal("context init --base-dir unexpectedly succeeded")
+	}
+	if !strings.Contains(stderr, "unknown flag: --base-dir") {
+		t.Fatalf("stderr does not reject --base-dir: %q", stderr)
+	}
 }
 
 func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	_, stderr, code = runCLI(t, "context", "init", "test", "-f", source)
 	if code == 0 {
 		t.Fatal("second context init without --yes unexpectedly succeeded")
 	}
-	if !strings.Contains(stderr, `context "test" already exists; rerun with --yes to update it`) {
+	if !strings.Contains(stderr, `context "test" already exists; rerun with --yes to replace it`) {
 		t.Fatalf("stderr missing --yes remediation: %q", stderr)
 	}
 	oldFlag := "--" + "force"
@@ -410,12 +418,18 @@ func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 
 func TestContextInitYesReplacesImportedInputs(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleSecret := filepath.Join(ctx.SecretsDir, "stale-secret")
+	if err := os.WriteFile(staleSecret, []byte("stale\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	sourceEnvironment := filepath.Join(source, "environment.yaml")
 	body, err := os.ReadFile(sourceEnvironment)
@@ -426,29 +440,34 @@ func TestContextInitYesReplacesImportedInputs(t *testing.T) {
 	if err := os.WriteFile(sourceEnvironment, append(body, []byte(marker)...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir, "--yes")
+	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", source, "--yes")
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	imported, err := os.ReadFile(filepath.Join(baseDir, contextstore.InputDirName, "environment.yaml"))
+	imported, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(imported), marker) {
 		t.Fatalf("imported environment.yaml was not replaced:\n%s", imported)
 	}
+	if _, err := os.Stat(staleSecret); !os.IsNotExist(err) {
+		t.Fatalf("context init --yes did not replace whole context directory: %v", err)
+	}
 }
 
 func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	importedPath := filepath.Join(baseDir, contextstore.InputDirName, "environment.yaml")
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	importedPath := filepath.Join(ctx.InputDir, "environment.yaml")
 	before, err := os.ReadFile(importedPath)
 	if err != nil {
 		t.Fatal(err)
@@ -456,7 +475,7 @@ func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  retiredField: true\n\n  secrets:\n")
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--base-dir", baseDir, "--yes")
+	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
 	if code == 0 {
 		t.Fatalf("context init --yes unexpectedly accepted invalid replacement:\n%s", stdout)
 	}
@@ -474,20 +493,91 @@ func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.
 
 func TestContextInitYesRejectsSelfImportFromInputDir(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
-	home := t.TempDir()
-	baseDir := filepath.Join(home, "ctx")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source, "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	inputDir := filepath.Join(baseDir, contextstore.InputDirName)
-	_, stderr, code = runCLI(t, "context", "init", "test", "-f", inputDir, "--base-dir", baseDir, "--yes")
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputDir := ctx.InputDir
+	_, stderr, code = runCLI(t, "context", "init", "test", "-f", inputDir, "--yes")
 	if code == 0 {
 		t.Fatal("context init --yes self-import unexpectedly succeeded")
 	}
 	if !strings.Contains(stderr, "must not be inside target input directory") {
 		t.Fatalf("stderr does not reject self-import: %q", stderr)
+	}
+}
+
+func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretPath := filepath.Join(ctx.SecretsDir, "manual-secret")
+	statePath := filepath.Join(ctx.StateDir, "manual-state")
+	runtimePath := filepath.Join(ctx.RuntimeDir, "manual-runtime")
+	for path, body := range map[string]string{
+		secretPath:  "secret\n",
+		statePath:   "state\n",
+		runtimePath: "runtime\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	sourceEnvironment := filepath.Join(source, "environment.yaml")
+	body, err := os.ReadFile(sourceEnvironment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = "# update marker\n"
+	if err := os.WriteFile(sourceEnvironment, append(body, []byte(marker)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code = runCLI(t, "context", "update", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
+	}
+	updated, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updated), marker) {
+		t.Fatalf("context update did not replace input files:\n%s", updated)
+	}
+	for path, want := range map[string]string{
+		secretPath:  "secret\n",
+		statePath:   "state\n",
+		runtimePath: "runtime\n",
+	} {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read preserved %s: %v", path, err)
+		}
+		if string(got) != want {
+			t.Fatalf("%s = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestContextUpdateRequiresExistingContext(t *testing.T) {
+	setTestHomeAndRoot(t)
+	_, stderr, code := runCLI(t, "context", "update", "missing", "-f", fixturePath("001-sno-libvirt"))
+	if code == 0 {
+		t.Fatal("context update unexpectedly succeeded for missing context")
+	}
+	if !strings.Contains(stderr, `context "missing" not found`) {
+		t.Fatalf("stderr missing missing-context error: %q", stderr)
 	}
 }
 
@@ -514,6 +604,31 @@ func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	}
 	if got := byName["openshift-pull-secret"]; got.Type != "context" || got.Present {
 		t.Fatalf("openshift-pull-secret status = %+v", got)
+	}
+}
+
+func TestSecretShowPrintsRawContextSecret(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	if err := os.WriteFile(filepath.Join(ctx.SecretsDir, "manual-secret"), []byte("secret\nwith-newline\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runCLI(t, "secret", "show", "--name", "manual-secret")
+	if code != 0 {
+		t.Fatalf("secret show exited %d, stderr=%q", code, stderr)
+	}
+	if stdout != "secret\nwith-newline\n" {
+		t.Fatalf("secret show stdout = %q", stdout)
+	}
+}
+
+func TestSecretShowRejectsInvalidName(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	_, stderr, code := runCLI(t, "secret", "show", "--name", "../manual-secret")
+	if code == 0 {
+		t.Fatal("secret show accepted invalid name")
+	}
+	if !strings.Contains(stderr, "--name must be a lowercase DNS label") {
+		t.Fatalf("stderr missing DNS label error: %q", stderr)
 	}
 }
 
@@ -567,6 +682,92 @@ func TestContextBackedCommandRequiresReadyContext(t *testing.T) {
 	if !strings.Contains(stderr, "bootwright context validate") {
 		t.Fatalf("stderr missing context validate hint: %q", stderr)
 	}
+}
+
+func TestLocalRootGateArgs(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{args: []string{"context", "list"}, want: false},
+		{args: []string{"context", "current"}, want: false},
+		{args: []string{"context", "init", "lab", "-f", "."}, want: true},
+		{args: []string{"context", "update", "lab", "-f", "."}, want: true},
+		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
+		{args: []string{"check", "syntax"}, want: true},
+		{args: []string{"check", "--help"}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			if got := argsNeedLocalRoot(tc.args); got != tc.want {
+				t.Fatalf("argsNeedLocalRoot(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	var gotName string
+	var gotArgs []string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			gotName = name
+			gotArgs = append([]string(nil), args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestLocalRootGateHelperProcess", "--")
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_HELPER=1")
+			return cmd
+		},
+	}
+
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("ensureLocalRootForArgs: %v", err)
+	}
+	if !handled || code != 0 {
+		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
+	}
+	if gotName != "sudo" {
+		t.Fatalf("command name = %q, want sudo", gotName)
+	}
+	if !reflect.DeepEqual(gotArgs, []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+		t.Fatalf("sudo args = %v", gotArgs)
+	}
+}
+
+func TestEnsureLocalRootForArgsSkipsWhenAlreadyRoot(t *testing.T) {
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	called := false
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 0 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			called = true
+			return exec.CommandContext(ctx, os.Args[0], "-test.run=TestLocalRootGateHelperProcess", "--")
+		},
+	}
+	_, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("ensureLocalRootForArgs: %v", err)
+	}
+	if handled || called {
+		t.Fatalf("ensureLocalRootForArgs should skip sudo when euid is root, handled=%v called=%v", handled, called)
+	}
+}
+
+func TestLocalRootGateHelperProcess(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_ROOT_GATE_HELPER") != "1" {
+		return
+	}
+	os.Exit(0)
 }
 
 func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {
@@ -658,11 +859,19 @@ func TestContextPrintEnvNoProxy(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("print-env exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "export BOOTWRIGHT_INPUT_DIR="+ctx.InputDir+"\n") {
-		t.Fatalf("stdout missing input dir export:\n%s", stdout)
+	if !strings.Contains(stdout, "export BOOTWRIGHT_CONTEXT="+ctx.Name+"\n") {
+		t.Fatalf("stdout missing context export:\n%s", stdout)
 	}
-	if !strings.Contains(stdout, "export BOOTWRIGHT_RUNTIME_DIR="+controllerRuntimeDir(ctx.Name)+"\n") {
-		t.Fatalf("stdout missing runtime dir export:\n%s", stdout)
+	for _, reject := range []string{
+		"BOOTWRIGHT_BASE_DIR",
+		"BOOTWRIGHT_INPUT_DIR",
+		"BOOTWRIGHT_STATE_DIR",
+		"BOOTWRIGHT_RUNTIME_DIR",
+		"BOOTWRIGHT_SECRETS_DIR",
+	} {
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("stdout unexpectedly contains %s export:\n%s", reject, stdout)
+		}
 	}
 	if strings.Contains(stdout, "HTTP_PROXY") {
 		t.Fatalf("stdout unexpectedly contains proxy export:\n%s", stdout)
@@ -726,8 +935,8 @@ func TestRenderOutputDirRequiresSensitive(t *testing.T) {
 }
 
 func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
-	ctx := initTestContext(t, "001-sno-libvirt")
-	home := filepath.Dir(ctx.BaseDir)
+	initTestContext(t, "001-sno-libvirt")
+	home := os.Getenv("HOME")
 	sshDir := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -1126,7 +1335,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 
 	t.Run("missing", func(t *testing.T) {
-		report, err := buildStatusReport(testCommonFlags(t.TempDir(), "001-sno-libvirt"), defaultHostStateDir)
+		report, err := buildStatusReport(testCommonFlags(t, t.TempDir(), "001-sno-libvirt"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1135,7 +1344,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 
 	t.Run("unknown", func(t *testing.T) {
 		baseDir := t.TempDir()
-		cf := testCommonFlags(baseDir, "001-sno-libvirt")
+		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
 		installer := installerInstallConfigPath(cf.ctx.StateDir, "sno-libvirt")
 		if err := os.MkdirAll(filepath.Dir(installer), 0o755); err != nil {
 			t.Fatalf("mkdir installer dir: %v", err)
@@ -1143,7 +1352,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err := os.WriteFile(installer, []byte("{}\n"), 0o644); err != nil {
 			t.Fatalf("write installer: %v", err)
 		}
-		report, err := buildStatusReport(cf, defaultHostStateDir)
+		report, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1152,12 +1361,12 @@ func TestStatusInstallerFreshness(t *testing.T) {
 
 	t.Run("installer stat error", func(t *testing.T) {
 		baseDir := t.TempDir()
-		cf := testCommonFlags(baseDir, "001-sno-libvirt")
+		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
 		installer := installerInstallConfigPath(cf.ctx.StateDir, "sno-libvirt")
 		if err := os.MkdirAll(installer, 0o755); err != nil {
 			t.Fatalf("mkdir installer path: %v", err)
 		}
-		report, err := buildStatusReport(cf, defaultHostStateDir)
+		report, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1169,11 +1378,11 @@ func TestStatusInstallerFreshness(t *testing.T) {
 
 	t.Run("fresh", func(t *testing.T) {
 		baseDir := t.TempDir()
-		cf := testCommonFlags(baseDir, "001-sno-libvirt")
+		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
 		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
-		report, err := buildStatusReport(cf, defaultHostStateDir)
+		report, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1182,7 +1391,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 
 	t.Run("stale", func(t *testing.T) {
 		baseDir := t.TempDir()
-		cf := testCommonFlags(baseDir, "001-sno-libvirt")
+		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
 		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
@@ -1195,7 +1404,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(cf.ctx.StateDir, "effective-state.yaml"), data, 0o644); err != nil {
 			t.Fatalf("write stale effective state: %v", err)
 		}
-		report, err := buildStatusReport(cf, defaultHostStateDir)
+		report, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1448,6 +1657,14 @@ func runCLI(t *testing.T, args ...string) (string, string, int) {
 	return stdout.String(), stderr.String(), code
 }
 
+func setTestHomeAndRoot(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(home, "bootwright-root")))
+	return home
+}
+
 func fixturePath(name string) string {
 	return filepath.Join("..", "..", "test", "e2e", name)
 }
@@ -1497,22 +1714,22 @@ func commandContains(command []string, arg string) bool {
 
 func initTestContext(t *testing.T, fixtureName string) contextstore.Context {
 	t.Helper()
-	home := t.TempDir()
-	baseDir := filepath.Join(home, ".bootwright")
-	t.Setenv("HOME", home)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath(fixtureName), "--base-dir", baseDir)
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath(fixtureName))
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.NewContext("test", baseDir)
+	ctx, err := contextstore.NewContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ctx
 }
 
-func testCommonFlags(baseDir, fixtureName string) *commonFlags {
-	ctx, err := contextstore.NewContext("test", baseDir)
+func testCommonFlags(t *testing.T, rootDir, fixtureName string) *commonFlags {
+	t.Helper()
+	t.Cleanup(contextstore.SetRootDirForTest(rootDir))
+	ctx, err := contextstore.NewContext("test")
 	if err != nil {
 		panic(err)
 	}

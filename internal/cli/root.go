@@ -77,6 +77,14 @@ func addCommonFlags() *commonFlags {
 }
 
 func (cf *commonFlags) resolve() (contextstore.Context, error) {
+	return cf.resolveWithLocality(true)
+}
+
+func (cf *commonFlags) resolveLocalOnly() (contextstore.Context, error) {
+	return cf.resolveWithLocality(false)
+}
+
+func (cf *commonFlags) resolveWithLocality(checkLocality bool) (contextstore.Context, error) {
 	if cf.ctx.Name != "" {
 		return cf.ctx, nil
 	}
@@ -86,6 +94,11 @@ func (cf *commonFlags) resolve() (contextstore.Context, error) {
 	}
 	if err := ensureContextReady(ctx); err != nil {
 		return contextstore.Context{}, err
+	}
+	if checkLocality {
+		if err := enforceContextLocality(ctx); err != nil {
+			return contextstore.Context{}, err
+		}
 	}
 	cf.ctx = ctx
 	return ctx, nil

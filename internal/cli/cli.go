@@ -17,6 +17,12 @@ import (
 const ansibleBundleDirName = "ansible-bundle"
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	if code, handled, err := ensureLocalRootForArgs(ctx, args, stdin, stdout, stderr); handled {
+		return code
+	} else if err != nil {
+		output.New(stderr).Error(err)
+		return 1
+	}
 	root := newRootCmd(stdin, stdout, stderr)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)

@@ -4,13 +4,12 @@ Identical for every case once you have a bastion, an active context, and the
 desired-state files edited. The e2e README drops you here after context input
 customization. Return there at the end for bastion-side teardown.
 
-These steps assume the env vars from the bastion doc are exported:
-`$CASE`, `$BOOTWRIGHT_BASE_DIR`, `$BOOTWRIGHT_INPUT_DIR`,
-`$BOOTWRIGHT_STATE_DIR`, `$BOOTWRIGHT_RUNTIME_DIR`, and
-`$BOOTWRIGHT_SECRETS_DIR`.
+These steps assume `$CASE` is exported and the active context has been
+initialized on the bastion. Context paths are fixed under
+`/var/lib/bootwright/contexts/$CASE`.
 If `print-env` was blocked because proxy credentials would be printed,
-run the `proxy-credentials` `secret set` command below first, then export the
-vars with `bootwright print-env --sensitive`.
+run the `proxy-credentials` `secret set` command below first, then rerun
+`bootwright print-env --sensitive` for proxy exports.
 
 ## 1. Save And Generate Secrets
 
@@ -38,7 +37,7 @@ bootwright secret set openshift-pull-secret \
 For the containerized bastion the pull secret is mounted at
 `$HOME/pull-secret.json`. For a host bastion, point `--pull-secret` at
 wherever you placed the JSON (typically
-`$BOOTWRIGHT_SECRETS_DIR/openshift-pull-secret`).
+`/var/lib/bootwright/contexts/$CASE/secrets/openshift-pull-secret`).
 
 If you want to provide `proxy-credentials` instead of generating them, write
 them now:
@@ -54,7 +53,7 @@ Materialize every remaining `generated:` entry:
 ```bash
 bootwright secret generate
 bootwright secret list
-find "$BOOTWRIGHT_SECRETS_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+sudo find "/var/lib/bootwright/contexts/$CASE/secrets" -maxdepth 1 -type f -printf '%f\n' | sort
 ```
 
 ## 2. Apply The Context To The Bastion
@@ -100,7 +99,8 @@ to the two `apply` commands.
 ## 4. Install The Cluster
 
 `render installer` writes `install-config.yaml`, `agent-config.yaml`, and
-optional `openshift/` manifests under `$BOOTWRIGHT_STATE_DIR/installer/<cluster>/`
+optional `openshift/` manifests under
+`/var/lib/bootwright/contexts/$CASE/state/installer/<cluster>/`
 with placeholder strings in place of pull secret, SSH key, trust bundle, and
 TLS data. These files are generated and can be regenerated.
 
@@ -113,10 +113,10 @@ bootwright apply cluster --yes
 ```
 
 `apply cluster` materializes
-`$BOOTWRIGHT_RUNTIME_DIR/runtime/<cluster>/installer/{install,agent}-config.yaml`
+`/var/lib/bootwright/contexts/$CASE/runtime/<cluster>/installer/{install,agent}-config.yaml`
 with secret material inlined (mode `0600`) — the form `openshift-install`
 consumes. It stages those files under
-`/var/lib/bootwright/runtime/<cluster>/installer/` on the bastion. It then
+the same context runtime directory on the bastion. It then
 renders the agent installer assets, boots every cluster node through the provider's
 machine-control path (Redfish virtual media for bare metal, or emulated
 Redfish on libvirt), and waits for
@@ -143,7 +143,7 @@ to disk. Open a second shell on the bastion to follow it:
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-sudo tail -f "/var/lib/bootwright/runtime/$CLUSTER/installer/.openshift_install.log"
+sudo tail -f "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/.openshift_install.log"
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
@@ -165,7 +165,7 @@ ssh -i ~/.ssh/bootwright-ssh-key core@<node-ip> \
 export CLUSTER=<ContainerCluster.metadata.name>
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
 sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" \
-  "$BOOTWRIGHT_RUNTIME_DIR/runtime/$CLUSTER/installer/auth/kubeconfig" \
+  "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/auth/kubeconfig" \
   "$TMP_KUBECONFIG"
 export KUBECONFIG="$TMP_KUBECONFIG"
 
@@ -184,7 +184,7 @@ To keep the cluster in the user's default kube contexts, merge the generated
 kubeconfig after the install:
 
 ```bash
-export SRC_KUBECONFIG="$BOOTWRIGHT_RUNTIME_DIR/runtime/$CLUSTER/installer/auth/kubeconfig"
+export SRC_KUBECONFIG="/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 

@@ -84,7 +84,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err := validateScopedApplySharedServices(state, scope.name, flags.clusterScope); err != nil {
 			return failErr(1, err)
 		}
-		plan, err := prepareScopedWorkflow(state, scope, flags.clusterScope, flags.hostStateDir, askBecomePass, dryRun)
+		plan, err := prepareScopedWorkflow(state, scope, flags.clusterScope, ctx.BaseDir, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -113,7 +113,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.StateDir); err != nil {
 				return failErr(1, err)
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, flags.hostStateDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, ctx.BaseDir); err != nil {
 				return err
 			}
 		}
@@ -155,7 +155,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			StateDir:           ctx.StateDir,
 			RuntimeDir:         runtimeDir,
 			SecretsDir:         ctx.SecretsDir,
-			HostStateDir:       flags.hostStateDir,
+			HostStateDir:       ctx.BaseDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           scope.applyPlaybook,

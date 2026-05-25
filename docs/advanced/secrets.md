@@ -45,22 +45,23 @@ spec:
 ```
 
 Every entry has **at most one** of `file:` or `generated:`. An entry
-with neither field resolves to `<context>/secrets/<name>`. TLS pair consumers
-read `<context>/secrets/<name>` and `<context>/secrets/<name>.key`, unless
-`file:` and `keyFile:` point at operator-owned files. Each kind
+with neither field resolves to
+`/var/lib/bootwright/contexts/<context>/secrets/<name>`. TLS pair consumers
+read that file and `<name>.key`, unless `file:` and `keyFile:` point at
+operator-owned files. Each kind
 references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `caBundleRefs[].name`, `proxyAuthRef.name`,
 `secretRef.name`, or `defaultCertificateRef.name`.
 
 ## Local secrets directory
 
-Bytes live under the Bootwright base directory:
+Bytes live under the root-managed Bootwright context directory:
 
-| Path | Default | Override |
-| --- | --- | --- |
-| Context registry | `~/.bootwright/contexts.yaml` | none |
-| Context base dir | `~/bootwright/<context-name>` | `bootwright context init --base-dir <dir>` |
-| Secrets dir | `<base-dir>/secrets` | context selection |
+| Path | Location |
+| --- | --- |
+| Context registry | `~/.bootwright/contexts.yaml` |
+| Context dir | `/var/lib/bootwright/contexts/<context-name>` |
+| Secrets dir | `/var/lib/bootwright/contexts/<context-name>/secrets` |
 
 The secrets directory must be host-local, unversioned, mode `0700`, and
 individual files mode `0600`.
@@ -75,6 +76,7 @@ individual files mode `0600`.
 | Credentials from protected env vars | `bootwright secret set proxy-credentials --username "$PROXY_USER" --password "$PROXY_PASS"` |
 | Materialize every `generated:` entry | `bootwright secret generate` |
 | Inspect required material | `bootwright secret list` |
+| Print one local secret as raw bytes | `bootwright secret show --name <name>` |
 | Delete local material | `bootwright secret delete <name> --yes` |
 
 `bootwright secret set` writes into the current context secrets
@@ -83,7 +85,10 @@ directory, so context-local entries can be declared as empty keys.
 External `file:` entries, such as SSH keys under `~/.ssh`, must already
 exist at their declared paths.
 
-`bootwright print-env` exports context paths and proxy environment variables.
+`bootwright secret show` reads only context-local secret files. It does not
+read external `file:` sources.
+
+`bootwright print-env` exports `BOOTWRIGHT_CONTEXT` and proxy environment variables.
 When proxy credentials would be embedded in those exports, rerun it as
 `bootwright print-env --sensitive` and avoid recording the shell output.
 

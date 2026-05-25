@@ -4,7 +4,7 @@
 
 - Apply appears stuck at `Fetch generated agent ISO to local runtime state`.
 - `Create agent ISO` completed quickly.
-- `$BOOTWRIGHT_STATE_DIR/runtime/<cluster>/installer/.openshift_install.log`
+- `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/.openshift_install.log`
   has no new lines while the fetch task is active.
 
 ## Cause

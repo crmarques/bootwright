@@ -29,7 +29,7 @@ Run from the repository root:
 ```bash
 make build
 make list-e2e-cases
-bin/bootwright context init 001-sno-libvirt -f test/e2e/001-sno-libvirt --base-dir /tmp/bootwright-001-sno-libvirt --yes
+bin/bootwright context init 001-sno-libvirt -f test/e2e/001-sno-libvirt --yes
 bin/bootwright check syntax
 bin/bootwright render installer --scope sno-libvirt
 ```
@@ -56,26 +56,26 @@ KVM and permission to manage libvirt on the provider host.
      isolated Podman-based runs.
    - [bastion.md](bastion.md) for a Linux VM or physical host.
 3. Export the e2e case name and initialize a context from the fixture on the
-   bastion. The command copies the YAML into `<base-dir>/input-files`, creates
-   state, secrets, and Git directories, and selects the context:
+   bastion. The command copies the YAML into
+   `/var/lib/bootwright/contexts/<context>/input-files`, creates state,
+   secrets, runtime, workflow, and artifact-server directories, and selects the
+   context:
 
    ```bash
    export CASE=<case-directory>
-   export BASE_DIR="$HOME/bootwright/$CASE"
 
    # Host or VM bastion; run this from the repo path on the bastion.
-   bootwright context init "$CASE" -f "test/e2e/$CASE" --base-dir "$BASE_DIR" --yes
+   bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
 
    # Containerized bastion alternative; the repo is mounted at /work.
-   # bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --base-dir "$BASE_DIR" --yes
+   # bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --yes
    ```
-4. Export the context paths and edit the imported desired state for the target
+4. Validate the context and edit the imported desired state for the target
    hosts, addresses, BMC endpoints, and secret references:
 
    ```bash
    bootwright context validate
-   eval "$(bootwright print-env)"
-   vi "$BOOTWRIGHT_INPUT_DIR/environment.yaml"
+   sudo vi "/var/lib/bootwright/contexts/$CASE/input-files/environment.yaml"
    ```
 
    If `print-env` reports that proxy credentials would be printed,
@@ -92,10 +92,9 @@ next one starts:
 set -euo pipefail
 for case_dir in test/e2e/[0-9]*; do
   case_name=$(basename "$case_dir")
-  base_dir="/tmp/bootwright-$case_name"
 
   make e2e CASE="$case_name"
-  bin/bootwright context init "$case_name" -f "$case_dir" --base-dir "$base_dir" --yes
+  bin/bootwright context init "$case_name" -f "$case_dir" --yes
   bin/bootwright destroy cluster --yes
   bin/bootwright destroy infra --yes
   make clean-e2e-state CASE="$case_name"
@@ -105,6 +104,6 @@ done
 If cases are copied and edited under another parent directory, pass that parent
 as `E2E_DIR=<path>` to the `make` targets.
 
-Generated state defaults to `~/bootwright/<context>/state`; the Makefile e2e
-targets use `/tmp/bootwright-<case>/state`. Failed apply phases print the
-Ansible log path under `/var/lib/bootwright/contexts/<context>/workflow/`.
+Generated state lives under `/var/lib/bootwright/contexts/<context>/state`.
+Failed apply phases print the Ansible log path under
+`/var/lib/bootwright/contexts/<context>/workflow/`.

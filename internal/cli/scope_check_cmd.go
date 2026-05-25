@@ -64,7 +64,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			selected := phasesForState(scope.phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "check", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, flags.hostStateDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, ctx.BaseDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -84,7 +84,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			StateDir:          ctx.StateDir,
 			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
-			HostStateDir:      flags.hostStateDir,
+			HostStateDir:      ctx.BaseDir,
 			Executable:        flags.executable,
 			BundleDir:         bundle.Dir,
 			Playbook:          preflightPlaybookPath,

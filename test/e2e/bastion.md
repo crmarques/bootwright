@@ -119,8 +119,7 @@ on the bastion:
 
 ```bash
 export CASE=<case-directory>
-export BASE_DIR="$HOME/bootwright/$CASE"
-bootwright context init "$CASE" -f "test/e2e/$CASE" --base-dir "$BASE_DIR" --yes
+bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
 bootwright context validate
 eval "$(bootwright print-env)"
 ```
@@ -151,9 +150,8 @@ After the case-specific cluster destroy steps in
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-rm -rf "$BOOTWRIGHT_STATE_DIR/installer/$CLUSTER"
-sudo rm -rf "$BOOTWRIGHT_RUNTIME_DIR/runtime/$CLUSTER" \
-            "/var/lib/bootwright/runtime/$CLUSTER"
+sudo rm -rf "/var/lib/bootwright/contexts/$CASE/state/installer/$CLUSTER" \
+            "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER"
 ```
 
 The bastion machine itself stays — Bootwright does not manage its lifecycle.

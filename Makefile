@@ -14,8 +14,8 @@ TEST_HOME ?= $(abspath $(STATE_DIR)/home)
 E2E_DIR ?= test/e2e
 CASE ?=
 E2E_FIXTURE = $(E2E_DIR)/$(CASE)
-E2E_BASE_DIR ?= /tmp/bootwright-$(CASE)
-E2E_HOME ?= $(E2E_BASE_DIR)/home
+E2E_CONTEXT_DIR ?= /var/lib/bootwright/contexts/$(CASE)
+E2E_HOME ?= $(abspath $(STATE_DIR)/e2e-home/$(CASE))
 ANSIBLE_PLAYBOOK ?= $(shell command -v ansible-playbook 2>/dev/null)
 E2E_ANSIBLE_FLAGS = $(if $(ANSIBLE_PLAYBOOK),--ansible-playbook $(ANSIBLE_PLAYBOOK),)
 E2E_APPLY_ALL ?= $(BIN_DIR)/$(BINARY) apply all --yes
@@ -219,11 +219,11 @@ cli-file-size-check:
 	fi
 
 validate: build
-	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --base-dir $(abspath $(STATE_DIR)/validate) --yes
+	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --yes
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) check syntax
 
 plan: build
-	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init plan -f test/e2e/001-sno-libvirt --base-dir $(abspath $(STATE_DIR)/plan) --yes
+	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init plan -f test/e2e/001-sno-libvirt --yes
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) render installer
 
 check-e2e-deps:
@@ -237,11 +237,11 @@ list-e2e-cases:
 	@printf '%s\n' 'Available e2e cases:' $(addprefix '  ',$(E2E_CASES))
 
 e2e-dry-run: check-e2e-case check-e2e-deps build
-	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --base-dir $(E2E_BASE_DIR) --yes
+	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --yes
 	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) apply all --dry-run $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
 
 e2e: check-e2e-case check-e2e-deps build
-	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --base-dir $(E2E_BASE_DIR) --yes
+	HOME=$(E2E_HOME) $(BIN_DIR)/$(BINARY) context init $(CASE) -f $(E2E_FIXTURE) --yes
 	HOME=$(E2E_HOME) $(E2E_APPLY_ALL) $(E2E_ANSIBLE_FLAGS) $(E2E_APPLY_FLAGS)
 
 clean:
@@ -256,9 +256,9 @@ clean:
 		! -name PLACEHOLDER ! -name .gitignore -exec rm -rf {} +
 
 clean-e2e-state: check-e2e-case
-	@test -n "$(E2E_BASE_DIR)" || { printf '%s\n' 'E2E_BASE_DIR must not be empty'; exit 1; }
-	@case "$(E2E_BASE_DIR)" in /tmp/bootwright-*) ;; *) printf 'refusing to clean E2E_BASE_DIR outside /tmp/bootwright-*: %s\n' "$(E2E_BASE_DIR)"; exit 1;; esac
-	$(E2E_CLEAN) "$(E2E_BASE_DIR)"
+	@test -n "$(E2E_CONTEXT_DIR)" || { printf '%s\n' 'E2E_CONTEXT_DIR must not be empty'; exit 1; }
+	@case "$(E2E_CONTEXT_DIR)" in /var/lib/bootwright/contexts/*) ;; *) printf 'refusing to clean E2E_CONTEXT_DIR outside /var/lib/bootwright/contexts: %s\n' "$(E2E_CONTEXT_DIR)"; exit 1;; esac
+	$(E2E_CLEAN) "$(E2E_CONTEXT_DIR)"
 
 help:
 	@printf '%s\n' \

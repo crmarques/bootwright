@@ -10,14 +10,14 @@ import (
 )
 
 func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
 
-	ctx, err := NewContext("lab", "")
+	ctx, err := NewContext("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantBase := filepath.Join(home, "bootwright", "lab")
+	wantBase := filepath.Join(root, "contexts", "lab")
 	if ctx.BaseDir != wantBase {
 		t.Fatalf("BaseDir = %q, want %q", ctx.BaseDir, wantBase)
 	}
@@ -28,11 +28,13 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 
 func TestStoreRoundTripCurrentContext(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "contexts.yaml")
-	ctx, err := NewContext("lab", filepath.Join(t.TempDir(), "lab"))
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	ctx, err := NewContext("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := Store{Current: "lab", Contexts: map[string]Context{"lab": ctx}}
+	store := Store{Current: "lab", Contexts: []string{"lab"}}
 	if err := Save(path, store); err != nil {
 		t.Fatal(err)
 	}
@@ -47,29 +49,53 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 	if current.Name != "lab" || current.BaseDir != ctx.BaseDir {
 		t.Fatalf("current = %+v, want %+v", current, ctx)
 	}
-}
-
-func TestNewContextRejectsUnsafeBaseDir(t *testing.T) {
-	if _, err := NewContext("lab", string(filepath.Separator)); err == nil {
-		t.Fatal("NewContext accepted filesystem root")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "contexts:\n    - lab\n") {
+		t.Fatalf("store was not saved in strict list format:\n%s", body)
+	}
+	if strings.Contains(body, "baseDir") || strings.Contains(body, "inputDir") {
+		t.Fatalf("store unexpectedly persisted derived paths:\n%s", body)
 	}
 }
 
-func TestNewContextRejectsExistingNonEmptyUnmarkedBaseDir(t *testing.T) {
-	baseDir := filepath.Join(t.TempDir(), "lab")
+func TestLoadRejectsLegacyContextMapRegistry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "contexts.yaml")
+	body := []byte("current: lab\ncontexts:\n  lab:\n    baseDir: /tmp/lab\n")
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted legacy context map registry")
+	}
+}
+
+func TestNewContextDerivesFixedPathEvenWhenContextDirExists(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	baseDir := filepath.Join(root, "contexts", "lab")
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(baseDir, "owned-by-someone-else"), []byte("data\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewContext("lab", baseDir); err == nil {
-		t.Fatal("NewContext accepted an existing non-empty unmarked base directory")
+	ctx, err := NewContext("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.BaseDir != baseDir {
+		t.Fatalf("BaseDir = %q, want %q", ctx.BaseDir, baseDir)
 	}
 }
 
 func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
-	ctx, err := NewContext("lab", filepath.Join(t.TempDir(), "lab"))
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	ctx, err := NewContext("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,16 +107,46 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 	}
 }
 
-func TestCurrentRejectsUnsafeContextLayout(t *testing.T) {
-	baseDir := filepath.Join(t.TempDir(), "lab")
-	ctx, err := NewContext("lab", baseDir)
+func TestPreparedContextImportYesReplacesExistingUnmarkedContextDir(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	ctx, err := NewContext("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx.StateDir = string(filepath.Separator)
-	store := Store{Current: "lab", Contexts: map[string]Context{"lab": ctx}}
+	if _, err := managedroot.Ensure(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(ctx.BaseDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ctx.BaseDir, "stale"), []byte("stale\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("fresh\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := PrepareContextImport("lab", []string{source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Cancel()
+	if _, err := prepared.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.BaseDir, "stale")); !os.IsNotExist(err) {
+		t.Fatalf("stale context file still exists or stat failed unexpectedly: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml")); err != nil || string(got) != "fresh\n" {
+		t.Fatalf("imported environment.yaml = %q, err=%v", got, err)
+	}
+}
+
+func TestCurrentRejectsMissingCurrentContext(t *testing.T) {
+	store := Store{Current: "lab", Contexts: []string{"other"}}
 	if _, err := Current(store); err == nil {
-		t.Fatal("Current accepted context with unsafe stateDir")
+		t.Fatal("Current accepted a current context absent from the registry")
 	}
 }
 
@@ -167,11 +223,13 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	ctx := Context{
-		Name:       "lab",
-		BaseDir:    home,
-		InputDir:   filepath.Join(home, InputDirName),
-		StateDir:   filepath.Join(home, StateDirName),
-		SecretsDir: filepath.Join(home, SecretsDirName),
+		Name:        "lab",
+		BaseDir:     home,
+		InputDir:    filepath.Join(home, InputDirName),
+		StateDir:    filepath.Join(home, StateDirName),
+		SecretsDir:  filepath.Join(home, SecretsDirName),
+		RuntimeDir:  filepath.Join(home, RuntimeDirName),
+		WorkflowDir: filepath.Join(home, WorkflowDirName),
 	}
 	if err := SafePurgeBaseDir(ctx); err == nil {
 		t.Fatal("SafePurgeBaseDir unexpectedly removed home")
@@ -181,11 +239,13 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 	baseDir := filepath.Join(t.TempDir(), "lab")
 	ctx := Context{
-		Name:       "lab",
-		BaseDir:    baseDir,
-		InputDir:   filepath.Join(baseDir, InputDirName),
-		StateDir:   filepath.Join(baseDir, StateDirName),
-		SecretsDir: filepath.Join(baseDir, SecretsDirName),
+		Name:        "lab",
+		BaseDir:     baseDir,
+		InputDir:    filepath.Join(baseDir, InputDirName),
+		StateDir:    filepath.Join(baseDir, StateDirName),
+		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
+		RuntimeDir:  filepath.Join(baseDir, RuntimeDirName),
+		WorkflowDir: filepath.Join(baseDir, WorkflowDirName),
 	}
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		t.Fatal(err)

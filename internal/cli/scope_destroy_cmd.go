@@ -94,7 +94,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			artifactsBaseName = infraDestroyHTTPServerArtifactsBaseName
 			workflowLabel = "infra destroy http-server"
 		} else {
-			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, flags.hostStateDir, askBecomePass, dryRun)
+			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, ctx.BaseDir, askBecomePass, dryRun)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -144,7 +144,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			StateDir:          ctx.StateDir,
 			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
-			HostStateDir:      flags.hostStateDir,
+			HostStateDir:      ctx.BaseDir,
 			Executable:        flags.executable,
 			BundleDir:         bundle.Dir,
 			Playbook:          playbook,

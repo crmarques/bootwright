@@ -11,11 +11,9 @@ import (
 
 func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
-		executable   string
-		hostStateDir string
-		dryRun       bool
+		executable string
+		dryRun     bool
 	)
-	hostStateDir = defaultHostStateDir
 	cmd := &cobra.Command{
 		Use:   "all",
 		Short: "Check all provisioning prerequisites",
@@ -28,7 +26,6 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
-	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		state, err := loadDesiredState(cf)
@@ -41,7 +38,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		ctx := cf.ctx
 		runtimeDir := controllerRuntimeDir(ctx.Name)
-		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, hostStateDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, ctx.BaseDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -61,7 +58,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			StateDir:          ctx.StateDir,
 			RuntimeDir:        runtimeDir,
 			SecretsDir:        ctx.SecretsDir,
-			HostStateDir:      hostStateDir,
+			HostStateDir:      ctx.BaseDir,
 			Executable:        executable,
 			BundleDir:         bundle.Dir,
 			Playbook:          "playbooks/checks/preflight.yml",

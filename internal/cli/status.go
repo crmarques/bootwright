@@ -31,7 +31,6 @@ func validateOutputFormat(value string) error {
 }
 
 func newStatusCmd(stdout io.Writer) *cobra.Command {
-	hostStateDir := defaultHostStateDir
 	output := outputText
 	watch := false
 	watchInterval := 5 * time.Second
@@ -50,7 +49,6 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
   bootwright status --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&hostStateDir, "host-state-dir", hostStateDir, "root-managed host runtime state directory")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.Flags().BoolVar(&watch, "watch", false, "refresh status until the current apply run reaches a terminal state")
 	cmd.Flags().DurationVar(&watchInterval, "watch-interval", watchInterval, "status refresh interval for --watch")
@@ -62,18 +60,18 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 			return failErr(2, fmt.Errorf("--watch is only supported with text output"))
 		}
 		if output == outputJSON {
-			return runStatusJSON(stdout, cf, hostStateDir)
+			return runStatusJSON(stdout, cf)
 		}
 		if watch {
-			return runStatusWatch(c.Context(), stdout, cf, hostStateDir, watchInterval)
+			return runStatusWatch(c.Context(), stdout, cf, watchInterval)
 		}
-		return runStatus(stdout, cf, hostStateDir)
+		return runStatus(stdout, cf)
 	}
 	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
-func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
+func runStatus(stdout io.Writer, cf *commonFlags) error {
 	ctx, err := cf.resolve()
 	if err != nil {
 		return failErr(1, err)
@@ -84,11 +82,11 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 	p.Section("Context")
 	p.Fields([]cliout.Field{
 		{Key: "context", Value: ctx.Name},
+		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "state-dir", Value: ctx.StateDir},
-		{Key: "runtime-dir", Value: controllerRuntimeDir(ctx.Name)},
+		{Key: "runtime-dir", Value: ctx.RuntimeDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
-		{Key: "host-state-dir", Value: hostStateDir},
 	})
 
 	state, loadErr := loadOptionalDesiredState(cf)
@@ -136,12 +134,12 @@ func runStatus(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
 	return nil
 }
 
-func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, hostStateDir string, interval time.Duration) error {
+func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, interval time.Duration) error {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
 	for {
-		if err := runStatus(stdout, cf, hostStateDir); err != nil {
+		if err := runStatus(stdout, cf); err != nil {
 			return err
 		}
 		contextState, err := cf.resolve()

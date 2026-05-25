@@ -8,7 +8,7 @@ bootwright_proxy_http: "{{ (bootwright_proxy | default({})).http | default('') }
 bootwright_proxy_https: "{{ (bootwright_proxy | default({})).https | default('') }}"
 bootwright_proxy_no: "{{ (bootwright_proxy | default({})).noProxy | default([]) | join(',') }}"
 bootwright_proxy_credentials_name: "{{ ((bootwright_proxy | default({})).auth | default({})).proxyAuthRef | default('') }}"
-bootwright_secrets_dir: "{{ lookup('env', 'BOOTWRIGHT_SECRETS_DIR') | default((lookup('env', 'BOOTWRIGHT_BASE_DIR') | default(lookup('env', 'HOME') ~ '/.bootwright', true)) ~ '/secrets', true) }}"
+bootwright_secrets_dir: "{{ bootwright_host_state_dir }}/secrets"
 # Resolved file path of the proxy credential, when set. Roles slurp
 # this from localhost; the file must exist with mode 0600.
 bootwright_proxy_credentials_ref: "{{ (bootwright_secrets_dir ~ '/' ~ bootwright_proxy_credentials_name) if (bootwright_proxy_credentials_name | length) > 0 else '' }}"

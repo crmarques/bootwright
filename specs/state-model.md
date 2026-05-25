@@ -713,25 +713,37 @@ Validation rejects:
 ## CLI Contract
 
 The CLI resolves desired state from the current named context. Contexts are
-stored in `~/.bootwright/contexts.yaml`; `context init` imports one or more
-YAML files or directories into `<base-dir>/input-files`, where directories are
-walked for YAML files unless exactly one discovered `Environment` sets
-`spec.resources`, in which case only that environment file plus the listed
-files are loaded.
+registered in `~/.bootwright/contexts.yaml` using only this list form:
+
+```yaml
+current: lab
+contexts:
+  - lab
+```
+
+All context data is derived from the fixed root-managed path
+`/var/lib/bootwright/contexts/<context>/`; `context init` imports one or more
+YAML files or directories into that context's `input-files/` directory. Input
+directories are walked for YAML files unless exactly one discovered
+`Environment` sets `spec.resources`, in which case only that environment file
+plus the listed files are loaded.
 Unknown fields are rejected at decode time, and all loaded objects are
 normalized and validated before any render or apply step.
 Context-backed commands fail before doing work when the selected context is
-not structurally ready; `bootwright context validate` reports each checked
-aspect as `OK` or `MISSING`.
+not structurally ready or the local host does not match the declared
+`Environment.spec.bastion.hostRef`; `bootwright context validate` reports each
+checked aspect as `OK` or `MISSING`.
 
 Primary commands:
 
 ```text
 bootwright context init lab -f ./examples/sno-libvirt-redfish
+bootwright context update lab -f ./examples/sno-libvirt-redfish
 bootwright context validate
 bootwright context use lab
 bootwright print-env [--sensitive]
 bootwright secret list
+bootwright secret show --name <secret-name>
 bootwright secret set openshift-pull-secret --pull-secret <path>
 bootwright secret generate
 bootwright check syntax
@@ -754,7 +766,9 @@ grouped into sections, status labels, artifact groups, summaries, and
 actionable check remediation.
 Commands that support `--output json` expose the stable automation surface and
 must emit only JSON on stdout. Shell-export commands such as
-`bootwright print-env` intentionally emit only `export ...` lines.
+`bootwright print-env` intentionally emit only `export ...` lines. `secret
+show` intentionally emits raw secret bytes on stdout and is a sensitive
+raw-output exception.
 Apply commands may execute independent tasks concurrently. Operators can tune
 task scheduling with `--parallelism`, `--parallelism-per-host`, and
 `--parallelism-redfish`; `0` for any of those flags means Bootwright uses the
@@ -802,10 +816,26 @@ Filtered `apply infra --scope` and `apply all --scope` fail before rendering
 when the selected clusters share provider services with unselected clusters;
 include every consumer or run without `--scope`.
 
+Fixed storage layout:
+
+- The only user-writable registry is `~/.bootwright/contexts.yaml`.
+- The root-managed tree is `/var/lib/bootwright/`, mode `0700`.
+- Each context is `/var/lib/bootwright/contexts/<context>/` with
+  `input-files/`, `secrets/`, `state/`, `runtime/`, `workflow/`, and
+  `artifacts-server/tls/`.
+- Shared runtime files, including `ansible-venv`, live directly under
+  `/var/lib/bootwright/`.
+- `context init <name> -f <path> --yes` replaces the entire context directory
+  after validating staged input and bastion locality.
+- `context update <name> -f <path>` requires an existing context and replaces
+  only `input-files/`, preserving secrets, state, runtime, and workflow data.
+
 Generated output boundaries:
 
-- User-authored YAML lives under `<base-dir>/input-files/`.
-- Placeholder installer output lives under `<base-dir>/state/installer/<cluster>/`.
+- User-authored YAML lives under
+  `/var/lib/bootwright/contexts/<context>/input-files/`.
+- Placeholder installer output lives under
+  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
 - External tool input exports written by

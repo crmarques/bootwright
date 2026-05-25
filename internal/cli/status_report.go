@@ -33,12 +33,12 @@ type statusShared struct {
 }
 
 type statusContext struct {
-	Name         string `json:"name"`
-	InputDir     string `json:"inputDir"`
-	StateDir     string `json:"stateDir"`
-	RuntimeDir   string `json:"runtimeDir"`
-	SecretsDir   string `json:"secretsDir"`
-	HostStateDir string `json:"hostStateDir"`
+	Name       string `json:"name"`
+	ContextDir string `json:"contextDir"`
+	InputDir   string `json:"inputDir"`
+	StateDir   string `json:"stateDir"`
+	RuntimeDir string `json:"runtimeDir"`
+	SecretsDir string `json:"secretsDir"`
 }
 
 type statusApplyRunActivity struct {
@@ -67,15 +67,15 @@ type statusCluster struct {
 	FreshnessDetail    string `json:"freshnessDetail,omitempty"`
 }
 
-func runStatusJSON(stdout io.Writer, cf *commonFlags, hostStateDir string) error {
-	report, err := buildStatusReport(cf, hostStateDir)
+func runStatusJSON(stdout io.Writer, cf *commonFlags) error {
+	report, err := buildStatusReport(cf)
 	if err != nil {
 		return failErr(1, err)
 	}
 	return output.JSON(stdout, report)
 }
 
-func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, error) {
+func buildStatusReport(cf *commonFlags) (statusReport, error) {
 	ctx, err := cf.resolve()
 	if err != nil {
 		return statusReport{}, err
@@ -85,12 +85,12 @@ func buildStatusReport(cf *commonFlags, hostStateDir string) (statusReport, erro
 
 	report := statusReport{
 		Context: statusContext{
-			Name:         ctx.Name,
-			InputDir:     ctx.InputDir,
-			StateDir:     ctx.StateDir,
-			RuntimeDir:   controllerRuntimeDir(ctx.Name),
-			SecretsDir:   ctx.SecretsDir,
-			HostStateDir: hostStateDir,
+			Name:       ctx.Name,
+			ContextDir: ctx.BaseDir,
+			InputDir:   ctx.InputDir,
+			StateDir:   ctx.StateDir,
+			RuntimeDir: ctx.RuntimeDir,
+			SecretsDir: ctx.SecretsDir,
 		},
 		Desired: statusDesired{
 			Source: stateSource(cf),
