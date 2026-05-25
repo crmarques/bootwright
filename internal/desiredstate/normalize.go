@@ -147,11 +147,6 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 	if ocp.Spec.Install.SSHKeyRef.Name == "" {
 		ocp.Spec.Install.SSHKeyRef = v1alpha1.SecretRef{Name: v1alpha1.DefaultClusterSSHKeyName}
 	}
-	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil &&
-		registries.Mirror.TrustBundleRef.Name != "" &&
-		ocp.Spec.Install.AdditionalTrustBundleRef.Name == "" {
-		ocp.Spec.Install.AdditionalTrustBundleRef = registries.Mirror.TrustBundleRef
-	}
 }
 
 func primaryEnvironment(state *v1alpha1.State) *v1alpha1.Environment {

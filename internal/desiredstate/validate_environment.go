@@ -61,6 +61,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentSecrets(env)...)
 		errs = append(errs, validateEnvironmentProxy(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
+		errs = append(errs, validateEnvironmentClusterTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)
 		errs = append(errs, validateEnvironmentNTPSources(env)...)
 	}
@@ -172,11 +173,34 @@ func validateEnvironmentSecrets(env v1alpha1.Environment) []string {
 		hasFile := secret.File != ""
 		hasGenerated := secret.Generated != nil
 		switch {
+		case secret.KeyFile != "" && !hasFile:
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].keyFile requires file", env.Metadata.Name, name))
 		case hasFile && hasGenerated:
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s] sets both file and generated; pick at most one source", env.Metadata.Name, name))
 		case hasGenerated:
 			errs = append(errs, validateGeneratedSecret(env.Metadata.Name, name, secret.Generated)...)
 		}
+	}
+	return errs
+}
+
+func validateEnvironmentClusterTrust(env v1alpha1.Environment) []string {
+	if env.Spec.ClusterTrust == nil {
+		return nil
+	}
+	var errs []string
+	seen := map[string]bool{}
+	owner := fmt.Sprintf("Environment/%s spec.clusterTrust.caBundleRefs", env.Metadata.Name)
+	for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
+		if ref.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s[%d].name is required", owner, i))
+			continue
+		}
+		if seen[ref.Name] {
+			errs = append(errs, fmt.Sprintf("%s[%d].name %q is duplicated", owner, i, ref.Name))
+			continue
+		}
+		seen[ref.Name] = true
 	}
 	return errs
 }

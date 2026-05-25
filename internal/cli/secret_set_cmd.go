@@ -21,6 +21,8 @@ func newSecretSetCmd(stdout io.Writer) *cobra.Command {
 	var (
 		pullSecret    string
 		fromFile      string
+		tlsCert       string
+		tlsKey        string
 		username      string
 		password      string
 		passwordStdin bool
@@ -33,6 +35,7 @@ func newSecretSetCmd(stdout io.Writer) *cobra.Command {
 Exactly one input mode is required:
 
   --pull-secret <file>             store an OpenShift pull-secret JSON file
+  --tls-cert <file> --tls-key <file> store a TLS certificate chain and key
   --from-file <file>               store an existing "username:password" file
   --username <u> --password-stdin  read the password from stdin
   --generate                       generate a random password (default username "admin")
@@ -53,6 +56,8 @@ provides. Use --generate for test fixtures.`,
   bootwright secret set proxy-credentials --generate --username proxy`,
 	}
 	cmd.Flags().StringVar(&pullSecret, "pull-secret", "", "path to an OpenShift pull-secret JSON file")
+	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to a PEM TLS certificate chain file")
+	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to a PEM TLS private key file")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "path to a file containing one line: username:password")
 	cmd.Flags().StringVar(&username, "username", "", "username (required with --password, --password-stdin, or --generate)")
 	cmd.Flags().StringVar(&password, "password", "", "password (mutually exclusive with --password-stdin and --generate)")
@@ -73,6 +78,12 @@ provides. Use --generate for test fixtures.`,
 		if pullSecret != "" {
 			modes++
 		}
+		if tlsCert != "" || tlsKey != "" {
+			if tlsCert == "" || tlsKey == "" {
+				return failf(2, "--tls-cert and --tls-key must be set together")
+			}
+			modes++
+		}
 		if fromFile != "" {
 			modes++
 		}
@@ -86,17 +97,64 @@ provides. Use --generate for test fixtures.`,
 			modes++
 		}
 		if modes == 0 {
-			return failf(2, "one of --pull-secret, --from-file, --password, --password-stdin, or --generate is required")
+			return failf(2, "one of --pull-secret, --tls-cert/--tls-key, --from-file, --password, --password-stdin, or --generate is required")
 		}
 		if modes > 1 {
-			return failf(2, "--pull-secret, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
+			return failf(2, "--pull-secret, --tls-cert/--tls-key, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
 		}
 		if pullSecret != "" {
 			return runSecretSetPullSecret(stdout, name, pullSecret, ctx.SecretsDir)
 		}
+		if tlsCert != "" {
+			return runSecretSetTLS(stdout, name, tlsCert, tlsKey, ctx.SecretsDir)
+		}
 		return runSecretSetCredentials(c, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.SecretsDir)
 	}
 	return cmd
+}
+
+func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, secretsDir string) error {
+	certData, err := os.ReadFile(certFile)
+	if err != nil {
+		return failErr(1, fmt.Errorf("read TLS certificate file %s: %w", certFile, err))
+	}
+	keyData, err := os.ReadFile(keyFile)
+	if err != nil {
+		return failErr(1, fmt.Errorf("read TLS private key file %s: %w", keyFile, err))
+	}
+	if _, err := secret.ValidateTLSCertificateKey(certData, keyData); err != nil {
+		return failErr(1, err)
+	}
+	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
+	}
+	if err := os.Chmod(secretsDir, 0o700); err != nil {
+		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
+	}
+	certTarget := filepath.Join(secretsDir, name)
+	keyTarget := certTarget + ".key"
+	certExists, err := safefs.RegularFileExists(certTarget)
+	if err != nil {
+		return failErr(1, err)
+	}
+	keyExists, err := safefs.RegularFileExists(keyTarget)
+	if err != nil {
+		return failErr(1, err)
+	}
+	if err := safefs.AtomicWriteFile(certTarget, certData, 0o600); err != nil {
+		return failErr(1, err)
+	}
+	if err := safefs.AtomicWriteFile(keyTarget, keyData, 0o600); err != nil {
+		return failErr(1, err)
+	}
+	action := "wrote"
+	if certExists || keyExists {
+		action = "updated"
+	}
+	p := output.New(stdout)
+	p.Command("secret set")
+	p.Summary(output.StatusOK, name, fmt.Sprintf("%s TLS certificate and key at %s and %s", action, certTarget, keyTarget))
+	return nil
 }
 
 func runSecretSetPullSecret(stdout io.Writer, name, fromFile, secretsDir string) error {

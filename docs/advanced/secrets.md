@@ -38,12 +38,19 @@ spec:
       generated:
         selfSignedCertificate:
           commonName: registry.lab.bootwright.test
+    api-serving-tls:
+      file: ../secrets/api-serving.crt
+      keyFile: ../secrets/api-serving.key
+    ingress-serving-tls:
 ```
 
 Every entry has **at most one** of `file:` or `generated:`. An entry
-with neither field resolves to `<context>/secrets/<name>`. Each kind
+with neither field resolves to `<context>/secrets/<name>`. TLS pair consumers
+read `<context>/secrets/<name>` and `<context>/secrets/<name>.key`, unless
+`file:` and `keyFile:` point at operator-owned files. Each kind
 references the secret by name: `keyRef.name`, `credentialRef.name`,
-`trustBundleRef.name`, `proxyAuthRef.name`.
+`trustBundleRef.name`, `caBundleRefs[].name`, `proxyAuthRef.name`,
+`secretRef.name`, or `defaultCertificateRef.name`.
 
 ## Local secrets directory
 
@@ -63,6 +70,7 @@ individual files mode `0600`.
 | Form | Command |
 | --- | --- |
 | Pull secret or context-local secret | `bootwright secret set openshift-pull-secret --pull-secret ~/pull-secret.json` |
+| TLS certificate and key | `bootwright secret set ingress-serving-tls --tls-cert ./tls.crt --tls-key ./tls.key` |
 | Credentials | `bootwright secret set proxy-credentials --username proxy --password-stdin` |
 | Credentials from protected env vars | `bootwright secret set proxy-credentials --username "$PROXY_USER" --password "$PROXY_PASS"` |
 | Materialize every `generated:` entry | `bootwright secret generate` |
@@ -88,12 +96,14 @@ When proxy credentials would be embedded in those exports, rerun it as
 | Provider host SSH key | OpenSSH private key |
 | BMC / proxy credentials | One `username:password\n` line — sushy-emulator and Squid htpasswd files are derived from this at apply time and never committed |
 | Self-signed cert + key | PEM cert and PEM key written by `bootwright secret generate` |
+| TLS pair | PEM certificate chain in `<name>` and unencrypted PEM private key in `<name>.key` |
 
 ## What never appears in YAML or logs
 
 - Plaintext credentials, kubeconfigs, pull secrets, private keys,
   tokens.
-- Effective install / agent configs with resolved secrets (these live under
+- Effective install / agent configs and `openshift/` manifests with resolved
+  secrets (these live under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/` with
   mode `0600` and are never committed).
 - Generated self-signed cert/key material outside the local secrets

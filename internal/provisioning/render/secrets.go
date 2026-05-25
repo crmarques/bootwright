@@ -22,11 +22,17 @@ type InstallerSecrets struct {
 	TrustBundle string
 	ProxyHTTP   string
 	ProxyHTTPS  string
+	TLSPairs    map[string]InstallerTLSSecret
+}
+
+type InstallerTLSSecret struct {
+	Cert string
+	Key  string
 }
 
 // PlaceholderInstallerSecrets returns sentinel strings for placeholder
 // installer output in place of real material.
-func PlaceholderInstallerSecrets(ocp v1alpha1.ContainerCluster) InstallerSecrets {
+func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster) InstallerSecrets {
 	pullSecret := "{}"
 	if ocp.Spec.Install.PullSecretRef.Name != "" {
 		pullSecret = pullSecretPlaceholder(ocp.Spec.Install.PullSecretRef.Name)
@@ -34,9 +40,20 @@ func PlaceholderInstallerSecrets(ocp v1alpha1.ContainerCluster) InstallerSecrets
 	out := InstallerSecrets{
 		PullSecret: pullSecret,
 		SSHKey:     secretRefPlaceholder("ssh-key", ocp.Spec.Install.SSHKeyRef.Name),
+		TLSPairs:   map[string]InstallerTLSSecret{},
 	}
-	if ocp.Spec.Install.AdditionalTrustBundleRef.Name != "" {
-		out.TrustBundle = secretRefPlaceholder("trust-bundle", ocp.Spec.Install.AdditionalTrustBundleRef.Name)
+	if refs := additionalTrustBundleRefs(state, ocp); len(refs) > 0 {
+		var parts []string
+		for _, ref := range refs {
+			parts = append(parts, secretRefPlaceholder("trust-bundle", ref.Name))
+		}
+		out.TrustBundle = strings.Join(parts, "\n")
+	}
+	for _, ref := range servingCertificateSecretRefs(ocp) {
+		out.TLSPairs[ref.Name] = InstallerTLSSecret{
+			Cert: secretRefPlaceholder("tls.crt", ref.Name),
+			Key:  secretRefPlaceholder("tls.key", ref.Name),
+		}
 	}
 	return out
 }
@@ -74,13 +91,44 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	}
 	out.SSHKey = sshKey
 
-	if name := ocp.Spec.Install.AdditionalTrustBundleRef.Name; name != "" {
-		tbPath := secret.ResolvePath(name, env, secretsDir)
-		bundle, err := readSecretFile(tbPath, "additional trust bundle")
-		if err != nil {
-			return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+	if refs := additionalTrustBundleRefs(state, ocp); len(refs) > 0 {
+		var bundles []string
+		for _, ref := range refs {
+			name := ref.Name
+			tbPath := secret.ResolvePath(name, env, secretsDir)
+			bundle, err := readSecretFile(tbPath, "additional trust bundle")
+			if err != nil {
+				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+			}
+			if err := secret.ValidateCABundlePEM([]byte(bundle)); err != nil {
+				return out, fmt.Errorf("%s: additional trust bundle %s at %s: %w", ocp.Metadata.Name, name, tbPath, err)
+			}
+			bundles = append(bundles, strings.TrimSpace(bundle))
 		}
-		out.TrustBundle = bundle
+		out.TrustBundle = strings.Join(bundles, "\n")
+	}
+
+	if refs := servingCertificateSecretRefs(ocp); len(refs) > 0 {
+		out.TLSPairs = map[string]InstallerTLSSecret{}
+		for _, ref := range refs {
+			certPath := secret.ResolvePath(ref.Name, env, secretsDir)
+			keyPath := secret.ResolveTLSKeyPath(ref.Name, env, secretsDir)
+			certPEM, err := readSecretFile(certPath, "serving certificate")
+			if err != nil {
+				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+			}
+			keyPEM, err := readSecretFile(keyPath, "serving certificate private key")
+			if err != nil {
+				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+			}
+			if _, err := secret.ValidateTLSCertificateKey([]byte(certPEM), []byte(keyPEM)); err != nil {
+				return out, fmt.Errorf("%s: serving certificate %s: %w", ocp.Metadata.Name, ref.Name, err)
+			}
+			out.TLSPairs[ref.Name] = InstallerTLSSecret{Cert: certPEM, Key: keyPEM}
+		}
+		if err := validateServingCertificateCoverage(state, ocp, out.TLSPairs); err != nil {
+			return out, err
+		}
 	}
 
 	if env == nil {
@@ -159,6 +207,86 @@ func readSecretFile(path, kind string) (string, error) {
 		return "", fmt.Errorf("read %s at %s: %w", kind, path, err)
 	}
 	return strings.TrimRight(string(data), "\n"), nil
+}
+
+func additionalTrustBundleRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []v1alpha1.SecretRef {
+	env := primaryEnvironment(state)
+	var refs []v1alpha1.SecretRef
+	if env != nil {
+		if env.Spec.ClusterTrust != nil {
+			refs = append(refs, env.Spec.ClusterTrust.CABundleRefs...)
+		}
+		if reg := env.Spec.Registries; reg != nil && reg.Mirror != nil && reg.Mirror.TrustBundleRef.Name != "" {
+			refs = append(refs, reg.Mirror.TrustBundleRef)
+		}
+	}
+	refs = append(refs, ocp.Spec.Install.AdditionalTrustBundleRefs...)
+	seen := map[string]bool{}
+	out := make([]v1alpha1.SecretRef, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Name == "" || seen[ref.Name] {
+			continue
+		}
+		seen[ref.Name] = true
+		out = append(out, ref)
+	}
+	return out
+}
+
+func servingCertificateSecretRefs(ocp v1alpha1.ContainerCluster) []v1alpha1.SecretRef {
+	serving := ocp.Spec.Install.ServingCertificates
+	if serving == nil {
+		return nil
+	}
+	var refs []v1alpha1.SecretRef
+	if api := serving.APIServer; api != nil {
+		for _, cert := range api.NamedCertificates {
+			refs = append(refs, cert.SecretRef)
+		}
+	}
+	if ingress := serving.Ingress; ingress != nil {
+		refs = append(refs, ingress.DefaultCertificateRef)
+	}
+	seen := map[string]bool{}
+	out := make([]v1alpha1.SecretRef, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Name == "" || seen[ref.Name] {
+			continue
+		}
+		seen[ref.Name] = true
+		out = append(out, ref)
+	}
+	return out
+}
+
+func validateServingCertificateCoverage(state v1alpha1.State, ocp v1alpha1.ContainerCluster, pairs map[string]InstallerTLSSecret) error {
+	serving := ocp.Spec.Install.ServingCertificates
+	if serving == nil {
+		return nil
+	}
+	if api := serving.APIServer; api != nil {
+		for _, cert := range api.NamedCertificates {
+			pair := pairs[cert.SecretRef.Name]
+			for _, name := range cert.Names {
+				if err := secret.CertificateBundleCoversDNSName([]byte(pair.Cert), name); err != nil {
+					return fmt.Errorf("%s: serving certificate %s does not cover API name %s: %w", ocp.Metadata.Name, cert.SecretRef.Name, name, err)
+				}
+			}
+		}
+	}
+	if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name != "" {
+		env := primaryEnvironment(state)
+		baseDomain := ""
+		if env != nil {
+			baseDomain = env.Spec.BaseDomain
+		}
+		probe := "console-openshift-console.apps." + ocp.Metadata.Name + "." + baseDomain
+		pair := pairs[ingress.DefaultCertificateRef.Name]
+		if err := secret.CertificateBundleCoversDNSName([]byte(pair.Cert), probe); err != nil {
+			return fmt.Errorf("%s: serving certificate %s does not cover ingress wildcard *.apps.%s.%s: %w", ocp.Metadata.Name, ingress.DefaultCertificateRef.Name, ocp.Metadata.Name, baseDomain, err)
+		}
+	}
+	return nil
 }
 
 func validatePullSecret(content, path string) error {

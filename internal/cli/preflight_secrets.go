@@ -19,6 +19,7 @@ type secretRefRequirement struct {
 	source        secretRefSource
 	generatedKind string
 	publicKey     bool
+	tlsPair       bool
 }
 
 type secretRefSource string
@@ -51,6 +52,10 @@ func secretRefChecks(state v1alpha1.State, secretsDir string, selected []Phase, 
 		checks = append(checks, secretsDirCheck(secretsDir, deps))
 	}
 	for _, req := range inScope {
+		if req.tlsPair {
+			checks = append(checks, tlsSecretFileChecks(req, env, secretsDir, deps)...)
+			continue
+		}
 		if req.source == secretRefSourceGenerated {
 			path := filepath.Join(secretsDir, req.refName)
 			checks = append(checks, generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps))
@@ -66,6 +71,18 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 	var out []secretRefRequirement
 
 	if env := environmentForChecks(state); env != nil {
+		if env.Spec.ClusterTrust != nil {
+			for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
+				if ref.Name == "" {
+					continue
+				}
+				out = append(out, secretRefRequirement{
+					refName: ref.Name,
+					label:   fmt.Sprintf("environment clusterTrust caBundleRefs[%d]", i),
+					phases:  []string{"clusters"},
+				})
+			}
+		}
 		if env.Spec.Proxy != nil && env.Spec.Proxy.Auth != nil && env.Spec.Proxy.Auth.ProxyAuthRef.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: env.Spec.Proxy.Auth.ProxyAuthRef.Name,
@@ -78,6 +95,13 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 				refName: registries.Mirror.CredentialsRef.Name,
 				label:   "registry mirror credentialsRef",
 				phases:  []string{"provider", "clusters"},
+			})
+		}
+		if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil && registries.Mirror.TrustBundleRef.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: registries.Mirror.TrustBundleRef.Name,
+				label:   "registry mirror trustBundleRef",
+				phases:  []string{"clusters"},
 			})
 		}
 	}
@@ -150,12 +174,38 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 				publicKey: true,
 			})
 		}
-		if install.AdditionalTrustBundleRef.Name != "" {
+		for i, ref := range install.AdditionalTrustBundleRefs {
+			if ref.Name == "" {
+				continue
+			}
 			out = append(out, secretRefRequirement{
-				refName: install.AdditionalTrustBundleRef.Name,
-				label:   cluster.Metadata.Name + " additionalTrustBundleRef",
+				refName: ref.Name,
+				label:   fmt.Sprintf("%s additionalTrustBundleRefs[%d]", cluster.Metadata.Name, i),
 				phases:  []string{"clusters"},
 			})
+		}
+		if serving := install.ServingCertificates; serving != nil {
+			if api := serving.APIServer; api != nil {
+				for i, cert := range api.NamedCertificates {
+					if cert.SecretRef.Name == "" {
+						continue
+					}
+					out = append(out, secretRefRequirement{
+						refName: cert.SecretRef.Name,
+						label:   fmt.Sprintf("%s apiServer namedCertificates[%d] secretRef", cluster.Metadata.Name, i),
+						phases:  []string{"clusters"},
+						tlsPair: true,
+					})
+				}
+			}
+			if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name != "" {
+				out = append(out, secretRefRequirement{
+					refName: ingress.DefaultCertificateRef.Name,
+					label:   cluster.Metadata.Name + " ingress defaultCertificateRef",
+					phases:  []string{"clusters"},
+					tlsPair: true,
+				})
+			}
 		}
 	}
 	return resolveSecretRequirementSources(state, out)
@@ -205,6 +255,15 @@ func generatedSecretKind(spec v1alpha1.EnvironmentSecretSpec) string {
 		return "selfSignedCertificate"
 	default:
 		return ""
+	}
+}
+
+func tlsSecretFileChecks(req secretRefRequirement, env *v1alpha1.Environment, secretsDir string, deps preflightDeps) []preflightCheck {
+	certPath := resolvedSecretPath(req.refName, env, secretsDir)
+	keyPath := secret.ResolveTLSKeyPath(req.refName, env, secretsDir)
+	return []preflightCheck{
+		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
+		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
 	}
 }
 

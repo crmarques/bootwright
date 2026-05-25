@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {
@@ -143,6 +145,44 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 		}
 	}
 	t.Fatalf("missing provider-host SSH key check for clusters phase: %+v", checks)
+}
+
+func TestClusterPreflightRequiresTLSPairMaterial(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
+		APIServer: &v1alpha1.APIServerServingCertificateSpec{
+			NamedCertificates: []v1alpha1.APIServerNamedCertificateSpec{{
+				Names:     []string{"api.sno-libvirt.bootwright.test"},
+				SecretRef: v1alpha1.SecretRef{Name: "api-tls"},
+			}},
+		},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var certCheck, keyCheck *preflightCheck
+	for i := range checks {
+		check := &checks[i]
+		switch check.Name {
+		case "sno-libvirt apiServer namedCertificates[0] secretRef tls.crt":
+			certCheck = check
+		case "sno-libvirt apiServer namedCertificates[0] secretRef tls.key":
+			keyCheck = check
+		}
+	}
+	if certCheck == nil || keyCheck == nil {
+		t.Fatalf("missing TLS pair checks: %+v", checks)
+	}
+	if !strings.Contains(certCheck.Evidence, "/context/secrets/api-tls missing") {
+		t.Fatalf("cert check evidence = %q", certCheck.Evidence)
+	}
+	if !strings.Contains(keyCheck.Evidence, "/context/secrets/api-tls.key missing") {
+		t.Fatalf("key check evidence = %q", keyCheck.Evidence)
+	}
 }
 
 func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {

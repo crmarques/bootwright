@@ -99,10 +99,10 @@ to the two `apply` commands.
 
 ## 4. Install The Cluster
 
-`render installer` writes `install-config.yaml` and `agent-config.yaml`
-under `$BOOTWRIGHT_STATE_DIR/installer/<cluster>/` with
-placeholder strings in place of pull secret, SSH key, and trust bundle.
-These files are generated and can be regenerated.
+`render installer` writes `install-config.yaml`, `agent-config.yaml`, and
+optional `openshift/` manifests under `$BOOTWRIGHT_STATE_DIR/installer/<cluster>/`
+with placeholder strings in place of pull secret, SSH key, trust bundle, and
+TLS data. These files are generated and can be regenerated.
 
 ```bash
 bootwright check cluster

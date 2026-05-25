@@ -2,6 +2,8 @@ package secret
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -103,6 +105,120 @@ func ValidatePullSecretJSON(data []byte) error {
 		return errors.New("pull secret .auths must be a JSON object")
 	}
 	return nil
+}
+
+func ParseCertificateBundlePEM(data []byte) ([]*x509.Certificate, error) {
+	rest := bytes.TrimSpace(data)
+	var certs []*x509.Certificate
+	for len(rest) > 0 {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return nil, errors.New("certificate bundle must contain PEM-encoded certificates only")
+		}
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("certificate bundle contains PEM block %q; expected CERTIFICATE", block.Type)
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse certificate: %w", err)
+		}
+		certs = append(certs, cert)
+		rest = bytes.TrimSpace(remaining)
+	}
+	if len(certs) == 0 {
+		return nil, errors.New("certificate bundle must contain at least one PEM certificate")
+	}
+	return certs, nil
+}
+
+func ValidateCABundlePEM(data []byte) error {
+	_, err := ParseCertificateBundlePEM(data)
+	return err
+}
+
+func ValidateTLSCertificateKey(certPEM, keyPEM []byte) ([]*x509.Certificate, error) {
+	certs, err := ParseCertificateBundlePEM(certPEM)
+	if err != nil {
+		return nil, err
+	}
+	key, err := ParsePrivateKeyPEM(keyPEM)
+	if err != nil {
+		return nil, err
+	}
+	keyPublic, err := privateKeyPublicKey(key)
+	if err != nil {
+		return nil, err
+	}
+	if !publicKeysEqual(certs[0].PublicKey, keyPublic) {
+		return nil, errors.New("certificate leaf public key does not match private key")
+	}
+	return certs, nil
+}
+
+func ParsePrivateKeyPEM(data []byte) (any, error) {
+	rest := bytes.TrimSpace(data)
+	for len(rest) > 0 {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return nil, errors.New("private key must be PEM-encoded")
+		}
+		if block.Type == "ENCRYPTED PRIVATE KEY" || block.Headers["Proc-Type"] == "4,ENCRYPTED" {
+			return nil, errors.New("private key must be unencrypted")
+		}
+		switch block.Type {
+		case "RSA PRIVATE KEY":
+			return x509.ParsePKCS1PrivateKey(block.Bytes)
+		case "EC PRIVATE KEY":
+			return x509.ParseECPrivateKey(block.Bytes)
+		case "PRIVATE KEY":
+			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, err
+			}
+			switch key.(type) {
+			case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
+				return key, nil
+			default:
+				return nil, fmt.Errorf("unsupported private key type %T", key)
+			}
+		default:
+			rest = bytes.TrimSpace(remaining)
+		}
+	}
+	return nil, errors.New("private key PEM block not found")
+}
+
+func CertificateBundleCoversDNSName(certPEM []byte, name string) error {
+	certs, err := ParseCertificateBundlePEM(certPEM)
+	if err != nil {
+		return err
+	}
+	return certs[0].VerifyHostname(name)
+}
+
+func privateKeyPublicKey(key any) (any, error) {
+	switch k := key.(type) {
+	case *rsa.PrivateKey:
+		return &k.PublicKey, nil
+	case *ecdsa.PrivateKey:
+		return &k.PublicKey, nil
+	case ed25519.PrivateKey:
+		return k.Public(), nil
+	default:
+		return nil, fmt.Errorf("unsupported private key type %T", key)
+	}
+}
+
+func publicKeysEqual(a, b any) bool {
+	left, err := x509.MarshalPKIXPublicKey(a)
+	if err != nil {
+		return false
+	}
+	right, err := x509.MarshalPKIXPublicKey(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(left, right)
 }
 
 // SelfSignedCertificatePEM generates a 4096-bit RSA key + self-signed

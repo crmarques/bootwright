@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -36,7 +37,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 			errs = append(errs, validateNodes(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
 		}
-		errs = append(errs, validateInstallRefs(ocp)...)
+		errs = append(errs, validateInstallRefs(state, ocp)...)
 	}
 	return errs
 }
@@ -174,13 +175,80 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
 }
 
-func validateInstallRefs(ocp v1alpha1.ContainerCluster) []string {
+func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef.name is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
 	}
 	if ocp.Spec.Install.SSHKeyRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.sshKeyRef.name is required (inheritable from Environment)", ocp.Metadata.Name))
+	}
+	errs = append(errs, validateAdditionalTrustBundleRefs(ocp)...)
+	errs = append(errs, validateServingCertificateRefs(state, ocp)...)
+	return errs
+}
+
+func validateAdditionalTrustBundleRefs(ocp v1alpha1.ContainerCluster) []string {
+	var errs []string
+	seen := map[string]bool{}
+	owner := fmt.Sprintf("ContainerCluster/%s spec.install.additionalTrustBundleRefs", ocp.Metadata.Name)
+	for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
+		if ref.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s[%d].name is required", owner, i))
+			continue
+		}
+		if seen[ref.Name] {
+			errs = append(errs, fmt.Sprintf("%s[%d].name %q is duplicated", owner, i, ref.Name))
+			continue
+		}
+		seen[ref.Name] = true
+	}
+	return errs
+}
+
+func validateServingCertificateRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
+	serving := ocp.Spec.Install.ServingCertificates
+	if serving == nil {
+		return nil
+	}
+	var errs []string
+	baseDomain := ""
+	if env := primaryEnvironment(&state); env != nil {
+		baseDomain = env.Spec.BaseDomain
+	}
+	apiIntName := "api-int." + ocp.Metadata.Name + "." + baseDomain
+	if api := serving.APIServer; api != nil {
+		if len(api.NamedCertificates) == 0 {
+			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.apiServer.namedCertificates requires at least one entry", ocp.Metadata.Name))
+		}
+		for i, cert := range api.NamedCertificates {
+			owner := fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.apiServer.namedCertificates[%d]", ocp.Metadata.Name, i)
+			if cert.SecretRef.Name == "" {
+				errs = append(errs, owner+".secretRef.name is required")
+			}
+			if len(cert.Names) == 0 {
+				errs = append(errs, owner+".names requires at least one DNS name")
+			}
+			seenNames := map[string]bool{}
+			for j, name := range cert.Names {
+				field := fmt.Sprintf("%s.names[%d]", owner, j)
+				if strings.TrimSpace(name) != name || name == "" {
+					errs = append(errs, fmt.Sprintf("%s must not be empty or contain leading/trailing whitespace", field))
+					continue
+				}
+				if baseDomain != "" && strings.EqualFold(name, apiIntName) {
+					errs = append(errs, fmt.Sprintf("%s %q must not target the internal API endpoint", field, name))
+				}
+				if seenNames[name] {
+					errs = append(errs, fmt.Sprintf("%s %q is duplicated", field, name))
+					continue
+				}
+				seenNames[name] = true
+			}
+		}
+	}
+	if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name == "" {
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.ingress.defaultCertificateRef.name is required", ocp.Metadata.Name))
 	}
 	return errs
 }

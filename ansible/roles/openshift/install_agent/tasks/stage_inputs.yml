@@ -15,3 +15,27 @@
     - install-config.yaml
     - agent-config.yaml
   when: bootwright_install_agent_action_effective in ['run', 'create_iso']
+
+- name: Check local installer extra manifests
+  ansible.builtin.stat:
+    path: "{{ bootwright_install_local_work_dir }}/openshift"
+  register: bootwright_install_extra_manifests_stat
+  delegate_to: localhost
+  become: false
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']
+
+- name: Remove stale remote installer extra manifests
+  ansible.builtin.file:
+    path: "{{ bootwright_install_work_dir }}/openshift"
+    state: absent
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']
+
+- name: Stage installer extra manifests on bastion
+  ansible.builtin.copy:
+    src: "{{ bootwright_install_local_work_dir }}/openshift/"
+    dest: "{{ bootwright_install_work_dir }}/openshift/"
+    mode: "0600"
+    directory_mode: "0700"
+  when:
+    - bootwright_install_agent_action_effective in ['run', 'create_iso']
+    - bootwright_install_extra_manifests_stat.stat.isdir | default(false)

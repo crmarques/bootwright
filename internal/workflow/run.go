@@ -50,8 +50,8 @@ type RunOptions struct {
 	UseControllingTTY  bool
 	DryRun             bool
 	// ResolveInstaller, when true and the run is not a dry-run, writes
-	// per-cluster effective install-config.yaml / agent-config.yaml with
-	// real secret material inlined under RuntimeDir/runtime/<cluster>/installer/
+	// per-cluster effective installer inputs with real secret material
+	// inlined under RuntimeDir/runtime/<cluster>/installer/
 	// before invoking ansible-playbook. Required for any apply path that
 	// targets the openshift install_agent role.
 	ResolveInstaller bool
@@ -212,9 +212,8 @@ func RenderOnly(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (
 	return render.All(stateDir, runtimeDir, secretsDir, state)
 }
 
-// ResolveInstaller renders effective install-config/agent-config copies
-// with secret material inlined. Used by `bootwright render installer
-// --sensitive`.
+// ResolveInstaller renders effective OpenShift installer inputs with secret
+// material inlined. Used by `bootwright render installer --sensitive`.
 func ResolveInstaller(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ResolveInstaller(stateDir, runtimeDir, secretsDir, state)
 }

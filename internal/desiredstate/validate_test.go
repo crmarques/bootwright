@@ -219,6 +219,71 @@ spec:
 			},
 			wantSubstring: `install.pullSecretRef "openshift-pull-secret" is not declared`,
 		},
+		{
+			name: "secret-keyfile-without-file-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"    provider-host-ssh: { file: ~/ssh }",
+				"    provider-host-ssh: { keyFile: ~/ssh.key }", 1)},
+			wantSubstring: "spec.secrets[provider-host-ssh].keyFile requires file",
+		},
+		{
+			name: "clustertrust-duplicate-ref-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  secrets:\n",
+				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n      - name: corp-ca\n\n  secrets:\n", 1)},
+			wantSubstring: `spec.clusterTrust.caBundleRefs[1].name "corp-ca" is duplicated`,
+		},
+		{
+			name: "clustertrust-unknown-ref-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  secrets:\n",
+				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  secrets:\n", 1)},
+			wantSubstring: `spec.clusterTrust.caBundleRefs[0] "corp-ca" is not declared`,
+		},
+		{
+			name: "additionaltrust-duplicate-ref-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }\n",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    additionalTrustBundleRefs:\n      - name: corp-ca\n      - name: corp-ca\n", 1)},
+			wantSubstring: `spec.install.additionalTrustBundleRefs[1].name "corp-ca" is duplicated`,
+		},
+		{
+			name: "api-serving-cert-names-required",
+			files: map[string]string{
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls:\n", 1),
+				"cluster.yaml": strings.Replace(newClusterYAML,
+					"    pullSecretRef: { name: openshift-pull-secret }\n",
+					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - secretRef: { name: api-tls }\n", 1),
+			},
+			wantSubstring: "namedCertificates[0].names requires at least one DNS name",
+		},
+		{
+			name: "api-serving-cert-api-int-rejected",
+			files: map[string]string{
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls:\n", 1),
+				"cluster.yaml": strings.Replace(newClusterYAML,
+					"    pullSecretRef: { name: openshift-pull-secret }\n",
+					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api-int.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
+			},
+			wantSubstring: `must not target the internal API endpoint`,
+		},
+		{
+			name: "serving-cert-file-source-keyfile-required",
+			files: map[string]string{
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls: { file: ./api.crt }\n", 1),
+				"cluster.yaml": strings.Replace(newClusterYAML,
+					"    pullSecretRef: { name: openshift-pull-secret }\n",
+					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
+			},
+			wantSubstring: `uses file-sourced TLS material but Environment/env spec.secrets[api-tls].keyFile is empty`,
+		},
+		{
+			name: "ingress-serving-cert-unknown-ref-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }\n",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: { name: ingress-tls }\n", 1)},
+			wantSubstring: `defaultCertificateRef "ingress-tls" is not declared`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -276,6 +341,13 @@ func TestRemovedContainerClusterInstallFieldsRejectStrictDecode(t *testing.T) {
         - ntp.example.test
 `,
 			wantSubstring: "field agentConfigOverrides not found",
+		},
+		{
+			name: "additionalTrustBundleRef",
+			fieldYAML: `    additionalTrustBundleRef:
+      name: old-trust
+`,
+			wantSubstring: "field additionalTrustBundleRef not found",
 		},
 	}
 	for _, tc := range tests {

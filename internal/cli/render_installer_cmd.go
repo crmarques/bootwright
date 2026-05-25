@@ -21,7 +21,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 	output = outputText
 	cmd := &cobra.Command{
 		Use:   "installer",
-		Short: "Render install-config.yaml and agent-config.yaml",
+		Short: "Render OpenShift installer inputs",
 		Args:  cobra.NoArgs,
 		Example: `  # Render installer files (placeholders for secrets) for every cluster
   bootwright render installer
@@ -37,7 +37,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render")
-	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective install-config.yaml/agent-config.yaml under /var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
+	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -115,11 +115,13 @@ type renderInstallerReport struct {
 }
 
 type renderInstallerCluster struct {
-	Name                       string `json:"name"`
-	InstallConfigPath          string `json:"installConfigPath"`
-	AgentConfigPath            string `json:"agentConfigPath"`
-	EffectiveInstallConfigPath string `json:"effectiveInstallConfigPath,omitempty"`
-	EffectiveAgentConfigPath   string `json:"effectiveAgentConfigPath,omitempty"`
+	Name                         string `json:"name"`
+	InstallConfigPath            string `json:"installConfigPath"`
+	AgentConfigPath              string `json:"agentConfigPath"`
+	InstallManifestsDir          string `json:"installManifestsDir,omitempty"`
+	EffectiveInstallConfigPath   string `json:"effectiveInstallConfigPath,omitempty"`
+	EffectiveAgentConfigPath     string `json:"effectiveAgentConfigPath,omitempty"`
+	EffectiveInstallManifestsDir string `json:"effectiveInstallManifestsDir,omitempty"`
 }
 
 func writeRenderInstallerJSON(stdout io.Writer, result render.Result, resolved render.Result, hasResolved bool) error {
@@ -132,13 +134,15 @@ func writeRenderInstallerJSON(stdout io.Writer, result render.Result, resolved r
 	}
 	for _, asset := range result.InstallerAssets {
 		entry := renderInstallerCluster{
-			Name:              asset.ClusterName,
-			InstallConfigPath: asset.InstallConfigPath,
-			AgentConfigPath:   asset.AgentConfigPath,
+			Name:                asset.ClusterName,
+			InstallConfigPath:   asset.InstallConfigPath,
+			AgentConfigPath:     asset.AgentConfigPath,
+			InstallManifestsDir: asset.InstallManifestsDir,
 		}
 		if effective, ok := effectiveByName[asset.ClusterName]; ok {
 			entry.EffectiveInstallConfigPath = effective.EffectiveInstallConfigPath
 			entry.EffectiveAgentConfigPath = effective.EffectiveAgentConfigPath
+			entry.EffectiveInstallManifestsDir = effective.EffectiveInstallManifestsDir
 		}
 		report.Clusters = append(report.Clusters, entry)
 	}
@@ -148,7 +152,7 @@ func writeRenderInstallerJSON(stdout io.Writer, result render.Result, resolved r
 func printInstallerFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.InstallerAssets {
-		paths = append(paths, asset.InstallConfigPath, asset.AgentConfigPath)
+		paths = append(paths, asset.InstallConfigPath, asset.AgentConfigPath, asset.InstallManifestsDir)
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Rendered artifacts")
@@ -158,7 +162,7 @@ func printInstallerFiles(stdout io.Writer, result render.Result) {
 func printEffectiveInstallerFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.InstallerAssets {
-		paths = append(paths, asset.EffectiveInstallConfigPath, asset.EffectiveAgentConfigPath)
+		paths = append(paths, asset.EffectiveInstallConfigPath, asset.EffectiveAgentConfigPath, asset.EffectiveInstallManifestsDir)
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Effective installer files")
@@ -168,7 +172,7 @@ func printEffectiveInstallerFiles(stdout io.Writer, result render.Result) {
 func printToolInputFiles(stdout io.Writer, result render.Result) {
 	var installerPaths []string
 	for _, asset := range result.InstallerAssets {
-		installerPaths = append(installerPaths, asset.InstallConfigPath, asset.AgentConfigPath)
+		installerPaths = append(installerPaths, asset.InstallConfigPath, asset.AgentConfigPath, asset.InstallManifestsDir)
 	}
 	groups := []cliout.ArtifactGroup{
 		{Name: "Bootwright", Paths: []string{result.EffectiveStatePath, result.LockPath}},

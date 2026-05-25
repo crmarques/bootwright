@@ -59,6 +59,12 @@ spec:
     mirror-registry-credentials:
     mirror-registry-ca:
       file: ../secrets/mirror-registry-ca.crt
+    corp-root-ca:
+      file: ../secrets/corp-root-ca.crt
+    prod-api-tls:
+      file: ../secrets/prod-api-tls.crt
+      keyFile: ../secrets/prod-api-tls.key
+    prod-apps-wildcard-tls:
 
   proxy:
     httpProxy: http://proxy.example.test:3128
@@ -80,6 +86,10 @@ spec:
         name: mirror-registry-credentials
       trustBundleRef:
         name: mirror-registry-ca
+
+  clusterTrust:
+    caBundleRefs:
+      - name: corp-root-ca
 
   ntpSources:
     - 0.pool.ntp.org
@@ -110,6 +120,11 @@ Rules:
   path. `generated:` resolves under the context secrets directory; generated
   credentials may be populated with either `bootwright secret set` or
   `bootwright secret generate`.
+- TLS-pair consumers use the certificate at `file:` plus the private key at
+  `keyFile:` for file-sourced secrets. Context-local and generated TLS pairs
+  resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
+- `clusterTrust.caBundleRefs[]` is optional fleet-wide CA trust rendered into
+  every selected cluster install. Entries reference PEM CA bundle secrets.
 - `proxy.httpProxy`, `proxy.httpsProxy`, and `proxy.noProxy` keep installer
   field names.
 - `proxy.useFor.bootwright` applies to Bootwright runtime actions. When
@@ -155,6 +170,18 @@ spec:
       name: openshift-pull-secret
     sshKeyRef:
       name: cluster-admin-pub-key
+    additionalTrustBundleRefs:
+      - name: cluster-extra-ca
+    servingCertificates:
+      apiServer:
+        namedCertificates:
+          - names:
+              - api.prod-3node.example.test
+            secretRef:
+              name: prod-api-tls
+      ingress:
+        defaultCertificateRef:
+          name: prod-apps-wildcard-tls
 
   controlPlane:
     name: master
@@ -208,6 +235,15 @@ Rules:
   release image is set.
 - OKD does not derive an OpenShift channel and does not require a Red Hat pull
   secret by default. Prefer explicit OKD release images for exact installs.
+- `additionalTrustBundleRefs[]` is cluster-scoped CA trust. Effective
+  `additionalTrustBundle` order is environment `clusterTrust`, mirror registry
+  trust, then cluster refs, de-duplicated by secret name.
+- `servingCertificates.apiServer.namedCertificates[]` renders OpenShift API
+  serving certificate Secrets plus `APIServer/cluster`. `names[]` is required
+  and must not target the internal `api-int.<cluster>.<baseDomain>` endpoint.
+- `servingCertificates.ingress.defaultCertificateRef` renders the default
+  ingress certificate Secret plus `IngressController/default`. The certificate
+  must cover `*.apps.<cluster>.<baseDomain>`.
 - Every node binds to a `ClusterInfra` machine by
   `nodes[].machineRef.clusterInfra` and `nodes[].machineRef.name`.
 - In v1, all nodes in one cluster must reference the same `ClusterInfra`.
@@ -633,6 +669,9 @@ Bootwright renders:
   deterministic generated MACs for virtual substrates that Bootwright creates.
 - Provider or generated machine MACs into matching NMState interfaces when
   present.
+- Install-time OpenShift extra manifests under `openshift/` for declared API
+  and ingress serving certificates. Placeholder render output redacts Secret
+  data; runtime and `--sensitive` output include TLS material.
 - Managed non-machine components from `ClusterInfra.spec.components`.
 - Shared provider service identities, consumers, host placement, conflict
   fields, and mergeable overlays from the resolved service graph. Mergeable
@@ -772,7 +811,8 @@ Generated output boundaries:
 - External tool input exports written by
   `bootwright render --output-dir <dir> --sensitive` live under the
   requested output directory and include
-  `openshift-install/<cluster>/{install,agent}-config.yaml` plus Ansible
+  `openshift-install/<cluster>/{install,agent}-config.yaml`,
+  optional `openshift-install/<cluster>/openshift/` manifests, and Ansible
   inventory and vars files. The command must fail before writing files when
-  `--sensitive` is omitted, because the OpenShift install-config export
+  `--sensitive` is omitted, because the OpenShift install input export
   contains secret material and must be treated as local runtime output.

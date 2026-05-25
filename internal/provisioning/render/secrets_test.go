@@ -1,13 +1,22 @@
 package render
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -179,6 +188,13 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
+	mirrorTrust, err := fastTestCertificatePEM("registry.lab")
+	if err != nil {
+		t.Fatalf("generate mirror trust: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(secretsDir, "mirror-trust"), mirrorTrust, 0o600); err != nil {
+		t.Fatalf("write mirror trust: %v", err)
+	}
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -258,6 +274,40 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 	if got := string(decoded); got != "mirror-user:mirror-pass" {
 		t.Fatalf("mirror auth decoded to %q, want %q", got, "mirror-user:mirror-pass")
 	}
+}
+
+func fastTestCertificatePEM(commonName string) ([]byte, error) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return nil, err
+	}
+	template := x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName: commonName,
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().AddDate(0, 0, 1),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		DNSNames:              []string{commonName},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	var certBuf bytes.Buffer
+	if err := pem.Encode(&certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: der}); err != nil {
+		return nil, err
+	}
+	return certBuf.Bytes(), nil
 }
 
 func TestBakeProxyCredentials(t *testing.T) {

@@ -20,14 +20,16 @@ const (
 // (`Dir`) and effective (`WorkDir`) install-config / agent-config
 // outputs.
 type InstallerAsset struct {
-	ClusterName                string
-	Method                     string
-	Dir                        string
-	InstallConfigPath          string
-	AgentConfigPath            string
-	WorkDir                    string
-	EffectiveInstallConfigPath string
-	EffectiveAgentConfigPath   string
+	ClusterName                  string
+	Method                       string
+	Dir                          string
+	InstallConfigPath            string
+	AgentConfigPath              string
+	InstallManifestsDir          string
+	WorkDir                      string
+	EffectiveInstallConfigPath   string
+	EffectiveAgentConfigPath     string
+	EffectiveInstallManifestsDir string
 }
 
 func InstallerAssets(stateDir, runtimeDir string, state v1alpha1.State) []InstallerAsset {
@@ -36,14 +38,16 @@ func InstallerAssets(stateDir, runtimeDir string, state v1alpha1.State) []Instal
 		dir := filepath.Join(stateDir, InstallerRelativeDir, ocp.Metadata.Name)
 		workDir := filepath.Join(runtimeDir, RuntimeRelativeDir, ocp.Metadata.Name, "installer")
 		assets = append(assets, InstallerAsset{
-			ClusterName:                ocp.Metadata.Name,
-			Method:                     ocp.Spec.Install.Method,
-			Dir:                        dir,
-			InstallConfigPath:          filepath.Join(dir, "install-config.yaml"),
-			AgentConfigPath:            filepath.Join(dir, "agent-config.yaml"),
-			WorkDir:                    workDir,
-			EffectiveInstallConfigPath: filepath.Join(workDir, "install-config.yaml"),
-			EffectiveAgentConfigPath:   filepath.Join(workDir, "agent-config.yaml"),
+			ClusterName:                  ocp.Metadata.Name,
+			Method:                       ocp.Spec.Install.Method,
+			Dir:                          dir,
+			InstallConfigPath:            filepath.Join(dir, "install-config.yaml"),
+			AgentConfigPath:              filepath.Join(dir, "agent-config.yaml"),
+			InstallManifestsDir:          filepath.Join(dir, "openshift"),
+			WorkDir:                      workDir,
+			EffectiveInstallConfigPath:   filepath.Join(workDir, "install-config.yaml"),
+			EffectiveAgentConfigPath:     filepath.Join(workDir, "agent-config.yaml"),
+			EffectiveInstallManifestsDir: filepath.Join(workDir, "openshift"),
 		})
 	}
 	return assets
@@ -56,14 +60,16 @@ func InstallerToolInputAssets(outputDir string, state v1alpha1.State) []Installe
 		installConfigPath := filepath.Join(dir, "install-config.yaml")
 		agentConfigPath := filepath.Join(dir, "agent-config.yaml")
 		assets = append(assets, InstallerAsset{
-			ClusterName:                ocp.Metadata.Name,
-			Method:                     ocp.Spec.Install.Method,
-			Dir:                        dir,
-			InstallConfigPath:          installConfigPath,
-			AgentConfigPath:            agentConfigPath,
-			WorkDir:                    dir,
-			EffectiveInstallConfigPath: installConfigPath,
-			EffectiveAgentConfigPath:   agentConfigPath,
+			ClusterName:                  ocp.Metadata.Name,
+			Method:                       ocp.Spec.Install.Method,
+			Dir:                          dir,
+			InstallConfigPath:            installConfigPath,
+			AgentConfigPath:              agentConfigPath,
+			InstallManifestsDir:          filepath.Join(dir, "openshift"),
+			WorkDir:                      dir,
+			EffectiveInstallConfigPath:   installConfigPath,
+			EffectiveAgentConfigPath:     agentConfigPath,
+			EffectiveInstallManifestsDir: filepath.Join(dir, "openshift"),
 		})
 	}
 	return assets
@@ -72,7 +78,7 @@ func InstallerToolInputAssets(outputDir string, state v1alpha1.State) []Installe
 // InstallerConfig renders the placeholder install-config.yaml with
 // secret references rather than secret material.
 func InstallerConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
-	return InstallerConfigWithSecrets(state, ocp, PlaceholderInstallerSecrets(ocp))
+	return InstallerConfigWithSecrets(state, ocp, PlaceholderInstallerSecrets(state, ocp))
 }
 
 // InstallerConfigWithSecrets is the same as InstallerConfig but accepts

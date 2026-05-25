@@ -20,11 +20,30 @@ type ContainerClusterSpec struct {
 }
 
 type OCPInstallSpec struct {
-	Method                   string    `yaml:"method,omitempty" json:"method,omitempty"`
-	Mode                     string    `yaml:"mode,omitempty" json:"mode,omitempty"`
-	PullSecretRef            SecretRef `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	SSHKeyRef                SecretRef `yaml:"sshKeyRef,omitempty" json:"sshKeyRef,omitempty"`
-	AdditionalTrustBundleRef SecretRef `yaml:"additionalTrustBundleRef,omitempty" json:"additionalTrustBundleRef,omitempty"`
+	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
+	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
+	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
+	SSHKeyRef                 SecretRef                `yaml:"sshKeyRef,omitempty" json:"sshKeyRef,omitempty"`
+	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
+	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
+}
+
+type ServingCertificatesSpec struct {
+	APIServer *APIServerServingCertificateSpec `yaml:"apiServer,omitempty" json:"apiServer,omitempty"`
+	Ingress   *IngressServingCertificateSpec   `yaml:"ingress,omitempty" json:"ingress,omitempty"`
+}
+
+type APIServerServingCertificateSpec struct {
+	NamedCertificates []APIServerNamedCertificateSpec `yaml:"namedCertificates,omitempty" json:"namedCertificates,omitempty"`
+}
+
+type APIServerNamedCertificateSpec struct {
+	Names     []string  `yaml:"names,omitempty" json:"names,omitempty"`
+	SecretRef SecretRef `yaml:"secretRef" json:"secretRef"`
+}
+
+type IngressServingCertificateSpec struct {
+	DefaultCertificateRef SecretRef `yaml:"defaultCertificateRef,omitempty" json:"defaultCertificateRef,omitempty"`
 }
 
 type DistributionSpec struct {

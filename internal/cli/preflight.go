@@ -167,6 +167,8 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked bool,
 		switch {
 		case strings.Contains(label, "pullSecretRef"):
 			remediation = "bootwright secret set " + refName + " --pull-secret <path>"
+		case strings.Contains(label, "tls.crt") || strings.Contains(label, "tls.key"):
+			remediation = "bootwright secret set " + refName + " --tls-cert <cert-chain.pem> --tls-key <key.pem>"
 		case strings.Contains(label, "credentialRef") || strings.Contains(label, "credentialsRef") || strings.Contains(label, "proxyAuthRef"):
 			remediation = "bootwright secret set " + refName + " --from-file <path>"
 		case strings.Contains(label, "sshKeyRef") && !contextBacked:

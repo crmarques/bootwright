@@ -54,3 +54,18 @@ func ResolvePath(name string, env *v1alpha1.Environment, secretsDir string) stri
 	}
 	return filepath.Join(secretsDir, name)
 }
+
+func ResolveTLSKeyPath(name string, env *v1alpha1.Environment, secretsDir string) string {
+	if name == "" {
+		return ""
+	}
+	if env != nil {
+		if secret, ok := env.Spec.Secrets[name]; ok && secret.KeyFile != "" {
+			envSourceDir := filepath.Dir(env.SourcePath)
+			if path, err := ResolveKeyFilePath(secret.KeyFile, envSourceDir); err == nil {
+				return path
+			}
+		}
+	}
+	return filepath.Join(secretsDir, name+".key")
+}

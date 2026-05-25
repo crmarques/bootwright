@@ -179,8 +179,9 @@ openshift-install agent wait-for install-complete --dir ./rendered/openshift-ins
 
 The OpenShift installer inputs are written under
 `./rendered/openshift-install/<cluster-name>/` as `install-config.yaml` and
-`agent-config.yaml` with secret material inlined. Keep that directory local and
-remove it when you no longer need the files.
+`agent-config.yaml`, plus optional `openshift/` manifests, with secret material
+inlined. Keep that directory local and remove it when you no longer need the
+files.
 
 ## Optional Cleanup
 

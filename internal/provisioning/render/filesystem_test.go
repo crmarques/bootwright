@@ -26,9 +26,10 @@ const (
 // 0600") without touching real disk. Side effects are recorded in call
 // order so a test can assert "Chmod(dir) is preceded by MkdirAll(dir)".
 type recordingFS struct {
-	mkdirs []fsCall
-	chmods []fsCall
-	writes []fsCall
+	mkdirs  []fsCall
+	chmods  []fsCall
+	writes  []fsCall
+	removes []string
 }
 
 type fsCall struct {
@@ -48,6 +49,11 @@ func (r *recordingFS) Chmod(path string, mode os.FileMode) error {
 
 func (r *recordingFS) WriteAtomic(path string, _ []byte, mode os.FileMode) error {
 	r.writes = append(r.writes, fsCall{path, mode})
+	return nil
+}
+
+func (r *recordingFS) RemoveAll(path string) error {
+	r.removes = append(r.removes, path)
 	return nil
 }
 

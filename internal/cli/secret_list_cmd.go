@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/secret"
 )
 
 type secretListReport struct {
@@ -89,8 +90,8 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 	entries := make([]secretListEntry, 0, len(names))
 	for _, name := range names {
 		spec := env.Spec.Secrets[name]
-		typ := secretSpecType(spec)
-		paths := secretSpecPaths(name, spec, env, secretsDir)
+		typ := secretSpecType(name, spec, state)
+		paths := secretSpecPaths(name, spec, env, secretsDir, state)
 		present, detail, err := secretPathsPresent(paths)
 		if err != nil {
 			return nil, err
@@ -106,8 +107,16 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 	return entries, nil
 }
 
-func secretSpecType(spec v1alpha1.EnvironmentSecretSpec) string {
+func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1alpha1.State) string {
 	switch {
+	case secretConsumedAsTLS(name, state):
+		if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil {
+			return "generated:selfSignedCertificate"
+		}
+		if spec.File != "" {
+			return "file:tls"
+		}
+		return "context:tls"
 	case spec.File != "":
 		return "file"
 	case spec.Generated != nil && spec.Generated.Credentials != nil:
@@ -119,12 +128,32 @@ func secretSpecType(spec v1alpha1.EnvironmentSecretSpec) string {
 	}
 }
 
-func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string) []string {
+func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []string {
 	path := resolvedSecretPath(name, env, secretsDir)
-	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil {
-		return []string{path, path + ".key"}
+	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
+		return []string{path, secret.ResolveTLSKeyPath(name, env, secretsDir)}
 	}
 	return []string{path}
+}
+
+func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
+	for _, cluster := range state.ContainerClusters {
+		serving := cluster.Spec.Install.ServingCertificates
+		if serving == nil {
+			continue
+		}
+		if api := serving.APIServer; api != nil {
+			for _, cert := range api.NamedCertificates {
+				if cert.SecretRef.Name == name {
+					return true
+				}
+			}
+		}
+		if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func secretPathsPresent(paths []string) (bool, string, error) {

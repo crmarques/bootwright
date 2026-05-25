@@ -240,8 +240,23 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s %q is not declared in Environment/%s spec.secrets", owner, ref.Name, env.Metadata.Name))
 		}
 	}
+	requireTLS := func(owner string, ref v1alpha1.SecretRef) {
+		require(owner, ref)
+		if ref.Name == "" || !declared[ref.Name] {
+			return
+		}
+		spec := env.Spec.Secrets[ref.Name]
+		if spec.File != "" && spec.KeyFile == "" && spec.Generated == nil {
+			errs = append(errs, fmt.Sprintf("%s %q uses file-sourced TLS material but Environment/%s spec.secrets[%s].keyFile is empty", owner, ref.Name, env.Metadata.Name, ref.Name))
+		}
+	}
 	if env.Spec.Proxy != nil && env.Spec.Proxy.Auth != nil {
 		require(fmt.Sprintf("Environment/%s spec.proxy.auth.proxyAuthRef", env.Metadata.Name), env.Spec.Proxy.Auth.ProxyAuthRef)
+	}
+	if env.Spec.ClusterTrust != nil {
+		for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
+			require(fmt.Sprintf("Environment/%s spec.clusterTrust.caBundleRefs[%d]", env.Metadata.Name, i), ref)
+		}
 	}
 	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil {
 		owner := fmt.Sprintf("Environment/%s spec.registries.mirror", env.Metadata.Name)
@@ -277,7 +292,19 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	for _, ocp := range state.ContainerClusters {
 		require(fmt.Sprintf("ContainerCluster/%s install.pullSecretRef", ocp.Metadata.Name), ocp.Spec.Install.PullSecretRef)
 		require(fmt.Sprintf("ContainerCluster/%s install.sshKeyRef", ocp.Metadata.Name), ocp.Spec.Install.SSHKeyRef)
-		require(fmt.Sprintf("ContainerCluster/%s install.additionalTrustBundleRef", ocp.Metadata.Name), ocp.Spec.Install.AdditionalTrustBundleRef)
+		for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
+			require(fmt.Sprintf("ContainerCluster/%s install.additionalTrustBundleRefs[%d]", ocp.Metadata.Name, i), ref)
+		}
+		if serving := ocp.Spec.Install.ServingCertificates; serving != nil {
+			if api := serving.APIServer; api != nil {
+				for i, cert := range api.NamedCertificates {
+					requireTLS(fmt.Sprintf("ContainerCluster/%s install.servingCertificates.apiServer.namedCertificates[%d].secretRef", ocp.Metadata.Name, i), cert.SecretRef)
+				}
+			}
+			if ingress := serving.Ingress; ingress != nil {
+				requireTLS(fmt.Sprintf("ContainerCluster/%s install.servingCertificates.ingress.defaultCertificateRef", ocp.Metadata.Name), ingress.DefaultCertificateRef)
+			}
+		}
 	}
 	return errs
 }

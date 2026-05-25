@@ -11,9 +11,10 @@ context secrets directory, `file:` points at operator-owned local material, and
 `generated:` describes material Bootwright can create under the context secrets
 directory. Other kinds reference those names with `SecretRef`.
 
-Sensitive material includes pull secrets, SSH private keys, BMC credentials,
-vCenter credentials, proxy credentials, mirror credentials, CA bundles, tokens,
-and kubeconfigs. These values must stay outside versioned desired state.
+Sensitive material includes pull secrets, SSH private keys, TLS private keys,
+BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
+CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
+desired state.
 
 ## Installer Trust
 
@@ -25,8 +26,12 @@ Cluster install trust is rendered only from explicit references:
   mirror requires credentials.
 - Mirror credentials and trust bundles come from
   `Environment.spec.registries.mirror`.
-- Additional installer trust comes from
-  `ContainerCluster.spec.install.additionalTrustBundleRef`.
+- Fleet-wide installer trust comes from `Environment.spec.clusterTrust`.
+- Cluster-scoped installer trust comes from
+  `ContainerCluster.spec.install.additionalTrustBundleRefs`.
+- API and ingress serving certificate material comes from
+  `ContainerCluster.spec.install.servingCertificates` references and is
+  rendered as install-time OpenShift manifests.
 
 Disconnected installs are cluster-scoped through
 `ContainerCluster.spec.install.mode`.
@@ -57,6 +62,7 @@ Generated output boundaries are part of the safety contract:
 
 - User-authored YAML lives under `<base-dir>/input-files/`.
 - Placeholder installer output lives under `<base-dir>/state/installer/<cluster>/`.
+  Placeholder `openshift/` Secret manifests carry redacted data only.
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
   restrictive file modes, and must never be versioned.
@@ -65,9 +71,9 @@ Generated output boundaries are part of the safety contract:
   modes, and must never be versioned.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined
-  `openshift-install` configs, under `<dir>` with restrictive file modes. The
-  command must fail without `--sensitive`. Operators must keep that
-  directory local and unversioned.
+  `openshift-install` configs and optional `openshift/` manifests, under
+  `<dir>` with restrictive file modes. The command must fail without
+  `--sensitive`. Operators must keep that directory local and unversioned.
 
 ## Supply Chain
 

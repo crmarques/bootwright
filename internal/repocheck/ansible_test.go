@@ -1071,6 +1071,36 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 	}
 }
 
+func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/stage_inputs.yml")
+	stat := tasks[findAnsibleTask(t, tasks, "Check local installer extra manifests")]
+	remove := tasks[findAnsibleTask(t, tasks, "Remove stale remote installer extra manifests")]
+	stage := tasks[findAnsibleTask(t, tasks, "Stage installer extra manifests on bastion")]
+
+	if got := fmt.Sprint(stat["delegate_to"]); got != "localhost" {
+		t.Fatalf("extra manifest stat delegate_to = %v", got)
+	}
+	copyTask, ok := stage["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("stage extra manifests has no copy body: %v", stage)
+	}
+	if got := copyTask["src"]; got != "{{ bootwright_install_local_work_dir }}/openshift/" {
+		t.Fatalf("extra manifest copy src = %v", got)
+	}
+	if got := copyTask["dest"]; got != "{{ bootwright_install_work_dir }}/openshift/" {
+		t.Fatalf("extra manifest copy dest = %v", got)
+	}
+	if got := copyTask["directory_mode"]; got != "0700" {
+		t.Fatalf("extra manifest directory_mode = %v", got)
+	}
+	if got := fmt.Sprint(remove["when"]); !strings.Contains(got, "run") || !strings.Contains(got, "create_iso") {
+		t.Fatalf("remove stale manifests when = %v", remove["when"])
+	}
+	if !stringListContains(stage["when"], "bootwright_install_extra_manifests_stat.stat.isdir | default(false)") {
+		t.Fatalf("extra manifest stage when = %v", stage["when"])
+	}
+}
+
 func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/create_iso.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")

@@ -16,6 +16,7 @@ type EnvironmentSpec struct {
 	Resources       []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	Proxy           *EnvironmentProxySpec                    `yaml:"proxy,omitempty" json:"proxy,omitempty"`
 	Registries      *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
+	ClusterTrust    *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
 	Secrets         map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	ComponentImages map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
 	// NTPSources is the operator-supplied list of NTP servers the
@@ -35,7 +36,12 @@ type EnvironmentBastionSpec struct {
 
 type EnvironmentSecretSpec struct {
 	File      string                      `yaml:"file,omitempty" json:"file,omitempty"`
+	KeyFile   string                      `yaml:"keyFile,omitempty" json:"keyFile,omitempty"`
 	Generated *EnvironmentSecretGenerated `yaml:"generated,omitempty" json:"generated,omitempty"`
+}
+
+type EnvironmentClusterTrustSpec struct {
+	CABundleRefs []SecretRef `yaml:"caBundleRefs,omitempty" json:"caBundleRefs,omitempty"`
 }
 
 type EnvironmentSecretGenerated struct {

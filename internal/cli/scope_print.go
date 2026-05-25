@@ -105,9 +105,9 @@ func useControllingTTYForWorkflow(selected []Phase, askBecomePass bool) bool {
 
 // selectedTargetsClusters reports whether the selected phases include the
 // `clusters` phase. Used to gate ResolveInstaller: the install_agent role
-// consumes the secret-inlined install-config.yaml/agent-config.yaml under
-// the per-cluster runtime work dir, so apply paths that drive that role
-// must inline secrets before handing off to Ansible.
+// consumes secret-inlined installer inputs under the per-cluster runtime work
+// dir, so apply paths that drive that role must inline secrets before handing
+// off to Ansible.
 func selectedTargetsClusters(selected []Phase) bool {
 	for _, p := range selected {
 		if p.Name == "clusters" {

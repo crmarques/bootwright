@@ -33,6 +33,7 @@ type FileSystem interface {
 	MkdirAll(path string, mode os.FileMode) error
 	Chmod(path string, mode os.FileMode) error
 	WriteAtomic(path string, data []byte, mode os.FileMode) error
+	RemoveAll(path string) error
 }
 
 // osFS is the default FileSystem; calls into os/* directly and uses
@@ -52,6 +53,10 @@ func (osFS) WriteAtomic(path string, data []byte, mode os.FileMode) error {
 	return safefs.AtomicWriteFile(path, data, mode)
 }
 
+func (osFS) RemoveAll(path string) error {
+	return os.RemoveAll(path)
+}
+
 // defaultFS is the FileSystem the package's exported entry points use
 // when callers don't supply their own. Tests use AllOn /
 // ResolveInstallerOn to inject a substitute.
@@ -68,9 +73,9 @@ type Result struct {
 }
 
 // All writes effective-state, lock, Ansible inventory + vars, and
-// per-cluster install-config + agent-config placeholders. `stateDir` is the
-// Bootwright context state directory, `runtimeDir` is the root-managed local
-// runtime directory, and `secretsDir` is the local secrets dir. Uses the
+// per-cluster installer placeholders. `stateDir` is the Bootwright context
+// state directory, `runtimeDir` is the root-managed local runtime directory,
+// and `secretsDir` is the local secrets dir. Uses the
 // default os-backed FileSystem; tests use AllOn to inject a substitute.
 func All(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return AllOn(defaultFS, stateDir, runtimeDir, secretsDir, state)
@@ -124,6 +129,9 @@ func AllOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha
 			return result, err
 		}
 		if err := writeYAML(fs, asset.AgentConfigPath, agentConfig); err != nil {
+			return result, err
+		}
+		if err := writeInstallerManifests(fs, asset.InstallManifestsDir, InstallerManifests(ocp, PlaceholderInstallerSecrets(state, ocp))); err != nil {
 			return result, err
 		}
 	}
@@ -182,6 +190,9 @@ func ResolveInstallerOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, 
 			return result, err
 		}
 		if err := writeYAML(fs, asset.EffectiveAgentConfigPath, agentConfig); err != nil {
+			return result, err
+		}
+		if err := writeInstallerManifests(fs, asset.EffectiveInstallManifestsDir, InstallerManifests(ocp, secrets)); err != nil {
 			return result, err
 		}
 	}
@@ -253,6 +264,9 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 		if err := writeYAML(fs, asset.AgentConfigPath, agentConfig); err != nil {
 			return result, err
 		}
+		if err := writeInstallerManifests(fs, asset.InstallManifestsDir, InstallerManifests(ocp, secrets)); err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }
@@ -273,6 +287,24 @@ func writeYAML(fs FileSystem, path string, value any) error {
 	}
 	if err := fs.WriteAtomic(path, data, stateFileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+func writeInstallerManifests(fs FileSystem, dir string, manifests []InstallerManifest) error {
+	if err := fs.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove %s: %w", dir, err)
+	}
+	if len(manifests) == 0 {
+		return nil
+	}
+	if err := ensureStateDir(fs, dir); err != nil {
+		return err
+	}
+	for _, manifest := range manifests {
+		if err := writeYAML(fs, filepath.Join(dir, manifest.FileName), manifest.Object); err != nil {
+			return err
+		}
 	}
 	return nil
 }
