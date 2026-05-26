@@ -49,10 +49,12 @@ RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharin
     make sync-bundle
 
 COPY . .
-ARG VERSION=dev
-ARG GIT_COMMIT=unknown
+ARG VERSION
+ARG GIT_COMMIT
 RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
+    test -n "${VERSION}" || { printf '%s\n' 'VERSION build arg is required; use make container-build or pass --build-arg VERSION="$(git describe --tags --always --dirty)"'; exit 1; }; \
+    test -n "${GIT_COMMIT}" || { printf '%s\n' 'GIT_COMMIT build arg is required; use make container-build or pass --build-arg GIT_COMMIT="$(git rev-parse --short HEAD)"'; exit 1; }; \
     make build VERSION="${VERSION}" GIT_COMMIT="${GIT_COMMIT}"
 
 FROM docker.io/redhat/ubi9:9.7

@@ -221,6 +221,29 @@ func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	}
 }
 
+func TestContainerfileRequiresBuildMetadata(t *testing.T) {
+	body := readRepoFile(t, "Containerfile")
+	for _, reject := range []string{
+		"ARG VERSION=dev",
+		"ARG GIT_COMMIT=unknown",
+	} {
+		if strings.Contains(body, reject) {
+			t.Fatalf("Containerfile must not silently default metadata with %q", reject)
+		}
+	}
+	for _, want := range []string{
+		"ARG VERSION",
+		"ARG GIT_COMMIT",
+		"VERSION build arg is required",
+		"GIT_COMMIT build arg is required",
+		`make build VERSION="${VERSION}" GIT_COMMIT="${GIT_COMMIT}"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Containerfile missing build metadata guard %q", want)
+		}
+	}
+}
+
 func TestGitHubActionsUseCommitSHARefs(t *testing.T) {
 	root := filepath.Join(repoRoot(t), ".github", "workflows")
 	usesRE := regexp.MustCompile(`\buses:\s*([^#\s]+)`)
