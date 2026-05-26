@@ -3,6 +3,7 @@ name: Deploy docs to GitHub Pages
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   release:
     types: [published]
 
@@ -26,14 +27,26 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
         run: |
           should_publish=false
 
-          if [ "$EVENT_NAME" = "release" ]; then
-            should_publish=true
-          elif jq -r '.commits[]?.message // empty | split("\n")[0]' "$GITHUB_EVENT_PATH" | grep -Eq '^fix\(docs\)(!:|:)'; then
-            should_publish=true
-          fi
+          case "$EVENT_NAME" in
+            release)
+              if [[ "$RELEASE_TAG" == v* ]]; then
+                should_publish=true
+              fi
+              ;;
+            push)
+              if [[ "$REF_TYPE" = "tag" && "$REF_NAME" == v* ]]; then
+                should_publish=true
+              elif jq -r '.commits[]?.message // empty' "$GITHUB_EVENT_PATH" | grep -Eq '^fix\(docs\): .+'; then
+                should_publish=true
+              fi
+              ;;
+          esac
 
           echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
 

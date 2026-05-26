@@ -4,11 +4,12 @@
 
 # Bootwright
 
-Bootwright is a desired-state orchestrator that provisions fleets of OpenShift
+Bootwright is a desired-state orchestrator for provisioning fleets of OpenShift
 and OKD clusters from bare hardware or virtualized substrates. You describe the
 environment, providers, infrastructure, networks, and clusters with six
-declarative YAML kinds. Bootwright validates the inputs, renders deterministic
-installer artifacts, and converges each phase idempotently.
+declarative YAML kinds. Bootwright validates that intent, renders the
+deterministic input files expected by installer and provider CLIs, and
+coordinates each phase idempotently.
 
 **Supported distributions:** OpenShift and OKD.
 
@@ -162,8 +163,8 @@ progress.
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including
 `openshift-install/<cluster>/{install,agent}-config.yaml`, for operators who
-want to run `openshift-install` themselves. Treat that output as local runtime
-material because it contains secrets.
+want to run supplier or community tools such as `openshift-install` themselves.
+Treat that output as local runtime material because it contains secrets.
 
 ## Repository Layout
 

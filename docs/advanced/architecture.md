@@ -5,7 +5,8 @@ description: How Bootwright turns desired state into installer and provider inpu
 
 # Architecture
 
-Bootwright runs a simple pipeline:
+Bootwright orchestrates external tool-driven provisioning through a simple
+pipeline:
 
 ```text
 load YAML -> normalize -> validate -> render -> apply/status
@@ -55,8 +56,8 @@ cluster, and keeps the terminal focused on high-level apply progress.
 ## External CLI Inputs
 
 `bootwright render --output-dir <dir> --scope <cluster> --sensitive` writes the
-same concrete tool inputs Bootwright would hand to external tools. OpenShift
-installer files land under
+same concrete tool inputs Bootwright would hand to supplier or community CLIs.
+OpenShift installer files land under
 `<dir>/openshift-install/<cluster>/{install,agent}-config.yaml`; Ansible
 inventory and vars files are written beside the effective state and lock.
 Because the installer files contain secret material, the command requires

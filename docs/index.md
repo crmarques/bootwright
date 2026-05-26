@@ -12,11 +12,12 @@ hide:
        width="520">
 </p>
 
-Bootwright provisions fleets of OpenShift and OKD clusters from declarative
-desired state. You describe the environment, provider hosts, substrate
-inventory, network templates, cluster infrastructure, and cluster install
-intent; Bootwright validates that input, renders deterministic installer
-files, and converges the provisioning phases idempotently.
+Bootwright orchestrates provisioning for fleets of OpenShift and OKD clusters
+from declarative desired state. You describe the environment, provider hosts,
+substrate inventory, network templates, cluster infrastructure, and cluster
+install intent; Bootwright validates that input, renders the deterministic
+files expected by installer and provider CLIs, and coordinates the provisioning
+phases idempotently.
 
 [Get Started](getting-started.md){ .md-button .md-button--primary }
 [Learn the Concepts](concepts.md){ .md-button }
@@ -31,4 +32,3 @@ files, and converges the provisioning phases idempotently.
 
 The detailed schema contract lives in
 [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md).
-

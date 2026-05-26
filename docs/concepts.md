@@ -6,8 +6,9 @@ description: How Bootwright distributes installer input across desired-state obj
 # Concepts
 
 Bootwright keeps installer-compatible fields close to the object that owns the
-operational fact. The renderer then merges those objects into
-`install-config.yaml`, `agent-config.yaml`, and provider variables.
+operational fact. The renderer then merges those objects into the input files
+that installer and provider CLIs consume, including `install-config.yaml`,
+`agent-config.yaml`, and provider variables.
 
 Authored desired-state YAML uses block-style mappings in examples, e2e inputs,
 fixtures, and scaffold output. Keep each object field on its own indented line
