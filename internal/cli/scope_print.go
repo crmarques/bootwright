@@ -125,7 +125,16 @@ func phaseList(selected []Phase) string {
 	return strings.Join(names, ", ")
 }
 
-var askBecomePassDefault = func() bool { return os.Geteuid() != 0 }
+var askBecomePassDefault = func() bool {
+	switch os.Getenv(localRootSudoAuthEnv) {
+	case localSudoAuthPrompted:
+		return true
+	case localSudoAuthNonInteractive:
+		return false
+	default:
+		return os.Geteuid() != 0
+	}
+}
 
 // printDestroyPreview lists the user-visible resources `destroy` will
 // remove for the current scope, before the confirmation prompt. The

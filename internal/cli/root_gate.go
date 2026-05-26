@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/localroot"
+	"github.com/crmarques/bootwright/internal/execution"
 )
 
 type localRootGateDeps struct {
@@ -57,15 +57,16 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	}
 	stopKeepAlive := sudoSession.keepAlive(ctx)
 	defer stopKeepAlive()
-	cmdArgs := sudoSession.sudoArgs(append([]string{
-		"env",
-		contextstore.InternalRegistryEnv + "=" + registry.tempPath,
-		localroot.InternalEnv + "=1",
-		localroot.CallerHomeEnv + "=" + callerHome,
-		localroot.CallerPathEnv + "=" + os.Getenv("PATH"),
-		localRootSudoAuthEnv + "=" + sudoSession.authMethod,
+	rootArgs := execution.LocalRootCommandArgs(
+		contextstore.InternalRegistryEnv,
+		registry.tempPath,
+		callerHome,
+		os.Getenv("PATH"),
 		exe,
-	}, args...)...)
+		[]string{localRootSudoAuthEnv + "=" + sudoSession.authMethod},
+		args,
+	)
+	cmdArgs := sudoSession.sudoArgs(rootArgs...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout

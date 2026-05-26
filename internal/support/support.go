@@ -118,6 +118,7 @@ type ServiceSupport struct {
 	HostCapabilities  []string
 	ConflictFields    []string
 	MergeStringFields []string
+	DefaultPort       int
 	Image             ServiceImage
 	Status            Status
 	Summary           string
@@ -133,8 +134,8 @@ type ServiceImage struct {
 }
 
 var serviceSupport = map[ServiceKey]ServiceSupport{
-	{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: "haProxy"}: {
-		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: "haProxy"},
+	{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy}: {
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy},
 		ApplyRole:        "load_balancer_haproxy",
 		DestroyRole:      "load_balancer_haproxy",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
@@ -150,8 +151,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "HAProxy managed load balancer",
 	},
-	{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: "http"}: {
-		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: "http"},
+	{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP}: {
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP},
 		ApplyRole:        "artifacts_http",
 		DestroyRole:      "artifacts_http",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
@@ -167,12 +168,13 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "HTTP/HTTPS artifact server",
 	},
-	{Kind: v1alpha1.ComponentSlotProxy, Realisation: "squid"}: {
-		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: "squid"},
+	{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid}: {
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid},
 		ApplyRole:        "proxy_squid",
 		DestroyRole:      "proxy_squid",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		DefaultPort:      v1alpha1.DefaultSquidPort,
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryProxy,
 			Type:       v1alpha1.ComponentImageTypeSquid,
@@ -184,13 +186,14 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "Squid managed proxy",
 	},
-	{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: "dnsmasq"}: {
-		Key:               ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: "dnsmasq"},
+	{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq}: {
+		Key:               ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq},
 		ApplyRole:         "dns_dnsmasq",
 		DestroyRole:       "dns_dnsmasq",
 		HostCapabilities:  []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:    []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		MergeStringFields: []string{"additionalIngressHosts"},
+		DefaultPort:       v1alpha1.DefaultDNSPort,
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryDNS,
 			Type:       v1alpha1.ComponentImageTypeDnsmasq,
@@ -202,12 +205,13 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "dnsmasq managed name resolution",
 	},
-	{Kind: v1alpha1.ComponentSlotRegistry, Realisation: "mirrorRegistry"}: {
-		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: "mirrorRegistry"},
+	{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry}: {
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry},
 		ApplyRole:        "mirror_registry",
 		DestroyRole:      "mirror_registry",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		DefaultPort:      v1alpha1.DefaultMirrorRegistryPort,
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryRegistry,
 			Type:       v1alpha1.ComponentImageTypeMirrorRegistry,

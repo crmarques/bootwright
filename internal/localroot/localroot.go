@@ -1,57 +1,27 @@
 package localroot
 
 import (
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
+	"github.com/crmarques/bootwright/internal/execution"
 )
 
 const (
-	InternalEnv   = "BOOTWRIGHT_INTERNAL_LOCAL_ROOT"
-	CallerHomeEnv = "BOOTWRIGHT_INTERNAL_CALLER_HOME"
-	CallerPathEnv = "BOOTWRIGHT_INTERNAL_CALLER_PATH"
+	InternalEnv   = execution.InternalEnv
+	CallerHomeEnv = execution.CallerHomeEnv
+	CallerPathEnv = execution.CallerPathEnv
 )
 
 func IsInternalRootChild() bool {
-	return strings.TrimSpace(os.Getenv(InternalEnv)) == "1" && os.Geteuid() == 0
+	return execution.IsInternalLocalRootChild()
 }
 
 func CallerHomeDir() (string, bool) {
-	if strings.TrimSpace(os.Getenv(InternalEnv)) != "1" {
-		return "", false
-	}
-	home := strings.TrimSpace(os.Getenv(CallerHomeEnv))
-	if home == "" {
-		return "", false
-	}
-	return filepath.Clean(home), true
+	return execution.CallerHomeDir()
 }
 
 func CallerPath() (string, bool) {
-	if strings.TrimSpace(os.Getenv(InternalEnv)) != "1" {
-		return "", false
-	}
-	path := strings.TrimSpace(os.Getenv(CallerPathEnv))
-	if path == "" {
-		return "", false
-	}
-	return path, true
+	return execution.CallerPath()
 }
 
 func CallerUIDGID() (uint32, uint32, bool) {
-	if !IsInternalRootChild() {
-		return 0, 0, false
-	}
-	uidRaw := strings.TrimSpace(os.Getenv("SUDO_UID"))
-	gidRaw := strings.TrimSpace(os.Getenv("SUDO_GID"))
-	if uidRaw == "" || gidRaw == "" {
-		return 0, 0, false
-	}
-	uid, uidErr := strconv.ParseUint(uidRaw, 10, 32)
-	gid, gidErr := strconv.ParseUint(gidRaw, 10, 32)
-	if uidErr != nil || gidErr != nil {
-		return 0, 0, false
-	}
-	return uint32(uid), uint32(gid), true
+	return execution.CallerUIDGID()
 }

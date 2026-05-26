@@ -37,19 +37,19 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 		pins = append(pins, ComponentPin{Name: "sushy-tools", Version: defaultSushyToolsVersion, Source: "https://pypi.org/project/sushy-tools/", LookupDate: versionLookupDate})
 	}
 	if usesManagedHAProxy(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)
 	}
 	if usesManagedMirrorRegistry(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)
 	}
 	if usesManagedProxy(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotProxy, "squid")
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)
 	}
 	if usesManagedDNS(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	}
 	if usesManagedArtifacts(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotArtifacts, "http")
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{

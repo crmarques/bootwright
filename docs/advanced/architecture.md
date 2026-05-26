@@ -27,6 +27,19 @@ rendering, status, and scoped apply checks use the same service identities and
 consumer list, so a partial `apply infra --scope` cannot silently narrow a
 service another cluster still depends on.
 
+Bootwright uses distinct execution identities instead of treating the process
+as simply root or non-root:
+
+- user-authored files, external secret sources, `~` expansion, and caller PATH
+  discovery run as the original local caller
+- context state, generated secrets, runtime installer files, workflow logs,
+  managed Ansible runtime, and local package or CLI installs run as the
+  protected local root state identity
+- provider and infrastructure host work connects as the rendered SSH user, then
+  uses Ansible `become` for privileged host mutation
+- controller-local Ansible work uses localhost inventory and `become` only for
+  the tasks that intentionally mutate controller state
+
 The important boundary is ownership. Physical machine facts do not move into
 cluster intent, and cluster release intent does not move into environment
 defaults. That keeps provider swaps and release changes explicit.

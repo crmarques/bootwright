@@ -1,7 +1,7 @@
 package v1alpha1
 
-// OwnedInstallerFields is the source of truth for fields Bootwright
-// writes into the generated install-config.yaml and agent-config.yaml.
+// OwnedInstallerFields is the renderer contract audit registry for fields
+// Bootwright writes into generated install-config.yaml and agent-config.yaml.
 //
 // When the renderer learns to write a new field, list it here.
 // When it stops owning a field, remove it from here.
@@ -19,7 +19,7 @@ type OwnedInstallerFields struct {
 	AgentConfigKeys []string
 }
 
-// OwnedFields returns the renderer's owned-field set. Callers MUST treat
+// OwnedFields returns the renderer's owned-field audit set. Callers MUST treat
 // the returned slices as read-only.
 func OwnedFields() OwnedInstallerFields {
 	return OwnedInstallerFields{

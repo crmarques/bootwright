@@ -170,6 +170,12 @@ the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
 Supported authored service slots are load balancer, proxy, name resolution,
 and registry.
 
+When adding another managed service, keep the service path orthogonal: add a
+typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
+`internal/support`, add its consumer discovery to the service graph, project
+that resolved graph into Ansible vars, and place the converging role under
+`ansible/roles/providers/`.
+
 For real BMCs, the artifact server endpoint used by
 `routes.redfishVirtualMedia.endpoint` should usually resolve to an IP address that
 the BMC network can reach. Controller reachability alone is not enough for

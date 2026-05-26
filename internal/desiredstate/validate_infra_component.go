@@ -69,7 +69,7 @@ func validateArtifactServerComponent(component v1alpha1.InfraComponent, hosts ma
 	server := component.Spec.ArtifactServer
 	prefix := fmt.Sprintf("InfraComponent/%s spec.artifactServer", component.Metadata.Name)
 	var errs []string
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", server.HostRef, hosts, v1alpha1.ComponentSlotArtifacts, "http")...)
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", server.HostRef, hosts, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)...)
 	if server.BindAddress != "" && net.ParseIP(server.BindAddress) == nil {
 		errs = append(errs, fmt.Sprintf("%s.bindAddress %q is not a valid IP address", prefix, server.BindAddress))
 	}
@@ -158,7 +158,7 @@ func validateLoadBalancerComponent(component v1alpha1.InfraComponent, hosts map[
 	if lb.Type != v1alpha1.InfraComponentTypeHAProxy {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, lb.Type, v1alpha1.InfraComponentTypeHAProxy))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", lb.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, "haProxy")...)
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", lb.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)...)
 	errs = append(errs, validateLoadBalancerBindAddresses(prefix, lb.BindAddresses, nil)...)
 	return errs
 }
@@ -170,7 +170,7 @@ func validateProxyComponent(component v1alpha1.InfraComponent, hosts map[string]
 	if proxy.Type != v1alpha1.InfraComponentTypeSquid {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, proxy.Type, v1alpha1.InfraComponentTypeSquid))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", proxy.HostRef, hosts, v1alpha1.ComponentSlotProxy, "squid")...)
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", proxy.HostRef, hosts, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)...)
 	errs = append(errs, validateServiceParams(prefix, proxy.BindAddress, proxy.Port)...)
 	if host, ok := hosts[proxy.HostRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, proxy.Endpoints, host)...)
@@ -185,7 +185,7 @@ func validateNameResolutionComponent(component v1alpha1.InfraComponent, hosts ma
 	if dns.Type != v1alpha1.InfraComponentTypeDnsmasq {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, dns.Type, v1alpha1.InfraComponentTypeDnsmasq))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", dns.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, "dnsmasq")...)
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", dns.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)...)
 	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
 	if host, ok := hosts[dns.HostRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, host)...)
@@ -200,7 +200,7 @@ func validateRegistryComponent(component v1alpha1.InfraComponent, hosts map[stri
 	if registry.Type != v1alpha1.InfraComponentTypeMirrorRegistry {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, registry.Type, v1alpha1.InfraComponentTypeMirrorRegistry))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", registry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")...)
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", registry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)...)
 	errs = append(errs, validateServiceParams(prefix, registry.BindAddress, registry.Port)...)
 	if host, ok := hosts[registry.HostRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, registry.Endpoints, host)...)

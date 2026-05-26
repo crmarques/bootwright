@@ -32,23 +32,23 @@ func componentPinVersion(state v1alpha1.State, name, fallback string) string {
 }
 
 func managedHAProxyImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
+	return managedServiceImage(state, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)
 }
 
 func managedMirrorRegistryImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
+	return managedServiceImage(state, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)
 }
 
 func managedSquidImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotProxy, "squid")
+	return managedServiceImage(state, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)
 }
 
 func managedDnsmasqImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
+	return managedServiceImage(state, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 }
 
 func managedArtifactsHTTPImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotArtifacts, "http")
+	return managedServiceImage(state, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
 }
 
 func managedServiceImage(state v1alpha1.State, kind, realisation string) string {

@@ -172,7 +172,7 @@ echo ansible-stderr-line >&2
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",
-	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil)
+	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil, nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
@@ -259,7 +259,7 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "cluster",
-	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr))
+	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
@@ -350,7 +350,7 @@ rmdir "$lock_dir"
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",
-	}, infraScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil); err != nil {
+	}, infraScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil, nil); err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph should serialize same resource key: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }

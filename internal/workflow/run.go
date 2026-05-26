@@ -7,7 +7,7 @@
 // Design constraints:
 //   - No package in internal/workflow imports internal/cli.
 //   - Human output is reported as semantic events; no fmt.Print or log.
-//   - All exec goes through ansible.CommandRunner so tests can fake it.
+//   - All exec goes through ansible.Runner so tests can fake it.
 //   - Options structs are flat: callers compute defaults and resolve paths
 //     before calling in; workflow does not consult the environment.
 package workflow

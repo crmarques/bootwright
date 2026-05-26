@@ -37,6 +37,10 @@ type ProviderServiceGraph struct {
 	Services []ProviderService
 }
 
+func (s ProviderService) ConsumerClusters() []string {
+	return serviceConsumerClusters(s.Consumers)
+}
+
 type SharedServiceGroup struct {
 	Kind              string   `yaml:"kind" json:"kind"`
 	ProviderName      string   `yaml:"providerName" json:"providerName"`
@@ -232,7 +236,7 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 				v1alpha1.ComponentSlotArtifacts,
 				v1alpha1.KindInfraComponent,
 				server.Component.Metadata.Name,
-				"http",
+				v1alpha1.ArtifactServerProtocolHTTP,
 				map[string]string{
 					"hostRef":     server.Config.HostRef.Name,
 					"bindAddress": server.Config.BindAddress,
@@ -270,7 +274,7 @@ func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cl
 			v1alpha1.ComponentSlotLoadBalancer,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
-			"haProxy",
+			v1alpha1.InfraComponentTypeHAProxy,
 			map[string]string{"hostRef": lb.HostRef.Name, "capabilityName": component.Metadata.Name},
 			nil,
 		))
@@ -305,8 +309,8 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 			v1alpha1.ComponentSlotProxy,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
-			"squid",
-			map[string]string{"hostRef": proxy.HostRef.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(proxy.Port)},
+			v1alpha1.InfraComponentTypeSquid,
+			map[string]string{"hostRef": proxy.HostRef.Name, "entryName": entry.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid, proxy.Port))},
 			nil,
 		))
 	}
@@ -338,8 +342,8 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 			v1alpha1.ComponentSlotNameResolution,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
-			"dnsmasq",
-			map[string]string{"hostRef": dns.HostRef.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(dns.Port)},
+			v1alpha1.InfraComponentTypeDnsmasq,
+			map[string]string{"hostRef": dns.HostRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
 			map[string][]string{"additionalIngressHosts": mergedHosts},
 		))
 	}
@@ -370,8 +374,8 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		v1alpha1.ComponentSlotRegistry,
 		v1alpha1.KindInfraComponent,
 		component.Metadata.Name,
-		"mirrorRegistry",
-		map[string]string{"hostRef": registry.HostRef.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(registry.Port)},
+		v1alpha1.InfraComponentTypeMirrorRegistry,
+		map[string]string{"hostRef": registry.HostRef.Name, "entryName": entry.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry, registry.Port))},
 		nil,
 	)}
 }
@@ -386,6 +390,13 @@ func selectedRegistry(entries []v1alpha1.EnvironmentRegistryComponent) (v1alpha1
 		return entries[0], true
 	}
 	return v1alpha1.EnvironmentRegistryComponent{}, false
+}
+
+func servicePort(kind, realisation string, configured int) int {
+	if configured != 0 {
+		return configured
+	}
+	return support.LookupService(kind, realisation).DefaultPort
 }
 
 func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInfra) map[string]bool {

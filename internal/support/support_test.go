@@ -1,6 +1,10 @@
 package support
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+)
 
 func TestLookupDispatchClassifiesApplySupport(t *testing.T) {
 	tests := []struct {
@@ -58,9 +62,12 @@ func TestLookupProvisionerUsesRegistry(t *testing.T) {
 }
 
 func TestLookupServiceUsesRegistry(t *testing.T) {
-	got := LookupService("nameResolution", "dnsmasq")
+	got := LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	if got.ApplyRole != "dns_dnsmasq" || got.DestroyRole != "dns_dnsmasq" {
 		t.Fatalf("dnsmasq roles = %#v", got)
+	}
+	if got.DefaultPort != v1alpha1.DefaultDNSPort {
+		t.Fatalf("dnsmasq default port = %d, want %d", got.DefaultPort, v1alpha1.DefaultDNSPort)
 	}
 }
 

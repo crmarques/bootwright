@@ -1041,6 +1041,17 @@ func TestEnsureLocalRootForArgsSkipsWhenAlreadyRoot(t *testing.T) {
 	}
 }
 
+func TestAskBecomePassDefaultUsesLocalRootSudoAuth(t *testing.T) {
+	t.Setenv(localRootSudoAuthEnv, localSudoAuthPrompted)
+	if !askBecomePassDefault() {
+		t.Fatal("prompted local sudo re-exec should default Ansible become prompting on")
+	}
+	t.Setenv(localRootSudoAuthEnv, localSudoAuthNonInteractive)
+	if askBecomePassDefault() {
+		t.Fatal("noninteractive local sudo re-exec should default Ansible become prompting off")
+	}
+}
+
 func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 	setTestHomeAndRoot(t)
 	source := filepath.Join(t.TempDir(), "pull-secret.json")

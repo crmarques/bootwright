@@ -88,7 +88,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
-		if err := ensureApplySupported(plan.state); err != nil {
+		if err := workflow.EnsureApplySupported(plan.state); err != nil {
 			return failErr(1, err)
 		}
 		if override {
@@ -195,7 +195,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 				return failErr(1, err)
 			}
 		}
-		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr))
+		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr), nil)
 		if err != nil {
 			return failErr(1, err)
 		}

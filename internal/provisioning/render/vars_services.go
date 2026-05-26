@@ -23,8 +23,8 @@ func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraCom
 	if lb := component.Spec.LoadBalancer; lb != nil {
 		out["hostRef"] = lb.HostRef.Name
 		out["hostAddress"] = lookupHostAddress(state, lb.HostRef.Name)
-		out["realisation"] = "haProxy"
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
+		out["realisation"] = v1alpha1.InfraComponentTypeHAProxy
+		applyServiceRoleContract(out, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)
 		out["image"] = managedHAProxyImage(state)
 	}
 	return out
@@ -159,7 +159,7 @@ func artifactServerComponentVars(state v1alpha1.State, server artifactpub.Server
 		out["bindAddress"] = config.BindAddress
 		out["hostRef"] = config.HostRef.Name
 		out["hostAddress"] = lookupHostAddress(state, config.HostRef.Name)
-		out["realisation"] = "http"
+		out["realisation"] = v1alpha1.ArtifactServerProtocolHTTP
 		out["tls"] = artifactServerTLSVars(state, server)
 		out["image"] = managedArtifactsHTTPImage(state)
 		if endpoint := server.Entry.Routes.ClusterInstall.Endpoint; endpoint != "" {
@@ -167,7 +167,7 @@ func artifactServerComponentVars(state v1alpha1.State, server artifactpub.Server
 				out["url"] = url
 			}
 		}
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, "http")
+		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
 	}
 	return out
 }
@@ -293,7 +293,7 @@ func proxyComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentProxyCom
 	proxy := component.Spec.Proxy
 	port := proxy.Port
 	if port == 0 {
-		port = v1alpha1.DefaultSquidPort
+		port = support.LookupService(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid).DefaultPort
 	}
 	hostAddress := lookupHostAddress(state, proxy.HostRef.Name)
 	out := map[string]any{
@@ -306,11 +306,11 @@ func proxyComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentProxyCom
 		"bindAddress":   proxy.BindAddress,
 		"hostRef":       proxy.HostRef.Name,
 		"hostAddress":   hostAddress,
-		"realisation":   "squid",
+		"realisation":   v1alpha1.InfraComponentTypeSquid,
 		"url":           fmt.Sprintf("http://%s:%d", hostAddress, port),
 		"image":         managedSquidImage(state),
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotProxy, "squid")
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)
 	return out
 }
 
@@ -318,7 +318,7 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	dns := component.Spec.NameResolution
 	port := dns.Port
 	if port == 0 {
-		port = v1alpha1.DefaultDNSPort
+		port = support.LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq).DefaultPort
 	}
 	additionalHosts := append([]string(nil), dns.AdditionalIngressHosts...)
 	additionalHosts = append(additionalHosts, entry.AdditionalIngressHosts...)
@@ -334,7 +334,7 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 		"additionalIngressHosts": additionalHosts,
 		"hostRef":                dns.HostRef.Name,
 		"hostAddress":            lookupHostAddress(state, dns.HostRef.Name),
-		"realisation":            "dnsmasq",
+		"realisation":            v1alpha1.InfraComponentTypeDnsmasq,
 		"image":                  managedDnsmasqImage(state),
 	}
 	if len(hostRecords) > 0 {
@@ -343,7 +343,7 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	if len(domainRecords) > 0 {
 		out["domainRecords"] = domainRecords
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	return out
 }
 
@@ -351,7 +351,7 @@ func registryComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentRegis
 	registry := component.Spec.Registry
 	port := registry.Port
 	if port == 0 {
-		port = v1alpha1.DefaultMirrorRegistryPort
+		port = support.LookupService(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry).DefaultPort
 	}
 	hostAddress := lookupHostAddress(state, registry.HostRef.Name)
 	out := map[string]any{
@@ -364,11 +364,11 @@ func registryComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentRegis
 		"bindAddress":   registry.BindAddress,
 		"hostRef":       registry.HostRef.Name,
 		"hostAddress":   hostAddress,
-		"realisation":   "mirrorRegistry",
+		"realisation":   v1alpha1.InfraComponentTypeMirrorRegistry,
 		"url":           fmt.Sprintf("%s:%d", hostAddress, port),
 		"image":         managedMirrorRegistryImage(state),
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)
 	return out
 }
 

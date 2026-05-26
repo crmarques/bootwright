@@ -69,6 +69,8 @@ type ApplyReporter interface {
 	PromptGap()
 }
 
+type ApplyTaskRunnerFactory func(stdout io.Writer, stderr io.Writer) ansible.Runner
+
 func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
@@ -215,7 +217,7 @@ func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 	return tasks
 }
 
-func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter) (RunLedger, error) {
+func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
 	if strings.TrimSpace(opts.RuntimeDir) == "" {
@@ -334,7 +336,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			}
 			stdoutWriter, stderrWriter := applyTaskWriters(task, taskStdout, taskStderr, clusterLogs, multiClusterOutput)
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
-				events <- runOneApplyTask(ctx, taskOut, taskErr, stateDir, ledger.RunID, opts, task)
+				events <- runOneApplyTask(ctx, taskOut, taskErr, stateDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
 		}
 		if firstErr != nil && running == 0 {
@@ -474,7 +476,7 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 	}
 }
 
-func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
+func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, stateDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	renderDir := filepath.Join(stateDir, "workflow", "runs", runID, task.Entry.ID, "render")
 	taskOpts := opts
 	taskOpts.State = task.State
@@ -487,7 +489,12 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, st
 	taskOpts.Label = task.Entry.Label
 	taskOpts.Forks = task.Forks
 	taskOpts.ArtifactsRoot = filepath.Join(opts.RuntimeDir, "workflow", "runs", runID, "tasks", task.Entry.ID, "artifacts")
-	runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
+	if runnerFactory == nil {
+		runnerFactory = func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+			return ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
+		}
+	}
+	runner := runnerFactory(stdout, stderr)
 	result, err := Run(ctx, taskOpts, runner, nil)
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }

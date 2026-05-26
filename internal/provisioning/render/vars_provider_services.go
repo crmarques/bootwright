@@ -5,29 +5,28 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/artifactpub"
 	"github.com/crmarques/bootwright/internal/stategraph"
+	"github.com/crmarques/bootwright/internal/support"
 )
 
 const providerServiceKindBMC = "bmc"
 
 func providerServicesVars(state v1alpha1.State) []any {
 	builder := newProviderServiceBuilder()
-	services := stategraph.ResolveProviderServices(state)
-	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
-		if err != nil {
+	graph := stategraph.ResolveProviderServices(state)
+	for _, service := range graph.Services {
+		component, ok := providerServiceVarsFromGraph(state, service)
+		if !ok {
 			continue
 		}
-		for _, raw := range componentsVars(state, ci, ocp) {
-			component, ok := raw.(map[string]any)
-			if !ok || component["kind"] == v1alpha1.ComponentSlotMachines {
-				continue
-			}
-			if component["hostRef"] == nil || component["applyRole"] == nil {
-				continue
-			}
-			applyServiceGraphMerges(component, services)
-			builder.Add(component, ocp.Metadata.Name)
+		clusters := service.ConsumerClusters()
+		if len(clusters) == 0 {
+			builder.Add(component, "")
+			continue
+		}
+		for _, cluster := range clusters {
+			builder.Add(component, cluster)
 		}
 	}
 	for _, raw := range bmcProviderServiceVars(state) {
@@ -38,15 +37,193 @@ func providerServicesVars(state v1alpha1.State) []any {
 	return builder.Services()
 }
 
-func applyServiceGraphMerges(component map[string]any, services stategraph.ProviderServiceGraph) {
-	id := stategraph.ProviderServiceIdentity{
-		Kind:         stringMapValue(component, "kind"),
-		ProviderName: stringMapValue(component, "providerName"),
-		Name:         stringMapValue(component, "name"),
+func providerServiceVarsFromGraph(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	switch service.Identity.Kind {
+	case v1alpha1.ComponentSlotLoadBalancer:
+		return loadBalancerProviderServiceVars(state, service)
+	case v1alpha1.ComponentSlotArtifacts:
+		return artifactProviderServiceVars(state, service)
+	case v1alpha1.ComponentSlotProxy:
+		return proxyProviderServiceVars(state, service)
+	case v1alpha1.ComponentSlotNameResolution:
+		return nameResolutionProviderServiceVars(state, service)
+	case v1alpha1.ComponentSlotRegistry:
+		return registryProviderServiceVars(state, service)
+	default:
+		return nil, false
 	}
-	if values := services.MergedStringField(id, "additionalIngressHosts"); len(values) > 0 {
-		component["additionalIngressHosts"] = values
+}
+
+func loadBalancerProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	component, ok := findInfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.LoadBalancer == nil {
+		return nil, false
 	}
+	out := loadBalancerComponentVars(state, component)
+	var frontends []any
+	for _, consumer := range service.Consumers {
+		ci, ok := clusterInfraByName(state, consumer.ClusterInfra)
+		if !ok {
+			continue
+		}
+		frontends = append(frontends, loadBalancerFrontends(state, ci, component.Metadata.Name, consumer.Cluster, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))...)
+	}
+	if len(frontends) > 0 {
+		out["frontends"] = frontends
+	}
+	return out, true
+}
+
+func artifactProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	server, ok := artifactpub.Select(state)
+	if !ok || server.Component.Metadata.Name != service.Identity.Name || server.Config == nil {
+		return nil, false
+	}
+	return artifactServerComponentVars(state, server), true
+}
+
+func proxyProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	component, ok := findInfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.Proxy == nil {
+		return nil, false
+	}
+	entry := v1alpha1.EnvironmentProxyComponent{Name: serviceEntryName(service)}
+	return proxyComponentVars(state, entry, component), true
+}
+
+func nameResolutionProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	component, ok := findInfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.NameResolution == nil {
+		return nil, false
+	}
+	dns := component.Spec.NameResolution
+	port := dns.Port
+	if port == 0 {
+		port = support.LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq).DefaultPort
+	}
+	additionalHosts := append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)
+	hostRecords, domainRecords := nameResolutionRecordsForGraphService(state, service)
+	out := map[string]any{
+		"kind":                   v1alpha1.ComponentSlotNameResolution,
+		"providerName":           v1alpha1.KindInfraComponent,
+		"name":                   component.Metadata.Name,
+		"componentName":          component.Metadata.Name,
+		"entryName":              serviceEntryName(service),
+		"port":                   port,
+		"bindAddress":            dns.BindAddress,
+		"additionalIngressHosts": additionalHosts,
+		"hostRef":                dns.HostRef.Name,
+		"hostAddress":            lookupHostAddress(state, dns.HostRef.Name),
+		"realisation":            v1alpha1.InfraComponentTypeDnsmasq,
+		"image":                  managedDnsmasqImage(state),
+	}
+	if len(hostRecords) > 0 {
+		out["hostRecords"] = hostRecords
+	}
+	if len(domainRecords) > 0 {
+		out["domainRecords"] = domainRecords
+	}
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
+	return out, true
+}
+
+func registryProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	component, ok := findInfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.Registry == nil {
+		return nil, false
+	}
+	entry := v1alpha1.EnvironmentRegistryComponent{Name: serviceEntryName(service)}
+	return registryComponentVars(state, entry, component), true
+}
+
+func clusterInfraByName(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, bool) {
+	for _, infra := range state.ClusterInfras {
+		if infra.Metadata.Name == name {
+			return infra, true
+		}
+	}
+	return v1alpha1.ClusterInfra{}, false
+}
+
+func serviceEntryName(service stategraph.ProviderService) string {
+	for _, consumer := range service.Consumers {
+		if entryName := consumer.Fields["entryName"]; entryName != "" {
+			return entryName
+		}
+	}
+	return ""
+}
+
+func serviceEntryNames(service stategraph.ProviderService) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, consumer := range service.Consumers {
+		entryName := consumer.Fields["entryName"]
+		if entryName == "" || seen[entryName] {
+			continue
+		}
+		seen[entryName] = true
+		out = append(out, entryName)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func nameResolutionRecordsForGraphService(state v1alpha1.State, service stategraph.ProviderService) ([]any, []any) {
+	hostRecords := map[string]map[string]any{}
+	domainRecords := map[string]map[string]any{}
+	for _, entryName := range serviceEntryNames(service) {
+		hosts, domains := nameResolutionRecordsVars(state, entryName, serviceEntryStringField(service, entryName, "additionalIngressHosts"))
+		mergeRecordVars(hostRecords, hosts)
+		mergeRecordVars(domainRecords, domains)
+	}
+	return sortedRecordVars(hostRecords), sortedRecordVars(domainRecords)
+}
+
+func serviceEntryStringField(service stategraph.ProviderService, entryName, field string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, consumer := range service.Consumers {
+		if consumer.Fields["entryName"] != entryName {
+			continue
+		}
+		for _, value := range consumer.MergeStringFields[field] {
+			if value == "" || seen[value] {
+				continue
+			}
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func mergeRecordVars(dst map[string]map[string]any, records []any) {
+	for _, raw := range records {
+		record, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		key := fmt.Sprintf("%v|%v", record["name"], record["address"])
+		dst[key] = cloneComponentVars(record)
+	}
+}
+
+func sortedRecordVars(records map[string]map[string]any) []any {
+	if len(records) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(records))
+	for key := range records {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]any, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, records[key])
+	}
+	return out
 }
 
 func providerHostSetupsVars(state v1alpha1.State) []any {
