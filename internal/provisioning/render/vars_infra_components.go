@@ -77,21 +77,21 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 
 func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map[string]any {
 	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.Endpoint)
-	if entry.Spec != nil {
-		spec := map[string]any{}
-		if entry.Spec.HTTPProxy != "" {
-			spec["httpProxy"] = entry.Spec.HTTPProxy
+	if entry.Connection != nil {
+		connection := map[string]any{}
+		if entry.Connection.HTTPProxy != "" {
+			connection["httpProxy"] = entry.Connection.HTTPProxy
 		}
-		if entry.Spec.HTTPSProxy != "" {
-			spec["httpsProxy"] = entry.Spec.HTTPSProxy
+		if entry.Connection.HTTPSProxy != "" {
+			connection["httpsProxy"] = entry.Connection.HTTPSProxy
 		}
-		if len(entry.Spec.NoProxy) > 0 {
-			spec["noProxy"] = stringSliceAny(entry.Spec.NoProxy)
+		if len(entry.Connection.NoProxy) > 0 {
+			connection["noProxy"] = stringSliceAny(entry.Connection.NoProxy)
 		}
-		if entry.Spec.Auth != nil && entry.Spec.Auth.ProxyAuthRef.Name != "" {
-			spec["auth"] = map[string]any{"proxyAuthRef": entry.Spec.Auth.ProxyAuthRef.Name}
+		if entry.Connection.Auth != nil && entry.Connection.Auth.ProxyAuthRef.Name != "" {
+			connection["auth"] = map[string]any{"proxyAuthRef": entry.Connection.Auth.ProxyAuthRef.Name}
 		}
-		out["spec"] = spec
+		out["connection"] = connection
 	}
 	return out
 }

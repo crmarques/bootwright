@@ -21,7 +21,7 @@ func envWithExternalProxy() *v1alpha1.Environment {
 				Proxies: []v1alpha1.EnvironmentProxyComponent{{
 					Name: "default",
 					Type: v1alpha1.EnvironmentComponentExternal,
-					Spec: &v1alpha1.EnvironmentProxySpec{
+					Connection: &v1alpha1.EnvironmentProxyConnection{
 						HTTPProxy:  "http://external-proxy:3128",
 						HTTPSProxy: "https://external-proxy:3128",
 						NoProxy:    []string{"corp.internal", "localhost"},
@@ -102,12 +102,12 @@ func TestResolveExternalCopiesEnvProxy(t *testing.T) {
 	if got == nil {
 		t.Fatal("Resolve returned nil")
 	}
-	spec := env.Spec.InfraComponents.Proxies[0].Spec
-	if got.HTTP != spec.HTTPProxy {
-		t.Errorf("HTTP = %q, want %q", got.HTTP, spec.HTTPProxy)
+	connection := env.Spec.InfraComponents.Proxies[0].Connection
+	if got.HTTP != connection.HTTPProxy {
+		t.Errorf("HTTP = %q, want %q", got.HTTP, connection.HTTPProxy)
 	}
-	if got.HTTPS != spec.HTTPSProxy {
-		t.Errorf("HTTPS = %q, want %q", got.HTTPS, spec.HTTPSProxy)
+	if got.HTTPS != connection.HTTPSProxy {
+		t.Errorf("HTTPS = %q, want %q", got.HTTPS, connection.HTTPSProxy)
 	}
 	if got.Auth.Name != "proxy-auth" {
 		t.Errorf("Auth.Name = %q, want %q", got.Auth.Name, "proxy-auth")

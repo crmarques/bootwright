@@ -39,16 +39,16 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 		return nil
 	}
 	entry, ok := SelectedProxy(*env, name)
-	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Spec == nil {
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Connection == nil {
 		return nil
 	}
 	eff := &Effective{
-		HTTP:    entry.Spec.HTTPProxy,
-		HTTPS:   entry.Spec.HTTPSProxy,
-		NoProxy: merge(entry.Spec.NoProxy, auto(state, env)),
+		HTTP:    entry.Connection.HTTPProxy,
+		HTTPS:   entry.Connection.HTTPSProxy,
+		NoProxy: merge(entry.Connection.NoProxy, auto(state, env)),
 	}
-	if entry.Spec.Auth != nil {
-		eff.Auth = entry.Spec.Auth.ProxyAuthRef
+	if entry.Connection.Auth != nil {
+		eff.Auth = entry.Connection.Auth.ProxyAuthRef
 	}
 	if eff.HTTP == "" && eff.HTTPS == "" && len(eff.NoProxy) == 0 {
 		return nil

@@ -53,12 +53,12 @@ type EnvironmentArtifactRoute struct {
 }
 
 type EnvironmentProxyComponent struct {
-	Name         string                `yaml:"name" json:"name"`
-	Default      bool                  `yaml:"default,omitempty" json:"default,omitempty"`
-	Type         string                `yaml:"type" json:"type"`
-	ComponentRef LocalObjectReference  `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Endpoint     string                `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
-	Spec         *EnvironmentProxySpec `yaml:"spec,omitempty" json:"spec,omitempty"`
+	Name         string                      `yaml:"name" json:"name"`
+	Default      bool                        `yaml:"default,omitempty" json:"default,omitempty"`
+	Type         string                      `yaml:"type" json:"type"`
+	ComponentRef LocalObjectReference        `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Endpoint     string                      `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	Connection   *EnvironmentProxyConnection `yaml:"connection,omitempty" json:"connection,omitempty"`
 }
 
 type EnvironmentNameResolutionComponent struct {
@@ -120,7 +120,7 @@ type SelfSignedCertificateSpec struct {
 	ValidityDays int      `yaml:"validityDays,omitempty" json:"validityDays,omitempty"`
 }
 
-type EnvironmentProxySpec struct {
+type EnvironmentProxyConnection struct {
 	HTTPProxy  string                    `yaml:"httpProxy,omitempty" json:"httpProxy,omitempty"`
 	HTTPSProxy string                    `yaml:"httpsProxy,omitempty" json:"httpsProxy,omitempty"`
 	NoProxy    []string                  `yaml:"noProxy,omitempty" json:"noProxy,omitempty"`

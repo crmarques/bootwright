@@ -471,7 +471,7 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			proxyYAML: `    proxies:
       - name: default
         type: external
-        spec:
+        connection:
           httpProxy: http://proxy.bootwright.test:3128
 `,
 		},
@@ -480,30 +480,30 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			proxyYAML: `    proxies:
       - name: default
         type: external
-        spec:
+        connection:
           httpProxy: proxy.bootwright.test:3128
 `,
-			wantSubstring: `spec.infraComponents.proxies[0].httpProxy "proxy.bootwright.test:3128" is invalid: must include scheme and host`,
+			wantSubstring: `spec.infraComponents.proxies[0].connection.httpProxy "proxy.bootwright.test:3128" is invalid: must include scheme and host`,
 		},
 		{
 			name: "unsupported-scheme",
 			proxyYAML: `    proxies:
       - name: default
         type: external
-        spec:
+        connection:
           httpsProxy: socks5://proxy.bootwright.test:1080
 `,
-			wantSubstring: `spec.infraComponents.proxies[0].httpsProxy "socks5://proxy.bootwright.test:1080" is invalid: scheme must be http or https`,
+			wantSubstring: `spec.infraComponents.proxies[0].connection.httpsProxy "socks5://proxy.bootwright.test:1080" is invalid: scheme must be http or https`,
 		},
 		{
 			name: "inline-credentials",
 			proxyYAML: `    proxies:
       - name: default
         type: external
-        spec:
+        connection:
           httpProxy: http://user:pass@proxy.bootwright.test:3128
 `,
-			wantSubstring: `spec.infraComponents.proxies[0].httpProxy must not embed credentials`,
+			wantSubstring: `spec.infraComponents.proxies[0].connection.httpProxy must not embed credentials`,
 		},
 	}
 	for _, tc := range cases {
@@ -529,6 +529,26 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}
 }
 
+func TestEnvironmentProxyOldSpecRejectsStrictDecode(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
+      - name: default
+        type: external
+        spec:
+          httpProxy: http://proxy.bootwright.test:3128
+    artifactServers:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected old proxy spec field to be rejected, got nil")
+	}
+	if !strings.Contains(err.Error(), "field spec not found") {
+		t.Fatalf("error %q does not contain %q", err, "field spec not found")
+	}
+}
+
 func TestEnvironmentProxyDefaultsMustBeUnique(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -536,11 +556,13 @@ func TestEnvironmentProxyDefaultsMustBeUnique(t *testing.T) {
       - name: one
         default: true
         type: external
-        spec: { httpProxy: http://proxy-one.bootwright.test:3128 }
+        connection:
+          httpProxy: http://proxy-one.bootwright.test:3128
       - name: two
         default: true
         type: external
-        spec: { httpProxy: http://proxy-two.bootwright.test:3128 }
+        connection:
+          httpProxy: http://proxy-two.bootwright.test:3128
     artifactServers:
 `, 1)
 	writeFiles(t, dir, files)

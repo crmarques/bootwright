@@ -75,7 +75,7 @@ spec:
       - name: default
         default: true
         type: external
-        spec:
+        connection:
           httpProxy: http://proxy.example.test:3128
           httpsProxy: http://proxy.example.test:3128
           noProxy:
@@ -164,8 +164,8 @@ Rules:
   resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
 - `clusterTrust.caBundleRefs[]` is optional fleet-wide CA trust rendered into
   every selected cluster install. Entries reference PEM CA bundle secrets.
-- External proxy entries use installer field names: `httpProxy`,
-  `httpsProxy`, and `noProxy`.
+- External proxy `connection` entries use installer field names:
+  `httpProxy`, `httpsProxy`, and `noProxy`.
 - `install.mode: disconnected` on any `ContainerCluster` requires mirror trust
   material and either an external mirror URL or a managed registry component.
 - `registries.imageDigestSources[]`, when set, renders into installer

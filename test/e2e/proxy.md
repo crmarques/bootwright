@@ -7,7 +7,7 @@ infraComponents:
   proxies:
     - name: default
       type: external
-      spec:
+      connection:
         httpProxy: http://proxy.example.test:3128
         httpsProxy: http://proxy.example.test:3128
         noProxy:

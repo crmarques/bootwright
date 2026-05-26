@@ -204,8 +204,8 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 	}
 	for i, entry := range env.Spec.InfraComponents.Proxies {
-		if entry.Spec != nil && entry.Spec.Auth != nil {
-			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].spec.auth.proxyAuthRef", env.Metadata.Name, i), entry.Spec.Auth.ProxyAuthRef)
+		if entry.Connection != nil && entry.Connection.Auth != nil {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].connection.auth.proxyAuthRef", env.Metadata.Name, i), entry.Connection.Auth.ProxyAuthRef)
 		}
 	}
 	if env.Spec.ClusterTrust != nil {

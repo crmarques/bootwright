@@ -251,10 +251,10 @@ func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.Environme
 	return errs
 }
 
-func validateEnvironmentProxySpec(envName, owner string, p *v1alpha1.EnvironmentProxySpec) []string {
+func validateEnvironmentProxyConnection(envName, owner string, p *v1alpha1.EnvironmentProxyConnection) []string {
 	var errs []string
 	if p == nil {
-		return []string{owner + ".spec is required for external proxy"}
+		return []string{owner + ".connection is required for external proxy"}
 	}
 	if p.Auth != nil && p.Auth.ProxyAuthRef.Name != "" && !dnsLabel.MatchString(p.Auth.ProxyAuthRef.Name) {
 		errs = append(errs, fmt.Sprintf("%s.auth.proxyAuthRef.name %q is not a DNS label", owner, p.Auth.ProxyAuthRef.Name))
@@ -315,7 +315,7 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 		}
 		switch entry.Type {
 		case v1alpha1.EnvironmentComponentExternal:
-			errs = append(errs, validateEnvironmentProxySpec(env.Metadata.Name, owner, entry.Spec)...)
+			errs = append(errs, validateEnvironmentProxyConnection(env.Metadata.Name, owner+".connection", entry.Connection)...)
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed proxy entries")
 			}
@@ -323,8 +323,8 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
 				return c.Spec.Proxy != nil
 			}, "proxy")...)
-			if entry.Spec != nil {
-				errs = append(errs, owner+".spec is only valid for external proxy entries")
+			if entry.Connection != nil {
+				errs = append(errs, owner+".connection is only valid for external proxy entries")
 			}
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))

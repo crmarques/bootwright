@@ -73,7 +73,7 @@ func TestResolveProxyEnvHonorsProxyForNone(t *testing.T) {
 				Proxies: []v1alpha1.EnvironmentProxyComponent{{
 					Name: "default",
 					Type: v1alpha1.EnvironmentComponentExternal,
-					Spec: &v1alpha1.EnvironmentProxySpec{
+					Connection: &v1alpha1.EnvironmentProxyConnection{
 						HTTPProxy: "http://proxy.example.test:3128",
 					},
 				}},
