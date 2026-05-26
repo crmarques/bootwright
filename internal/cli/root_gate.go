@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/contextstore"
 )
@@ -47,13 +46,8 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		return 1, err
 	}
 	defer registry.cleanup()
-	cmdArgs := append([]string{exe}, args...)
+	cmdArgs := append([]string{"env", contextstore.InternalRegistryEnv + "=" + registry.tempPath, exe}, args...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
-	env := cmd.Env
-	if env == nil {
-		env = os.Environ()
-	}
-	cmd.Env = envWith(env, contextstore.InternalRegistryEnv, registry.tempPath)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -149,16 +143,4 @@ func argsContainHelp(args []string) bool {
 
 func argsMayMutateRegistry(args []string) bool {
 	return len(args) >= 2 && args[0] == "context" && (args[1] == "init" || args[1] == "update" || args[1] == "delete")
-}
-
-func envWith(env []string, key, value string) []string {
-	prefix := key + "="
-	out := make([]string, 0, len(env)+1)
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			continue
-		}
-		out = append(out, entry)
-	}
-	return append(out, prefix+value)
 }

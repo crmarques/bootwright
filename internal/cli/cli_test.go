@@ -838,7 +838,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if !reflect.DeepEqual(gotArgs, []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 5 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || !reflect.DeepEqual(gotArgs[2:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -924,13 +924,17 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if rootArgs[1] != "context" || rootArgs[2] != "init" || rootArgs[3] != "lab" || rootArgs[4] != "-f" {
+	if len(rootArgs) < 8 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") {
 		os.Exit(2)
 	}
-	if _, err := os.Stat(filepath.Join(rootArgs[5], "environment.yaml")); err != nil {
+	registry := strings.TrimPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=")
+	rootArgs = rootArgs[3:]
+	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
 	}
-	registry := os.Getenv(contextstore.InternalRegistryEnv)
+	if _, err := os.Stat(filepath.Join(rootArgs[4], "environment.yaml")); err != nil {
+		os.Exit(2)
+	}
 	if registry == "" {
 		os.Exit(2)
 	}
