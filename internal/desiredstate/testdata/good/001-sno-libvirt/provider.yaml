@@ -18,21 +18,3 @@ spec:
           auth:
             credentialRef:
               name: bmc-credentials
-
-  loadBalancers:
-    - name: default
-      haProxy:
-        hostRef:
-          name: lab-host
-
-  proxies:
-    - name: default
-      squid:
-        hostRef:
-          name: lab-host
-
-  dns:
-    - name: default
-      dnsmasq:
-        hostRef:
-          name: lab-host

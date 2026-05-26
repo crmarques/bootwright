@@ -232,23 +232,105 @@ func artifactServerClusterConsumers(state v1alpha1.State) []string {
 
 func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) string {
 	var parts []string
-	c := ci.Spec.Components
-	if len(c.LoadBalancers) > 0 {
+	if clusterUsesLoadBalancerComponent(ci) {
 		parts = append(parts, "loadBalancers")
 	}
-	if c.NameResolution != nil {
+	if clusterUsesManagedNameResolution(state, ci) {
 		parts = append(parts, "nameResolution")
 	}
-	if c.Proxy != nil {
+	if environmentUsesManagedProxy(state) {
 		parts = append(parts, "proxy")
 	}
-	if c.Registry != nil {
+	if clusterUsesManagedRegistry(state, ci) {
 		parts = append(parts, "registry")
 	}
 	if ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name); ok && artifactpub.ClusterNeedsPublication(state, ci, ocp) {
 		parts = append(parts, "artifacts")
 	}
 	return strings.Join(parts, ", ")
+}
+
+func clusterUsesLoadBalancerComponent(ci v1alpha1.ClusterInfra) bool {
+	for _, endpoint := range ci.Spec.Endpoints {
+		if endpoint.ProvidedBy != nil && endpoint.ProvidedBy.ComponentRef.Name != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
+	if len(state.Environments) == 0 {
+		return nil
+	}
+	return &state.Environments[0]
+}
+
+func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return false
+	}
+	managed := map[string]bool{}
+	for _, entry := range env.Spec.InfraComponents.NameResolution {
+		if entry.Type == v1alpha1.EnvironmentComponentManaged {
+			managed[entry.Name] = true
+		}
+	}
+	for _, network := range state.NetworkConfigs {
+		if !clusterConsumesNetwork(ci, network.Metadata.Name) {
+			continue
+		}
+		for _, ref := range network.Spec.Template.DNSRefs {
+			if managed[ref] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func clusterUsesManagedRegistry(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
+	ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)
+	if !ok || v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
+		return false
+	}
+	env := primaryEnvironment(state)
+	if env == nil {
+		return false
+	}
+	for _, entry := range env.Spec.InfraComponents.Registries {
+		if entry.Type == v1alpha1.EnvironmentComponentManaged && entry.Default {
+			return true
+		}
+	}
+	return len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Type == v1alpha1.EnvironmentComponentManaged
+}
+
+func environmentUsesManagedProxy(state v1alpha1.State) bool {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return false
+	}
+	selected := map[string]bool{
+		env.Spec.ProxyFor.Bootwright:     true,
+		env.Spec.ProxyFor.ClusterInstall: true,
+	}
+	for _, entry := range env.Spec.InfraComponents.Proxies {
+		if selected[entry.Name] && entry.Type == v1alpha1.EnvironmentComponentManaged {
+			return true
+		}
+	}
+	return false
+}
+
+func clusterConsumesNetwork(ci v1alpha1.ClusterInfra, networkName string) bool {
+	for _, machine := range ci.Spec.Components.Machines {
+		if machine.NetworkConfig.Ref.Name == networkName {
+			return true
+		}
+	}
+	return false
 }
 
 func confirm(in io.Reader, prompt io.Writer, message string) bool {

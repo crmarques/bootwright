@@ -15,8 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/embedded"
 	"github.com/crmarques/bootwright/internal/operator"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/secret"
-	"github.com/crmarques/bootwright/internal/stateview"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -113,13 +111,13 @@ func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, std
 
 func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
 	spec.BundleDir = bundleDir
-	inventoryPath := filepath.Join(bundleDir, controllerCLIBastionInventory)
-	inventoryBody, err := controllerCLIBastionInventoryBody(state, secretsDir)
+	inventoryPath := filepath.Join(bundleDir, controllerCLIInventory)
+	inventoryBody, err := controllerCLIInventoryBody(state, secretsDir)
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(inventoryPath, []byte(inventoryBody), 0o600); err != nil {
-		return fmt.Errorf("write bastion-clis inventory: %w", err)
+		return fmt.Errorf("write controller-clis inventory: %w", err)
 	}
 	p := output.NewContinuation(stdout)
 	p.Section("Ansible execution")
@@ -137,7 +135,7 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 		defer cleanup()
 		becomePasswordFile = path
 	}
-	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIBastionInventory), askBecomePass, becomePasswordFile)
+	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIInventory), askBecomePass, becomePasswordFile)
 	env := operator.MergeBootstrapEnv(os.Environ(), ansibleEnv)
 	run := runCommandWithControllingTTY
 	if err := run(ctx, stdin, stdout, stderr, args, env); err != nil {
@@ -166,7 +164,7 @@ func controllerCLIBundleDisplayDir() string {
 
 const controllerCLITempParent = ansible.SystemTempDir
 
-const controllerCLIBastionInventory = "_setup-bastion.yaml"
+const controllerCLIInventory = "_setup-controller.yaml"
 
 func controllerCLIAnsibleEnv(bundleDir string) map[string]string {
 	env := map[string]string{
@@ -191,40 +189,28 @@ func controllerCLIInstallCommand(args []string, askBecomePass bool, becomePasswo
 	return out
 }
 
-func controllerCLIBastionInventoryBody(state v1alpha1.State, secretsDir string) (string, error) {
-	env := stateview.Environment(state)
-	host, ok := stateview.BastionHost(state)
-	if !ok {
-		return "", fmt.Errorf("Environment.spec.bastion.hostRef does not resolve to a Host")
-	}
+func controllerCLIInventoryBody(_ v1alpha1.State, _ string) (string, error) {
 	entry := map[string]any{
-		"ansible_host":         v1alpha1.HostSSHAddress(host),
-		"bootwright_host_name": host.Metadata.Name,
-	}
-	if host.Spec.SSH != nil {
-		if host.Spec.SSH.User != "" {
-			entry["ansible_user"] = host.Spec.SSH.User
-		}
-		if path := secret.ResolvePath(host.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
-			entry["ansible_ssh_private_key_file"] = path
-		}
+		"ansible_connection":   "local",
+		"ansible_host":         "localhost",
+		"bootwright_host_name": "localhost",
 	}
 	body, err := yaml.Marshal(map[string]any{
 		"all": map[string]any{
 			"hosts": map[string]any{
-				host.Metadata.Name: entry,
+				"localhost": entry,
 			},
 			"children": map[string]any{
-				render.GroupBastionHosts: map[string]any{
+				render.GroupControllerHosts: map[string]any{
 					"hosts": map[string]any{
-						host.Metadata.Name: map[string]any{},
+						"localhost": map[string]any{},
 					},
 				},
 			},
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("marshal bastion inventory: %w", err)
+		return "", fmt.Errorf("marshal controller inventory: %w", err)
 	}
 	return string(body), nil
 }

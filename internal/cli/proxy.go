@@ -11,17 +11,14 @@ import (
 	"github.com/crmarques/bootwright/internal/secret"
 )
 
-// returns nil when proxy is Bootwright-managed: the bastion provisions that proxy, so
-// it cannot route its own bootstrap through a proxy that does not yet exist.
+// returns nil when proxy is Bootwright-managed: Bootwright provisions that
+// proxy, so bootstrap cannot route through a proxy that does not yet exist.
 func resolveProxyEnv(state v1alpha1.State, secretsDir string) (map[string]string, error) {
 	if proxy.IsManaged(state) {
 		return nil, nil
 	}
 	for i := range state.Environments {
 		env := state.Environments[i]
-		if !v1alpha1.ProxyUseForBootwright(env.Spec.Proxy) {
-			continue
-		}
 		eff := proxy.Resolve(state, &env)
 		if eff == nil || (eff.HTTP == "" && eff.HTTPS == "" && len(eff.NoProxy) == 0) {
 			continue
@@ -61,9 +58,6 @@ func proxyEnvRequiresSecrets(state v1alpha1.State) bool {
 		return false
 	}
 	for i := range state.Environments {
-		if !v1alpha1.ProxyUseForBootwright(state.Environments[i].Spec.Proxy) {
-			continue
-		}
 		if effectiveProxyEnvUsesCredentials(proxy.Resolve(state, &state.Environments[i])) {
 			return true
 		}

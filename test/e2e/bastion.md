@@ -8,10 +8,8 @@ points here when the operator chooses the host-bastion mode.
 ## Requirements
 
 The bastion is a Linux machine you SSH into and run `bootwright` from. It must
-be able to reach the Host selected by `environment.yaml` and every provider host
-the case declares in `provider.yaml` over SSH. Use the declared
-`Host.spec.ssh.addressName` address for the bastion Host; Bootwright does not
-replace it with `localhost` just because the CLI is running there.
+be able to reach every provider and service host the case declares over SSH.
+Use the declared `Host.spec.ssh.addressName` addresses for those hosts.
 
 - A non-root user with `sudo`.
 - `bin/bootwright` available in `$PATH`.
@@ -96,10 +94,11 @@ cd ~/bootwright
 
 ## Optional Proxy Env
 
-Bootwright commands use `Environment.spec.proxy` from the active context, not
-ambient shell proxy variables. Use `bootwright print-env` when a shell
-outside Bootwright needs the same proxy exports. If proxy credentials would be
-printed, rerun it with `--sensitive` after creating the credential secret.
+Bootwright commands use the proxy selected by
+`Environment.spec.proxyFor.bootwright` from the active context, not ambient
+shell proxy variables. Use `bootwright print-env` when a shell outside
+Bootwright needs the same proxy exports. If proxy credentials would be printed,
+rerun it with `--sensitive` after creating the credential secret.
 
 Leave unset for direct internet access. Replace the placeholder URL before
 exporting:

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/stategraph"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -23,10 +24,22 @@ func LoadNormalizeValidate(paths []string) (v1alpha1.State, error) {
 		return v1alpha1.State{}, err
 	}
 	Normalize(&state)
+	state = applyEnvironmentClusterSelection(state)
 	if err := Validate(state); err != nil {
 		return v1alpha1.State{}, err
 	}
 	return state, nil
+}
+
+func applyEnvironmentClusterSelection(state v1alpha1.State) v1alpha1.State {
+	if len(state.Environments) != 1 {
+		return state
+	}
+	names := state.Environments[0].Spec.ContainerClusters
+	if len(names) == 0 {
+		return state
+	}
+	return stategraph.FilterStateToClusters(state, names)
 }
 
 // Load reads `-f` arguments (files or directories) and decodes either every

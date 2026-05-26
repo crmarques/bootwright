@@ -65,14 +65,20 @@ func TestProxySummaryUsesLowercaseFallbacks(t *testing.T) {
 	}
 }
 
-func TestResolveProxyEnvHonorsBootwrightUseForFalse(t *testing.T) {
+func TestResolveProxyEnvHonorsProxyForNone(t *testing.T) {
 	state := v1alpha1.State{Environments: []v1alpha1.Environment{{
-		Spec: v1alpha1.EnvironmentSpec{Proxy: &v1alpha1.EnvironmentProxySpec{
-			HTTPProxy: "http://proxy.example.test:3128",
-			UseFor: v1alpha1.EnvironmentProxyUseFor{
-				Bootwright: v1alpha1.BoolPtr(false),
+		Spec: v1alpha1.EnvironmentSpec{
+			ProxyFor: v1alpha1.EnvironmentProxyForSpec{Bootwright: v1alpha1.EnvironmentComponentNone},
+			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+				Proxies: []v1alpha1.EnvironmentProxyComponent{{
+					Name: "default",
+					Type: v1alpha1.EnvironmentComponentExternal,
+					Spec: &v1alpha1.EnvironmentProxySpec{
+						HTTPProxy: "http://proxy.example.test:3128",
+					},
+				}},
 			},
-		}},
+		},
 	}}}
 
 	got, err := resolveProxyEnv(state, t.TempDir())

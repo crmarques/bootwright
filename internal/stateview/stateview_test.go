@@ -14,13 +14,15 @@ func TestProviderCapabilityLookups(t *testing.T) {
 		Spec: v1alpha1.InfraProviderSpec{
 			MachineProfiles: []v1alpha1.MachineProfileCapability{{Name: "profile"}},
 			Machines:        []v1alpha1.MachineCapability{{Name: "server"}},
-			LoadBalancers:   []v1alpha1.LoadBalancerCapability{{Name: "lb"}},
-			Proxies:         []v1alpha1.ProxyCapability{{Name: "proxy"}},
-			DNS:             []v1alpha1.DNSCapability{{Name: "dns"}},
-			Registries:      []v1alpha1.RegistryCapability{{Name: "registry"}},
 		},
 	}
-	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{provider}}
+	component := v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "lb"},
+		Spec: v1alpha1.InfraComponentSpec{
+			LoadBalancer: &v1alpha1.LoadBalancerComponent{Type: v1alpha1.InfraComponentTypeHAProxy},
+		},
+	}
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{provider}, InfraComponents: []v1alpha1.InfraComponent{component}}
 
 	gotProvider, ok := Provider(state, "provider")
 	if !ok || gotProvider.Metadata.Name != "provider" {
@@ -32,17 +34,8 @@ func TestProviderCapabilityLookups(t *testing.T) {
 	if machine, ok := Machine(gotProvider, "server"); !ok || machine.Name != "server" {
 		t.Fatalf("Machine lookup failed: %v %+v", ok, machine)
 	}
-	if lb, ok := LoadBalancer(gotProvider, "lb"); !ok || lb.Name != "lb" {
-		t.Fatalf("LoadBalancer lookup failed: %v %+v", ok, lb)
-	}
-	if proxy, ok := Proxy(gotProvider, "proxy"); !ok || proxy.Name != "proxy" {
-		t.Fatalf("Proxy lookup failed: %v %+v", ok, proxy)
-	}
-	if dns, ok := DNS(gotProvider, "dns"); !ok || dns.Name != "dns" {
-		t.Fatalf("DNS lookup failed: %v %+v", ok, dns)
-	}
-	if registry, ok := Registry(gotProvider, "registry"); !ok || registry.Name != "registry" {
-		t.Fatalf("Registry lookup failed: %v %+v", ok, registry)
+	if gotComponent, ok := InfraComponent(state, "lb"); !ok || gotComponent.Metadata.Name != "lb" {
+		t.Fatalf("InfraComponent lookup failed: %v %+v", ok, gotComponent)
 	}
 }
 
@@ -79,17 +72,10 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 		Spec: v1alpha1.ClusterInfraSpec{
 			Endpoints: map[string]v1alpha1.Endpoint{
 				v1alpha1.EndpointAPI: {
-					ProvidedBy: &v1alpha1.EndpointProvidedBy{LoadBalancer: "lb", Address: "api"},
+					ProvidedBy: &v1alpha1.EndpointProvidedBy{ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"}, Address: "api"},
 				},
 			},
 			Components: v1alpha1.ClusterComponents{
-				LoadBalancers: []v1alpha1.ClusterLoadBalancerComponent{{
-					Name: "lb",
-					BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
-						Name: "api",
-						IP:   "192.168.133.10",
-					}},
-				}},
 				Machines: []v1alpha1.ClusterMachineComponent{{
 					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
 						Ref: v1alpha1.LocalObjectReference{Name: "network"},
@@ -104,9 +90,23 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 			MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.133.0/24"}},
 		},
 	}
-	state := v1alpha1.State{NetworkConfigs: []v1alpha1.NetworkConfig{network}}
+	state := v1alpha1.State{
+		NetworkConfigs: []v1alpha1.NetworkConfig{network},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "lb"},
+			Spec: v1alpha1.InfraComponentSpec{
+				LoadBalancer: &v1alpha1.LoadBalancerComponent{
+					Type: v1alpha1.InfraComponentTypeHAProxy,
+					BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
+						Name: "api",
+						IP:   "192.168.133.10",
+					}},
+				},
+			},
+		}},
+	}
 
-	if got := EndpointAddress(infra, v1alpha1.EndpointAPI); got != "192.168.133.10" {
+	if got := EndpointAddress(state, infra, v1alpha1.EndpointAPI); got != "192.168.133.10" {
 		t.Fatalf("EndpointAddress = %q", got)
 	}
 	if !NetworkConfigContainsIP(network, net.ParseIP("192.168.133.10")) {

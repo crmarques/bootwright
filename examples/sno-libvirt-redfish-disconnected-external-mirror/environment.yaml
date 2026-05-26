@@ -5,16 +5,6 @@ metadata:
 spec:
   baseDomain: example.test
 
-  bastion:
-    hostRef: lab-host
-
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      clusterInstall:
-        endpoint: cluster
-
   resources:
     - hosts.yaml
     - networks.yaml
@@ -24,7 +14,7 @@ spec:
     - container-cluster.yaml
 
   secrets:
-    openshift-pull-secret:
+    openshift-pull-secret: null
     cluster-admin-pub-key:
       file: ~/.ssh/bootwright-ssh-key.pub
     provider-host-ssh:
@@ -33,7 +23,7 @@ spec:
       generated:
         credentials:
           username: admin
-    mirror-registry-credentials:
+    mirror-registry-credentials: null
     mirror-registry-ca:
       file: ./mirror-registry-ca.crt
 
@@ -44,3 +34,20 @@ spec:
         name: mirror-registry-credentials
       trustBundleRef:
         name: mirror-registry-ca
+
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          clusterInstall:
+            endpoint: cluster
+    nameResolution:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: name-resolution

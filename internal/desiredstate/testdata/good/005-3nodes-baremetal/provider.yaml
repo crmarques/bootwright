@@ -57,4 +57,4 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: bastion-services
-spec:
+spec: null

@@ -446,7 +446,7 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		Listener:    "https",
 		AddressName: "cluster-lan",
 	})
-	state.Environments[0].Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint = "cluster"
+	state.Environments[0].Spec.InfraComponents.ArtifactServers[0].Routes.RedfishVirtualMedia.Endpoint = "cluster"
 
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
@@ -652,7 +652,7 @@ func TestBareMetalCorporateFixtureDoesNotRenderManagedProxyOrDNS(t *testing.T) {
 	}
 }
 
-func TestProxyUseForControlsRuntimeAndInstallerRendering(t *testing.T) {
+func TestProxyForControlsRuntimeAndInstallerRendering(t *testing.T) {
 	cases := []struct {
 		name               string
 		bootwright         bool
@@ -671,8 +671,16 @@ func TestProxyUseForControlsRuntimeAndInstallerRendering(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadNormalizeValidate: %v", err)
 			}
-			state.Environments[0].Spec.Proxy.UseFor.Bootwright = v1alpha1.BoolPtr(tc.bootwright)
-			state.Environments[0].Spec.Proxy.UseFor.ClusterInstall = v1alpha1.BoolPtr(tc.clusterInstall)
+			if tc.bootwright {
+				state.Environments[0].Spec.ProxyFor.Bootwright = "default"
+			} else {
+				state.Environments[0].Spec.ProxyFor.Bootwright = v1alpha1.EnvironmentComponentNone
+			}
+			if tc.clusterInstall {
+				state.Environments[0].Spec.ProxyFor.ClusterInstall = "default"
+			} else {
+				state.Environments[0].Spec.ProxyFor.ClusterInstall = v1alpha1.EnvironmentComponentNone
+			}
 
 			vars := render.Vars(state)
 			_, gotRuntimeProxy := vars["bootwright_proxy"]
@@ -770,28 +778,30 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.InfraProviders[0].Spec.Registries = []v1alpha1.RegistryCapability{{
-		Name:           "default",
-		MirrorRegistry: &v1alpha1.MirrorRegistryCapability{HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"}},
+	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
-	for i := range state.ClusterInfras {
-		state.ClusterInfras[i].Spec.Components.Registry = &v1alpha1.ClusterComponentRef{
-			From:        v1alpha1.From{Provider: "lab-libvirt-provider", Name: "default"},
-			Port:        v1alpha1.DefaultMirrorRegistryPort,
-			BindAddress: v1alpha1.DefaultServiceBindAddress,
-		}
-	}
+	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "registry"},
+		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
+			Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
+			HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+			Port:    v1alpha1.DefaultMirrorRegistryPort,
+		}},
+	})
+	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
 	ci := state.ClusterInfras[0]
 	ci.Metadata.Name = "sno-libvirt-b"
 	ci.Spec.Components.Machines = append([]v1alpha1.ClusterMachineComponent(nil), ci.Spec.Components.Machines...)
 	ci.Spec.Components.Machines[0].NetworkConfig.Addresses = append([]v1alpha1.NetworkConfigAddress(nil), ci.Spec.Components.Machines[0].NetworkConfig.Addresses...)
 	ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4 = append([]v1alpha1.NetworkIPAddress(nil), ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4...)
 	ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4[0].IP = "192.168.132.30"
-	nameResolution := *ci.Spec.Components.NameResolution
-	ci.Spec.Components.NameResolution = &nameResolution
-	ci.Spec.Components.NameResolution.AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
+	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
 	for i := range ocp.Spec.Nodes {
 		ocp.Spec.Nodes[i].MachineRef.ClusterInfra = ci.Metadata.Name

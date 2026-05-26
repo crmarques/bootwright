@@ -25,19 +25,16 @@ into root-managed per-task artifact logs. When an apply selects multiple `Contai
 objects, Bootwright keeps Ansible output in logs and prints per-cluster install
 log paths plus high-level progress instead.
 
-For now, context-backed CLI commands are bastion-local: the selected
-`Environment.spec.bastion.hostRef` must resolve to the machine running
-Bootwright. The check is centralized behind an internal runtime-locality policy
-so future controller or remote execution can relax that requirement without
-rewriting command handlers. Commands that need context data re-exec through
-`sudo` when necessary and store all runtime state under
+Context-backed controller and OpenShift installer actions run on localhost.
+Commands that need context data re-exec through `sudo` when necessary and
+store all runtime state under
 `/var/lib/bootwright`; only the context registry remains in
 `~/.bootwright/contexts.yaml`.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
-cluster task on the Environment-selected bastion Host: create the cluster agent
-ISO with `openshift-install`, boot each declared node through its rendered boot
-adapter as parallel node tasks, then run `openshift-install agent wait-for
+cluster task on a remote controller host: create the cluster agent ISO with
+`openshift-install`, boot each declared node through its rendered boot adapter
+as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
@@ -53,16 +50,16 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 
 ## Ownership Boundaries
 
-- `Environment` owns fleet-wide defaults, bastion host selection, context
-  resource selection, secret sources, proxy defaults, registry mirrors, and
-  component images.
+- `Environment` owns fleet-wide defaults, context resource selection, cluster
+  selection, secret sources, service access catalog entries, registry mirrors,
+  and component images.
 - `InfraProvider` owns capabilities: explicit bare-metal machines, virtual
-  machine profiles, and service capabilities.
+  machine profiles, and substrate capabilities.
 - `NetworkConfig` owns reusable machine-network data and NMState templates.
 - `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
   machines, and managed infra components.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
-- `Host` owns SSH reachability to the bastion plus provider or service hosts.
+- `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:
 
@@ -72,8 +69,8 @@ These boundaries are reflected in rendering:
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
-- Infra component variables are rendered from `ClusterInfra.components`,
-  `InfraComponent` services, and provider service capabilities.
+- Infra component variables are rendered from `InfraComponent` services
+  referenced by endpoints, environment catalog entries, and DNS refs.
 
 Shared host services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about
@@ -85,11 +82,10 @@ state to make shared services converge.
 ## Providers
 
 Provider adapters should consume capability arms instead of inferring behavior
-from names. Current capability arms include:
+from names. Current provider capability arms include:
 
 - machine profiles: `libvirt`, `vsphere`, `kubevirt`
 - explicit machines: `baremetal`
-- services: `haProxy`, `http`, `squid`, `dnsmasq`, `mirrorRegistry`
 
 Adding a substrate means adding a capability arm, validation, renderer support,
 and an apply adapter. It must not move physical facts into cluster intent.

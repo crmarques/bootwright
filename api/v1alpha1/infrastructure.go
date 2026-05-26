@@ -70,6 +70,15 @@ const (
 	ComponentSlotNameResolution = "nameResolution"
 	ComponentSlotRegistry       = "registry"
 
+	EnvironmentComponentNone     = "none"
+	EnvironmentComponentExternal = "external"
+	EnvironmentComponentManaged  = "managed"
+
+	InfraComponentTypeHAProxy        = "haProxy"
+	InfraComponentTypeSquid          = "squid"
+	InfraComponentTypeDnsmasq        = "dnsmasq"
+	InfraComponentTypeMirrorRegistry = "mirrorRegistry"
+
 	// Default secret names that the renderer falls back to when the
 	// ContainerCluster does not override them.
 	DefaultPullSecretName    = "openshift-pull-secret"
@@ -291,11 +300,8 @@ func MachineProvisionerKind(m MachineCapability) string {
 	return ""
 }
 
-func DNSServiceIP(nr *ClusterNameResolutionComponent, network NetworkConfig) string {
-	if nr == nil {
-		return ""
-	}
-	if bind := nr.BindAddress; bind != "" && bind != "0.0.0.0" && bind != "::" {
+func DNSServiceIP(bind string, network NetworkConfig) string {
+	if bind != "" && bind != "0.0.0.0" && bind != "::" {
 		if ip := net.ParseIP(bind); ip != nil {
 			for _, mn := range network.Spec.MachineNetwork {
 				if _, cidr, err := net.ParseCIDR(mn.CIDR); err == nil && cidr.Contains(ip) {

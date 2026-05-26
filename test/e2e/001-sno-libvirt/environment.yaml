@@ -5,11 +5,8 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
-  bastion:
-    hostRef: lab-host
-
   secrets:
-    openshift-pull-secret:
+    openshift-pull-secret: null
     cluster-admin-pub-key:
       file: ~/.ssh/bootwright-ssh-key.pub
     provider-host-ssh:
@@ -23,12 +20,10 @@ spec:
         credentials:
           username: proxy
 
-  proxy:
-    noProxy:
-      - 192.168.132.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
+  infraComponents:
+    nameResolution:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: name-resolution

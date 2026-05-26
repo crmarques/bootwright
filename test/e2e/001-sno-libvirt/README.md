@@ -17,4 +17,4 @@ Key files:
 The cluster node binds to `ClusterInfra.components.machines[master-0]`, which
 uses the `sno-bridge` network template and a per-host static IP overlay.
 Cluster endpoints use `providedBy` and resolve to the managed HAProxy
-`loadBalancers[default]` bind addresses.
+`InfraComponent/load-balancer` bind addresses.

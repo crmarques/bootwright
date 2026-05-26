@@ -17,25 +17,31 @@ Complete desired-state examples live under `examples/`:
 
 ```yaml
 spec:
-  proxy:
-    httpProxy: http://proxy.example.test:3128
-    httpsProxy: http://proxy.example.test:3128
-    noProxy:
-      - .example.test
-      - 192.168.133.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
+  infraComponents:
+    proxies:
+      - name: default
+        type: external
+        spec:
+          httpProxy: http://proxy.example.test:3128
+          httpsProxy: http://proxy.example.test:3128
+          noProxy:
+            - .example.test
+            - 192.168.133.0/24
+          auth:
+            proxyAuthRef:
+              name: proxy-credentials
+
+  proxyFor:
+    bootwright: default
+    clusterInstall: default
 ```
 
-`useFor.bootwright` applies to Bootwright runtime actions. `useFor.clusterInstall`
-renders the proxy into installer input.
+`proxyFor.bootwright` applies to Bootwright runtime actions.
+`proxyFor.clusterInstall` renders the selected proxy into installer input.
+Omitted values and the reserved value `none` disable proxy use.
 
-Do not combine an external proxy URL with `ClusterInfra.components.proxy`; a
-managed proxy URL is derived from its selected service capability and port.
+Managed proxy entries use `type: managed` and reference an `InfraComponent`
+with `spec.proxy`; the URL is derived from its selected service host and port.
 
 ## Disconnected Install
 

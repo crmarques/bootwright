@@ -30,7 +30,7 @@ ansible/playbooks/
   layers/        executable layer workflows
   checks/        read-only Ansible checks
 ansible/roles/
-  bastion/       setup on the Environment-selected bastion host
+  bastion/       controller-local setup
   shared/        context and host helper roles
   providers/     provider-scoped shared services
   cluster_infra/ per-cluster substrate and network state
@@ -56,14 +56,14 @@ playbooks do not construct role names from those labels:
 - `component.mediaPrepareRole`, when set, selects an optional virtual-media
   backend hook. `boot_redfish` remains the Redfish protocol role for both
   real BMCs and sushy-emulator.
-- Generated artifact publication resolves to the
-  `Environment.spec.artifactServer.componentRef` selected
-  `InfraComponent`. Its `hostRef` gates the rendered artifact service and
-  limits it to that host. The component declares listeners, endpoints, and
-  optional bind address.
+- Generated artifact publication resolves to the `InfraComponent` selected by
+  `Environment.spec.infraComponents.artifactServers[]`. Its `hostRef` gates
+  the rendered artifact service and limits it to that host. The component
+  declares listeners, endpoints, and optional bind address.
   Bare-metal Redfish machines and disconnected agent installs derive
   publication consumers automatically; BMC-specific and cluster-install
-  routes come from `Environment.spec.artifactServer.routes`.
+  routes come from
+  `Environment.spec.infraComponents.artifactServers[].routes`.
 
 `bmcRole` and `bootRole` are independent. BMC-driven substrates use a
 matched pair because the boot path runs through the BMC service

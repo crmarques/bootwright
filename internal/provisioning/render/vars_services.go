@@ -12,16 +12,17 @@ import (
 	"github.com/crmarques/bootwright/internal/support"
 )
 
-func loadBalancerComponentVars(state v1alpha1.State, c v1alpha1.ClusterLoadBalancerComponent) map[string]any {
+func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraComponent) map[string]any {
 	out := map[string]any{
 		"kind":           v1alpha1.ComponentSlotLoadBalancer,
-		"providerName":   c.From.Provider,
-		"name":           c.Name,
-		"capabilityName": c.From.Name,
+		"providerName":   v1alpha1.KindInfraComponent,
+		"name":           component.Metadata.Name,
+		"componentName":  component.Metadata.Name,
+		"capabilityName": component.Metadata.Name,
 	}
-	if lb, ok := resolveLoadBalancer(state, c.From); ok && lb.HAProxy != nil {
-		out["hostRef"] = lb.HAProxy.HostRef.Name
-		out["hostAddress"] = lookupHostAddress(state, lb.HAProxy.HostRef.Name)
+	if lb := component.Spec.LoadBalancer; lb != nil {
+		out["hostRef"] = lb.HostRef.Name
+		out["hostAddress"] = lookupHostAddress(state, lb.HostRef.Name)
 		out["realisation"] = "haProxy"
 		applyServiceRoleContract(out, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
 		out["image"] = managedHAProxyImage(state)
@@ -31,18 +32,15 @@ func loadBalancerComponentVars(state v1alpha1.State, c v1alpha1.ClusterLoadBalan
 
 // loadBalancerFrontends projects per-cluster HAProxy frontends from
 // the cluster's endpoints + machine IPs. Each frontend also carries a
-// substrate-blind `attachment` block that network_vips consumes to
-// plumb the VIP onto the right L2: libvirt bridge today, no-op for
-// physical/vsphere/kubevirt. The renderer owns the substrate decision;
-// the role does not look up cluster networks itself.
-func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, loadBalancerName, clusterName string, machines []v1alpha1.ClusterMachineComponent, nodes map[string]v1alpha1.OCPNodeSpec) []any {
+// substrate-blind attachment block consumed by network_vips.
+func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, componentName, clusterName string, machines []v1alpha1.ClusterMachineComponent, nodes map[string]v1alpha1.OCPNodeSpec) []any {
 	out := []any{}
 	for _, name := range standardEndpointNames {
 		e, ok := ci.Spec.Endpoints[name]
-		if !ok || e.ProvidedBy == nil || e.ProvidedBy.LoadBalancer != loadBalancerName {
+		if !ok || e.ProvidedBy == nil || e.ProvidedBy.ComponentRef.Name != componentName {
 			continue
 		}
-		vip := endpointAddress(ci, name)
+		vip := endpointAddress(state, ci, name)
 		if vip == "" {
 			continue
 		}
@@ -86,13 +84,6 @@ func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, loadB
 	return out
 }
 
-// vipAttachmentVars projects the per-frontend L2 attachment shape
-// network_vips consumes. The role iterates frontends and only plumbs
-// VIPs when `attachment.kind == 'libvirt'`; physical / vsphere /
-// kubevirt return without `libvirt` so the role no-ops cleanly. This
-// is the seam that lets a managed loadBalancer coexist with a
-// non-libvirt cluster; previously the role filtered libvirt networks
-// itself and silently skipped when none matched.
 func vipAttachmentVars(net v1alpha1.NetworkConfig) map[string]any {
 	out := map[string]any{}
 	switch {
@@ -120,10 +111,6 @@ func firstMachineNetworkCIDR(net v1alpha1.NetworkConfig) string {
 	return net.Spec.MachineNetwork[0].CIDR
 }
 
-// cidrPrefix returns the prefix length from a CIDR string ("192.168.0.0/24"
-// to 24). Returns 0 if the prefix is missing or unparseable; the caller
-// omits the field in that case so Ansible falls back to its own parse
-// of the network CIDR (current role behaviour preserved).
 func cidrPrefix(cidr string) int {
 	i := strings.LastIndex(cidr, "/")
 	if i <= 0 {
@@ -175,11 +162,9 @@ func artifactServerComponentVars(state v1alpha1.State, server artifactpub.Server
 		out["realisation"] = "http"
 		out["tls"] = artifactServerTLSVars(state, server)
 		out["image"] = managedArtifactsHTTPImage(state)
-		if env := primaryEnvironment(state); env != nil && env.Spec.ArtifactServer != nil {
-			if endpoint := env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint; endpoint != "" {
-				if url := artifactServerEndpointURL(state, server, endpoint); url != "" {
-					out["url"] = url
-				}
+		if endpoint := server.Entry.Routes.ClusterInstall.Endpoint; endpoint != "" {
+			if url := artifactServerEndpointURL(state, server, endpoint); url != "" {
+				out["url"] = url
 			}
 		}
 		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, "http")
@@ -219,11 +204,27 @@ func artifactPrimaryPort(listeners []v1alpha1.ArtifactServerListener) int {
 }
 
 func artifactServerEndpointURL(state v1alpha1.State, server artifactpub.Server, endpointName string) string {
+	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal && server.Entry.Spec != nil {
+		switch endpointName {
+		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
+			return trailingSlash(server.Entry.Spec.RedfishVirtualMediaURL)
+		case server.Entry.Routes.ClusterInstall.Endpoint:
+			return trailingSlash(server.Entry.Spec.ClusterInstallURL)
+		}
+	}
 	endpoint, ok := artifactpub.ResolveEndpoint(state, server, endpointName)
 	if !ok {
 		return ""
 	}
 	return fmt.Sprintf("%s://%s:%d/", endpoint.Listener.Protocol, artifactURLHost(endpoint.Host), endpoint.Listener.Port)
+}
+
+func trailingSlash(raw string) string {
+	raw = strings.TrimRight(raw, "/")
+	if raw == "" {
+		return ""
+	}
+	return raw + "/"
 }
 
 func artifactServerTLSVars(state v1alpha1.State, server artifactpub.Server) map[string]any {
@@ -288,34 +289,53 @@ func artifactURLHost(host string) string {
 	return host
 }
 
-func proxyComponentVars(state v1alpha1.State, c *v1alpha1.ClusterComponentRef) map[string]any {
+func proxyComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentProxyComponent, component v1alpha1.InfraComponent) map[string]any {
+	proxy := component.Spec.Proxy
+	port := proxy.Port
+	if port == 0 {
+		port = v1alpha1.DefaultSquidPort
+	}
+	hostAddress := lookupHostAddress(state, proxy.HostRef.Name)
 	out := map[string]any{
-		"kind":         v1alpha1.ComponentSlotProxy,
-		"providerName": c.From.Provider,
-		"name":         c.From.Name,
-		"port":         c.Port,
-		"bindAddress":  c.BindAddress,
+		"kind":          v1alpha1.ComponentSlotProxy,
+		"providerName":  v1alpha1.KindInfraComponent,
+		"name":          component.Metadata.Name,
+		"componentName": component.Metadata.Name,
+		"entryName":     entry.Name,
+		"port":          port,
+		"bindAddress":   proxy.BindAddress,
+		"hostRef":       proxy.HostRef.Name,
+		"hostAddress":   hostAddress,
+		"realisation":   "squid",
+		"url":           fmt.Sprintf("http://%s:%d", hostAddress, port),
+		"image":         managedSquidImage(state),
 	}
-	if proxy, ok := resolveProxy(state, c.From); ok && proxy.Squid != nil {
-		out["hostRef"] = proxy.Squid.HostRef.Name
-		out["hostAddress"] = lookupHostAddress(state, proxy.Squid.HostRef.Name)
-		out["realisation"] = "squid"
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotProxy, "squid")
-		out["url"] = fmt.Sprintf("http://%s:%d", lookupHostAddress(state, proxy.Squid.HostRef.Name), c.Port)
-		out["image"] = managedSquidImage(state)
-	}
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotProxy, "squid")
 	return out
 }
 
-func nameResolutionComponentVars(state v1alpha1.State, c *v1alpha1.ClusterNameResolutionComponent) map[string]any {
-	hostRecords, domainRecords := nameResolutionRecordsVars(state, c)
+func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNameResolutionComponent, component v1alpha1.InfraComponent) map[string]any {
+	dns := component.Spec.NameResolution
+	port := dns.Port
+	if port == 0 {
+		port = v1alpha1.DefaultDNSPort
+	}
+	additionalHosts := append([]string(nil), dns.AdditionalIngressHosts...)
+	additionalHosts = append(additionalHosts, entry.AdditionalIngressHosts...)
+	hostRecords, domainRecords := nameResolutionRecordsVars(state, entry.Name, additionalHosts)
 	out := map[string]any{
 		"kind":                   v1alpha1.ComponentSlotNameResolution,
-		"providerName":           c.From.Provider,
-		"name":                   c.From.Name,
-		"port":                   c.Port,
-		"bindAddress":            c.BindAddress,
-		"additionalIngressHosts": c.AdditionalIngressHosts,
+		"providerName":           v1alpha1.KindInfraComponent,
+		"name":                   component.Metadata.Name,
+		"componentName":          component.Metadata.Name,
+		"entryName":              entry.Name,
+		"port":                   port,
+		"bindAddress":            dns.BindAddress,
+		"additionalIngressHosts": additionalHosts,
+		"hostRef":                dns.HostRef.Name,
+		"hostAddress":            lookupHostAddress(state, dns.HostRef.Name),
+		"realisation":            "dnsmasq",
+		"image":                  managedDnsmasqImage(state),
 	}
 	if len(hostRecords) > 0 {
 		out["hostRecords"] = hostRecords
@@ -323,32 +343,32 @@ func nameResolutionComponentVars(state v1alpha1.State, c *v1alpha1.ClusterNameRe
 	if len(domainRecords) > 0 {
 		out["domainRecords"] = domainRecords
 	}
-	if d, ok := resolveDNS(state, c.From); ok && d.Dnsmasq != nil {
-		out["hostRef"] = d.Dnsmasq.HostRef.Name
-		out["hostAddress"] = lookupHostAddress(state, d.Dnsmasq.HostRef.Name)
-		out["realisation"] = "dnsmasq"
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
-		out["image"] = managedDnsmasqImage(state)
-	}
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
 	return out
 }
 
-func registryComponentVars(state v1alpha1.State, c *v1alpha1.ClusterComponentRef) map[string]any {
+func registryComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentRegistryComponent, component v1alpha1.InfraComponent) map[string]any {
+	registry := component.Spec.Registry
+	port := registry.Port
+	if port == 0 {
+		port = v1alpha1.DefaultMirrorRegistryPort
+	}
+	hostAddress := lookupHostAddress(state, registry.HostRef.Name)
 	out := map[string]any{
-		"kind":         v1alpha1.ComponentSlotRegistry,
-		"providerName": c.From.Provider,
-		"name":         c.From.Name,
-		"port":         c.Port,
-		"bindAddress":  c.BindAddress,
+		"kind":          v1alpha1.ComponentSlotRegistry,
+		"providerName":  v1alpha1.KindInfraComponent,
+		"name":          component.Metadata.Name,
+		"componentName": component.Metadata.Name,
+		"entryName":     entry.Name,
+		"port":          port,
+		"bindAddress":   registry.BindAddress,
+		"hostRef":       registry.HostRef.Name,
+		"hostAddress":   hostAddress,
+		"realisation":   "mirrorRegistry",
+		"url":           fmt.Sprintf("%s:%d", hostAddress, port),
+		"image":         managedMirrorRegistryImage(state),
 	}
-	if reg, ok := resolveRegistry(state, c.From); ok && reg.MirrorRegistry != nil {
-		out["hostRef"] = reg.MirrorRegistry.HostRef.Name
-		out["hostAddress"] = lookupHostAddress(state, reg.MirrorRegistry.HostRef.Name)
-		out["realisation"] = "mirrorRegistry"
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
-		out["url"] = fmt.Sprintf("%s:%d", lookupHostAddress(state, reg.MirrorRegistry.HostRef.Name), c.Port)
-		out["image"] = managedMirrorRegistryImage(state)
-	}
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
 	return out
 }
 

@@ -6,7 +6,7 @@
     mode: "0700"
   when: bootwright_install_agent_action_effective in ['run', 'create_iso']
 
-- name: Stage effective installer inputs on bastion
+- name: Stage effective installer inputs on controller
   ansible.builtin.copy:
     src: "{{ bootwright_install_local_work_dir }}/{{ item }}"
     dest: "{{ bootwright_install_work_dir }}/{{ item }}"
@@ -30,7 +30,7 @@
     state: absent
   when: bootwright_install_agent_action_effective in ['run', 'create_iso']
 
-- name: Stage installer extra manifests on bastion
+- name: Stage installer extra manifests on controller
   ansible.builtin.copy:
     src: "{{ bootwright_install_local_work_dir }}/openshift/"
     dest: "{{ bootwright_install_work_dir }}/openshift/"

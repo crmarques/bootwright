@@ -3,6 +3,7 @@ package render
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
+	"github.com/crmarques/bootwright/internal/proxy"
 	"github.com/crmarques/bootwright/internal/support"
 )
 
@@ -15,30 +16,134 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 	for _, m := range ci.Spec.Components.Machines {
 		out = append(out, machineComponentVars(state, ci, m, clusterName))
 	}
-	for _, c := range ci.Spec.Components.LoadBalancers {
-		lb := loadBalancerComponentVars(state, c)
+	for _, component := range loadBalancerComponentsForCluster(state, ci) {
+		lb := loadBalancerComponentVars(state, component)
 		lb["clusterName"] = clusterName
-		lb["frontends"] = loadBalancerFrontends(state, ci, c.Name, clusterName, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))
+		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))
 		out = append(out, lb)
 	}
 	if artifactpub.ClusterNeedsPublication(state, ci, ocp) {
-		if server, ok := artifactpub.Select(state); ok {
+		if server, ok := artifactpub.Select(state); ok && server.Config != nil {
 			out = append(out, artifactServerComponentVars(state, server))
 		}
 	}
-	if c := ci.Spec.Components.Proxy; c != nil {
-		out = append(out, proxyComponentVars(state, c))
+	for _, selected := range proxyComponentsForCluster(state) {
+		out = append(out, proxyComponentVars(state, selected.entry, selected.component))
 	}
-	if c := ci.Spec.Components.NameResolution; c != nil {
-		out = append(out, nameResolutionComponentVars(state, c))
+	for _, selected := range nameResolutionComponentsForCluster(state, ci) {
+		out = append(out, nameResolutionComponentVars(state, selected.entry, selected.component))
 	}
-	if c := ci.Spec.Components.Registry; c != nil {
-		out = append(out, registryComponentVars(state, c))
+	if selected, ok := registryComponentForCluster(state, ocp); ok {
+		out = append(out, registryComponentVars(state, selected.entry, selected.component))
 	}
 	return out
 }
 
-func endpointsVars(ci v1alpha1.ClusterInfra) []any {
+type selectedProxyComponent struct {
+	entry     v1alpha1.EnvironmentProxyComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedNameResolutionComponent struct {
+	entry     v1alpha1.EnvironmentNameResolutionComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedRegistryComponent struct {
+	entry     v1alpha1.EnvironmentRegistryComponent
+	component v1alpha1.InfraComponent
+}
+
+func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra) []v1alpha1.InfraComponent {
+	seen := map[string]bool{}
+	out := []v1alpha1.InfraComponent{}
+	for _, endpoint := range ci.Spec.Endpoints {
+		if endpoint.ProvidedBy == nil || endpoint.ProvidedBy.ComponentRef.Name == "" {
+			continue
+		}
+		name := endpoint.ProvidedBy.ComponentRef.Name
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		component, ok := findInfraComponent(state, name)
+		if ok && component.Spec.LoadBalancer != nil {
+			out = append(out, component)
+		}
+	}
+	return out
+}
+
+func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedProxyComponent{}
+	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ClusterInstall} {
+		entry, ok := proxy.SelectedProxy(*env, name)
+		if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+			continue
+		}
+		if seen[entry.ComponentRef.Name] {
+			continue
+		}
+		seen[entry.ComponentRef.Name] = true
+		component, ok := findInfraComponent(state, entry.ComponentRef.Name)
+		if ok && component.Spec.Proxy != nil {
+			out = append(out, selectedProxyComponent{entry: entry, component: component})
+		}
+	}
+	return out
+}
+
+func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra) []selectedNameResolutionComponent {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedNameResolutionComponent{}
+	for _, networkName := range clusterNetworkConfigNames(ci) {
+		network, ok := findNetworkConfig(state, networkName)
+		if !ok {
+			continue
+		}
+		for _, ref := range network.Spec.Template.DNSRefs {
+			entry, ok := nameResolutionEntry(env, ref)
+			if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+				continue
+			}
+			if seen[entry.ComponentRef.Name] {
+				continue
+			}
+			seen[entry.ComponentRef.Name] = true
+			component, ok := findInfraComponent(state, entry.ComponentRef.Name)
+			if ok && component.Spec.NameResolution != nil {
+				out = append(out, selectedNameResolutionComponent{entry: entry, component: component})
+			}
+		}
+	}
+	return out
+}
+
+func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (selectedRegistryComponent, bool) {
+	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
+		return selectedRegistryComponent{}, false
+	}
+	entry, ok := selectedRegistryEntry(primaryEnvironment(state))
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+		return selectedRegistryComponent{}, false
+	}
+	component, ok := findInfraComponent(state, entry.ComponentRef.Name)
+	if !ok || component.Spec.Registry == nil {
+		return selectedRegistryComponent{}, false
+	}
+	return selectedRegistryComponent{entry: entry, component: component}, true
+}
+
+func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 	out := make([]any, 0, len(ci.Spec.Endpoints))
 	for _, name := range standardEndpointNames {
 		e, ok := ci.Spec.Endpoints[name]
@@ -47,7 +152,7 @@ func endpointsVars(ci v1alpha1.ClusterInfra) []any {
 		}
 		entry := map[string]any{
 			"name":    name,
-			"address": endpointAddress(ci, name),
+			"address": endpointAddress(state, ci, name),
 		}
 		if e.VIP != "" {
 			entry["vip"] = e.VIP
@@ -56,7 +161,7 @@ func endpointsVars(ci v1alpha1.ClusterInfra) []any {
 			entry["externalVip"] = e.ExternalVIP
 		}
 		if e.ProvidedBy != nil {
-			providedBy := map[string]any{"loadBalancer": e.ProvidedBy.LoadBalancer}
+			providedBy := map[string]any{"componentRef": e.ProvidedBy.ComponentRef.Name}
 			if e.ProvidedBy.Address != "" {
 				providedBy["address"] = e.ProvidedBy.Address
 			}

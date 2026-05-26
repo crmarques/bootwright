@@ -70,7 +70,7 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
 		}
-		if err := enforceBastionLocality(state); err != nil {
+		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
 		copied, err := prepared.Commit(yes)
@@ -147,7 +147,7 @@ func newContextUpdateCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
 		}
-		if err := enforceBastionLocality(state); err != nil {
+		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
 		copied, err := prepared.Commit()

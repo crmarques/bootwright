@@ -62,7 +62,7 @@ func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
 			wantNames := defaultNames
-			if scaffold.Provider(p) == scaffold.ProviderBareMetal {
+			if scaffold.Provider(p) == scaffold.ProviderBareMetal || scaffold.Provider(p) == scaffold.ProviderEmulatedBareMetal {
 				wantNames = namesWithArtifacts
 			}
 			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p))

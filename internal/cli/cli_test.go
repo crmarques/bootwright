@@ -28,7 +28,6 @@ import (
 
 func TestMain(m *testing.M) {
 	localRootGate.enabled = false
-	bastionLocalityPolicy.RequireBastion = false
 	os.Exit(m.Run())
 }
 
@@ -803,9 +802,9 @@ func TestContextPrintEnvProxyWithoutAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replaceInFile(t, filepath.Join(ctx.InputDir, "environment.yaml"), `    auth:
-      proxyAuthRef:
-        name: proxy-credentials
+	replaceInFile(t, filepath.Join(ctx.InputDir, "environment.yaml"), `          auth:
+            proxyAuthRef:
+              name: proxy-credentials
 `, "")
 
 	stdout, stderr, code := runCLI(t, "print-env")
@@ -835,25 +834,6 @@ func TestContextPrintEnvSuppressesManagedProxy(t *testing.T) {
 
 func TestContextPrintEnvNoProxy(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	replaceInFile(t, filepath.Join(ctx.InputDir, "environment.yaml"), `
-  proxy:
-    noProxy:
-      - 192.168.132.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
-`, "")
-	replaceInFile(t, filepath.Join(ctx.InputDir, "cluster-infra.yaml"), `    proxy:
-      from:
-        provider: lab-libvirt-provider
-        name: default
-      port: 3128
-      bindAddress: 0.0.0.0
-
-`, "")
 
 	stdout, stderr, code := runCLI(t, "print-env")
 	if code != 0 {
@@ -1011,24 +991,20 @@ func TestRenderOutputDirRejectsNonEmptyUnmarkedDirectory(t *testing.T) {
 	}
 }
 
-func TestControllerCLIBastionInventoryUsesHostSSHAddress(t *testing.T) {
+func TestControllerCLIBastionInventoryUsesLocalhost(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	state.Hosts[0].Spec.Addresses[0].Address = "bastion.example.test"
-	state.Environments[0].Spec.Secrets["provider-host-ssh"] = v1alpha1.EnvironmentSecretSpec{}
 
-	body, err := controllerCLIBastionInventoryBody(state, "/context/secrets")
+	body, err := controllerCLIInventoryBody(state, "/context/secrets")
 	if err != nil {
-		t.Fatalf("controllerCLIBastionInventoryBody: %v", err)
+		t.Fatalf("controllerCLIInventoryBody: %v", err)
 	}
 	for _, reject := range []string{
-		"ansible_connection",
-		"ansible_connection=local",
-		"localhost",
 		"ansible_become_",
 		"ansible_pipelining",
+		"ansible_ssh_private_key_file",
 	} {
 		if strings.Contains(body, reject) {
-			t.Fatalf("controller CLI bastion inventory should not contain %q: %q", reject, body)
+			t.Fatalf("controller CLI inventory should not contain %q: %q", reject, body)
 		}
 	}
 
@@ -1038,18 +1014,18 @@ func TestControllerCLIBastionInventoryUsesHostSSHAddress(t *testing.T) {
 	}
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	bastion := hosts["lab-host"].(map[string]any)
-	if got := bastion["ansible_host"]; got != "bastion.example.test" {
-		t.Fatalf("ansible_host = %v, want Host.spec.ssh.address", got)
+	controller := hosts["localhost"].(map[string]any)
+	if got := controller["ansible_connection"]; got != "local" {
+		t.Fatalf("ansible_connection = %v, want local", got)
 	}
-	if got := bastion["ansible_ssh_private_key_file"]; got != "/context/secrets/provider-host-ssh" {
-		t.Fatalf("ansible_ssh_private_key_file = %v, want resolved Host keyRef path", got)
+	if got := controller["ansible_host"]; got != "localhost" {
+		t.Fatalf("ansible_host = %v, want localhost", got)
 	}
 
 	children := all["children"].(map[string]any)
-	groupHosts := children[render.GroupBastionHosts].(map[string]any)["hosts"].(map[string]any)
-	if _, ok := groupHosts["lab-host"]; !ok {
-		t.Fatalf("%s hosts = %v, want lab-host", render.GroupBastionHosts, groupHosts)
+	groupHosts := children[render.GroupControllerHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := groupHosts["localhost"]; !ok {
+		t.Fatalf("%s hosts = %v, want localhost", render.GroupControllerHosts, groupHosts)
 	}
 }
 

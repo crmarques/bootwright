@@ -5,10 +5,10 @@ description: Import, validate, and converge a Bootwright context.
 
 # Getting Started
 
-Bootwright runs from a named context on the declared bastion host. The context
+Bootwright runs from a named context on the local controller host. The context
 points at the desired-state YAML you edited for your environment and stores
-local state, generated runtime files, and secret material outside the repo under
-`/var/lib/bootwright`.
+local state, generated runtime files, and secret material outside the repo
+under `/var/lib/bootwright`.
 
 ## 0. Install The CLI
 
@@ -61,8 +61,10 @@ container-cluster.yaml ContainerCluster
 Edit these first:
 
 - `Environment.spec.baseDomain` and `Environment.spec.secrets`.
-- `Environment.spec.bastion.hostRef`, which selects the Host Ansible uses for
-  bastion and installer actions.
+- `Environment.spec.containerClusters[]` if the environment should select only
+  part of the loaded fleet.
+- `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
+  external or managed proxy, DNS, artifact, or registry services.
 - `Host.spec.addresses[]` and SSH key references for provider/service hosts.
 - Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`.
 - Machine CIDRs and NMState templates in `networks.yaml`.
@@ -75,17 +77,15 @@ unless the cluster intent itself changes.
 
 ## 2. Verify SSH Access
 
-Bootwright uses SSH to reach the environment bastion plus provider and service
-hosts. Test the same key, user, and Host address values before importing the
-context:
+Bootwright uses SSH to reach provider and service hosts. Test the same key,
+user, and Host address values before importing the context:
 
 ```text
-ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${BASTION_ADDRESS}" true
+ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${HOST_ADDRESS}" true
 ```
 
-Use the exact address you declare in `Host.spec.addresses[]` for the selected
-bastion Host. Bootwright will use that address even when the CLI runs on the
-same server.
+Use the exact address you declare in `Host.spec.addresses[]` for each provider
+or service host.
 
 ## 3. Import A Context
 

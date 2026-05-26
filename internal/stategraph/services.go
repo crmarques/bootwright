@@ -120,7 +120,7 @@ func (g ProviderServiceGraph) ValidateSharedServices() []string {
 					continue
 				}
 				errs = append(errs, fmt.Sprintf(
-					"shared provider service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
+					"shared infra component service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
 					service.Identity.Kind,
 					service.Identity.ProviderName,
 					service.Identity.Name,
@@ -218,68 +218,11 @@ func providerServiceConsumers(state v1alpha1.State) []ProviderServiceConsumer {
 }
 
 func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
-	c := infra.Spec.Components
 	var out []ProviderServiceConsumer
-	for _, lb := range c.LoadBalancers {
-		if cap, ok := loadBalancerCapability(state, lb.From); ok && cap.HAProxy != nil {
-			out = append(out, newServiceConsumer(
-				cluster.Metadata.Name,
-				infra.Metadata.Name,
-				fmt.Sprintf("ClusterInfra/%s spec.components.loadBalancers[%s]", infra.Metadata.Name, lb.Name),
-				v1alpha1.ComponentSlotLoadBalancer,
-				lb.From.Provider,
-				lb.Name,
-				"haProxy",
-				map[string]string{"hostRef": cap.HAProxy.HostRef.Name, "capabilityName": lb.From.Name},
-				nil,
-			))
-		}
-	}
-	if c.Proxy != nil {
-		if cap, ok := proxyCapability(state, c.Proxy.From); ok && cap.Squid != nil {
-			out = append(out, newServiceConsumer(
-				cluster.Metadata.Name,
-				infra.Metadata.Name,
-				fmt.Sprintf("ClusterInfra/%s spec.components.proxy", infra.Metadata.Name),
-				v1alpha1.ComponentSlotProxy,
-				c.Proxy.From.Provider,
-				c.Proxy.From.Name,
-				"squid",
-				map[string]string{"hostRef": cap.Squid.HostRef.Name, "bindAddress": c.Proxy.BindAddress, "port": fmt.Sprint(c.Proxy.Port)},
-				nil,
-			))
-		}
-	}
-	if c.NameResolution != nil {
-		if cap, ok := dnsCapability(state, c.NameResolution.From); ok && cap.Dnsmasq != nil {
-			out = append(out, newServiceConsumer(
-				cluster.Metadata.Name,
-				infra.Metadata.Name,
-				fmt.Sprintf("ClusterInfra/%s spec.components.nameResolution", infra.Metadata.Name),
-				v1alpha1.ComponentSlotNameResolution,
-				c.NameResolution.From.Provider,
-				c.NameResolution.From.Name,
-				"dnsmasq",
-				map[string]string{"hostRef": cap.Dnsmasq.HostRef.Name, "bindAddress": c.NameResolution.BindAddress, "port": fmt.Sprint(c.NameResolution.Port)},
-				map[string][]string{"additionalIngressHosts": c.NameResolution.AdditionalIngressHosts},
-			))
-		}
-	}
-	if c.Registry != nil {
-		if cap, ok := registryCapability(state, c.Registry.From); ok && cap.MirrorRegistry != nil {
-			out = append(out, newServiceConsumer(
-				cluster.Metadata.Name,
-				infra.Metadata.Name,
-				fmt.Sprintf("ClusterInfra/%s spec.components.registry", infra.Metadata.Name),
-				v1alpha1.ComponentSlotRegistry,
-				c.Registry.From.Provider,
-				c.Registry.From.Name,
-				"mirrorRegistry",
-				map[string]string{"hostRef": cap.MirrorRegistry.HostRef.Name, "bindAddress": c.Registry.BindAddress, "port": fmt.Sprint(c.Registry.Port)},
-				nil,
-			))
-		}
-	}
+	out = append(out, loadBalancerConsumers(state, infra, cluster)...)
+	out = append(out, selectedManagedProxyConsumers(state, infra, cluster)...)
+	out = append(out, networkNameResolutionConsumers(state, infra, cluster)...)
+	out = append(out, selectedManagedRegistryConsumers(state, infra, cluster)...)
 	if artifactpub.ClusterNeedsPublication(state, infra, cluster) {
 		if server, ok := artifactpub.Select(state); ok && server.Config != nil {
 			out = append(out, newServiceConsumer(
@@ -298,6 +241,162 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 				},
 				nil,
 			))
+		}
+	}
+	return out
+}
+
+func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	seen := map[string]bool{}
+	var out []ProviderServiceConsumer
+	for _, endpoint := range infra.Spec.Endpoints {
+		if endpoint.ProvidedBy == nil || endpoint.ProvidedBy.ComponentRef.Name == "" {
+			continue
+		}
+		name := endpoint.ProvidedBy.ComponentRef.Name
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		component, ok := stateview.InfraComponent(state, name)
+		if !ok || component.Spec.LoadBalancer == nil {
+			continue
+		}
+		lb := component.Spec.LoadBalancer
+		out = append(out, newServiceConsumer(
+			cluster.Metadata.Name,
+			infra.Metadata.Name,
+			fmt.Sprintf("ClusterInfra/%s endpoint providedBy InfraComponent/%s", infra.Metadata.Name, component.Metadata.Name),
+			v1alpha1.ComponentSlotLoadBalancer,
+			v1alpha1.KindInfraComponent,
+			component.Metadata.Name,
+			"haProxy",
+			map[string]string{"hostRef": lb.HostRef.Name, "capabilityName": component.Metadata.Name},
+			nil,
+		))
+	}
+	return out
+}
+
+func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	entries := map[string]v1alpha1.EnvironmentProxyComponent{}
+	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ClusterInstall} {
+		for _, entry := range env.Spec.InfraComponents.Proxies {
+			if entry.Name == name && entry.Type == v1alpha1.EnvironmentComponentManaged {
+				entries[entry.ComponentRef.Name] = entry
+			}
+		}
+	}
+	var out []ProviderServiceConsumer
+	for componentName, entry := range entries {
+		component, ok := stateview.InfraComponent(state, componentName)
+		if !ok || component.Spec.Proxy == nil {
+			continue
+		}
+		proxy := component.Spec.Proxy
+		out = append(out, newServiceConsumer(
+			cluster.Metadata.Name,
+			infra.Metadata.Name,
+			fmt.Sprintf("Environment/%s infraComponents.proxies[%s]", env.Metadata.Name, entry.Name),
+			v1alpha1.ComponentSlotProxy,
+			v1alpha1.KindInfraComponent,
+			component.Metadata.Name,
+			"squid",
+			map[string]string{"hostRef": proxy.HostRef.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(proxy.Port)},
+			nil,
+		))
+	}
+	return out
+}
+
+func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	refs := networkDNSRefs(state, infra)
+	var out []ProviderServiceConsumer
+	for _, entry := range env.Spec.InfraComponents.NameResolution {
+		if !refs[entry.Name] || entry.Type != v1alpha1.EnvironmentComponentManaged {
+			continue
+		}
+		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+		if !ok || component.Spec.NameResolution == nil {
+			continue
+		}
+		dns := component.Spec.NameResolution
+		mergedHosts := append([]string(nil), dns.AdditionalIngressHosts...)
+		mergedHosts = append(mergedHosts, entry.AdditionalIngressHosts...)
+		out = append(out, newServiceConsumer(
+			cluster.Metadata.Name,
+			infra.Metadata.Name,
+			fmt.Sprintf("NetworkConfig dnsRefs[%s]", entry.Name),
+			v1alpha1.ComponentSlotNameResolution,
+			v1alpha1.KindInfraComponent,
+			component.Metadata.Name,
+			"dnsmasq",
+			map[string]string{"hostRef": dns.HostRef.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(dns.Port)},
+			map[string][]string{"additionalIngressHosts": mergedHosts},
+		))
+	}
+	return out
+}
+
+func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	if v1alpha1.InstallMode(cluster) != v1alpha1.InstallModeDisconnected {
+		return nil
+	}
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	entry, ok := selectedRegistry(env.Spec.InfraComponents.Registries)
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged {
+		return nil
+	}
+	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+	if !ok || component.Spec.Registry == nil {
+		return nil
+	}
+	registry := component.Spec.Registry
+	return []ProviderServiceConsumer{newServiceConsumer(
+		cluster.Metadata.Name,
+		infra.Metadata.Name,
+		fmt.Sprintf("Environment/%s infraComponents.registries[%s]", env.Metadata.Name, entry.Name),
+		v1alpha1.ComponentSlotRegistry,
+		v1alpha1.KindInfraComponent,
+		component.Metadata.Name,
+		"mirrorRegistry",
+		map[string]string{"hostRef": registry.HostRef.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(registry.Port)},
+		nil,
+	)}
+}
+
+func selectedRegistry(entries []v1alpha1.EnvironmentRegistryComponent) (v1alpha1.EnvironmentRegistryComponent, bool) {
+	for _, entry := range entries {
+		if entry.Default {
+			return entry, true
+		}
+	}
+	if len(entries) == 1 {
+		return entries[0], true
+	}
+	return v1alpha1.EnvironmentRegistryComponent{}, false
+}
+
+func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInfra) map[string]bool {
+	out := map[string]bool{}
+	for _, name := range stateview.ClusterConsumedNetworkConfigs(infra) {
+		network, ok := stateview.NetworkConfig(state, name)
+		if !ok {
+			continue
+		}
+		for _, ref := range network.Spec.Template.DNSRefs {
+			out[ref] = true
 		}
 	}
 	return out
@@ -404,36 +503,4 @@ func cloneStringMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func loadBalancerCapability(state v1alpha1.State, from v1alpha1.From) (v1alpha1.LoadBalancerCapability, bool) {
-	provider, ok := stateview.Provider(state, from.Provider)
-	if !ok {
-		return v1alpha1.LoadBalancerCapability{}, false
-	}
-	return stateview.LoadBalancer(provider, from.Name)
-}
-
-func proxyCapability(state v1alpha1.State, from v1alpha1.From) (v1alpha1.ProxyCapability, bool) {
-	provider, ok := stateview.Provider(state, from.Provider)
-	if !ok {
-		return v1alpha1.ProxyCapability{}, false
-	}
-	return stateview.Proxy(provider, from.Name)
-}
-
-func dnsCapability(state v1alpha1.State, from v1alpha1.From) (v1alpha1.DNSCapability, bool) {
-	provider, ok := stateview.Provider(state, from.Provider)
-	if !ok {
-		return v1alpha1.DNSCapability{}, false
-	}
-	return stateview.DNS(provider, from.Name)
-}
-
-func registryCapability(state v1alpha1.State, from v1alpha1.From) (v1alpha1.RegistryCapability, bool) {
-	provider, ok := stateview.Provider(state, from.Provider)
-	if !ok {
-		return v1alpha1.RegistryCapability{}, false
-	}
-	return stateview.Registry(provider, from.Name)
 }

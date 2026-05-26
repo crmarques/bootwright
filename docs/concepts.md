@@ -18,7 +18,7 @@ instead of compact inline maps.
 
 | Kind | Ownership boundary |
 | --- | --- |
-| `Environment` | Fleet-wide defaults, bastion host selection, selected resource files, secret sources, proxy defaults, mirrors, component images |
+| `Environment` | Fleet-wide defaults, selected resource files, cluster selection, service access catalog, secret sources, mirrors, component images |
 | `Host` | SSH access to a machine that can run substrate or service actions |
 | `InfraProvider` | Capability inventory: bare-metal machines, virtual machine profiles, service implementations |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
@@ -30,13 +30,14 @@ instead of compact inline maps.
 ```text
 ContainerCluster.nodes[*].machineRef
   -> ClusterInfra.components.machines[*]
-  -> InfraProvider machine, profile, or service capability
+  -> InfraProvider machine or profile
   -> Host
 
 ClusterInfra machines
   -> NetworkConfig
 
-Environment.bastion.hostRef
+Environment.infraComponents.*.componentRef
+  -> InfraComponent service
   -> Host
 ```
 
@@ -44,10 +45,8 @@ Environment.bastion.hostRef
 the exact cluster infrastructure machine that backs it. In v1 all nodes in one
 cluster must reference the same `ClusterInfra`.
 
-The environment-selected bastion Host is where Bootwright runs bastion setup
-and OpenShift installer actions. Ansible connects through the Host SSH address
-declared in desired state, even when that address reaches the machine running
-the CLI.
+Bootwright controller and OpenShift installer actions run on localhost.
+Desired state only selects substrate and service hosts.
 
 ## NMState Templates
 
@@ -98,18 +97,14 @@ the selected machines, endpoints, and managed components.
 
 ## Managed Components
 
-`ClusterInfra.spec.components` still supports non-machine infra alongside
-machines:
-
-- `loadBalancers[]`
-- `proxy`
-- `nameResolution`
-- `registry`
-
-Those components resolve through `InfraProvider.spec`, just like machines do.
+Host-bound shared services live in `InfraComponent` objects. `ClusterInfra`
+references load balancers from endpoints, `Environment` selects proxy,
+artifact, and registry access, and `NetworkConfig.spec.template.dnsRefs[]`
+selects environment name-resolution entries.
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a
-host, listeners, and named endpoints. `Environment.spec.artifactServer.routes`
-binds each consumer path, such as Redfish virtual media or disconnected
-cluster install, to the endpoint that component can reach.
+host, listeners, and named endpoints.
+`Environment.spec.infraComponents.artifactServers[].routes` binds each
+consumer path, such as Redfish virtual media or disconnected cluster install,
+to the endpoint that component can reach.

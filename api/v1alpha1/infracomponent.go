@@ -10,6 +10,10 @@ type InfraComponent struct {
 
 type InfraComponentSpec struct {
 	ArtifactServer *ArtifactServerComponent `yaml:"artifactServer,omitempty" json:"artifactServer,omitempty"`
+	LoadBalancer   *LoadBalancerComponent   `yaml:"loadBalancer,omitempty" json:"loadBalancer,omitempty"`
+	Proxy          *ProxyComponent          `yaml:"proxy,omitempty" json:"proxy,omitempty"`
+	NameResolution *NameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
+	Registry       *RegistryComponent       `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
 type ArtifactServerComponent struct {
@@ -28,5 +32,41 @@ type ArtifactServerListener struct {
 type ArtifactServerEndpoint struct {
 	Name        string `yaml:"name" json:"name"`
 	Listener    string `yaml:"listener" json:"listener"`
+	AddressName string `yaml:"addressName" json:"addressName"`
+}
+
+type LoadBalancerComponent struct {
+	Type          string                    `yaml:"type" json:"type"`
+	HostRef       LocalObjectReference      `yaml:"hostRef" json:"hostRef"`
+	BindAddresses []LoadBalancerBindAddress `yaml:"bindAddresses,omitempty" json:"bindAddresses,omitempty"`
+}
+
+type ProxyComponent struct {
+	Type        string               `yaml:"type" json:"type"`
+	HostRef     LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	BindAddress string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	Port        int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	Endpoints   []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+}
+
+type NameResolutionComponent struct {
+	Type                   string               `yaml:"type" json:"type"`
+	HostRef                LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	BindAddress            string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	Port                   int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	Endpoints              []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
+}
+
+type RegistryComponent struct {
+	Type        string               `yaml:"type" json:"type"`
+	HostRef     LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	BindAddress string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	Port        int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	Endpoints   []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+}
+
+type ServiceEndpoint struct {
+	Name        string `yaml:"name" json:"name"`
 	AddressName string `yaml:"addressName" json:"addressName"`
 }

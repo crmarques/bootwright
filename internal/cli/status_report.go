@@ -15,7 +15,7 @@ type statusReport struct {
 	Context  statusContext   `json:"context"`
 	Desired  statusDesired   `json:"desired"`
 	Clusters []statusCluster `json:"clusters"`
-	// Shared lists provider service capabilities that two or more clusters
+	// Shared lists infra component services that two or more clusters
 	// reference. Each entry maps to one Ansible-converged host instance.
 	Shared           []statusShared          `json:"shared"`
 	Secrets          []secretListEntry       `json:"secrets"`

@@ -1,25 +1,27 @@
 # Proxy And Mirror E2E Notes
 
-External proxy defaults live in `Environment.spec.proxy`:
+External proxy defaults live in `Environment.spec.infraComponents.proxies[]`:
 
 ```yaml
-proxy:
-  httpProxy: http://proxy.example.test:3128
-  httpsProxy: http://proxy.example.test:3128
-  noProxy:
-    - .example.test
-    - 192.168.133.0/24
-  useFor:
-    bootwright: true
-    clusterInstall: true
+infraComponents:
+  proxies:
+    - name: default
+      type: external
+      spec:
+        httpProxy: http://proxy.example.test:3128
+        httpsProxy: http://proxy.example.test:3128
+        noProxy:
+          - .example.test
+          - 192.168.133.0/24
+proxyFor:
+  bootwright: default
+  clusterInstall: default
 ```
 
-When `proxy` is declared, omitted `useFor.bootwright` and
-`useFor.clusterInstall` values default to `true`.
+Omitted `proxyFor` values and the reserved value `none` disable proxy use.
 
-Managed proxy services live in `ClusterInfra.spec.components.proxy` and are
-selected from `InfraProvider.spec.proxies[]`. Do not configure an
-external proxy URL and a managed proxy component in the same loaded state.
+Managed proxy services live in `InfraComponent.spec.proxy` and are selected by
+environment proxy entries with `type: managed`.
 
 Disconnected mode is set on each `ContainerCluster`:
 

@@ -11,9 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/stateview"
 )
 
-// Effective is the resolved proxy view used by the install-config
-// renderer and by the apply-bastion subprocess. A nil result means no
-// proxy is in play.
 type Effective struct {
 	HTTP    string
 	HTTPS   string
@@ -21,66 +18,75 @@ type Effective struct {
 	Auth    v1alpha1.SecretRef
 }
 
-// IsManaged reports whether any cluster declares a managed
-// `components.proxy`. That tells callers (e.g. `apply bastion`) that
-// the proxy only exists after Bootwright stands it up, so they must
-// not route through it during bootstrap.
 func IsManaged(state v1alpha1.State) bool {
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Proxy != nil {
-			return true
-		}
+	env := stateview.Environment(state)
+	if env == nil {
+		return false
 	}
-	return false
+	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.Bootwright)
+	return ok && entry.Type == v1alpha1.EnvironmentComponentManaged
 }
 
-// Resolve computes the effective proxy view. External mode reads
-// `Environment.spec.proxy.{httpProxy,httpsProxy}`; managed mode derives the URL
-// from the chosen capability's `(hostRef, port)` (compose at the call
-// site). Returns nil when env is nil and no managed proxy is in play.
 func Resolve(state v1alpha1.State, env *v1alpha1.Environment) *Effective {
 	if env == nil {
 		return nil
 	}
-	if env.Spec.Proxy == nil && !IsManaged(state) {
+	return ResolveFor(state, env, env.Spec.ProxyFor.Bootwright)
+}
+
+func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *Effective {
+	if env == nil {
 		return nil
 	}
-	eff := &Effective{}
-	if p := env.Spec.Proxy; p != nil {
-		eff.HTTP = p.HTTPProxy
-		eff.HTTPS = p.HTTPSProxy
-		if p.Auth != nil {
-			eff.Auth = p.Auth.ProxyAuthRef
-		}
-		eff.NoProxy = merge(p.NoProxy, auto(state, env))
-	} else {
-		eff.NoProxy = merge(nil, auto(state, env))
+	entry, ok := SelectedProxy(*env, name)
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Spec == nil {
+		return nil
+	}
+	eff := &Effective{
+		HTTP:    entry.Spec.HTTPProxy,
+		HTTPS:   entry.Spec.HTTPSProxy,
+		NoProxy: merge(entry.Spec.NoProxy, auto(state, env)),
+	}
+	if entry.Spec.Auth != nil {
+		eff.Auth = entry.Spec.Auth.ProxyAuthRef
+	}
+	if eff.HTTP == "" && eff.HTTPS == "" && len(eff.NoProxy) == 0 {
+		return nil
 	}
 	return eff
 }
 
-// ManagedProxyURL returns the derived host-facing URL of the cluster's
-// managed Squid (when a `components.proxy` is set). The cluster-side
-// port lives on `components.proxy.port`; the provider supplies only
-// the host placement.
+func SelectedProxy(env v1alpha1.Environment, name string) (v1alpha1.EnvironmentProxyComponent, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" || name == v1alpha1.EnvironmentComponentNone {
+		return v1alpha1.EnvironmentProxyComponent{}, false
+	}
+	for _, entry := range env.Spec.InfraComponents.Proxies {
+		if entry.Name == name {
+			return entry, true
+		}
+	}
+	return v1alpha1.EnvironmentProxyComponent{}, false
+}
+
 func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInfra) (string, error) {
-	if ci.Spec.Components.Proxy == nil {
+	env := stateview.Environment(state)
+	if env == nil {
 		return "", nil
 	}
-	from := ci.Spec.Components.Proxy.From
-	provider, ok := stateview.Provider(state, from.Provider)
-	if !ok {
-		return "", fmt.Errorf("ClusterInfra/%s spec.components.proxy.from.provider %q not found", ci.Metadata.Name, from.Provider)
+	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.ClusterInstall)
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged {
+		return "", nil
 	}
-	proxy, ok := stateview.Proxy(provider, from.Name)
-	if !ok || proxy.Squid == nil {
-		return "", fmt.Errorf("ClusterInfra/%s spec.components.proxy.from.name %q is not a squid capability on InfraProvider/%s", ci.Metadata.Name, from.Name, provider.Metadata.Name)
+	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+	if !ok || component.Spec.Proxy == nil {
+		return "", fmt.Errorf("environment/%s proxyFor.clusterInstall %q does not resolve to an InfraComponent proxy", env.Metadata.Name, entry.Name)
 	}
-	hostAddr := ClusterFacingHostAddress(state, proxy.Squid.HostRef.Name, ci)
+	hostAddr := ClusterFacingHostAddress(state, component.Spec.Proxy.HostRef.Name, ci)
 	if hostAddr == "" {
-		return "", fmt.Errorf("ClusterInfra/%s spec.components.proxy hostRef %q has no routable address: set Host.spec.ssh.addressName to a non-loopback address or give the cluster's primary network a gateway", ci.Metadata.Name, proxy.Squid.HostRef.Name)
+		return "", fmt.Errorf("infracomponent/%s spec.proxy.hostRef %q has no routable address: set a Host address reachable from the cluster or give the cluster's primary network a gateway", component.Metadata.Name, component.Spec.Proxy.HostRef.Name)
 	}
-	port := ci.Spec.Components.Proxy.Port
+	port := component.Spec.Proxy.Port
 	if port == 0 {
 		port = v1alpha1.DefaultSquidPort
 	}
@@ -101,7 +107,7 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 	}
 	for _, ci := range state.ClusterInfras {
 		for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
-			if address := stateview.EndpointAddress(ci, name); address != "" {
+			if address := stateview.EndpointAddress(state, ci, name); address != "" {
 				out = append(out, address)
 			}
 		}
@@ -157,7 +163,6 @@ func merge(user, auto []string) []string {
 	return out
 }
 
-// MirrorHost returns the host portion of url, stripping the trailing :port.
 func MirrorHost(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

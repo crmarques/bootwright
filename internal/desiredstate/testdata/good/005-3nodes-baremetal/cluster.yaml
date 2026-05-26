@@ -54,7 +54,6 @@ spec:
               ipv4:
                 - ip: 192.168.140.22
                   prefix-length: 24
-
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

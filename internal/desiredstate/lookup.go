@@ -56,22 +56,6 @@ func lookupMachine(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapab
 	return stateview.Machine(p, name)
 }
 
-func lookupLoadBalancer(p v1alpha1.InfraProvider, name string) (v1alpha1.LoadBalancerCapability, bool) {
-	return stateview.LoadBalancer(p, name)
-}
-
-func lookupProxy(p v1alpha1.InfraProvider, name string) (v1alpha1.ProxyCapability, bool) {
-	return stateview.Proxy(p, name)
-}
-
-func lookupDNS(p v1alpha1.InfraProvider, name string) (v1alpha1.DNSCapability, bool) {
-	return stateview.DNS(p, name)
-}
-
-func lookupRegistry(p v1alpha1.InfraProvider, name string) (v1alpha1.RegistryCapability, bool) {
-	return stateview.Registry(p, name)
-}
-
 func hostHasCapability(h v1alpha1.Host, want string) bool {
 	return stateview.HostHasCapability(h, want)
 }

@@ -24,6 +24,7 @@ type MachineNetworkCIDR struct {
 }
 
 type NetworkConfigTemplate struct {
+	DNSRefs       []string       `yaml:"dnsRefs,omitempty" json:"dnsRefs,omitempty"`
 	NetworkConfig map[string]any `yaml:"networkConfig,omitempty" json:"networkConfig,omitempty"`
 }
 

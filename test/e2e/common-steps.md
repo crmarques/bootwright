@@ -59,8 +59,8 @@ sudo find "/var/lib/bootwright/contexts/$CASE/secrets" -maxdepth 1 -type f -prin
 ## 2. Apply The Context To The Bastion
 
 Installs release-specific OpenShift CLIs declared by the context input.
-`apply bastion` strips ambient proxy variables and uses
-`Environment.spec.proxy` from desired state.
+`apply bastion` strips ambient proxy variables and uses the proxy selected by
+`Environment.spec.proxyFor.bootwright` from desired state.
 
 ```bash
 bootwright check bastion
@@ -69,7 +69,7 @@ bootwright apply bastion --yes
 
 Managed Squid is **not** running yet at this point — the bastion phase
 runs before `apply infra` provisions it. Bootwright deliberately ignores
-`spec.proxy` for this phase; every later phase routes through Squid once
+managed proxy entries for this phase; later phases can route through Squid once
 infra is up. See [proxy.md](proxy.md) for the full bootstrap order.
 
 ## 3. Provision The Infrastructure

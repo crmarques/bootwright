@@ -40,17 +40,19 @@ managed registry component.
 
 ## Proxy Boundaries
 
-`Environment.spec.proxy` can be applied independently to Bootwright runtime
-actions and cluster installer rendering through `useFor.bootwright` and
-`useFor.clusterInstall`.
+`Environment.spec.infraComponents.proxies[]` declares proxy access entries.
+`Environment.spec.proxyFor.bootwright` and
+`Environment.spec.proxyFor.clusterInstall` select which proxy each consumer
+uses; omitted values and the reserved value `none` disable proxy use.
 
-An external environment proxy URL conflicts with a managed
-`ClusterInfra.components.proxy`, because the managed URL is derived from the
-selected service host and port.
+External proxy entries carry direct URLs and optional auth refs. Managed proxy
+entries reference an `InfraComponent` with `spec.proxy`, and the runtime URL is
+derived from the selected service host and port.
 
-Shell exports rendered from `Environment.spec.proxy.auth` include the referenced
-credentials in proxy URLs so downstream tools can authenticate. Commands that
-print those exports must fail unless the operator passes `--sensitive`.
+Shell exports rendered from external proxy `auth.proxyAuthRef` include the
+referenced credentials in proxy URLs so downstream tools can authenticate.
+Commands that print those exports must fail unless the operator passes
+`--sensitive`.
 
 ## Generated Artifacts
 

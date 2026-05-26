@@ -31,7 +31,7 @@ func TestInventoryStructure(t *testing.T) {
 		"bootwright_provider_hosts",
 		"bootwright_infra_hosts",
 		"bootwright_boot_hosts",
-		"bootwright_bastion_hosts",
+		"bootwright_controller_hosts",
 		"bootwright_ocp_hosts",
 		"bootwright_agent_node_hosts",
 	} {
@@ -40,14 +40,14 @@ func TestInventoryStructure(t *testing.T) {
 		}
 	}
 
-	for _, group := range []string{"bootwright_ocp_hosts", "bootwright_bastion_hosts"} {
+	for _, group := range []string{"bootwright_ocp_hosts", "bootwright_controller_hosts"} {
 		grp := children[group].(map[string]any)
 		hosts, ok := grp["hosts"].(map[string]any)
 		if !ok {
 			t.Fatalf("%s missing hosts: %v", group, grp)
 		}
-		if _, ok := hosts["lab-host"]; !ok {
-			t.Fatalf("%s must include Environment.spec.bastion.hostRef: %v", group, hosts)
+		if _, ok := hosts["localhost"]; !ok {
+			t.Fatalf("%s must include localhost controller: %v", group, hosts)
 		}
 	}
 
@@ -65,37 +65,30 @@ func TestInventoryStructure(t *testing.T) {
 			t.Fatalf("inventory host %q should not force become; playbooks own privilege escalation: %v", name, host)
 		}
 	}
-	labHost := allHosts["lab-host"].(map[string]any)
-	if got := labHost["ansible_host"]; got != "localhost" {
-		t.Fatalf("bastion ansible_host = %v, want Host.spec.ssh.address", got)
-	}
-	if _, ok := labHost["ansible_connection"]; ok {
-		t.Fatalf("bastion inventory must use SSH, not ansible_connection=local: %v", labHost)
+	localHost := allHosts["localhost"].(map[string]any)
+	if got := localHost["ansible_connection"]; got != "local" {
+		t.Fatalf("localhost ansible_connection = %v, want local", got)
 	}
 }
 
-func TestInventoryUsesBastionHostSSHAddress(t *testing.T) {
+func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Hosts[0].Spec.Addresses[0].Address = "bastion.example.test"
 
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	bastion := hosts["lab-host"].(map[string]any)
-	if got := bastion["ansible_host"]; got != "bastion.example.test" {
-		t.Fatalf("bastion ansible_host = %v, want declared Host SSH address", got)
-	}
-	if _, ok := bastion["ansible_connection"]; ok {
-		t.Fatalf("bastion inventory must not use local connection for SSH address %q: %v", bastion["ansible_host"], bastion)
+	controller := hosts["localhost"].(map[string]any)
+	if got := controller["ansible_connection"]; got != "local" {
+		t.Fatalf("localhost ansible_connection = %v, want local", got)
 	}
 
 	children := all["children"].(map[string]any)
-	groupHosts := children[render.GroupBastionHosts].(map[string]any)["hosts"].(map[string]any)
-	if _, ok := groupHosts["lab-host"]; !ok {
-		t.Fatalf("%s hosts = %v, want lab-host", render.GroupBastionHosts, groupHosts)
+	groupHosts := children[render.GroupControllerHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := groupHosts["localhost"]; !ok {
+		t.Fatalf("%s hosts = %v, want localhost", render.GroupControllerHosts, groupHosts)
 	}
 }
 
@@ -108,9 +101,9 @@ func TestInventoryDoesNotForceSSHUserWhenHostUserOmitted(t *testing.T) {
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	bastion := hosts["bastion"].(map[string]any)
-	if _, ok := bastion["ansible_user"]; ok {
-		t.Fatalf("inventory forced ansible_user for omitted Host.spec.ssh.user: %v", bastion)
+	serviceHost := hosts["bastion"].(map[string]any)
+	if _, ok := serviceHost["ansible_user"]; ok {
+		t.Fatalf("inventory forced ansible_user for omitted Host.spec.ssh.user: %v", serviceHost)
 	}
 }
 
@@ -124,8 +117,8 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	bastion := hosts["bastion"].(map[string]any)
-	if got := bastion["ansible_user"]; got != "provider-admin" {
+	serviceHost := hosts["bastion"].(map[string]any)
+	if got := serviceHost["ansible_user"]; got != "provider-admin" {
 		t.Fatalf("ansible_user got %v, want explicit Host.spec.ssh.user", got)
 	}
 }
@@ -147,9 +140,12 @@ func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
 		Name:    "unused-profile",
 		Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{HostRef: v1alpha1.LocalObjectReference{Name: "unused-host"}},
 	})
-	state.InfraProviders[0].Spec.DNS = append(state.InfraProviders[0].Spec.DNS, v1alpha1.DNSCapability{
-		Name:    "unused-dns",
-		Dnsmasq: &v1alpha1.DnsmasqCapability{HostRef: v1alpha1.LocalObjectReference{Name: "unused-host"}},
+	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "unused-dns"},
+		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
+			Type:    v1alpha1.InfraComponentTypeDnsmasq,
+			HostRef: v1alpha1.LocalObjectReference{Name: "unused-host"},
+		}},
 	})
 
 	inv := render.Inventory(state, "")
@@ -205,10 +201,11 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	if len(hosts) != 4 {
-		t.Fatalf("inventory hosts = %v, want bastion plus three agent node aliases", hosts)
+	if len(hosts) != 5 {
+		t.Fatalf("inventory hosts = %v, want localhost, bastion, plus three agent node aliases", hosts)
 	}
 	for _, name := range []string{
+		"localhost",
 		"bastion",
 		"3-nodes-ocp-baremetal__master-0",
 		"3-nodes-ocp-baremetal__master-1",
@@ -219,8 +216,11 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 		}
 	}
 	node := hosts["3-nodes-ocp-baremetal__master-0"].(map[string]any)
-	if got := node["ansible_host"]; got != "bastion.bootwright.test" {
-		t.Fatalf("agent node ansible_host = %v, want bastion SSH address", got)
+	if got := node["ansible_host"]; got != "localhost" {
+		t.Fatalf("agent node ansible_host = %v, want localhost", got)
+	}
+	if got := node["ansible_connection"]; got != "local" {
+		t.Fatalf("agent node ansible_connection = %v, want local", got)
 	}
 	if got := node["bootwright_agent_node_cluster_name"]; got != "3-nodes-ocp-baremetal" {
 		t.Fatalf("agent node cluster var = %v", got)

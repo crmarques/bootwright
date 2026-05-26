@@ -39,50 +39,6 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 		}
 		out["machines"] = machines
 	}
-	if len(p.Spec.LoadBalancers) > 0 {
-		lbs := make([]any, 0, len(p.Spec.LoadBalancers))
-		for _, lb := range p.Spec.LoadBalancers {
-			entry := map[string]any{"name": lb.Name}
-			if lb.HAProxy != nil {
-				entry["haProxy"] = map[string]any{"hostRef": lb.HAProxy.HostRef.Name}
-			}
-			lbs = append(lbs, entry)
-		}
-		out["loadBalancers"] = lbs
-	}
-	if len(p.Spec.Proxies) > 0 {
-		proxies := make([]any, 0, len(p.Spec.Proxies))
-		for _, pr := range p.Spec.Proxies {
-			entry := map[string]any{"name": pr.Name}
-			if pr.Squid != nil {
-				entry["squid"] = map[string]any{"hostRef": pr.Squid.HostRef.Name}
-			}
-			proxies = append(proxies, entry)
-		}
-		out["proxies"] = proxies
-	}
-	if len(p.Spec.DNS) > 0 {
-		dnss := make([]any, 0, len(p.Spec.DNS))
-		for _, d := range p.Spec.DNS {
-			entry := map[string]any{"name": d.Name}
-			if d.Dnsmasq != nil {
-				entry["dnsmasq"] = map[string]any{"hostRef": d.Dnsmasq.HostRef.Name}
-			}
-			dnss = append(dnss, entry)
-		}
-		out["dns"] = dnss
-	}
-	if len(p.Spec.Registries) > 0 {
-		regs := make([]any, 0, len(p.Spec.Registries))
-		for _, r := range p.Spec.Registries {
-			entry := map[string]any{"name": r.Name}
-			if r.MirrorRegistry != nil {
-				entry["mirrorRegistry"] = map[string]any{"hostRef": r.MirrorRegistry.HostRef.Name}
-			}
-			regs = append(regs, entry)
-		}
-		out["registries"] = regs
-	}
 	return out
 }
 

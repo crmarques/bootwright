@@ -110,7 +110,7 @@ func usesSushyTools(state v1alpha1.State) bool {
 
 func usesManagedHAProxy(state v1alpha1.State) bool {
 	for _, ci := range state.ClusterInfras {
-		if len(ci.Spec.Components.LoadBalancers) > 0 {
+		if len(loadBalancerComponentsForCluster(state, ci)) > 0 {
 			return true
 		}
 	}
@@ -118,8 +118,8 @@ func usesManagedHAProxy(state v1alpha1.State) bool {
 }
 
 func usesManagedMirrorRegistry(state v1alpha1.State) bool {
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Registry != nil {
+	for _, ocp := range state.ContainerClusters {
+		if _, ok := registryComponentForCluster(state, ocp); ok {
 			return true
 		}
 	}
@@ -127,17 +127,12 @@ func usesManagedMirrorRegistry(state v1alpha1.State) bool {
 }
 
 func usesManagedProxy(state v1alpha1.State) bool {
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Proxy != nil {
-			return true
-		}
-	}
-	return false
+	return len(proxyComponentsForCluster(state)) > 0
 }
 
 func usesManagedDNS(state v1alpha1.State) bool {
 	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.NameResolution != nil {
+		if len(nameResolutionComponentsForCluster(state, ci)) > 0 {
 			return true
 		}
 	}
@@ -145,7 +140,8 @@ func usesManagedDNS(state v1alpha1.State) bool {
 }
 
 func usesManagedArtifacts(state v1alpha1.State) bool {
-	if _, ok := artifactpub.Select(state); !ok {
+	server, ok := artifactpub.Select(state)
+	if !ok || server.Config == nil {
 		return false
 	}
 	for _, ocp := range state.ContainerClusters {

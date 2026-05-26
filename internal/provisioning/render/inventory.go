@@ -14,13 +14,9 @@ import (
 // today — the only substrate with an on-host hypervisor) land in
 // `bootwright_infra_hosts`. Bare-metal machines and vsphere/kubevirt
 // guests are remote by design and have no on-host provider. Hosts
-// that back a provider-scoped service (LB, DNS, proxy, registry,
-// artifacts) land in `bootwright_provider_hosts`. A host that does
-// both lives in both groups — Ansible group membership can overlap.
-// The OCP-install layer runs against `bootwright_ocp_hosts`, which is
-// the Environment-declared bastion Host. Even when Bootwright itself is
-// running on that same machine, Ansible still connects through
-// Host.spec.ssh.address rather than a local inventory shortcut.
+// that back managed services (LB, DNS, proxy, registry, artifacts) land
+// in `bootwright_provider_hosts`. A host that does both lives in both
+// groups. The OCP-install and agent-node layers run on localhost.
 //
 // Two groups instead of one is deliberate: the cluster_infra layer
 // playbook targets `bootwright_infra_hosts` directly and no longer
@@ -47,25 +43,25 @@ func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 		}
 		hosts[name] = hostInventoryEntry(h, env, secretsDir)
 	}
-	if bastion := primaryBastionHost(state); bastion != nil && bastion.Spec.SSH != nil {
-		for _, cluster := range state.ContainerClusters {
-			for _, machineName := range clusterMachineNames(cluster) {
-				hostName := AgentNodeHostName(cluster.Metadata.Name, machineName)
-				entry := hostInventoryEntry(*bastion, env, secretsDir)
-				entry["bootwright_agent_node_cluster_name"] = cluster.Metadata.Name
-				entry["bootwright_agent_node_machine_name"] = machineName
-				entry["bootwright_agent_node_bastion_host"] = bastion.Metadata.Name
-				hosts[hostName] = entry
-			}
+	if len(ocpHostSet) > 0 {
+		hosts["localhost"] = localhostInventoryEntry()
+	}
+	for _, cluster := range state.ContainerClusters {
+		for _, machineName := range clusterMachineNames(cluster) {
+			hostName := AgentNodeHostName(cluster.Metadata.Name, machineName)
+			entry := localhostInventoryEntry()
+			entry["bootwright_agent_node_cluster_name"] = cluster.Metadata.Name
+			entry["bootwright_agent_node_machine_name"] = machineName
+			hosts[hostName] = entry
 		}
 	}
 	children := map[string]any{
-		GroupProviderHosts:  map[string]any{"hosts": hostsAsEmptyMap(serviceHostSet)},
-		GroupInfraHosts:     map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
-		GroupBootHosts:      map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
-		GroupBastionHosts:   map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
-		GroupOCPHosts:       map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
-		GroupAgentNodeHosts: map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
+		GroupProviderHosts:   map[string]any{"hosts": hostsAsEmptyMap(serviceHostSet)},
+		GroupInfraHosts:      map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
+		GroupBootHosts:       map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
+		GroupControllerHosts: map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+		GroupOCPHosts:        map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+		GroupAgentNodeHosts:  map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
 	}
 	for group, set := range agentNodeGroups {
 		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
@@ -83,29 +79,28 @@ func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 // invocation that would target only empty groups) don't have to
 // hardcode the strings.
 const (
-	GroupProviderHosts  = "bootwright_provider_hosts"
-	GroupInfraHosts     = "bootwright_infra_hosts"
-	GroupBootHosts      = "bootwright_boot_hosts"
-	GroupBastionHosts   = "bootwright_bastion_hosts"
-	GroupOCPHosts       = "bootwright_ocp_hosts"
-	GroupAgentNodeHosts = "bootwright_agent_node_hosts"
+	GroupProviderHosts   = "bootwright_provider_hosts"
+	GroupInfraHosts      = "bootwright_infra_hosts"
+	GroupBootHosts       = "bootwright_boot_hosts"
+	GroupControllerHosts = "bootwright_controller_hosts"
+	GroupOCPHosts        = "bootwright_ocp_hosts"
+	GroupAgentNodeHosts  = "bootwright_agent_node_hosts"
 )
 
 // HostGroupCounts returns the number of hosts in each inventory child
 // group for the given state. Used to detect an ansible-playbook
 // invocation that would target only empty groups (which fails with
-// "no hosts to target") and skip it instead. `bootwright_ocp_hosts`
-// contains the Environment-declared bastion Host for valid loaded
-// state.
+// "no hosts to target") and skip it instead. Controller and OCP-install
+// groups contain localhost when clusters are loaded.
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	out := map[string]int{
-		GroupInfraHosts:     len(infraReferencedHosts(state)),
-		GroupProviderHosts:  len(serviceReferencedHosts(state)),
-		GroupBootHosts:      len(bootReferencedHosts(state)),
-		GroupBastionHosts:   len(ocpReferencedHosts(state)),
-		GroupOCPHosts:       len(ocpReferencedHosts(state)),
-		GroupAgentNodeHosts: len(agentNodeHostSet),
+		GroupInfraHosts:      len(infraReferencedHosts(state)),
+		GroupProviderHosts:   len(serviceReferencedHosts(state)),
+		GroupBootHosts:       len(bootReferencedHosts(state)),
+		GroupControllerHosts: len(ocpReferencedHosts(state)),
+		GroupOCPHosts:        len(ocpReferencedHosts(state)),
+		GroupAgentNodeHosts:  len(agentNodeHostSet),
 	}
 	for group, set := range agentNodeGroups {
 		out[group] = len(set)
@@ -117,12 +112,12 @@ func HostGroupMembers(state v1alpha1.State) map[string][]string {
 	ocpHosts := sortedHostSet(ocpReferencedHosts(state))
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	out := map[string][]string{
-		GroupInfraHosts:     sortedHostSet(infraReferencedHosts(state)),
-		GroupProviderHosts:  sortedHostSet(serviceReferencedHosts(state)),
-		GroupBootHosts:      sortedHostSet(bootReferencedHosts(state)),
-		GroupBastionHosts:   ocpHosts,
-		GroupOCPHosts:       ocpHosts,
-		GroupAgentNodeHosts: sortedHostSet(agentNodeHostSet),
+		GroupInfraHosts:      sortedHostSet(infraReferencedHosts(state)),
+		GroupProviderHosts:   sortedHostSet(serviceReferencedHosts(state)),
+		GroupBootHosts:       sortedHostSet(bootReferencedHosts(state)),
+		GroupControllerHosts: ocpHosts,
+		GroupOCPHosts:        ocpHosts,
+		GroupAgentNodeHosts:  sortedHostSet(agentNodeHostSet),
 	}
 	for group, set := range agentNodeGroups {
 		out[group] = sortedHostSet(set)
@@ -152,23 +147,17 @@ func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir s
 	return entry
 }
 
-func primaryBastionHost(state v1alpha1.State) *v1alpha1.Host {
-	env := primaryEnvironment(state)
-	if env == nil || env.Spec.Bastion == nil || env.Spec.Bastion.HostRef == "" {
-		return nil
+func localhostInventoryEntry() map[string]any {
+	return map[string]any{
+		"ansible_connection":   "local",
+		"ansible_host":         "localhost",
+		"bootwright_host_name": "localhost",
 	}
-	if h, ok := findHost(state, env.Spec.Bastion.HostRef); ok {
-		return &h
-	}
-	return nil
 }
 
 func agentNodeHostSets(state v1alpha1.State) (map[string]bool, map[string]map[string]bool) {
 	all := map[string]bool{}
 	byGroup := map[string]map[string]bool{}
-	if primaryBastionHost(state) == nil {
-		return all, byGroup
-	}
 	for _, cluster := range state.ContainerClusters {
 		groupName := AgentNodeGroupName(cluster.Metadata.Name)
 		group := map[string]bool{}
@@ -218,8 +207,8 @@ func inventoryGroupToken(s string) string {
 
 func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	if env := primaryEnvironment(state); env != nil && env.Spec.Bastion != nil && env.Spec.Bastion.HostRef != "" {
-		out[env.Spec.Bastion.HostRef] = true
+	if primaryEnvironment(state) != nil {
+		out["localhost"] = true
 	}
 	return out
 }
@@ -247,26 +236,21 @@ func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 func serviceReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
-		components := ci.Spec.Components
-		for _, c := range components.LoadBalancers {
-			if lb, ok := resolveLoadBalancer(state, c.From); ok && lb.HAProxy != nil {
-				out[lb.HAProxy.HostRef.Name] = true
+		for _, component := range loadBalancerComponentsForCluster(state, ci) {
+			if component.Spec.LoadBalancer != nil {
+				out[component.Spec.LoadBalancer.HostRef.Name] = true
 			}
 		}
-		if c := components.Proxy; c != nil {
-			if pr, ok := resolveProxy(state, c.From); ok && pr.Squid != nil {
-				out[pr.Squid.HostRef.Name] = true
-			}
+		for _, selected := range nameResolutionComponentsForCluster(state, ci) {
+			out[selected.component.Spec.NameResolution.HostRef.Name] = true
 		}
-		if c := components.NameResolution; c != nil {
-			if d, ok := resolveDNS(state, c.From); ok && d.Dnsmasq != nil {
-				out[d.Dnsmasq.HostRef.Name] = true
-			}
-		}
-		if c := components.Registry; c != nil {
-			if r, ok := resolveRegistry(state, c.From); ok && r.MirrorRegistry != nil {
-				out[r.MirrorRegistry.HostRef.Name] = true
-			}
+	}
+	for _, selected := range proxyComponentsForCluster(state) {
+		out[selected.component.Spec.Proxy.HostRef.Name] = true
+	}
+	for _, ocp := range state.ContainerClusters {
+		if selected, ok := registryComponentForCluster(state, ocp); ok {
+			out[selected.component.Spec.Registry.HostRef.Name] = true
 		}
 	}
 	if server, ok := artifactpub.Select(state); ok && server.Config != nil && anyClusterNeedsArtifactPublication(state) {

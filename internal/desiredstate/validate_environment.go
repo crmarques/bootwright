@@ -56,11 +56,10 @@ func validateEnvironments(state v1alpha1.State) []string {
 		if env.Spec.BaseDomain == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
-		errs = append(errs, validateEnvironmentBastion(env, state)...)
-		errs = append(errs, validateEnvironmentArtifactServer(env, state)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
+		errs = append(errs, validateEnvironmentContainerClusters(env, state)...)
+		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
-		errs = append(errs, validateEnvironmentProxy(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
 		errs = append(errs, validateEnvironmentClusterTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)
@@ -69,61 +68,40 @@ func validateEnvironments(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateEnvironmentArtifactServer(env v1alpha1.Environment, state v1alpha1.State) []string {
-	if env.Spec.ArtifactServer == nil {
-		return nil
-	}
-	owner := fmt.Sprintf("Environment/%s spec.artifactServer", env.Metadata.Name)
+func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
 	var errs []string
-	ref := env.Spec.ArtifactServer.ComponentRef.Name
-	if ref == "" {
-		errs = append(errs, owner+".componentRef.name is required")
-		return errs
+	known := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		known[cluster.Metadata.Name] = true
 	}
-	component, ok := indexInfraComponents(state.InfraComponents)[ref]
-	if !ok {
-		errs = append(errs, fmt.Sprintf("%s.componentRef.name %q does not resolve to an InfraComponent", owner, ref))
-		return errs
+	seen := map[string]bool{}
+	for i, name := range env.Spec.ContainerClusters {
+		owner := fmt.Sprintf("Environment/%s spec.containerClusters[%d]", env.Metadata.Name, i)
+		if name == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if seen[name] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
+			continue
+		}
+		seen[name] = true
+		if !known[name] {
+			errs = append(errs, fmt.Sprintf("%s %q does not match any ContainerCluster", owner, name))
+		}
 	}
-	if component.Spec.ArtifactServer == nil {
-		errs = append(errs, fmt.Sprintf("%s.componentRef.name %q resolves to InfraComponent/%s without spec.artifactServer", owner, ref, component.Metadata.Name))
-		return errs
-	}
-	endpoints := map[string]bool{}
-	for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
-		endpoints[endpoint.Name] = true
-	}
-	errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.redfishVirtualMedia", env.Spec.ArtifactServer.Routes.RedfishVirtualMedia, endpoints)...)
-	errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.clusterInstall", env.Spec.ArtifactServer.Routes.ClusterInstall, endpoints)...)
 	return errs
 }
 
-func validateEnvironmentArtifactRoute(owner string, route v1alpha1.EnvironmentArtifactRoute, endpoints map[string]bool) []string {
-	if route.Endpoint == "" {
-		return nil
-	}
-	if !endpoints[route.Endpoint] {
-		return []string{fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.artifactServer.endpoints", owner, route.Endpoint)}
-	}
-	return nil
-}
-
-func validateEnvironmentBastion(env v1alpha1.Environment, state v1alpha1.State) []string {
-	owner := fmt.Sprintf("Environment/%s spec.bastion", env.Metadata.Name)
-	if env.Spec.Bastion == nil {
-		return []string{owner + " is required"}
-	}
-	if env.Spec.Bastion.HostRef == "" {
-		return []string{owner + ".hostRef is required"}
-	}
-	host, ok := indexHosts(state.Hosts)[env.Spec.Bastion.HostRef]
-	if !ok {
-		return []string{fmt.Sprintf("%s.hostRef %q does not resolve to a Host", owner, env.Spec.Bastion.HostRef)}
-	}
-	if v1alpha1.HostSSHAddress(host) == "" {
-		return []string{fmt.Sprintf("%s.hostRef %q resolves to Host/%s without a usable spec.ssh address", owner, env.Spec.Bastion.HostRef, host.Metadata.Name)}
-	}
-	return nil
+func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1.State) []string {
+	components := indexInfraComponents(state.InfraComponents)
+	var errs []string
+	errs = append(errs, validateEnvironmentProxyFor(env)...)
+	errs = append(errs, validateEnvironmentProxyComponents(env, components)...)
+	errs = append(errs, validateEnvironmentNameResolutionComponents(env, components)...)
+	errs = append(errs, validateEnvironmentArtifactServerComponents(env, components)...)
+	errs = append(errs, validateEnvironmentRegistryComponents(env, components)...)
+	return errs
 }
 
 func validateEnvironmentResources(env v1alpha1.Environment) []string {
@@ -273,13 +251,11 @@ func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.Environme
 	return errs
 }
 
-func validateEnvironmentProxy(env v1alpha1.Environment) []string {
-	p := env.Spec.Proxy
-	if p == nil {
-		return nil
-	}
+func validateEnvironmentProxySpec(envName, owner string, p *v1alpha1.EnvironmentProxySpec) []string {
 	var errs []string
-	owner := fmt.Sprintf("Environment/%s spec.proxy", env.Metadata.Name)
+	if p == nil {
+		return []string{owner + ".spec is required for external proxy"}
+	}
 	if p.Auth != nil && p.Auth.ProxyAuthRef.Name != "" && !dnsLabel.MatchString(p.Auth.ProxyAuthRef.Name) {
 		errs = append(errs, fmt.Sprintf("%s.auth.proxyAuthRef.name %q is not a DNS label", owner, p.Auth.ProxyAuthRef.Name))
 	}
@@ -298,7 +274,211 @@ func validateEnvironmentProxy(env v1alpha1.Environment) []string {
 			errs = append(errs, fmt.Sprintf("%s.%s must not embed credentials; use auth.proxyAuthRef and supply the bare URL", owner, field.name))
 		}
 	}
+	if p.HTTPProxy == "" && p.HTTPSProxy == "" && len(p.NoProxy) == 0 {
+		errs = append(errs, fmt.Sprintf("Environment/%s %s must set at least one of httpProxy, httpsProxy, or noProxy", envName, owner))
+	}
 	return errs
+}
+
+func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
+	var errs []string
+	names := map[string]bool{v1alpha1.EnvironmentComponentNone: true}
+	for _, entry := range env.Spec.InfraComponents.Proxies {
+		names[entry.Name] = true
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"bootwright", env.Spec.ProxyFor.Bootwright},
+		{"clusterInstall", env.Spec.ProxyFor.ClusterInstall},
+	} {
+		if field.value == "" || field.value == v1alpha1.EnvironmentComponentNone {
+			continue
+		}
+		if !names[field.value] {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.proxyFor.%s %q does not match any spec.infraComponents.proxies[].name", env.Metadata.Name, field.name, field.value))
+		}
+	}
+	return errs
+}
+
+func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	var errs []string
+	seen := map[string]bool{}
+	defaults := 0
+	for i, entry := range env.Spec.InfraComponents.Proxies {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
+		switch entry.Type {
+		case v1alpha1.EnvironmentComponentExternal:
+			errs = append(errs, validateEnvironmentProxySpec(env.Metadata.Name, owner, entry.Spec)...)
+			if entry.ComponentRef.Name != "" {
+				errs = append(errs, owner+".componentRef is only valid for managed proxy entries")
+			}
+		case v1alpha1.EnvironmentComponentManaged:
+			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
+				return c.Spec.Proxy != nil
+			}, "proxy")...)
+			if entry.Spec != nil {
+				errs = append(errs, owner+".spec is only valid for external proxy entries")
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.proxies must not mark more than one entry default", env.Metadata.Name))
+	}
+	return errs
+}
+
+func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	var errs []string
+	seen := map[string]bool{}
+	defaults := 0
+	for i, entry := range env.Spec.InfraComponents.NameResolution {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
+		switch entry.Type {
+		case v1alpha1.EnvironmentComponentExternal:
+			if net.ParseIP(entry.IP) == nil {
+				errs = append(errs, fmt.Sprintf("%s.ip %q is not a valid IP address", owner, entry.IP))
+			}
+			if entry.ComponentRef.Name != "" {
+				errs = append(errs, owner+".componentRef is only valid for managed nameResolution entries")
+			}
+		case v1alpha1.EnvironmentComponentManaged:
+			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
+				return c.Spec.NameResolution != nil
+			}, "nameResolution")...)
+			if entry.IP != "" {
+				errs = append(errs, owner+".ip is only valid for external nameResolution entries")
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution must not mark more than one entry default", env.Metadata.Name))
+	}
+	return errs
+}
+
+func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	var errs []string
+	seen := map[string]bool{}
+	defaults := 0
+	for i, entry := range env.Spec.InfraComponents.ArtifactServers {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
+		switch entry.Type {
+		case v1alpha1.EnvironmentComponentExternal:
+			if entry.Spec == nil || (entry.Spec.RedfishVirtualMediaURL == "" && entry.Spec.ClusterInstallURL == "") {
+				errs = append(errs, owner+".spec must set redfishVirtualMediaURL or clusterInstallURL for external artifact servers")
+			}
+		case v1alpha1.EnvironmentComponentManaged:
+			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
+				return c.Spec.ArtifactServer != nil
+			}, "artifactServer")...)
+			if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.ArtifactServer != nil {
+				endpoints := map[string]bool{}
+				for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
+					endpoints[endpoint.Name] = true
+				}
+				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.redfishVirtualMedia", entry.Routes.RedfishVirtualMedia, endpoints)...)
+				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.clusterInstall", entry.Routes.ClusterInstall, endpoints)...)
+			}
+			if entry.Spec != nil {
+				errs = append(errs, owner+".spec is only valid for external artifactServers entries")
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers must not mark more than one entry default", env.Metadata.Name))
+	}
+	return errs
+}
+
+func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	var errs []string
+	seen := map[string]bool{}
+	defaults := 0
+	for i, entry := range env.Spec.InfraComponents.Registries {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.registries[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		if entry.Default {
+			defaults++
+		}
+		switch entry.Type {
+		case v1alpha1.EnvironmentComponentExternal:
+			if entry.URL == "" {
+				errs = append(errs, owner+".url is required for external registry entries")
+			}
+		case v1alpha1.EnvironmentComponentManaged:
+			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
+				return c.Spec.Registry != nil
+			}, "registry")...)
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+		}
+	}
+	if defaults > 1 {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.registries must not mark more than one entry default", env.Metadata.Name))
+	}
+	return errs
+}
+
+func validateNamedEnvironmentComponent(owner, name string, seen map[string]bool) []string {
+	if name == "" {
+		return []string{owner + ".name is required"}
+	}
+	if name == v1alpha1.EnvironmentComponentNone {
+		return []string{fmt.Sprintf("%s.name %q is reserved", owner, name)}
+	}
+	if seen[name] {
+		return []string{fmt.Sprintf("%s.name %q is duplicated", owner, name)}
+	}
+	seen[name] = true
+	if !IsDNSLabel(name) {
+		return []string{fmt.Sprintf("%s.name %q is not a DNS label", owner, name)}
+	}
+	return nil
+}
+
+func validateManagedComponentRef(owner, name string, components map[string]v1alpha1.InfraComponent, arm func(v1alpha1.InfraComponent) bool, armName string) []string {
+	if name == "" {
+		return []string{owner + ".componentRef.name is required for managed entries"}
+	}
+	component, ok := components[name]
+	if !ok {
+		return []string{fmt.Sprintf("%s.componentRef.name %q does not resolve to an InfraComponent", owner, name)}
+	}
+	if !arm(component) {
+		return []string{fmt.Sprintf("%s.componentRef.name %q resolves to InfraComponent/%s without spec.%s", owner, name, component.Metadata.Name, armName)}
+	}
+	return nil
+}
+
+func validateEnvironmentArtifactRoute(owner string, route v1alpha1.EnvironmentArtifactRoute, endpoints map[string]bool) []string {
+	if route.Endpoint == "" {
+		return nil
+	}
+	if !endpoints[route.Endpoint] {
+		return []string{fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.artifactServer.endpoints", owner, route.Endpoint)}
+	}
+	return nil
 }
 
 func validateProxyURL(raw string) error {

@@ -1,0 +1,41 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: load-balancer
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef:
+      name: lab-host
+    bindAddresses:
+      - name: control-plane
+        ip: 192.168.133.10
+      - name: apps
+        ip: 192.168.133.11
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: proxy
+spec:
+  proxy:
+    type: squid
+    hostRef:
+      name: lab-host
+    bindAddress: 0.0.0.0
+    port: 3128
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: name-resolution
+spec:
+  nameResolution:
+    type: dnsmasq
+    hostRef:
+      name: lab-host
+    bindAddress: 192.168.133.1
+    port: 53
+    additionalIngressHosts:
+      - console-openshift-console.apps.3-nodes-ocp-libvirt.bootwright.test
+      - oauth-openshift.apps.3-nodes-ocp-libvirt.bootwright.test

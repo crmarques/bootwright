@@ -203,6 +203,13 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 					CredentialsRef: v1alpha1.SecretRef{Name: "mirror-creds"},
 					TrustBundleRef: v1alpha1.SecretRef{Name: "mirror-trust"},
 				}},
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					Registries: []v1alpha1.EnvironmentRegistryComponent{{
+						Name:         "default",
+						Type:         v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
+					}},
+				},
 			},
 		}},
 		Hosts: []v1alpha1.Host{{
@@ -213,23 +220,16 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 			},
 		}},
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "provider"},
-			Spec: v1alpha1.InfraProviderSpec{
-				Registries: []v1alpha1.RegistryCapability{{
-					Name:           "default",
-					MirrorRegistry: &v1alpha1.MirrorRegistryCapability{HostRef: v1alpha1.LocalObjectReference{Name: "registry-host"}},
-				}},
-			},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "registry"},
+			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
+				Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
+				HostRef: v1alpha1.LocalObjectReference{Name: "registry-host"},
+				Port:    5000,
+			}},
 		}},
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "infra"},
-			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-				Registry: &v1alpha1.ClusterComponentRef{
-					From: v1alpha1.From{Provider: "provider", Name: "default"},
-					Port: 5000,
-				},
-			}},
 		}},
 	}
 	ocp := v1alpha1.ContainerCluster{

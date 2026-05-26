@@ -8,7 +8,7 @@ authors.
 
 | Fact | Shape |
 | --- | --- |
-| `bootwright_environment` | environment defaults, bastion hostRef, proxy, mirror, component image declarations |
+| `bootwright_environment` | environment defaults, proxy selections, mirror, component image declarations |
 | `bootwright_hosts` | host SSH endpoints and capability tags |
 | `bootwright_providers` | provider capability inventory |
 | `bootwright_infra_components` | host-bound infra services such as artifact servers |
@@ -23,8 +23,9 @@ authors.
 bootwright_environment:
   name: lab
   baseDomain: example.test
-  bastion:
-    hostRef: lab-host
+  proxyFor:
+    bootwright: default
+    clusterInstall: default
   artifactServer:
     componentRef:
       name: artifact-server
@@ -52,7 +53,7 @@ bootwright_clusters:
         externalVip: 192.168.133.10
       - name: ingress
         address: 192.168.133.11
-        providedBy: { loadBalancer: apps, address: apps-ip }
+        providedBy: { componentRef: { name: apps }, address: apps-ip }
     agentIsoPublishTargets:
       - stageHost: services-host
         stagePath: "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"

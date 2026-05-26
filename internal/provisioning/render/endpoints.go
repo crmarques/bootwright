@@ -11,8 +11,8 @@ var standardEndpointNames = []string{
 	v1alpha1.EndpointIngress,
 }
 
-func endpointAddress(ci v1alpha1.ClusterInfra, name string) string {
-	return stateview.EndpointAddress(ci, name)
+func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInfra, name string) string {
+	return stateview.EndpointAddress(state, ci, name)
 }
 
 func endpointNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, address string) (v1alpha1.NetworkConfig, bool) {

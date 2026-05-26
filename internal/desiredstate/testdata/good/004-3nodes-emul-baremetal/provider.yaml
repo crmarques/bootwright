@@ -6,10 +6,10 @@ spec:
   machines:
     - name: rack1-srv1
       baremetal:
-        bootMACAddress: 52:54:00:33:11:10
+        bootMACAddress: '52:54:00:33:11:10'
         interfaces:
           - name: primary
-            macAddress: 52:54:00:33:11:10
+            macAddress: '52:54:00:33:11:10'
         rootDeviceHints:
           deviceName: /dev/vda
         bmc:
@@ -20,10 +20,10 @@ spec:
           disableCertificateVerification: true
     - name: rack1-srv2
       baremetal:
-        bootMACAddress: 52:54:00:33:11:11
+        bootMACAddress: '52:54:00:33:11:11'
         interfaces:
           - name: primary
-            macAddress: 52:54:00:33:11:11
+            macAddress: '52:54:00:33:11:11'
         rootDeviceHints:
           deviceName: /dev/vda
         bmc:
@@ -34,10 +34,10 @@ spec:
           disableCertificateVerification: true
     - name: rack1-srv3
       baremetal:
-        bootMACAddress: 52:54:00:33:11:12
+        bootMACAddress: '52:54:00:33:11:12'
         interfaces:
           - name: primary
-            macAddress: 52:54:00:33:11:12
+            macAddress: '52:54:00:33:11:12'
         rootDeviceHints:
           deviceName: /dev/vda
         bmc:
@@ -51,4 +51,4 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: host-services
-spec:
+spec: null

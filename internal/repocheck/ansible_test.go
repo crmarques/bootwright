@@ -1062,7 +1062,7 @@ func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/stage_inputs.yml")
 	stat := tasks[findAnsibleTask(t, tasks, "Check local installer extra manifests")]
 	remove := tasks[findAnsibleTask(t, tasks, "Remove stale remote installer extra manifests")]
-	stage := tasks[findAnsibleTask(t, tasks, "Stage installer extra manifests on bastion")]
+	stage := tasks[findAnsibleTask(t, tasks, "Stage installer extra manifests on controller")]
 
 	if got := fmt.Sprint(stat["delegate_to"]); got != "localhost" {
 		t.Fatalf("extra manifest stat delegate_to = %v", got)

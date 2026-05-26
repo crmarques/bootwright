@@ -35,18 +35,6 @@ metadata:
 spec:
   baseDomain: example.test
 
-  bastion:
-    hostRef: lab-host
-
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
-      clusterInstall:
-        endpoint: cluster
-
   resources:
     - hosts.yaml
     - networks.yaml
@@ -79,18 +67,42 @@ spec:
       keyFile: ../secrets/prod-api-tls.key
     prod-apps-wildcard-tls:
 
-  proxy:
-    httpProxy: http://proxy.example.test:3128
-    httpsProxy: http://proxy.example.test:3128
-    noProxy:
-      - .example.test
-      - 192.168.133.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
+  containerClusters:
+    - prod-3node
+
+  infraComponents:
+    proxies:
+      - name: default
+        default: true
+        type: external
+        spec:
+          httpProxy: http://proxy.example.test:3128
+          httpsProxy: http://proxy.example.test:3128
+          noProxy:
+            - .example.test
+            - 192.168.133.0/24
+          auth:
+            proxyAuthRef:
+              name: proxy-credentials
+    nameResolution:
+      - name: default-01
+        type: external
+        ip: 192.168.133.53
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          clusterInstall:
+            endpoint: cluster
+
+  proxyFor:
+    bootwright: default
+    clusterInstall: default
 
   registries:
     mirror:
@@ -122,17 +134,25 @@ Rules:
   every discovered YAML file.
 - A listed file is loaded as a complete YAML file; every Bootwright resource
   referenced by any selected resource must also be selected.
-- `bastion.hostRef` is required and references the `Host` used for
-  bastion-side Bootwright and OpenShift installer actions. Ansible connects to
-  the referenced Host through `Host.spec.ssh.addressName` and the matching
-  `Host.spec.addresses[].address`. It does not synthesize `localhost` when the
-  CLI happens to run on the same machine.
-- `artifactServer.componentRef.name`, when set, references an
-  `InfraComponent` with `spec.artifactServer`.
-- `artifactServer.routes.redfishVirtualMedia.endpoint` selects the artifact
-  server endpoint used in BMC ISO fetch URLs.
-- `artifactServer.routes.clusterInstall.endpoint` selects the artifact server
-  endpoint used for disconnected agent-install boot artifacts.
+- `containerClusters[]`, when set, is the effective fleet selection list for
+  render, apply, status, destroy, and check flows. Omitted means every loaded
+  `ContainerCluster`.
+- Bootwright controller and OpenShift installer actions run on localhost.
+  Desired state does not select a controller host.
+- `infraComponents.proxies[]`, `infraComponents.nameResolution[]`,
+  `infraComponents.artifactServers[]`, and `infraComponents.registries[]`
+  are the environment service access catalog. Entries are either `external`
+  with direct access configuration, or `managed` with `componentRef.name`
+  pointing at an `InfraComponent` arm of the matching kind.
+- `proxyFor.bootwright` and `proxyFor.clusterInstall` select entries from
+  `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
+  reserved value that disables proxy use for that consumer.
+- At most one entry per environment service list may set `default: true`.
+- `infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`
+  selects the artifact server endpoint used in BMC ISO fetch URLs.
+- `infraComponents.artifactServers[].routes.clusterInstall.endpoint` selects
+  the artifact server endpoint used for disconnected agent-install boot
+  artifacts.
 - `secrets` declares names, not bytes. An empty entry resolves to
   `<context>/secrets/<name>` and must be populated with `bootwright secret set`
   before the consuming workflow runs. `file:` resolves to the declared local
@@ -144,14 +164,8 @@ Rules:
   resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
 - `clusterTrust.caBundleRefs[]` is optional fleet-wide CA trust rendered into
   every selected cluster install. Entries reference PEM CA bundle secrets.
-- `proxy.httpProxy`, `proxy.httpsProxy`, and `proxy.noProxy` keep installer
-  field names.
-- `proxy.useFor.bootwright` applies to Bootwright runtime actions. When
-  `proxy` is declared and this flag is omitted, it defaults to `true`.
-- `proxy.useFor.clusterInstall` renders the proxy into installer input. When
-  `proxy` is declared and this flag is omitted, it defaults to `true`.
-- A managed proxy component and an external environment proxy URL are mutually
-  exclusive for the same loaded state.
+- External proxy entries use installer field names: `httpProxy`,
+  `httpsProxy`, and `noProxy`.
 - `install.mode: disconnected` on any `ContainerCluster` requires mirror trust
   material and either an external mirror URL or a managed registry component.
 - `registries.imageDigestSources[]`, when set, renders into installer
@@ -499,8 +513,7 @@ Rules:
 ## InfraComponent
 
 `InfraComponent` declares reusable host-bound services that are not cluster
-intent and are not substrate inventory. Artifact serving is the first
-component kind.
+intent and are not substrate inventory.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -527,8 +540,8 @@ spec:
 
 Rules:
 
-- `spec` must set exactly one component arm. Today the only arm is
-  `artifactServer`.
+- `spec` must set exactly one component arm: `artifactServer`,
+  `loadBalancer`, `proxy`, `nameResolution`, or `registry`.
 - `artifactServer.hostRef.name` references a `Host` with `container-runtime`.
 - `artifactServer.bindAddress` defaults to `0.0.0.0`.
 - `artifactServer.listeners[]` declares the ports the container listens on.
@@ -537,10 +550,14 @@ Rules:
 - `artifactServer.endpoints[]` names routeable service addresses. Each endpoint
   chooses a listener and a `Host.spec.addresses[].name`.
 - Endpoint names are the stable binding surface used by
-  `Environment.spec.artifactServer.routes`.
+  `Environment.spec.infraComponents.artifactServers[].routes`.
 - The artifact server is implemented as a containerized static file service
   that serves generated ISOs and disconnected boot artifacts. HTTPS listeners
   use a self-signed certificate generated on the component host.
+- `loadBalancer`, `proxy`, `nameResolution`, and `registry` arms declare
+  their host placement and component-specific bind surface. Environment
+  catalog entries decide which consumers use proxy, DNS, registry, or artifact
+  services.
 
 ## ClusterInfra
 
@@ -620,14 +637,10 @@ Rules:
   Each endpoint must set exactly one ownership field:
   `vip` for OpenShift-managed VIPs, `externalVip` for operator-owned external
   load balancers, or `providedBy` for Bootwright-provisioned load balancers.
-- `providedBy.loadBalancer` references
-  `components.loadBalancers[].name`. `providedBy.address` references
-  `components.loadBalancers[].bindAddresses[].name` and is required when the
-  load balancer has more than one bind address.
-- `components.loadBalancers[]`, `proxy`, `nameResolution`, and `registry`
-  remain valid sibling component slots.
-- `components.loadBalancers[].bindAddresses[].port` is not supported; listener
-  ports are derived from endpoint names.
+- `providedBy.componentRef.name` references an `InfraComponent` with
+  `spec.loadBalancer`. `providedBy.address` references
+  `spec.loadBalancer.bindAddresses[].name` and is required when the load
+  balancer has more than one bind address.
 - Bare-metal Redfish virtual-media boot and disconnected agent installs derive
   generated artifact publication from the environment-selected artifact server
   component and route endpoints.
@@ -642,33 +655,19 @@ addresses:
 endpoints:
   api:
     providedBy:
-      loadBalancer: control-plane
+      componentRef:
+        name: control-plane
       address: control-plane-ip
   apiInt:
     providedBy:
-      loadBalancer: control-plane
+      componentRef:
+        name: control-plane
       address: control-plane-ip
   ingress:
     providedBy:
-      loadBalancer: apps
+      componentRef:
+        name: apps
       address: apps-ip
-
-components:
-  loadBalancers:
-    - name: control-plane
-      from:
-        provider: lab-provider
-        name: default
-      bindAddresses:
-        - name: control-plane-ip
-          ip: 192.168.133.10
-    - name: apps
-      from:
-        provider: lab-provider
-        name: default
-      bindAddresses:
-        - name: apps-ip
-          ip: 192.168.133.11
 ```
 
 ## Render Behavior
@@ -698,8 +697,9 @@ Bootwright renders:
 - Install-time OpenShift extra manifests under `openshift/` for declared API
   and ingress serving certificates. Placeholder render output redacts Secret
   data; runtime and `--sensitive` output include TLS material.
-- Managed non-machine components from `ClusterInfra.spec.components`.
-- Shared provider service identities, consumers, host placement, conflict
+- Managed non-machine components from `InfraComponent` objects selected by
+  endpoints, environment catalog entries, and DNS refs.
+- Shared infra component service identities, consumers, host placement, conflict
   fields, and mergeable overlays from the resolved service graph. Mergeable
   overlays are rendered into generated Ansible vars without mutating authored
   desired state.
@@ -721,18 +721,18 @@ Validation rejects:
 - OKD clusters that set an OpenShift release channel.
 - Missing, unknown, or incomplete endpoint keys.
 - Endpoint entries with zero or multiple ownership fields.
-- `providedBy.loadBalancer` or `providedBy.address` references that do not
-  resolve to declared load balancers and bind addresses.
+- `providedBy.componentRef.name` or `providedBy.address` references that do
+  not resolve to declared load balancer components and bind addresses.
 - Unreferenced load balancers or named bind addresses.
 - Endpoint VIPs or machine overlay IPs outside selected machine networks.
 - Bare-metal machines selected by a non-bare-metal platform.
 - vSphere platform selections backed by a non-vSphere machine profile.
-- External environment proxy or registry URLs that conflict with managed
-  `ClusterInfra` proxy or registry components.
+- Invalid environment proxy or registry catalog entries, unresolved managed
+  component refs, or conflicting service defaults.
 - Clusters that need generated artifact publication unless
-  `Environment.spec.artifactServer.componentRef.name` selects an artifact
-  server component and the required route endpoint resolves.
-- Shared provider service consumers with the same rendered service identity
+  `Environment.spec.infraComponents.artifactServers[]` selects an artifact
+  server entry and the required route endpoint resolves.
+- Shared infra component service consumers with the same rendered service identity
   but incompatible host, role, realisation, bind address, port, or selected
   capability.
 
@@ -756,9 +756,9 @@ plus the listed files are loaded.
 Unknown fields are rejected at decode time, and all loaded objects are
 normalized and validated before any render or apply step.
 Context-backed commands fail before doing work when the selected context is
-not structurally ready or the local host does not match the declared
-`Environment.spec.bastion.hostRef`; `bootwright context validate` reports each
-checked aspect as `OK` or `MISSING`.
+not structurally ready. Controller-local actions run on localhost;
+`bootwright context validate` reports each checked aspect as `OK` or
+`MISSING`.
 
 Primary commands:
 
@@ -852,7 +852,7 @@ Fixed storage layout:
 - Shared runtime files, including `ansible-venv`, live directly under
   `/var/lib/bootwright/`.
 - `context init <name> -f <path> --yes` replaces the entire context directory
-  after validating staged input and bastion locality.
+  after validating staged input.
 - `context update <name> -f <path>` requires an existing context and replaces
   only `input-files/`, preserving secrets, state, runtime, and workflow data.
 

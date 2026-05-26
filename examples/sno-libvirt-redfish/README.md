@@ -1,6 +1,6 @@
 # SNO Libvirt Redfish Example
 
-This is the smallest canonical six-kind example for one OpenShift
+This is the smallest canonical seven-kind example for one OpenShift
 single-node cluster on a libvirt provider with emulated Redfish BMC access.
 
 Authored files:
@@ -8,7 +8,7 @@ Authored files:
 ```text
 environment.yaml       fleet defaults, selected resources, and secret names
 hosts.yaml             provider host reachability
-provider.yaml          libvirt, Redfish emulator, and managed-service capabilities
+provider.yaml          libvirt and Redfish emulator capabilities
 networks.yaml          machine network and NMState template
 cluster-infra.yaml     selected machine, endpoints, and managed infra components
 container-cluster.yaml OpenShift install intent and node binding

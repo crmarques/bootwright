@@ -5,18 +5,16 @@ metadata:
 spec:
   baseDomain: example.test
 
-  bastion:
-    hostRef: services-host
-
   resources:
     - hosts.yaml
     - networks.yaml
     - provider.yaml
+    - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
 
   secrets:
-    openshift-pull-secret:
+    openshift-pull-secret: null
     cluster-admin-pub-key:
       file: ~/.ssh/bootwright-ssh-key.pub
     provider-host-ssh:
@@ -25,3 +23,16 @@ spec:
       generated:
         credentials:
           username: admin
+
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          clusterInstall:
+            endpoint: cluster

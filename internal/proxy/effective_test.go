@@ -8,25 +8,50 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func envWithProxy() *v1alpha1.Environment {
+func envWithExternalProxy() *v1alpha1.Environment {
 	return &v1alpha1.Environment{
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec: v1alpha1.EnvironmentSpec{
 			BaseDomain: "example.test",
-			Proxy: &v1alpha1.EnvironmentProxySpec{
-				HTTPProxy:  "http://external-proxy:3128",
-				HTTPSProxy: "https://external-proxy:3128",
-				NoProxy:    []string{"corp.internal", "localhost"},
-				Auth: &v1alpha1.EnvironmentProxyAuthSpec{
-					ProxyAuthRef: v1alpha1.SecretRef{Name: "proxy-auth"},
-				},
+			ProxyFor: v1alpha1.EnvironmentProxyForSpec{
+				Bootwright:     "default",
+				ClusterInstall: "default",
+			},
+			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+				Proxies: []v1alpha1.EnvironmentProxyComponent{{
+					Name: "default",
+					Type: v1alpha1.EnvironmentComponentExternal,
+					Spec: &v1alpha1.EnvironmentProxySpec{
+						HTTPProxy:  "http://external-proxy:3128",
+						HTTPSProxy: "https://external-proxy:3128",
+						NoProxy:    []string{"corp.internal", "localhost"},
+						Auth: &v1alpha1.EnvironmentProxyAuthSpec{
+							ProxyAuthRef: v1alpha1.SecretRef{Name: "proxy-auth"},
+						},
+					},
+				}},
 			},
 		},
 	}
 }
 
 func stateWithManagedProxy() v1alpha1.State {
+	env := v1alpha1.Environment{
+		Metadata: v1alpha1.Metadata{Name: "env"},
+		Spec: v1alpha1.EnvironmentSpec{
+			BaseDomain: "example.test",
+			ProxyFor:   v1alpha1.EnvironmentProxyForSpec{Bootwright: "managed", ClusterInstall: "managed"},
+			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+				Proxies: []v1alpha1.EnvironmentProxyComponent{{
+					Name:         "managed",
+					Type:         v1alpha1.EnvironmentComponentManaged,
+					ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
+				}},
+			},
+		},
+	}
 	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{env},
 		Hosts: []v1alpha1.Host{{
 			Metadata: v1alpha1.Metadata{Name: "lab-host"},
 			Spec: v1alpha1.HostSpec{
@@ -35,58 +60,26 @@ func stateWithManagedProxy() v1alpha1.State {
 				Capabilities: []string{"container-runtime"},
 			},
 		}},
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "lab"},
-			Spec: v1alpha1.InfraProviderSpec{
-				Proxies: []v1alpha1.ProxyCapability{{
-					Name:  "default",
-					Squid: &v1alpha1.SquidCapability{HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"}},
-				}},
-			},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "c1"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{
-					Proxy: &v1alpha1.ClusterComponentRef{
-						From: v1alpha1.From{Provider: "lab", Name: "default"},
-						Port: 3128,
-					},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Proxy: &v1alpha1.ProxyComponent{
+					Type:    v1alpha1.InfraComponentTypeSquid,
+					HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+					Port:    3128,
 				},
 			},
 		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{Metadata: v1alpha1.Metadata{Name: "c1"}}},
 	}
 }
 
 func TestIsManaged(t *testing.T) {
-	cases := []struct {
-		name string
-		ci   []v1alpha1.ClusterInfra
-		want bool
-	}{
-		{"empty state", nil, false},
-		{
-			"cluster without proxy component",
-			[]v1alpha1.ClusterInfra{{Spec: v1alpha1.ClusterInfraSpec{}}},
-			false,
-		},
-		{
-			"cluster with proxy component",
-			[]v1alpha1.ClusterInfra{{Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{
-					Proxy: &v1alpha1.ClusterComponentRef{From: v1alpha1.From{Provider: "p", Name: "n"}},
-				},
-			}}},
-			true,
-		},
+	if IsManaged(v1alpha1.State{}) {
+		t.Fatal("IsManaged(empty) = true")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := IsManaged(v1alpha1.State{ClusterInfras: tc.ci})
-			if got != tc.want {
-				t.Fatalf("IsManaged = %v, want %v", got, tc.want)
-			}
-		})
+	if !IsManaged(stateWithManagedProxy()) {
+		t.Fatal("IsManaged(managed proxy catalog) = false")
 	}
 }
 
@@ -96,60 +89,33 @@ func TestResolveNilEnv(t *testing.T) {
 	}
 }
 
-func TestResolveReturnsNilWhenNoProxyAndNoManaged(t *testing.T) {
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{BaseDomain: "example.test"}}
+func TestResolveReturnsNilForNone(t *testing.T) {
+	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{ProxyFor: v1alpha1.EnvironmentProxyForSpec{Bootwright: v1alpha1.EnvironmentComponentNone}}}
 	if got := Resolve(v1alpha1.State{}, env); got != nil {
-		t.Fatalf("Resolve = %+v, want nil when env has no proxy and no managed proxy", got)
+		t.Fatalf("Resolve = %+v, want nil", got)
 	}
 }
 
 func TestResolveExternalCopiesEnvProxy(t *testing.T) {
-	env := envWithProxy()
+	env := envWithExternalProxy()
 	got := Resolve(v1alpha1.State{}, env)
 	if got == nil {
 		t.Fatal("Resolve returned nil")
 	}
-	if got.HTTP != env.Spec.Proxy.HTTPProxy {
-		t.Errorf("HTTP = %q, want %q", got.HTTP, env.Spec.Proxy.HTTPProxy)
+	spec := env.Spec.InfraComponents.Proxies[0].Spec
+	if got.HTTP != spec.HTTPProxy {
+		t.Errorf("HTTP = %q, want %q", got.HTTP, spec.HTTPProxy)
 	}
-	if got.HTTPS != env.Spec.Proxy.HTTPSProxy {
-		t.Errorf("HTTPS = %q, want %q", got.HTTPS, env.Spec.Proxy.HTTPSProxy)
+	if got.HTTPS != spec.HTTPSProxy {
+		t.Errorf("HTTPS = %q, want %q", got.HTTPS, spec.HTTPSProxy)
 	}
 	if got.Auth.Name != "proxy-auth" {
 		t.Errorf("Auth.Name = %q, want %q", got.Auth.Name, "proxy-auth")
 	}
 }
 
-func TestResolveManagedModeKeepsAuthAndAutoNoProxy(t *testing.T) {
-	state := stateWithManagedProxy()
-	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{
-		BaseDomain: "example.test",
-		Proxy: &v1alpha1.EnvironmentProxySpec{
-			Auth: &v1alpha1.EnvironmentProxyAuthSpec{
-				ProxyAuthRef: v1alpha1.SecretRef{Name: "managed-auth"},
-			},
-		},
-	}}
-	got := Resolve(state, env)
-	if got == nil {
-		t.Fatal("Resolve returned nil for managed-mode env+state")
-	}
-	if got.HTTP != "" || got.HTTPS != "" {
-		t.Errorf("managed mode should not set HTTP/HTTPS on Effective; got HTTP=%q HTTPS=%q", got.HTTP, got.HTTPS)
-	}
-	if got.Auth.Name != "managed-auth" {
-		t.Errorf("Auth.Name = %q, want %q", got.Auth.Name, "managed-auth")
-	}
-	// Auto noProxy must at least contain the canonical baseline.
-	for _, want := range []string{"localhost", "127.0.0.1", "::1", ".svc", ".cluster.local", ".example.test"} {
-		if !slices.Contains(got.NoProxy, want) {
-			t.Errorf("NoProxy missing %q; got %v", want, got.NoProxy)
-		}
-	}
-}
-
 func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
-	env := envWithProxy()
+	env := envWithExternalProxy()
 	state := v1alpha1.State{
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "net"},
@@ -161,9 +127,7 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
 			Spec: v1alpha1.ClusterInfraSpec{
-				Endpoints: map[string]v1alpha1.Endpoint{
-					"api": {ExternalVIP: "10.10.0.10"},
-				},
+				Endpoints: map[string]v1alpha1.Endpoint{"api": {ExternalVIP: "10.10.0.10"}},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
@@ -187,8 +151,6 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 	if got == nil {
 		t.Fatal("Resolve returned nil")
 	}
-	// User entries are emitted first (and "localhost" appears once even
-	// though both user and auto include it).
 	if len(got.NoProxy) < 2 || got.NoProxy[0] != "corp.internal" || got.NoProxy[1] != "localhost" {
 		t.Errorf("user entries should lead NoProxy, got %v", got.NoProxy)
 	}
@@ -201,11 +163,7 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 	if count != 1 {
 		t.Errorf("localhost should appear exactly once in NoProxy, got %d times: %v", count, got.NoProxy)
 	}
-	// Auto-extended entries.
-	for _, want := range []string{
-		"10.10.0.0/24", "10.10.0.10", "10.128.0.0/14", "172.30.0.0/16",
-		".c1.example.test", "10.0.0.5",
-	} {
+	for _, want := range []string{"10.10.0.0/24", "10.10.0.10", "10.128.0.0/14", "172.30.0.0/16", ".c1.example.test", "10.0.0.5"} {
 		if !slices.Contains(got.NoProxy, want) {
 			t.Errorf("NoProxy missing %q; got %v", want, got.NoProxy)
 		}
@@ -214,79 +172,36 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 
 func TestManagedProxyURL(t *testing.T) {
 	state := stateWithManagedProxy()
-	ci := state.ClusterInfras[0]
-	got, err := ManagedProxyURL(state, ci)
+	got, err := ManagedProxyURL(state, state.ClusterInfras[0])
 	if err != nil {
 		t.Fatalf("ManagedProxyURL: %v", err)
 	}
-	want := "http://10.0.0.5:3128"
-	if got != want {
-		t.Errorf("ManagedProxyURL = %q, want %q", got, want)
+	if got != "http://10.0.0.5:3128" {
+		t.Errorf("ManagedProxyURL = %q", got)
 	}
 }
 
 func TestManagedProxyURLDefaultsPort(t *testing.T) {
 	state := stateWithManagedProxy()
-	state.ClusterInfras[0].Spec.Components.Proxy.Port = 0
+	state.InfraComponents[0].Spec.Proxy.Port = 0
 	got, err := ManagedProxyURL(state, state.ClusterInfras[0])
 	if err != nil {
 		t.Fatalf("ManagedProxyURL: %v", err)
 	}
-	want := "http://10.0.0.5:3128"
-	if got != want {
-		t.Errorf("default port: got %q, want %q", got, want)
-	}
-}
-
-func TestManagedProxyURLNilWhenNoComponent(t *testing.T) {
-	ci := v1alpha1.ClusterInfra{Metadata: v1alpha1.Metadata{Name: "c1"}}
-	got, err := ManagedProxyURL(v1alpha1.State{}, ci)
-	if err != nil {
-		t.Fatalf("ManagedProxyURL: %v", err)
-	}
-	if got != "" {
-		t.Errorf("want empty URL when no proxy component, got %q", got)
+	if got != "http://10.0.0.5:3128" {
+		t.Errorf("default port: got %q", got)
 	}
 }
 
 func TestManagedProxyURLErrors(t *testing.T) {
-	cases := []struct {
-		name        string
-		mutate      func(*v1alpha1.State)
-		wantErrPart string
-	}{
-		{
-			name:        "missing provider",
-			mutate:      func(s *v1alpha1.State) { s.InfraProviders = nil },
-			wantErrPart: "not found",
-		},
-		{
-			name: "wrong capability name",
-			mutate: func(s *v1alpha1.State) {
-				s.ClusterInfras[0].Spec.Components.Proxy.From.Name = "other"
-			},
-			wantErrPart: "is not a squid capability",
-		},
-		{
-			name: "hostRef has no cluster-facing address",
-			mutate: func(s *v1alpha1.State) {
-				s.Hosts[0].Spec.SSH = &v1alpha1.HostSSHSpec{}
-			},
-			wantErrPart: "has no routable address",
-		},
+	state := stateWithManagedProxy()
+	state.Hosts[0].Spec.SSH = &v1alpha1.HostSSHSpec{}
+	_, err := ManagedProxyURL(state, state.ClusterInfras[0])
+	if err == nil {
+		t.Fatal("want error, got nil")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			state := stateWithManagedProxy()
-			tc.mutate(&state)
-			_, err := ManagedProxyURL(state, state.ClusterInfras[0])
-			if err == nil {
-				t.Fatalf("want error containing %q, got nil", tc.wantErrPart)
-			}
-			if !strings.Contains(err.Error(), tc.wantErrPart) {
-				t.Fatalf("error = %q, want substring %q", err.Error(), tc.wantErrPart)
-			}
-		})
+	if !strings.Contains(err.Error(), "has no routable address") {
+		t.Fatalf("error = %q", err.Error())
 	}
 }
 

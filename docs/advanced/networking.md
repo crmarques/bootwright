@@ -84,7 +84,8 @@ endpoints:
     externalVip: 192.168.133.10  # external LB/DNS, outside Bootwright
   ingress:
     providedBy:
-      loadBalancer: apps
+      componentRef:
+        name: apps
       address: apps-ip           # Bootwright-provisioned load balancer
 ```
 
@@ -92,15 +93,18 @@ For Bootwright-provisioned load balancers, declare the target component and its
 bind addresses:
 
 ```yaml
-components:
-  loadBalancers:
-    - name: apps
-      from:
-        provider: lab-provider
-        name: default
-      bindAddresses:
-        - name: apps-ip
-          ip: 192.168.133.11
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: apps
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef:
+      name: lab-host
+    bindAddresses:
+      - name: apps-ip
+        ip: 192.168.133.11
 ```
 
 If a load balancer has exactly one bind address, the endpoint may omit
@@ -109,6 +113,8 @@ VIPs are validated against the machine networks selected by cluster machines.
 
 ## Name Resolution
 
-When `ClusterInfra.components.nameResolution` is present, Bootwright renders the
-managed DNS service from the selected provider capability. Static resolver
-servers still come from the `NetworkConfig` NMState template.
+`NetworkConfig.spec.template.dnsRefs[]` selects entries from
+`Environment.spec.infraComponents.nameResolution[]`. Static resolver servers
+may still come from the `NetworkConfig` NMState template; resolved DNS refs are
+appended to the rendered NMState server list and never rendered as
+Bootwright-only fields.

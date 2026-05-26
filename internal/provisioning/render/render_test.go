@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -188,57 +187,63 @@ func TestAllIsStableAcrossRuns(t *testing.T) {
 }
 
 func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
-	srcRoot := filepath.Join(fixtureRoot, "001-sno-libvirt")
-	dir := t.TempDir()
-	for _, name := range []string{"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml", "cluster.yaml"} {
-		body, err := os.ReadFile(filepath.Join(srcRoot, name))
-		if err != nil {
-			t.Fatalf("read fixture %s: %v", name, err)
-		}
-		text := string(body)
-		switch name {
-		case "environment.yaml":
-			text = strings.Replace(text, "    proxy-credentials:\n      generated:\n        credentials:\n          username: proxy\n", "    proxy-credentials:\n      generated:\n        credentials:\n          username: proxy\n    mirror-trust:\n      generated:\n        selfSignedCertificate:\n          commonName: lab-host\n", 1)
-			text = strings.Replace(text, "  proxy:\n", "  artifactServer:\n    componentRef:\n      name: artifact-server\n    routes:\n      clusterInstall:\n        endpoint: cluster\n\n  proxy:\n", 1)
-			text = strings.Replace(text, "  proxy:\n", "  registries:\n    mirror:\n      trustBundleRef:\n        name: mirror-trust\n  proxy:\n", 1)
-		case "hosts.yaml":
-			text = strings.Replace(text, "    - name: cluster-lan\n      address: 192.168.132.1\n", "    - name: cluster-lan\n      address: 192.168.132.99\n", 1)
-		case "provider.yaml":
-			needle := "  dns:\n    - name: default\n      dnsmasq:\n        hostRef:\n          name: lab-host\n"
-			text = strings.Replace(text, needle, needle+"\n  registries:\n    - name: default\n      mirrorRegistry:\n        hostRef:\n          name: lab-host\n", 1)
-		case "cluster.yaml":
-			text = strings.Replace(text, "    mode: connected\n", "    mode: disconnected\n", 1)
-			needle := "      additionalIngressHosts:\n        - console-openshift-console.apps.sno-libvirt.bootwright.test\n        - oauth-openshift.apps.sno-libvirt.bootwright.test\n"
-			text = strings.Replace(text, needle, needle+"\n    registry:\n      from:\n        provider: lab-libvirt-provider\n        name: default\n      port: 5000\n      bindAddress: 0.0.0.0\n", 1)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
-			t.Fatalf("write fixture %s: %v", name, err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "infra-component.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
-metadata:
-  name: artifact-server
-spec:
-  artifactServer:
-    hostRef:
-      name: lab-host
-    listeners:
-      - name: https
-        protocol: https
-        port: 9443
-    endpoints:
-      - name: cluster
-        listener: https
-        addressName: cluster-lan
-`), 0o600); err != nil {
-		t.Fatalf("write infra-component.yaml: %v", err)
-	}
-
-	state, err := desiredstate.LoadNormalizeValidate([]string{dir})
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
+	state.Environments[0].Spec.Secrets["mirror-trust"] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			SelfSignedCertificate: &v1alpha1.SelfSignedCertificateSpec{CommonName: "lab-host"},
+		},
+	}
+	state.Environments[0].Spec.Registries = &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{
+		TrustBundleRef: v1alpha1.SecretRef{Name: "mirror-trust"},
+	}}
+	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+		Routes: v1alpha1.EnvironmentArtifactRoutes{
+			ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+		},
+	}}
+	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
+	}}
+	for i := range state.Hosts {
+		if state.Hosts[i].Metadata.Name == "lab-host" {
+			state.Hosts[i].Spec.Addresses[1].Address = "192.168.132.99"
+		}
+	}
+	state.InfraComponents = append(state.InfraComponents,
+		v1alpha1.InfraComponent{
+			Metadata: v1alpha1.Metadata{Name: "artifact-server"},
+			Spec: v1alpha1.InfraComponentSpec{ArtifactServer: &v1alpha1.ArtifactServerComponent{
+				HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				Listeners: []v1alpha1.ArtifactServerListener{{
+					Name:     "https",
+					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+					Port:     9443,
+				}},
+				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
+					Name:        "cluster",
+					Listener:    "https",
+					AddressName: "cluster-lan",
+				}},
+			}},
+		},
+		v1alpha1.InfraComponent{
+			Metadata: v1alpha1.Metadata{Name: "registry"},
+			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
+				Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
+				HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				Port:    5000,
+			}},
+		},
+	)
+	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	cfg, err := render.InstallerConfig(state, state.ContainerClusters[0])
 	if err != nil {
 		t.Fatalf("InstallerConfig: %v", err)

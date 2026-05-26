@@ -31,10 +31,38 @@ func validateInfraComponentSpec(component v1alpha1.InfraComponent, hosts map[str
 	if component.Spec.ArtifactServer != nil {
 		set++
 	}
-	if set != 1 {
-		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer} (got %d)", prefix, set)}
+	if component.Spec.LoadBalancer != nil {
+		set++
 	}
-	return validateArtifactServerComponent(component, hosts)
+	if component.Spec.Proxy != nil {
+		set++
+	}
+	if component.Spec.NameResolution != nil {
+		set++
+	}
+	if component.Spec.Registry != nil {
+		set++
+	}
+	if set != 1 {
+		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, registry} (got %d)", prefix, set)}
+	}
+	var errs []string
+	if component.Spec.ArtifactServer != nil {
+		errs = append(errs, validateArtifactServerComponent(component, hosts)...)
+	}
+	if component.Spec.LoadBalancer != nil {
+		errs = append(errs, validateLoadBalancerComponent(component, hosts)...)
+	}
+	if component.Spec.Proxy != nil {
+		errs = append(errs, validateProxyComponent(component, hosts)...)
+	}
+	if component.Spec.NameResolution != nil {
+		errs = append(errs, validateNameResolutionComponent(component, hosts)...)
+	}
+	if component.Spec.Registry != nil {
+		errs = append(errs, validateRegistryComponent(component, hosts)...)
+	}
+	return errs
 }
 
 func validateArtifactServerComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
@@ -116,6 +144,88 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 			errs = append(errs, owner+".listener is required")
 		} else if !listenerNames[endpoint.Listener] {
 			errs = append(errs, fmt.Sprintf("%s.listener %q does not match any %s.listeners[].name", owner, endpoint.Listener, prefix))
+		}
+		if endpoint.AddressName == "" {
+			errs = append(errs, owner+".addressName is required")
+		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.AddressName); !ok {
+			errs = append(errs, fmt.Sprintf("%s.addressName %q does not resolve on Host/%s spec.addresses", owner, endpoint.AddressName, host.Metadata.Name))
+		}
+	}
+	return errs
+}
+
+func validateLoadBalancerComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+	lb := component.Spec.LoadBalancer
+	prefix := fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name)
+	var errs []string
+	if lb.Type != v1alpha1.InfraComponentTypeHAProxy {
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, lb.Type, v1alpha1.InfraComponentTypeHAProxy))
+	}
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", lb.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, "haProxy")...)
+	errs = append(errs, validateLoadBalancerBindAddresses(prefix, lb.BindAddresses, nil)...)
+	return errs
+}
+
+func validateProxyComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+	proxy := component.Spec.Proxy
+	prefix := fmt.Sprintf("InfraComponent/%s spec.proxy", component.Metadata.Name)
+	var errs []string
+	if proxy.Type != v1alpha1.InfraComponentTypeSquid {
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, proxy.Type, v1alpha1.InfraComponentTypeSquid))
+	}
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", proxy.HostRef, hosts, v1alpha1.ComponentSlotProxy, "squid")...)
+	errs = append(errs, validateServiceParams(prefix, proxy.BindAddress, proxy.Port)...)
+	if host, ok := hosts[proxy.HostRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, proxy.Endpoints, host)...)
+	}
+	return errs
+}
+
+func validateNameResolutionComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+	dns := component.Spec.NameResolution
+	prefix := fmt.Sprintf("InfraComponent/%s spec.nameResolution", component.Metadata.Name)
+	var errs []string
+	if dns.Type != v1alpha1.InfraComponentTypeDnsmasq {
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, dns.Type, v1alpha1.InfraComponentTypeDnsmasq))
+	}
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", dns.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, "dnsmasq")...)
+	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
+	if host, ok := hosts[dns.HostRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, host)...)
+	}
+	return errs
+}
+
+func validateRegistryComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+	registry := component.Spec.Registry
+	prefix := fmt.Sprintf("InfraComponent/%s spec.registry", component.Metadata.Name)
+	var errs []string
+	if registry.Type != v1alpha1.InfraComponentTypeMirrorRegistry {
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, registry.Type, v1alpha1.InfraComponentTypeMirrorRegistry))
+	}
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", registry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")...)
+	errs = append(errs, validateServiceParams(prefix, registry.BindAddress, registry.Port)...)
+	if host, ok := hosts[registry.HostRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, registry.Endpoints, host)...)
+	}
+	return errs
+}
+
+func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoint, host v1alpha1.Host) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, endpoint := range endpoints {
+		owner := fmt.Sprintf("%s.endpoints[%d]", prefix, i)
+		if endpoint.Name == "" {
+			errs = append(errs, owner+".name is required")
+		} else {
+			if !IsDNSLabel(endpoint.Name) {
+				errs = append(errs, fmt.Sprintf("%s.name %q is not a DNS label", owner, endpoint.Name))
+			}
+			if seen[endpoint.Name] {
+				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, endpoint.Name))
+			}
+			seen[endpoint.Name] = true
 		}
 		if endpoint.AddressName == "" {
 			errs = append(errs, owner+".addressName is required")

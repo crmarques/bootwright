@@ -33,28 +33,12 @@ func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1a
 	caps := p.Spec
 	errs = append(errs, validateUniqueCapabilityNames(p, "machineProfiles", capabilityNames(caps.MachineProfiles, func(x v1alpha1.MachineProfileCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "machines", capabilityNames(caps.Machines, func(x v1alpha1.MachineCapability) string { return x.Name }))...)
-	errs = append(errs, validateUniqueCapabilityNames(p, "loadBalancers", capabilityNames(caps.LoadBalancers, func(x v1alpha1.LoadBalancerCapability) string { return x.Name }))...)
-	errs = append(errs, validateUniqueCapabilityNames(p, "proxies", capabilityNames(caps.Proxies, func(x v1alpha1.ProxyCapability) string { return x.Name }))...)
-	errs = append(errs, validateUniqueCapabilityNames(p, "dns", capabilityNames(caps.DNS, func(x v1alpha1.DNSCapability) string { return x.Name }))...)
-	errs = append(errs, validateUniqueCapabilityNames(p, "registries", capabilityNames(caps.Registries, func(x v1alpha1.RegistryCapability) string { return x.Name }))...)
 
 	for _, mp := range caps.MachineProfiles {
 		errs = append(errs, validateMachineProfile(p, mp, hosts)...)
 	}
 	for _, m := range caps.Machines {
 		errs = append(errs, validateProviderMachine(p, m)...)
-	}
-	for _, lb := range caps.LoadBalancers {
-		errs = append(errs, validateServiceLoadBalancer(p, lb, hosts)...)
-	}
-	for _, proxy := range caps.Proxies {
-		errs = append(errs, validateServiceProxy(p, proxy, hosts)...)
-	}
-	for _, d := range caps.DNS {
-		errs = append(errs, validateServiceDNS(p, d, hosts)...)
-	}
-	for _, r := range caps.Registries {
-		errs = append(errs, validateServiceRegistry(p, r, hosts)...)
 	}
 	return errs
 }
@@ -277,38 +261,6 @@ func validateProviderMachineBareMetal(prefix string, b *v1alpha1.MachineBareMeta
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bootMACAddress %q does not match any baremetal.interfaces[].macAddress", prefix, b.BootMACAddress))
 	}
 	return errs
-}
-
-func validateServiceLoadBalancer(p v1alpha1.InfraProvider, lb v1alpha1.LoadBalancerCapability, hosts map[string]v1alpha1.Host) []string {
-	prefix := fmt.Sprintf("InfraProvider/%s spec.loadBalancers[%s]", p.Metadata.Name, lb.Name)
-	if lb.HAProxy == nil {
-		return []string{fmt.Sprintf("%s must set exactly one of {haProxy}", prefix)}
-	}
-	return validateServiceHostRef(prefix+".haProxy.hostRef", lb.HAProxy.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
-}
-
-func validateServiceProxy(p v1alpha1.InfraProvider, proxy v1alpha1.ProxyCapability, hosts map[string]v1alpha1.Host) []string {
-	prefix := fmt.Sprintf("InfraProvider/%s spec.proxies[%s]", p.Metadata.Name, proxy.Name)
-	if proxy.Squid == nil {
-		return []string{fmt.Sprintf("%s must set exactly one of {squid}", prefix)}
-	}
-	return validateServiceHostRef(prefix+".squid.hostRef", proxy.Squid.HostRef, hosts, v1alpha1.ComponentSlotProxy, "squid")
-}
-
-func validateServiceDNS(p v1alpha1.InfraProvider, d v1alpha1.DNSCapability, hosts map[string]v1alpha1.Host) []string {
-	prefix := fmt.Sprintf("InfraProvider/%s spec.dns[%s]", p.Metadata.Name, d.Name)
-	if d.Dnsmasq == nil {
-		return []string{fmt.Sprintf("%s must set exactly one of {dnsmasq}", prefix)}
-	}
-	return validateServiceHostRef(prefix+".dnsmasq.hostRef", d.Dnsmasq.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
-}
-
-func validateServiceRegistry(p v1alpha1.InfraProvider, r v1alpha1.RegistryCapability, hosts map[string]v1alpha1.Host) []string {
-	prefix := fmt.Sprintf("InfraProvider/%s spec.registries[%s]", p.Metadata.Name, r.Name)
-	if r.MirrorRegistry == nil {
-		return []string{fmt.Sprintf("%s must set exactly one of {mirrorRegistry}", prefix)}
-	}
-	return validateServiceHostRef(prefix+".mirrorRegistry.hostRef", r.MirrorRegistry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, "mirrorRegistry")
 }
 
 func validateServiceHostRef(owner string, ref v1alpha1.LocalObjectReference, hosts map[string]v1alpha1.Host, kind, realisation string) []string {

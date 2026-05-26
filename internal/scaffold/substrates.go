@@ -8,7 +8,6 @@ var Substrates = map[Provider]Substrate{
 	ProviderEmulatedBareMetal: {
 		ProviderNameSuffix: "libvirt",
 		NetworkNameSuffix:  "bridge",
-		BastionHostRef:     "lab-host",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
@@ -19,6 +18,15 @@ var Substrates = map[Provider]Substrate{
       generated:
         credentials:
           username: proxy
+`,
+		EnvArtifactServer: `  infraComponents:
+    nameResolution:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: name-resolution
+
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Host
@@ -43,12 +51,10 @@ spec:
 		NetworkConnectivity: `  libvirt:
     bridge: vbr-{{.NetworkID}}          # libvirt bridge Bootwright will create
 `,
-		// dnsServers omitted on purpose: this project declares
-		// components.nameResolution below, so the renderer auto-injects
-		// the bootwright dnsmasq IP (the libvirt bridge gateway) into
-		// every node's resolver list. Empty here = "use DHCP for the
-		// rest"; add upstream entries explicitly if you want them.
 		NetworkDNSServers: "",
+		NetworkDNSRefs: `    dnsRefs:
+      - default
+`,
 		ProviderCapabilities: `  machineProfiles:
     - name: sno
       cpu: 8
@@ -67,63 +73,66 @@ spec:
             credentialRef:
               name: bmc-credentials
 
-  loadBalancers:
-    - name: default
-      haProxy:
-        hostRef:
-          name: lab-host
-
-  proxies:
-    - name: default
-      squid:
-        hostRef:
-          name: lab-host
-
-  dns:
-    - name: default
-      dnsmasq:
-        hostRef:
-          name: lab-host
+`,
+		InfraComponentYAML: `apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: load-balancer
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef:
+      name: lab-host
+    bindAddresses:
+      - name: control-plane
+        ip: 192.168.130.10
+      - name: apps
+        ip: 192.168.130.11
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: proxy
+spec:
+  proxy:
+    type: squid
+    hostRef:
+      name: lab-host
+    bindAddress: 0.0.0.0
+    port: 3128
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: name-resolution
+spec:
+  nameResolution:
+    type: dnsmasq
+    hostRef:
+      name: lab-host
+    bindAddress: 192.168.130.1
+    port: 53
 `,
 		ClusterMachineFrom: `        from:
           provider: {{.ProviderID}}
           profile: sno`,
 		ClusterMachineExtras: "",
-		ClusterServices: `    loadBalancers:
-      - name: default
-        from:
-          provider: {{.ProviderID}}
-          name: default
-        bindAddresses:
-          - name: control-plane
-            ip: 192.168.130.10
-          - name: apps
-            ip: 192.168.130.11
-    proxy:
-      from:
-        provider: {{.ProviderID}}
-        name: default
-      port: 3128
-      bindAddress: 0.0.0.0
-    nameResolution:
-      from:
-        provider: {{.ProviderID}}
-        name: default
-      port: 53
-      bindAddress: 192.168.130.1
-`,
+		ClusterServices:      "",
 		EndpointsYAML: `    api:
       providedBy:
-        loadBalancer: default
         address: control-plane
+        componentRef:
+          name: load-balancer
     apiInt:
       providedBy:
-        loadBalancer: default
         address: control-plane
+        componentRef:
+          name: load-balancer
     ingress:
       providedBy:
-        loadBalancer: default
         address: apps
+        componentRef:
+          name: load-balancer
 `,
 		PlatformYAML: `  platform:
     type: baremetal
@@ -135,7 +144,6 @@ spec:
 	ProviderBareMetal: {
 		ProviderNameSuffix: "bare-metal",
 		NetworkNameSuffix:  "vlan",
-		BastionHostRef:     "services-host",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
@@ -162,12 +170,16 @@ spec:
   capabilities:
     - container-runtime
 `,
-		EnvArtifactServer: `  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
+		EnvArtifactServer: `  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
 
 `,
 		NetworkConnectivity: `  physical:
@@ -236,7 +248,6 @@ spec:
 	ProviderVSphere: {
 		ProviderNameSuffix: "vsphere",
 		NetworkNameSuffix:  "portgroup",
-		BastionHostRef:     "bastion",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     vcenter-credentials:
@@ -318,7 +329,6 @@ spec:
 	ProviderKubeVirt: {
 		ProviderNameSuffix: "kubevirt",
 		NetworkNameSuffix:  "nad",
-		BastionHostRef:     "bastion",
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     cnv-cluster-kubeconfig:

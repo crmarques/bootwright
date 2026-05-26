@@ -79,65 +79,12 @@ func validateCrossLayer(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("ClusterInfra/%s is referenced by multiple ContainerClusters: %s", ci.Metadata.Name, strings.Join(owners, ", ")))
 		}
 	}
-	errs = append(errs, validateProxySourceConsistency(state)...)
-	errs = append(errs, validateRegistrySourceConsistency(state)...)
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedProviderServices(state)...)
 	return errs
 }
 
-// validateProxySourceConsistency rejects the case where Environment
-// carries an external proxy URL and any cluster carries a managed
-// `components.proxy`. Managed proxy URL is derived from
-// `(hostRef, port)`; the operator MUST NOT also declare an external one.
-func validateProxySourceConsistency(state v1alpha1.State) []string {
-	env := primaryEnvironment(&state)
-	if env == nil || env.Spec.Proxy == nil {
-		return nil
-	}
-	hasExternalURL := env.Spec.Proxy.HTTPProxy != "" || env.Spec.Proxy.HTTPSProxy != ""
-	if !hasExternalURL {
-		return nil
-	}
-	var managed []string
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Proxy != nil {
-			managed = append(managed, ci.Metadata.Name)
-		}
-	}
-	if len(managed) == 0 {
-		return nil
-	}
-	return []string{fmt.Sprintf(
-		"Environment/%s spec.proxy.{httpProxy,httpsProxy} set AND ClusterInfra/%s has spec.components.proxy: managed proxy URL is derived from (hostRef, port); external URL on Environment is forbidden when any cluster declares a managed proxy",
-		env.Metadata.Name, strings.Join(managed, ","))}
-}
-
-func validateRegistrySourceConsistency(state v1alpha1.State) []string {
-	env := primaryEnvironment(&state)
-	if env == nil || env.Spec.Registries == nil || env.Spec.Registries.Mirror == nil || env.Spec.Registries.Mirror.URL == "" {
-		return nil
-	}
-	var managed []string
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Registry != nil {
-			managed = append(managed, ci.Metadata.Name)
-		}
-	}
-	if len(managed) == 0 {
-		return nil
-	}
-	return []string{fmt.Sprintf(
-		"Environment/%s spec.registries.mirror.url set AND ClusterInfra/%s has spec.components.registry: managed mirror URL is derived from (hostRef, port); external URL on Environment is forbidden when any cluster declares a managed registry",
-		env.Metadata.Name, strings.Join(managed, ","))}
-}
-
-// validateDisconnectedRequiresRegistry checks ContainerCluster
-// `install.mode: disconnected`: the environment must declare mirror
-// metadata/trust material, and there must be one endpoint source:
-// either external (Environment URL) OR managed (any cluster's
-// components.registry).
 func validateDisconnectedRequiresRegistry(state v1alpha1.State) []string {
 	env := primaryEnvironment(&state)
 	if env == nil {
@@ -154,7 +101,7 @@ func validateDisconnectedRequiresRegistry(state v1alpha1.State) []string {
 	}
 	if env.Spec.Registries == nil || env.Spec.Registries.Mirror == nil {
 		return []string{fmt.Sprintf(
-			"ContainerCluster/%s install.mode=disconnected requires Environment/%s spec.registries.mirror with trust material and either a url (external) or a managed ClusterInfra.spec.components.registry",
+			"ContainerCluster/%s install.mode=disconnected requires Environment/%s spec.registries.mirror with trust material and either a url (external) or a managed registry infra component",
 			strings.Join(disconnected, ","), env.Metadata.Name)}
 	}
 	mirror := env.Spec.Registries.Mirror
@@ -164,19 +111,29 @@ func validateDisconnectedRequiresRegistry(state v1alpha1.State) []string {
 			strings.Join(disconnected, ","), env.Metadata.Name)}
 	}
 	hasExternalMirror := mirror.URL != ""
-	hasManagedRegistry := false
-	for _, ci := range state.ClusterInfras {
-		if ci.Spec.Components.Registry != nil {
-			hasManagedRegistry = true
-			break
-		}
-	}
+	hasManagedRegistry := selectedManagedRegistry(env) != nil
 	if hasExternalMirror || hasManagedRegistry {
 		return nil
 	}
 	return []string{fmt.Sprintf(
-		"ContainerCluster/%s install.mode=disconnected requires one of: Environment.spec.registries.mirror.url (external) OR at least one ClusterInfra.spec.components.registry (managed)",
+		"ContainerCluster/%s install.mode=disconnected requires one of: Environment.spec.registries.mirror.url (external) OR a managed Environment.spec.infraComponents.registries entry",
 		strings.Join(disconnected, ","))}
+}
+
+func selectedManagedRegistry(env *v1alpha1.Environment) *v1alpha1.EnvironmentRegistryComponent {
+	if env == nil {
+		return nil
+	}
+	for i := range env.Spec.InfraComponents.Registries {
+		entry := &env.Spec.InfraComponents.Registries[i]
+		if entry.Type == v1alpha1.EnvironmentComponentManaged && entry.Default {
+			return entry
+		}
+	}
+	if len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Type == v1alpha1.EnvironmentComponentManaged {
+		return &env.Spec.InfraComponents.Registries[0]
+	}
+	return nil
 }
 
 func validateArtifactServerRequirements(state v1alpha1.State) []string {
@@ -190,20 +147,20 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			continue
 		}
 		prefix := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
-		if env == nil || env.Spec.ArtifactServer == nil || env.Spec.ArtifactServer.ComponentRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.artifactServer.componentRef.name", prefix))
+		if env == nil || len(env.Spec.InfraComponents.ArtifactServers) == 0 {
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.infraComponents.artifactServers", prefix))
 			continue
 		}
 		if !hasServer {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; Environment/%s spec.artifactServer.componentRef.name %q does not resolve to an InfraComponent artifact server", prefix, env.Metadata.Name, env.Spec.ArtifactServer.ComponentRef.Name))
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; Environment/%s has no default artifact server", prefix, env.Metadata.Name))
 			continue
 		}
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifactpub.RouteAvailable(server, env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint) {
-			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s spec.artifactServer.routes.clusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
+		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifactpub.RouteAvailable(server, server.Entry.Routes.ClusterInstall.Endpoint) {
+			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s selected artifact server routes.clusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
 				prefix, env.Metadata.Name, server.Component.Metadata.Name))
 		}
-		if artifactpub.ClusterUsesBareMetalMachine(state, ci) && !artifactpub.RouteAvailable(server, env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint) {
-			errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires Environment/%s spec.artifactServer.routes.redfishVirtualMedia.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
+		if artifactpub.ClusterUsesBareMetalMachine(state, ci) && !artifactpub.RouteAvailable(server, server.Entry.Routes.RedfishVirtualMedia.Endpoint) {
+			errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires Environment/%s selected artifact server routes.redfishVirtualMedia.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
 				prefix, env.Metadata.Name, server.Component.Metadata.Name))
 		}
 	}
@@ -246,8 +203,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s %q uses file-sourced TLS material but Environment/%s spec.secrets[%s].keyFile is empty", owner, ref.Name, env.Metadata.Name, ref.Name))
 		}
 	}
-	if env.Spec.Proxy != nil && env.Spec.Proxy.Auth != nil {
-		require(fmt.Sprintf("Environment/%s spec.proxy.auth.proxyAuthRef", env.Metadata.Name), env.Spec.Proxy.Auth.ProxyAuthRef)
+	for i, entry := range env.Spec.InfraComponents.Proxies {
+		if entry.Spec != nil && entry.Spec.Auth != nil {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].spec.auth.proxyAuthRef", env.Metadata.Name, i), entry.Spec.Auth.ProxyAuthRef)
+		}
 	}
 	if env.Spec.ClusterTrust != nil {
 		for i, ref := range env.Spec.ClusterTrust.CABundleRefs {

@@ -32,10 +32,10 @@ func TestValidateScopedApplySharedServicesFailsForInfraAndAllSharedKinds(t *test
 			}
 			for _, fragment := range []string{
 				"artifacts InfraComponent/artifact-server",
-				"loadBalancer services/default",
-				"nameResolution services/default",
-				"proxy services/default",
-				"registry services/default",
+				"loadBalancer InfraComponent/load-balancer",
+				"nameResolution InfraComponent/name-resolution",
+				"proxy InfraComponent/proxy",
+				"registry InfraComponent/registry",
 			} {
 				if !strings.Contains(err.Error(), fragment) {
 					t.Fatalf("%s error %q missing %q", target, err, fragment)
@@ -59,6 +59,19 @@ func TestValidateScopedApplySharedServicesAllowsAllConsumers(t *testing.T) {
 
 func cliStateWithSharedDNS() v1alpha1.State {
 	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
+						Name:         "default",
+						Type:         v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "name-resolution"},
+					}},
+				},
+			},
+		}},
 		Hosts: []v1alpha1.Host{{
 			Metadata: v1alpha1.Metadata{Name: "service-host"},
 			Spec: v1alpha1.HostSpec{
@@ -67,18 +80,19 @@ func cliStateWithSharedDNS() v1alpha1.State {
 				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 			},
 		}},
+		NetworkConfigs: []v1alpha1.NetworkConfig{
+			cliNetworkConfig("net-a"),
+			cliNetworkConfig("net-b"),
+		},
 		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "services"},
-			Spec: v1alpha1.InfraProviderSpec{
-				DNS: []v1alpha1.DNSCapability{{
-					Name:    "default",
-					Dnsmasq: &v1alpha1.DnsmasqCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
-				}},
-			},
+			Metadata: v1alpha1.Metadata{Name: "machines-a"},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "machines-b"},
 		}},
+		InfraComponents: []v1alpha1.InfraComponent{cliNameResolutionComponent()},
 		ClusterInfras: []v1alpha1.ClusterInfra{
-			cliClusterInfraWithDNS("infra-a", "machines-a"),
-			cliClusterInfraWithDNS("infra-b", "machines-b"),
+			cliClusterInfra("infra-a", "machines-a", "net-a", false),
+			cliClusterInfra("infra-b", "machines-b", "net-b", false),
 		},
 		ContainerClusters: []v1alpha1.ContainerCluster{
 			cliContainerCluster("cluster-a", "infra-a"),
@@ -89,46 +103,57 @@ func cliStateWithSharedDNS() v1alpha1.State {
 
 func cliStateWithAllSharedProviderServices() v1alpha1.State {
 	state := cliStateWithSharedDNS()
-	state.Environments = []v1alpha1.Environment{{
-		Metadata: v1alpha1.Metadata{Name: "env"},
-		Spec: v1alpha1.EnvironmentSpec{
-			ArtifactServer: &v1alpha1.EnvironmentArtifactServerSpec{
-				ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
-				Routes: v1alpha1.EnvironmentArtifactRoutes{
-					ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
-				},
-			},
+	state.Environments[0].Spec.ProxyFor = v1alpha1.EnvironmentProxyForSpec{
+		Bootwright:     "default",
+		ClusterInstall: "default",
+	}
+	state.Environments[0].Spec.InfraComponents.Proxies = []v1alpha1.EnvironmentProxyComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
+	}}
+	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+		Routes: v1alpha1.EnvironmentArtifactRoutes{
+			ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
 		},
 	}}
-	state.InfraComponents = []v1alpha1.InfraComponent{cliArtifactServerComponent()}
-	state.InfraProviders[0].Spec.LoadBalancers = []v1alpha1.LoadBalancerCapability{{
-		Name:    "default",
-		HAProxy: &v1alpha1.HAProxyCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
+	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
-	state.InfraProviders[0].Spec.Proxies = []v1alpha1.ProxyCapability{{
-		Name:  "default",
-		Squid: &v1alpha1.SquidCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
-	}}
-	state.InfraProviders[0].Spec.Registries = []v1alpha1.RegistryCapability{{
-		Name:           "default",
-		MirrorRegistry: &v1alpha1.MirrorRegistryCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
-	}}
+	state.InfraComponents = append(state.InfraComponents,
+		cliLoadBalancerComponent(),
+		cliProxyComponent(),
+		cliRegistryComponent(),
+		cliArtifactServerComponent(),
+	)
 	for i := range state.ClusterInfras {
-		state.ClusterInfras[i].Spec.Components.LoadBalancers = []v1alpha1.ClusterLoadBalancerComponent{{
-			Name: "default",
-			From: v1alpha1.From{Provider: "services", Name: "default"},
-		}}
-		state.ClusterInfras[i].Spec.Components.Proxy = &v1alpha1.ClusterComponentRef{
-			From: v1alpha1.From{Provider: "services", Name: "default"},
-		}
-		state.ClusterInfras[i].Spec.Components.Registry = &v1alpha1.ClusterComponentRef{
-			From: v1alpha1.From{Provider: "services", Name: "default"},
+		state.ClusterInfras[i].Spec.Endpoints = map[string]v1alpha1.Endpoint{
+			v1alpha1.EndpointAPI: {
+				ProvidedBy: &v1alpha1.EndpointProvidedBy{
+					ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
+					Address:      "api",
+				},
+			},
 		}
 	}
 	for i := range state.ContainerClusters {
 		state.ContainerClusters[i].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	}
 	return state
+}
+
+func cliNetworkConfig(name string) v1alpha1.NetworkConfig {
+	return v1alpha1.NetworkConfig{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.NetworkConfigSpec{
+			Template: v1alpha1.NetworkConfigTemplate{DNSRefs: []string{"default"}},
+		},
+	}
 }
 
 func cliArtifactServerComponent() v1alpha1.InfraComponent {
@@ -152,18 +177,76 @@ func cliArtifactServerComponent() v1alpha1.InfraComponent {
 	}
 }
 
-func cliClusterInfraWithDNS(name, machineProvider string) v1alpha1.ClusterInfra {
+func cliLoadBalancerComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "load-balancer"},
+		Spec: v1alpha1.InfraComponentSpec{LoadBalancer: &v1alpha1.LoadBalancerComponent{
+			Type:    v1alpha1.InfraComponentTypeHAProxy,
+			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
+				Name: "api",
+				IP:   "10.0.0.10",
+			}},
+		}},
+	}
+}
+
+func cliNameResolutionComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "name-resolution"},
+		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
+			Type:        v1alpha1.InfraComponentTypeDnsmasq,
+			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			BindAddress: "10.0.0.5",
+			Port:        v1alpha1.DefaultDNSPort,
+		}},
+	}
+}
+
+func cliProxyComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "proxy"},
+		Spec: v1alpha1.InfraComponentSpec{Proxy: &v1alpha1.ProxyComponent{
+			Type:    v1alpha1.InfraComponentTypeSquid,
+			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:    v1alpha1.DefaultSquidPort,
+		}},
+	}
+}
+
+func cliRegistryComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "registry"},
+		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
+			Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
+			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:    v1alpha1.DefaultMirrorRegistryPort,
+		}},
+	}
+}
+
+func cliClusterInfra(name, machineProvider, networkName string, withEndpoints bool) v1alpha1.ClusterInfra {
+	endpoints := map[string]v1alpha1.Endpoint{}
+	if withEndpoints {
+		endpoints[v1alpha1.EndpointAPI] = v1alpha1.Endpoint{
+			ProvidedBy: &v1alpha1.EndpointProvidedBy{
+				ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
+				Address:      "api",
+			},
+		}
+	}
 	return v1alpha1.ClusterInfra{
 		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Machines: []v1alpha1.ClusterMachineComponent{{
+		Spec: v1alpha1.ClusterInfraSpec{
+			Endpoints: endpoints,
+			Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
 				Name: "master-0",
 				From: v1alpha1.From{Provider: machineProvider, Name: "node-0"},
-			}},
-			NameResolution: &v1alpha1.ClusterNameResolutionComponent{
-				From: v1alpha1.From{Provider: "services", Name: "default"},
-			},
-		}},
+				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
+					Ref: v1alpha1.LocalObjectReference{Name: networkName},
+				},
+			}}},
+		},
 	}
 }
 

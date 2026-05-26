@@ -30,7 +30,7 @@ func Vars(state v1alpha1.State) map[string]any {
 			"installMode":            v1alpha1.InstallMode(ocp),
 			"installMethod":          ocp.Spec.Install.Method,
 			"baseDomain":             environmentBaseDomain(env),
-			"endpoints":              endpointsVars(ci),
+			"endpoints":              endpointsVars(state, ci),
 			"networks":               clusterNetworksVars(state, ci),
 			"components":             componentsVars(state, ci, ocp),
 			"nodes":                  nodesVars(ocp),
@@ -87,24 +87,21 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 		"name":       env.Metadata.Name,
 		"baseDomain": env.Spec.BaseDomain,
 	}
-	if env.Spec.Bastion != nil && env.Spec.Bastion.HostRef != "" {
-		out["bastion"] = map[string]any{"hostRef": env.Spec.Bastion.HostRef}
+	if len(env.Spec.ContainerClusters) > 0 {
+		out["containerClusters"] = stringSliceAny(env.Spec.ContainerClusters)
 	}
-	if env.Spec.ArtifactServer != nil {
-		artifactServer := map[string]any{
-			"componentRef": env.Spec.ArtifactServer.ComponentRef.Name,
-		}
-		routes := map[string]any{}
-		if endpoint := env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint; endpoint != "" {
-			routes["redfishVirtualMedia"] = map[string]any{"endpoint": endpoint}
-		}
-		if endpoint := env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint; endpoint != "" {
-			routes["clusterInstall"] = map[string]any{"endpoint": endpoint}
-		}
-		if len(routes) > 0 {
-			artifactServer["routes"] = routes
-		}
-		out["artifactServer"] = artifactServer
+	proxyFor := map[string]any{}
+	if env.Spec.ProxyFor.Bootwright != "" {
+		proxyFor["bootwright"] = env.Spec.ProxyFor.Bootwright
+	}
+	if env.Spec.ProxyFor.ClusterInstall != "" {
+		proxyFor["clusterInstall"] = env.Spec.ProxyFor.ClusterInstall
+	}
+	if len(proxyFor) > 0 {
+		out["proxyFor"] = proxyFor
+	}
+	if infra := environmentInfraComponentsVars(env); len(infra) > 0 {
+		out["infraComponents"] = infra
 	}
 	if env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {
 		mirror := map[string]any{}
@@ -128,23 +125,6 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 			ntp = append(ntp, s)
 		}
 		out["ntpSources"] = ntp
-	}
-	return out
-}
-
-func infraComponentsVars(state v1alpha1.State) []any {
-	out := make([]any, 0, len(state.InfraComponents))
-	for _, component := range state.InfraComponents {
-		entry := map[string]any{"name": component.Metadata.Name}
-		if server := component.Spec.ArtifactServer; server != nil {
-			entry["artifactServer"] = map[string]any{
-				"hostRef":     server.HostRef.Name,
-				"bindAddress": server.BindAddress,
-				"listeners":   artifactServerListenersVars(server.Listeners),
-				"endpoints":   artifactServerEndpointsVars(server.Endpoints),
-			}
-		}
-		out = append(out, entry)
 	}
 	return out
 }
@@ -255,12 +235,6 @@ func effectiveProxyVars(eff *proxy.Effective) map[string]any {
 func bootwrightProxyVars(state v1alpha1.State, env *v1alpha1.Environment) map[string]any {
 	eff := proxy.Resolve(state, env)
 	if eff == nil {
-		return nil
-	}
-	if env != nil && !v1alpha1.ProxyUseForBootwright(env.Spec.Proxy) {
-		if proxy.IsManaged(state) && eff.Auth.Name != "" {
-			return map[string]any{"auth": map[string]any{"proxyAuthRef": eff.Auth.Name}}
-		}
 		return nil
 	}
 	return effectiveProxyVars(eff)

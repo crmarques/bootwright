@@ -11,15 +11,15 @@ type Environment struct {
 }
 
 type EnvironmentSpec struct {
-	BaseDomain      string                                   `yaml:"baseDomain" json:"baseDomain"`
-	Bastion         *EnvironmentBastionSpec                  `yaml:"bastion,omitempty" json:"bastion,omitempty"`
-	Resources       []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
-	ArtifactServer  *EnvironmentArtifactServerSpec           `yaml:"artifactServer,omitempty" json:"artifactServer,omitempty"`
-	Proxy           *EnvironmentProxySpec                    `yaml:"proxy,omitempty" json:"proxy,omitempty"`
-	Registries      *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
-	ClusterTrust    *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
-	Secrets         map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
-	ComponentImages map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
+	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
+	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
+	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
+	InfraComponents   EnvironmentInfraComponentsSpec           `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
+	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
+	ClusterTrust      *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
+	Secrets           map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
 	// NTPSources is the operator-supplied list of NTP servers the
 	// cluster nodes should chrony against during install. The renderer
 	// projects this into agent-config.yaml as additionalNTPSources;
@@ -31,13 +31,16 @@ type EnvironmentSpec struct {
 	NTPSources []string `yaml:"ntpSources,omitempty" json:"ntpSources,omitempty"`
 }
 
-type EnvironmentBastionSpec struct {
-	HostRef string `yaml:"hostRef" json:"hostRef"`
+type EnvironmentProxyForSpec struct {
+	Bootwright     string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
+	ClusterInstall string `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
 }
 
-type EnvironmentArtifactServerSpec struct {
-	ComponentRef LocalObjectReference      `yaml:"componentRef" json:"componentRef"`
-	Routes       EnvironmentArtifactRoutes `yaml:"routes,omitempty" json:"routes,omitempty"`
+type EnvironmentInfraComponentsSpec struct {
+	Proxies         []EnvironmentProxyComponent          `yaml:"proxies,omitempty" json:"proxies,omitempty"`
+	NameResolution  []EnvironmentNameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
+	ArtifactServers []EnvironmentArtifactServerComponent `yaml:"artifactServers,omitempty" json:"artifactServers,omitempty"`
+	Registries      []EnvironmentRegistryComponent       `yaml:"registries,omitempty" json:"registries,omitempty"`
 }
 
 type EnvironmentArtifactRoutes struct {
@@ -47,6 +50,48 @@ type EnvironmentArtifactRoutes struct {
 
 type EnvironmentArtifactRoute struct {
 	Endpoint string `yaml:"endpoint" json:"endpoint"`
+}
+
+type EnvironmentProxyComponent struct {
+	Name         string                `yaml:"name" json:"name"`
+	Default      bool                  `yaml:"default,omitempty" json:"default,omitempty"`
+	Type         string                `yaml:"type" json:"type"`
+	ComponentRef LocalObjectReference  `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Endpoint     string                `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	Spec         *EnvironmentProxySpec `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+type EnvironmentNameResolutionComponent struct {
+	Name                   string               `yaml:"name" json:"name"`
+	Default                bool                 `yaml:"default,omitempty" json:"default,omitempty"`
+	Type                   string               `yaml:"type" json:"type"`
+	ComponentRef           LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Endpoint               string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	IP                     string               `yaml:"ip,omitempty" json:"ip,omitempty"`
+	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
+}
+
+type EnvironmentArtifactServerComponent struct {
+	Name         string                                 `yaml:"name" json:"name"`
+	Default      bool                                   `yaml:"default,omitempty" json:"default,omitempty"`
+	Type         string                                 `yaml:"type" json:"type"`
+	ComponentRef LocalObjectReference                   `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Routes       EnvironmentArtifactRoutes              `yaml:"routes,omitempty" json:"routes,omitempty"`
+	Spec         *EnvironmentExternalArtifactServerSpec `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+type EnvironmentExternalArtifactServerSpec struct {
+	RedfishVirtualMediaURL string `yaml:"redfishVirtualMediaURL,omitempty" json:"redfishVirtualMediaURL,omitempty"`
+	ClusterInstallURL      string `yaml:"clusterInstallURL,omitempty" json:"clusterInstallURL,omitempty"`
+}
+
+type EnvironmentRegistryComponent struct {
+	Name         string               `yaml:"name" json:"name"`
+	Default      bool                 `yaml:"default,omitempty" json:"default,omitempty"`
+	Type         string               `yaml:"type" json:"type"`
+	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Endpoint     string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	URL          string               `yaml:"url,omitempty" json:"url,omitempty"`
 }
 
 type EnvironmentSecretSpec struct {
@@ -80,24 +125,10 @@ type EnvironmentProxySpec struct {
 	HTTPSProxy string                    `yaml:"httpsProxy,omitempty" json:"httpsProxy,omitempty"`
 	NoProxy    []string                  `yaml:"noProxy,omitempty" json:"noProxy,omitempty"`
 	Auth       *EnvironmentProxyAuthSpec `yaml:"auth,omitempty" json:"auth,omitempty"`
-	UseFor     EnvironmentProxyUseFor    `yaml:"useFor,omitempty" json:"useFor,omitempty"`
 }
 
 type EnvironmentProxyAuthSpec struct {
 	ProxyAuthRef SecretRef `yaml:"proxyAuthRef" json:"proxyAuthRef"`
-}
-
-type EnvironmentProxyUseFor struct {
-	Bootwright     *bool `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
-	ClusterInstall *bool `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
-}
-
-func ProxyUseForBootwright(p *EnvironmentProxySpec) bool {
-	return p == nil || p.UseFor.Bootwright == nil || *p.UseFor.Bootwright
-}
-
-func ProxyUseForClusterInstall(p *EnvironmentProxySpec) bool {
-	return p == nil || p.UseFor.ClusterInstall == nil || *p.UseFor.ClusterInstall
 }
 
 type EnvironmentRegistriesSpec struct {

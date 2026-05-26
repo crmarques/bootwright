@@ -12,6 +12,7 @@ func validateClusterInfras(state v1alpha1.State) []string {
 	var errs []string
 	providers := indexProviders(state.InfraProviders)
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
+	components := indexInfraComponents(state.InfraComponents)
 	seen := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
 		if e := validateName(v1alpha1.KindClusterInfra, ci.Metadata.Name); e != "" {
@@ -23,10 +24,9 @@ func validateClusterInfras(state v1alpha1.State) []string {
 		}
 		seen[ci.Metadata.Name] = true
 		errs = append(errs, validateClusterPlatform(ci)...)
-		errs = append(errs, validateClusterEndpoints(ci, networkConfigs)...)
+		errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs)...)
 		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
-		errs = append(errs, validateClusterDNSResolution(ci, networkConfigs)...)
 	}
 	return errs
 }
@@ -70,7 +70,7 @@ func validateClusterPlatform(ci v1alpha1.ClusterInfra) []string {
 	return errs
 }
 
-func validateClusterEndpoints(ci v1alpha1.ClusterInfra, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterEndpoints(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	if len(ci.Spec.Endpoints) == 0 {
 		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints is required", ci.Metadata.Name))
@@ -93,12 +93,12 @@ func validateClusterEndpoints(ci v1alpha1.ClusterInfra, networkConfigs map[strin
 			errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s is required", ci.Metadata.Name, name))
 			continue
 		}
-		errs = append(errs, validateClusterEndpoint(ci, name, endpoint, networkConfigs)...)
+		errs = append(errs, validateClusterEndpoint(ci, components, name, endpoint, networkConfigs)...)
 	}
 	return errs
 }
 
-func validateClusterEndpoint(ci v1alpha1.ClusterInfra, name string, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterEndpoint(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, name string, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s", ci.Metadata.Name, name)
 	set := 0
@@ -116,9 +116,9 @@ func validateClusterEndpoint(ci v1alpha1.ClusterInfra, name string, endpoint v1a
 		return errs
 	}
 	if endpoint.ProvidedBy != nil {
-		errs = append(errs, validateEndpointProvider(ci, prefix, *endpoint.ProvidedBy)...)
+		errs = append(errs, validateEndpointProvider(prefix, *endpoint.ProvidedBy, components)...)
 	}
-	vip, ok := endpointVIP(ci, endpoint)
+	vip, ok := endpointVIP(components, endpoint)
 	if !ok {
 		return errs
 	}
@@ -139,42 +139,42 @@ func validateClusterEndpoint(ci v1alpha1.ClusterInfra, name string, endpoint v1a
 	return errs
 }
 
-func validateEndpointProvider(ci v1alpha1.ClusterInfra, prefix string, ref v1alpha1.EndpointProvidedBy) []string {
+func validateEndpointProvider(prefix string, ref v1alpha1.EndpointProvidedBy, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
-	if ref.LoadBalancer == "" {
-		return []string{fmt.Sprintf("%s.providedBy.loadBalancer is required", prefix)}
+	if ref.ComponentRef.Name == "" {
+		return []string{fmt.Sprintf("%s.providedBy.componentRef.name is required", prefix)}
 	}
-	lb, ok := clusterLoadBalancer(ci, ref.LoadBalancer)
-	if !ok {
-		return []string{fmt.Sprintf("%s.providedBy.loadBalancer %q does not match any ClusterInfra/%s spec.components.loadBalancers[].name",
-			prefix, ref.LoadBalancer, ci.Metadata.Name)}
+	component, ok := components[ref.ComponentRef.Name]
+	if !ok || component.Spec.LoadBalancer == nil {
+		return []string{fmt.Sprintf("%s.providedBy.componentRef.name %q does not resolve to an InfraComponent loadBalancer", prefix, ref.ComponentRef.Name)}
 	}
+	lb := component.Spec.LoadBalancer
 	if len(lb.BindAddresses) == 0 {
-		return []string{fmt.Sprintf("ClusterInfra/%s spec.components.loadBalancers[%s].bindAddresses is required for provided endpoints",
-			ci.Metadata.Name, lb.Name)}
+		return []string{fmt.Sprintf("InfraComponent/%s spec.loadBalancer.bindAddresses is required for provided endpoints", component.Metadata.Name)}
 	}
 	if len(lb.BindAddresses) > 1 && ref.Address == "" {
-		errs = append(errs, fmt.Sprintf("%s.providedBy.address is required because ClusterInfra/%s spec.components.loadBalancers[%s] has multiple bindAddresses",
-			prefix, ci.Metadata.Name, lb.Name))
+		errs = append(errs, fmt.Sprintf("%s.providedBy.address is required because InfraComponent/%s spec.loadBalancer has multiple bindAddresses",
+			prefix, component.Metadata.Name))
 	}
 	if ref.Address != "" && !loadBalancerHasBindAddress(lb, ref.Address) {
-		errs = append(errs, fmt.Sprintf("%s.providedBy.address %q does not match any ClusterInfra/%s spec.components.loadBalancers[%s].bindAddresses[].name",
-			prefix, ref.Address, ci.Metadata.Name, lb.Name))
+		errs = append(errs, fmt.Sprintf("%s.providedBy.address %q does not match any InfraComponent/%s spec.loadBalancer.bindAddresses[].name",
+			prefix, ref.Address, component.Metadata.Name))
 	}
 	return errs
 }
 
-func endpointVIP(ci v1alpha1.ClusterInfra, endpoint v1alpha1.Endpoint) (string, bool) {
+func endpointVIP(components map[string]v1alpha1.InfraComponent, endpoint v1alpha1.Endpoint) (string, bool) {
 	switch {
 	case endpoint.VIP != "":
 		return endpoint.VIP, true
 	case endpoint.ExternalVIP != "":
 		return endpoint.ExternalVIP, true
 	case endpoint.ProvidedBy != nil:
-		lb, ok := clusterLoadBalancer(ci, endpoint.ProvidedBy.LoadBalancer)
-		if !ok || len(lb.BindAddresses) == 0 {
+		component, ok := components[endpoint.ProvidedBy.ComponentRef.Name]
+		if !ok || component.Spec.LoadBalancer == nil || len(component.Spec.LoadBalancer.BindAddresses) == 0 {
 			return "", false
 		}
+		lb := component.Spec.LoadBalancer
 		if endpoint.ProvidedBy.Address == "" {
 			if len(lb.BindAddresses) == 1 {
 				return lb.BindAddresses[0].IP, true
@@ -190,41 +190,13 @@ func endpointVIP(ci v1alpha1.ClusterInfra, endpoint v1alpha1.Endpoint) (string, 
 	return "", false
 }
 
-func clusterLoadBalancer(ci v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterLoadBalancerComponent, bool) {
-	for _, lb := range ci.Spec.Components.LoadBalancers {
-		if lb.Name == name {
-			return lb, true
-		}
-	}
-	return v1alpha1.ClusterLoadBalancerComponent{}, false
-}
-
-func loadBalancerHasBindAddress(lb v1alpha1.ClusterLoadBalancerComponent, name string) bool {
+func loadBalancerHasBindAddress(lb *v1alpha1.LoadBalancerComponent, name string) bool {
 	for _, bind := range lb.BindAddresses {
 		if bind.Name == name {
 			return true
 		}
 	}
 	return false
-}
-
-func endpointLoadBalancerRefs(ci v1alpha1.ClusterInfra) (map[string]bool, map[string]map[string]bool) {
-	lbs := map[string]bool{}
-	binds := map[string]map[string]bool{}
-	for _, endpoint := range ci.Spec.Endpoints {
-		if endpoint.ProvidedBy == nil || endpoint.ProvidedBy.LoadBalancer == "" {
-			continue
-		}
-		lbs[endpoint.ProvidedBy.LoadBalancer] = true
-		if endpoint.ProvidedBy.Address == "" {
-			continue
-		}
-		if binds[endpoint.ProvidedBy.LoadBalancer] == nil {
-			binds[endpoint.ProvidedBy.LoadBalancer] = map[string]bool{}
-		}
-		binds[endpoint.ProvidedBy.LoadBalancer][endpoint.ProvidedBy.Address] = true
-	}
-	return lbs, binds
 }
 
 func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {

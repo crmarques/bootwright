@@ -17,7 +17,7 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 }
 
 func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra, _ v1alpha1.ContainerCluster) map[string]any {
-	apiVIPs, ingressVIPs := vipsFromEndpoints(ci)
+	apiVIPs, ingressVIPs := vipsFromEndpoints(state, ci)
 	userManaged := !allEndpointsOpenShift(ci)
 	switch kind {
 	case v1alpha1.PlatformTypeVSphere:
@@ -214,11 +214,11 @@ func vSphereNetworkSubnetConfig(n *v1alpha1.VSphereNetworkSubnet) map[string]any
 	return out
 }
 
-func vipsFromEndpoints(ci v1alpha1.ClusterInfra) (api []any, ingress []any) {
-	if vip := endpointAddress(ci, v1alpha1.EndpointAPI); vip != "" {
+func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra) (api []any, ingress []any) {
+	if vip := endpointAddress(state, ci, v1alpha1.EndpointAPI); vip != "" {
 		api = append(api, vip)
 	}
-	if vip := endpointAddress(ci, v1alpha1.EndpointIngress); vip != "" {
+	if vip := endpointAddress(state, ci, v1alpha1.EndpointIngress); vip != "" {
 		ingress = append(ingress, vip)
 	}
 	if api == nil {

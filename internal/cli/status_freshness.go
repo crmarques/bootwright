@@ -67,6 +67,9 @@ func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
 	for i := range state.InfraProviders {
 		state.InfraProviders[i].SourcePath = ""
 	}
+	for i := range state.InfraComponents {
+		state.InfraComponents[i].SourcePath = ""
+	}
 	for i := range state.ClusterInfras {
 		state.ClusterInfras[i].SourcePath = ""
 	}

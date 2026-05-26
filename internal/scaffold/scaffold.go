@@ -50,11 +50,10 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		return nil, fmt.Errorf("unknown provider %q (known: %s)", kind, strings.Join(known, ", "))
 	}
 	data := templateData{
-		Cluster:        clusterName,
-		ProviderID:     clusterName + "-" + s.ProviderNameSuffix,
-		NetworkID:      clusterName + "-" + s.NetworkNameSuffix,
-		BastionHostRef: s.BastionHostRef,
-		BootDevice:     s.BootDevice,
+		Cluster:    clusterName,
+		ProviderID: clusterName + "-" + s.ProviderNameSuffix,
+		NetworkID:  clusterName + "-" + s.NetworkNameSuffix,
+		BootDevice: s.BootDevice,
 	}
 	resolved, err := resolveSubstrateFragments(s, data)
 	if err != nil {
@@ -109,6 +108,9 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 		return s, err
 	}
 	if s.NetworkConnectivity, err = render("NetworkConnectivity", s.NetworkConnectivity); err != nil {
+		return s, err
+	}
+	if s.NetworkDNSRefs, err = render("NetworkDNSRefs", s.NetworkDNSRefs); err != nil {
 		return s, err
 	}
 	if s.ProviderCapabilities, err = render("ProviderCapabilities", s.ProviderCapabilities); err != nil {
@@ -173,12 +175,12 @@ func ApplySupport(kind Provider) support.DispatchSupport {
 type Substrate struct {
 	ProviderNameSuffix   string
 	NetworkNameSuffix    string
-	BastionHostRef       string
 	EnvExtraSecrets      string
 	EnvArtifactServer    string
 	HostsYAML            string
 	NetworkConnectivity  string
 	NetworkDNSServers    string
+	NetworkDNSRefs       string
 	ProviderCapabilities string
 	InfraComponentYAML   string
 	ClusterMachineFrom   string
@@ -190,14 +192,13 @@ type Substrate struct {
 }
 
 type templateData struct {
-	Cluster        string
-	ProviderID     string
-	NetworkID      string
-	BastionHostRef string
-	Substrate      Substrate
-	HostsYAML      string
-	EnvSecrets     string
-	BootDevice     string
+	Cluster    string
+	ProviderID string
+	NetworkID  string
+	Substrate  Substrate
+	HostsYAML  string
+	EnvSecrets string
+	BootDevice string
 }
 
 type namedTemplate struct {
@@ -237,9 +238,6 @@ metadata:
 spec:
   baseDomain: example.test              # change to a domain you own
 
-  bastion:
-    hostRef: {{.BastionHostRef}}
-
 {{.Substrate.EnvArtifactServer}}
   secrets:
     openshift-pull-secret:
@@ -275,6 +273,7 @@ spec:
             next-hop-address: 192.168.130.1
             next-hop-interface: primary
             table-id: 254
+{{.Substrate.NetworkDNSRefs}}
 
 {{.Substrate.NetworkConnectivity}}`
 

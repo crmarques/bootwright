@@ -84,7 +84,7 @@ Real BMCs must also reach the generated artifact HTTPS route used for the agent
 ISO. If Redfish virtual media insert fails after the controller can download
 the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
-`Environment.spec.artifactServer.routes.redfishVirtualMedia.endpoint`.
+`Environment.spec.infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`.
 
 ## Context Input Looks Stale
 

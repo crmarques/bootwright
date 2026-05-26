@@ -81,20 +81,6 @@ spec:
 			wantSubstring: "field capabilities not found",
 		},
 		{
-			name: "environment-missing-bastion-rejected",
-			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  bastion:\n    hostRef: services-host\n\n",
-				"", 1)},
-			wantSubstring: "spec.bastion is required",
-		},
-		{
-			name: "environment-bastion-host-ref-rejected",
-			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"hostRef: services-host",
-				"hostRef: missing-host", 1)},
-			wantSubstring: `spec.bastion.hostRef "missing-host" does not resolve to a Host`,
-		},
-		{
 			name: "infraprovider-networkref-rejected",
 			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
 				"interfaces:\n          - { name: primary, macAddress: 52:54:00:32:11:10 }",
@@ -167,8 +153,8 @@ spec:
 		{
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  artifactServer:\n    componentRef:\n      name: artifact-server\n    routes:\n      redfishVirtualMedia:\n        endpoint: bmc\n\n", "", 1)},
-			wantSubstring: "requires generated artifact publication; set Environment.spec.artifactServer.componentRef.name",
+				"  infraComponents:\n    artifactServers:\n      - name: default\n        default: true\n        type: managed\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
+			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
 			name: "artifact-server-listener-port-out-of-range-rejected",
@@ -196,7 +182,7 @@ spec:
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"endpoint: bmc",
 				"endpoint: missing", 1)},
-			wantSubstring: `spec.artifactServer.routes.redfishVirtualMedia.endpoint "missing" does not resolve on selected InfraComponent spec.artifactServer.endpoints`,
+			wantSubstring: `routes.redfishVirtualMedia.endpoint "missing" does not resolve on selected InfraComponent spec.artifactServer.endpoints`,
 		},
 		{
 			name: "multiple-clusterinfra-refs-rejected",
@@ -403,25 +389,22 @@ func TestEnvironmentSecretEmptyEntryDeclaresContextMaterial(t *testing.T) {
 	}
 }
 
-func TestEnvironmentProxyUseForDefaultsTrue(t *testing.T) {
+func TestEnvironmentProxyForNoneIsReservedDisableValue(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", `  proxy:
-    httpProxy: http://proxy.bootwright.test:3128
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  proxyFor:
+    bootwright: none
+    clusterInstall: none
 
-  secrets:
+  infraComponents:
 `, 1)
 	writeFiles(t, dir, files)
 	state, err := LoadNormalizeValidate([]string{dir})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	useFor := state.Environments[0].Spec.Proxy.UseFor
-	if useFor.Bootwright == nil || !*useFor.Bootwright {
-		t.Fatalf("proxy.useFor.bootwright = %v, want default true", useFor.Bootwright)
-	}
-	if useFor.ClusterInstall == nil || !*useFor.ClusterInstall {
-		t.Fatalf("proxy.useFor.clusterInstall = %v, want default true", useFor.ClusterInstall)
+	if got := state.Environments[0].Spec.ProxyFor.Bootwright; got != v1alpha1.EnvironmentComponentNone {
+		t.Fatalf("proxyFor.bootwright = %q, want none", got)
 	}
 }
 
@@ -485,37 +468,49 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}{
 		{
 			name: "valid-http-proxy",
-			proxyYAML: `  proxy:
-    httpProxy: http://proxy.bootwright.test:3128
+			proxyYAML: `    proxies:
+      - name: default
+        type: external
+        spec:
+          httpProxy: http://proxy.bootwright.test:3128
 `,
 		},
 		{
 			name: "missing-scheme",
-			proxyYAML: `  proxy:
-    httpProxy: proxy.bootwright.test:3128
+			proxyYAML: `    proxies:
+      - name: default
+        type: external
+        spec:
+          httpProxy: proxy.bootwright.test:3128
 `,
-			wantSubstring: `spec.proxy.httpProxy "proxy.bootwright.test:3128" is invalid: must include scheme and host`,
+			wantSubstring: `spec.infraComponents.proxies[0].httpProxy "proxy.bootwright.test:3128" is invalid: must include scheme and host`,
 		},
 		{
 			name: "unsupported-scheme",
-			proxyYAML: `  proxy:
-    httpsProxy: socks5://proxy.bootwright.test:1080
+			proxyYAML: `    proxies:
+      - name: default
+        type: external
+        spec:
+          httpsProxy: socks5://proxy.bootwright.test:1080
 `,
-			wantSubstring: `spec.proxy.httpsProxy "socks5://proxy.bootwright.test:1080" is invalid: scheme must be http or https`,
+			wantSubstring: `spec.infraComponents.proxies[0].httpsProxy "socks5://proxy.bootwright.test:1080" is invalid: scheme must be http or https`,
 		},
 		{
 			name: "inline-credentials",
-			proxyYAML: `  proxy:
-    httpProxy: http://user:pass@proxy.bootwright.test:3128
+			proxyYAML: `    proxies:
+      - name: default
+        type: external
+        spec:
+          httpProxy: http://user:pass@proxy.bootwright.test:3128
 `,
-			wantSubstring: `spec.proxy.httpProxy must not embed credentials`,
+			wantSubstring: `spec.infraComponents.proxies[0].httpProxy must not embed credentials`,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			files := newBaselineFiles()
-			files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  secrets:\n", tc.proxyYAML+"  secrets:\n", 1)
+			files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", tc.proxyYAML+"    artifactServers:\n", 1)
 			writeFiles(t, dir, files)
 			_, err := LoadNormalizeValidate([]string{dir})
 			if tc.wantSubstring == "" {
@@ -534,37 +529,26 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}
 }
 
-func TestSharedProviderServiceConflictsRejectIncompatiblePorts(t *testing.T) {
+func TestEnvironmentProxyDefaultsMustBeUnique(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["provider.yaml"] = strings.Replace(files["provider.yaml"],
-		"spec:\n",
-		"spec:\n  proxies:\n    - name: default\n      squid: { hostRef: { name: services-host } }\n", 1)
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
-		"  components:\n    machines:\n",
-		"  components:\n    proxy:\n      from: { provider: rack, name: default }\n      port: 3128\n    machines:\n", 1)
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
+      - name: one
+        default: true
+        type: external
+        spec: { httpProxy: http://proxy-one.bootwright.test:3128 }
+      - name: two
+        default: true
+        type: external
+        spec: { httpProxy: http://proxy-two.bootwright.test:3128 }
+    artifactServers:
+`, 1)
 	writeFiles(t, dir, files)
-	state, err := LoadNormalizeValidate([]string{dir})
-	if err != nil {
-		t.Fatalf("LoadNormalizeValidate: %v", err)
-	}
-	ci := state.ClusterInfras[0]
-	ci.Metadata.Name = "sno-b"
-	proxy := *ci.Spec.Components.Proxy
-	ci.Spec.Components.Proxy = &proxy
-	ci.Spec.Components.Proxy.Port = 3129
-	ocp := state.ContainerClusters[0]
-	ocp.Metadata.Name = "sno-b"
-	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
-	ocp.Spec.Nodes[0].MachineRef.ClusterInfra = ci.Metadata.Name
-	state.ClusterInfras = append(state.ClusterInfras, ci)
-	state.ContainerClusters = append(state.ContainerClusters, ocp)
-
-	err = Validate(state)
+	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected shared proxy port conflict, got nil")
+		t.Fatal("expected duplicate proxy default error, got nil")
 	}
-	want := "shared provider service proxy rack/default has conflicting port"
+	want := "spec.infraComponents.proxies must not mark more than one entry default"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -750,6 +734,45 @@ spec: {}
 	}
 }
 
+func TestEnvironmentContainerClustersFiltersEffectiveState(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  baseDomain: bootwright.test\n", `  baseDomain: bootwright.test
+
+  containerClusters:
+    - sno
+
+`, 1)
+	files["cluster-b.yaml"] = strings.Replace(newClusterYAML, "name: sno", "name: unused", 2)
+	files["cluster-b.yaml"] = strings.Replace(files["cluster-b.yaml"], "clusterInfra: sno", "clusterInfra: unused", 1)
+	files["cluster-b.yaml"] = strings.Replace(files["cluster-b.yaml"], "from: { provider: rack, name: srv1 }", "from: { provider: unused-rack, name: srv1 }", 1)
+	files["provider-b.yaml"] = strings.Replace(newProviderYAML, "name: rack", "name: unused-rack", 1)
+	writeFiles(t, dir, files)
+
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := len(state.ContainerClusters); got != 1 {
+		t.Fatalf("ContainerClusters = %d, want 1", got)
+	}
+	if got := state.ContainerClusters[0].Metadata.Name; got != "sno" {
+		t.Fatalf("selected cluster = %q, want sno", got)
+	}
+	if got := len(state.ClusterInfras); got != 1 {
+		t.Fatalf("ClusterInfras = %d, want 1", got)
+	}
+	if got := state.ClusterInfras[0].Metadata.Name; got != "sno" {
+		t.Fatalf("selected infra = %q, want sno", got)
+	}
+	if got := len(state.InfraProviders); got != 1 {
+		t.Fatalf("InfraProviders = %d, want 1", got)
+	}
+	if got := state.InfraProviders[0].Metadata.Name; got != "rack" {
+		t.Fatalf("selected provider = %q, want rack", got)
+	}
+}
+
 func TestEnvironmentResourcesUnsetLoadsAllFiles(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -823,96 +846,70 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 		{
 			name: "single-bind-address-shortcut-accepted",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = withDefaultLoadBalancerCapability(files["provider.yaml"])
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
       providedBy:
-        loadBalancer: control-plane
+        componentRef: { name: control-plane }
     apiInt:
       providedBy:
-        loadBalancer: control-plane
+        componentRef: { name: control-plane }
     ingress:
       externalVip: 192.168.132.11
 `)
-				files["cluster.yaml"] = addClusterLoadBalancers(t, files["cluster.yaml"], `    loadBalancers:
-      - name: control-plane
-        from: { provider: rack, name: default }
-        bindAddresses:
-          - ip: 192.168.132.10
-`)
+				addLoadBalancerInfraComponent(files, "control-plane", "- ip: 192.168.132.10\n")
 			},
 		},
 		{
 			name: "named-bind-address-selection-accepted",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = withDefaultLoadBalancerCapability(files["provider.yaml"])
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { loadBalancer: default, address: control-plane }
+      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
     apiInt:
-      providedBy: { loadBalancer: default, address: control-plane }
+      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
     ingress:
-      providedBy: { loadBalancer: default, address: apps }
+      providedBy: { componentRef: { name: load-balancer }, address: apps }
 `)
-				files["cluster.yaml"] = addClusterLoadBalancers(t, files["cluster.yaml"], `    loadBalancers:
-      - name: default
-        from: { provider: rack, name: default }
-        bindAddresses:
-          - { name: control-plane, ip: 192.168.132.10 }
-          - { name: apps, ip: 192.168.132.11 }
-`)
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
 			},
 		},
 		{
 			name: "missing-bind-address-names-rejected",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = withDefaultLoadBalancerCapability(files["provider.yaml"])
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { loadBalancer: default, address: control-plane }
+      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
     apiInt:
-      providedBy: { loadBalancer: default, address: control-plane }
+      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
     ingress:
-      providedBy: { loadBalancer: default, address: apps }
+      providedBy: { componentRef: { name: load-balancer }, address: apps }
 `)
-				files["cluster.yaml"] = addClusterLoadBalancers(t, files["cluster.yaml"], `    loadBalancers:
-      - name: default
-        from: { provider: rack, name: default }
-        bindAddresses:
-          - { ip: 192.168.132.10 }
-          - { ip: 192.168.132.11 }
-`)
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { ip: 192.168.132.10 }\n    - { ip: 192.168.132.11 }\n")
 			},
-			wantSubstring: "name is required when a load balancer has multiple bindAddresses",
+			wantSubstring: "bindAddresses[0].name is required",
 		},
 		{
 			name: "bad-loadbalancer-reference-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
       providedBy:
-        loadBalancer: missing
+        componentRef: { name: missing }
     apiInt:
       externalVip: 192.168.132.10
     ingress:
       externalVip: 192.168.132.11
 `)
 			},
-			wantSubstring: `providedBy.loadBalancer "missing" does not match`,
+			wantSubstring: `providedBy.componentRef.name "missing" does not resolve to an InfraComponent loadBalancer`,
 		},
 		{
 			name: "bad-bind-address-reference-rejected",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = withDefaultLoadBalancerCapability(files["provider.yaml"])
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { loadBalancer: default, address: missing }
+      providedBy: { componentRef: { name: load-balancer }, address: missing }
     apiInt:
       externalVip: 192.168.132.10
     ingress:
       externalVip: 192.168.132.11
 `)
-				files["cluster.yaml"] = addClusterLoadBalancers(t, files["cluster.yaml"], `    loadBalancers:
-      - name: default
-        from: { provider: rack, name: default }
-        bindAddresses:
-          - { name: control-plane, ip: 192.168.132.10 }
-`)
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n")
 			},
 			wantSubstring: `providedBy.address "missing" does not match`,
 		},
@@ -1063,8 +1060,6 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  bastion:
-    hostRef: services-host
 
   secrets:
     openshift-pull-secret:
@@ -1190,20 +1185,17 @@ func replaceBaselineEndpoints(t *testing.T, clusterYAML, endpoints string) strin
 	return strings.Replace(clusterYAML, old, endpoints, 1)
 }
 
-func withDefaultLoadBalancerCapability(providerYAML string) string {
-	return strings.Replace(providerYAML,
-		"spec:\n",
-		"spec:\n  loadBalancers:\n    - name: default\n      haProxy: { hostRef: { name: services-host } }\n",
-		1)
-}
-
-func addClusterLoadBalancers(t *testing.T, clusterYAML, loadBalancers string) string {
-	t.Helper()
-	needle := "  components:\n    machines:\n"
-	if !strings.Contains(clusterYAML, needle) {
-		t.Fatalf("baseline cluster components block not found")
-	}
-	return strings.Replace(clusterYAML, needle, "  components:\n"+loadBalancers+"    machines:\n", 1)
+func addLoadBalancerInfraComponent(files map[string]string, name, bindAddresses string) {
+	files["infra-component.yaml"] += `---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: ` + name + ` }
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef: { name: services-host }
+    bindAddresses:
+    ` + bindAddresses
 }
 
 func newBaselineFiles() map[string]string {
@@ -1222,15 +1214,16 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  bastion:
-    hostRef: services-host
-
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
 
   secrets:
     openshift-pull-secret:
@@ -1247,15 +1240,16 @@ kind: Environment
 metadata: { name: env }
 spec:
   baseDomain: bootwright.test
-  bastion:
-    hostRef: services-host
-
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
 
   resources:
 `)

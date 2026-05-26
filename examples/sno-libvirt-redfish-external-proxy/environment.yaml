@@ -5,18 +5,16 @@ metadata:
 spec:
   baseDomain: example.test
 
-  bastion:
-    hostRef: lab-host
-
   resources:
     - hosts.yaml
     - networks.yaml
     - provider.yaml
+    - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
 
   secrets:
-    openshift-pull-secret:
+    openshift-pull-secret: null
     cluster-admin-pub-key:
       file: ~/.ssh/bootwright-ssh-key.pub
     provider-host-ssh:
@@ -30,15 +28,27 @@ spec:
         credentials:
           username: proxy
 
-  proxy:
-    httpProxy: http://proxy.example.test:3128
-    httpsProxy: http://proxy.example.test:3128
-    noProxy:
-      - .example.test
-      - 192.168.132.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
+  infraComponents:
+    proxies:
+      - name: default
+        default: true
+        type: external
+        spec:
+          httpProxy: http://proxy.example.test:3128
+          httpsProxy: http://proxy.example.test:3128
+          noProxy:
+            - .example.test
+            - 192.168.132.0/24
+          auth:
+            proxyAuthRef:
+              name: proxy-credentials
+    nameResolution:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: name-resolution
+
+  proxyFor:
+    bootwright: default
+    clusterInstall: default

@@ -11,16 +11,19 @@ spec:
   endpoints:
     api:
       providedBy:
-        loadBalancer: default
         address: control-plane
+        componentRef:
+          name: load-balancer
     apiInt:
       providedBy:
-        loadBalancer: default
         address: control-plane
+        componentRef:
+          name: load-balancer
     ingress:
       providedBy:
-        loadBalancer: default
         address: apps
+        componentRef:
+          name: load-balancer
 
   components:
     machines:
@@ -38,30 +41,3 @@ spec:
                   prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda
-
-    loadBalancers:
-      - name: default
-        from:
-          provider: lab-libvirt-provider
-          name: default
-        bindAddresses:
-          - name: control-plane
-            ip: 192.168.132.10
-          - name: apps
-            ip: 192.168.132.11
-
-    proxy:
-      from:
-        provider: lab-libvirt-provider
-        name: default
-      port: 3128
-      bindAddress: 0.0.0.0
-
-    nameResolution:
-      from:
-        provider: lab-libvirt-provider
-        name: default
-      bindAddress: 192.168.132.1
-      additionalIngressHosts:
-        - console-openshift-console.apps.sno-libvirt.example.test
-        - oauth-openshift.apps.sno-libvirt.example.test

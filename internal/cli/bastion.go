@@ -102,7 +102,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		}
 		switch {
 		case cliSpec != nil:
-			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIBastionInventory), askBecomePass, "")
+			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIInventory), askBecomePass, "")
 			p.CommandLine("install OCP CLIs "+cliSpec.OCPReleaseVersion+" into "+cliSpec.InstallDir, cliInstallCommand)
 		default:
 			p.Status(output.StatusSkip, "install OCP CLIs", "no openshift.release.version declared in state")

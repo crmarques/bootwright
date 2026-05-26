@@ -29,7 +29,8 @@ Declare artifact publication as an `InfraComponent` with
 - `endpoints[]` for named routable service addresses, each backed by a
   listener and a `Host.spec.addresses[].name`.
 
-Bind consumer audiences in `Environment.spec.artifactServer.routes`:
+Bind consumer audiences in
+`Environment.spec.infraComponents.artifactServers[].routes`:
 
 - `redfishVirtualMedia.endpoint` selects the endpoint rendered into BMC ISO
   fetch URLs.

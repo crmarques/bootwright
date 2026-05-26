@@ -33,7 +33,7 @@ var conditionalInstallConfigKeys = map[string]string{
 	"additionalTrustBundle":       "set only when ContainerCluster.spec.install.mode=disconnected",
 	"additionalTrustBundlePolicy": "set only when additionalTrustBundle is set",
 	"imageDigestSources":          "set only when Environment.spec.registries.mirror is declared (disconnected mode)",
-	"proxy":                       "set only when Environment.spec.proxy.useFor.clusterInstall permits an external or managed proxy",
+	"proxy":                       "set only when Environment.spec.proxyFor.clusterInstall selects an external or managed proxy",
 }
 
 // alwaysOwnedAgentConfigKeys are the agent-config keys Bootwright

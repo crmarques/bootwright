@@ -16,22 +16,6 @@ func Environment(state v1alpha1.State) *v1alpha1.Environment {
 	return &state.Environments[0]
 }
 
-func BastionHostName(state v1alpha1.State) string {
-	env := Environment(state)
-	if env == nil || env.Spec.Bastion == nil {
-		return ""
-	}
-	return env.Spec.Bastion.HostRef
-}
-
-func BastionHost(state v1alpha1.State) (v1alpha1.Host, bool) {
-	name := BastionHostName(state)
-	if name == "" {
-		return v1alpha1.Host{}, false
-	}
-	return Host(state, name)
-}
-
 func Provider(state v1alpha1.State, name string) (v1alpha1.InfraProvider, bool) {
 	for _, provider := range state.InfraProviders {
 		if provider.Metadata.Name == name {
@@ -95,42 +79,6 @@ func Machine(provider v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapa
 	return v1alpha1.MachineCapability{}, false
 }
 
-func LoadBalancer(provider v1alpha1.InfraProvider, name string) (v1alpha1.LoadBalancerCapability, bool) {
-	for _, loadBalancer := range provider.Spec.LoadBalancers {
-		if loadBalancer.Name == name {
-			return loadBalancer, true
-		}
-	}
-	return v1alpha1.LoadBalancerCapability{}, false
-}
-
-func Proxy(provider v1alpha1.InfraProvider, name string) (v1alpha1.ProxyCapability, bool) {
-	for _, proxy := range provider.Spec.Proxies {
-		if proxy.Name == name {
-			return proxy, true
-		}
-	}
-	return v1alpha1.ProxyCapability{}, false
-}
-
-func DNS(provider v1alpha1.InfraProvider, name string) (v1alpha1.DNSCapability, bool) {
-	for _, dns := range provider.Spec.DNS {
-		if dns.Name == name {
-			return dns, true
-		}
-	}
-	return v1alpha1.DNSCapability{}, false
-}
-
-func Registry(provider v1alpha1.InfraProvider, name string) (v1alpha1.RegistryCapability, bool) {
-	for _, registry := range provider.Spec.Registries {
-		if registry.Name == name {
-			return registry, true
-		}
-	}
-	return v1alpha1.RegistryCapability{}, false
-}
-
 func HostHasCapability(host v1alpha1.Host, want string) bool {
 	for _, capability := range host.Spec.Capabilities {
 		if capability == want {
@@ -181,7 +129,7 @@ func ClusterNodesForInfra(state v1alpha1.State, infra v1alpha1.ClusterInfra) map
 	return nil
 }
 
-func EndpointAddress(infra v1alpha1.ClusterInfra, name string) string {
+func EndpointAddress(state v1alpha1.State, infra v1alpha1.ClusterInfra, name string) string {
 	endpoint, ok := infra.Spec.Endpoints[name]
 	if !ok {
 		return ""
@@ -192,28 +140,28 @@ func EndpointAddress(infra v1alpha1.ClusterInfra, name string) string {
 	case endpoint.ExternalVIP != "":
 		return endpoint.ExternalVIP
 	case endpoint.ProvidedBy != nil:
-		if bind, ok := LoadBalancerBindAddress(infra, *endpoint.ProvidedBy); ok {
+		if bind, ok := LoadBalancerBindAddress(state, *endpoint.ProvidedBy); ok {
 			return bind.IP
 		}
 	}
 	return ""
 }
 
-func LoadBalancerBindAddress(infra v1alpha1.ClusterInfra, ref v1alpha1.EndpointProvidedBy) (v1alpha1.LoadBalancerBindAddress, bool) {
-	for _, loadBalancer := range infra.Spec.Components.LoadBalancers {
-		if loadBalancer.Name != ref.LoadBalancer || len(loadBalancer.BindAddresses) == 0 {
-			continue
+func LoadBalancerBindAddress(state v1alpha1.State, ref v1alpha1.EndpointProvidedBy) (v1alpha1.LoadBalancerBindAddress, bool) {
+	component, ok := InfraComponent(state, ref.ComponentRef.Name)
+	if !ok || component.Spec.LoadBalancer == nil {
+		return v1alpha1.LoadBalancerBindAddress{}, false
+	}
+	binds := component.Spec.LoadBalancer.BindAddresses
+	if ref.Address == "" {
+		if len(binds) == 1 {
+			return binds[0], true
 		}
-		if ref.Address == "" {
-			if len(loadBalancer.BindAddresses) == 1 {
-				return loadBalancer.BindAddresses[0], true
-			}
-			return v1alpha1.LoadBalancerBindAddress{}, false
-		}
-		for _, bind := range loadBalancer.BindAddresses {
-			if bind.Name == ref.Address {
-				return bind, true
-			}
+		return v1alpha1.LoadBalancerBindAddress{}, false
+	}
+	for _, bind := range binds {
+		if bind.Name == ref.Address {
+			return bind, true
 		}
 	}
 	return v1alpha1.LoadBalancerBindAddress{}, false
@@ -301,13 +249,13 @@ func PrimaryNetworkGateway(state v1alpha1.State, infra v1alpha1.ClusterInfra) st
 }
 
 func PrimaryClusterNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra) *v1alpha1.NetworkConfig {
-	if address := EndpointAddress(infra, v1alpha1.EndpointAPI); address != "" {
+	if address := EndpointAddress(state, infra, v1alpha1.EndpointAPI); address != "" {
 		if network, ok := EndpointNetworkConfig(state, infra, address); ok {
 			return &network
 		}
 	}
 	for _, name := range []string{v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
-		if address := EndpointAddress(infra, name); address != "" {
+		if address := EndpointAddress(state, infra, name); address != "" {
 			if network, ok := EndpointNetworkConfig(state, infra, address); ok {
 				return &network
 			}

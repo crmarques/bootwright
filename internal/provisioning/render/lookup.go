@@ -45,38 +45,6 @@ func findClusterMachine(ci v1alpha1.ClusterInfra, name string) (v1alpha1.Cluster
 	return v1alpha1.ClusterMachineComponent{}, false
 }
 
-func resolveLoadBalancer(state v1alpha1.State, from v1alpha1.From) (v1alpha1.LoadBalancerCapability, bool) {
-	p, ok := findProvider(state, from.Provider)
-	if !ok {
-		return v1alpha1.LoadBalancerCapability{}, false
-	}
-	return stateview.LoadBalancer(p, from.Name)
-}
-
-func resolveProxy(state v1alpha1.State, from v1alpha1.From) (v1alpha1.ProxyCapability, bool) {
-	p, ok := findProvider(state, from.Provider)
-	if !ok {
-		return v1alpha1.ProxyCapability{}, false
-	}
-	return stateview.Proxy(p, from.Name)
-}
-
-func resolveDNS(state v1alpha1.State, from v1alpha1.From) (v1alpha1.DNSCapability, bool) {
-	p, ok := findProvider(state, from.Provider)
-	if !ok {
-		return v1alpha1.DNSCapability{}, false
-	}
-	return stateview.DNS(p, from.Name)
-}
-
-func resolveRegistry(state v1alpha1.State, from v1alpha1.From) (v1alpha1.RegistryCapability, bool) {
-	p, ok := findProvider(state, from.Provider)
-	if !ok {
-		return v1alpha1.RegistryCapability{}, false
-	}
-	return stateview.Registry(p, from.Name)
-}
-
 func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
 	return stateview.Environment(state)
 }

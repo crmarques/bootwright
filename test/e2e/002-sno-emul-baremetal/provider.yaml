@@ -6,10 +6,10 @@ spec:
   machines:
     - name: rack1-srv1
       baremetal:
-        bootMACAddress: 52:54:00:32:11:10
+        bootMACAddress: '52:54:00:32:11:10'
         interfaces:
           - name: primary
-            macAddress: 52:54:00:32:11:10
+            macAddress: '52:54:00:32:11:10'
         rootDeviceHints:
           deviceName: /dev/vda
         bmc:
@@ -23,4 +23,4 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: host-services
-spec:
+spec: null

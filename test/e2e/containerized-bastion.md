@@ -9,8 +9,8 @@ mode.
 ## Requirements
 
 - Linux host with Podman.
-- A non-root user that can SSH to the address declared on the selected bastion
-  Host and escalate with `sudo`.
+- A non-root user that can SSH to declared provider/service Host addresses and
+  escalate with `sudo`.
 - `bin/bootwright` built from this repository (`make build`).
 - An OpenShift pull secret JSON at
   `~/.bootwright/secrets/openshift-pull-secret` on the host.
@@ -39,9 +39,9 @@ local libvirt provider) — those are in the case README, not here.
 ## Optional Proxy Env For The Container Build
 
 The container build picks up the standard process proxy environment.
-Bootwright commands inside the container use `Environment.spec.proxy` from the
-active context. See [proxy.md](proxy.md) for how to express the proxy in
-desired state.
+Bootwright commands inside the container use the proxy selected by
+`Environment.spec.proxyFor.bootwright` from the active context. See
+[proxy.md](proxy.md) for how to express the proxy in desired state.
 
 Leave unset for direct internet access. Replace the placeholder URL before
 exporting:

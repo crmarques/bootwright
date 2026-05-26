@@ -75,11 +75,11 @@ func validateContextChecks(ctx contextstore.Context) []output.Check {
 		checks = append(checks, missingContextCheck("desired state", err.Error(), "fix context input files and rerun bootwright context validate"))
 	} else {
 		checks = append(checks, okContextCheck("desired state", "loads, normalizes, and validates"))
-		result := locality.CheckBastion(state, bastionLocalityPolicy)
+		result := locality.CheckController(state, controllerLocalityPolicy)
 		if result.OK {
-			checks = append(checks, okContextCheck("bastion locality", result.Evidence))
+			checks = append(checks, okContextCheck("controller locality", result.Evidence))
 		} else {
-			checks = append(checks, missingContextCheck("bastion locality", result.Evidence, "run bootwright on the Host selected by Environment.spec.bastion.hostRef"))
+			checks = append(checks, missingContextCheck("controller locality", result.Evidence, "run bootwright from the local controller context"))
 		}
 	}
 	return checks

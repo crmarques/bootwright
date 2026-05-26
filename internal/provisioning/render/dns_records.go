@@ -11,15 +11,12 @@ type dnsmasqRecord struct {
 	address string
 }
 
-func nameResolutionRecordsVars(state v1alpha1.State, c *v1alpha1.ClusterNameResolutionComponent) ([]any, []any) {
-	if c == nil {
-		return nil, nil
-	}
+func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additionalIngressHosts []string) ([]any, []any) {
 	hostRecords := []dnsmasqRecord{}
 	domainRecords := []dnsmasqRecord{}
 	for _, ocp := range state.ContainerClusters {
 		ci, err := clusterInfraForOCP(state, ocp)
-		if err != nil || !clusterUsesNameResolution(state, ci, c) {
+		if err != nil || !clusterUsesNameResolution(state, ci, entryName) {
 			continue
 		}
 		baseDomain := clusterBaseDomain(state)
@@ -27,28 +24,26 @@ func nameResolutionRecordsVars(state v1alpha1.State, c *v1alpha1.ClusterNameReso
 			continue
 		}
 		clusterName := ocp.Metadata.Name
-		if address := endpointAddress(ci, v1alpha1.EndpointAPI); address != "" {
+		if address := endpointAddress(state, ci, v1alpha1.EndpointAPI); address != "" {
 			hostRecords = append(hostRecords, dnsmasqRecord{
 				name:    "api." + clusterName + "." + baseDomain,
 				address: address,
 			})
 		}
-		if address := endpointAddress(ci, v1alpha1.EndpointAPIInt); address != "" {
+		if address := endpointAddress(state, ci, v1alpha1.EndpointAPIInt); address != "" {
 			hostRecords = append(hostRecords, dnsmasqRecord{
 				name:    "api-int." + clusterName + "." + baseDomain,
 				address: address,
 			})
 		}
-		if address := endpointAddress(ci, v1alpha1.EndpointIngress); address != "" {
+		if address := endpointAddress(state, ci, v1alpha1.EndpointIngress); address != "" {
 			domainRecords = append(domainRecords, dnsmasqRecord{
 				name:    "apps." + clusterName + "." + baseDomain,
 				address: address,
 			})
-			if nr := ci.Spec.Components.NameResolution; nr != nil && sameFrom(nr.From, c.From) {
-				for _, host := range nr.AdditionalIngressHosts {
-					if host != "" {
-						hostRecords = append(hostRecords, dnsmasqRecord{name: host, address: address})
-					}
+			for _, host := range additionalIngressHosts {
+				if host != "" {
+					hostRecords = append(hostRecords, dnsmasqRecord{name: host, address: address})
 				}
 			}
 		}
@@ -56,20 +51,17 @@ func nameResolutionRecordsVars(state v1alpha1.State, c *v1alpha1.ClusterNameReso
 	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
 }
 
-func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, c *v1alpha1.ClusterNameResolutionComponent) bool {
-	if nr := ci.Spec.Components.NameResolution; nr != nil && sameFrom(nr.From, c.From) {
-		return true
-	}
-	if c.BindAddress == "" || c.BindAddress == "0.0.0.0" || c.BindAddress == "::" {
+func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, refName string) bool {
+	if refName == "" {
 		return false
 	}
-	for _, name := range clusterNetworkConfigNames(ci) {
-		network, ok := findNetworkConfig(state, name)
+	for _, networkName := range clusterNetworkConfigNames(ci) {
+		network, ok := findNetworkConfig(state, networkName)
 		if !ok {
 			continue
 		}
-		for _, server := range templateDNSServers(network) {
-			if server == c.BindAddress {
+		for _, ref := range network.Spec.Template.DNSRefs {
+			if ref == refName {
 				return true
 			}
 		}
@@ -82,10 +74,6 @@ func clusterBaseDomain(state v1alpha1.State) string {
 		return env.Spec.BaseDomain
 	}
 	return ""
-}
-
-func sameFrom(a, b v1alpha1.From) bool {
-	return a.Provider == b.Provider && a.Name == b.Name
 }
 
 func dnsmasqRecordVars(records []dnsmasqRecord) []any {

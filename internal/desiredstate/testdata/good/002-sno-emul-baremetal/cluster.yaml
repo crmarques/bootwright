@@ -32,7 +32,6 @@ spec:
                   prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda
-
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

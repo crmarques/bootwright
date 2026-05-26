@@ -18,10 +18,3 @@ spec:
           auth:
             credentialRef:
               name: bmc-credentials
-
-  loadBalancers:
-    - name: default
-      haProxy:
-        hostRef:
-          name: services-host
-

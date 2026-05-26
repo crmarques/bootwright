@@ -9,4 +9,4 @@ Each `ContainerCluster.spec.nodes[]` entry binds a hostname and role to a
 addresses.
 
 Cluster endpoints use `providedBy` and resolve to the managed HAProxy
-`loadBalancers[default]` bind addresses.
+`InfraComponent/load-balancer` bind addresses.

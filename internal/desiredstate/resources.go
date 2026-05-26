@@ -139,35 +139,27 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 					v1alpha1.KindHost, mp.Libvirt.HostRef.Name)
 			}
 		}
-		for _, lb := range p.Spec.LoadBalancers {
-			if lb.HAProxy != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.loadBalancers[%s].haProxy.hostRef", p.Metadata.Name, lb.Name),
-					v1alpha1.KindHost, lb.HAProxy.HostRef.Name)
-			}
-		}
-		for _, proxy := range p.Spec.Proxies {
-			if proxy.Squid != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.proxies[%s].squid.hostRef", p.Metadata.Name, proxy.Name),
-					v1alpha1.KindHost, proxy.Squid.HostRef.Name)
-			}
-		}
-		for _, d := range p.Spec.DNS {
-			if d.Dnsmasq != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.dns[%s].dnsmasq.hostRef", p.Metadata.Name, d.Name),
-					v1alpha1.KindHost, d.Dnsmasq.HostRef.Name)
-			}
-		}
-		for _, registry := range p.Spec.Registries {
-			if registry.MirrorRegistry != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.registries[%s].mirrorRegistry.hostRef", p.Metadata.Name, registry.Name),
-					v1alpha1.KindHost, registry.MirrorRegistry.HostRef.Name)
-			}
-		}
 	}
 	for _, component := range state.InfraComponents {
 		if server := component.Spec.ArtifactServer; server != nil {
 			require(fmt.Sprintf("InfraComponent/%s spec.artifactServer.hostRef", component.Metadata.Name),
 				v1alpha1.KindHost, server.HostRef.Name)
+		}
+		if lb := component.Spec.LoadBalancer; lb != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.loadBalancer.hostRef", component.Metadata.Name),
+				v1alpha1.KindHost, lb.HostRef.Name)
+		}
+		if proxy := component.Spec.Proxy; proxy != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.proxy.hostRef", component.Metadata.Name),
+				v1alpha1.KindHost, proxy.HostRef.Name)
+		}
+		if dns := component.Spec.NameResolution; dns != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.nameResolution.hostRef", component.Metadata.Name),
+				v1alpha1.KindHost, dns.HostRef.Name)
+		}
+		if registry := component.Spec.Registry; registry != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.registry.hostRef", component.Metadata.Name),
+				v1alpha1.KindHost, registry.HostRef.Name)
 		}
 	}
 	for _, ci := range state.ClusterInfras {
@@ -177,16 +169,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].networkConfig.ref", ci.Metadata.Name, machine.Name),
 				v1alpha1.KindNetworkConfig, machine.NetworkConfig.Ref.Name)
 		}
-		for _, lb := range ci.Spec.Components.LoadBalancers {
-			require(fmt.Sprintf("ClusterInfra/%s spec.components.loadBalancers[%s].from.provider", ci.Metadata.Name, lb.Name),
-				v1alpha1.KindInfraProvider, lb.From.Provider)
-		}
-		requireClusterComponentProvider(require, ci, "proxy", ci.Spec.Components.Proxy)
-		requireClusterComponentProvider(require, ci, "registry", ci.Spec.Components.Registry)
-		if ci.Spec.Components.NameResolution != nil {
-			require(fmt.Sprintf("ClusterInfra/%s spec.components.nameResolution.from.provider", ci.Metadata.Name),
-				v1alpha1.KindInfraProvider, ci.Spec.Components.NameResolution.From.Provider)
-		}
 	}
 	for _, ocp := range state.ContainerClusters {
 		for i, node := range ocp.Spec.Nodes {
@@ -195,13 +177,21 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, env := range state.Environments {
-		if env.Spec.Bastion != nil {
-			require(fmt.Sprintf("Environment/%s spec.bastion.hostRef", env.Metadata.Name),
-				v1alpha1.KindHost, env.Spec.Bastion.HostRef)
+		for _, entry := range env.Spec.InfraComponents.Proxies {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%s].componentRef", env.Metadata.Name, entry.Name),
+				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
 		}
-		if env.Spec.ArtifactServer != nil {
-			require(fmt.Sprintf("Environment/%s spec.artifactServer.componentRef", env.Metadata.Name),
-				v1alpha1.KindInfraComponent, env.Spec.ArtifactServer.ComponentRef.Name)
+		for _, entry := range env.Spec.InfraComponents.NameResolution {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution[%s].componentRef", env.Metadata.Name, entry.Name),
+				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
+		}
+		for _, entry := range env.Spec.InfraComponents.ArtifactServers {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers[%s].componentRef", env.Metadata.Name, entry.Name),
+				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
+		}
+		for _, entry := range env.Spec.InfraComponents.Registries {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.registries[%s].componentRef", env.Metadata.Name, entry.Name),
+				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
 		}
 	}
 	if len(errs) == 0 {
@@ -209,14 +199,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 	}
 	sort.Strings(errs)
 	return errors.New(strings.Join(errs, "; "))
-}
-
-func requireClusterComponentProvider(require func(string, string, string), ci v1alpha1.ClusterInfra, slot string, component *v1alpha1.ClusterComponentRef) {
-	if component == nil {
-		return
-	}
-	require(fmt.Sprintf("ClusterInfra/%s spec.components.%s.from.provider", ci.Metadata.Name, slot),
-		v1alpha1.KindInfraProvider, component.From.Provider)
 }
 
 func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {

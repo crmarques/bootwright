@@ -10,6 +10,7 @@ import (
 type Server struct {
 	Component v1alpha1.InfraComponent
 	Config    *v1alpha1.ArtifactServerComponent
+	Entry     v1alpha1.EnvironmentArtifactServerComponent
 }
 
 type ResolvedEndpoint struct {
@@ -20,14 +21,36 @@ type ResolvedEndpoint struct {
 
 func Select(state v1alpha1.State) (Server, bool) {
 	env := stateview.Environment(state)
-	if env == nil || env.Spec.ArtifactServer == nil || env.Spec.ArtifactServer.ComponentRef.Name == "" {
+	if env == nil {
 		return Server{}, false
 	}
-	component, ok := stateview.InfraComponent(state, env.Spec.ArtifactServer.ComponentRef.Name)
+	entry, ok := selectedArtifactServer(env.Spec.InfraComponents.ArtifactServers)
+	if !ok {
+		return Server{}, false
+	}
+	if entry.Type == v1alpha1.EnvironmentComponentExternal {
+		return Server{Entry: entry}, true
+	}
+	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
 	if !ok || component.Spec.ArtifactServer == nil {
 		return Server{}, false
 	}
-	return Server{Component: component, Config: component.Spec.ArtifactServer}, true
+	return Server{Component: component, Config: component.Spec.ArtifactServer, Entry: entry}, true
+}
+
+func selectedArtifactServer(entries []v1alpha1.EnvironmentArtifactServerComponent) (v1alpha1.EnvironmentArtifactServerComponent, bool) {
+	if len(entries) == 0 {
+		return v1alpha1.EnvironmentArtifactServerComponent{}, false
+	}
+	for _, entry := range entries {
+		if entry.Default {
+			return entry, true
+		}
+	}
+	if len(entries) == 1 {
+		return entries[0], true
+	}
+	return v1alpha1.EnvironmentArtifactServerComponent{}, false
 }
 
 func ResolveEndpoint(state v1alpha1.State, server Server, name string) (ResolvedEndpoint, bool) {
@@ -50,6 +73,14 @@ func ResolveEndpoint(state v1alpha1.State, server Server, name string) (Resolved
 }
 
 func RouteAvailable(server Server, endpointName string) bool {
+	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal {
+		switch endpointName {
+		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
+			return server.Entry.Spec != nil && server.Entry.Spec.RedfishVirtualMediaURL != ""
+		case server.Entry.Routes.ClusterInstall.Endpoint:
+			return server.Entry.Spec != nil && server.Entry.Spec.ClusterInstallURL != ""
+		}
+	}
 	_, ok := Endpoint(server, endpointName)
 	return ok
 }

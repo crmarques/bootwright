@@ -1,5 +1,5 @@
 ---
-# OpenShift install layer. Runs on the declared bastion host and drives the
+# OpenShift install layer. Runs on the localhost controller and drives the
 # agent installer per cluster. Rendered boot driver roles dispatch per machine
 # and may call into provider-host services (BMC, libvirt) over SSH.
 

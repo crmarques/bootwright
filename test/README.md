@@ -19,16 +19,16 @@ install mode (connected vs. disconnected) is documented in each case's
 
 Current cases:
 
-- `001-sno-libvirt` — Bootwright CLI runs inside a UBI9
-  container; the environment bastion points at the libvirt host on the same
-  machine through the fixture's declared Host SSH address; one SNO cluster.
+- `001-sno-libvirt` — Bootwright CLI runs inside a UBI9 container; the
+  libvirt provider host is reached through the fixture's declared Host SSH
+  address; one SNO cluster.
 - `002-sno-emul-baremetal` — single-node bare-metal shape backed by
   emulated services.
-- `003-3nodes-libvirt` — same bastion/provider shape with one compact
+- `003-3nodes-libvirt` — same controller/provider shape with one compact
   3-node OpenShift cluster.
 - `004-3nodes-emul-baremetal` — three-node bare-metal shape backed by
   emulated services.
-- `005-3nodes-baremetal` — three-node real bare-metal shape with bastion
+- `005-3nodes-baremetal` — three-node real bare-metal shape with controller
   artifact publishing, external proxy/DNS, bonded VLAN node networking, and
   OpenShift-managed VIPs.
 

@@ -2,29 +2,30 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-// resolveClusterDNSServers returns DNS servers declared in the NMState
-// NetworkConfig template, with the managed dnsmasq service IP prepended
-// when it can be derived.
+// dnsRefs are Bootwright-only input and must not be emitted into NMState.
 func resolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig) []string {
-	base := templateDNSServers(network)
-	nr := ci.Spec.Components.NameResolution
-	if nr == nil {
-		return base
+	out := append([]string(nil), templateDNSServers(network)...)
+	env := primaryEnvironment(state)
+	if env == nil {
+		return out
 	}
-	d, ok := resolveDNS(state, nr.From)
-	if !ok || d.Dnsmasq == nil {
-		return base
+	seen := map[string]bool{}
+	for _, server := range out {
+		seen[server] = true
 	}
-	ip := v1alpha1.DNSServiceIP(nr, network)
-	if ip == "" {
-		return base
-	}
-	for _, s := range base {
-		if s == ip {
-			return base
+	for _, ref := range network.Spec.Template.DNSRefs {
+		entry, ok := nameResolutionEntry(env, ref)
+		if !ok {
+			continue
 		}
+		ip := resolvedNameResolutionIP(state, ci, network, entry)
+		if ip == "" || seen[ip] {
+			continue
+		}
+		seen[ip] = true
+		out = append(out, ip)
 	}
-	return append([]string{ip}, base...)
+	return out
 }
 
 func templateDNSServers(network v1alpha1.NetworkConfig) []string {

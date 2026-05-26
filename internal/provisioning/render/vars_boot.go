@@ -150,13 +150,9 @@ func baremetalAgentISOTarget(state v1alpha1.State, isoBasename string) (stageHos
 	if !ok || server.Config == nil {
 		return "", "", ""
 	}
-	env := primaryEnvironment(state)
-	if env == nil || env.Spec.ArtifactServer == nil {
-		return "", "", ""
-	}
 	hostRef := server.Config.HostRef.Name
 	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts-server/%s/%s", agentISOPublishTokenExpr, isoBasename)
-	fetchURL = artifactEndpointFetchURL(state, server, env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint, agentISOPublishTokenExpr, isoBasename)
+	fetchURL = artifactEndpointFetchURL(state, server, server.Entry.Routes.RedfishVirtualMedia.Endpoint, agentISOPublishTokenExpr, isoBasename)
 	if fetchURL == "" {
 		return "", "", ""
 	}

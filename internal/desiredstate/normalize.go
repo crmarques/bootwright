@@ -24,14 +24,6 @@ func Normalize(state *v1alpha1.State) {
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {
-	if env.Spec.Proxy != nil {
-		if env.Spec.Proxy.UseFor.Bootwright == nil {
-			env.Spec.Proxy.UseFor.Bootwright = v1alpha1.BoolPtr(true)
-		}
-		if env.Spec.Proxy.UseFor.ClusterInstall == nil {
-			env.Spec.Proxy.UseFor.ClusterInstall = v1alpha1.BoolPtr(true)
-		}
-	}
 	for name, secret := range env.Spec.Secrets {
 		if secret.Generated == nil {
 			continue
@@ -62,19 +54,41 @@ func normalizeProvider(p *v1alpha1.InfraProvider) {
 }
 
 func normalizeInfraComponent(c *v1alpha1.InfraComponent) {
-	if c.Spec.ArtifactServer == nil {
-		return
+	if server := c.Spec.ArtifactServer; server != nil {
+		if server.BindAddress == "" {
+			server.BindAddress = v1alpha1.DefaultServiceBindAddress
+		}
+		if len(server.Listeners) == 0 {
+			server.Listeners = []v1alpha1.ArtifactServerListener{{
+				Name:     v1alpha1.ArtifactServerProtocolHTTPS,
+				Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+				Port:     v1alpha1.DefaultArtifactsHTTPPort,
+			}}
+		}
 	}
-	server := c.Spec.ArtifactServer
-	if server.BindAddress == "" {
-		server.BindAddress = v1alpha1.DefaultServiceBindAddress
+	if proxy := c.Spec.Proxy; proxy != nil {
+		if proxy.BindAddress == "" {
+			proxy.BindAddress = v1alpha1.DefaultServiceBindAddress
+		}
+		if proxy.Port == 0 {
+			proxy.Port = v1alpha1.DefaultSquidPort
+		}
 	}
-	if len(server.Listeners) == 0 {
-		server.Listeners = []v1alpha1.ArtifactServerListener{{
-			Name:     v1alpha1.ArtifactServerProtocolHTTPS,
-			Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
-			Port:     v1alpha1.DefaultArtifactsHTTPPort,
-		}}
+	if dns := c.Spec.NameResolution; dns != nil {
+		if dns.BindAddress == "" {
+			dns.BindAddress = v1alpha1.DefaultServiceBindAddress
+		}
+		if dns.Port == 0 {
+			dns.Port = v1alpha1.DefaultDNSPort
+		}
+	}
+	if registry := c.Spec.Registry; registry != nil {
+		if registry.BindAddress == "" {
+			registry.BindAddress = v1alpha1.DefaultServiceBindAddress
+		}
+		if registry.Port == 0 {
+			registry.Port = v1alpha1.DefaultMirrorRegistryPort
+		}
 	}
 }
 
@@ -106,31 +120,6 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 }
 
 func normalizeClusterInfra(ci *v1alpha1.ClusterInfra) {
-	c := &ci.Spec.Components
-	if c.Proxy != nil {
-		if c.Proxy.BindAddress == "" {
-			c.Proxy.BindAddress = v1alpha1.DefaultServiceBindAddress
-		}
-		if c.Proxy.Port == 0 {
-			c.Proxy.Port = v1alpha1.DefaultSquidPort
-		}
-	}
-	if c.NameResolution != nil {
-		if c.NameResolution.BindAddress == "" {
-			c.NameResolution.BindAddress = v1alpha1.DefaultServiceBindAddress
-		}
-		if c.NameResolution.Port == 0 {
-			c.NameResolution.Port = v1alpha1.DefaultDNSPort
-		}
-	}
-	if c.Registry != nil {
-		if c.Registry.BindAddress == "" {
-			c.Registry.BindAddress = v1alpha1.DefaultServiceBindAddress
-		}
-		if c.Registry.Port == 0 {
-			c.Registry.Port = v1alpha1.DefaultMirrorRegistryPort
-		}
-	}
 }
 
 func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Environment) {

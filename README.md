@@ -104,18 +104,18 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seven kinds:
 
 | Kind | Owns |
 | --- | --- |
-| `Environment` | Shared environment defaults: selected resource files, base domain, secret sources, external proxy defaults, mirror registry defaults, and component image pins |
+| `Environment` | Shared environment defaults: selected resource files, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
 | `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
-| `InfraProvider` | Named provider capability lists — `machineProfiles`, `machines`, `loadBalancers`, `proxies`, `dns`, `registries` — with names scoped per kind |
-| `InfraComponent` | Host-bound shared infra services such as the artifact server, including listener and routable endpoint definitions |
+| `InfraProvider` | Named provider capability lists — `machineProfiles` and explicit `machines` — with names scoped per kind |
+| `InfraComponent` | Host-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
 | `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, selected machines under `components.machines[]`, and managed infra components |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with
 Redfish emulation to real bare metal edits the substrate-owned objects:
-`InfraProvider`, `NetworkConfig`, and the cluster infrastructure machine
-bindings.
+`InfraProvider`, `InfraComponent`, `NetworkConfig`, and the cluster
+infrastructure machine bindings.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs and
 bare metal with Redfish virtual media are converged by the shipped Ansible

@@ -38,51 +38,17 @@ type Endpoint struct {
 }
 
 type EndpointProvidedBy struct {
-	LoadBalancer string `yaml:"loadBalancer" json:"loadBalancer"`
-	Address      string `yaml:"address,omitempty" json:"address,omitempty"`
+	ComponentRef LocalObjectReference `yaml:"componentRef" json:"componentRef"`
+	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
 }
 
 type ClusterComponents struct {
-	Machines       []ClusterMachineComponent       `yaml:"machines,omitempty" json:"machines,omitempty"`
-	LoadBalancers  []ClusterLoadBalancerComponent  `yaml:"loadBalancers,omitempty" json:"loadBalancers,omitempty"`
-	Proxy          *ClusterComponentRef            `yaml:"proxy,omitempty" json:"proxy,omitempty"`
-	NameResolution *ClusterNameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
-	Registry       *ClusterComponentRef            `yaml:"registry,omitempty" json:"registry,omitempty"`
-}
-
-type ClusterLoadBalancerComponent struct {
-	Name          string                    `yaml:"name" json:"name"`
-	From          From                      `yaml:"from" json:"from"`
-	BindAddresses []LoadBalancerBindAddress `yaml:"bindAddresses,omitempty" json:"bindAddresses,omitempty"`
+	Machines []ClusterMachineComponent `yaml:"machines,omitempty" json:"machines,omitempty"`
 }
 
 type LoadBalancerBindAddress struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 	IP   string `yaml:"ip" json:"ip"`
-}
-
-// ClusterComponentRef is the shape of non-machine service component slots
-// with a single selected capability. Carries the
-// provider+capability selector and optional instance-time parameters
-// (bindAddress, port).
-type ClusterComponentRef struct {
-	From        From   `yaml:"from" json:"from"`
-	BindAddress string `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
-	Port        int    `yaml:"port,omitempty" json:"port,omitempty"`
-}
-
-type ClusterNameResolutionComponent struct {
-	From From `yaml:"from" json:"from"`
-	// BindAddress is the dnsmasq listen address and, when set to a
-	// specific non-wildcard IP inside a consumed NetworkConfig machine
-	// CIDR, the address prepended to rendered resolver servers so
-	// cluster nodes resolve through this service. For other substrates
-	// set this to a routable IP explicitly; the desired-state validator
-	// otherwise rejects the cluster. See DNSServiceIP for the precedence
-	// rules.
-	BindAddress            string   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
-	Port                   int      `yaml:"port,omitempty" json:"port,omitempty"`
-	AdditionalIngressHosts []string `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
 }
 
 // ClusterMachineComponent is one cluster machine. from.profile

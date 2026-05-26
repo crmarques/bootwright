@@ -29,8 +29,6 @@ metadata:
   name: lab
 spec:
   baseDomain: example.test
-  bastion:
-    hostRef: bastion
   resources:
     - linked.yaml
 `

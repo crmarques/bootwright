@@ -98,14 +98,18 @@ clusters yet.
 
 ## Services
 
-Most service capabilities are selected by non-machine component slots:
+Host-bound shared services are declared as `InfraComponent` objects:
 
 ```yaml
-components:
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: proxy
+spec:
   proxy:
-    from:
-      provider: host-services
-      name: default
+    type: squid
+    hostRef:
+      name: services-host
     port: 3128
 ```
 

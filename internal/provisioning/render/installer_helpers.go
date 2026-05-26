@@ -56,10 +56,10 @@ func managedProxyClientURLForCluster(state v1alpha1.State, ci v1alpha1.ClusterIn
 }
 
 func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, ci v1alpha1.ClusterInfra) (*proxy.Effective, string) {
-	if env != nil && !v1alpha1.ProxyUseForClusterInstall(env.Spec.Proxy) {
+	if env == nil {
 		return nil, ""
 	}
-	return proxy.Resolve(state, env), managedProxyClientURLForCluster(state, ci)
+	return proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall), managedProxyClientURLForCluster(state, ci)
 }
 
 func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, env *v1alpha1.Environment) string {
@@ -68,15 +68,22 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, 
 			return u
 		}
 	}
-	registry := ci.Spec.Components.Registry
-	if registry == nil {
+	entry, ok := selectedRegistryEntry(env)
+	if !ok {
 		return ""
 	}
-	cap, ok := resolveRegistry(state, registry.From)
-	if !ok || cap.MirrorRegistry == nil {
+	if entry.Type == v1alpha1.EnvironmentComponentExternal {
+		return strings.TrimRight(entry.URL, "/")
+	}
+	if entry.Type != v1alpha1.EnvironmentComponentManaged {
 		return ""
 	}
-	host := proxy.ClusterFacingHostAddress(state, cap.MirrorRegistry.HostRef.Name, ci)
+	component, ok := findInfraComponent(state, entry.ComponentRef.Name)
+	if !ok || component.Spec.Registry == nil {
+		return ""
+	}
+	registry := component.Spec.Registry
+	host := proxy.ClusterFacingHostAddress(state, registry.HostRef.Name, ci)
 	if host == "" {
 		return ""
 	}
@@ -141,14 +148,10 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 		return nil
 	}
 	server, ok := artifactpub.Select(state)
-	if !ok || server.Config == nil {
+	if !ok {
 		return nil
 	}
-	env := primaryEnvironment(state)
-	if env == nil || env.Spec.ArtifactServer == nil {
-		return nil
-	}
-	url := artifactServerEndpointURL(state, server, env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint)
+	url := artifactServerEndpointURL(state, server, server.Entry.Routes.ClusterInstall.Endpoint)
 	if url == "" {
 		return nil
 	}

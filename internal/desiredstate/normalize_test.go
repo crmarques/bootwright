@@ -30,13 +30,14 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	}
 }
 
-func TestNormalizeDefaultsEnvironmentProxyUseFor(t *testing.T) {
+func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 	state := v1alpha1.State{
-		Environments: []v1alpha1.Environment{{
-			Metadata: v1alpha1.Metadata{Name: "env"},
-			Spec: v1alpha1.EnvironmentSpec{
-				Proxy: &v1alpha1.EnvironmentProxySpec{
-					HTTPProxy: "http://proxy.example.test:3128",
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Proxy: &v1alpha1.ProxyComponent{
+					Type:    v1alpha1.InfraComponentTypeSquid,
+					HostRef: v1alpha1.LocalObjectReference{Name: "services-host"},
 				},
 			},
 		}},
@@ -44,12 +45,12 @@ func TestNormalizeDefaultsEnvironmentProxyUseFor(t *testing.T) {
 
 	Normalize(&state)
 
-	useFor := state.Environments[0].Spec.Proxy.UseFor
-	if useFor.Bootwright == nil || !*useFor.Bootwright {
-		t.Fatalf("UseFor.Bootwright = %v, want true", useFor.Bootwright)
+	proxy := state.InfraComponents[0].Spec.Proxy
+	if got := proxy.Port; got != v1alpha1.DefaultSquidPort {
+		t.Fatalf("proxy port = %d, want %d", got, v1alpha1.DefaultSquidPort)
 	}
-	if useFor.ClusterInstall == nil || !*useFor.ClusterInstall {
-		t.Fatalf("UseFor.ClusterInstall = %v, want true", useFor.ClusterInstall)
+	if got := proxy.BindAddress; got != v1alpha1.DefaultServiceBindAddress {
+		t.Fatalf("proxy bindAddress = %q, want %q", got, v1alpha1.DefaultServiceBindAddress)
 	}
 }
 

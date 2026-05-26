@@ -10,6 +10,12 @@ import (
 
 func validateNetworkConfigs(state v1alpha1.State) []string {
 	var errs []string
+	dnsRefs := map[string]bool{}
+	if env := primaryEnvironment(&state); env != nil {
+		for _, entry := range env.Spec.InfraComponents.NameResolution {
+			dnsRefs[entry.Name] = true
+		}
+	}
 	seen := map[string]bool{}
 	for _, n := range state.NetworkConfigs {
 		if e := validateName(v1alpha1.KindNetworkConfig, n.Metadata.Name); e != "" {
@@ -20,13 +26,13 @@ func validateNetworkConfigs(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate NetworkConfig %q", n.Metadata.Name))
 		}
 		seen[n.Metadata.Name] = true
-		errs = append(errs, validateNetworkConfigSpec(n)...)
+		errs = append(errs, validateNetworkConfigSpec(n, dnsRefs)...)
 	}
 	errs = append(errs, validateNetworkConfigCIDRSharing(state.NetworkConfigs)...)
 	return errs
 }
 
-func validateNetworkConfigSpec(n v1alpha1.NetworkConfig) []string {
+func validateNetworkConfigSpec(n v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
 	var errs []string
 	if len(n.Spec.MachineNetwork) == 0 {
 		errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.machineNetwork is required (at least one cidr)", n.Metadata.Name))
@@ -49,6 +55,22 @@ func validateNetworkConfigSpec(n v1alpha1.NetworkConfig) []string {
 	}
 	if n.Spec.Template.NetworkConfig == nil {
 		errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.template.networkConfig is required", n.Metadata.Name))
+	}
+	seenDNSRefs := map[string]bool{}
+	for i, ref := range n.Spec.Template.DNSRefs {
+		owner := fmt.Sprintf("NetworkConfig/%s spec.template.dnsRefs[%d]", n.Metadata.Name, i)
+		if ref == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if seenDNSRefs[ref] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, ref))
+			continue
+		}
+		seenDNSRefs[ref] = true
+		if !dnsRefs[ref] {
+			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", owner, ref))
+		}
 	}
 	set := 0
 	if n.Spec.Libvirt != nil {

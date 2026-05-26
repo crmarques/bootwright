@@ -9,20 +9,20 @@ import (
 	"github.com/crmarques/bootwright/internal/locality"
 )
 
-var bastionLocalityPolicy = locality.DefaultPolicy
+var controllerLocalityPolicy = locality.DefaultPolicy
 
 func enforceContextLocality(ctx contextstore.Context) error {
 	state, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths)
 	if err != nil {
 		return err
 	}
-	return enforceBastionLocality(state)
+	return enforceControllerLocality(state)
 }
 
-func enforceBastionLocality(state v1alpha1.State) error {
-	result := locality.CheckBastion(state, bastionLocalityPolicy)
+func enforceControllerLocality(state v1alpha1.State) error {
+	result := locality.CheckController(state, controllerLocalityPolicy)
 	if result.OK {
 		return nil
 	}
-	return fmt.Errorf("bootwright must run on the declared bastion host: %s", result.Evidence)
+	return fmt.Errorf("bootwright must run from the local controller context: %s", result.Evidence)
 }

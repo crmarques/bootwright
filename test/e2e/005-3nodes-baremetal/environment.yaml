@@ -5,20 +5,8 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
-  bastion:
-    hostRef: bastion
-
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
-      clusterInstall:
-        endpoint: cluster
-
   secrets:
-    openshift-pull-secret:
+    openshift-pull-secret: null
     cluster-admin-pub-key:
       file: ~/.ssh/bootwright-ssh-key.pub
     provider-host-ssh:
@@ -32,15 +20,32 @@ spec:
         credentials:
           username: proxy
 
-  proxy:
-    httpProxy: http://proxy.bootwright.test:3128
-    httpsProxy: http://proxy.bootwright.test:3128
-    noProxy:
-      - .bootwright.test
-      - 192.168.140.0/24
-    auth:
-      proxyAuthRef:
-        name: proxy-credentials
-    useFor:
-      bootwright: true
-      clusterInstall: true
+  infraComponents:
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          clusterInstall:
+            endpoint: cluster
+    proxies:
+      - name: default
+        default: true
+        type: external
+        spec:
+          httpProxy: http://proxy.bootwright.test:3128
+          httpsProxy: http://proxy.bootwright.test:3128
+          noProxy:
+            - .bootwright.test
+            - 192.168.140.0/24
+          auth:
+            proxyAuthRef:
+              name: proxy-credentials
+
+  proxyFor:
+    bootwright: default
+    clusterInstall: default

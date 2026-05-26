@@ -83,10 +83,13 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 				})
 			}
 		}
-		if env.Spec.Proxy != nil && env.Spec.Proxy.Auth != nil && env.Spec.Proxy.Auth.ProxyAuthRef.Name != "" {
+		for _, entry := range env.Spec.InfraComponents.Proxies {
+			if entry.Spec == nil || entry.Spec.Auth == nil || entry.Spec.Auth.ProxyAuthRef.Name == "" {
+				continue
+			}
 			out = append(out, secretRefRequirement{
-				refName: env.Spec.Proxy.Auth.ProxyAuthRef.Name,
-				label:   "proxy proxyAuthRef",
+				refName: entry.Spec.Auth.ProxyAuthRef.Name,
+				label:   fmt.Sprintf("proxy %s proxyAuthRef", entry.Name),
 				phases:  []string{"provider", "cluster"},
 			})
 		}

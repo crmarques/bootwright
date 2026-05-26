@@ -1,6 +1,6 @@
 ---
 - name: Install controller OpenShift CLIs
-  hosts: bootwright_bastion_hosts
+  hosts: bootwright_controller_hosts
   gather_facts: true
   become: true
   environment:

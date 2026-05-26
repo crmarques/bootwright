@@ -13,10 +13,6 @@ type InfraProvider struct {
 type InfraProviderSpec struct {
 	MachineProfiles []MachineProfileCapability `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
 	Machines        []MachineCapability        `yaml:"machines,omitempty" json:"machines,omitempty"`
-	LoadBalancers   []LoadBalancerCapability   `yaml:"loadBalancers,omitempty" json:"loadBalancers,omitempty"`
-	Proxies         []ProxyCapability          `yaml:"proxies,omitempty" json:"proxies,omitempty"`
-	DNS             []DNSCapability            `yaml:"dns,omitempty" json:"dns,omitempty"`
-	Registries      []RegistryCapability       `yaml:"registries,omitempty" json:"registries,omitempty"`
 }
 
 // MachineProfileCapability is a parameterised machine template; the
@@ -134,45 +130,4 @@ type RootDeviceHints struct {
 	MinSizeGigabytes int    `yaml:"minSizeGigabytes,omitempty" json:"minSizeGigabytes,omitempty"`
 	WWN              string `yaml:"wwn,omitempty" json:"wwn,omitempty"`
 	Rotational       *bool  `yaml:"rotational,omitempty" json:"rotational,omitempty"`
-}
-
-// Service capabilities. Each is a structural one-of with one realisation
-// arm. Provider declares WHERE+HOW only; instance-time parameters live on
-// ClusterInfra components. Host-bound services that are not provider
-// inventory live on InfraComponent.
-
-type LoadBalancerCapability struct {
-	Name    string             `yaml:"name" json:"name"`
-	HAProxy *HAProxyCapability `yaml:"haProxy,omitempty" json:"haProxy,omitempty"`
-}
-
-type HAProxyCapability struct {
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-}
-
-type ProxyCapability struct {
-	Name  string           `yaml:"name" json:"name"`
-	Squid *SquidCapability `yaml:"squid,omitempty" json:"squid,omitempty"`
-}
-
-type SquidCapability struct {
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-}
-
-type DNSCapability struct {
-	Name    string             `yaml:"name" json:"name"`
-	Dnsmasq *DnsmasqCapability `yaml:"dnsmasq,omitempty" json:"dnsmasq,omitempty"`
-}
-
-type DnsmasqCapability struct {
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-}
-
-type RegistryCapability struct {
-	Name           string                    `yaml:"name" json:"name"`
-	MirrorRegistry *MirrorRegistryCapability `yaml:"mirrorRegistry,omitempty" json:"mirrorRegistry,omitempty"`
-}
-
-type MirrorRegistryCapability struct {
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
 }

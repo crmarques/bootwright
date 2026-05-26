@@ -9,17 +9,22 @@ Bootwright-provisioned load balancer:
 endpoints:
   api:
     providedBy:
-      loadBalancer: control-plane
+      componentRef:
+        name: control-plane
       address: control-plane-ip
-components:
-  loadBalancers:
-    - name: control-plane
-      from:
-        provider: host-services
-        name: default
-      bindAddresses:
-        - name: control-plane-ip
-          ip: 192.168.133.10
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: control-plane
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef:
+      name: services-host
+    bindAddresses:
+      - name: control-plane-ip
+        ip: 192.168.133.10
 ```
 
 External load balancer:
