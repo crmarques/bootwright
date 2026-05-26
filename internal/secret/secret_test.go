@@ -13,6 +13,34 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+func TestResolveKeyFilePathUsesInternalCallerHome(t *testing.T) {
+	t.Setenv(InternalCallerHomeEnv, "/home/operator")
+
+	got, err := ResolveKeyFilePath("~/.ssh/bootwright-ssh-key.pub", "")
+	if err != nil {
+		t.Fatalf("ResolveKeyFilePath: %v", err)
+	}
+	want := filepath.Join("/home/operator", ".ssh", "bootwright-ssh-key.pub")
+	if got != want {
+		t.Fatalf("ResolveKeyFilePath = %q, want %q", got, want)
+	}
+}
+
+func TestResolveKeyFilePathUsesProcessHomeWithoutInternalCaller(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(InternalCallerHomeEnv, "")
+
+	got, err := ResolveKeyFilePath("~/.ssh/bootwright-ssh-key", "")
+	if err != nil {
+		t.Fatalf("ResolveKeyFilePath: %v", err)
+	}
+	want := filepath.Join(home, ".ssh", "bootwright-ssh-key")
+	if got != want {
+		t.Fatalf("ResolveKeyFilePath = %q, want %q", got, want)
+	}
+}
+
 func TestParseBMCCredentials(t *testing.T) {
 	cases := []struct {
 		name             string

@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/operator"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/scaffold"
+	"github.com/crmarques/bootwright/internal/secret"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
@@ -810,7 +811,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 }
 
 func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
-	setTestHomeAndRoot(t)
+	home := setTestHomeAndRoot(t)
 	previous := localRootGate
 	defer func() { localRootGate = previous }()
 
@@ -839,7 +840,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 5 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || !reflect.DeepEqual(gotArgs[2:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 6 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || gotArgs[2] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(gotArgs[3:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -910,14 +911,14 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 	}
 	args := os.Args
 	sep := slices.Index(args, "--")
-	if sep < 0 || len(args) < sep+9 {
+	if sep < 0 || len(args) < sep+10 {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 8 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") {
+	if len(rootArgs) < 9 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || !strings.HasPrefix(rootArgs[2], secret.InternalCallerHomeEnv+"=") {
 		os.Exit(2)
 	}
-	rootArgs = rootArgs[3:]
+	rootArgs = rootArgs[4:]
 	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
 		os.Exit(2)
 	}
@@ -985,15 +986,15 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	}
 	args := os.Args
 	sep := slices.Index(args, "--")
-	if sep < 0 || len(args) < sep+7 {
+	if sep < 0 || len(args) < sep+8 {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 8 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") {
+	if len(rootArgs) < 9 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || !strings.HasPrefix(rootArgs[2], secret.InternalCallerHomeEnv+"=") {
 		os.Exit(2)
 	}
 	registry := strings.TrimPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=")
-	rootArgs = rootArgs[3:]
+	rootArgs = rootArgs[4:]
 	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
 	}

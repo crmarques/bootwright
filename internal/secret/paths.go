@@ -10,12 +10,14 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+const InternalCallerHomeEnv = "BOOTWRIGHT_INTERNAL_CALLER_HOME"
+
 func ResolveKeyFilePath(file, envSourceDir string) (string, error) {
 	if file == "" {
 		return "", errors.New("file source is empty")
 	}
 	if strings.HasPrefix(file, "~/") || file == "~" {
-		home, err := os.UserHomeDir()
+		home, err := callerHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("resolve home directory: %w", err)
 		}
@@ -35,6 +37,13 @@ func ResolveKeyFilePath(file, envSourceDir string) (string, error) {
 		return abs, nil
 	}
 	return filepath.Clean(filepath.Join(envSourceDir, file)), nil
+}
+
+func callerHomeDir() (string, error) {
+	if home := strings.TrimSpace(os.Getenv(InternalCallerHomeEnv)); home != "" {
+		return filepath.Clean(home), nil
+	}
+	return os.UserHomeDir()
 }
 
 // ResolvePath returns the path for a declared SecretRef: file-sourced secrets
