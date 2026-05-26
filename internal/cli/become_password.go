@@ -45,13 +45,25 @@ func writeBecomePasswordFile(password string) (string, func(), error) {
 }
 
 func readBecomePassword(in io.Reader, prompt io.Writer) (string, error) {
-	if in == nil {
-		return "", errors.New("cannot read BECOME password without stdin")
+	return readPromptedPassword(in, prompt, "BECOME password: ", false)
+}
+
+func readSudoPassword(in io.Reader, prompt io.Writer) (string, error) {
+	return readPromptedPassword(in, prompt, "SUDO password: ", true)
+}
+
+var openControllingTTY = func() (*os.File, error) {
+	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
+}
+
+func readPromptedPassword(in io.Reader, prompt io.Writer, promptText string, fallbackTTY bool) (string, error) {
+	if in == nil && !fallbackTTY {
+		return "", errors.New("cannot read password without stdin")
 	}
 	if prompt == nil {
 		prompt = io.Discard
 	}
-	fmt.Fprint(prompt, "BECOME password: ")
+	fmt.Fprint(prompt, promptText)
 	if file, ok := in.(*os.File); ok {
 		password, usedTerminal, err := readPasswordNoEcho(file)
 		if usedTerminal {
@@ -59,9 +71,22 @@ func readBecomePassword(in io.Reader, prompt io.Writer) (string, error) {
 			return password, err
 		}
 	}
+	if fallbackTTY {
+		if tty, err := openControllingTTY(); err == nil {
+			defer tty.Close()
+			password, usedTerminal, err := readPasswordNoEcho(tty)
+			if usedTerminal {
+				fmt.Fprintln(prompt)
+				return password, err
+			}
+		}
+	}
+	if in == nil {
+		return "", errors.New("cannot read password without stdin")
+	}
 	line, err := bufio.NewReader(in).ReadString('\n')
 	if err != nil && line == "" {
-		return "", fmt.Errorf("read BECOME password: %w", err)
+		return "", fmt.Errorf("read password: %w", err)
 	}
 	return strings.TrimRight(line, "\r\n"), nil
 }

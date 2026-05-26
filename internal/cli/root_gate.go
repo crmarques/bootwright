@@ -51,13 +51,19 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	if err != nil {
 		return 1, fmt.Errorf("resolve caller home for sudo: %w", err)
 	}
-	cmdArgs := append([]string{
+	sudoSession, err := newLocalSudoSession(ctx, stdin, stderr, localRootGate.commandContext)
+	if err != nil {
+		return 1, err
+	}
+	stopKeepAlive := sudoSession.keepAlive(ctx)
+	defer stopKeepAlive()
+	cmdArgs := sudoSession.sudoArgs(append([]string{
 		"env",
 		contextstore.InternalRegistryEnv + "=" + registry.tempPath,
 		localroot.InternalEnv + "=1",
 		localroot.CallerHomeEnv + "=" + callerHome,
 		exe,
-	}, args...)
+	}, args...)...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout

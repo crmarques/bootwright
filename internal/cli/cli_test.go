@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -885,8 +886,58 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 7 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || gotArgs[2] != localroot.InternalEnv+"=1" || gotArgs[3] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(gotArgs[4:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 8 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], contextstore.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(gotArgs[5:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
+	}
+}
+
+func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T) {
+	home := setTestHomeAndRoot(t)
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+	previousTTY := openControllingTTY
+	openControllingTTY = func() (*os.File, error) { return nil, os.ErrNotExist }
+	defer func() { openControllingTTY = previousTTY }()
+
+	var calls [][]string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			if name != "sudo" {
+				t.Fatalf("command name = %q, want sudo", name)
+			}
+			calls = append(calls, append([]string(nil), args...))
+			helperArgs := append([]string{"-test.run=TestLocalRootGateSudoPromptHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_SUDO_PROMPT_HELPER=1")
+			return cmd
+		},
+	}
+
+	var stderr bytes.Buffer
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"check", "syntax"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &stderr)
+	if err != nil {
+		t.Fatalf("ensureLocalRootForArgs: %v", err)
+	}
+	if !handled || code != 0 {
+		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
+	}
+	if got := stderr.String(); got != "SUDO password: " {
+		t.Fatalf("stderr prompt = %q, want SUDO password prompt", got)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("sudo calls = %v, want validate, refresh, command", calls)
+	}
+	if !reflect.DeepEqual(calls[0], []string{"-n", "-v"}) {
+		t.Fatalf("first sudo call = %v, want noninteractive validation", calls[0])
+	}
+	if !reflect.DeepEqual(calls[1], []string{"-S", "-p", "", "-v"}) {
+		t.Fatalf("second sudo call = %v, want password validation", calls[1])
+	}
+	if len(calls[2]) != 8 || calls[2][0] != "-n" || calls[2][1] != "env" || !strings.HasPrefix(calls[2][2], contextstore.InternalRegistryEnv+"=") || calls[2][3] != localroot.InternalEnv+"=1" || calls[2][4] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(calls[2][5:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+		t.Fatalf("third sudo call = %v", calls[2])
 	}
 }
 
@@ -986,14 +1037,20 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 	}
 	args := os.Args
 	sep := slices.Index(args, "--")
-	if sep < 0 || len(args) < sep+10 {
+	if sep < 0 {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 10 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || rootArgs[2] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[3], secret.InternalCallerHomeEnv+"=") {
+	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
+		os.Exit(0)
+	}
+	if len(args) < sep+10 {
 		os.Exit(2)
 	}
-	rootArgs = rootArgs[5:]
+	if len(rootArgs) < 11 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") {
+		os.Exit(2)
+	}
+	rootArgs = rootArgs[6:]
 	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
 		os.Exit(2)
 	}
@@ -1061,15 +1118,21 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	}
 	args := os.Args
 	sep := slices.Index(args, "--")
-	if sep < 0 || len(args) < sep+8 {
+	if sep < 0 {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 10 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || rootArgs[2] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[3], secret.InternalCallerHomeEnv+"=") {
+	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
+		os.Exit(0)
+	}
+	if len(args) < sep+8 {
 		os.Exit(2)
 	}
-	registry := strings.TrimPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=")
-	rootArgs = rootArgs[5:]
+	if len(rootArgs) < 11 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") {
+		os.Exit(2)
+	}
+	registry := strings.TrimPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=")
+	rootArgs = rootArgs[6:]
 	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
 	}
@@ -1090,6 +1153,32 @@ func TestLocalRootGateHelperProcess(t *testing.T) {
 		return
 	}
 	os.Exit(0)
+}
+
+func TestLocalRootGateSudoPromptHelperProcess(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_ROOT_GATE_SUDO_PROMPT_HELPER") != "1" {
+		return
+	}
+	args := os.Args
+	sep := slices.Index(args, "--")
+	if sep < 0 {
+		os.Exit(2)
+	}
+	sudoArgs := args[sep+1:]
+	switch {
+	case reflect.DeepEqual(sudoArgs, []string{"-n", "-v"}):
+		os.Exit(1)
+	case reflect.DeepEqual(sudoArgs, []string{"-S", "-p", "", "-v"}):
+		body, err := io.ReadAll(os.Stdin)
+		if err != nil || string(body) != "secret\n" {
+			os.Exit(2)
+		}
+		os.Exit(0)
+	case len(sudoArgs) >= 2 && sudoArgs[0] == "-n" && sudoArgs[1] == "env":
+		os.Exit(0)
+	default:
+		os.Exit(2)
+	}
 }
 
 func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {

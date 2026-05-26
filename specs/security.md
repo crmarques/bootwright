@@ -69,6 +69,11 @@ Generated output boundaries are part of the safety contract:
 - Context data is root-managed under `/var/lib/bootwright/contexts/<context>/`.
   Commands that read or write that tree re-exec through `sudo` when not already
   running as root.
+- Non-root commands that require local `sudo` must let Bootwright own the
+  prompt. Bootwright collects local sudo credentials at most once per command,
+  sends passwords only over stdin to `sudo -S -v`, keeps them out of argv,
+  environment, logs, and desired state, and runs subsequent local sudo commands
+  with `sudo -n`.
 - User-authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input-files/`.
 - Placeholder installer output lives under
