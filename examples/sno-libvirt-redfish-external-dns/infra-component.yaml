@@ -1,0 +1,29 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: load-balancer
+spec:
+  loadBalancer:
+    type: haProxy
+    hostRef:
+      name: lab-host
+    bindAddresses:
+      - name: control-plane
+        ip: 192.168.132.10
+      - name: apps
+        ip: 192.168.132.11
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: external-dns
+spec:
+  nameResolution:
+    type: dnsmasq
+    hostRef:
+      name: lab-host
+    bindAddress: 192.168.132.53
+    port: 53
+    additionalIngressHosts:
+      - console-openshift-console.apps.sno-libvirt.example.test
+      - oauth-openshift.apps.sno-libvirt.example.test

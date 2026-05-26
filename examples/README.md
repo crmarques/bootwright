@@ -9,6 +9,8 @@ Current examples:
 - `sno-libvirt-redfish`: minimal single-node OpenShift cluster on a libvirt
   provider with Redfish BMC emulation. Start here for the smallest safe
   input shape.
+- `sno-libvirt-redfish-external-dns`: the minimal SNO shape with DNS provided
+  by a name-resolution `InfraComponent` and selected from `NetworkConfig`.
 - `sno-libvirt-redfish-external-proxy`: the minimal SNO shape with an
   operator-owned external proxy.
 - `sno-libvirt-redfish-managed-proxy`: the minimal SNO shape with a
