@@ -55,6 +55,25 @@ func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	}
 }
 
+func TestArtifactServerEndpointNamesAreRouteSelectors(t *testing.T) {
+	files := newBaselineFiles()
+	files["hosts.yaml"] = strings.Replace(files["hosts.yaml"],
+		"    - name: bmc-lan\n      address: 192.168.132.1",
+		"    - name: bmc-lan\n      address: 192.168.132.1\n    - name: dnsAlias\n      address: artifact.example.test", 1)
+	files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"],
+		"name: bmc\n        listener: https\n        hostAddress: bmc-lan",
+		"name: dnsAlias\n        listener: https\n        hostAddress: dnsAlias", 1)
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
+		"endpoint: bmc",
+		"endpoint: dnsAlias", 1)
+
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
 func TestSchemaRefactorValidation(t *testing.T) {
 	cases := []struct {
 		name          string

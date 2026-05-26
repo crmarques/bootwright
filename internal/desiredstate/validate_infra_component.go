@@ -132,9 +132,6 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 		if endpoint.Name == "" {
 			errs = append(errs, owner+".name is required")
 		} else {
-			if !IsDNSLabel(endpoint.Name) {
-				errs = append(errs, fmt.Sprintf("%s.name %q is not a DNS label", owner, endpoint.Name))
-			}
 			if seen[endpoint.Name] {
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, endpoint.Name))
 			}
@@ -219,9 +216,6 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 		if endpoint.Name == "" {
 			errs = append(errs, owner+".name is required")
 		} else {
-			if !IsDNSLabel(endpoint.Name) {
-				errs = append(errs, fmt.Sprintf("%s.name %q is not a DNS label", owner, endpoint.Name))
-			}
 			if seen[endpoint.Name] {
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, endpoint.Name))
 			}

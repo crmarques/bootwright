@@ -559,7 +559,8 @@ Rules:
   chooses a listener, and `hostAddress` must match a
   `Host.spec.addresses[].name` on `artifactServer.hostRef`; Bootwright uses
   that address object's `address` value in routed URLs and TLS names.
-- Endpoint names are the stable binding surface used by
+- Endpoint names are opaque route selectors, not DNS labels. They are the
+  stable binding surface used by
   `Environment.spec.infraComponents.artifactServers[].routes`.
 - The artifact server is implemented as a containerized static file service
   that serves generated ISOs and disconnected boot artifacts. HTTPS listeners
