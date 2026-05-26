@@ -188,6 +188,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
 	diskBootConfirmIdx := findAnsibleTask(t, postTasks, "Confirm subsequent disk boot override was accepted")
+	vmediaEjectIdx := findAnsibleTask(t, postTasks, "Eject virtual media after live ISO boot")
+	vmediaEjectWaitIdx := findAnsibleTask(t, postTasks, "Wait for virtual media to report ejected agent ISO")
+	vmediaEjectConfirmIdx := findAnsibleTask(t, postTasks, "Confirm virtual media is ejected after live ISO boot")
 
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
@@ -206,6 +209,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if !(waitSSHIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
 		t.Fatalf("boot_redfish must wait for SSH before switching subsequent boots back to disk")
+	}
+	if !(diskBootConfirmIdx < vmediaEjectIdx && vmediaEjectIdx < vmediaEjectWaitIdx && vmediaEjectWaitIdx < vmediaEjectConfirmIdx) {
+		t.Fatalf("boot_redfish must accept disk boot override before ejecting virtual media through Redfish")
 	}
 
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
@@ -544,16 +550,13 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if hdIdx, cdIdx := strings.Index(domainXML, "<boot dev='hd'/>"), strings.Index(domainXML, "<boot dev='cdrom'/>"); hdIdx < 0 || cdIdx < 0 || hdIdx > cdIdx {
 		t.Fatalf("libvirt domain must keep disk-first, CD-fallback boot order")
 	}
-	for _, forbidden := range []string{
-		"Detach virtual media after live ISO boot",
-		"Wait for virtual media to report detached",
-		"Eject running virtual media after live ISO boot",
-		"Eject persistent virtual media after live ISO boot",
-		"Verify running virtual media source is absent",
-		"Verify persistent virtual media source is absent",
-	} {
-		if findAnsibleTaskIndex(prepareTasks, forbidden) >= 0 || findAnsibleTaskIndex(mediaTasks, forbidden) >= 0 || findAnsibleTaskIndex(powerTasks, forbidden) >= 0 || findAnsibleTaskIndex(insertAttemptTasks, forbidden) >= 0 || findAnsibleTaskIndex(postTasks, forbidden) >= 0 {
-			t.Fatalf("boot_redfish must not remove live ISO media before install completion: found %q", forbidden)
+
+	for _, task := range postTasks {
+		if _, ok := task["ansible.builtin.include_tasks"]; ok {
+			t.Fatalf("post-boot Redfish media eject must not dispatch media backend include_tasks: %v", task["name"])
+		}
+		if _, ok := task["ansible.builtin.include_role"]; ok {
+			t.Fatalf("post-boot Redfish media eject must not dispatch media backend include_role: %v", task["name"])
 		}
 	}
 
@@ -588,6 +591,66 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if !strings.Contains(diskAssert["fail_msg"].(string), "future reboots may keep using") {
 		t.Fatalf("disk boot assertion must explain rejected override risk, got %v", diskAssert["fail_msg"])
+	}
+	ejectURI, ok := postTasks[vmediaEjectIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri task", postTasks[vmediaEjectIdx]["name"])
+	}
+	if got := ejectURI["url"]; got != "{{ bootwright_redfish_vmedia_eject_url }}" {
+		t.Fatalf("post-boot virtual media eject must use resolved Redfish URL, got %v", got)
+	}
+	if got := ejectURI["body"]; got != "{{ bootwright_redfish_vmedia_eject_body }}" {
+		t.Fatalf("post-boot virtual media eject must use resolved Redfish body, got %v", got)
+	}
+	if got := postTasks[vmediaEjectIdx]["register"]; got != "bootwright_redfish_vmedia_eject" {
+		t.Fatalf("post-boot virtual media eject must register Redfish response, got %v", got)
+	}
+	if got := postTasks[vmediaEjectIdx]["changed_when"]; got != "(bootwright_redfish_vmedia_eject.status | default(0) | int) in [200, 202, 204]" {
+		t.Fatalf("post-boot virtual media eject must mark accepted responses changed, got %v", got)
+	}
+	waitURI, ok := postTasks[vmediaEjectWaitIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri task", postTasks[vmediaEjectWaitIdx]["name"])
+	}
+	if got := waitURI["url"]; got != "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}" {
+		t.Fatalf("post-boot virtual media eject wait must poll VirtualMedia member, got %v", got)
+	}
+	if got := postTasks[vmediaEjectWaitIdx]["register"]; got != "bootwright_redfish_vmedia_eject_probe" {
+		t.Fatalf("post-boot virtual media eject wait must register probe, got %v", got)
+	}
+	if got := postTasks[vmediaEjectWaitIdx]["retries"]; got != "{{ bootwright_redfish_vmedia_eject_retries }}" {
+		t.Fatalf("post-boot virtual media eject wait must use eject retries default, got %v", got)
+	}
+	if got := postTasks[vmediaEjectWaitIdx]["delay"]; got != "{{ bootwright_redfish_vmedia_eject_delay_seconds }}" {
+		t.Fatalf("post-boot virtual media eject wait must use eject delay default, got %v", got)
+	}
+	until := fmt.Sprint(postTasks[vmediaEjectWaitIdx]["until"])
+	for _, want := range []string{"not (", "bootwright_redfish_vmedia_attached", "bootwright_component.boot.agentIso.fetchUrl", "bootwright_redfish_vmedia_transfer_protocol"} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("post-boot virtual media eject wait missing %q in until=%v", want, until)
+		}
+	}
+	ejectAssert, ok := postTasks[vmediaEjectConfirmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert task", postTasks[vmediaEjectConfirmIdx]["name"])
+	}
+	if !stringListContains(ejectAssert["that"], "(bootwright_redfish_vmedia_eject_probe.status | default(0) | int) in [200, 404]") {
+		t.Fatalf("post-boot virtual media eject assertion must require readable media state, got %v", ejectAssert["that"])
+	}
+	ejectAssertThat := fmt.Sprint(ejectAssert["that"])
+	if !strings.Contains(ejectAssertThat, "not (") || !strings.Contains(ejectAssertThat, "bootwright_redfish_vmedia_attached") {
+		t.Fatalf("post-boot virtual media eject assertion must require detached agent ISO, got %v", ejectAssert["that"])
+	}
+	for _, want := range []string{"Eject HTTP status", "observed HTTP status", "Inserted", "Image", "TransferProtocolType"} {
+		if !strings.Contains(ejectAssert["fail_msg"].(string), want) {
+			t.Fatalf("post-boot virtual media eject assertion must include %q, got %v", want, ejectAssert["fail_msg"])
+		}
+	}
+	defaults := readRepoFile(t, "ansible/roles/openshift/boot_redfish/defaults/main.yml")
+	for _, want := range []string{"bootwright_redfish_vmedia_eject_retries", "bootwright_redfish_vmedia_eject_delay_seconds"} {
+		if !strings.Contains(defaults, want) {
+			t.Fatalf("boot_redfish defaults missing %q", want)
+		}
 	}
 }
 
