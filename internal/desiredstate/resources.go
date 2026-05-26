@@ -277,6 +277,7 @@ func knownResourceKind(kind string) bool {
 		v1alpha1.KindHost,
 		v1alpha1.KindNetworkConfig,
 		v1alpha1.KindInfraProvider,
+		v1alpha1.KindInfraComponent,
 		v1alpha1.KindClusterInfra,
 		v1alpha1.KindContainerCluster:
 		return true

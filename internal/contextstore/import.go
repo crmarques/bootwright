@@ -349,6 +349,11 @@ type inputFile struct {
 	RelPath string
 }
 
+var nonInputDirs = map[string]struct{}{
+	"node_modules": {},
+	"vendor":       {},
+}
+
 func discoverInputFiles(paths []string) ([]inputFile, error) {
 	if len(paths) == 0 {
 		return nil, errors.New("at least one -f path is required")
@@ -379,8 +384,13 @@ func discoverInputFiles(paths []string) ([]inputFile, error) {
 				return walkErr
 			}
 			if entry.IsDir() {
-				if path != root && strings.HasPrefix(entry.Name(), ".") {
-					return filepath.SkipDir
+				if path != root {
+					if strings.HasPrefix(entry.Name(), ".") {
+						return filepath.SkipDir
+					}
+					if _, skip := nonInputDirs[entry.Name()]; skip {
+						return filepath.SkipDir
+					}
 				}
 				return nil
 			}

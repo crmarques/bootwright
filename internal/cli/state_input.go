@@ -10,7 +10,7 @@ func loadDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	if err != nil {
 		return v1alpha1.State{}, err
 	}
-	return desiredstate.LoadNormalizeValidate(ctx.InputPaths)
+	return desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
 }
 
 func loadOptionalDesiredState(cf *commonFlags) (v1alpha1.State, error) {
@@ -18,5 +18,5 @@ func loadOptionalDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	if err != nil {
 		return v1alpha1.State{}, err
 	}
-	return desiredstate.LoadNormalizeValidate(ctx.InputPaths)
+	return desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
 }

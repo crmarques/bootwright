@@ -66,7 +66,7 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		defer prepared.Cancel()
-		state, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths())
+		state, err := desiredstate.LoadNormalizeValidateInputFiles(prepared.ValidationPaths())
 		if err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
 		}
@@ -143,7 +143,7 @@ func newContextUpdateCmd(stdout io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		defer prepared.Cancel()
-		state, err := desiredstate.LoadNormalizeValidate(prepared.ValidationPaths())
+		state, err := desiredstate.LoadNormalizeValidateInputFiles(prepared.ValidationPaths())
 		if err != nil {
 			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
 		}

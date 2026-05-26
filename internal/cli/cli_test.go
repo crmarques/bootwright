@@ -490,6 +490,53 @@ func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.
 	}
 }
 
+func TestContextInitYesPreservesImportedInputsWhenUnselectedReplacementInvalid(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	importedPath := filepath.Join(ctx.InputDir, "environment.yaml")
+	before, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	addFixtureResourceSelection(t, replacement)
+	if err := os.WriteFile(filepath.Join(replacement, "unselected.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: spare-host
+spec:
+  retiredField: true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
+	if code == 0 {
+		t.Fatalf("context init --yes unexpectedly accepted invalid unselected replacement:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "field retiredField not found") {
+		t.Fatalf("stderr missing strict decode error: %q", stderr)
+	}
+	after, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("invalid replacement changed existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("invalid replacement imported unselected.yaml: %v", err)
+	}
+}
+
 func TestContextInitYesRejectsSelfImportFromInputDir(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
@@ -566,6 +613,61 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("%s = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestContextUpdatePreservesImportedInputsWhenUnselectedReplacementInvalid(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	importedPath := filepath.Join(ctx.InputDir, "environment.yaml")
+	before, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	addFixtureResourceSelection(t, replacement)
+	if err := os.WriteFile(filepath.Join(replacement, "unselected.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: spare-host
+spec:
+  addresses:
+    - name: ssh
+      address: 192.168.132.50
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: missing-secret
+  capabilities:
+    - container-runtime
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "context", "update", "test", "-f", replacement)
+	if code == 0 {
+		t.Fatalf("context update unexpectedly accepted invalid unselected replacement:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, `Host/spare-host spec.ssh.keyRef "missing-secret" is not declared`) {
+		t.Fatalf("stderr missing broken reference error: %q", stderr)
+	}
+	after, err := os.ReadFile(importedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("invalid update changed existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("invalid update imported unselected.yaml: %v", err)
 	}
 }
 
@@ -871,6 +973,21 @@ func replaceInFile(t *testing.T, path, old, new string) {
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func addFixtureResourceSelection(t *testing.T, dir string) {
+	t.Helper()
+	replaceInFile(t, filepath.Join(dir, "environment.yaml"), "  baseDomain: bootwright.test\n\n", `  baseDomain: bootwright.test
+
+  resources:
+    - hosts.yaml
+    - networks.yaml
+    - provider.yaml
+    - infra-component.yaml
+    - cluster-infra.yaml
+    - container-cluster.yaml
+
+`)
 }
 
 func TestRenderOutputDirRequiresSensitive(t *testing.T) {

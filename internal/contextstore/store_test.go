@@ -219,6 +219,30 @@ func TestImportInputsRejectsYAMLSymlink(t *testing.T) {
 	}
 }
 
+func TestImportInputsSkipsNonWorkspaceDirs(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("env\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{"vendor", "node_modules", ".cache"} {
+		nested := filepath.Join(source, dir)
+		if err := os.MkdirAll(nested, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(nested, "ignored.yaml"), []byte("ignored\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inputDir := filepath.Join(t.TempDir(), "input-files")
+	imported, err := ImportInputs([]string{source}, inputDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(imported) != 1 || filepath.Base(imported[0]) != "environment.yaml" {
+		t.Fatalf("imported = %v, want only environment.yaml", imported)
+	}
+}
+
 func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

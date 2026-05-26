@@ -720,9 +720,16 @@ func TestEnvironmentResourcesSelectsListedFiles(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml")
 	files["unused.yaml"] = `apiVersion: bootwright.io/v1alpha1
-kind: Network
-metadata: { name: old }
-spec: {}
+kind: Host
+metadata: { name: unused-host }
+spec:
+  addresses:
+    - name: ssh
+      address: 192.168.132.50
+  ssh:
+    addressName: ssh
+    keyRef: { name: provider-host-ssh }
+  capabilities: [container-runtime]
 `
 	writeFiles(t, dir, files)
 	state, err := LoadNormalizeValidate([]string{dir})
@@ -818,6 +825,84 @@ func TestEnvironmentResourcesRequireReferencedHost(t *testing.T) {
 	want := `spec.resources excludes Host/services-host required by InfraComponent/artifact-server spec.artifactServer.hostRef; add "hosts.yaml"`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestEnvironmentResourcesRequireReferencedInfraComponent(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "cluster.yaml")
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidateInputFiles([]string{dir})
+	if err == nil {
+		t.Fatal("expected omitted infra component to fail")
+	}
+	want := `spec.resources excludes InfraComponent/artifact-server required by Environment/env spec.infraComponents.artifactServers[default].componentRef; add "infra-component.yaml"`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestEnvironmentResourcesDoNotHideInvalidImportedFiles(t *testing.T) {
+	cases := []struct {
+		name           string
+		unselectedYAML string
+		wantSubstring  string
+	}{
+		{
+			name: "unknown-field",
+			unselectedYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: spare-host
+spec:
+  retiredField: true
+`,
+			wantSubstring: "field retiredField not found",
+		},
+		{
+			name: "malformed-yaml",
+			unselectedYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata: [bad
+`,
+			wantSubstring: "unselected.yaml document 1",
+		},
+		{
+			name: "broken-reference",
+			unselectedYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: spare-host
+spec:
+  addresses:
+    - name: ssh
+      address: 192.168.132.50
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: missing-secret
+  capabilities:
+    - container-runtime
+`,
+			wantSubstring: `Host/spare-host spec.ssh.keyRef "missing-secret" is not declared`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml")
+			files["unselected.yaml"] = tc.unselectedYAML
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidateInputFiles([]string{dir})
+			if err == nil {
+				t.Fatal("expected invalid unselected input to fail")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
 	}
 }
 
