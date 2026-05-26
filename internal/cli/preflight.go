@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/operator"
 	"github.com/crmarques/bootwright/internal/secret"
@@ -34,10 +35,11 @@ func collectBastionChecks(deps preflightDeps) []preflightCheck {
 func pythonVersionCheck(deps preflightDeps) preflightCheck {
 	name := "python3 >= 3.12"
 	for _, bin := range []string{"python3.12", "python3"} {
-		if _, err := deps.lookPath(bin, nil); err != nil {
+		path, err := deps.lookPath(bin, nil)
+		if err != nil {
 			continue
 		}
-		out, err := deps.commandOutput(bin, "--version")
+		out, err := deps.commandOutput(path, "--version")
 		if err != nil {
 			continue
 		}
@@ -47,9 +49,9 @@ func pythonVersionCheck(deps preflightDeps) preflightCheck {
 		}
 		ver := fmt.Sprintf("%d.%d", major, minor)
 		if major > 3 || (major == 3 && minor >= 12) {
-			return okCheck(checkGroupControllerTools, name, bin+" "+ver)
+			return okCheck(checkGroupControllerTools, name, path+" "+ver)
 		}
-		return failCheck(checkGroupControllerTools, name, bin+" is "+ver, "Ansible runtime bootstrap requires Python 3.12 or newer", "bootwright apply bastion")
+		return failCheck(checkGroupControllerTools, name, path+" is "+ver, "Ansible runtime bootstrap requires Python 3.12 or newer", "bootwright apply bastion")
 	}
 	return failCheck(checkGroupControllerTools, name, "not found", "Bootwright cannot run the managed Ansible runtime", "bootwright apply bastion")
 }
@@ -67,6 +69,9 @@ var defaultPreflightDeps = preflightDeps{
 	lookPath: defaultLookPath,
 	statPath: secret.Stat,
 	commandOutput: func(name string, args ...string) ([]byte, error) {
+		if out, ok, err := callerio.CommandOutput(name, args...); ok {
+			return out, err
+		}
 		return exec.Command(name, args...).CombinedOutput()
 	},
 	uid: os.Getuid,

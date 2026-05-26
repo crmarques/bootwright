@@ -62,6 +62,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		contextstore.InternalRegistryEnv + "=" + registry.tempPath,
 		localroot.InternalEnv + "=1",
 		localroot.CallerHomeEnv + "=" + callerHome,
+		localroot.CallerPathEnv + "=" + os.Getenv("PATH"),
 		exe,
 	}, args...)...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)

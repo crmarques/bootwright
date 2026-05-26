@@ -130,11 +130,15 @@ func ResolvePython312() (string, bool) {
 
 func ResolvePython312With(deps ProcessDeps) (string, bool) {
 	for _, bin := range []string{"python3.12", "python3"} {
-		if _, err := deps.LookPath(bin); err != nil {
+		path, err := deps.LookPath(bin)
+		if err != nil {
 			continue
 		}
-		if pythonAtLeast312(deps, bin) {
-			return bin, true
+		if path == "" {
+			path = bin
+		}
+		if pythonAtLeast312(deps, path) {
+			return path, true
 		}
 	}
 	return "", false

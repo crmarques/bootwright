@@ -6,12 +6,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/localroot"
 	"github.com/crmarques/bootwright/internal/ptyexec"
 )
@@ -226,22 +226,19 @@ func sudoUserSitePackages() string {
 	if !localroot.IsInternalRootChild() {
 		return ""
 	}
-	sudoUser := os.Getenv("SUDO_USER")
-	if sudoUser == "" || sudoUser == "root" {
+	home, ok := localroot.CallerHomeDir()
+	if !ok || home == "" {
 		return ""
 	}
-	u, err := user.Lookup(sudoUser)
-	if err != nil || u.HomeDir == "" {
-		return ""
-	}
-	probe := exec.Command("python3", "-m", "site", "--user-site")
-	probe.Env = append(os.Environ(), "HOME="+u.HomeDir)
-	out, err := probe.Output()
+	out, _, err := callerio.CommandOutput("python3", "-m", "site", "--user-site")
 	if err != nil {
 		return ""
 	}
 	site := strings.TrimSpace(string(out))
 	if site == "" {
+		return ""
+	}
+	if !strings.HasPrefix(filepath.Clean(site), filepath.Clean(home)+string(os.PathSeparator)) && filepath.Clean(site) != filepath.Clean(home) {
 		return ""
 	}
 	if info, err := os.Stat(site); err != nil || !info.IsDir() {

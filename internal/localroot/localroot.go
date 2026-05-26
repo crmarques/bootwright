@@ -10,6 +10,7 @@ import (
 const (
 	InternalEnv   = "BOOTWRIGHT_INTERNAL_LOCAL_ROOT"
 	CallerHomeEnv = "BOOTWRIGHT_INTERNAL_CALLER_HOME"
+	CallerPathEnv = "BOOTWRIGHT_INTERNAL_CALLER_PATH"
 )
 
 func IsInternalRootChild() bool {
@@ -25,6 +26,17 @@ func CallerHomeDir() (string, bool) {
 		return "", false
 	}
 	return filepath.Clean(home), true
+}
+
+func CallerPath() (string, bool) {
+	if strings.TrimSpace(os.Getenv(InternalEnv)) != "1" {
+		return "", false
+	}
+	path := strings.TrimSpace(os.Getenv(CallerPathEnv))
+	if path == "" {
+		return "", false
+	}
+	return path, true
 }
 
 func CallerUIDGID() (uint32, uint32, bool) {

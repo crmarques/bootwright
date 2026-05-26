@@ -11,16 +11,20 @@ import (
 )
 
 type fakeProcessDeps struct {
-	paths   map[string]bool
-	outputs map[string][]byte
-	uid     int
+	paths       map[string]bool
+	pathResults map[string]string
+	outputs     map[string][]byte
+	uid         int
 }
 
 func (f fakeProcessDeps) deps() ProcessDeps {
 	return ProcessDeps{
 		LookPath: func(name string) (string, error) {
 			if f.paths[name] {
-				return "/bin/" + name, nil
+				if path := f.pathResults[name]; path != "" {
+					return path, nil
+				}
+				return name, nil
 			}
 			return "", errors.New("not found")
 		},
@@ -240,6 +244,18 @@ func TestResolvePython312WithDeps(t *testing.T) {
 		outputs: map[string][]byte{"python3": []byte("Python 3.11.9")},
 	}.deps()); ok || got != "" {
 		t.Fatalf("old Python accepted: %q, %v", got, ok)
+	}
+}
+
+func TestResolvePython312WithDepsUsesLookPathResult(t *testing.T) {
+	python := "/home/operator/.local/bin/python3.12"
+	got, ok := ResolvePython312With(fakeProcessDeps{
+		paths:       map[string]bool{"python3.12": true},
+		pathResults: map[string]string{"python3.12": python},
+		outputs:     map[string][]byte{python: []byte("Python 3.12.4")},
+	}.deps())
+	if !ok || got != python {
+		t.Fatalf("ResolvePython312With = %q, %v; want %s, true", got, ok, python)
 	}
 }
 

@@ -84,9 +84,36 @@ func readPromptedPassword(in io.Reader, prompt io.Writer, promptText string, fal
 	if in == nil {
 		return "", errors.New("cannot read password without stdin")
 	}
-	line, err := bufio.NewReader(in).ReadString('\n')
+	line, err := readPasswordLine(in)
 	if err != nil && line == "" {
-		return "", fmt.Errorf("read password: %w", err)
+		return "", err
 	}
 	return strings.TrimRight(line, "\r\n"), nil
+}
+
+func readPasswordLine(in io.Reader) (string, error) {
+	if br, ok := in.(*bufio.Reader); ok {
+		line, err := br.ReadString('\n')
+		if err != nil && line == "" {
+			return "", fmt.Errorf("read password: %w", err)
+		}
+		return line, nil
+	}
+	var b strings.Builder
+	buf := make([]byte, 1)
+	for {
+		n, err := in.Read(buf)
+		if n > 0 {
+			b.WriteByte(buf[0])
+			if buf[0] == '\n' {
+				return b.String(), nil
+			}
+		}
+		if err != nil {
+			if err == io.EOF && b.Len() > 0 {
+				return b.String(), nil
+			}
+			return "", fmt.Errorf("read password: %w", err)
+		}
+	}
 }

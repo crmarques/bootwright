@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"github.com/crmarques/bootwright/internal/secret"
@@ -331,6 +333,14 @@ func defaultLookPath(name string, extraDirs []string) (string, error) {
 			continue
 		}
 		return candidate, nil
+	}
+	if path, ok, err := callerio.LookPath(name); ok {
+		if err == nil {
+			return path, nil
+		}
+		if !errors.Is(err, exec.ErrNotFound) {
+			return "", err
+		}
 	}
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil

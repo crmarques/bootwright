@@ -70,10 +70,22 @@ Generated output boundaries are part of the safety contract:
   Commands that read or write that tree re-exec through `sudo` when not already
   running as root.
 - Non-root commands that require local `sudo` must let Bootwright own the
-  prompt. Bootwright collects local sudo credentials at most once per command,
-  sends passwords only over stdin to `sudo -S -v`, keeps them out of argv,
-  environment, logs, and desired state, and runs subsequent local sudo commands
-  with `sudo -n`.
+  prompt. Bootwright checks each entered local sudo password immediately,
+  retries invalid passwords up to three total attempts, sends passwords only
+  over stdin to `sudo -S -v`, keeps them out of argv, environment, logs, and
+  desired state, refreshes the validated sudo timestamp during long-running
+  commands, and runs subsequent local sudo commands with `sudo -n`.
+- Internal sudo re-exec has a strict local privilege boundary. User-owned
+  inputs run as the original caller: context import source reads, `secret set`
+  source reads, external `Environment.spec.secrets[].file` and `keyFile`
+  checks/reads, `~` expansion for file-sourced secrets, caller PATH tool
+  discovery, and other probes that do not need protected filesystem access.
+  Root is used only for protected local mutations and reads: context state
+  under `/var/lib/bootwright`, context-local/generated secret storage,
+  workflow/runtime logs, the managed Ansible venv, package-manager installs,
+  OCP CLI installation into `/usr/local/bin`, and context purges. An explicit
+  `sudo bootwright ...` invocation is treated as root-owned and uses root's
+  home, PATH, registry, and file permissions.
 - User-authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input-files/`.
 - Placeholder installer output lives under
@@ -85,9 +97,7 @@ Generated output boundaries are part of the safety contract:
   sources.
 - External `file:` secret sources are operator-owned local material. When a
   non-root Bootwright invocation internally re-execs through `sudo`, checks and
-  reads of those external files run as the original caller; an explicit
-  `sudo bootwright ...` invocation is treated as root-owned and uses root's
-  home, registry, and file permissions.
+  reads of those external files run as the original caller.
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
   restrictive file modes, and must never be versioned.

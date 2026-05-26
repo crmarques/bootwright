@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ansible"
+	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/embedded"
 	"github.com/crmarques/bootwright/internal/operator"
@@ -23,7 +25,36 @@ import (
 // thin adapter so the CLI doesn't have to know venv layout when
 // computing or running the plan.
 func controllerBootstrapPlan(preserveProxyEnv bool) ([]operator.BootstrapStep, error) {
-	return operator.BootstrapPlan(ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
+	return operator.BootstrapPlanWith(controllerBootstrapProcessDeps(), ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
+}
+
+func controllerBootstrapProcessDeps() operator.ProcessDeps {
+	return operator.ProcessDeps{
+		LookPath:      controllerBootstrapLookPath,
+		CommandOutput: callerCommandOutput,
+		UID:           os.Getuid,
+	}
+}
+
+func controllerBootstrapLookPath(name string) (string, error) {
+	if name == "python3.12" || name == "python3" {
+		if path, ok, err := callerio.LookPath(name); ok {
+			if err == nil {
+				return path, nil
+			}
+			if !errors.Is(err, exec.ErrNotFound) {
+				return "", err
+			}
+		}
+	}
+	return exec.LookPath(name)
+}
+
+func callerCommandOutput(name string, args ...string) ([]byte, error) {
+	if out, ok, err := callerio.CommandOutput(name, args...); ok {
+		return out, err
+	}
+	return exec.Command(name, args...).CombinedOutput()
 }
 
 func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []operator.BootstrapStep, extraEnv map[string]string, becomePassword string, askBecomePass bool) error {

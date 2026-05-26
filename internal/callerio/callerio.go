@@ -7,6 +7,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -87,7 +91,7 @@ func RunHelper(args []string, stdout, stderr io.Writer) (int, bool) {
 }
 
 func ReadFile(path string) ([]byte, bool, error) {
-	cmd, ok, err := command("read", path)
+	cmd, ok, err := bootwrightHelperCommand("read", path)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -101,7 +105,7 @@ func ReadFile(path string) ([]byte, bool, error) {
 }
 
 func Stat(path string) (os.FileInfo, bool, error) {
-	cmd, ok, err := command("stat", path)
+	cmd, ok, err := bootwrightHelperCommand("stat", path)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -118,28 +122,136 @@ func Stat(path string) (os.FileInfo, bool, error) {
 	return FileInfo{payload: payload}, true, nil
 }
 
-func command(action, path string) (*exec.Cmd, bool, error) {
-	uid, gid, ok := localroot.CallerUIDGID()
+func CommandOutput(name string, args ...string) ([]byte, bool, error) {
+	cmd, ok, err := Command(name, args...)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	out, err := cmd.CombinedOutput()
+	return out, true, err
+}
+
+func Command(name string, args ...string) (*exec.Cmd, bool, error) {
+	credential, ok, err := callerCredential()
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	resolved := name
+	if !strings.ContainsRune(name, os.PathSeparator) {
+		path, found, err := LookPath(name)
+		if err != nil {
+			return nil, true, err
+		}
+		if found {
+			resolved = path
+		}
+	}
+	cmd := exec.Command(resolved, args...)
+	cmd.Env = callerEnv()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
+	return cmd, true, nil
+}
+
+func LookPath(name string) (string, bool, error) {
+	if _, _, ok := localroot.CallerUIDGID(); !ok {
+		return "", false, nil
+	}
+	if strings.ContainsRune(name, os.PathSeparator) {
+		info, err := os.Stat(name)
+		if err != nil {
+			return "", true, err
+		}
+		if info.IsDir() || info.Mode()&0o111 == 0 {
+			return "", true, exec.ErrNotFound
+		}
+		return filepath.Clean(name), true, nil
+	}
+	pathEnv, ok := localroot.CallerPath()
 	if !ok {
-		return nil, false, nil
+		return "", true, exec.ErrNotFound
+	}
+	for _, dir := range filepath.SplitList(pathEnv) {
+		if dir == "" {
+			dir = "."
+		}
+		candidate := filepath.Join(dir, name)
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+			continue
+		}
+		return candidate, true, nil
+	}
+	return "", true, exec.ErrNotFound
+}
+
+func bootwrightHelperCommand(action, path string) (*exec.Cmd, bool, error) {
+	credential, ok, err := callerCredential()
+	if !ok || err != nil {
+		return nil, ok, err
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, true, fmt.Errorf("resolve bootwright executable for caller file %s: %w", action, err)
 	}
 	cmd := exec.Command(exe, helperCommand, action, path)
-	cmd.Env = append(os.Environ(), helperEnv+"=1")
-	if home, ok := localroot.CallerHomeDir(); ok {
-		cmd.Env = append(cmd.Env, "HOME="+home)
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: &syscall.Credential{
-			Uid:    uid,
-			Gid:    gid,
-			Groups: []uint32{gid},
-		},
-	}
+	cmd.Env = withEnv(callerEnv(), helperEnv, "1")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
 	return cmd, true, nil
+}
+
+func callerCredential() (*syscall.Credential, bool, error) {
+	uid, gid, ok := localroot.CallerUIDGID()
+	if !ok {
+		return nil, false, nil
+	}
+	return &syscall.Credential{Uid: uid, Gid: gid, Groups: callerGroups(uid, gid)}, true, nil
+}
+
+func callerGroups(uid, gid uint32) []uint32 {
+	groups := []uint32{gid}
+	u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	if err != nil {
+		return groups
+	}
+	ids, err := u.GroupIds()
+	if err != nil {
+		return groups
+	}
+	seen := map[uint32]bool{gid: true}
+	for _, raw := range ids {
+		id, err := strconv.ParseUint(raw, 10, 32)
+		if err != nil {
+			continue
+		}
+		group := uint32(id)
+		if !seen[group] {
+			groups = append(groups, group)
+			seen[group] = true
+		}
+	}
+	return groups
+}
+
+func callerEnv() []string {
+	env := os.Environ()
+	if home, ok := localroot.CallerHomeDir(); ok {
+		env = withEnv(env, "HOME", home)
+	}
+	if path, ok := localroot.CallerPath(); ok {
+		env = withEnv(env, "PATH", path)
+	}
+	return env
+}
+
+func withEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			out = append(out, entry)
+		}
+	}
+	return append(out, prefix+value)
 }
 
 func commandError(action, path string, err error, stderr string) error {

@@ -11,6 +11,7 @@ import (
 )
 
 const localSudoKeepAliveInterval = time.Minute
+const localSudoPasswordAttempts = 3
 
 type localSudoSession struct {
 	password       string
@@ -30,18 +31,21 @@ func newLocalSudoSession(ctx context.Context, stdin io.Reader, stderr io.Writer,
 	if errors.Is(err, exec.ErrNotFound) {
 		return nil, fmt.Errorf("sudo is required for this command: %w", err)
 	}
-	password, err := readSudoPassword(stdin, stderr)
-	if err != nil {
-		return nil, err
+	for attempt := 1; attempt <= localSudoPasswordAttempts; attempt++ {
+		password, err := readSudoPassword(stdin, stderr)
+		if err != nil {
+			return nil, err
+		}
+		session.password = password
+		if err := session.refresh(ctx); err != nil {
+			if attempt == localSudoPasswordAttempts {
+				return nil, fmt.Errorf("sudo authentication failed after %d attempts: %w", localSudoPasswordAttempts, err)
+			}
+			continue
+		}
+		return session, nil
 	}
-	if password == "" {
-		return nil, fmt.Errorf("SUDO password cannot be empty")
-	}
-	session.password = password
-	if err := session.refresh(ctx); err != nil {
-		return nil, fmt.Errorf("validate sudo credentials: %w", err)
-	}
-	return session, nil
+	return nil, fmt.Errorf("sudo authentication failed after %d attempts", localSudoPasswordAttempts)
 }
 
 func (s *localSudoSession) sudoArgs(args ...string) []string {

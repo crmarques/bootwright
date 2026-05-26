@@ -26,7 +26,7 @@ func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {
 	if check.Status != "OK" {
 		t.Fatalf("python check failed: %+v", check)
 	}
-	if check.Evidence != "python3 3.12" {
+	if check.Evidence != "/bin/python3 3.12" {
 		t.Fatalf("evidence = %q", check.Evidence)
 	}
 }
