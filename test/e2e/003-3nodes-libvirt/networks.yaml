@@ -6,6 +6,9 @@ spec:
   machineNetwork:
     - cidr: 192.168.133.0/24
 
+  dnsRefs:
+    - default
+
   template:
     networkConfig:
       interfaces:
@@ -27,8 +30,6 @@ spec:
             next-hop-address: 192.168.133.1
             next-hop-interface: primary
             table-id: 254
-    dnsRefs:
-      - default
 
   libvirt:
     bridge: vbr-cb-3n

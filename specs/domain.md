@@ -16,7 +16,7 @@ Operators author desired state as seven YAML kinds:
 | --- | --- |
 | `Environment` | What defaults, selected resource files, secrets, proxy, mirrors, and component image pins apply to the fleet? |
 | `Host` | Which SSH targets and named addresses can provider or service actions use? |
-| `InfraProvider` | What machines, profiles, and provider-scoped services does each substrate offer? |
+| `InfraProvider` | What machines and profiles does each substrate offer? |
 | `InfraComponent` | Which host-bound shared services and routable endpoints exist outside cluster intent? |
 | `NetworkConfig` | What machine CIDRs and NMState templates can nodes consume? |
 | `ClusterInfra` | Which machines, endpoints, platform mode, and infra components back this cluster? |

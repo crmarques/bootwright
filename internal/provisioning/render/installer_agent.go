@@ -45,18 +45,25 @@ func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineCo
 	return out
 }
 
-func agentNetworkConfig(state v1alpha1.State, _ v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
+func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
 	var out map[string]any
+	network, hasNetwork := findNetworkConfig(state, machine.NetworkConfig.Ref.Name)
 	if len(machine.NetworkConfig.NetworkConfig) > 0 {
 		out = cloneYAMLMap(machine.NetworkConfig.NetworkConfig)
-	} else if n, ok := findNetworkConfig(state, machine.NetworkConfig.Ref.Name); ok {
-		out = cloneYAMLMap(n.Spec.Template.NetworkConfig)
+	} else if hasNetwork {
+		out = cloneYAMLMap(network.Spec.Template.NetworkConfig)
 	}
-	if len(out) == 0 {
+	if out == nil {
 		return nil
 	}
 	renderMachineMACs(out, machineInterfaces(state, machine, clusterName))
 	renderAddressOverlays(out, machine.NetworkConfig.Addresses)
+	if hasNetwork {
+		renderDNSServers(out, resolveClusterDNSServersFromConfig(state, ci, network, out))
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
 }
 

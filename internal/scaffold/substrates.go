@@ -52,8 +52,9 @@ spec:
     bridge: vbr-{{.NetworkID}}          # libvirt bridge Bootwright will create
 `,
 		NetworkDNSServers: "",
-		NetworkDNSRefs: `    dnsRefs:
-      - default
+		NetworkDNSRefs: `  dnsRefs:
+    - default
+
 `,
 		ProviderCapabilities: `  machineProfiles:
     - name: sno

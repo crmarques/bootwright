@@ -5,8 +5,8 @@ description: InfraProvider capability shapes and cluster machine selection.
 
 # Providers
 
-`InfraProvider` declares what a substrate or service host can provide. It does
-not decide which cluster consumes the capability.
+`InfraProvider` declares what a substrate can provide. It does not decide
+which cluster consumes the capability.
 
 Current apply support covers libvirt machines with emulated Redfish BMCs and
 bare-metal machines with Redfish virtual media. vSphere and OpenShift
@@ -40,6 +40,9 @@ spec:
             name: bmc-credentials
           disableCertificateVerification: true
 ```
+
+`disableCertificateVerification: true` is a lab posture for BMCs without
+trusted TLS. Do not treat it as the production default.
 
 The cluster selects that server and adds IP overlays in `ClusterInfra`:
 
@@ -143,14 +146,17 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 spec:
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
-      clusterInstall:
-        endpoint: cluster
+  infraComponents:
+    artifactServers:
+      - name: default
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          clusterInstall:
+            endpoint: cluster
 ```
 
 Endpoint `addressName` values resolve against the named addresses on the

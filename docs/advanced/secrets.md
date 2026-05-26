@@ -11,7 +11,7 @@ live outside the repo. Three sources are supported per name:
 - Empty entry - context-local bytes written with `bootwright secret set`
   under the current context secrets directory.
 - `file:` — operator-supplied bytes that already exist at a declared
-  path. The path is local to the controller.
+  path. The path is local to the bastion.
 - `generated:` — bytes Bootwright produces via `bootwright secret
   generate`. Operators may also pre-populate generated credentials with
   `bootwright secret set`.

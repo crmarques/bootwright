@@ -2,18 +2,25 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-// dnsRefs are Bootwright-only input and must not be emitted into NMState.
 func resolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig) []string {
-	out := append([]string(nil), templateDNSServers(network)...)
+	return resolveClusterDNSServersFromConfig(state, ci, network, network.Spec.Template.NetworkConfig)
+}
+
+func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig, config map[string]any) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, server := range networkConfigDNSServers(config) {
+		if seen[server] {
+			continue
+		}
+		seen[server] = true
+		out = append(out, server)
+	}
 	env := primaryEnvironment(state)
 	if env == nil {
 		return out
 	}
-	seen := map[string]bool{}
-	for _, server := range out {
-		seen[server] = true
-	}
-	for _, ref := range network.Spec.Template.DNSRefs {
+	for _, ref := range network.Spec.DNSRefs {
 		entry, ok := nameResolutionEntry(env, ref)
 		if !ok {
 			continue
@@ -28,8 +35,8 @@ func resolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInfra, ne
 	return out
 }
 
-func templateDNSServers(network v1alpha1.NetworkConfig) []string {
-	rawResolver, ok := network.Spec.Template.NetworkConfig["dns-resolver"].(map[string]any)
+func networkConfigDNSServers(config map[string]any) []string {
+	rawResolver, ok := config["dns-resolver"].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -47,5 +54,27 @@ func templateDNSServers(network v1alpha1.NetworkConfig) []string {
 			out = append(out, server)
 		}
 	}
+	return out
+}
+
+func renderDNSServers(config map[string]any, servers []string) {
+	if len(servers) == 0 {
+		return
+	}
+	resolver := ensureMap(config, "dns-resolver")
+	resolverConfig := ensureMap(resolver, "config")
+	rendered := make([]any, 0, len(servers))
+	for _, server := range servers {
+		rendered = append(rendered, server)
+	}
+	resolverConfig["server"] = rendered
+}
+
+func ensureMap(config map[string]any, key string) map[string]any {
+	if out, ok := config[key].(map[string]any); ok {
+		return out
+	}
+	out := map[string]any{}
+	config[key] = out
 	return out
 }

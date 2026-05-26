@@ -109,7 +109,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seven kinds:
 | `InfraProvider` | Named provider capability lists — `machineProfiles` and explicit `machines` — with names scoped per kind |
 | `InfraComponent` | Host-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
-| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, selected machines under `components.machines[]`, and managed infra components |
+| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected machines under `components.machines[]` |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with

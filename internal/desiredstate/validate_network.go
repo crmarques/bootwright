@@ -55,10 +55,12 @@ func validateNetworkConfigSpec(n v1alpha1.NetworkConfig, dnsRefs map[string]bool
 	}
 	if n.Spec.Template.NetworkConfig == nil {
 		errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.template.networkConfig is required", n.Metadata.Name))
+	} else if _, ok := n.Spec.Template.NetworkConfig["dnsRefs"]; ok {
+		errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.template.networkConfig.dnsRefs is not valid NMState; use spec.dnsRefs instead", n.Metadata.Name))
 	}
 	seenDNSRefs := map[string]bool{}
-	for i, ref := range n.Spec.Template.DNSRefs {
-		owner := fmt.Sprintf("NetworkConfig/%s spec.template.dnsRefs[%d]", n.Metadata.Name, i)
+	for i, ref := range n.Spec.DNSRefs {
+		owner := fmt.Sprintf("NetworkConfig/%s spec.dnsRefs[%d]", n.Metadata.Name, i)
 		if ref == "" {
 			errs = append(errs, owner+" must not be empty")
 			continue

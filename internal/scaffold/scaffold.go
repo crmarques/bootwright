@@ -256,6 +256,7 @@ spec:
   machineNetwork:
     - cidr: 192.168.130.0/24            # change to your cluster machine network
 
+{{.Substrate.NetworkDNSRefs}}
   template:
     networkConfig:
       interfaces:
@@ -273,7 +274,6 @@ spec:
             next-hop-address: 192.168.130.1
             next-hop-interface: primary
             table-id: 254
-{{.Substrate.NetworkDNSRefs}}
 
 {{.Substrate.NetworkConnectivity}}`
 

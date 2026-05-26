@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Replaces the earlier Environment-level controller-local HTTP fields,
+Accepted. Replaces the earlier Environment-level bastion-local HTTP fields,
 per-cluster `ClusterInfra.spec.components.artifacts`, and provider-declared
 artifact publishers.
 

@@ -967,6 +967,103 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 	}
 }
 
+func TestNetworkConfigDNSRefsSelectEnvironmentEntries(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  infraComponents:
+    nameResolution:
+      - name: default
+        type: external
+        ip: 192.168.132.53
+`, 1)
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+    - default
+  template:
+`, 1)
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
+func TestNetworkConfigDNSRefsRejectDuplicates(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  infraComponents:
+    nameResolution:
+      - name: default
+        type: external
+        ip: 192.168.132.53
+`, 1)
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+    - default
+    - default
+  template:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected duplicate dnsRefs error, got nil")
+	}
+	want := `NetworkConfig/cluster-net spec.dnsRefs[1] "default" is duplicated`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestNetworkConfigDNSRefsRejectUnknownEnvironmentEntry(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+    - missing
+  template:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected unresolved dnsRefs error, got nil")
+	}
+	want := `NetworkConfig/cluster-net spec.dnsRefs[0] "missing" does not match any Environment spec.infraComponents.nameResolution[].name`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestNetworkConfigRejectsStaleNameResolutionRefs(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  nameResolutionRefs:
+    - default
+  template:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected stale nameResolutionRefs field error, got nil")
+	}
+	if !strings.Contains(err.Error(), "nameResolutionRefs") {
+		t.Fatalf("error %q does not mention nameResolutionRefs", err)
+	}
+}
+
+func TestNetworkConfigRejectsTemplateDNSRefs(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "    networkConfig:\n", `    networkConfig:
+      dnsRefs:
+        - default
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected invalid networkConfig.dnsRefs error, got nil")
+	}
+	want := "spec.template.networkConfig.dnsRefs is not valid NMState; use spec.dnsRefs instead"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
 func TestVSphereMultiNICRequiresNodeNetworking(t *testing.T) {
 	dir := t.TempDir()
 	files := newVSphereFiles("")

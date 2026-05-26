@@ -60,7 +60,7 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, r
 		if !ok {
 			continue
 		}
-		for _, ref := range network.Spec.Template.DNSRefs {
+		for _, ref := range network.Spec.DNSRefs {
 			if ref == refName {
 				return true
 			}

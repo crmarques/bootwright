@@ -12,7 +12,7 @@ import (
 func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
-		Short: "Check controller dependencies",
+		Short: "Check bastion dependencies",
 		Args:  cobra.NoArgs,
 		Example: `  # Check the bastion has the runtime + CLIs the current context needs
   bootwright check bastion`,
@@ -43,7 +43,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 	)
 	cmd := &cobra.Command{
 		Use:   "apply",
-		Short: "Install controller prerequisites",
+		Short: "Install bastion prerequisites",
 		Args:  cobra.NoArgs,
 		Example: `  # Install runtime and release-specific OCP CLIs for the current context
   bootwright apply bastion --yes
@@ -95,7 +95,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		p.Fields(fields)
 		p.Section("Bootwright prerequisites")
 		if len(plan) == 0 {
-			p.Status(output.StatusSkip, "controller runtime", "already installed")
+			p.Status(output.StatusSkip, "bastion runtime", "already installed")
 		}
 		for _, step := range plan {
 			p.CommandLine(step.Label, step.Cmd)

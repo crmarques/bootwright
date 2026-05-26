@@ -171,7 +171,7 @@ func TestFailedCheckOutputIsActionable(t *testing.T) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, heading := range []string{"Prepare", "Controller tools", "Secret material", "Summary"} {
+	for _, heading := range []string{"Prepare", "Bastion tools", "Secret material", "Summary"} {
 		want := "\n\n" + heading + "\n"
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("stdout does not separate %q with an empty line:\n%s", heading, stdout)

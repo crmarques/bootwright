@@ -281,7 +281,7 @@ func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterI
 		if !clusterConsumesNetwork(ci, network.Metadata.Name) {
 			continue
 		}
-		for _, ref := range network.Spec.Template.DNSRefs {
+		for _, ref := range network.Spec.DNSRefs {
 			if managed[ref] {
 				return true
 			}

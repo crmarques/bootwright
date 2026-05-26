@@ -9,8 +9,9 @@ Authored files:
 environment.yaml       fleet defaults, selected resources, and secret names
 hosts.yaml             provider host reachability
 provider.yaml          libvirt and Redfish emulator capabilities
+infra-component.yaml   shared infra services
 networks.yaml          machine network and NMState template
-cluster-infra.yaml     selected machine, endpoints, and managed infra components
+cluster-infra.yaml     selected machine and endpoints
 container-cluster.yaml OpenShift install intent and node binding
 ```
 

@@ -159,7 +159,7 @@ func networkConfig(name string) v1alpha1.NetworkConfig {
 	return v1alpha1.NetworkConfig{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.NetworkConfigSpec{
-			Template: v1alpha1.NetworkConfigTemplate{DNSRefs: []string{"default"}},
+			DNSRefs: []string{"default"},
 		},
 	}
 }

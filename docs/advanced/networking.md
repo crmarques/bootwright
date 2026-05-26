@@ -22,6 +22,9 @@ spec:
   machineNetwork:
     - cidr: 192.168.133.0/24
 
+  dnsRefs:
+    - default
+
   template:
     networkConfig:
       interfaces:
@@ -113,8 +116,8 @@ VIPs are validated against the machine networks selected by cluster machines.
 
 ## Name Resolution
 
-`NetworkConfig.spec.template.dnsRefs[]` selects entries from
+`NetworkConfig.spec.dnsRefs[]` selects entries from
 `Environment.spec.infraComponents.nameResolution[]`. Static resolver servers
 may still come from the `NetworkConfig` NMState template; resolved DNS refs are
-appended to the rendered NMState server list and never rendered as
-Bootwright-only fields.
+appended to the rendered `dns-resolver.config.server` list. Keep `dnsRefs`
+outside `template.networkConfig`; that map is raw NMState.

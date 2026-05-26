@@ -25,14 +25,14 @@ into root-managed per-task artifact logs. When an apply selects multiple `Contai
 objects, Bootwright keeps Ansible output in logs and prints per-cluster install
 log paths plus high-level progress instead.
 
-Context-backed controller and OpenShift installer actions run on localhost.
+Context-backed bastion and OpenShift installer actions run on localhost.
 Commands that need context data re-exec through `sudo` when necessary and
 store all runtime state under
 `/var/lib/bootwright`; only the context registry remains in
 `~/.bootwright/contexts.yaml`.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque
-cluster task on a remote controller host: create the cluster agent ISO with
+cluster task on a remote bastion host: create the cluster agent ISO with
 `openshift-install`, boot each declared node through its rendered boot adapter
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
@@ -55,9 +55,11 @@ The desired-state API is defined in `api/v1alpha1` and specified in
   and component images.
 - `InfraProvider` owns capabilities: explicit bare-metal machines, virtual
   machine profiles, and substrate capabilities.
+- `InfraComponent` owns host-bound shared infra services, service placement,
+  listeners, bind addresses, and routable endpoints.
 - `NetworkConfig` owns reusable machine-network data and NMState templates.
-- `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
-  machines, and managed infra components.
+- `ClusterInfra` owns endpoint VIP ownership, platform render mode, and
+  selected machines.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
 - `Host` owns SSH reachability to provider or service hosts.
 
@@ -70,7 +72,8 @@ These boundaries are reflected in rendering:
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
 - Infra component variables are rendered from `InfraComponent` services
-  referenced by endpoints, environment catalog entries, and DNS refs.
+  referenced by endpoints, environment catalog entries, and
+  `NetworkConfig.spec.dnsRefs[]`.
 
 Shared host services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about

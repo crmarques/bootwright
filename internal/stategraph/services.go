@@ -395,7 +395,7 @@ func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInfra) map[strin
 		if !ok {
 			continue
 		}
-		for _, ref := range network.Spec.Template.DNSRefs {
+		for _, ref := range network.Spec.DNSRefs {
 			out[ref] = true
 		}
 	}

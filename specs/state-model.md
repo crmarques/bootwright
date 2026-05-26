@@ -6,10 +6,10 @@ user-authored kinds. The schema intentionally tracks the inputs consumed by
 
 - `ContainerCluster` owns install intent and the fields that render mostly to
   `install-config.yaml`.
-- `ClusterInfra` owns the selected machines, install endpoints, platform render
-  mode, and managed infra components.
-- `NetworkConfig` owns reusable `machineNetwork[]` plus the NMState template
-  rendered into `agent-config.yaml`.
+- `ClusterInfra` owns the selected machines, install endpoints, and platform
+  render mode.
+- `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
+  selections, and the NMState template rendered into `agent-config.yaml`.
 - `InfraProvider` owns substrate inventory and capabilities.
 - `InfraComponent` owns host-bound shared infra services and their routable
   endpoints.
@@ -137,8 +137,8 @@ Rules:
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
   `ContainerCluster`.
-- Bootwright controller and OpenShift installer actions run on localhost.
-  Desired state does not select a controller host.
+- Bootwright and OpenShift installer actions run on the bastion host where the
+  CLI is invoked. Desired state does not select that execution host.
 - `infraComponents.proxies[]`, `infraComponents.nameResolution[]`,
   `infraComponents.artifactServers[]`, and `infraComponents.registries[]`
   are the environment service access catalog. Entries are either `external`
@@ -296,6 +296,9 @@ spec:
   machineNetwork:
     - cidr: 192.168.133.0/24
 
+  dnsRefs:
+    - default
+
   template:
     networkConfig:
       interfaces:
@@ -343,6 +346,11 @@ Rules:
   `NetworkConfig`; duplicates across objects are invalid.
 - `spec.template.networkConfig` renders to
   `agent-config.yaml hosts[].networkConfig` after per-machine overlays.
+- `spec.dnsRefs[]` selects entries from
+  `Environment.spec.infraComponents.nameResolution[].name`. These refs are
+  Bootwright service-selection intent and must stay outside the raw NMState
+  template. Resolved IPs are appended to generated
+  `dns-resolver.config.server` entries.
 - Common overlays should be limited to `addresses[]`; advanced users may set a
   full machine-level `networkConfig` override.
 - Static overlay IPs must fit at least one referenced machine network CIDR.
@@ -383,7 +391,7 @@ Rules:
 - `spec.addresses[]` declares neutral named host addresses. Names are scoped to
   one `Host` and may be referenced by same-host consumers.
 - `spec.ssh.addressName` references one `spec.addresses[].name` and is the
-  controller-facing SSH endpoint. When `spec.ssh.user` is omitted, Bootwright
+  bastion-facing SSH endpoint. When `spec.ssh.user` is omitted, Bootwright
   does not render `ansible_user`; SSH chooses the local account or configured
   host-specific user. Set `spec.ssh.user` only when Bootwright must force a
   provider-host SSH login name.
@@ -562,7 +570,7 @@ Rules:
 ## ClusterInfra
 
 `ClusterInfra` owns the infrastructure selected for one cluster: platform
-render mode, endpoints, selected machines, and managed infra components.
+render mode, endpoints, and selected machines.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -690,6 +698,9 @@ Bootwright renders:
   `ClusterInfra.spec.components.machines[]`.
 - `agent-config.yaml hosts[].networkConfig` from the referenced
   `NetworkConfig` template plus machine overlays or full overrides.
+- `agent-config.yaml hosts[].networkConfig.dns-resolver.config.server` from
+  static NMState servers plus `NetworkConfig.spec.dnsRefs[]`, de-duplicated in
+  that order.
 - `agent-config.yaml hosts[].interfaces[]` from provider MAC inventory or
   deterministic generated MACs for virtual substrates that Bootwright creates.
 - Provider or generated machine MACs into matching NMState interfaces when

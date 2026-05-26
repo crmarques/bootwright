@@ -10,6 +10,7 @@ Key files:
 | `environment.yaml` | `Environment` |
 | `hosts.yaml` | `Host` |
 | `provider.yaml` | `InfraProvider` |
+| `infra-component.yaml` | `InfraComponent` |
 | `networks.yaml` | `NetworkConfig` |
 | `cluster-infra.yaml` | `ClusterInfra` |
 | `container-cluster.yaml` | `ContainerCluster` |

@@ -110,7 +110,7 @@ func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.Cluste
 		if !ok {
 			continue
 		}
-		for _, ref := range network.Spec.Template.DNSRefs {
+		for _, ref := range network.Spec.DNSRefs {
 			entry, ok := nameResolutionEntry(env, ref)
 			if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 				continue

@@ -12,6 +12,7 @@ type NetworkConfig struct {
 
 type NetworkConfigSpec struct {
 	MachineNetwork []MachineNetworkCIDR   `yaml:"machineNetwork,omitempty" json:"machineNetwork,omitempty"`
+	DNSRefs        []string               `yaml:"dnsRefs,omitempty" json:"dnsRefs,omitempty"`
 	Template       NetworkConfigTemplate  `yaml:"template,omitempty" json:"template,omitempty"`
 	Libvirt        *NetworkConfigLibvirt  `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 	VSphere        *NetworkConfigVSphere  `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
@@ -24,7 +25,6 @@ type MachineNetworkCIDR struct {
 }
 
 type NetworkConfigTemplate struct {
-	DNSRefs       []string       `yaml:"dnsRefs,omitempty" json:"dnsRefs,omitempty"`
 	NetworkConfig map[string]any `yaml:"networkConfig,omitempty" json:"networkConfig,omitempty"`
 }
 

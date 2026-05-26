@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	checkGroupControllerTools = "Controller tools"
+	checkGroupControllerTools = "Bastion tools"
 	checkGroupInstallerTools  = "Installer tools"
 	checkGroupSecretMaterial  = "Secret material"
 )

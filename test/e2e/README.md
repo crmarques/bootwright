@@ -7,7 +7,7 @@ cluster-install flows. Each case uses the current desired-state schema:
 environment.yaml       Environment
 hosts.yaml             Host
 provider.yaml          InfraProvider
-infra-component.yaml   InfraComponent (when the case needs artifact serving)
+infra-component.yaml   InfraComponent shared infra services
 networks.yaml          NetworkConfig
 cluster-infra.yaml     ClusterInfra
 container-cluster.yaml ContainerCluster

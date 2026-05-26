@@ -20,5 +20,5 @@ func DefaultDeps() Deps {
 }
 
 func CheckController(_ v1alpha1.State, _ Policy) Result {
-	return Result{OK: true, Evidence: "controller actions run on localhost"}
+	return Result{OK: true, Evidence: "bastion actions run on localhost"}
 }

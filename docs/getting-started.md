@@ -5,10 +5,10 @@ description: Import, validate, and converge a Bootwright context.
 
 # Getting Started
 
-Bootwright runs from a named context on the local controller host. The context
-points at the desired-state YAML you edited for your environment and stores
-local state, generated runtime files, and secret material outside the repo
-under `/var/lib/bootwright`.
+Bootwright runs from a named context on the bastion host where you invoke the
+CLI. The context points at the desired-state YAML you edited for your
+environment and stores local state, generated runtime files, and secret
+material outside the repo under `/var/lib/bootwright`.
 
 ## 0. Install The CLI
 
@@ -52,7 +52,7 @@ The copied directory contains desired-state files for the relevant kinds:
 environment.yaml       Environment
 hosts.yaml             Host
 provider.yaml          InfraProvider
-infra-component.yaml   InfraComponent (when the example needs artifact serving)
+infra-component.yaml   InfraComponent shared infra services
 networks.yaml          NetworkConfig
 cluster-infra.yaml     ClusterInfra
 container-cluster.yaml ContainerCluster
@@ -74,6 +74,23 @@ Edit these first:
 
 Provider swaps should leave `Environment` and `ContainerCluster` unchanged
 unless the cluster intent itself changes.
+
+Before importing a context, confirm the out-of-band inputs exist:
+
+- The bastion host can use `sudo` for `/var/lib/bootwright`.
+- SSH from the bastion reaches every `Host` address used by provider or
+  service actions.
+- The OpenShift pull secret is available outside the repo.
+- Generated or supplied BMC, proxy, and mirror secrets are planned in
+  `Environment.spec.secrets`.
+- Provider host tooling and permissions are available for the selected
+  substrate.
+- BMCs can reach the artifact endpoint selected for Redfish virtual media.
+- DNS, VIPs, and load balancer addresses are reachable from the bastion and
+  the cluster nodes.
+- Mirror CA files and other trust bundles are local, unversioned files.
+- Real BMC TLS posture is understood before using
+  `disableCertificateVerification: true`.
 
 ## 2. Verify SSH Access
 
@@ -154,7 +171,7 @@ bootwright apply cluster --yes
 bootwright status
 ```
 
-`apply bastion` installs controller-side prerequisites. `apply infra`
+`apply bastion` installs bastion-host prerequisites. `apply infra`
 converges provider hosts, substrate state, and managed infra components.
 `apply cluster` creates the agent ISO, boots every declared node, and waits for
 `openshift-install agent wait-for install-complete`.
@@ -163,6 +180,17 @@ Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an
 interrupted process leaves only a stale ledger, the next `apply` or `destroy`
 marks it cancelled before continuing.
+
+Stable JSON output is intentionally limited. Use these forms for automation:
+
+| Command | JSON support | Destructive behavior |
+| --- | --- | --- |
+| `bootwright apply infra --dry-run --output json` | Supported | Dry-run only |
+| `bootwright apply cluster --dry-run --output json` | Supported | Dry-run only |
+| `bootwright destroy infra --dry-run --output json` | Supported | Dry-run only |
+| `bootwright destroy cluster --dry-run --output json` | Supported | Dry-run only |
+| `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
+| `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
 
 ## Export External CLI Inputs
 

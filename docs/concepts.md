@@ -20,9 +20,10 @@ instead of compact inline maps.
 | --- | --- |
 | `Environment` | Fleet-wide defaults, selected resource files, cluster selection, service access catalog, secret sources, mirrors, component images |
 | `Host` | SSH access to a machine that can run substrate or service actions |
-| `InfraProvider` | Capability inventory: bare-metal machines, virtual machine profiles, service implementations |
+| `InfraProvider` | Capability inventory: bare-metal machines and virtual machine profiles |
+| `InfraComponent` | Host-bound shared infra services and routable endpoints |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
-| `ClusterInfra` | Platform render mode, endpoints, selected machines, and managed infra components |
+| `ClusterInfra` | Platform render mode, endpoints, and selected machines |
 | `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
 
 ## Reference Flow
@@ -45,8 +46,8 @@ Environment.infraComponents.*.componentRef
 the exact cluster infrastructure machine that backs it. In v1 all nodes in one
 cluster must reference the same `ClusterInfra`.
 
-Bootwright controller and OpenShift installer actions run on localhost.
-Desired state only selects substrate and service hosts.
+Bootwright and OpenShift installer actions run on the bastion host where the
+CLI is invoked. Desired state only selects substrate and service hosts.
 
 ## NMState Templates
 
@@ -99,7 +100,7 @@ the selected machines, endpoints, and managed components.
 
 Host-bound shared services live in `InfraComponent` objects. `ClusterInfra`
 references load balancers from endpoints, `Environment` selects proxy,
-artifact, and registry access, and `NetworkConfig.spec.template.dnsRefs[]`
+artifact, and registry access, and `NetworkConfig.spec.dnsRefs[]`
 selects environment name-resolution entries.
 
 Generated artifact publication is derived from install requirements and uses

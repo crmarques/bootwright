@@ -24,5 +24,5 @@ func enforceControllerLocality(state v1alpha1.State) error {
 	if result.OK {
 		return nil
 	}
-	return fmt.Errorf("bootwright must run from the local controller context: %s", result.Evidence)
+	return fmt.Errorf("bootwright must run from the local bastion context: %s", result.Evidence)
 }

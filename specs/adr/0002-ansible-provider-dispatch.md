@@ -30,7 +30,7 @@ ansible/playbooks/
   layers/        executable layer workflows
   checks/        read-only Ansible checks
 ansible/roles/
-  bastion/       controller-local setup
+  bastion/       bastion-local setup
   shared/        context and host helper roles
   providers/     provider-scoped shared services
   cluster_infra/ per-cluster substrate and network state

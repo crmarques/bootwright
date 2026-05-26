@@ -8,7 +8,7 @@ Current examples:
 
 - `sno-libvirt-redfish`: minimal single-node OpenShift cluster on a libvirt
   provider with Redfish BMC emulation. Start here for the smallest safe
-  six-file input shape.
+  input shape.
 - `sno-libvirt-redfish-external-proxy`: the minimal SNO shape with an
   operator-owned external proxy.
 - `sno-libvirt-redfish-managed-proxy`: the minimal SNO shape with a
@@ -26,7 +26,8 @@ Current examples:
 The two examples intentionally keep `environment.yaml` and
 `container-cluster.yaml` byte-identical. Provider swaps should normally change
 substrate-owned files only: `hosts.yaml`, `networks.yaml`, `provider.yaml`, and
-`cluster-infra.yaml`.
+`cluster-infra.yaml`, plus `infra-component.yaml` when service placement or
+routable service endpoints change.
 
 Copy an example to a working directory before editing it for a real
 environment, then import that copy:
