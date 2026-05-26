@@ -11,9 +11,11 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/localroot"
 )
 
 func TestResolveKeyFilePathUsesInternalCallerHome(t *testing.T) {
+	t.Setenv(localroot.InternalEnv, "1")
 	t.Setenv(InternalCallerHomeEnv, "/home/operator")
 
 	got, err := ResolveKeyFilePath("~/.ssh/bootwright-ssh-key.pub", "")
@@ -21,6 +23,21 @@ func TestResolveKeyFilePathUsesInternalCallerHome(t *testing.T) {
 		t.Fatalf("ResolveKeyFilePath: %v", err)
 	}
 	want := filepath.Join("/home/operator", ".ssh", "bootwright-ssh-key.pub")
+	if got != want {
+		t.Fatalf("ResolveKeyFilePath = %q, want %q", got, want)
+	}
+}
+
+func TestResolveKeyFilePathIgnoresCallerHomeWithoutInternalMarker(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(InternalCallerHomeEnv, "/home/operator")
+
+	got, err := ResolveKeyFilePath("~/.ssh/bootwright-ssh-key", "")
+	if err != nil {
+		t.Fatalf("ResolveKeyFilePath: %v", err)
+	}
+	want := filepath.Join(home, ".ssh", "bootwright-ssh-key")
 	if got != want {
 		t.Fatalf("ResolveKeyFilePath = %q, want %q", got, want)
 	}

@@ -78,6 +78,11 @@ Generated output boundaries are part of the safety contract:
   `/var/lib/bootwright/contexts/<context>/secrets/`; `secret show` prints a
   named context-local secret as raw bytes and must not read external `file:`
   sources.
+- External `file:` secret sources are operator-owned local material. When a
+  non-root Bootwright invocation internally re-execs through `sudo`, checks and
+  reads of those external files run as the original caller; an explicit
+  `sudo bootwright ...` invocation is treated as root-owned and uses root's
+  home, registry, and file permissions.
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
   restrictive file modes, and must never be versioned.

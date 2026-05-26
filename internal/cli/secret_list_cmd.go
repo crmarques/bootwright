@@ -64,11 +64,15 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 			if !entry.Present {
 				status = output.StatusFail
 			}
+			evidence := entry.Type + " " + strings.Join(entry.Paths, ", ")
+			if entry.Detail != "" {
+				evidence += " (" + entry.Detail + ")"
+			}
 			checks = append(checks, output.Check{
 				Group:    "Declared secrets",
 				Name:     entry.Name,
 				Status:   status,
-				Evidence: entry.Type + " " + strings.Join(entry.Paths, ", "),
+				Evidence: evidence,
 			})
 		}
 		p.Checks(checks)
@@ -92,10 +96,7 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 		spec := env.Spec.Secrets[name]
 		typ := secretSpecType(name, spec, state)
 		paths := secretSpecPaths(name, spec, env, secretsDir, state)
-		present, detail, err := secretPathsPresent(paths)
-		if err != nil {
-			return nil, err
-		}
+		present, detail := secretPathsPresent(paths)
 		entries = append(entries, secretListEntry{
 			Name:    name,
 			Type:    typ,
@@ -156,18 +157,18 @@ func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
 	return false
 }
 
-func secretPathsPresent(paths []string) (bool, string, error) {
+func secretPathsPresent(paths []string) (bool, string) {
 	for _, path := range paths {
-		info, err := os.Stat(path)
+		info, err := secret.Stat(path)
 		if errors.Is(err, os.ErrNotExist) {
-			return false, "missing " + path, nil
+			return false, "missing " + path
 		}
 		if err != nil {
-			return false, "", fmt.Errorf("stat %s: %w", path, err)
+			return false, fmt.Sprintf("stat %s: %v", path, err)
 		}
 		if info.IsDir() {
-			return false, path + " is a directory", nil
+			return false, path + " is a directory"
 		}
 	}
-	return true, "", nil
+	return true, ""
 }

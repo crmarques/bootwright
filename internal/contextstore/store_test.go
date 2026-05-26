@@ -26,6 +26,23 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 	}
 }
 
+func TestDefaultRegistryPathIgnoresSudoUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SUDO_USER", "operator")
+	t.Setenv("SUDO_UID", "1000")
+	t.Setenv("SUDO_GID", "1000")
+
+	got, err := DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".bootwright", RegistryFileName)
+	if got != want {
+		t.Fatalf("DefaultRegistryPath = %q, want %q", got, want)
+	}
+}
+
 func TestStoreRoundTripCurrentContext(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "contexts.yaml")
 	root := filepath.Join(t.TempDir(), "bootwright-root")

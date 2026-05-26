@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/contextstore"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/localroot"
 	"github.com/crmarques/bootwright/internal/operator"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/scaffold"
@@ -709,6 +710,50 @@ func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	}
 }
 
+func TestSecretListReportsUnreadableFileAsFailedEntry(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission-denied stat check requires non-root test process")
+	}
+	dir := t.TempDir()
+	blocked := filepath.Join(dir, "blocked")
+	if err := os.Mkdir(blocked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(blocked, "secret")
+	if err := os.WriteFile(path, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(blocked, 0o700)
+
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata:   v1alpha1.Metadata{Name: "lab"},
+			SourcePath: filepath.Join(dir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"blocked-secret": {File: path},
+				},
+			},
+		}},
+	}
+	entries, err := declaredSecretEntries(filepath.Join(dir, "context-secrets"), state)
+	if err != nil {
+		t.Fatalf("declaredSecretEntries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v, want one", entries)
+	}
+	if entries[0].Present {
+		t.Fatalf("blocked secret reported present: %+v", entries[0])
+	}
+	if !strings.Contains(entries[0].Detail, "permission denied") {
+		t.Fatalf("blocked secret detail = %q, want permission denied", entries[0].Detail)
+	}
+}
+
 func TestSecretShowPrintsRawContextSecret(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	if err := os.WriteFile(filepath.Join(ctx.SecretsDir, "manual-secret"), []byte("secret\nwith-newline\n"), 0o600); err != nil {
@@ -840,7 +885,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 6 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || gotArgs[2] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(gotArgs[3:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 7 || gotArgs[0] != "env" || !strings.HasPrefix(gotArgs[1], contextstore.InternalRegistryEnv+"=") || gotArgs[2] != localroot.InternalEnv+"=1" || gotArgs[3] != secret.InternalCallerHomeEnv+"="+home || !reflect.DeepEqual(gotArgs[4:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -905,6 +950,36 @@ func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 	}
 }
 
+func TestSecretSetStagesPasswordInputBeforeSudo(t *testing.T) {
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "proxy", "", true, false)
+	if err != nil {
+		t.Fatalf("stagedSecretSetRootArgs: %v", err)
+	}
+	defer cleanup()
+	if commandContains(rootArgs, "--password-stdin") {
+		t.Fatalf("root args still read password from stdin: %v", rootArgs)
+	}
+	if commandContains(rootArgs, "s3cr3t") {
+		t.Fatalf("root args exposed password: %v", rootArgs)
+	}
+	idx := slices.Index(rootArgs, "--from-file")
+	if idx < 0 || idx+1 >= len(rootArgs) {
+		t.Fatalf("root args missing staged credentials file: %v", rootArgs)
+	}
+	data, err := os.ReadFile(rootArgs[idx+1])
+	if err != nil {
+		t.Fatalf("read staged credentials: %v", err)
+	}
+	if string(data) != "proxy:s3cr3t\n" {
+		t.Fatalf("staged credentials = %q", data)
+	}
+	buf := make([]byte, 1)
+	n, err := rootStdin.Read(buf)
+	if n != 0 || err == nil {
+		t.Fatalf("root stdin should be drained, read n=%d err=%v", n, err)
+	}
+}
+
 func TestSecretSetRootHelperProcess(t *testing.T) {
 	if os.Getenv("BOOTWRIGHT_SECRET_SET_HELPER") != "1" {
 		return
@@ -915,10 +990,10 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 9 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || !strings.HasPrefix(rootArgs[2], secret.InternalCallerHomeEnv+"=") {
+	if len(rootArgs) < 10 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || rootArgs[2] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[3], secret.InternalCallerHomeEnv+"=") {
 		os.Exit(2)
 	}
-	rootArgs = rootArgs[4:]
+	rootArgs = rootArgs[5:]
 	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
 		os.Exit(2)
 	}
@@ -990,11 +1065,11 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	rootArgs := args[sep+1:]
-	if len(rootArgs) < 9 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || !strings.HasPrefix(rootArgs[2], secret.InternalCallerHomeEnv+"=") {
+	if len(rootArgs) < 10 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") || rootArgs[2] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[3], secret.InternalCallerHomeEnv+"=") {
 		os.Exit(2)
 	}
 	registry := strings.TrimPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=")
-	rootArgs = rootArgs[4:]
+	rootArgs = rootArgs[5:]
 	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
 	}

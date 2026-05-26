@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/crmarques/bootwright/internal/localroot"
 	"github.com/crmarques/bootwright/internal/ptyexec"
 )
 
@@ -222,6 +223,9 @@ func summarizeFailure(logPath string, tailLines int) string {
 }
 
 func sudoUserSitePackages() string {
+	if !localroot.IsInternalRootChild() {
+		return ""
+	}
 	sudoUser := os.Getenv("SUDO_USER")
 	if sudoUser == "" || sudoUser == "root" {
 		return ""

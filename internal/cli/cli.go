@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/embedded"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
@@ -17,6 +18,9 @@ import (
 const ansibleBundleDirName = "ansible-bundle"
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	if code, handled := callerio.RunHelper(args, stdout, stderr); handled {
+		return code
+	}
 	if code, handled, err := ensureLocalRootForArgs(ctx, args, stdin, stdout, stderr); handled {
 		return code
 	} else if err != nil {

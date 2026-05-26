@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -202,7 +201,7 @@ func readSecretFile(path, kind string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("%s path is empty", kind)
 	}
-	data, err := os.ReadFile(path)
+	data, err := secret.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read %s at %s: %w", kind, path, err)
 	}

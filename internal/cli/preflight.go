@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/operator"
+	"github.com/crmarques/bootwright/internal/secret"
 )
 
 const (
@@ -64,7 +65,7 @@ type preflightDeps struct {
 
 var defaultPreflightDeps = preflightDeps{
 	lookPath: defaultLookPath,
-	statPath: os.Stat,
+	statPath: secret.Stat,
 	commandOutput: func(name string, args ...string) ([]byte, error) {
 		return exec.Command(name, args...).CombinedOutput()
 	},

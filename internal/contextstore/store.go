@@ -4,13 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/localroot"
 	"github.com/crmarques/bootwright/internal/managedroot"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"go.yaml.in/yaml/v3"
@@ -58,17 +57,12 @@ func RootDir() string {
 }
 
 func DefaultRegistryPath() (string, error) {
-	if override := strings.TrimSpace(os.Getenv(InternalRegistryEnv)); override != "" && os.Geteuid() == 0 {
+	if override := strings.TrimSpace(os.Getenv(InternalRegistryEnv)); override != "" && localroot.IsInternalRootChild() {
 		path, err := cleanPath(override)
 		if err != nil {
 			return "", err
 		}
 		return path, nil
-	}
-	if sudoUser := strings.TrimSpace(os.Getenv("SUDO_USER")); sudoUser != "" && sudoUser != "root" {
-		if u, err := user.Lookup(sudoUser); err == nil && u.HomeDir != "" {
-			return filepath.Join(u.HomeDir, ".bootwright", RegistryFileName), nil
-		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -167,7 +161,7 @@ func Save(path string, store Store) error {
 	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
 		return err
 	}
-	chownRegistryToSudoUser(dir, path)
+	chownRegistryToInternalCaller(dir, path)
 	return nil
 }
 
@@ -345,32 +339,14 @@ func normalizeNames(names []string) []string {
 	return out
 }
 
-func chownRegistryToSudoUser(paths ...string) {
-	uid, gid, ok := sudoUserIDs()
+func chownRegistryToInternalCaller(paths ...string) {
+	uid, gid, ok := localroot.CallerUIDGID()
 	if !ok {
 		return
 	}
 	for _, path := range paths {
-		_ = os.Chown(path, uid, gid)
+		_ = os.Chown(path, int(uid), int(gid))
 	}
-}
-
-func sudoUserIDs() (int, int, bool) {
-	sudoUser := strings.TrimSpace(os.Getenv("SUDO_USER"))
-	if sudoUser == "" || sudoUser == "root" {
-		return 0, 0, false
-	}
-	uidRaw := strings.TrimSpace(os.Getenv("SUDO_UID"))
-	gidRaw := strings.TrimSpace(os.Getenv("SUDO_GID"))
-	if uidRaw == "" || gidRaw == "" {
-		return 0, 0, false
-	}
-	uid, uidErr := strconv.Atoi(uidRaw)
-	gid, gidErr := strconv.Atoi(gidRaw)
-	if uidErr != nil || gidErr != nil || uid < 0 || gid < 0 {
-		return 0, 0, false
-	}
-	return uid, gid, true
 }
 
 func cleanPath(path string) (string, error) {

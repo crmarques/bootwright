@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/localroot"
 )
 
 type localRootGateDeps struct {
@@ -51,7 +51,13 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	if err != nil {
 		return 1, fmt.Errorf("resolve caller home for sudo: %w", err)
 	}
-	cmdArgs := append([]string{"env", contextstore.InternalRegistryEnv + "=" + registry.tempPath, secret.InternalCallerHomeEnv + "=" + callerHome, exe}, args...)
+	cmdArgs := append([]string{
+		"env",
+		contextstore.InternalRegistryEnv + "=" + registry.tempPath,
+		localroot.InternalEnv + "=1",
+		localroot.CallerHomeEnv + "=" + callerHome,
+		exe,
+	}, args...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout

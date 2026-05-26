@@ -17,12 +17,15 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/callerio"
+	"github.com/crmarques/bootwright/internal/contextstore"
 )
 
 // ParseBMCCredentials decodes a single `username:password` line into
@@ -52,7 +55,7 @@ func ReadUserPasswordFile(path, kind string) (UserPassword, error) {
 	if path == "" {
 		return UserPassword{}, fmt.Errorf("%s path is empty", kind)
 	}
-	data, err := os.ReadFile(path)
+	data, err := ReadFile(path)
 	if err != nil {
 		return UserPassword{}, fmt.Errorf("read %s at %s: %w", kind, path, err)
 	}
@@ -61,6 +64,34 @@ func ReadUserPasswordFile(path, kind string) (UserPassword, error) {
 		return UserPassword{}, fmt.Errorf("%s at %s: %w", kind, path, err)
 	}
 	return UserPassword{Username: username, Password: password}, nil
+}
+
+func ReadFile(path string) ([]byte, error) {
+	if pathUsesCaller(path) {
+		if data, ok, err := callerio.ReadFile(path); ok {
+			return data, err
+		}
+	}
+	return os.ReadFile(path)
+}
+
+func Stat(path string) (os.FileInfo, error) {
+	if pathUsesCaller(path) {
+		if info, ok, err := callerio.Stat(path); ok {
+			return info, err
+		}
+	}
+	return os.Stat(path)
+}
+
+func pathUsesCaller(path string) bool {
+	clean := filepath.Clean(path)
+	root := filepath.Clean(contextstore.RootDir())
+	rel, err := filepath.Rel(root, clean)
+	if err != nil {
+		return true
+	}
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 // ValidateBMCUsername rejects usernames containing whitespace or ':',

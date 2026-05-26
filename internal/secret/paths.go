@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/localroot"
 )
 
-const InternalCallerHomeEnv = "BOOTWRIGHT_INTERNAL_CALLER_HOME"
+const InternalCallerHomeEnv = localroot.CallerHomeEnv
 
 func ResolveKeyFilePath(file, envSourceDir string) (string, error) {
 	if file == "" {
@@ -40,8 +41,8 @@ func ResolveKeyFilePath(file, envSourceDir string) (string, error) {
 }
 
 func callerHomeDir() (string, error) {
-	if home := strings.TrimSpace(os.Getenv(InternalCallerHomeEnv)); home != "" {
-		return filepath.Clean(home), nil
+	if home, ok := localroot.CallerHomeDir(); ok {
+		return home, nil
 	}
 	return os.UserHomeDir()
 }
