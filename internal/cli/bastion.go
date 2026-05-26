@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -87,6 +88,9 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		p.Command("bastion apply")
 		p.Section("Plan")
 		fields := []output.Field{{Key: "ansible-core target", Value: "managed venv at " + ansibleVenvDir()}}
+		if summary := localRootSudoSummary(); summary != "" {
+			fields = append(fields, output.Field{Key: "local sudo", Value: summary})
+		}
 		if summary := proxySummary(proxyEnv); summary != "" {
 			fields = append(fields, output.Field{Key: "proxy", Value: summary})
 		} else {
@@ -146,4 +150,15 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		return nil
 	}
 	return cmd
+}
+
+func localRootSudoSummary() string {
+	switch os.Getenv(localRootSudoAuthEnv) {
+	case localSudoAuthNonInteractive:
+		return "validated non-interactively before re-exec"
+	case localSudoAuthPrompted:
+		return "password validated before re-exec"
+	default:
+		return ""
+	}
 }

@@ -12,9 +12,16 @@ import (
 
 const localSudoKeepAliveInterval = time.Minute
 const localSudoPasswordAttempts = 3
+const localRootSudoAuthEnv = "BOOTWRIGHT_INTERNAL_LOCAL_SUDO_AUTH"
+
+const (
+	localSudoAuthNonInteractive = "noninteractive"
+	localSudoAuthPrompted       = "prompted"
+)
 
 type localSudoSession struct {
 	password       string
+	authMethod     string
 	stderr         io.Writer
 	commandContext func(context.Context, string, ...string) *exec.Cmd
 }
@@ -26,6 +33,7 @@ func newLocalSudoSession(ctx context.Context, stdin io.Reader, stderr io.Writer,
 	}
 	err := session.validateNonInteractive(ctx)
 	if err == nil {
+		session.authMethod = localSudoAuthNonInteractive
 		return session, nil
 	}
 	if errors.Is(err, exec.ErrNotFound) {
@@ -43,6 +51,7 @@ func newLocalSudoSession(ctx context.Context, stdin io.Reader, stderr io.Writer,
 			}
 			continue
 		}
+		session.authMethod = localSudoAuthPrompted
 		return session, nil
 	}
 	return nil, fmt.Errorf("sudo authentication failed after %d attempts", localSudoPasswordAttempts)

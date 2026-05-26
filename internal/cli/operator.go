@@ -78,10 +78,29 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 		run.Stdin = stdin
 		run.Env = env
 		if err := run.Run(); err != nil {
+			if isPython312InstallStep(step) {
+				return failErr(1, fmt.Errorf("bootstrap step %q: Python 3.12+ was not found and %s install failed; enable or repair host package repositories, register the host if required, or install Python 3.12+ on PATH manually: %w", step.Label, bootstrapPythonInstallTool(step.Cmd), err))
+			}
 			return failErr(1, fmt.Errorf("bootstrap step %q: %w", step.Label, err))
 		}
 	}
 	return nil
+}
+
+func isPython312InstallStep(step operator.BootstrapStep) bool {
+	return strings.HasPrefix(step.Label, "install python3.12")
+}
+
+func bootstrapPythonInstallTool(args []string) string {
+	for _, arg := range args {
+		switch filepath.Base(arg) {
+		case "dnf":
+			return "dnf"
+		case "apt-get":
+			return "apt-get"
+		}
+	}
+	return "package-manager"
 }
 
 func bootstrapPlanNeedsSudo(plan []operator.BootstrapStep) bool {

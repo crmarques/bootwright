@@ -886,7 +886,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 9 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], contextstore.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || !reflect.DeepEqual(gotArgs[6:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 10 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], contextstore.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || gotArgs[6] != localRootSudoAuthEnv+"="+localSudoAuthNonInteractive || !reflect.DeepEqual(gotArgs[7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -936,7 +936,7 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if !reflect.DeepEqual(calls[1], []string{"-S", "-p", "", "-v"}) {
 		t.Fatalf("second sudo call = %v, want password validation", calls[1])
 	}
-	if len(calls[2]) != 9 || calls[2][0] != "-n" || calls[2][1] != "env" || !strings.HasPrefix(calls[2][2], contextstore.InternalRegistryEnv+"=") || calls[2][3] != localroot.InternalEnv+"=1" || calls[2][4] != secret.InternalCallerHomeEnv+"="+home || calls[2][5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || !reflect.DeepEqual(calls[2][6:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(calls[2]) != 10 || calls[2][0] != "-n" || calls[2][1] != "env" || !strings.HasPrefix(calls[2][2], contextstore.InternalRegistryEnv+"=") || calls[2][3] != localroot.InternalEnv+"=1" || calls[2][4] != secret.InternalCallerHomeEnv+"="+home || calls[2][5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || calls[2][6] != localRootSudoAuthEnv+"="+localSudoAuthPrompted || !reflect.DeepEqual(calls[2][7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("third sudo call = %v", calls[2])
 	}
 }
@@ -1121,13 +1121,13 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
 		os.Exit(0)
 	}
-	if len(args) < sep+10 {
+	if len(args) < sep+11 {
 		os.Exit(2)
 	}
-	if len(rootArgs) < 12 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") {
+	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
 		os.Exit(2)
 	}
-	rootArgs = rootArgs[7:]
+	rootArgs = rootArgs[8:]
 	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
 		os.Exit(2)
 	}
@@ -1202,14 +1202,14 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
 		os.Exit(0)
 	}
-	if len(args) < sep+8 {
+	if len(args) < sep+9 {
 		os.Exit(2)
 	}
-	if len(rootArgs) < 12 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") {
+	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
 		os.Exit(2)
 	}
 	registry := strings.TrimPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=")
-	rootArgs = rootArgs[7:]
+	rootArgs = rootArgs[8:]
 	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
 	}
@@ -1591,6 +1591,44 @@ func TestControllerCLIInstallCommandCopiesArgs(t *testing.T) {
 	got[0] = "changed"
 	if args[0] == "changed" {
 		t.Fatal("controller CLI command aliases input args")
+	}
+}
+
+func TestRunBootstrapPlanExplainsPythonInstallFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakeDnf := filepath.Join(dir, "dnf")
+	if err := os.WriteFile(fakeDnf, []byte("#!/bin/sh\nprintf '%s\\n' 'no enabled repositories' >&2\nexit 42\n"), 0o755); err != nil {
+		t.Fatalf("write fake dnf: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runBootstrapPlan(
+		context.Background(),
+		strings.NewReader("unused\n"),
+		&stdout,
+		&stderr,
+		[]operator.BootstrapStep{{Label: "install python3.12", Cmd: []string{fakeDnf, "install", "-y", "python3.12"}}},
+		nil,
+		"",
+		true,
+	)
+	if err == nil {
+		t.Fatal("expected bootstrap failure")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"Python 3.12+ was not found",
+		"dnf install failed",
+		"enable or repair host package repositories",
+		"install Python 3.12+ on PATH manually",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error missing %q:\n%s", want, msg)
+		}
 	}
 }
 

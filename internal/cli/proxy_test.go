@@ -121,6 +121,21 @@ func TestBastionApplyDryRunShowsNoProxyWhenUnset(t *testing.T) {
 	}
 }
 
+func TestBastionApplyDryRunShowsLocalSudoAuth(t *testing.T) {
+	clearProxyEnv(t)
+	t.Setenv(localRootSudoAuthEnv, localSudoAuthNonInteractive)
+	initTestContext(t, "001-sno-libvirt")
+
+	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	if code != 0 {
+		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+	}
+	want := "local sudo: validated non-interactively before re-exec"
+	if !strings.Contains(stdout, want) {
+		t.Fatalf("stdout missing %q:\n%s", want, stdout)
+	}
+}
+
 func clearProxyEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range proxyEnvKeys {

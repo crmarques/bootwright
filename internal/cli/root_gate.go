@@ -63,6 +63,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		localroot.InternalEnv + "=1",
 		localroot.CallerHomeEnv + "=" + callerHome,
 		localroot.CallerPathEnv + "=" + os.Getenv("PATH"),
+		localRootSudoAuthEnv + "=" + sudoSession.authMethod,
 		exe,
 	}, args...)...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
