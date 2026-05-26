@@ -90,8 +90,8 @@ spec:
         ip: 192.168.133.53
     artifactServers:
       - name: default
-        default: true
         type: managed
+        default: true
         componentRef:
           name: artifact-server
         routes:

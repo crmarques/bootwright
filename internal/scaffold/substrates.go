@@ -174,8 +174,8 @@ spec:
 		EnvArtifactServer: `  infraComponents:
     artifactServers:
       - name: default
-        default: true
         type: managed
+        default: true
         componentRef:
           name: artifact-server
         routes:

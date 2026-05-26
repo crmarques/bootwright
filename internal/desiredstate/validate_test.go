@@ -153,7 +153,7 @@ spec:
 		{
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  infraComponents:\n    artifactServers:\n      - name: default\n        default: true\n        type: managed\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
+				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        default: true\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
 			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
@@ -1314,8 +1314,8 @@ spec:
   infraComponents:
     artifactServers:
       - name: default
-        default: true
         type: managed
+        default: true
         componentRef:
           name: artifact-server
         routes:
@@ -1340,8 +1340,8 @@ spec:
   infraComponents:
     artifactServers:
       - name: default
-        default: true
         type: managed
+        default: true
         componentRef:
           name: artifact-server
         routes:
