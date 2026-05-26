@@ -166,3 +166,16 @@ func TestHostRouteAddressFallback(t *testing.T) {
 		t.Fatalf("fallback HostRouteAddress = %q", got)
 	}
 }
+
+func TestIsLoopbackAlias(t *testing.T) {
+	for _, value := range []string{"localhost", "LOCALHOST", "127.0.0.1", "::1", "0.0.0.0"} {
+		if !IsLoopbackAlias(value) {
+			t.Fatalf("IsLoopbackAlias(%q) = false, want true", value)
+		}
+	}
+	for _, value := range []string{"provider.example.test", "192.168.133.2"} {
+		if IsLoopbackAlias(value) {
+			t.Fatalf("IsLoopbackAlias(%q) = true, want false", value)
+		}
+	}
+}

@@ -232,7 +232,7 @@ func fallbackHostRouteAddress(state v1alpha1.State, hostName string, infra v1alp
 	if !ok {
 		return ""
 	}
-	if address := v1alpha1.HostSSHAddress(host); address != "" && !isLoopbackAlias(address) {
+	if address := v1alpha1.HostSSHAddress(host); address != "" && !IsLoopbackAlias(address) {
 		return address
 	}
 	if gateway := PrimaryNetworkGateway(state, infra); gateway != "" {
@@ -296,7 +296,7 @@ func GatewayFromNetworkConfig(network v1alpha1.NetworkConfig) string {
 	return ""
 }
 
-func isLoopbackAlias(s string) bool {
+func IsLoopbackAlias(s string) bool {
 	if strings.EqualFold(s, "localhost") {
 		return true
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/stateview"
 )
 
 type secretRefRequirement struct {
@@ -113,6 +114,9 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 
 	for _, h := range state.Hosts {
 		if h.Spec.SSH == nil || h.Spec.SSH.KeyRef.Name == "" {
+			continue
+		}
+		if stateview.IsLoopbackAlias(v1alpha1.HostSSHAddress(h)) {
 			continue
 		}
 		out = append(out, secretRefRequirement{

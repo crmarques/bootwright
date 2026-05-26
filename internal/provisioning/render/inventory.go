@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
 	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/stateview"
 )
 
 // Inventory builds the Ansible inventory tree per ADR-0002 § role
@@ -134,9 +135,14 @@ func AgentNodeHostName(clusterName, machineName string) string {
 }
 
 func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string) map[string]any {
+	sshAddress := v1alpha1.HostSSHAddress(h)
 	entry := map[string]any{
-		"ansible_host":         v1alpha1.HostSSHAddress(h),
+		"ansible_host":         sshAddress,
 		"bootwright_host_name": h.Metadata.Name,
+	}
+	if stateview.IsLoopbackAlias(sshAddress) {
+		entry["ansible_connection"] = "local"
+		return entry
 	}
 	if h.Spec.SSH.User != "" {
 		entry["ansible_user"] = h.Spec.SSH.User

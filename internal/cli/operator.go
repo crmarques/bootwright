@@ -37,7 +37,7 @@ func controllerBootstrapProcessDeps() operator.ProcessDeps {
 }
 
 func controllerBootstrapLookPath(name string) (string, error) {
-	if name == "python3.12" || name == "python3" {
+	if name == "python3" || strings.HasPrefix(name, "python3.") {
 		if path, ok, err := callerio.LookPath(name); ok {
 			if err == nil {
 				return path, nil
@@ -62,10 +62,9 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 		return nil
 	}
 	p := output.NewContinuation(stdout)
-	p.Section("Run")
+	p.Status(output.StatusRunning, "Ansible runtime", bootstrapPlanUserSummary(plan))
 	for _, step := range plan {
 		cmd := bootstrapRunCommand(step.Cmd, becomePassword, askBecomePass)
-		p.CommandLine(step.Label, cmd)
 		env := operator.MergeBootstrapEnv(os.Environ(), extraEnv)
 		if isSudoCommand(step.Cmd) && becomePassword != "" {
 			if err := refreshBootstrapSudo(ctx, stderr, env, becomePassword); err != nil {
@@ -84,6 +83,7 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 			return failErr(1, fmt.Errorf("bootstrap step %q: %w", step.Label, err))
 		}
 	}
+	p.Status(output.StatusOK, "Ansible runtime", "ready")
 	return nil
 }
 
@@ -170,8 +170,7 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 		return fmt.Errorf("write controller-clis inventory: %w", err)
 	}
 	p := output.NewContinuation(stdout)
-	p.Section("Ansible execution")
-	p.List([]output.Item{{Label: "install OCP CLIs " + spec.OCPReleaseVersion, Detail: spec.InstallDir}})
+	p.Status(output.StatusRunning, "OpenShift CLIs", spec.OCPReleaseVersion+" into "+spec.InstallDir)
 	ansibleEnv := controllerCLIAnsibleEnv(bundleDir)
 	for k, v := range extraEnv {
 		ansibleEnv[k] = v
@@ -191,6 +190,7 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 	if err := run(ctx, stdin, stdout, stderr, args, env); err != nil {
 		return fmt.Errorf("run controller-clis playbook: %w", err)
 	}
+	p.Status(output.StatusOK, "OpenShift CLIs", "ready")
 	return nil
 }
 

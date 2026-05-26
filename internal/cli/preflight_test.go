@@ -147,6 +147,21 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	t.Fatalf("missing provider-host SSH key check for clusters phase: %+v", checks)
 }
 
+func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
+	state := loadFixtureState(t, "002-sno-emul-baremetal")
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	for _, check := range checks {
+		if check.Name == "host services-host sshKeyRef" {
+			t.Fatalf("loopback host SSH key should not be required: %+v", checks)
+		}
+	}
+}
+
 func TestClusterPreflightRequiresTLSPairMaterial(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}

@@ -107,6 +107,30 @@ func TestInventoryDoesNotForceSSHUserWhenHostUserOmitted(t *testing.T) {
 	}
 }
 
+func TestInventoryUsesLocalConnectionForLoopbackHostRefs(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	inv := render.Inventory(state, "/context/secrets")
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	serviceHost := hosts["services-host"].(map[string]any)
+	if got := serviceHost["ansible_connection"]; got != "local" {
+		t.Fatalf("ansible_connection = %v, want local for loopback service host: %v", got, serviceHost)
+	}
+	if got := serviceHost["ansible_host"]; got != "localhost" {
+		t.Fatalf("ansible_host = %v, want localhost", got)
+	}
+	if _, ok := serviceHost["ansible_ssh_private_key_file"]; ok {
+		t.Fatalf("local service host should not render SSH key material: %v", serviceHost)
+	}
+	if _, ok := serviceHost["ansible_user"]; ok {
+		t.Fatalf("local service host should not force ansible_user: %v", serviceHost)
+	}
+}
+
 func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {

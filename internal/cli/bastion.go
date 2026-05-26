@@ -4,10 +4,12 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/operator"
 )
 
 func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
@@ -56,7 +58,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
   bootwright apply bastion --ask-become-pass=false --yes`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned commands without executing them")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without executing them")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
@@ -87,9 +89,14 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		p := output.New(stdout)
 		p.Command("bastion apply")
 		p.Section("Plan")
-		fields := []output.Field{{Key: "ansible-core target", Value: "managed venv at " + ansibleVenvDir()}}
+		fields := []output.Field{{Key: "runtime", Value: "managed Ansible environment"}}
+		if cliSpec != nil {
+			fields = append(fields, output.Field{Key: "OpenShift CLIs", Value: cliSpec.OCPReleaseVersion + " into " + cliSpec.InstallDir})
+		} else {
+			fields = append(fields, output.Field{Key: "OpenShift CLIs", Value: "not required"})
+		}
 		if summary := localRootSudoSummary(); summary != "" {
-			fields = append(fields, output.Field{Key: "local sudo", Value: summary})
+			fields = append(fields, output.Field{Key: "sudo", Value: summary})
 		}
 		if summary := proxySummary(proxyEnv); summary != "" {
 			fields = append(fields, output.Field{Key: "proxy", Value: summary})
@@ -97,19 +104,17 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			fields = append(fields, output.Field{Key: "proxy", Value: "none"})
 		}
 		p.Fields(fields)
-		p.Section("Bootwright prerequisites")
+		p.Section("Actions")
 		if len(plan) == 0 {
-			p.Status(output.StatusSkip, "bastion runtime", "already installed")
-		}
-		for _, step := range plan {
-			p.CommandLine(step.Label, step.Cmd)
+			p.Status(output.StatusSkip, "Ansible runtime", "already installed")
+		} else {
+			p.Status(output.StatusPending, "Ansible runtime", bootstrapPlanUserSummary(plan))
 		}
 		switch {
 		case cliSpec != nil:
-			cliInstallCommand := controllerCLIInstallCommand(cliSpec.PlannedCommand(controllerCLIInventory), askBecomePass, "")
-			p.CommandLine("install OCP CLIs "+cliSpec.OCPReleaseVersion+" into "+cliSpec.InstallDir, cliInstallCommand)
+			p.Status(output.StatusPending, "OpenShift CLIs", cliSpec.OCPReleaseVersion+" into "+cliSpec.InstallDir)
 		default:
-			p.Status(output.StatusSkip, "install OCP CLIs", "no openshift.release.version declared in state")
+			p.Status(output.StatusSkip, "OpenShift CLIs", "no openshift.release.version declared in state")
 		}
 		if dryRun {
 			return nil
@@ -138,6 +143,9 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 				becomePasswordFile = path
 			}
 		}
+		if len(plan) > 0 || cliSpec != nil {
+			output.NewContinuation(stdout).Section("Run")
+		}
 		if err := runBootstrapPlan(c.Context(), stdin, stdout, stderr, plan, proxyEnv, becomePassword, askBecomePass); err != nil {
 			return err
 		}
@@ -152,12 +160,36 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 	return cmd
 }
 
+func bootstrapPlanUserSummary(plan []operator.BootstrapStep) string {
+	needsPython := false
+	needsRuntime := false
+	for _, step := range plan {
+		label := strings.ToLower(step.Label)
+		if strings.Contains(label, "install python") {
+			needsPython = true
+			continue
+		}
+		needsRuntime = true
+	}
+	var parts []string
+	if needsPython {
+		parts = append(parts, "install Python 3.12+")
+	}
+	if needsRuntime {
+		parts = append(parts, "prepare managed Ansible")
+	}
+	if len(parts) == 0 {
+		return "refresh local tools"
+	}
+	return strings.Join(parts, "; ")
+}
+
 func localRootSudoSummary() string {
 	switch os.Getenv(localRootSudoAuthEnv) {
 	case localSudoAuthNonInteractive:
-		return "validated non-interactively before re-exec"
+		return "ready (non-interactive)"
 	case localSudoAuthPrompted:
-		return "password validated before re-exec"
+		return "ready"
 	default:
 		return ""
 	}

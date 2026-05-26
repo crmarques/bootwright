@@ -55,10 +55,10 @@ func TestAmbientProxyEnvReturnsNilWhenUnset(t *testing.T) {
 func TestProxySummaryUsesLowercaseFallbacks(t *testing.T) {
 	got := proxySummary(map[string]string{
 		"https_proxy": "http://user:pass@proxy.example.test:3128",
-		"no_proxy":    "localhost",
+		"no_proxy":    "localhost,127.0.0.1",
 	})
 
-	for _, want := range []string{"https=http://***@", "no_proxy=localhost"} {
+	for _, want := range []string{"configured", "https", "no_proxy: 2 entries"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("proxySummary = %q, missing %q", got, want)
 		}
@@ -102,7 +102,7 @@ func TestBastionApplyDryRunShowsContextProxy(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
 	}
-	want := "proxy: https=http://***@192.168.132.1:3128 http=http://***@192.168.132.1:3128"
+	want := "proxy: configured (https, http,"
 	if !strings.Contains(stdout, want) {
 		t.Fatalf("stdout missing %q:\n%s", want, stdout)
 	}
@@ -121,6 +121,31 @@ func TestBastionApplyDryRunShowsNoProxyWhenUnset(t *testing.T) {
 	}
 }
 
+func TestBastionApplyDryRunShowsHighLevelActions(t *testing.T) {
+	clearProxyEnv(t)
+	initTestContext(t, "001-sno-libvirt")
+
+	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	if code != 0 {
+		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{
+		"runtime: managed Ansible environment",
+		"Actions",
+		"Ansible runtime",
+		"OpenShift CLIs",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, reject := range []string{"Bootwright prerequisites", "$ ", "ansible-playbook"} {
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("stdout should not contain %q:\n%s", reject, stdout)
+		}
+	}
+}
+
 func TestBastionApplyDryRunShowsLocalSudoAuth(t *testing.T) {
 	clearProxyEnv(t)
 	t.Setenv(localRootSudoAuthEnv, localSudoAuthNonInteractive)
@@ -130,7 +155,7 @@ func TestBastionApplyDryRunShowsLocalSudoAuth(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
 	}
-	want := "local sudo: validated non-interactively before re-exec"
+	want := "sudo: ready (non-interactive)"
 	if !strings.Contains(stdout, want) {
 		t.Fatalf("stdout missing %q:\n%s", want, stdout)
 	}

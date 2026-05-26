@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"regexp"
@@ -107,15 +108,25 @@ func proxySummary(env map[string]string) string {
 	}
 	parts := make([]string, 0, 3)
 	if v := firstProxyEnv(env, "HTTPS_PROXY", "https_proxy"); v != "" {
-		parts = append(parts, "https="+redactProxyURL(v))
+		parts = append(parts, "https")
 	}
 	if v := firstProxyEnv(env, "HTTP_PROXY", "http_proxy"); v != "" {
-		parts = append(parts, "http="+redactProxyURL(v))
+		parts = append(parts, "http")
 	}
 	if v := firstProxyEnv(env, "NO_PROXY", "no_proxy"); v != "" {
-		parts = append(parts, "no_proxy="+v)
+		parts = append(parts, fmt.Sprintf("no_proxy: %d entries", noProxyEntryCount(v)))
 	}
-	return strings.Join(parts, " ")
+	return "configured (" + strings.Join(parts, ", ") + ")"
+}
+
+func noProxyEntryCount(value string) int {
+	count := 0
+	for _, part := range strings.Split(value, ",") {
+		if strings.TrimSpace(part) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func firstProxyEnv(env map[string]string, keys ...string) string {
@@ -125,18 +136,4 @@ func firstProxyEnv(env map[string]string, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func redactProxyURL(u string) string {
-	return proxySchemeAuthorityRE.ReplaceAllStringFunc(u, func(match string) string {
-		idx := strings.Index(match, "://")
-		if idx < 0 {
-			return match
-		}
-		scheme := match[:idx+3]
-		if strings.Contains(match[idx+3:], "@") {
-			return scheme + "***@"
-		}
-		return scheme
-	})
 }

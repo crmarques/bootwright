@@ -1719,8 +1719,8 @@ exec "$@"
 	if got := stderr.String(); got != "" {
 		t.Fatalf("stderr = %q, want no sudo prompt", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, "$ sudo -n sh -c 'printf first'") || !strings.Contains(got, "first") || !strings.Contains(got, "second") {
-		t.Fatalf("stdout missing noninteractive sudo command or step output:\n%s", got)
+	if got := stdout.String(); strings.Contains(got, "$ sudo") || !strings.Contains(got, "first") || !strings.Contains(got, "second") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
+		t.Fatalf("stdout should hide commands and show runtime status:\n%s", got)
 	}
 	body, err := os.ReadFile(passwordLog)
 	if err != nil {
@@ -1768,8 +1768,8 @@ exec "$@"
 	if err != nil {
 		t.Fatalf("runBootstrapPlan: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "$ sudo -n sh -c 'printf ok'") || !strings.Contains(got, "ok") {
-		t.Fatalf("stdout missing noninteractive sudo command or output:\n%s", got)
+	if got := stdout.String(); strings.Contains(got, "$ sudo") || !strings.Contains(got, "ok") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
+		t.Fatalf("stdout should hide commands and show runtime status:\n%s", got)
 	}
 }
 

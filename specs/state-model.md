@@ -395,6 +395,9 @@ Rules:
   does not render `ansible_user`; SSH chooses the local account or configured
   host-specific user. Set `spec.ssh.user` only when Bootwright must force a
   provider-host SSH login name.
+- When the resolved SSH endpoint is `localhost` or a loopback address,
+  Bootwright treats the host as controller-local, uses Ansible local
+  connection, and does not require host SSH key material for preflight.
 - `spec.ssh.keyRef.name`, when set, references `Environment.spec.secrets`.
 - `spec.capabilities[]` is a typed tag list used by provider capabilities to
   select hosts for substrate or service work.
@@ -817,7 +820,7 @@ task scheduling with `--parallelism`, `--parallelism-per-host`, and
 `--parallelism-redfish`; `0` for any of those flags means Bootwright uses the
 maximum safe automatic value. Explicit limits only reduce automatic
 concurrency; provider-host and Redfish safety locks still apply.
-`apply <target> --dry-run` is a plan-only render and command preview. It does
+`apply <target> --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not run
 Ansible; operators must run `bootwright check <target>` for readiness.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
