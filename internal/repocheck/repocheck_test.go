@@ -221,7 +221,7 @@ func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	}
 }
 
-func TestContainerfileRequiresBuildMetadata(t *testing.T) {
+func TestContainerfileStampsBuildMetadata(t *testing.T) {
 	body := readRepoFile(t, "Containerfile")
 	for _, reject := range []string{
 		"ARG VERSION=dev",
@@ -234,13 +234,20 @@ func TestContainerfileRequiresBuildMetadata(t *testing.T) {
 	for _, want := range []string{
 		"ARG VERSION",
 		"ARG GIT_COMMIT",
-		"VERSION build arg is required",
-		"GIT_COMMIT build arg is required",
-		`make build VERSION="${VERSION}" GIT_COMMIT="${GIT_COMMIT}"`,
+		`version="${VERSION}"`,
+		`git_commit="${GIT_COMMIT}"`,
+		"git describe --tags --always --dirty",
+		"git rev-parse --short HEAD",
+		`make build VERSION="${version}" GIT_COMMIT="${git_commit}"`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("Containerfile missing build metadata guard %q", want)
+			t.Fatalf("Containerfile missing build metadata fragment %q", want)
 		}
+	}
+
+	dockerignore := readRepoFile(t, ".dockerignore")
+	if strings.Contains(dockerignore, ".git/") {
+		t.Fatal(".dockerignore excludes .git, so direct Containerfile builds cannot self-stamp metadata")
 	}
 }
 

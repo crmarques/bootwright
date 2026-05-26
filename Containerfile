@@ -53,9 +53,11 @@ ARG VERSION
 ARG GIT_COMMIT
 RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build,sharing=locked \
-    test -n "${VERSION}" || { printf '%s\n' 'VERSION build arg is required; use make container-build or pass --build-arg VERSION="$(git describe --tags --always --dirty)"'; exit 1; }; \
-    test -n "${GIT_COMMIT}" || { printf '%s\n' 'GIT_COMMIT build arg is required; use make container-build or pass --build-arg GIT_COMMIT="$(git rev-parse --short HEAD)"'; exit 1; }; \
-    make build VERSION="${VERSION}" GIT_COMMIT="${GIT_COMMIT}"
+    version="${VERSION}"; \
+    git_commit="${GIT_COMMIT}"; \
+    if [ -z "${version}" ]; then version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"; fi; \
+    if [ -z "${git_commit}" ]; then git_commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; fi; \
+    make build VERSION="${version}" GIT_COMMIT="${git_commit}"
 
 FROM docker.io/redhat/ubi9:9.7
 

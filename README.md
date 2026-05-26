@@ -79,8 +79,6 @@ export NO_PROXY="localhost,127.0.0.1,.local,10."
 export http_proxy="${HTTP_PROXY}"
 export https_proxy="${HTTPS_PROXY}"
 export no_proxy="${NO_PROXY}"
-export BOOTWRIGHT_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
-export BOOTWRIGHT_GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 DOCKER_BUILDKIT=1 docker build \
   --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
@@ -89,8 +87,6 @@ DOCKER_BUILDKIT=1 docker build \
   --build-arg "http_proxy=${http_proxy}" \
   --build-arg "https_proxy=${https_proxy}" \
   --build-arg "no_proxy=${no_proxy}" \
-  --build-arg "VERSION=${BOOTWRIGHT_VERSION}" \
-  --build-arg "GIT_COMMIT=${BOOTWRIGHT_GIT_COMMIT}" \
   -t bootwright \
   -f Containerfile \
   .
