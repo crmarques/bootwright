@@ -199,11 +199,11 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		switch name {
 		case "environment.yaml":
 			text = strings.Replace(text, "    proxy-credentials:\n      generated:\n        credentials:\n          username: proxy\n", "    proxy-credentials:\n      generated:\n        credentials:\n          username: proxy\n    mirror-trust:\n      generated:\n        selfSignedCertificate:\n          commonName: lab-host\n", 1)
+			text = strings.Replace(text, "  proxy:\n", "  artifactServer:\n    componentRef:\n      name: artifact-server\n    routes:\n      clusterInstall:\n        endpoint: cluster\n\n  proxy:\n", 1)
 			text = strings.Replace(text, "  proxy:\n", "  registries:\n    mirror:\n      trustBundleRef:\n        name: mirror-trust\n  proxy:\n", 1)
 		case "hosts.yaml":
 			text = strings.Replace(text, "    - name: cluster-lan\n      address: 192.168.132.1\n", "    - name: cluster-lan\n      address: 192.168.132.99\n", 1)
 		case "provider.yaml":
-			text = strings.Replace(text, "        hostRef:\n          name: lab-host\n        routes:", "        hostRef:\n          name: lab-host\n        port: 9443\n        routes:", 1)
 			needle := "  dns:\n    - name: default\n      dnsmasq:\n        hostRef:\n          name: lab-host\n"
 			text = strings.Replace(text, needle, needle+"\n  registries:\n    - name: default\n      mirrorRegistry:\n        hostRef:\n          name: lab-host\n", 1)
 		case "cluster.yaml":
@@ -214,6 +214,25 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
 			t.Fatalf("write fixture %s: %v", name, err)
 		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "infra-component.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  artifactServer:
+    hostRef:
+      name: lab-host
+    listeners:
+      - name: https
+        protocol: https
+        port: 9443
+    endpoints:
+      - name: cluster
+        listener: https
+        addressName: cluster-lan
+`), 0o600); err != nil {
+		t.Fatalf("write infra-component.yaml: %v", err)
 	}
 
 	state, err := desiredstate.LoadNormalizeValidate([]string{dir})

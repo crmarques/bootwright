@@ -80,6 +80,8 @@ func mergeProviderServiceVars(dst, src map[string]any) {
 		"image",
 		"bindAddress",
 		"port",
+		"listeners",
+		"endpoints",
 		"url",
 		"tls",
 		"bmcEmulated",

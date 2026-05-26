@@ -7,7 +7,7 @@
     fail_msg: >-
       boot_redfish needs the renderer to project
       bootwright_component.boot.{redfish.baseUrl,agentIso.fetchUrl}. An empty
-      agentIso.fetchUrl means the cluster has no reachable artifact publisher;
-      declare one InfraProvider.spec.artifactPublishers[].http and set
-      artifactPublishers[].http.routes.redfishVirtualMedia.addressName when
-      the BMC needs a distinct route.
+      agentIso.fetchUrl means the cluster has no reachable artifact server;
+      declare an InfraComponent.spec.artifactServer endpoint and bind
+      Environment.spec.artifactServer.routes.redfishVirtualMedia.endpoint to
+      the endpoint the BMC must use.

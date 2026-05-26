@@ -52,6 +52,7 @@ func Load(paths []string) (v1alpha1.State, error) {
 		len(state.Hosts) == 0 &&
 		len(state.NetworkConfigs) == 0 &&
 		len(state.InfraProviders) == 0 &&
+		len(state.InfraComponents) == 0 &&
 		len(state.ClusterInfras) == 0 &&
 		len(state.ContainerClusters) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
@@ -211,6 +212,13 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.InfraProviders = append(state.InfraProviders, item)
+		case v1alpha1.KindInfraComponent:
+			var item v1alpha1.InfraComponent
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.InfraComponents = append(state.InfraComponents, item)
 		case v1alpha1.KindClusterInfra:
 			var item v1alpha1.ClusterInfra
 			if err := decodeKnown(node, &item); err != nil {
@@ -285,6 +293,12 @@ func sortState(state *v1alpha1.State) {
 			return state.InfraProviders[i].SourcePath < state.InfraProviders[j].SourcePath
 		}
 		return state.InfraProviders[i].Metadata.Name < state.InfraProviders[j].Metadata.Name
+	}))
+	sort.SliceStable(state.InfraComponents, sortByName(func(i, j int) bool {
+		if state.InfraComponents[i].Metadata.Name == state.InfraComponents[j].Metadata.Name {
+			return state.InfraComponents[i].SourcePath < state.InfraComponents[j].SourcePath
+		}
+		return state.InfraComponents[i].Metadata.Name < state.InfraComponents[j].Metadata.Name
 	}))
 	sort.SliceStable(state.ClusterInfras, sortByName(func(i, j int) bool {
 		if state.ClusterInfras[i].Metadata.Name == state.ClusterInfras[j].Metadata.Name {

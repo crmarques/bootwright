@@ -3,6 +3,7 @@ package stategraph
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
@@ -280,25 +281,44 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 		}
 	}
 	if artifactpub.ClusterNeedsPublication(state, infra, cluster) {
-		if publisher, ok := artifactpub.Select(state); ok && publisher.Capability.HTTP != nil {
+		if server, ok := artifactpub.Select(state); ok && server.Config != nil {
 			out = append(out, newServiceConsumer(
 				cluster.Metadata.Name,
 				infra.Metadata.Name,
-				fmt.Sprintf("ClusterInfra/%s generated artifact publisher", infra.Metadata.Name),
+				fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
 				v1alpha1.ComponentSlotArtifacts,
-				publisher.ProviderName,
-				publisher.Capability.Name,
+				v1alpha1.KindInfraComponent,
+				server.Component.Metadata.Name,
 				"http",
 				map[string]string{
-					"hostRef":     publisher.Capability.HTTP.HostRef.Name,
-					"bindAddress": v1alpha1.DefaultServiceBindAddress,
-					"port":        fmt.Sprint(publisher.Capability.HTTP.Port),
+					"hostRef":     server.Config.HostRef.Name,
+					"bindAddress": server.Config.BindAddress,
+					"listeners":   artifactListenersKey(server.Config.Listeners),
+					"endpoints":   artifactEndpointsKey(server.Config.Endpoints),
 				},
 				nil,
 			))
 		}
 	}
 	return out
+}
+
+func artifactListenersKey(listeners []v1alpha1.ArtifactServerListener) string {
+	parts := make([]string, 0, len(listeners))
+	for _, listener := range listeners {
+		parts = append(parts, fmt.Sprintf("%s/%s/%d", listener.Name, listener.Protocol, listener.Port))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
+	parts := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.Listener, endpoint.AddressName))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
 
 func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) ProviderServiceConsumer {

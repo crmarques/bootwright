@@ -110,35 +110,56 @@ components:
 ```
 
 Artifact publication is different: generated ISO and boot-artifact publication
-is derived from install requirements and uses one provider publisher:
+is derived from install requirements and uses an environment-bound
+`InfraComponent`:
 
 ```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
 spec:
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: services-host
+  artifactServer:
+    hostRef:
+      name: services-host
+    listeners:
+      - name: https
+        protocol: https
         port: 9443
-        routes:
-          redfishVirtualMedia:
-            addressName: lab-lan
-          clusterInstall:
-            addressName: lab-lan
+    endpoints:
+      - name: bmc
+        listener: https
+        addressName: lab-lan
+      - name: cluster
+        listener: https
+        addressName: lab-lan
 ```
 
-Publisher route `addressName` values resolve against the named addresses on
-the selected `hostRef`. For `redfishVirtualMedia`, use a BMC-routable IP
-address entry in most environments; many BMCs do not reliably resolve DNS
-aliases, and Bootwright uses the resolved value directly in the ISO URL sent to
-Redfish. Bootwright serves these routes over HTTPS with a self-signed
-certificate generated on the provider host. Omit `http.port` to use the
-default `8443`.
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+spec:
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
+      clusterInstall:
+        endpoint: cluster
+```
+
+Endpoint `addressName` values resolve against the named addresses on the
+selected `hostRef`. For `redfishVirtualMedia`, use a BMC-routable IP address
+entry in most environments; many BMCs do not reliably resolve DNS aliases, and
+Bootwright uses the resolved value directly in the ISO URL sent to Redfish.
+Bootwright serves HTTPS listeners with a self-signed certificate generated on
+the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
 
 Supported authored service slots are load balancer, proxy, name resolution,
 and registry.
 
-For real BMCs, the artifact publisher route used by
-`redfishVirtualMedia.addressName` should usually resolve to an IP address that
+For real BMCs, the artifact server endpoint used by
+`routes.redfishVirtualMedia.endpoint` should usually resolve to an IP address that
 the BMC network can reach. Controller reachability alone is not enough for
 virtual-media ISO fetches.

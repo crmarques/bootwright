@@ -8,6 +8,15 @@ spec:
   bastion:
     hostRef: bastion
 
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
+      clusterInstall:
+        endpoint: cluster
+
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key:

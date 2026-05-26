@@ -37,7 +37,7 @@ type File struct {
 	Body string
 }
 
-// Workspace renders the six YAML files for one cluster against the
+// Workspace renders the YAML objects for one cluster against the
 // substrate matching `kind`. Returns an error when `kind` does not
 // match any registered substrate. The substrate fragments may
 // themselves contain `{{.ProviderID}}` / `{{.NetworkID}}`
@@ -70,6 +70,9 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render %s: %w", t.name, err)
 		}
+		if t.optional && strings.TrimSpace(body) == "" {
+			continue
+		}
 		files = append(files, File{Name: t.name, Body: body})
 	}
 	return files, nil
@@ -99,6 +102,9 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.EnvExtraSecrets, err = render("EnvExtraSecrets", s.EnvExtraSecrets); err != nil {
 		return s, err
 	}
+	if s.EnvArtifactServer, err = render("EnvArtifactServer", s.EnvArtifactServer); err != nil {
+		return s, err
+	}
 	if s.HostsYAML, err = render("HostsYAML", s.HostsYAML); err != nil {
 		return s, err
 	}
@@ -106,6 +112,9 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 		return s, err
 	}
 	if s.ProviderCapabilities, err = render("ProviderCapabilities", s.ProviderCapabilities); err != nil {
+		return s, err
+	}
+	if s.InfraComponentYAML, err = render("InfraComponentYAML", s.InfraComponentYAML); err != nil {
 		return s, err
 	}
 	if s.ClusterMachineFrom, err = render("ClusterMachineFrom", s.ClusterMachineFrom); err != nil {
@@ -166,10 +175,12 @@ type Substrate struct {
 	NetworkNameSuffix    string
 	BastionHostRef       string
 	EnvExtraSecrets      string
+	EnvArtifactServer    string
 	HostsYAML            string
 	NetworkConnectivity  string
 	NetworkDNSServers    string
 	ProviderCapabilities string
+	InfraComponentYAML   string
 	ClusterMachineFrom   string
 	ClusterMachineExtras string
 	ClusterServices      string
@@ -190,8 +201,9 @@ type templateData struct {
 }
 
 type namedTemplate struct {
-	name string
-	tmpl *template.Template
+	name     string
+	tmpl     *template.Template
+	optional bool
 }
 
 var allTemplates = []namedTemplate{
@@ -199,6 +211,7 @@ var allTemplates = []namedTemplate{
 	{name: "hosts.yaml", tmpl: mustTmpl("hosts", hostsTmpl)},
 	{name: "networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
 	{name: "provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
+	{name: "infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
 	{name: "cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
 	{name: "container-cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 }
@@ -227,6 +240,7 @@ spec:
   bastion:
     hostRef: {{.BastionHostRef}}
 
+{{.Substrate.EnvArtifactServer}}
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key:
@@ -270,6 +284,8 @@ metadata:
   name: {{.ProviderID}}
 spec:
 {{.Substrate.ProviderCapabilities}}`
+
+const infraComponentTmpl = `{{.Substrate.InfraComponentYAML}}`
 
 const clusterInfraTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: ClusterInfra

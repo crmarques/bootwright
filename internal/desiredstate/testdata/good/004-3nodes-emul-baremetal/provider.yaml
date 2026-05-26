@@ -52,11 +52,3 @@ kind: InfraProvider
 metadata:
   name: host-services
 spec:
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: services-host
-        routes:
-          redfishVirtualMedia:
-            addressName: bmc-lan

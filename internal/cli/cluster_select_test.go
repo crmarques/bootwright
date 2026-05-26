@@ -31,7 +31,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraAndAllSharedKinds(t *test
 				t.Fatal("expected shared service conflict, got nil")
 			}
 			for _, fragment := range []string{
-				"artifacts services/default",
+				"artifacts InfraComponent/artifact-server",
 				"loadBalancer services/default",
 				"nameResolution services/default",
 				"proxy services/default",
@@ -89,12 +89,18 @@ func cliStateWithSharedDNS() v1alpha1.State {
 
 func cliStateWithAllSharedProviderServices() v1alpha1.State {
 	state := cliStateWithSharedDNS()
-	state.InfraProviders[0].Spec.ArtifactPublishers = []v1alpha1.ArtifactPublisherCapability{{
-		Name: "default",
-		HTTP: &v1alpha1.ArtifactHTTPCapability{HostRef: v1alpha1.LocalObjectReference{
-			Name: "service-host",
-		}},
+	state.Environments = []v1alpha1.Environment{{
+		Metadata: v1alpha1.Metadata{Name: "env"},
+		Spec: v1alpha1.EnvironmentSpec{
+			ArtifactServer: &v1alpha1.EnvironmentArtifactServerSpec{
+				ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+				Routes: v1alpha1.EnvironmentArtifactRoutes{
+					ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+				},
+			},
+		},
 	}}
+	state.InfraComponents = []v1alpha1.InfraComponent{cliArtifactServerComponent()}
 	state.InfraProviders[0].Spec.LoadBalancers = []v1alpha1.LoadBalancerCapability{{
 		Name:    "default",
 		HAProxy: &v1alpha1.HAProxyCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
@@ -123,6 +129,27 @@ func cliStateWithAllSharedProviderServices() v1alpha1.State {
 		state.ContainerClusters[i].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	}
 	return state
+}
+
+func cliArtifactServerComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "artifact-server"},
+		Spec: v1alpha1.InfraComponentSpec{
+			ArtifactServer: &v1alpha1.ArtifactServerComponent{
+				HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+				Listeners: []v1alpha1.ArtifactServerListener{{
+					Name:     "https",
+					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+					Port:     v1alpha1.DefaultArtifactsHTTPPort,
+				}},
+				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
+					Name:        "cluster",
+					Listener:    "https",
+					AddressName: "ssh",
+				}},
+			},
+		},
+	}
 }
 
 func cliClusterInfraWithDNS(name, machineProvider string) v1alpha1.ClusterInfra {

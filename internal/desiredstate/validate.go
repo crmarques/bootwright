@@ -8,7 +8,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
-	"github.com/crmarques/bootwright/internal/proxy"
 )
 
 // Validate is the single entry point. Every rule in
@@ -21,6 +20,7 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, validateHosts(state)...)
 	errs = append(errs, validateNetworkConfigs(state)...)
 	errs = append(errs, validateProviders(state)...)
+	errs = append(errs, validateInfraComponents(state)...)
 	errs = append(errs, validateClusterInfras(state)...)
 	errs = append(errs, validateContainerClusters(state)...)
 	errs = append(errs, validateCrossLayer(state)...)
@@ -82,7 +82,7 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	errs = append(errs, validateProxySourceConsistency(state)...)
 	errs = append(errs, validateRegistrySourceConsistency(state)...)
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
-	errs = append(errs, validateArtifactPublisherRequirements(state)...)
+	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedProviderServices(state)...)
 	return errs
 }
@@ -179,9 +179,10 @@ func validateDisconnectedRequiresRegistry(state v1alpha1.State) []string {
 		strings.Join(disconnected, ","))}
 }
 
-func validateArtifactPublisherRequirements(state v1alpha1.State) []string {
+func validateArtifactServerRequirements(state v1alpha1.State) []string {
 	infraIndex := indexClusterInfras(state.ClusterInfras)
-	publishers := artifactpub.All(state)
+	env := primaryEnvironment(&state)
+	server, hasServer := artifactpub.Select(state)
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
 		ci, ok, _ := resolveContainerClusterInfra(ocp, infraIndex)
@@ -189,26 +190,21 @@ func validateArtifactPublisherRequirements(state v1alpha1.State) []string {
 			continue
 		}
 		prefix := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
-		if len(publishers) == 0 {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; declare one InfraProvider.spec.artifactPublishers[].http", prefix))
+		if env == nil || env.Spec.ArtifactServer == nil || env.Spec.ArtifactServer.ComponentRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.artifactServer.componentRef.name", prefix))
 			continue
 		}
-		if len(publishers) > 1 {
-			errs = append(errs, fmt.Sprintf("%s requires exactly one generated artifact publisher because artifact publisher selection is currently global; found %s", prefix, strings.Join(artifactpub.Names(publishers), ", ")))
+		if !hasServer {
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; Environment/%s spec.artifactServer.componentRef.name %q does not resolve to an InfraComponent artifact server", prefix, env.Metadata.Name, env.Spec.ArtifactServer.ComponentRef.Name))
 			continue
 		}
-		publisher := publishers[0]
-		if publisher.Capability.HTTP == nil {
-			continue
+		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifactpub.RouteAvailable(server, env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint) {
+			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s spec.artifactServer.routes.clusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
+				prefix, env.Metadata.Name, server.Component.Metadata.Name))
 		}
-		hostRef := publisher.Capability.HTTP.HostRef.Name
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && proxy.HostRouteAddress(state, hostRef, publisher.Capability.HTTP.Routes.ClusterInstall.AddressName, ci) == "" {
-			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires artifact publisher %s/%s to have a cluster install route: set spec.artifactPublishers[%s].http.routes.clusterInstall.addressName, set Host/%s spec.ssh.addressName to a non-loopback address, or give the cluster's primary network a gateway",
-				prefix, publisher.ProviderName, publisher.Capability.Name, publisher.Capability.Name, hostRef))
-		}
-		if artifactpub.ClusterUsesBareMetalMachine(state, ci) && proxy.HostRouteAddress(state, hostRef, publisher.Capability.HTTP.Routes.RedfishVirtualMedia.AddressName, ci) == "" {
-			errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires artifact publisher %s/%s to have a Redfish virtual-media route: set spec.artifactPublishers[%s].http.routes.redfishVirtualMedia.addressName, set Host/%s spec.ssh.addressName to a non-loopback address, or give the cluster's primary network a gateway",
-				prefix, publisher.ProviderName, publisher.Capability.Name, publisher.Capability.Name, hostRef))
+		if artifactpub.ClusterUsesBareMetalMachine(state, ci) && !artifactpub.RouteAvailable(server, env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint) {
+			errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires Environment/%s spec.artifactServer.routes.redfishVirtualMedia.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
+				prefix, env.Metadata.Name, server.Component.Metadata.Name))
 		}
 	}
 	return errs

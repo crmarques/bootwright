@@ -7,9 +7,8 @@ import (
 	"strings"
 )
 
-// Bootwright desired-state API. Six user-authored kinds, all under one
-// apiVersion. Every fact has one home; references flow upward
-// (cluster ⇒ provider ⇒ host). The binding rules live in
+// Bootwright desired-state API. Every fact has one home; references flow
+// upward (cluster -> provider/component -> host). The binding rules live in
 // specs/state-model.md.
 
 const (
@@ -19,6 +18,7 @@ const (
 	KindHost             = "Host"
 	KindNetworkConfig    = "NetworkConfig"
 	KindInfraProvider    = "InfraProvider"
+	KindInfraComponent   = "InfraComponent"
 	KindClusterInfra     = "ClusterInfra"
 	KindContainerCluster = "ContainerCluster"
 
@@ -101,6 +101,9 @@ const (
 	DefaultDNSPort               = 53
 	DefaultServiceBindAddress    = "0.0.0.0"
 
+	ArtifactServerProtocolHTTP  = "http"
+	ArtifactServerProtocolHTTPS = "https"
+
 	// Component image catalog — closed set of (category, type) pairs that
 	// Environment.spec.componentImages may pin.
 	ComponentImageCategoryLoadBalancer = "load-balancer"
@@ -121,6 +124,7 @@ type State struct {
 	Hosts             []Host             `yaml:"hosts,omitempty" json:"hosts,omitempty"`
 	NetworkConfigs    []NetworkConfig    `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
 	InfraProviders    []InfraProvider    `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
+	InfraComponents   []InfraComponent   `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
 	ClusterInfras     []ClusterInfra     `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
 	ContainerClusters []ContainerCluster `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 }

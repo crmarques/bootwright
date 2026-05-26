@@ -10,20 +10,22 @@ repository.
 
 ## Operating Model
 
-Operators author desired state as six YAML kinds:
+Operators author desired state as seven YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
 | `Environment` | What defaults, selected resource files, secrets, proxy, mirrors, and component image pins apply to the fleet? |
-| `Host` | Which SSH targets can run provider or service actions? |
-| `InfraProvider` | What machines, profiles, and services does each substrate offer? |
+| `Host` | Which SSH targets and named addresses can provider or service actions use? |
+| `InfraProvider` | What machines, profiles, and provider-scoped services does each substrate offer? |
+| `InfraComponent` | Which host-bound shared services and routable endpoints exist outside cluster intent? |
 | `NetworkConfig` | What machine CIDRs and NMState templates can nodes consume? |
 | `ClusterInfra` | Which machines, endpoints, platform mode, and infra components back this cluster? |
 | `ContainerCluster` | What OpenShift or OKD cluster should be installed on those machines? |
 
 Every fact has one owner. References flow from cluster intent to cluster
-infrastructure, then to providers and hosts. Machine MACs and BMC details live
-in `InfraProvider`; per-machine IP overlays live in `ClusterInfra`; cluster and
+infrastructure, then to providers, infra components, and hosts. Machine MACs
+and BMC details live in `InfraProvider`; artifact service endpoints live in
+`InfraComponent`; per-machine IP overlays live in `ClusterInfra`; cluster and
 service networks live in `ContainerCluster`.
 
 ## Compatibility Goal
@@ -36,6 +38,7 @@ operational fact:
 - `NetworkConfig` renders machine networks and reusable NMState templates.
 - `ClusterInfra` renders platform and host bindings.
 - `InfraProvider` renders substrate inventory and platform facts.
+- `InfraComponent` renders shared service placement and routeable endpoints.
 
 No backward-compatibility shim is kept for abandoned fields. This keeps
 validation explicit and prevents stale desired state from silently rendering

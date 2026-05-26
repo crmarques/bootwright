@@ -136,23 +136,25 @@ func imageDigestSourcesConfig(sources []v1alpha1.ImageDigestSource) []any {
 	return out
 }
 
-func disconnectedBootArtifactsConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) map[string]any {
+func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) map[string]any {
 	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
 		return nil
 	}
-	publisher, ok := artifactpub.Select(state)
-	if !ok || publisher.Capability.HTTP == nil {
+	server, ok := artifactpub.Select(state)
+	if !ok || server.Config == nil {
 		return nil
 	}
-	route := publisher.Capability.HTTP.Routes.ClusterInstall.AddressName
-	host := proxy.HostRouteAddress(state, publisher.Capability.HTTP.HostRef.Name, route, ci)
-	if host == "" {
+	env := primaryEnvironment(state)
+	if env == nil || env.Spec.ArtifactServer == nil {
 		return nil
 	}
-	port := artifactHTTPPort(publisher.Capability.HTTP)
+	url := artifactServerEndpointURL(state, server, env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint)
+	if url == "" {
+		return nil
+	}
 	return map[string]any{
 		"minimalISO":           true,
-		"bootArtifactsBaseURL": fmt.Sprintf("%s://%s:%d/", artifactURLScheme, artifactURLHost(host), port),
+		"bootArtifactsBaseURL": url,
 	}
 }
 

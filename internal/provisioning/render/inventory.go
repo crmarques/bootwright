@@ -269,8 +269,8 @@ func serviceReferencedHosts(state v1alpha1.State) map[string]bool {
 			}
 		}
 	}
-	if publisher, ok := artifactpub.Select(state); ok && publisher.Capability.HTTP != nil && anyClusterNeedsArtifactPublication(state) {
-		out[publisher.Capability.HTTP.HostRef.Name] = true
+	if server, ok := artifactpub.Select(state); ok && server.Config != nil && anyClusterNeedsArtifactPublication(state) {
+		out[server.Config.HostRef.Name] = true
 	}
 	for _, raw := range bmcProviderServiceVars(state) {
 		service := raw.(map[string]any)
@@ -293,11 +293,11 @@ func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 		if !ok || !artifactpub.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
-		publisher, ok := artifactpub.Select(state)
-		if !ok || publisher.Capability.HTTP == nil {
+		server, ok := artifactpub.Select(state)
+		if !ok || server.Config == nil {
 			continue
 		}
-		if host := publisher.Capability.HTTP.HostRef.Name; host != "" {
+		if host := server.Config.HostRef.Name; host != "" {
 			out[host] = true
 		}
 	}

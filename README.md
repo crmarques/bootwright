@@ -6,7 +6,7 @@
 
 Bootwright is a desired-state orchestrator for provisioning fleets of OpenShift
 and OKD clusters from bare hardware or virtualized substrates. You describe the
-environment, providers, infrastructure, networks, and clusters with six
+environment, providers, shared components, infrastructure, networks, and clusters with seven
 declarative YAML kinds. Bootwright validates that intent, renders the
 deterministic input files expected by installer and provider CLIs, and
 coordinates each phase idempotently.
@@ -100,13 +100,14 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and six kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seven kinds:
 
 | Kind | Owns |
 | --- | --- |
 | `Environment` | Shared environment defaults: selected resource files, base domain, secret sources, external proxy defaults, mirror registry defaults, and component image pins |
-| `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); only ever referenced from `InfraProvider` |
-| `InfraProvider` | Named provider capability lists — `machineProfiles`, `machines`, `loadBalancers`, `artifactPublishers`, `proxies`, `dns`, `registries` — with names scoped per kind |
+| `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
+| `InfraProvider` | Named provider capability lists — `machineProfiles`, `machines`, `loadBalancers`, `proxies`, `dns`, `registries` — with names scoped per kind |
+| `InfraComponent` | Host-bound shared infra services such as the artifact server, including listener and routable endpoint definitions |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
 | `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, selected machines under `components.machines[]`, and managed infra components |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |

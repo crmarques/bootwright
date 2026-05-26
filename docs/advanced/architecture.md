@@ -12,14 +12,14 @@ pipeline:
 load YAML -> normalize -> validate -> render -> apply/status
 ```
 
-The render step merges the six kinds into concrete outputs:
+The render step merges the seven kinds into concrete outputs:
 
 - `install-config.yaml` from `ContainerCluster`, `Environment`,
   `NetworkConfig`, and `ClusterInfra.platform`
 - `agent-config.yaml` from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, `NetworkConfig` templates, and provider
   MAC inventory
-- provider variables from `InfraProvider`, `Host`, and
+- provider variables from `InfraProvider`, `InfraComponent`, `Host`, and
   `ClusterInfra.components`
 
 Shared provider services are resolved once as a service graph. Validation,

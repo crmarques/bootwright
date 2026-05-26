@@ -68,6 +68,15 @@ func ClusterInfra(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, boo
 	return v1alpha1.ClusterInfra{}, false
 }
 
+func InfraComponent(state v1alpha1.State, name string) (v1alpha1.InfraComponent, bool) {
+	for _, component := range state.InfraComponents {
+		if component.Metadata.Name == name {
+			return component, true
+		}
+	}
+	return v1alpha1.InfraComponent{}, false
+}
+
 func MachineProfile(provider v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
 	for _, profile := range provider.Spec.MachineProfiles {
 		if profile.Name == name {

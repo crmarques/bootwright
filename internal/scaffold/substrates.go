@@ -73,15 +73,6 @@ spec:
         hostRef:
           name: lab-host
 
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: lab-host
-        routes:
-          clusterInstall:
-            addressName: cluster-lan
-
   proxies:
     - name: default
       squid:
@@ -171,6 +162,14 @@ spec:
   capabilities:
     - container-runtime
 `,
+		EnvArtifactServer: `  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
+
+`,
 		NetworkConnectivity: `  physical:
     vlan: 0                              # untagged; set a non-zero VLAN ID for tagged
 `,
@@ -189,15 +188,23 @@ spec:
           credentialsRef:
             name: bmc-credentials
           disableCertificateVerification: true
-
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: services-host
-        routes:
-          redfishVirtualMedia:
-            addressName: bmc-lan
+`,
+		InfraComponentYAML: `apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  artifactServer:
+    hostRef:
+      name: services-host
+    listeners:
+      - name: https
+        protocol: https
+        port: 8443
+    endpoints:
+      - name: bmc
+        listener: https
+        addressName: bmc-lan
 `,
 		ClusterMachineFrom: `        from:
           provider: {{.ProviderID}}

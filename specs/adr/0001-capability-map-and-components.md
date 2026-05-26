@@ -11,11 +11,12 @@ future substrates. The model must stay close to `install-config.yaml` and
 
 ## Decision
 
-Keep six user-authored kinds:
+Keep seven user-authored kinds:
 
 - `Environment`
 - `Host`
 - `InfraProvider`
+- `InfraComponent`
 - `NetworkConfig`
 - `ClusterInfra`
 - `ContainerCluster`
@@ -24,6 +25,9 @@ Provider capability lists live directly under `InfraProvider.spec`. Cluster
 infrastructure consumes those capabilities through `ClusterInfra.spec.components`.
 Machine selections live at
 `ClusterInfra.spec.components.machines[]`.
+
+Reusable host-bound infra services that are not substrate inventory live under
+`InfraComponent.spec`.
 
 Reusable machine-network and NMState inputs live in `NetworkConfig`. Cluster
 nodes live in `ContainerCluster.spec.nodes[]` and each node references the

@@ -7,45 +7,75 @@ import (
 	"github.com/crmarques/bootwright/internal/stateview"
 )
 
-type Publisher struct {
-	ProviderName string
-	Capability   v1alpha1.ArtifactPublisherCapability
+type Server struct {
+	Component v1alpha1.InfraComponent
+	Config    *v1alpha1.ArtifactServerComponent
 }
 
-func All(state v1alpha1.State) []Publisher {
-	var out []Publisher
-	for _, provider := range state.InfraProviders {
-		for _, publisher := range provider.Spec.ArtifactPublishers {
-			out = append(out, Publisher{
-				ProviderName: provider.Metadata.Name,
-				Capability:   publisher,
-			})
+type ResolvedEndpoint struct {
+	Endpoint v1alpha1.ArtifactServerEndpoint
+	Listener v1alpha1.ArtifactServerListener
+	Host     string
+}
+
+func Select(state v1alpha1.State) (Server, bool) {
+	env := stateview.Environment(state)
+	if env == nil || env.Spec.ArtifactServer == nil || env.Spec.ArtifactServer.ComponentRef.Name == "" {
+		return Server{}, false
+	}
+	component, ok := stateview.InfraComponent(state, env.Spec.ArtifactServer.ComponentRef.Name)
+	if !ok || component.Spec.ArtifactServer == nil {
+		return Server{}, false
+	}
+	return Server{Component: component, Config: component.Spec.ArtifactServer}, true
+}
+
+func ResolveEndpoint(state v1alpha1.State, server Server, name string) (ResolvedEndpoint, bool) {
+	if name == "" || server.Config == nil {
+		return ResolvedEndpoint{}, false
+	}
+	endpoint, ok := Endpoint(server, name)
+	if !ok {
+		return ResolvedEndpoint{}, false
+	}
+	listener, ok := Listener(server, endpoint.Listener)
+	if !ok {
+		return ResolvedEndpoint{}, false
+	}
+	host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.AddressName)
+	if !ok || host == "" {
+		return ResolvedEndpoint{}, false
+	}
+	return ResolvedEndpoint{Endpoint: endpoint, Listener: listener, Host: host}, true
+}
+
+func RouteAvailable(server Server, endpointName string) bool {
+	_, ok := Endpoint(server, endpointName)
+	return ok
+}
+
+func Endpoint(server Server, name string) (v1alpha1.ArtifactServerEndpoint, bool) {
+	if server.Config == nil {
+		return v1alpha1.ArtifactServerEndpoint{}, false
+	}
+	for _, endpoint := range server.Config.Endpoints {
+		if endpoint.Name == name {
+			return endpoint, true
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].ProviderName != out[j].ProviderName {
-			return out[i].ProviderName < out[j].ProviderName
+	return v1alpha1.ArtifactServerEndpoint{}, false
+}
+
+func Listener(server Server, name string) (v1alpha1.ArtifactServerListener, bool) {
+	if server.Config == nil {
+		return v1alpha1.ArtifactServerListener{}, false
+	}
+	for _, listener := range server.Config.Listeners {
+		if listener.Name == name {
+			return listener, true
 		}
-		return out[i].Capability.Name < out[j].Capability.Name
-	})
-	return out
-}
-
-func Select(state v1alpha1.State) (Publisher, bool) {
-	publishers := All(state)
-	if len(publishers) != 1 {
-		return Publisher{}, false
 	}
-	return publishers[0], true
-}
-
-func Names(publishers []Publisher) []string {
-	out := make([]string, 0, len(publishers))
-	for _, publisher := range publishers {
-		out = append(out, publisher.ProviderName+"/"+publisher.Capability.Name)
-	}
-	sort.Strings(out)
-	return out
+	return v1alpha1.ArtifactServerListener{}, false
 }
 
 func ClusterNeedsPublication(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) bool {
@@ -71,4 +101,26 @@ func ClusterUsesBareMetalMachine(state v1alpha1.State, ci v1alpha1.ClusterInfra)
 		return true
 	}
 	return false
+}
+
+func EndpointHosts(state v1alpha1.State, server Server) []string {
+	if server.Config == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(host string) {
+		if host == "" || seen[host] {
+			return
+		}
+		seen[host] = true
+		out = append(out, host)
+	}
+	for _, endpoint := range server.Config.Endpoints {
+		if host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.AddressName); ok {
+			add(host)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

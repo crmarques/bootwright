@@ -40,6 +40,14 @@ func indexClusterInfras(items []v1alpha1.ClusterInfra) map[string]v1alpha1.Clust
 	return out
 }
 
+func indexInfraComponents(items []v1alpha1.InfraComponent) map[string]v1alpha1.InfraComponent {
+	out := make(map[string]v1alpha1.InfraComponent, len(items))
+	for _, c := range items {
+		out[c.Metadata.Name] = c
+	}
+	return out
+}
+
 func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
 	return stateview.MachineProfile(p, name)
 }

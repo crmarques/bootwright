@@ -8,10 +8,18 @@ spec:
   bastion:
     hostRef: lab-host
 
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      clusterInstall:
+        endpoint: cluster
+
   resources:
     - hosts.yaml
     - networks.yaml
     - provider.yaml
+    - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
 

@@ -50,24 +50,6 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 		}
 		out["loadBalancers"] = lbs
 	}
-	if len(p.Spec.ArtifactPublishers) > 0 {
-		artifacts := make([]any, 0, len(p.Spec.ArtifactPublishers))
-		for _, publisher := range p.Spec.ArtifactPublishers {
-			entry := map[string]any{"name": publisher.Name}
-			if publisher.HTTP != nil {
-				http := map[string]any{
-					"hostRef": publisher.HTTP.HostRef.Name,
-					"port":    artifactHTTPPort(publisher.HTTP),
-				}
-				if routes := artifactRoutesVars(publisher.HTTP.Routes); len(routes) > 0 {
-					http["routes"] = routes
-				}
-				entry["http"] = http
-			}
-			artifacts = append(artifacts, entry)
-		}
-		out["artifactPublishers"] = artifacts
-	}
 	if len(p.Spec.Proxies) > 0 {
 		proxies := make([]any, 0, len(p.Spec.Proxies))
 		for _, pr := range p.Spec.Proxies {
@@ -100,17 +82,6 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 			regs = append(regs, entry)
 		}
 		out["registries"] = regs
-	}
-	return out
-}
-
-func artifactRoutesVars(routes v1alpha1.ArtifactHTTPRoutes) map[string]any {
-	out := map[string]any{}
-	if routes.RedfishVirtualMedia.AddressName != "" {
-		out["redfishVirtualMedia"] = map[string]any{"addressName": routes.RedfishVirtualMedia.AddressName}
-	}
-	if routes.ClusterInstall.AddressName != "" {
-		out["clusterInstall"] = map[string]any{"addressName": routes.ClusterInstall.AddressName}
 	}
 	return out
 }

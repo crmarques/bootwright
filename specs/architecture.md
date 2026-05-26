@@ -72,10 +72,10 @@ These boundaries are reflected in rendering:
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
-- Infra component variables are rendered from `ClusterInfra.components` plus
-  provider service capabilities.
+- Infra component variables are rendered from `ClusterInfra.components`,
+  `InfraComponent` services, and provider service capabilities.
 
-Shared provider services are resolved through one service graph before
+Shared host services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about
 them. The graph owns service identity `(kind, provider, name)`, consuming
 clusters, host placement, conflict fields, and mergeable overlay fields.

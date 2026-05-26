@@ -165,31 +165,38 @@ spec:
 			wantSubstring: `provisioningNetwork "Disabled" must be one of {disabled, managed, unmanaged}`,
 		},
 		{
-			name: "baremetal-artifact-publisher-required",
-			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
-				"  artifactPublishers:\n    - name: default\n      http: { hostRef: { name: services-host } }\n", "", 1)},
-			wantSubstring: "requires generated artifact publication",
+			name: "baremetal-artifact-server-required",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  artifactServer:\n    componentRef:\n      name: artifact-server\n    routes:\n      redfishVirtualMedia:\n        endpoint: bmc\n\n", "", 1)},
+			wantSubstring: "requires generated artifact publication; set Environment.spec.artifactServer.componentRef.name",
 		},
 		{
-			name: "artifact-publisher-port-out-of-range-rejected",
-			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
-				"http: { hostRef: { name: services-host } }",
-				"http:\n        hostRef: { name: services-host }\n        port: 70000", 1)},
-			wantSubstring: "spec.artifactPublishers[default].http.port 70000 out of range",
+			name: "artifact-server-listener-port-out-of-range-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"port: 8443",
+				"port: 70000", 1)},
+			wantSubstring: "spec.artifactServer.listeners[0].port 70000 out of range",
 		},
 		{
-			name: "artifact-publisher-bind-address-rejected",
-			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
-				"http: { hostRef: { name: services-host } }",
-				"http:\n        hostRef: { name: services-host }\n        bindAddress: 0.0.0.0", 1)},
-			wantSubstring: "field bindAddress not found",
+			name: "artifact-server-bind-address-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"hostRef:\n      name: services-host",
+				"hostRef:\n      name: services-host\n    bindAddress: invalid", 1)},
+			wantSubstring: `spec.artifactServer.bindAddress "invalid" is not a valid IP address`,
 		},
 		{
-			name: "artifact-publisher-route-address-rejected",
-			files: map[string]string{"provider.yaml": strings.Replace(newProviderYAML,
-				"http: { hostRef: { name: services-host } }",
-				"http:\n        hostRef: { name: services-host }\n        routes:\n          redfishVirtualMedia:\n            addressName: missing", 1)},
-			wantSubstring: `routes.redfishVirtualMedia.addressName "missing" does not resolve on Host/services-host`,
+			name: "artifact-server-endpoint-address-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"addressName: bmc-lan",
+				"addressName: missing", 1)},
+			wantSubstring: `spec.artifactServer.endpoints[0].addressName "missing" does not resolve on Host/services-host spec.addresses`,
+		},
+		{
+			name: "artifact-server-route-endpoint-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"endpoint: bmc",
+				"endpoint: missing", 1)},
+			wantSubstring: `spec.artifactServer.routes.redfishVirtualMedia.endpoint "missing" does not resolve on selected InfraComponent spec.artifactServer.endpoints`,
 		},
 		{
 			name: "multiple-clusterinfra-refs-rejected",
@@ -531,8 +538,8 @@ func TestSharedProviderServiceConflictsRejectIncompatiblePorts(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["provider.yaml"] = strings.Replace(files["provider.yaml"],
-		"  artifactPublishers:\n",
-		"  proxies:\n    - name: default\n      squid: { hostRef: { name: services-host } }\n  artifactPublishers:\n", 1)
+		"spec:\n",
+		"spec:\n  proxies:\n    - name: default\n      squid: { hostRef: { name: services-host } }\n", 1)
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 		"  components:\n    machines:\n",
 		"  components:\n    proxy:\n      from: { provider: rack, name: default }\n      port: 3128\n    machines:\n", 1)
@@ -727,7 +734,7 @@ func TestComponentImagesRequirePinnedReference(t *testing.T) {
 func TestEnvironmentResourcesSelectsListedFiles(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "cluster.yaml")
+	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml")
 	files["unused.yaml"] = `apiVersion: bootwright.io/v1alpha1
 kind: Network
 metadata: { name: old }
@@ -764,7 +771,7 @@ spec: {}
 func TestEnvironmentResourcesRequireReferencedProvider(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "cluster.yaml")
+	files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "infra-component.yaml", "cluster.yaml")
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
@@ -779,13 +786,13 @@ func TestEnvironmentResourcesRequireReferencedProvider(t *testing.T) {
 func TestEnvironmentResourcesRequireReferencedHost(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["environment.yaml"] = newEnvironmentYAMLWithResources("network.yaml", "provider.yaml", "cluster.yaml")
+	files["environment.yaml"] = newEnvironmentYAMLWithResources("network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml")
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
 		t.Fatal("expected omitted host to fail")
 	}
-	want := `spec.resources excludes Host/services-host required by InfraProvider/rack spec.artifactPublishers[default].http.hostRef; add "hosts.yaml"`
+	want := `spec.resources excludes Host/services-host required by InfraComponent/artifact-server spec.artifactServer.hostRef; add "hosts.yaml"`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -1185,8 +1192,8 @@ func replaceBaselineEndpoints(t *testing.T, clusterYAML, endpoints string) strin
 
 func withDefaultLoadBalancerCapability(providerYAML string) string {
 	return strings.Replace(providerYAML,
-		"  artifactPublishers:\n",
-		"  loadBalancers:\n    - name: default\n      haProxy: { hostRef: { name: services-host } }\n  artifactPublishers:\n",
+		"spec:\n",
+		"spec:\n  loadBalancers:\n    - name: default\n      haProxy: { hostRef: { name: services-host } }\n",
 		1)
 }
 
@@ -1201,11 +1208,12 @@ func addClusterLoadBalancers(t *testing.T, clusterYAML, loadBalancers string) st
 
 func newBaselineFiles() map[string]string {
 	return map[string]string{
-		"environment.yaml": newEnvironmentYAML,
-		"hosts.yaml":       newHostsYAML,
-		"network.yaml":     newNetworkConfigYAML,
-		"provider.yaml":    newProviderYAML,
-		"cluster.yaml":     newClusterYAML,
+		"environment.yaml":     newEnvironmentYAML,
+		"hosts.yaml":           newHostsYAML,
+		"network.yaml":         newNetworkConfigYAML,
+		"provider.yaml":        newProviderYAML,
+		"infra-component.yaml": newInfraComponentYAML,
+		"cluster.yaml":         newClusterYAML,
 	}
 }
 
@@ -1216,6 +1224,13 @@ spec:
   baseDomain: bootwright.test
   bastion:
     hostRef: services-host
+
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
 
   secrets:
     openshift-pull-secret:
@@ -1234,6 +1249,13 @@ spec:
   baseDomain: bootwright.test
   bastion:
     hostRef: services-host
+
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
 
   resources:
 `)
@@ -1258,6 +1280,8 @@ metadata: { name: services-host }
 spec:
   addresses:
     - name: ssh
+      address: 192.168.132.1
+    - name: bmc-lan
       address: 192.168.132.1
 
   ssh:
@@ -1295,9 +1319,23 @@ spec:
         bmc:
           address: redfish-virtualmedia+http://10.0.0.1/redfish/v1/Systems/1
           credentialsRef: { name: bmc-credentials }
-  artifactPublishers:
-    - name: default
-      http: { hostRef: { name: services-host } }
+`
+
+const newInfraComponentYAML = `apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: artifact-server }
+spec:
+  artifactServer:
+    hostRef:
+      name: services-host
+    listeners:
+      - name: https
+        protocol: https
+        port: 8443
+    endpoints:
+      - name: bmc
+        listener: https
+        addressName: bmc-lan
 `
 
 const newClusterYAML = `apiVersion: bootwright.io/v1alpha1

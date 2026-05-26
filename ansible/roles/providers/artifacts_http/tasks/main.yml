@@ -1,16 +1,12 @@
 ---
-# Converges one artifacts HTTPS server on this provider host. The
-# renderer projects `bootwright_component` with:
-#   { kind, providerName, name, hostRef, hostAddress, port, bindAddress,
-#     realisation: 'http', url, tls }
-
-- name: Validate boot artifact HTTPS settings
+- name: Validate boot artifact server settings
   ansible.builtin.assert:
     that:
-      - bootwright_component.port | int > 0
+      - (bootwright_component.image | default('')) | length > 0
       - (bootwright_component.bindAddress | default('')) | length > 0
-      - (bootwright_component.tls.commonName | default('')) | length > 0
-    fail_msg: "artifacts_http requires component.{port,bindAddress,tls.commonName}"
+      - (bootwright_component.listeners | default([])) | length > 0
+      - (bootwright_component.endpoints | default([])) | length > 0
+    fail_msg: "artifacts_http requires component.{image,bindAddress,listeners,endpoints}"
 
 - name: Resolve boot artifact paths
   ansible.builtin.set_fact:
@@ -18,57 +14,47 @@
     bootwright_artifacts_tls_dir: "{{ bootwright_host_state_dir }}/artifacts-server/tls"
     bootwright_artifacts_tls_cert_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.crt"
     bootwright_artifacts_tls_key_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.key"
+    bootwright_artifacts_root: "{{ bootwright_host_state_dir }}/artifacts-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_artifacts_config_path: "{{ bootwright_host_state_dir }}/artifacts-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/nginx.conf"
+    bootwright_artifacts_container_name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_artifacts_https_enabled: "{{ (bootwright_component.listeners | selectattr('protocol', 'equalto', 'https') | list | length) > 0 }}"
   changed_when: false
 
-- name: Install boot artifact TLS tooling
+- name: Install boot artifact server packages
   ansible.builtin.package:
-    name: openssl
+    name:
+      - openssl
+      - podman
     state: present
 
-- name: Create boot artifact helper directory
+- name: Create boot artifact directories
   ansible.builtin.file:
-    path: /usr/local/libexec/bootwright
+    path: "{{ item.path }}"
     state: directory
     owner: root
     group: root
-    mode: "0755"
-
-- name: Install boot artifact HTTP server
-  ansible.builtin.copy:
-    src: artifacts_http_server.py
-    dest: /usr/local/libexec/bootwright/artifacts-http-server.py
-    owner: root
-    group: root
-    mode: "0755"
-  register: bootwright_artifacts_helper
-
-- name: Create boot artifact state directory
-  ansible.builtin.file:
-    path: "{{ bootwright_artifacts_state_dir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Create boot artifact TLS directory
-  ansible.builtin.file:
-    path: "{{ bootwright_artifacts_tls_dir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ bootwright_artifacts_state_dir }}"
+      mode: "0755"
+    - path: "{{ bootwright_artifacts_root }}"
+      mode: "0755"
+    - path: "{{ bootwright_artifacts_tls_dir }}"
+      mode: "0700"
 
 - name: Stat boot artifact TLS certificate
   ansible.builtin.stat:
     path: "{{ bootwright_artifacts_tls_cert_path }}"
   register: bootwright_artifacts_tls_cert
   changed_when: false
+  when: bootwright_artifacts_https_enabled | bool
 
 - name: Stat boot artifact TLS key
   ansible.builtin.stat:
     path: "{{ bootwright_artifacts_tls_key_path }}"
   register: bootwright_artifacts_tls_key
   changed_when: false
+  when: bootwright_artifacts_https_enabled | bool
 
 - name: Detect existing boot artifact TLS material
   ansible.builtin.set_fact:
@@ -78,6 +64,7 @@
         and (bootwright_artifacts_tls_key.stat.exists | bool)
       }}
   changed_when: false
+  when: bootwright_artifacts_https_enabled | bool
 
 - name: Render boot artifact TLS OpenSSL config
   ansible.builtin.template:
@@ -86,7 +73,9 @@
     owner: root
     group: root
     mode: "0644"
-  when: not (bootwright_artifacts_tls_material_present | bool)
+  when:
+    - bootwright_artifacts_https_enabled | bool
+    - not (bootwright_artifacts_tls_material_present | default(false) | bool)
 
 - name: Generate boot artifact TLS certificate
   ansible.builtin.command:
@@ -109,7 +98,9 @@
       - -extensions
       - v3_req
   register: bootwright_artifacts_tls_generated
-  when: not (bootwright_artifacts_tls_material_present | bool)
+  when:
+    - bootwright_artifacts_https_enabled | bool
+    - not (bootwright_artifacts_tls_material_present | default(false) | bool)
 
 - name: Restrict boot artifact TLS key
   ansible.builtin.file:
@@ -117,6 +108,7 @@
     owner: root
     group: root
     mode: "0600"
+  when: bootwright_artifacts_https_enabled | bool
 
 - name: Set boot artifact TLS certificate mode
   ansible.builtin.file:
@@ -124,38 +116,66 @@
     owner: root
     group: root
     mode: "0644"
+  when: bootwright_artifacts_https_enabled | bool
 
-- name: Install boot artifact HTTP unit
+- name: Render boot artifact nginx configuration
   ansible.builtin.template:
-    src: artifacts-http.service.j2
-    dest: "/etc/systemd/system/bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
+    src: artifacts-nginx.conf.j2
+    dest: "{{ bootwright_artifacts_config_path }}"
     owner: root
     group: root
     mode: "0644"
-  register: bootwright_artifacts_unit
+  register: bootwright_artifacts_config
 
-- name: Reload systemd manager when unit changed
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: bootwright_artifacts_unit.changed
+- name: Resolve boot artifact container volumes
+  ansible.builtin.set_fact:
+    bootwright_artifacts_volumes: >-
+      {{
+        [
+          bootwright_artifacts_config_path ~ ':/etc/nginx/nginx.conf:ro,Z',
+          bootwright_artifacts_state_dir ~ ':/usr/share/nginx/html:ro,Z'
+        ]
+        + (
+          [
+            bootwright_artifacts_tls_cert_path ~ ':/etc/bootwright-artifacts/server.crt:ro,Z',
+            bootwright_artifacts_tls_key_path ~ ':/etc/bootwright-artifacts/server.key:ro,Z'
+          ]
+          if (bootwright_artifacts_https_enabled | bool)
+          else []
+        )
+      }}
+  changed_when: false
 
-- name: Ensure boot artifact HTTP service is running
-  ansible.builtin.systemd_service:
-    name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
-    state: "{{ 'restarted' if (bootwright_artifacts_unit.changed or bootwright_artifacts_helper.changed or (bootwright_artifacts_tls_generated.changed | default(false))) else 'started' }}"
-    enabled: true
+- name: Run boot artifact server container
+  containers.podman.podman_container:
+    name: "{{ bootwright_artifacts_container_name }}"
+    image: "{{ bootwright_component.image }}"
+    state: started
+    recreate: "{{ bootwright_artifacts_config.changed or (bootwright_artifacts_tls_generated.changed | default(false)) }}"
+    network: host
+    user: "0:0"
+    restart_policy: unless-stopped
+    pull: missing
+    labels:
+      bootwright.kind: artifacts
+      bootwright.provider: "{{ bootwright_component.providerName }}"
+      bootwright.name: "{{ bootwright_component.name }}"
+    volumes: "{{ bootwright_artifacts_volumes }}"
 
-- name: Open boot artifact port on host firewall (firewalld)
+- name: Open boot artifact ports on host firewall
   ansible.posix.firewalld:
-    port: "{{ bootwright_component.port | int }}/tcp"
+    port: "{{ item.port | int }}/tcp"
     state: enabled
     permanent: true
     immediate: true
+  loop: "{{ bootwright_component.listeners }}"
+  loop_control:
+    label: "{{ item.protocol }}:{{ item.port }}"
   when: bootwright_firewalld_available | default(false)
 
-- name: Wait for boot artifact HTTPS endpoint
+- name: Wait for boot artifact endpoints
   ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ bootwright_component.port | int }}/"
+    url: "{{ item.protocol }}://{{ '127.0.0.1' if bootwright_component.bindAddress == '0.0.0.0' else ('[' ~ bootwright_component.bindAddress ~ ']' if ':' in bootwright_component.bindAddress else bootwright_component.bindAddress) }}:{{ item.port | int }}/"
     method: GET
     status_code: 404
     validate_certs: false
@@ -164,3 +184,6 @@
   retries: 30
   delay: 1
   until: bootwright_artifacts_ready.status == 404
+  loop: "{{ bootwright_component.listeners }}"
+  loop_control:
+    label: "{{ item.protocol }}:{{ item.port }}"

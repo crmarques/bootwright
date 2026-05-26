@@ -1,29 +1,28 @@
 ---
-- name: Stop boot artifact HTTP service
-  ansible.builtin.systemd_service:
-    name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
-    state: stopped
-    enabled: false
-  failed_when: false
+- name: Remove boot artifact server container
+  containers.podman.podman_container:
+    name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    state: absent
 
-- name: Close boot artifact port on host firewall (firewalld)
+- name: Reap orphan boot artifact server from a leaked container instance
+  ansible.builtin.include_role:
+    name: process_cleanup
+  vars:
+    bootwright_process_cleanup_pattern: "nginx: master process"
+    bootwright_process_cleanup_require_cgroup_match: true
+    bootwright_process_cleanup_cgroup_pattern: libpod
+    bootwright_process_cleanup_mark_changed: false
+
+- name: Close boot artifact ports on host firewall
   ansible.posix.firewalld:
-    port: "{{ bootwright_component.port | int }}/tcp"
+    port: "{{ item.port | int }}/tcp"
     state: disabled
     permanent: true
     immediate: true
-  failed_when: false
-
-- name: Remove boot artifact HTTP unit
-  ansible.builtin.file:
-    path: "/etc/systemd/system/bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.service"
-    state: absent
-  register: bootwright_artifacts_unit_remove
-
-- name: Reload systemd after boot artifact cleanup
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: bootwright_artifacts_unit_remove.changed
+  loop: "{{ bootwright_component.listeners | default([]) }}"
+  loop_control:
+    label: "{{ item.protocol }}:{{ item.port }}"
+  when: bootwright_firewalld_available | default(false)
 
 - name: Remove boot artifact state directory
   ansible.builtin.file:

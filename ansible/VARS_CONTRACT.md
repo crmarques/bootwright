@@ -11,8 +11,9 @@ authors.
 | `bootwright_environment` | environment defaults, bastion hostRef, proxy, mirror, component image declarations |
 | `bootwright_hosts` | host SSH endpoints and capability tags |
 | `bootwright_providers` | provider capability inventory |
+| `bootwright_infra_components` | host-bound infra services such as artifact servers |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
-| `bootwright_provider_services` | provider-host service instances with rendered role names |
+| `bootwright_provider_services` | host service instances with rendered role names |
 | `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
 
@@ -24,6 +25,14 @@ bootwright_environment:
   baseDomain: example.test
   bastion:
     hostRef: lab-host
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
+      clusterInstall:
+        endpoint: cluster
 ```
 
 ## Cluster Shape
@@ -122,15 +131,22 @@ bootwright_clusters:
             backends:
               - { name: master-0, address: 192.168.133.20, role: master }
       - kind: artifacts
-        name: default
-        providerName: host-services
+        name: artifact-server
+        componentName: artifact-server
+        providerName: InfraComponent
         hostRef: services-host
         hostAddress: 192.168.133.1
         realisation: http
         applyRole: artifacts_http
         destroyRole: artifacts_http
+        image: docker.io/library/nginx:1.29.8-alpine3.23
         bindAddress: 0.0.0.0
         port: 8443
+        listeners:
+          - { name: https, protocol: https, port: 8443 }
+        endpoints:
+          - { name: bmc, listener: https, addressName: lab-lan }
+          - { name: cluster, listener: https, addressName: cluster-lan }
         url: https://192.168.133.1:8443/
         tls:
           commonName: 192.168.133.1
@@ -163,7 +179,7 @@ bootwright_clusters:
 ## Provider Service Shape
 
 Provider playbooks consume `bootwright_provider_services[]` instead of scanning
-cluster components and hardcoding role names. Go resolves shared service
+cluster components, infra components, and hardcoding role names. Go resolves shared service
 identity as `(kind, providerName, name)` before rendering; host placement and
 ports are conflict fields, and mergeable overlays are unioned in the resolved
 graph. The renderer then emits one aggregated Ansible service instance with

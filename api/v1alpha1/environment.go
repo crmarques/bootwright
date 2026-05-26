@@ -14,6 +14,7 @@ type EnvironmentSpec struct {
 	BaseDomain      string                                   `yaml:"baseDomain" json:"baseDomain"`
 	Bastion         *EnvironmentBastionSpec                  `yaml:"bastion,omitempty" json:"bastion,omitempty"`
 	Resources       []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
+	ArtifactServer  *EnvironmentArtifactServerSpec           `yaml:"artifactServer,omitempty" json:"artifactServer,omitempty"`
 	Proxy           *EnvironmentProxySpec                    `yaml:"proxy,omitempty" json:"proxy,omitempty"`
 	Registries      *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
 	ClusterTrust    *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
@@ -32,6 +33,20 @@ type EnvironmentSpec struct {
 
 type EnvironmentBastionSpec struct {
 	HostRef string `yaml:"hostRef" json:"hostRef"`
+}
+
+type EnvironmentArtifactServerSpec struct {
+	ComponentRef LocalObjectReference      `yaml:"componentRef" json:"componentRef"`
+	Routes       EnvironmentArtifactRoutes `yaml:"routes,omitempty" json:"routes,omitempty"`
+}
+
+type EnvironmentArtifactRoutes struct {
+	RedfishVirtualMedia EnvironmentArtifactRoute `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	ClusterInstall      EnvironmentArtifactRoute `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
+}
+
+type EnvironmentArtifactRoute struct {
+	Endpoint string `yaml:"endpoint" json:"endpoint"`
 }
 
 type EnvironmentSecretSpec struct {

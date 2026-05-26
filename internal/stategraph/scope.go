@@ -7,7 +7,7 @@ import (
 )
 
 // FilterStateToClusters keeps selected ContainerClusters, their referenced
-// ClusterInfras, and the InfraProviders needed by those ClusterInfras.
+// ClusterInfras, and the providers/components needed by those ClusterInfras.
 func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State {
 	selectedOCP := map[string]bool{}
 	for _, name := range names {
@@ -26,6 +26,7 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 	}
 
 	selectedProviders := map[string]bool{}
+	selectedComponents := map[string]bool{}
 	filteredInfra := make([]v1alpha1.ClusterInfra, 0, len(state.ClusterInfras))
 	for _, infra := range state.ClusterInfras {
 		if !selectedInfra[infra.Metadata.Name] {
@@ -51,8 +52,8 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 			}
 		}
 		if ocp, ok := SelectedClusterForInfra(filteredOCP, infra.Metadata.Name); ok && artifactpub.ClusterNeedsPublication(state, infra, ocp) {
-			if publisher, ok := artifactpub.Select(state); ok {
-				selectedProviders[publisher.ProviderName] = true
+			if server, ok := artifactpub.Select(state); ok {
+				selectedComponents[server.Component.Metadata.Name] = true
 			}
 		}
 		if infra.Spec.Components.NameResolution != nil && infra.Spec.Components.NameResolution.From.Provider != "" {
@@ -68,6 +69,13 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 	}
 
 	state.InfraProviders = filteredProviders
+	filteredComponents := make([]v1alpha1.InfraComponent, 0, len(state.InfraComponents))
+	for _, component := range state.InfraComponents {
+		if selectedComponents[component.Metadata.Name] {
+			filteredComponents = append(filteredComponents, component)
+		}
+	}
+	state.InfraComponents = filteredComponents
 	state.ClusterInfras = filteredInfra
 	state.ContainerClusters = filteredOCP
 	return state

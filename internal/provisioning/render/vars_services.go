@@ -9,11 +9,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
-	"github.com/crmarques/bootwright/internal/proxy"
 	"github.com/crmarques/bootwright/internal/support"
 )
-
-const artifactURLScheme = "https"
 
 func loadBalancerComponentVars(state v1alpha1.State, c v1alpha1.ClusterLoadBalancerComponent) map[string]any {
 	out := map[string]any{
@@ -161,38 +158,76 @@ func machinePrimaryIP(m v1alpha1.ClusterMachineComponent) string {
 	return ""
 }
 
-func artifactPublisherComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, publisher artifactpub.Publisher) map[string]any {
+func artifactServerComponentVars(state v1alpha1.State, server artifactpub.Server) map[string]any {
 	out := map[string]any{
-		"kind":         v1alpha1.ComponentSlotArtifacts,
-		"providerName": publisher.ProviderName,
-		"name":         publisher.Capability.Name,
+		"kind":          v1alpha1.ComponentSlotArtifacts,
+		"providerName":  v1alpha1.KindInfraComponent,
+		"name":          server.Component.Metadata.Name,
+		"componentName": server.Component.Metadata.Name,
 	}
-	if http := publisher.Capability.HTTP; http != nil {
-		port := artifactHTTPPort(http)
-		out["port"] = port
-		out["bindAddress"] = v1alpha1.DefaultServiceBindAddress
-		out["hostRef"] = http.HostRef.Name
-		out["hostAddress"] = lookupHostAddress(state, http.HostRef.Name)
+	if config := server.Config; config != nil {
+		out["listeners"] = artifactServerListenersVars(config.Listeners)
+		out["endpoints"] = artifactServerEndpointsVars(config.Endpoints)
+		out["port"] = artifactPrimaryPort(config.Listeners)
+		out["bindAddress"] = config.BindAddress
+		out["hostRef"] = config.HostRef.Name
+		out["hostAddress"] = lookupHostAddress(state, config.HostRef.Name)
 		out["realisation"] = "http"
-		out["tls"] = artifactPublisherTLSVars(state, publisher)
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, "http")
-		route := http.Routes.ClusterInstall.AddressName
-		if host := proxy.HostRouteAddress(state, http.HostRef.Name, route, ci); host != "" {
-			out["url"] = fmt.Sprintf("%s://%s:%d/", artifactURLScheme, artifactURLHost(host), port)
+		out["tls"] = artifactServerTLSVars(state, server)
+		out["image"] = managedArtifactsHTTPImage(state)
+		if env := primaryEnvironment(state); env != nil && env.Spec.ArtifactServer != nil {
+			if endpoint := env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint; endpoint != "" {
+				if url := artifactServerEndpointURL(state, server, endpoint); url != "" {
+					out["url"] = url
+				}
+			}
 		}
+		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, "http")
 	}
 	return out
 }
 
-func artifactHTTPPort(http *v1alpha1.ArtifactHTTPCapability) int {
-	if http == nil || http.Port == 0 {
-		return v1alpha1.DefaultArtifactsHTTPPort
+func artifactServerListenersVars(listeners []v1alpha1.ArtifactServerListener) []any {
+	out := make([]any, 0, len(listeners))
+	for _, listener := range listeners {
+		out = append(out, map[string]any{
+			"name":     listener.Name,
+			"protocol": listener.Protocol,
+			"port":     listener.Port,
+		})
 	}
-	return http.Port
+	return out
 }
 
-func artifactPublisherTLSVars(state v1alpha1.State, publisher artifactpub.Publisher) map[string]any {
-	hosts := artifactPublisherTLSHosts(state, publisher)
+func artifactServerEndpointsVars(endpoints []v1alpha1.ArtifactServerEndpoint) []any {
+	out := make([]any, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		out = append(out, map[string]any{
+			"name":        endpoint.Name,
+			"listener":    endpoint.Listener,
+			"addressName": endpoint.AddressName,
+		})
+	}
+	return out
+}
+
+func artifactPrimaryPort(listeners []v1alpha1.ArtifactServerListener) int {
+	if len(listeners) == 0 {
+		return 0
+	}
+	return listeners[0].Port
+}
+
+func artifactServerEndpointURL(state v1alpha1.State, server artifactpub.Server, endpointName string) string {
+	endpoint, ok := artifactpub.ResolveEndpoint(state, server, endpointName)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s://%s:%d/", endpoint.Listener.Protocol, artifactURLHost(endpoint.Host), endpoint.Listener.Port)
+}
+
+func artifactServerTLSVars(state v1alpha1.State, server artifactpub.Server) map[string]any {
+	hosts := artifactServerTLSHosts(state, server)
 	commonName := "bootwright-artifacts"
 	if len(hosts) > 0 {
 		commonName = hosts[0]
@@ -213,11 +248,7 @@ func artifactPublisherTLSVars(state v1alpha1.State, publisher artifactpub.Publis
 	}
 }
 
-func artifactPublisherTLSHosts(state v1alpha1.State, publisher artifactpub.Publisher) []string {
-	http := publisher.Capability.HTTP
-	if http == nil {
-		return nil
-	}
+func artifactServerTLSHosts(state v1alpha1.State, server artifactpub.Server) []string {
 	seen := map[string]bool{}
 	hosts := []string{}
 	add := func(host string) {
@@ -232,13 +263,19 @@ func artifactPublisherTLSHosts(state v1alpha1.State, publisher artifactpub.Publi
 		seen[host] = true
 		hosts = append(hosts, host)
 	}
-	add(lookupHostAddress(state, http.HostRef.Name))
-	for _, ci := range state.ClusterInfras {
-		add(proxy.HostRouteAddress(state, http.HostRef.Name, http.Routes.RedfishVirtualMedia.AddressName, ci))
-		add(proxy.HostRouteAddress(state, http.HostRef.Name, http.Routes.ClusterInstall.AddressName, ci))
+	for _, host := range artifactpub.EndpointHosts(state, server) {
+		add(host)
 	}
 	sort.Strings(hosts)
 	return hosts
+}
+
+func artifactEndpointFetchURL(state v1alpha1.State, server artifactpub.Server, endpointName string, pathParts ...string) string {
+	base := artifactServerEndpointURL(state, server, endpointName)
+	if base == "" {
+		return ""
+	}
+	return base + strings.Join(pathParts, "/")
 }
 
 func artifactURLHost(host string) string {

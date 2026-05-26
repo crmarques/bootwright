@@ -47,13 +47,3 @@ spec:
             name: bmc-credentials
           disableCertificateVerification: true
 
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: services-host
-        routes:
-          redfishVirtualMedia:
-            addressName: lab-lan
-          clusterInstall:
-            addressName: lab-lan

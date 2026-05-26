@@ -11,6 +11,9 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
+	for i := range state.InfraComponents {
+		normalizeInfraComponent(&state.InfraComponents[i])
+	}
 	for i := range state.ClusterInfras {
 		normalizeClusterInfra(&state.ClusterInfras[i])
 	}
@@ -56,10 +59,22 @@ func normalizeProvider(p *v1alpha1.InfraProvider) {
 			normalizeBMC(&m.BareMetal.BMC)
 		}
 	}
-	for i := range p.Spec.ArtifactPublishers {
-		if http := p.Spec.ArtifactPublishers[i].HTTP; http != nil && http.Port == 0 {
-			http.Port = v1alpha1.DefaultArtifactsHTTPPort
-		}
+}
+
+func normalizeInfraComponent(c *v1alpha1.InfraComponent) {
+	if c.Spec.ArtifactServer == nil {
+		return
+	}
+	server := c.Spec.ArtifactServer
+	if server.BindAddress == "" {
+		server.BindAddress = v1alpha1.DefaultServiceBindAddress
+	}
+	if len(server.Listeners) == 0 {
+		server.Listeners = []v1alpha1.ArtifactServerListener{{
+			Name:     v1alpha1.ArtifactServerProtocolHTTPS,
+			Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+			Port:     v1alpha1.DefaultArtifactsHTTPPort,
+		}}
 	}
 }
 

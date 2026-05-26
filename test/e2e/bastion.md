@@ -75,7 +75,8 @@ ssh -i ~/.ssh/bootwright-ssh-key -o StrictHostKeyChecking=accept-new "$USER"@loc
 
 The e2e README's context step imports the per-kind YAML files from
 `test/e2e/<case>/` (typically `environment.yaml`,
-`hosts.yaml`, `networks.yaml`, `provider.yaml`,
+`hosts.yaml`, `networks.yaml`, `provider.yaml`, optional
+`infra-component.yaml`,
 `cluster-infra.yaml`, `container-cluster.yaml`).
 Put the repo on the bastion so they exist there, then export
 the context from that location. Either clone the repo:

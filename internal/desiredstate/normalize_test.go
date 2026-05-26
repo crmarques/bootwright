@@ -53,25 +53,28 @@ func TestNormalizeDefaultsEnvironmentProxyUseFor(t *testing.T) {
 	}
 }
 
-func TestNormalizeDefaultsArtifactHTTPPort(t *testing.T) {
+func TestNormalizeDefaultsArtifactServerListener(t *testing.T) {
 	state := v1alpha1.State{
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Spec: v1alpha1.InfraProviderSpec{
-				ArtifactPublishers: []v1alpha1.ArtifactPublisherCapability{{
-					Name: "default",
-					HTTP: &v1alpha1.ArtifactHTTPCapability{
-						HostRef: v1alpha1.LocalObjectReference{Name: "services-host"},
-					},
-				}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Spec: v1alpha1.InfraComponentSpec{
+				ArtifactServer: &v1alpha1.ArtifactServerComponent{
+					HostRef: v1alpha1.LocalObjectReference{Name: "services-host"},
+				},
 			},
 		}},
 	}
 
 	Normalize(&state)
 
-	http := state.InfraProviders[0].Spec.ArtifactPublishers[0].HTTP
-	if got := http.Port; got != v1alpha1.DefaultArtifactsHTTPPort {
-		t.Fatalf("artifact publisher HTTP port = %d, want %d", got, v1alpha1.DefaultArtifactsHTTPPort)
+	listeners := state.InfraComponents[0].Spec.ArtifactServer.Listeners
+	if len(listeners) != 1 {
+		t.Fatalf("artifact server listeners = %d, want 1", len(listeners))
+	}
+	if got := listeners[0].Protocol; got != v1alpha1.ArtifactServerProtocolHTTPS {
+		t.Fatalf("artifact server listener protocol = %q, want %q", got, v1alpha1.ArtifactServerProtocolHTTPS)
+	}
+	if got := listeners[0].Port; got != v1alpha1.DefaultArtifactsHTTPPort {
+		t.Fatalf("artifact server listener port = %d, want %d", got, v1alpha1.DefaultArtifactsHTTPPort)
 	}
 }
 

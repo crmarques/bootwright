@@ -25,15 +25,6 @@ spec:
         hostRef:
           name: lab-host
 
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: lab-host
-        routes:
-          clusterInstall:
-            addressName: host
-
   proxies:
     - name: default
       squid:

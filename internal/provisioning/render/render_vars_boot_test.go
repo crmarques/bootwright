@@ -397,7 +397,7 @@ func TestVarsUseSafeAgentISOPublishTokenPlaceholder(t *testing.T) {
 	}
 }
 
-func TestBareMetalArtifactFetchURLUsesPublisherPort(t *testing.T) {
+func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -418,9 +418,6 @@ func TestBareMetalArtifactFetchURLUsesPublisherPort(t *testing.T) {
 	if got := service["port"]; got != 9443 {
 		t.Errorf("artifact service port got %v, want 9443", got)
 	}
-	if got := service["url"]; got != "https://192.168.132.1:9443/" {
-		t.Errorf("artifact service url got %v, want HTTPS route URL", got)
-	}
 	tls := service["tls"].(map[string]any)
 	if got := tls["commonName"]; got != "192.168.132.1" {
 		t.Errorf("artifact service tls.commonName got %v, want route host", got)
@@ -430,20 +427,34 @@ func TestBareMetalArtifactFetchURLUsesPublisherPort(t *testing.T) {
 	}
 }
 
-func TestBareMetalArtifactFetchURLDerivesHostAddress(t *testing.T) {
+func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.InfraProviders[0].Spec.ArtifactPublishers[0].HTTP.Routes.RedfishVirtualMedia.AddressName = ""
+	for i := range state.Hosts {
+		if state.Hosts[i].Metadata.Name != "services-host" {
+			continue
+		}
+		state.Hosts[i].Spec.Addresses = append(state.Hosts[i].Spec.Addresses, v1alpha1.HostAddress{
+			Name:    "cluster-lan",
+			Address: "192.168.132.9",
+		})
+	}
+	state.InfraComponents[0].Spec.ArtifactServer.Endpoints = append(state.InfraComponents[0].Spec.ArtifactServer.Endpoints, v1alpha1.ArtifactServerEndpoint{
+		Name:        "cluster",
+		Listener:    "https",
+		AddressName: "cluster-lan",
+	})
+	state.Environments[0].Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint = "cluster"
 
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	if got := iso["fetchUrl"]; got != "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
-		t.Errorf("agentIso.fetchUrl got %v, want derived host address", got)
+	if got := iso["fetchUrl"]; got != "https://192.168.132.9:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
+		t.Errorf("agentIso.fetchUrl got %v, want selected endpoint address", got)
 	}
 }
 
@@ -575,7 +586,7 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 	}
 }
 
-func TestProviderServicesAggregateSharedArtifactPublisher(t *testing.T) {
+func TestProviderServicesAggregateSharedArtifactServer(t *testing.T) {
 	state := twoClusterBareMetalPublicationState(t)
 	vars := render.Vars(state)
 	services := vars["bootwright_provider_services"].([]any)
@@ -587,8 +598,8 @@ func TestProviderServicesAggregateSharedArtifactPublisher(t *testing.T) {
 		t.Fatalf("artifact consumingClusters got %v", got)
 	}
 	for k, want := range map[string]any{
-		"providerName": "host-services",
-		"name":         "default",
+		"providerName": v1alpha1.KindInfraComponent,
+		"name":         "artifact-server",
 		"hostRef":      "services-host",
 		"realisation":  "http",
 	} {

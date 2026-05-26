@@ -1,12 +1,13 @@
 # End-To-End Fixtures
 
 These directories are runnable desired-state cases for provider, render, and
-cluster-install flows. Each case uses the current six-kind schema:
+cluster-install flows. Each case uses the current desired-state schema:
 
 ```text
 environment.yaml       Environment
 hosts.yaml             Host
 provider.yaml          InfraProvider
+infra-component.yaml   InfraComponent (when the case needs artifact serving)
 networks.yaml          NetworkConfig
 cluster-infra.yaml     ClusterInfra
 container-cluster.yaml ContainerCluster

@@ -145,12 +145,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 					v1alpha1.KindHost, lb.HAProxy.HostRef.Name)
 			}
 		}
-		for _, publisher := range p.Spec.ArtifactPublishers {
-			if publisher.HTTP != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.artifactPublishers[%s].http.hostRef", p.Metadata.Name, publisher.Name),
-					v1alpha1.KindHost, publisher.HTTP.HostRef.Name)
-			}
-		}
 		for _, proxy := range p.Spec.Proxies {
 			if proxy.Squid != nil {
 				require(fmt.Sprintf("InfraProvider/%s spec.proxies[%s].squid.hostRef", p.Metadata.Name, proxy.Name),
@@ -168,6 +162,12 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				require(fmt.Sprintf("InfraProvider/%s spec.registries[%s].mirrorRegistry.hostRef", p.Metadata.Name, registry.Name),
 					v1alpha1.KindHost, registry.MirrorRegistry.HostRef.Name)
 			}
+		}
+	}
+	for _, component := range state.InfraComponents {
+		if server := component.Spec.ArtifactServer; server != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.artifactServer.hostRef", component.Metadata.Name),
+				v1alpha1.KindHost, server.HostRef.Name)
 		}
 	}
 	for _, ci := range state.ClusterInfras {
@@ -199,6 +199,10 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("Environment/%s spec.bastion.hostRef", env.Metadata.Name),
 				v1alpha1.KindHost, env.Spec.Bastion.HostRef)
 		}
+		if env.Spec.ArtifactServer != nil {
+			require(fmt.Sprintf("Environment/%s spec.artifactServer.componentRef", env.Metadata.Name),
+				v1alpha1.KindInfraComponent, env.Spec.ArtifactServer.ComponentRef.Name)
+		}
 	}
 	if len(errs) == 0 {
 		return nil
@@ -228,6 +232,9 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	}
 	for _, p := range state.InfraProviders {
 		out[resourceKey{kind: v1alpha1.KindInfraProvider, name: p.Metadata.Name}] = true
+	}
+	for _, c := range state.InfraComponents {
+		out[resourceKey{kind: v1alpha1.KindInfraComponent, name: c.Metadata.Name}] = true
 	}
 	for _, ci := range state.ClusterInfras {
 		out[resourceKey{kind: v1alpha1.KindClusterInfra, name: ci.Metadata.Name}] = true

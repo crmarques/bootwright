@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 [ADR 0001](0001-capability-map-and-components.md) fixes the
-desired-state API as six kinds with per-entry provisioner arms
+desired-state API around per-entry provisioner arms
 (`InfraProvider.spec.machineProfiles[*].libvirt`,
 `InfraProvider.spec.machineProfiles[*].vsphere`,
 `InfraProvider.spec.machineProfiles[*].kubevirt`, and
@@ -56,14 +56,14 @@ playbooks do not construct role names from those labels:
 - `component.mediaPrepareRole`, when set, selects an optional virtual-media
   backend hook. `boot_redfish` remains the Redfish protocol role for both
   real BMCs and sushy-emulator.
-- Generated artifact publication resolves to the single
-  `artifactPublishers[*]` entry declared by providers. Its
-  `hostRef` gates the rendered HTTPS artifact service and limits it to that
-  host. The provider capability may set the artifact publication port; the
-  renderer derives the bind address from Bootwright defaults.
+- Generated artifact publication resolves to the
+  `Environment.spec.artifactServer.componentRef` selected
+  `InfraComponent`. Its `hostRef` gates the rendered artifact service and
+  limits it to that host. The component declares listeners, endpoints, and
+  optional bind address.
   Bare-metal Redfish machines and disconnected agent installs derive
   publication consumers automatically; BMC-specific and cluster-install
-  routes come from `artifactPublishers[*].http.routes`.
+  routes come from `Environment.spec.artifactServer.routes`.
 
 `bmcRole` and `bootRole` are independent. BMC-driven substrates use a
 matched pair because the boot path runs through the BMC service

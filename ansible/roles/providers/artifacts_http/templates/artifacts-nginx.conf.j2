@@ -1,0 +1,22 @@
+events {}
+
+http {
+  server_tokens off;
+
+{% set listen_host = '[' ~ bootwright_component.bindAddress ~ ']' if ':' in bootwright_component.bindAddress else bootwright_component.bindAddress %}
+{% for listener in bootwright_component.listeners %}
+  server {
+    listen {{ listen_host }}:{{ listener.port }}{% if listener.protocol == 'https' %} ssl{% endif %};
+{% if listener.protocol == 'https' %}
+    ssl_certificate /etc/bootwright-artifacts/server.crt;
+    ssl_certificate_key /etc/bootwright-artifacts/server.key;
+{% endif %}
+    root /usr/share/nginx/html;
+    autoindex off;
+
+    location / {
+      try_files $uri =404;
+    }
+  }
+{% endfor %}
+}

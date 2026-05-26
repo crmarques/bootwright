@@ -58,13 +58,3 @@ kind: InfraProvider
 metadata:
   name: bastion-services
 spec:
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: bastion
-        routes:
-          redfishVirtualMedia:
-            addressName: lab-lan
-          clusterInstall:
-            addressName: lab-lan

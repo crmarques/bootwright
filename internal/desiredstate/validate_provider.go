@@ -34,7 +34,6 @@ func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1a
 	errs = append(errs, validateUniqueCapabilityNames(p, "machineProfiles", capabilityNames(caps.MachineProfiles, func(x v1alpha1.MachineProfileCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "machines", capabilityNames(caps.Machines, func(x v1alpha1.MachineCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "loadBalancers", capabilityNames(caps.LoadBalancers, func(x v1alpha1.LoadBalancerCapability) string { return x.Name }))...)
-	errs = append(errs, validateUniqueCapabilityNames(p, "artifactPublishers", capabilityNames(caps.ArtifactPublishers, func(x v1alpha1.ArtifactPublisherCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "proxies", capabilityNames(caps.Proxies, func(x v1alpha1.ProxyCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "dns", capabilityNames(caps.DNS, func(x v1alpha1.DNSCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "registries", capabilityNames(caps.Registries, func(x v1alpha1.RegistryCapability) string { return x.Name }))...)
@@ -47,9 +46,6 @@ func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1a
 	}
 	for _, lb := range caps.LoadBalancers {
 		errs = append(errs, validateServiceLoadBalancer(p, lb, hosts)...)
-	}
-	for _, publisher := range caps.ArtifactPublishers {
-		errs = append(errs, validateServiceArtifactPublisher(p, publisher, hosts)...)
 	}
 	for _, proxy := range caps.Proxies {
 		errs = append(errs, validateServiceProxy(p, proxy, hosts)...)
@@ -289,33 +285,6 @@ func validateServiceLoadBalancer(p v1alpha1.InfraProvider, lb v1alpha1.LoadBalan
 		return []string{fmt.Sprintf("%s must set exactly one of {haProxy}", prefix)}
 	}
 	return validateServiceHostRef(prefix+".haProxy.hostRef", lb.HAProxy.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, "haProxy")
-}
-
-func validateServiceArtifactPublisher(p v1alpha1.InfraProvider, publisher v1alpha1.ArtifactPublisherCapability, hosts map[string]v1alpha1.Host) []string {
-	prefix := fmt.Sprintf("InfraProvider/%s spec.artifactPublishers[%s]", p.Metadata.Name, publisher.Name)
-	if publisher.HTTP == nil {
-		return []string{fmt.Sprintf("%s must set exactly one of {http}", prefix)}
-	}
-	errs := validateServiceHostRef(prefix+".http.hostRef", publisher.HTTP.HostRef, hosts, v1alpha1.ComponentSlotArtifacts, "http")
-	if publisher.HTTP.Port < 0 || publisher.HTTP.Port > 65535 {
-		errs = append(errs, fmt.Sprintf("%s.http.port %d out of range", prefix, publisher.HTTP.Port))
-	}
-	host, ok := hosts[publisher.HTTP.HostRef.Name]
-	if ok {
-		errs = append(errs, validateArtifactRouteAddress(prefix+".http.routes.redfishVirtualMedia", publisher.HTTP.Routes.RedfishVirtualMedia, host)...)
-		errs = append(errs, validateArtifactRouteAddress(prefix+".http.routes.clusterInstall", publisher.HTTP.Routes.ClusterInstall, host)...)
-	}
-	return errs
-}
-
-func validateArtifactRouteAddress(prefix string, route v1alpha1.ArtifactRoute, host v1alpha1.Host) []string {
-	if route.AddressName == "" {
-		return nil
-	}
-	if _, ok := v1alpha1.HostAddressByName(host, route.AddressName); !ok {
-		return []string{fmt.Sprintf("%s.addressName %q does not resolve on Host/%s spec.addresses", prefix, route.AddressName, host.Metadata.Name)}
-	}
-	return nil
 }
 
 func validateServiceProxy(p v1alpha1.InfraProvider, proxy v1alpha1.ProxyCapability, hosts map[string]v1alpha1.Host) []string {

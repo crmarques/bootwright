@@ -57,6 +57,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
 		errs = append(errs, validateEnvironmentBastion(env, state)...)
+		errs = append(errs, validateEnvironmentArtifactServer(env, state)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
 		errs = append(errs, validateEnvironmentProxy(env)...)
@@ -66,6 +67,45 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentNTPSources(env)...)
 	}
 	return errs
+}
+
+func validateEnvironmentArtifactServer(env v1alpha1.Environment, state v1alpha1.State) []string {
+	if env.Spec.ArtifactServer == nil {
+		return nil
+	}
+	owner := fmt.Sprintf("Environment/%s spec.artifactServer", env.Metadata.Name)
+	var errs []string
+	ref := env.Spec.ArtifactServer.ComponentRef.Name
+	if ref == "" {
+		errs = append(errs, owner+".componentRef.name is required")
+		return errs
+	}
+	component, ok := indexInfraComponents(state.InfraComponents)[ref]
+	if !ok {
+		errs = append(errs, fmt.Sprintf("%s.componentRef.name %q does not resolve to an InfraComponent", owner, ref))
+		return errs
+	}
+	if component.Spec.ArtifactServer == nil {
+		errs = append(errs, fmt.Sprintf("%s.componentRef.name %q resolves to InfraComponent/%s without spec.artifactServer", owner, ref, component.Metadata.Name))
+		return errs
+	}
+	endpoints := map[string]bool{}
+	for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
+		endpoints[endpoint.Name] = true
+	}
+	errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.redfishVirtualMedia", env.Spec.ArtifactServer.Routes.RedfishVirtualMedia, endpoints)...)
+	errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.clusterInstall", env.Spec.ArtifactServer.Routes.ClusterInstall, endpoints)...)
+	return errs
+}
+
+func validateEnvironmentArtifactRoute(owner string, route v1alpha1.EnvironmentArtifactRoute, endpoints map[string]bool) []string {
+	if route.Endpoint == "" {
+		return nil
+	}
+	if !endpoints[route.Endpoint] {
+		return []string{fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.artifactServer.endpoints", owner, route.Endpoint)}
+	}
+	return nil
 }
 
 func validateEnvironmentBastion(env v1alpha1.Environment, state v1alpha1.State) []string {

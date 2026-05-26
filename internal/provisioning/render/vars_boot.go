@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
-	"github.com/crmarques/bootwright/internal/proxy"
 )
 
 const emulatedVmediaOffset = 1
@@ -56,7 +55,7 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.
 		if server.BareMetal == nil {
 			return nil
 		}
-		return baremetalBootVars(state, ci, server, isoBasename)
+		return baremetalBootVars(state, server, isoBasename)
 	}
 	return nil
 }
@@ -125,10 +124,10 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 	}
 }
 
-func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server v1alpha1.MachineCapability, isoBasename string) map[string]any {
+func baremetalBootVars(state v1alpha1.State, server v1alpha1.MachineCapability, isoBasename string) map[string]any {
 	bmc := server.BareMetal.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
-	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
+	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, isoBasename)
 
 	return map[string]any{
 		"redfish": map[string]any{
@@ -146,20 +145,21 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server v1
 	}
 }
 
-func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, isoBasename string) (stageHost, stagePath, fetchURL string) {
-	publisher, ok := artifactpub.Select(state)
-	if !ok || publisher.Capability.HTTP == nil {
+func baremetalAgentISOTarget(state v1alpha1.State, isoBasename string) (stageHost, stagePath, fetchURL string) {
+	server, ok := artifactpub.Select(state)
+	if !ok || server.Config == nil {
 		return "", "", ""
 	}
-	hostRef := publisher.Capability.HTTP.HostRef.Name
-	route := publisher.Capability.HTTP.Routes.RedfishVirtualMedia.AddressName
-	hostAddr := proxy.HostRouteAddress(state, hostRef, route, ci)
-	if hostAddr == "" {
+	env := primaryEnvironment(state)
+	if env == nil || env.Spec.ArtifactServer == nil {
 		return "", "", ""
 	}
-	port := artifactHTTPPort(publisher.Capability.HTTP)
+	hostRef := server.Config.HostRef.Name
 	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts-server/%s/%s", agentISOPublishTokenExpr, isoBasename)
-	fetchURL = fmt.Sprintf("%s://%s:%d/%s/%s", artifactURLScheme, artifactURLHost(hostAddr), port, agentISOPublishTokenExpr, isoBasename)
+	fetchURL = artifactEndpointFetchURL(state, server, env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint, agentISOPublishTokenExpr, isoBasename)
+	if fetchURL == "" {
+		return "", "", ""
+	}
 	return hostRef, stagePath, fetchURL
 }
 

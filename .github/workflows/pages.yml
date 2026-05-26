@@ -42,7 +42,11 @@ jobs:
             push)
               if [[ "$REF_TYPE" = "tag" && "$REF_NAME" == v* ]]; then
                 should_publish=true
-              elif jq -r '.commits[]?.message // empty' "$GITHUB_EVENT_PATH" | grep -Eq '^fix\(docs\): .+'; then
+              elif jq -r '[
+                  .head_commit.message?,
+                  (.commits[]?.message?)
+                ] | .[] | select(. != null) | split("\n")[0]' "$GITHUB_EVENT_PATH" |
+                grep -Eq '^fix\(docs\): .+'; then
                 should_publish=true
               fi
               ;;

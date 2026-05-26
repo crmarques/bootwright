@@ -2,6 +2,7 @@ package render
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/artifactpub"
 	"github.com/crmarques/bootwright/internal/support"
 )
 
@@ -46,6 +47,9 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	}
 	if usesManagedDNS(state) {
 		pins = appendServicePin(pins, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
+	}
+	if usesManagedArtifacts(state) {
+		pins = appendServicePin(pins, v1alpha1.ComponentSlotArtifacts, "http")
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{
@@ -134,6 +138,22 @@ func usesManagedProxy(state v1alpha1.State) bool {
 func usesManagedDNS(state v1alpha1.State) bool {
 	for _, ci := range state.ClusterInfras {
 		if ci.Spec.Components.NameResolution != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func usesManagedArtifacts(state v1alpha1.State) bool {
+	if _, ok := artifactpub.Select(state); !ok {
+		return false
+	}
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInfraForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
+		if artifactpub.ClusterNeedsPublication(state, ci, ocp) {
 			return true
 		}
 	}

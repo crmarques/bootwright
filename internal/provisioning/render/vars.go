@@ -42,11 +42,12 @@ func Vars(state v1alpha1.State) map[string]any {
 		clusters = append(clusters, entry)
 	}
 	out := map[string]any{
-		"bootwright_environment":    environmentVars(env),
-		"bootwright_hosts":          hostsVars(state),
-		"bootwright_providers":      providersVars(state),
-		"bootwright_clusters":       clusters,
-		"bootwright_component_pins": componentPinsVars(state),
+		"bootwright_environment":      environmentVars(env),
+		"bootwright_hosts":            hostsVars(state),
+		"bootwright_providers":        providersVars(state),
+		"bootwright_infra_components": infraComponentsVars(state),
+		"bootwright_clusters":         clusters,
+		"bootwright_component_pins":   componentPinsVars(state),
 	}
 	if services := providerServicesVars(state); len(services) > 0 {
 		out["bootwright_provider_services"] = services
@@ -89,6 +90,22 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if env.Spec.Bastion != nil && env.Spec.Bastion.HostRef != "" {
 		out["bastion"] = map[string]any{"hostRef": env.Spec.Bastion.HostRef}
 	}
+	if env.Spec.ArtifactServer != nil {
+		artifactServer := map[string]any{
+			"componentRef": env.Spec.ArtifactServer.ComponentRef.Name,
+		}
+		routes := map[string]any{}
+		if endpoint := env.Spec.ArtifactServer.Routes.RedfishVirtualMedia.Endpoint; endpoint != "" {
+			routes["redfishVirtualMedia"] = map[string]any{"endpoint": endpoint}
+		}
+		if endpoint := env.Spec.ArtifactServer.Routes.ClusterInstall.Endpoint; endpoint != "" {
+			routes["clusterInstall"] = map[string]any{"endpoint": endpoint}
+		}
+		if len(routes) > 0 {
+			artifactServer["routes"] = routes
+		}
+		out["artifactServer"] = artifactServer
+	}
 	if env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {
 		mirror := map[string]any{}
 		if env.Spec.Registries.Mirror.URL != "" {
@@ -111,6 +128,23 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 			ntp = append(ntp, s)
 		}
 		out["ntpSources"] = ntp
+	}
+	return out
+}
+
+func infraComponentsVars(state v1alpha1.State) []any {
+	out := make([]any, 0, len(state.InfraComponents))
+	for _, component := range state.InfraComponents {
+		entry := map[string]any{"name": component.Metadata.Name}
+		if server := component.Spec.ArtifactServer; server != nil {
+			entry["artifactServer"] = map[string]any{
+				"hostRef":     server.HostRef.Name,
+				"bindAddress": server.BindAddress,
+				"listeners":   artifactServerListenersVars(server.Listeners),
+				"endpoints":   artifactServerEndpointsVars(server.Endpoints),
+			}
+		}
+		out = append(out, entry)
 	}
 	return out
 }

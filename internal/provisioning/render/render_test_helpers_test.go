@@ -46,10 +46,14 @@ func firstProviderServiceByKind(t *testing.T, services []any, kind string) map[s
 }
 
 func setArtifactHTTPPort(state *v1alpha1.State, port int) {
-	for i := range state.InfraProviders {
-		for j := range state.InfraProviders[i].Spec.ArtifactPublishers {
-			if http := state.InfraProviders[i].Spec.ArtifactPublishers[j].HTTP; http != nil {
-				http.Port = port
+	for i := range state.InfraComponents {
+		server := state.InfraComponents[i].Spec.ArtifactServer
+		if server == nil {
+			continue
+		}
+		for j := range server.Listeners {
+			if server.Listeners[j].Name == v1alpha1.ArtifactServerProtocolHTTPS {
+				server.Listeners[j].Port = port
 			}
 		}
 	}

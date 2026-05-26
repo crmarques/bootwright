@@ -51,12 +51,20 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 // YAML file per object for every provider. Names are pinned so
 // downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
-	wantNames := []string{
+	defaultNames := []string{
 		"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml",
 		"cluster-infra.yaml", "container-cluster.yaml",
 	}
+	namesWithArtifacts := []string{
+		"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml",
+		"infra-component.yaml", "cluster-infra.yaml", "container-cluster.yaml",
+	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
+			wantNames := defaultNames
+			if scaffold.Provider(p) == scaffold.ProviderBareMetal {
+				wantNames = namesWithArtifacts
+			}
 			files, err := scaffold.Workspace("cluster-a", scaffold.Provider(p))
 			if err != nil {
 				t.Fatalf("Workspace(%q): %v", p, err)

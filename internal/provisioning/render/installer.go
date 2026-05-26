@@ -127,7 +127,7 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 
 // AgentConfig renders the agent-config.yaml for the OpenShift agent
 // installer. minimalISO + bootArtifactsBaseURL are auto-added in
-// disconnected mode when a provider artifact publisher is available.
+// disconnected mode when an environment artifact server is available.
 func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
 	ci, err := clusterInfraForOCP(state, ocp)
 	if err != nil {
@@ -141,7 +141,7 @@ func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[strin
 		"rendezvousIP": rendezvousIP,
 		"hosts":        hosts,
 	}
-	for key, value := range disconnectedBootArtifactsConfig(state, ci, ocp) {
+	for key, value := range disconnectedBootArtifactsConfig(state, ocp) {
 		base[key] = value
 	}
 	if env := primaryEnvironment(state); env != nil && len(env.Spec.NTPSources) > 0 {

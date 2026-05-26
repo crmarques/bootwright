@@ -65,8 +65,12 @@ func TestSharedDestroyConflictsDetectsAllSharedProviderServiceKinds(t *testing.T
 		if !ok {
 			t.Fatalf("missing shared %s conflict in %#v", slot, conflicts)
 		}
-		if conflict.Provider != "services" || conflict.Name != "default" {
-			t.Fatalf("%s conflict identity = %#v, want services/default", slot, conflict)
+		wantProvider, wantName := "services", "default"
+		if slot == v1alpha1.ComponentSlotArtifacts {
+			wantProvider, wantName = v1alpha1.KindInfraComponent, "artifact-server"
+		}
+		if conflict.Provider != wantProvider || conflict.Name != wantName {
+			t.Fatalf("%s conflict identity = %#v, want %s/%s", slot, conflict, wantProvider, wantName)
 		}
 		if !reflect.DeepEqual(conflict.ScopedClusters, []string{"cluster-a"}) {
 			t.Fatalf("%s scoped clusters = %#v", slot, conflict.ScopedClusters)
@@ -132,16 +136,22 @@ func stateWithSharedDNS() v1alpha1.State {
 
 func stateWithAllSharedProviderServices() v1alpha1.State {
 	state := stateWithSharedDNS()
+	state.Environments = []v1alpha1.Environment{{
+		Metadata: v1alpha1.Metadata{Name: "env"},
+		Spec: v1alpha1.EnvironmentSpec{
+			ArtifactServer: &v1alpha1.EnvironmentArtifactServerSpec{
+				ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
+				Routes: v1alpha1.EnvironmentArtifactRoutes{
+					ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+				},
+			},
+		},
+	}}
+	state.InfraComponents = []v1alpha1.InfraComponent{artifactServerComponent()}
 	for i := range state.InfraProviders {
 		if state.InfraProviders[i].Metadata.Name != "services" {
 			continue
 		}
-		state.InfraProviders[i].Spec.ArtifactPublishers = []v1alpha1.ArtifactPublisherCapability{{
-			Name: "default",
-			HTTP: &v1alpha1.ArtifactHTTPCapability{HostRef: v1alpha1.LocalObjectReference{
-				Name: "service-host",
-			}},
-		}}
 		state.InfraProviders[i].Spec.Proxies = []v1alpha1.ProxyCapability{{
 			Name:  "default",
 			Squid: &v1alpha1.SquidCapability{HostRef: v1alpha1.LocalObjectReference{Name: "service-host"}},
@@ -167,6 +177,27 @@ func stateWithAllSharedProviderServices() v1alpha1.State {
 		state.ContainerClusters[i].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	}
 	return state
+}
+
+func artifactServerComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "artifact-server"},
+		Spec: v1alpha1.InfraComponentSpec{
+			ArtifactServer: &v1alpha1.ArtifactServerComponent{
+				HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+				Listeners: []v1alpha1.ArtifactServerListener{{
+					Name:     "https",
+					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+					Port:     v1alpha1.DefaultArtifactsHTTPPort,
+				}},
+				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
+					Name:        "cluster",
+					Listener:    "https",
+					AddressName: "ssh",
+				}},
+			},
+		},
+	}
 }
 
 func clusterInfra(name, machineProvider string) v1alpha1.ClusterInfra {

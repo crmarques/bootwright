@@ -46,12 +46,13 @@ Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab, or
 `baremetal-redfish-fleet` for real bare-metal hosts with Redfish virtual
 media.
 
-The copied directory should contain the six desired-state kinds:
+The copied directory contains desired-state files for the relevant kinds:
 
 ```text
 environment.yaml       Environment
 hosts.yaml             Host
 provider.yaml          InfraProvider
+infra-component.yaml   InfraComponent (when the example needs artifact serving)
 networks.yaml          NetworkConfig
 cluster-infra.yaml     ClusterInfra
 container-cluster.yaml ContainerCluster

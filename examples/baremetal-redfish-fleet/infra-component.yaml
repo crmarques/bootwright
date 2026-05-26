@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  artifactServer:
+    hostRef:
+      name: services-host
+    listeners:
+      - name: https
+        protocol: https
+        port: 8443
+    endpoints:
+      - name: bmc
+        listener: https
+        addressName: lab-lan
+      - name: cluster
+        listener: https
+        addressName: lab-lan

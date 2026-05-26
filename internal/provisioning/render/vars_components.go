@@ -22,8 +22,8 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 		out = append(out, lb)
 	}
 	if artifactpub.ClusterNeedsPublication(state, ci, ocp) {
-		if publisher, ok := artifactpub.Select(state); ok {
-			out = append(out, artifactPublisherComponentVars(state, ci, publisher))
+		if server, ok := artifactpub.Select(state); ok {
+			out = append(out, artifactServerComponentVars(state, server))
 		}
 	}
 	if c := ci.Spec.Components.Proxy; c != nil {

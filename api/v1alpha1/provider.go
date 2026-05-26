@@ -11,13 +11,12 @@ type InfraProvider struct {
 }
 
 type InfraProviderSpec struct {
-	MachineProfiles    []MachineProfileCapability    `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
-	Machines           []MachineCapability           `yaml:"machines,omitempty" json:"machines,omitempty"`
-	LoadBalancers      []LoadBalancerCapability      `yaml:"loadBalancers,omitempty" json:"loadBalancers,omitempty"`
-	ArtifactPublishers []ArtifactPublisherCapability `yaml:"artifactPublishers,omitempty" json:"artifactPublishers,omitempty"`
-	Proxies            []ProxyCapability             `yaml:"proxies,omitempty" json:"proxies,omitempty"`
-	DNS                []DNSCapability               `yaml:"dns,omitempty" json:"dns,omitempty"`
-	Registries         []RegistryCapability          `yaml:"registries,omitempty" json:"registries,omitempty"`
+	MachineProfiles []MachineProfileCapability `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+	Machines        []MachineCapability        `yaml:"machines,omitempty" json:"machines,omitempty"`
+	LoadBalancers   []LoadBalancerCapability   `yaml:"loadBalancers,omitempty" json:"loadBalancers,omitempty"`
+	Proxies         []ProxyCapability          `yaml:"proxies,omitempty" json:"proxies,omitempty"`
+	DNS             []DNSCapability            `yaml:"dns,omitempty" json:"dns,omitempty"`
+	Registries      []RegistryCapability       `yaml:"registries,omitempty" json:"registries,omitempty"`
 }
 
 // MachineProfileCapability is a parameterised machine template; the
@@ -138,9 +137,9 @@ type RootDeviceHints struct {
 }
 
 // Service capabilities. Each is a structural one-of with one realisation
-// arm; future realisations (e.g. nginx for artifacts) add a sibling
-// arm and a renderer dispatch case. Provider declares WHERE+HOW only;
-// instance-time parameters live on ClusterInfra components.
+// arm. Provider declares WHERE+HOW only; instance-time parameters live on
+// ClusterInfra components. Host-bound services that are not provider
+// inventory live on InfraComponent.
 
 type LoadBalancerCapability struct {
 	Name    string             `yaml:"name" json:"name"`
@@ -149,28 +148,6 @@ type LoadBalancerCapability struct {
 
 type HAProxyCapability struct {
 	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-}
-
-// ArtifactPublisherCapability declares a provider service that can
-// publish generated cluster artifacts derived by the renderer.
-type ArtifactPublisherCapability struct {
-	Name string                  `yaml:"name" json:"name"`
-	HTTP *ArtifactHTTPCapability `yaml:"http,omitempty" json:"http,omitempty"`
-}
-
-type ArtifactHTTPCapability struct {
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-	Port    int                  `yaml:"port,omitempty" json:"port,omitempty"`
-	Routes  ArtifactHTTPRoutes   `yaml:"routes,omitempty" json:"routes,omitempty"`
-}
-
-type ArtifactHTTPRoutes struct {
-	RedfishVirtualMedia ArtifactRoute `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
-	ClusterInstall      ArtifactRoute `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
-}
-
-type ArtifactRoute struct {
-	AddressName string `yaml:"addressName,omitempty" json:"addressName,omitempty"`
 }
 
 type ProxyCapability struct {

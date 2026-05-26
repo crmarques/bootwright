@@ -209,7 +209,7 @@ func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
 		}
 		detail := fmt.Sprintf("on %s, used by %s", host, joinNames(g.ConsumingClusters))
 		if g.Kind == v1alpha1.ComponentSlotArtifacts {
-			detail += " (global publisher selection)"
+			detail += " (environment artifact server)"
 		}
 		p.Status(cliout.StatusOK, fmt.Sprintf("%s/%s/%s", g.ProviderName, g.Kind, g.CapabilityName), detail)
 	}

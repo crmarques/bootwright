@@ -1,6 +1,6 @@
 # Desired-State Model
 
-Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and six
+Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and seven
 user-authored kinds. The schema intentionally tracks the inputs consumed by
 `openshift-install` for agent installs:
 
@@ -11,10 +11,13 @@ user-authored kinds. The schema intentionally tracks the inputs consumed by
 - `NetworkConfig` owns reusable `machineNetwork[]` plus the NMState template
   rendered into `agent-config.yaml`.
 - `InfraProvider` owns substrate inventory and capabilities.
+- `InfraComponent` owns host-bound shared infra services and their routable
+  endpoints.
 - `Environment` owns fleet-wide defaults, context resource selection, secret
   sources, proxy defaults, registry mirrors, and Bootwright component image
   pins.
-- `Host` owns SSH reachability for substrate or service hosts.
+- `Host` owns SSH reachability and named addresses for substrate or service
+  hosts.
 
 There is no compatibility layer for the pre-refactor shape. Old fields are
 decode or validation errors.
@@ -35,10 +38,20 @@ spec:
   bastion:
     hostRef: lab-host
 
+  artifactServer:
+    componentRef:
+      name: artifact-server
+    routes:
+      redfishVirtualMedia:
+        endpoint: bmc
+      clusterInstall:
+        endpoint: cluster
+
   resources:
     - hosts.yaml
     - networks.yaml
     - provider.yaml
+    - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
 
@@ -114,6 +127,12 @@ Rules:
   the referenced Host through `Host.spec.ssh.addressName` and the matching
   `Host.spec.addresses[].address`. It does not synthesize `localhost` when the
   CLI happens to run on the same machine.
+- `artifactServer.componentRef.name`, when set, references an
+  `InfraComponent` with `spec.artifactServer`.
+- `artifactServer.routes.redfishVirtualMedia.endpoint` selects the artifact
+  server endpoint used in BMC ISO fetch URLs.
+- `artifactServer.routes.clusterInstall.endpoint` selects the artifact server
+  endpoint used for disconnected agent-install boot artifacts.
 - `secrets` declares names, not bytes. An empty entry resolves to
   `<context>/secrets/<name>` and must be populated with `bootwright secret set`
   before the consuming workflow runs. `file:` resolves to the declared local
@@ -459,27 +478,6 @@ spec:
               - 192.168.133.0/24
 ```
 
-Artifact publishers declare reusable generated-artifact publication services:
-
-```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: InfraProvider
-metadata:
-  name: host-services
-spec:
-  artifactPublishers:
-    - name: default
-      http:
-        hostRef:
-          name: services-host
-        port: 8443
-        routes:
-          redfishVirtualMedia:
-            addressName: lab-lan
-          clusterInstall:
-            addressName: lab-lan
-```
-
 Rules:
 
 - Provider credentials are always `SecretRef`s.
@@ -496,25 +494,53 @@ Rules:
 - vSphere failure domains must include the installer-required `region`, `zone`,
   `server`, `topology.datacenter`, `topology.computeCluster`,
   `topology.datastore`, and `topology.networks`.
-- `artifactPublishers[].http` declares one reusable HTTPS publication service
-  for generated cluster artifacts, using a self-signed certificate generated
-  on the provider host at apply time. Operators author the service host and
-  may set the port and bind generated-artifact consumer routes to named
-  addresses on that host. The renderer derives the bind address from
-  Bootwright defaults.
-- `artifactPublishers[].http.port` defaults to `8443`.
-- `artifactPublishers[].http.routes.redfishVirtualMedia.addressName` is used
-  for BMC ISO fetch URLs. This route should usually reference an IP-address
-  entry on the publisher `Host`, because BMC firmware often cannot resolve DNS
-  aliases even when the bastion can.
-- `artifactPublishers[].http.routes.clusterInstall.addressName` is used for
-  disconnected `bootArtifactsBaseURL`.
-- If an artifact route is omitted, Bootwright falls back to the publisher
-  host's non-loopback SSH address or the referenced cluster network gateway.
-- Artifact publisher selection is global in `v1alpha1`: a cluster that needs
-  generated artifact publication requires exactly one
-  `artifactPublishers[].http` capability in the loaded state.
 - Capability names are scoped by capability kind.
+
+## InfraComponent
+
+`InfraComponent` declares reusable host-bound services that are not cluster
+intent and are not substrate inventory. Artifact serving is the first
+component kind.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  artifactServer:
+    hostRef:
+      name: services-host
+    bindAddress: 0.0.0.0
+    listeners:
+      - name: https
+        protocol: https
+        port: 8443
+    endpoints:
+      - name: bmc
+        listener: https
+        addressName: lab-lan
+      - name: cluster
+        listener: https
+        addressName: lab-lan
+```
+
+Rules:
+
+- `spec` must set exactly one component arm. Today the only arm is
+  `artifactServer`.
+- `artifactServer.hostRef.name` references a `Host` with `container-runtime`.
+- `artifactServer.bindAddress` defaults to `0.0.0.0`.
+- `artifactServer.listeners[]` declares the ports the container listens on.
+  Supported protocols are `http` and `https`. If omitted, Bootwright defaults
+  to one HTTPS listener named `https` on port `8443`.
+- `artifactServer.endpoints[]` names routeable service addresses. Each endpoint
+  chooses a listener and a `Host.spec.addresses[].name`.
+- Endpoint names are the stable binding surface used by
+  `Environment.spec.artifactServer.routes`.
+- The artifact server is implemented as a containerized static file service
+  that serves generated ISOs and disconnected boot artifacts. HTTPS listeners
+  use a self-signed certificate generated on the component host.
 
 ## ClusterInfra
 
@@ -603,8 +629,8 @@ Rules:
 - `components.loadBalancers[].bindAddresses[].port` is not supported; listener
   ports are derived from endpoint names.
 - Bare-metal Redfish virtual-media boot and disconnected agent installs derive
-  generated artifact publication from a provider `artifactPublishers[].http`
-  capability.
+  generated artifact publication from the environment-selected artifact server
+  component and route endpoints.
 - For vSphere multi-NIC installs, the first adapter network must correspond to
   the machine network unless `platform.vsphere.nodeNetworking` or profile
   `nodeNetworking` says otherwise.
@@ -677,7 +703,7 @@ Bootwright renders:
   fields, and mergeable overlays from the resolved service graph. Mergeable
   overlays are rendered into generated Ansible vars without mutating authored
   desired state.
-- Generated artifact publisher components when a cluster needs agent ISO or
+- Generated artifact server components when a cluster needs agent ISO or
   boot-artifact publication.
 
 ## Validation Rules
@@ -703,9 +729,9 @@ Validation rejects:
 - vSphere platform selections backed by a non-vSphere machine profile.
 - External environment proxy or registry URLs that conflict with managed
   `ClusterInfra` proxy or registry components.
-- Clusters that need generated artifact publication unless exactly one provider
-  `artifactPublishers[].http` capability is declared and reachable from the
-  required audience.
+- Clusters that need generated artifact publication unless
+  `Environment.spec.artifactServer.componentRef.name` selects an artifact
+  server component and the required route endpoint resolves.
 - Shared provider service consumers with the same rendered service identity
   but incompatible host, role, realisation, bind address, port, or selected
   capability.

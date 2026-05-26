@@ -201,23 +201,23 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 }
 
 func printDestroyHTTPServerPreview(w io.Writer, state v1alpha1.State) {
-	publisher, ok := artifactpub.Select(state)
-	if !ok || publisher.Capability.HTTP == nil {
+	server, ok := artifactpub.Select(state)
+	if !ok || server.Config == nil {
 		return
 	}
-	clusters := artifactPublisherClusterConsumers(state)
+	clusters := artifactServerClusterConsumers(state)
 	if len(clusters) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
 	p.Section("Will destroy")
 	p.List([]output.Item{{
-		Label:  "http-server " + publisher.ProviderName + "/" + publisher.Capability.Name,
-		Detail: "host " + publisher.Capability.HTTP.HostRef.Name + "; BMC ISO fetches for " + strings.Join(clusters, ", "),
+		Label:  "http-server " + server.Component.Metadata.Name,
+		Detail: "host " + server.Config.HostRef.Name + "; BMC ISO fetches for " + strings.Join(clusters, ", "),
 	}})
 }
 
-func artifactPublisherClusterConsumers(state v1alpha1.State) []string {
+func artifactServerClusterConsumers(state v1alpha1.State) []string {
 	var clusters []string
 	for _, ci := range state.ClusterInfras {
 		ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)

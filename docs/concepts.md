@@ -109,5 +109,7 @@ machines:
 Those components resolve through `InfraProvider.spec`, just like machines do.
 
 Generated artifact publication is derived from install requirements and uses
-`InfraProvider.spec.artifactPublishers[]`. Publisher routes reference neutral
-named addresses on the publisher Host; `http.port` defaults to `8443`.
+an `InfraComponent` with `spec.artifactServer`. The artifact server selects a
+host, listeners, and named endpoints. `Environment.spec.artifactServer.routes`
+binds each consumer path, such as Redfish virtual media or disconnected
+cluster install, to the endpoint that component can reach.

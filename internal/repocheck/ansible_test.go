@@ -814,60 +814,40 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 	}
 }
 
-func TestArtifactsHTTPServiceSupportsRangeRequests(t *testing.T) {
+func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/providers/artifacts_http/tasks/main.yml")
+	validateIdx := findAnsibleTask(t, tasks, "Validate boot artifact server settings")
 	pathsIdx := findAnsibleTask(t, tasks, "Resolve boot artifact paths")
-	helperDirIdx := findAnsibleTask(t, tasks, "Create boot artifact helper directory")
-	helperIdx := findAnsibleTask(t, tasks, "Install boot artifact HTTP server")
-	stateDirIdx := findAnsibleTask(t, tasks, "Create boot artifact state directory")
-	tlsDirIdx := findAnsibleTask(t, tasks, "Create boot artifact TLS directory")
+	packagesIdx := findAnsibleTask(t, tasks, "Install boot artifact server packages")
+	dirsIdx := findAnsibleTask(t, tasks, "Create boot artifact directories")
 	tlsCertIdx := findAnsibleTask(t, tasks, "Stat boot artifact TLS certificate")
 	tlsKeyIdx := findAnsibleTask(t, tasks, "Stat boot artifact TLS key")
 	tlsPresentIdx := findAnsibleTask(t, tasks, "Detect existing boot artifact TLS material")
 	tlsConfigIdx := findAnsibleTask(t, tasks, "Render boot artifact TLS OpenSSL config")
 	tlsGenerateIdx := findAnsibleTask(t, tasks, "Generate boot artifact TLS certificate")
-	unitIdx := findAnsibleTask(t, tasks, "Install boot artifact HTTP unit")
-	serviceIdx := findAnsibleTask(t, tasks, "Ensure boot artifact HTTP service is running")
-	waitIdx := findAnsibleTask(t, tasks, "Wait for boot artifact HTTPS endpoint")
-	if !(pathsIdx < helperDirIdx && helperDirIdx < helperIdx && helperIdx < stateDirIdx && stateDirIdx < tlsDirIdx && tlsDirIdx < tlsCertIdx && tlsCertIdx < tlsKeyIdx && tlsKeyIdx < tlsPresentIdx && tlsPresentIdx < tlsConfigIdx && tlsConfigIdx < tlsGenerateIdx && tlsGenerateIdx < unitIdx && unitIdx < serviceIdx && serviceIdx < waitIdx) {
-		t.Fatalf("artifacts_http must prepare TLS and the HTTP helper before managing the systemd unit")
+	keyModeIdx := findAnsibleTask(t, tasks, "Restrict boot artifact TLS key")
+	certModeIdx := findAnsibleTask(t, tasks, "Set boot artifact TLS certificate mode")
+	nginxIdx := findAnsibleTask(t, tasks, "Render boot artifact nginx configuration")
+	volumesIdx := findAnsibleTask(t, tasks, "Resolve boot artifact container volumes")
+	containerIdx := findAnsibleTask(t, tasks, "Run boot artifact server container")
+	firewallIdx := findAnsibleTask(t, tasks, "Open boot artifact ports on host firewall")
+	waitIdx := findAnsibleTask(t, tasks, "Wait for boot artifact endpoints")
+	if !(validateIdx < pathsIdx && pathsIdx < packagesIdx && packagesIdx < dirsIdx && dirsIdx < tlsCertIdx && tlsCertIdx < tlsKeyIdx && tlsKeyIdx < tlsPresentIdx && tlsPresentIdx < tlsConfigIdx && tlsConfigIdx < tlsGenerateIdx && tlsGenerateIdx < keyModeIdx && keyModeIdx < certModeIdx && certModeIdx < nginxIdx && nginxIdx < volumesIdx && volumesIdx < containerIdx && containerIdx < firewallIdx && firewallIdx < waitIdx) {
+		t.Fatalf("artifacts_http must prepare TLS, render nginx, then start the container")
 	}
 
-	copyTask, ok := tasks[helperIdx]["ansible.builtin.copy"].(map[string]any)
+	packages, ok := tasks[packagesIdx]["ansible.builtin.package"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no copy body", tasks[helperIdx]["name"])
+		t.Fatalf("%s has no package body", tasks[packagesIdx]["name"])
 	}
-	if got := copyTask["src"]; got != "artifacts_http_server.py" {
-		t.Fatalf("artifact HTTP helper source got %v, want artifacts_http_server.py", got)
-	}
-
-	unit := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-http.service.j2")
-	for _, want := range []string{"artifacts-http-server.py", "--directory", "--certfile", "--keyfile"} {
-		if !strings.Contains(unit, want) {
-			t.Fatalf("artifact HTTP unit must use TLS range-capable helper; missing %q", want)
-		}
+	if got := fmt.Sprint(packages["name"]); !strings.Contains(got, "podman") || !strings.Contains(got, "openssl") {
+		t.Fatalf("artifact server packages must include podman and openssl, got %v", packages["name"])
 	}
 
-	script := readRepoFile(t, "ansible/roles/providers/artifacts_http/files/artifacts_http_server.py")
-	for _, want := range []string{
-		"Accept-Ranges",
-		"Content-Range",
-		"send_response(206)",
-		"Range",
-		"ssl.SSLContext",
-		"ConnectionError",
-		"ssl.SSLError",
-		"Connection\", \"close",
-		"close_connection",
-		"send_error(404",
-	} {
-		if !strings.Contains(script, want) {
-			t.Fatalf("artifact HTTP helper must support TLS byte ranges; missing %q", want)
-		}
-	}
-	for _, rejected := range []string{"super().copyfile", "super().send_head"} {
-		if strings.Contains(script, rejected) {
-			t.Fatalf("artifact HTTP helper must not delegate sensitive artifact serving through %s", rejected)
+	nginx := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-nginx.conf.j2")
+	for _, want := range []string{"listen {{ listen_host }}:{{ listener.port }}", "ssl_certificate", "try_files $uri =404", "autoindex off"} {
+		if !strings.Contains(nginx, want) {
+			t.Fatalf("artifact nginx template missing %q", want)
 		}
 	}
 	tlsTemplate := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-openssl.cnf.j2")
@@ -877,26 +857,33 @@ func TestArtifactsHTTPServiceSupportsRangeRequests(t *testing.T) {
 		}
 	}
 	for _, idx := range []int{tlsConfigIdx, tlsGenerateIdx} {
-		when, ok := tasks[idx]["when"].(string)
-		if !ok || !strings.Contains(when, "not (bootwright_artifacts_tls_material_present | bool)") {
+		when := fmt.Sprint(tasks[idx]["when"])
+		if !strings.Contains(when, "not (bootwright_artifacts_tls_material_present") {
 			t.Fatalf("%s must preserve existing TLS material, got when=%v", tasks[idx]["name"], tasks[idx]["when"])
 		}
 	}
 
-	service, ok := tasks[serviceIdx]["ansible.builtin.systemd_service"].(map[string]any)
+	container, ok := tasks[containerIdx]["containers.podman.podman_container"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no systemd_service body", tasks[serviceIdx]["name"])
+		t.Fatalf("%s has no podman_container body", tasks[containerIdx]["name"])
 	}
-	state, ok := service["state"].(string)
-	if !ok || !strings.Contains(state, "bootwright_artifacts_helper.changed") || !strings.Contains(state, "bootwright_artifacts_tls_generated.changed") {
-		t.Fatalf("artifact HTTP service must restart when helper changes, got %v", service["state"])
+	if got := container["network"]; got != "host" {
+		t.Fatalf("artifact container must use host networking, got %v", got)
+	}
+	recreate := fmt.Sprint(container["recreate"])
+	if !strings.Contains(recreate, "bootwright_artifacts_config.changed") || !strings.Contains(recreate, "bootwright_artifacts_tls_generated.changed") {
+		t.Fatalf("artifact container must recreate on config or TLS changes, got %v", container["recreate"])
+	}
+	volumes, ok := tasks[volumesIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(volumes["bootwright_artifacts_volumes"]), "/usr/share/nginx/html") {
+		t.Fatalf("artifact container volumes must mount artifact root into nginx, got %v", tasks[volumesIdx])
 	}
 	waitURI, ok := tasks[waitIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s has no uri body", tasks[waitIdx]["name"])
 	}
-	if got := waitURI["url"]; !strings.HasPrefix(got.(string), "https://") {
-		t.Fatalf("artifact readiness probe must use HTTPS, got %v", got)
+	if got := fmt.Sprint(waitURI["url"]); !strings.Contains(got, "{{ item.protocol }}://") || !strings.Contains(got, "{{ item.port | int }}") {
+		t.Fatalf("artifact readiness probe must follow rendered listeners, got %v", got)
 	}
 	if got := waitURI["validate_certs"]; got != false {
 		t.Fatalf("artifact readiness probe must allow self-signed certs, got %v", got)

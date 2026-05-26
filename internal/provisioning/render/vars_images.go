@@ -47,6 +47,10 @@ func managedDnsmasqImage(state v1alpha1.State) string {
 	return managedServiceImage(state, v1alpha1.ComponentSlotNameResolution, "dnsmasq")
 }
 
+func managedArtifactsHTTPImage(state v1alpha1.State) string {
+	return managedServiceImage(state, v1alpha1.ComponentSlotArtifacts, "http")
+}
+
 func managedServiceImage(state v1alpha1.State, kind, realisation string) string {
 	image, ok := support.ServiceImagePin(kind, realisation)
 	if !ok {

@@ -13,15 +13,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// TestREADMEDescribesSixKindModel verifies the README still names the
-// canonical v1alpha1 six-kind model.
-func TestREADMEDescribesSixKindModel(t *testing.T) {
+// TestREADMEDescribesDesiredStateModel verifies the README still names the
+// canonical v1alpha1 desired-state model.
+func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
-		"six kinds",
+		"seven kinds",
 		"`Host`",
 		"`NetworkConfig`",
 		"`InfraProvider`",
+		"`InfraComponent`",
 		"`ClusterInfra`",
 		"`ContainerCluster`",
 		"`Environment`",
@@ -33,6 +34,7 @@ func TestREADMEDescribesSixKindModel(t *testing.T) {
 	}
 	rejected := []string{
 		"five kinds",
+		"six kinds",
 		"`HostPool`",
 		"providerRefs",
 	}
