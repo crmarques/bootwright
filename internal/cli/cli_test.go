@@ -792,8 +792,9 @@ func TestLocalRootGateArgs(t *testing.T) {
 	}{
 		{args: []string{"context", "list"}, want: false},
 		{args: []string{"context", "current"}, want: false},
-		{args: []string{"context", "init", "lab", "-f", "."}, want: true},
-		{args: []string{"context", "update", "lab", "-f", "."}, want: true},
+		{args: []string{"context", "init", "lab", "-f", "."}, want: false},
+		{args: []string{"context", "update", "lab", "-f", "."}, want: false},
+		{args: []string{"context", "validate"}, want: true},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
 		{args: []string{"check", "syntax"}, want: true},
 		{args: []string{"check", "--help"}, want: false},
@@ -808,6 +809,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 }
 
 func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
+	setTestHomeAndRoot(t)
 	previous := localRootGate
 	defer func() { localRootGate = previous }()
 
@@ -862,6 +864,80 @@ func TestEnsureLocalRootForArgsSkipsWhenAlreadyRoot(t *testing.T) {
 	if handled || called {
 		t.Fatalf("ensureLocalRootForArgs should skip sudo when euid is root, handled=%v called=%v", handled, called)
 	}
+}
+
+func TestContextInitStagesInputAndSyncsRegistryAroundSudo(t *testing.T) {
+	setTestHomeAndRoot(t)
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: lab\nspec:\n  baseDomain: example.test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	var gotName string
+	var gotArgs []string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			gotName = name
+			gotArgs = append([]string(nil), args...)
+			helperArgs := append([]string{"-test.run=TestContextInitRootHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_CONTEXT_INIT_HELPER=1")
+			return cmd
+		},
+	}
+
+	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if gotName != "sudo" {
+		t.Fatalf("command name = %q, want sudo", gotName)
+	}
+	if slices.Contains(gotArgs, source) {
+		t.Fatalf("sudo args used original input source instead of staged input: %v", gotArgs)
+	}
+	registry, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := contextstore.Load(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Current != "lab" || !contextstore.Contains(store, "lab") {
+		t.Fatalf("registry was not synced after sudo child: %+v", store)
+	}
+}
+
+func TestContextInitRootHelperProcess(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_CONTEXT_INIT_HELPER") != "1" {
+		return
+	}
+	args := os.Args
+	sep := slices.Index(args, "--")
+	if sep < 0 || len(args) < sep+7 {
+		os.Exit(2)
+	}
+	rootArgs := args[sep+1:]
+	if rootArgs[1] != "context" || rootArgs[2] != "init" || rootArgs[3] != "lab" || rootArgs[4] != "-f" {
+		os.Exit(2)
+	}
+	if _, err := os.Stat(filepath.Join(rootArgs[5], "environment.yaml")); err != nil {
+		os.Exit(2)
+	}
+	registry := os.Getenv(contextstore.InternalRegistryEnv)
+	if registry == "" {
+		os.Exit(2)
+	}
+	if err := contextstore.Save(registry, contextstore.Store{Current: "lab", Contexts: []string{"lab"}}); err != nil {
+		os.Exit(2)
+	}
+	os.Exit(0)
 }
 
 func TestLocalRootGateHelperProcess(t *testing.T) {

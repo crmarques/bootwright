@@ -48,7 +48,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetCompletionCommandGroupID(groupGeneral)
 
 	addWorkflow(root,
-		newContextCmd(stdin, stdout),
+		newContextCmd(stdin, stdout, stderr),
 		newPrintEnvCmd(stdout),
 		newSecretCmd(stdin, stdout, stderr),
 		newCheckCmd(stdout, stderr),

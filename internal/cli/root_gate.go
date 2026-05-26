@@ -6,6 +6,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/crmarques/bootwright/internal/contextstore"
 )
 
 type localRootGateDeps struct {
@@ -26,22 +30,90 @@ func ensureLocalRootForArgs(ctx context.Context, args []string, stdin io.Reader,
 	if !localRootGate.enabled || !argsNeedLocalRoot(args) || localRootGate.geteuid() == 0 {
 		return 0, false, nil
 	}
+	code, err := runWithLocalRoot(ctx, args, stdin, stdout, stderr, argsMayMutateRegistry(args))
+	if err != nil {
+		return code, false, err
+	}
+	return code, true, nil
+}
+
+func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, syncRegistry bool) (int, error) {
 	exe, err := localRootGate.executable()
 	if err != nil {
-		return 1, false, fmt.Errorf("resolve bootwright executable for sudo: %w", err)
+		return 1, fmt.Errorf("resolve bootwright executable for sudo: %w", err)
 	}
+	registry, err := prepareLocalRootRegistry()
+	if err != nil {
+		return 1, err
+	}
+	defer registry.cleanup()
 	cmdArgs := append([]string{exe}, args...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
+	env := cmd.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	cmd.Env = envWith(env, contextstore.InternalRegistryEnv, registry.tempPath)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		if cmd.ProcessState != nil {
-			return cmd.ProcessState.ExitCode(), true, nil
+			return cmd.ProcessState.ExitCode(), nil
 		}
-		return 1, false, fmt.Errorf("run sudo bootwright: %w", err)
+		return 1, fmt.Errorf("run sudo bootwright: %w", err)
 	}
-	return 0, true, nil
+	if syncRegistry {
+		if err := registry.syncBack(); err != nil {
+			return 1, err
+		}
+	}
+	return 0, nil
+}
+
+type localRootRegistry struct {
+	realPath string
+	tempPath string
+	tempDir  string
+}
+
+func prepareLocalRootRegistry() (localRootRegistry, error) {
+	realPath, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		return localRootRegistry{}, err
+	}
+	store, err := contextstore.Load(realPath)
+	if err != nil {
+		return localRootRegistry{}, err
+	}
+	tempDir, err := os.MkdirTemp("", "bootwright-registry-")
+	if err != nil {
+		return localRootRegistry{}, fmt.Errorf("create temporary context registry: %w", err)
+	}
+	registry := localRootRegistry{
+		realPath: realPath,
+		tempPath: filepath.Join(tempDir, contextstore.RegistryFileName),
+		tempDir:  tempDir,
+	}
+	if err := contextstore.Save(registry.tempPath, store); err != nil {
+		registry.cleanup()
+		return localRootRegistry{}, err
+	}
+	return registry, nil
+}
+
+func (r localRootRegistry) cleanup() {
+	if r.tempDir != "" {
+		_ = os.RemoveAll(r.tempDir)
+	}
+}
+
+func (r localRootRegistry) syncBack() error {
+	store, err := contextstore.Load(r.tempPath)
+	if err != nil {
+		return err
+	}
+	return contextstore.Save(r.realPath, store)
 }
 
 func argsNeedLocalRoot(args []string) bool {
@@ -56,7 +128,7 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "list", "use", "current":
+		case "list", "use", "current", "init", "update", "delete":
 			return false
 		default:
 			return true
@@ -73,4 +145,20 @@ func argsContainHelp(args []string) bool {
 		}
 	}
 	return false
+}
+
+func argsMayMutateRegistry(args []string) bool {
+	return len(args) >= 2 && args[0] == "context" && (args[1] == "init" || args[1] == "update" || args[1] == "delete")
+}
+
+func envWith(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return append(out, prefix+value)
 }

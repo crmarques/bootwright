@@ -17,18 +17,18 @@ const (
 	bootwrightContextEnv = "BOOTWRIGHT_CONTEXT"
 )
 
-func newContextCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context <command>",
 		Short: "Manage Bootwright contexts",
 	}
 	cmd.AddCommand(
-		newContextInitCmd(stdout),
-		newContextUpdateCmd(stdout),
+		newContextInitCmd(stdin, stdout, stderr),
+		newContextUpdateCmd(stdin, stdout, stderr),
 		newContextUseCmd(stdout),
 		newContextListCmd(stdout),
 		newContextCurrentCmd(stdout),
-		newContextDeleteCmd(stdin, stdout),
+		newContextDeleteCmd(stdin, stdout, stderr),
 		newContextValidateCmd(stdout),
 	)
 	requireSubcommand(cmd)
@@ -36,7 +36,7 @@ func newContextCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newContextInitCmd(stdout io.Writer) *cobra.Command {
+func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var files []string
 	var yes bool
 	cmd := &cobra.Command{
@@ -48,8 +48,18 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
 	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context directory")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		if shouldRunContextRootChild() {
+			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "init", name}, files, yes, stdin, stdout, stderr)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if code != 0 {
+				return silentExit(code)
+			}
+			return nil
+		}
 		ctx, err := contextstore.NewContext(name)
 		if err != nil {
 			return failErr(2, err)
@@ -108,7 +118,7 @@ func newContextInitCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newContextUpdateCmd(stdout io.Writer) *cobra.Command {
+func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var files []string
 	cmd := &cobra.Command{
 		Use:   "update <ctx-name>",
@@ -118,8 +128,18 @@ func newContextUpdateCmd(stdout io.Writer) *cobra.Command {
   bootwright context update lab -f ./environment.yaml -f ./hosts.yaml`,
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		if shouldRunContextRootChild() {
+			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "update", name}, files, false, stdin, stdout, stderr)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if code != 0 {
+				return silentExit(code)
+			}
+			return nil
+		}
 		ctx, err := contextstore.NewContext(name)
 		if err != nil {
 			return failErr(2, err)
@@ -268,7 +288,7 @@ func newContextCurrentCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newContextDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var purge bool
 	var yes bool
 	cmd := &cobra.Command{
@@ -278,10 +298,23 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&purge, "purge", false, "also delete the context base directory")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip confirmation when purging context files")
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if err := contextstore.ValidateName(name); err != nil {
 			return failErr(2, err)
+		}
+		if purge && shouldRunContextRootChild() {
+			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, controllerRuntimeDir(name))) {
+				return failErr(1, errors.New("context delete aborted"))
+			}
+			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "delete", name, "--purge", "--yes"}, stdin, stdout, stderr, true)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if code != 0 {
+				return silentExit(code)
+			}
+			return nil
 		}
 		registry, store, err := loadContextStore()
 		if err != nil {
