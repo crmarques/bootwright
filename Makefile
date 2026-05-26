@@ -71,8 +71,12 @@ all: build
 # Stamp the binary with version metadata via ldflags. VERSION may be an
 # explicit tag (set by CI/releases); fall back to `git describe` when
 # the repo has tags, then the short SHA, then "dev".
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+ifeq ($(strip $(VERSION)),)
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+endif
+ifeq ($(strip $(GIT_COMMIT)),)
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+endif
 LDFLAGS = -X github.com/crmarques/bootwright/internal/cli.versionString=$(VERSION) \
           -X github.com/crmarques/bootwright/internal/cli.gitCommit=$(GIT_COMMIT)
 
