@@ -146,8 +146,8 @@ bootwright_clusters:
         listeners:
           - { name: https, protocol: https, port: 8443 }
         endpoints:
-          - { name: bmc, listener: https, addressName: lab-lan }
-          - { name: cluster, listener: https, addressName: cluster-lan }
+          - { name: bmc, listener: https, hostAddress: lab-lan }
+          - { name: cluster, listener: https, hostAddress: cluster-lan }
         url: https://192.168.133.1:8443/
         tls:
           commonName: 192.168.133.1

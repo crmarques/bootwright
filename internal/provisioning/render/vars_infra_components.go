@@ -162,7 +162,7 @@ func serviceEndpointsVars(endpoints []v1alpha1.ServiceEndpoint) []any {
 	for _, endpoint := range endpoints {
 		out = append(out, map[string]any{
 			"name":        endpoint.Name,
-			"addressName": endpoint.AddressName,
+			"hostAddress": endpoint.HostAddress,
 		})
 	}
 	return out

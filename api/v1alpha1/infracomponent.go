@@ -32,7 +32,7 @@ type ArtifactServerListener struct {
 type ArtifactServerEndpoint struct {
 	Name        string `yaml:"name" json:"name"`
 	Listener    string `yaml:"listener" json:"listener"`
-	AddressName string `yaml:"addressName" json:"addressName"`
+	HostAddress string `yaml:"hostAddress" json:"hostAddress"`
 }
 
 type LoadBalancerComponent struct {
@@ -68,5 +68,5 @@ type RegistryComponent struct {
 
 type ServiceEndpoint struct {
 	Name        string `yaml:"name" json:"name"`
-	AddressName string `yaml:"addressName" json:"addressName"`
+	HostAddress string `yaml:"hostAddress" json:"hostAddress"`
 }

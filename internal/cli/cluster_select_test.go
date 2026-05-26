@@ -170,7 +170,7 @@ func cliArtifactServerComponent() v1alpha1.InfraComponent {
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
 					Name:        "cluster",
 					Listener:    "https",
-					AddressName: "ssh",
+					HostAddress: "ssh",
 				}},
 			},
 		},

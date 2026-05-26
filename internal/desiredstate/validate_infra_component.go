@@ -145,10 +145,10 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 		} else if !listenerNames[endpoint.Listener] {
 			errs = append(errs, fmt.Sprintf("%s.listener %q does not match any %s.listeners[].name", owner, endpoint.Listener, prefix))
 		}
-		if endpoint.AddressName == "" {
-			errs = append(errs, owner+".addressName is required")
-		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.AddressName); !ok {
-			errs = append(errs, fmt.Sprintf("%s.addressName %q does not resolve on Host/%s spec.addresses", owner, endpoint.AddressName, host.Metadata.Name))
+		if endpoint.HostAddress == "" {
+			errs = append(errs, owner+".hostAddress is required")
+		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.HostAddress); !ok {
+			errs = append(errs, fmt.Sprintf("%s.hostAddress %q does not resolve to Host/%s spec.addresses[].name", owner, endpoint.HostAddress, host.Metadata.Name))
 		}
 	}
 	return errs
@@ -227,10 +227,10 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.AddressName == "" {
-			errs = append(errs, owner+".addressName is required")
-		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.AddressName); !ok {
-			errs = append(errs, fmt.Sprintf("%s.addressName %q does not resolve on Host/%s spec.addresses", owner, endpoint.AddressName, host.Metadata.Name))
+		if endpoint.HostAddress == "" {
+			errs = append(errs, owner+".hostAddress is required")
+		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.HostAddress); !ok {
+			errs = append(errs, fmt.Sprintf("%s.hostAddress %q does not resolve to Host/%s spec.addresses[].name", owner, endpoint.HostAddress, host.Metadata.Name))
 		}
 	}
 	return errs

@@ -217,7 +217,7 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        addressName: bmc-lan
+        hostAddress: bmc-lan
 `,
 		ClusterMachineFrom: `        from:
           provider: {{.ProviderID}}

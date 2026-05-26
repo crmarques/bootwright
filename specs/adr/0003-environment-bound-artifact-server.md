@@ -27,7 +27,8 @@ Declare artifact publication as an `InfraComponent` with
 - `hostRef` for service placement.
 - `listeners[]` for protocol and port.
 - `endpoints[]` for named routable service addresses, each backed by a
-  listener and a `Host.spec.addresses[].name`.
+  listener and `hostAddress` value that matches a
+  `Host.spec.addresses[].name`.
 
 Bind consumer audiences in
 `Environment.spec.infraComponents.artifactServers[].routes`:

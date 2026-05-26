@@ -13,7 +13,7 @@ spec:
     endpoints:
       - name: cluster
         listener: https
-        addressName: cluster-lan
+        hostAddress: cluster-lan
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent

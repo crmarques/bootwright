@@ -444,7 +444,7 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	state.InfraComponents[0].Spec.ArtifactServer.Endpoints = append(state.InfraComponents[0].Spec.ArtifactServer.Endpoints, v1alpha1.ArtifactServerEndpoint{
 		Name:        "cluster",
 		Listener:    "https",
-		AddressName: "cluster-lan",
+		HostAddress: "cluster-lan",
 	})
 	state.Environments[0].Spec.InfraComponents.ArtifactServers[0].Routes.RedfishVirtualMedia.Endpoint = "cluster"
 

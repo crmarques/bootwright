@@ -42,7 +42,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, hostRef string, endpoin
 	if endpointName != "" {
 		for _, endpoint := range endpoints {
 			if endpoint.Name == endpointName {
-				if host, ok := stateview.NamedHostAddress(state, hostRef, endpoint.AddressName); ok {
+				if host, ok := stateview.NamedHostAddress(state, hostRef, endpoint.HostAddress); ok {
 					return host
 				}
 				return ""
@@ -51,7 +51,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, hostRef string, endpoin
 		return ""
 	}
 	if len(endpoints) == 1 {
-		if host, ok := stateview.NamedHostAddress(state, hostRef, endpoints[0].AddressName); ok {
+		if host, ok := stateview.NamedHostAddress(state, hostRef, endpoints[0].HostAddress); ok {
 			return host
 		}
 	}

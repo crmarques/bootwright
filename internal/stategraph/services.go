@@ -414,7 +414,7 @@ func artifactListenersKey(listeners []v1alpha1.ArtifactServerListener) string {
 func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 	parts := make([]string, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.Listener, endpoint.AddressName))
+		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.Listener, endpoint.HostAddress))
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")

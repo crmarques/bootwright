@@ -28,7 +28,7 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan
       - name: cluster
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan

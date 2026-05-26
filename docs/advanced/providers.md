@@ -136,10 +136,10 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan
       - name: cluster
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan
 ```
 
 ```yaml
@@ -159,10 +159,11 @@ spec:
             endpoint: cluster
 ```
 
-Endpoint `addressName` values resolve against the named addresses on the
+Endpoint `hostAddress` values resolve against the named addresses on the
 selected `hostRef`. For `redfishVirtualMedia`, use a BMC-routable IP address
 entry in most environments; many BMCs do not reliably resolve DNS aliases, and
-Bootwright uses the resolved value directly in the ISO URL sent to Redfish.
+Bootwright uses the matched address value directly in the ISO URL sent to
+Redfish.
 Bootwright serves HTTPS listeners with a self-signed certificate generated on
 the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
 

@@ -540,10 +540,10 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan
       - name: cluster
         listener: https
-        addressName: lab-lan
+        hostAddress: lab-lan
 ```
 
 Rules:
@@ -556,7 +556,9 @@ Rules:
   Supported protocols are `http` and `https`. If omitted, Bootwright defaults
   to one HTTPS listener named `https` on port `8443`.
 - `artifactServer.endpoints[]` names routeable service addresses. Each endpoint
-  chooses a listener and a `Host.spec.addresses[].name`.
+  chooses a listener, and `hostAddress` must match a
+  `Host.spec.addresses[].name` on `artifactServer.hostRef`; Bootwright uses
+  that address object's `address` value in routed URLs and TLS names.
 - Endpoint names are the stable binding surface used by
   `Environment.spec.infraComponents.artifactServers[].routes`.
 - The artifact server is implemented as a containerized static file service
@@ -566,6 +568,9 @@ Rules:
   their host placement and component-specific bind surface. Environment
   catalog entries decide which consumers use proxy, DNS, registry, or artifact
   services.
+- `proxy.endpoints[]`, `nameResolution.endpoints[]`, and
+  `registry.endpoints[]`, when set, use `hostAddress` values that must match
+  `Host.spec.addresses[].name` on their component `hostRef`.
 
 ## ClusterInfra
 

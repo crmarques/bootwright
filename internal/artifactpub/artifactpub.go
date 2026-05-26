@@ -65,7 +65,7 @@ func ResolveEndpoint(state v1alpha1.State, server Server, name string) (Resolved
 	if !ok {
 		return ResolvedEndpoint{}, false
 	}
-	host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.AddressName)
+	host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.HostAddress)
 	if !ok || host == "" {
 		return ResolvedEndpoint{}, false
 	}
@@ -148,7 +148,7 @@ func EndpointHosts(state v1alpha1.State, server Server) []string {
 		out = append(out, host)
 	}
 	for _, endpoint := range server.Config.Endpoints {
-		if host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.AddressName); ok {
+		if host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.HostAddress); ok {
 			add(host)
 		}
 	}

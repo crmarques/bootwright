@@ -173,9 +173,16 @@ spec:
 		{
 			name: "artifact-server-endpoint-address-rejected",
 			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
-				"addressName: bmc-lan",
-				"addressName: missing", 1)},
-			wantSubstring: `spec.artifactServer.endpoints[0].addressName "missing" does not resolve on Host/services-host spec.addresses`,
+				"hostAddress: bmc-lan",
+				"hostAddress: missing", 1)},
+			wantSubstring: `spec.artifactServer.endpoints[0].hostAddress "missing" does not resolve to Host/services-host spec.addresses[].name`,
+		},
+		{
+			name: "artifact-server-endpoint-address-name-rejected",
+			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
+				"hostAddress: bmc-lan",
+				"addressName: bmc-lan", 1)},
+			wantSubstring: "field addressName not found",
 		},
 		{
 			name: "artifact-server-route-endpoint-rejected",
@@ -1533,7 +1540,7 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        addressName: bmc-lan
+        hostAddress: bmc-lan
 `
 
 const newClusterYAML = `apiVersion: bootwright.io/v1alpha1

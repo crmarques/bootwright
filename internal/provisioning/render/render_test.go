@@ -230,7 +230,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
 					Name:        "cluster",
 					Listener:    "https",
-					AddressName: "cluster-lan",
+					HostAddress: "cluster-lan",
 				}},
 			}},
 		},
