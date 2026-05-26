@@ -11,7 +11,7 @@ import (
 )
 
 func shouldRunContextRootChild() bool {
-	return localRootGate.enabled && localRootGate.geteuid() != 0
+	return shouldRunLocalRootChild()
 }
 
 func runContextImportWithLocalRoot(ctx context.Context, baseArgs []string, files []string, yes bool, stdin io.Reader, stdout io.Writer, stderr io.Writer) (int, error) {

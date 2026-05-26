@@ -795,6 +795,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "init", "lab", "-f", "."}, want: false},
 		{args: []string{"context", "update", "lab", "-f", "."}, want: false},
 		{args: []string{"context", "validate"}, want: true},
+		{args: []string{"secret", "set", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
 		{args: []string{"check", "syntax"}, want: true},
 		{args: []string{"check", "--help"}, want: false},
@@ -864,6 +865,70 @@ func TestEnsureLocalRootForArgsSkipsWhenAlreadyRoot(t *testing.T) {
 	if handled || called {
 		t.Fatalf("ensureLocalRootForArgs should skip sudo when euid is root, handled=%v called=%v", handled, called)
 	}
+}
+
+func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
+	setTestHomeAndRoot(t)
+	source := filepath.Join(t.TempDir(), "pull-secret.json")
+	if err := os.WriteFile(source, []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	var gotName string
+	var gotArgs []string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			gotName = name
+			gotArgs = append([]string(nil), args...)
+			helperArgs := append([]string{"-test.run=TestSecretSetRootHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_SECRET_SET_HELPER=1", "BOOTWRIGHT_SECRET_SET_SOURCE="+source)
+			return cmd
+		},
+	}
+
+	stdout, stderr, code := runCLI(t, "secret", "set", "openshift-pull-secret", "--pull-secret", source)
+	if code != 0 {
+		t.Fatalf("secret set exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if gotName != "sudo" {
+		t.Fatalf("command name = %q, want sudo", gotName)
+	}
+	if slices.Contains(gotArgs, source) {
+		t.Fatalf("sudo args used original secret source instead of staged input: %v", gotArgs)
+	}
+}
+
+func TestSecretSetRootHelperProcess(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_SECRET_SET_HELPER") != "1" {
+		return
+	}
+	args := os.Args
+	sep := slices.Index(args, "--")
+	if sep < 0 || len(args) < sep+9 {
+		os.Exit(2)
+	}
+	rootArgs := args[sep+1:]
+	if len(rootArgs) < 8 || rootArgs[0] != "env" || !strings.HasPrefix(rootArgs[1], contextstore.InternalRegistryEnv+"=") {
+		os.Exit(2)
+	}
+	rootArgs = rootArgs[3:]
+	if len(rootArgs) != 5 || rootArgs[0] != "secret" || rootArgs[1] != "set" || rootArgs[2] != "openshift-pull-secret" || rootArgs[3] != "--pull-secret" {
+		os.Exit(2)
+	}
+	if rootArgs[4] == os.Getenv("BOOTWRIGHT_SECRET_SET_SOURCE") {
+		os.Exit(2)
+	}
+	data, err := os.ReadFile(rootArgs[4])
+	if err != nil || string(data) != `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}` {
+		os.Exit(2)
+	}
+	os.Exit(0)
 }
 
 func TestContextInitStagesInputAndSyncsRegistryAroundSudo(t *testing.T) {

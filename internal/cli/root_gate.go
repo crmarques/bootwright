@@ -65,6 +65,10 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	return 0, nil
 }
 
+func shouldRunLocalRootChild() bool {
+	return localRootGate.enabled && localRootGate.geteuid() != 0
+}
+
 type localRootRegistry struct {
 	realPath string
 	tempPath string
@@ -127,6 +131,11 @@ func argsNeedLocalRoot(args []string) bool {
 		default:
 			return true
 		}
+	case "secret":
+		if len(args) >= 2 && args[1] == "set" {
+			return false
+		}
+		return true
 	default:
 		return true
 	}
