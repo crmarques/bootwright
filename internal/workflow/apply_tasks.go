@@ -746,6 +746,10 @@ func ApplyClusterLogPath(runtimeDir, runID, cluster string) string {
 	return filepath.Join(runtimeDir, "workflow", "runs", runID, "clusters", cluster, "install.log")
 }
 
+func OpenShiftInstallerLogPath(runtimeDir, cluster string) string {
+	return filepath.Join(runtimeDir, render.RuntimeRelativeDir, cluster, "installer", ".openshift_install.log")
+}
+
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {
 	members := render.HostGroupMembers(state)
 	selected := map[string]bool{}
