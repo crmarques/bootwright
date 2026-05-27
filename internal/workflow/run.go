@@ -56,7 +56,9 @@ type RunOptions struct {
 	// targets the openshift install_agent role.
 	ResolveInstaller bool
 	// Label is included in the dry-run echo line, e.g. "infra apply".
-	Label string
+	Label                      string
+	InstallOverride            bool
+	ClusterAvailabilityChecker ClusterAvailabilityChecker
 }
 
 // RunResult is what callers need to keep printing after the run completes

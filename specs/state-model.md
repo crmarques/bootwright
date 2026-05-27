@@ -835,12 +835,26 @@ run even when local runtime kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
 replaced the target machines; it does not wipe disks, destroy substrate
 machines, power off nodes, or remove provider services.
+Without `--override`, `apply cluster` must not regenerate the agent ISO or
+reboot nodes when Bootwright can prove that the selected cluster is already
+installed for the same rendered desired inputs. Completed installs are proven by
+the per-cluster install record, the non-secret desired-input fingerprint, and a
+local kubeconfig probe that reports `ClusterVersion Available=True`. If the
+stored fingerprint differs from the current rendered inputs, apply must stop and
+require either `destroy cluster` or `apply cluster --override` after the
+operator has reset or replaced target machines. If an interrupted run already
+booted nodes, apply resumes at `openshift-install agent wait-for
+install-complete` instead of creating a new ISO or rebooting machines.
 Every apply writes `<state-dir>/workflow/current-apply.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task
 `ansible-output.log` paths under the root-managed runtime directory.
 Cluster-owned tasks also record
 `/var/lib/bootwright/contexts/<context>/workflow/runs/<run>/clusters/<cluster>/install.log`.
+Per-cluster install state is stored under
+`<state-dir>/workflow/cluster-installs/<cluster>.json`; it records the desired
+input fingerprint, install status, last safe phase, run ID, timestamps, and
+node boot markers, but not secret bytes.
 Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
 `failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes

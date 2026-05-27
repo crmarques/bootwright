@@ -225,6 +225,11 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	}
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
 	tasks = AnnotateApplyTaskClusterLogPaths(opts.RuntimeDir, runID, tasks)
+	var err error
+	tasks, err = ReconcileApplyClusterInstallState(ctx, stateDir, opts.RuntimeDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
+	if err != nil {
+		return RunLedger{}, err
+	}
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	if err := SaveRunLedger(stateDir, ledger); err != nil {
 		return ledger, err
@@ -289,7 +294,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	runningResources := map[string]int{}
 	running := 0
 	runningRedfish := 0
-	completed := 0
+	completed := initiallyCompletedApplyTasks(tasks)
 	var firstErr error
 
 	for completed < len(tasks) {
@@ -298,7 +303,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 			if running >= parallelism {
 				break
 			}
-			if started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
+			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
 				continue
 			}
 			redfishSlots := taskRedfishSlots(task, redfishLimit)
@@ -495,7 +500,23 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, st
 		}
 	}
 	runner := runnerFactory(stdout, stderr)
+	now := time.Now()
+	if err := MarkClusterInstallTaskStarted(stateDir, runID, task, now); err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
 	result, err := Run(ctx, taskOpts, runner, nil)
+	now = time.Now()
+	if err != nil {
+		if recordErr := MarkClusterInstallTaskFailed(stateDir, runID, task, now); recordErr != nil {
+			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
+		}
+		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+	}
+	if !result.Skipped {
+		if recordErr := MarkClusterInstallTaskSucceeded(stateDir, runID, task, now); recordErr != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
+		}
+	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }
 
@@ -584,6 +605,16 @@ func applyTaskWriters(task ApplyTask, stdout io.Writer, stderr io.Writer, cluste
 	}
 	writer := clusterLogs.Writer(task.Entry.Cluster)
 	return writer, writer
+}
+
+func initiallyCompletedApplyTasks(tasks []ApplyTask) int {
+	completed := 0
+	for _, task := range tasks {
+		if taskTerminal(task.Entry.Status) {
+			completed++
+		}
+	}
+	return completed
 }
 
 func applyClusterNames(state v1alpha1.State) []string {

@@ -172,6 +172,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			DryRun:             dryRun,
 			ResolveInstaller:   plan.targetsClusters,
 			Label:              scope.name + " apply",
+			InstallOverride:    override,
 		}
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
