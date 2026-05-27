@@ -34,7 +34,7 @@ func TestRunLedgerRoundTrip(t *testing.T) {
 	if loaded.RunID != "run-1" || loaded.Tasks[0].Status != TaskStatusPending {
 		t.Fatalf("loaded ledger mismatch: %+v", loaded)
 	}
-	if got := filepath.Base(LedgerPath(dir)); got != "current-apply.json" {
+	if got := filepath.Base(LedgerPath(dir)); got != "current.json" {
 		t.Fatalf("ledger path base = %q", got)
 	}
 }
@@ -57,7 +57,7 @@ func TestRunLeaseRoundTrip(t *testing.T) {
 	if loaded.RunID != "run-1" || loaded.PID == 0 || !loaded.HeartbeatAt.Equal(now) {
 		t.Fatalf("loaded lease mismatch: %+v", loaded)
 	}
-	if got := filepath.Base(LeasePath(dir)); got != "current-apply.lease.json" {
+	if got := filepath.Base(LeasePath(dir)); got != "current.lease.json" {
 		t.Fatalf("lease path base = %q", got)
 	}
 }

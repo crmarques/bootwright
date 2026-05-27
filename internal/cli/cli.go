@@ -14,8 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 )
 
-const ansibleBundleDirName = "ansible-bundle"
-
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	if code, handled := callerio.RunHelper(args, stdout, stderr); handled {
 		return code
@@ -64,12 +62,12 @@ func failf(code int, format string, a ...any) *exitError {
 }
 func silentExit(code int) *exitError { return &exitError{code: code, silent: true} }
 
-func resolveBundleDir(stateDir string) (string, error) {
-	return filepath.Abs(filepath.Join(stateDir, ansibleBundleDirName))
+func resolveBundleDir() (string, error) {
+	return filepath.Abs(filepath.Join(cacheDir(), ansibleBundlesDirName, bundleVersionMarker()))
 }
 
-func prepareWorkflowBundle(stateDir string, skipExtract bool) (embedded.AnsibleBundleResult, error) {
-	bundleDir, err := resolveBundleDir(stateDir)
+func prepareWorkflowBundle(skipExtract bool) (embedded.AnsibleBundleResult, error) {
+	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		return embedded.AnsibleBundleResult{}, err
 	}
@@ -79,15 +77,15 @@ func prepareWorkflowBundle(stateDir string, skipExtract bool) (embedded.AnsibleB
 	return embedded.EnsureAnsibleBundle(bundleDir, bundleVersionMarker())
 }
 
-func prepareInitialBundle(stateDir string) (embedded.AnsibleBundleResult, bool, error) {
-	result, err := prepareWorkflowBundle(stateDir, false)
+func prepareInitialBundle() (embedded.AnsibleBundleResult, bool, error) {
+	result, err := prepareWorkflowBundle(false)
 	if err == nil {
 		return result, false, nil
 	}
 	if !embedded.IsEmptyAnsibleBundle(err) {
 		return embedded.AnsibleBundleResult{}, false, err
 	}
-	bundleDir, dirErr := resolveBundleDir(stateDir)
+	bundleDir, dirErr := resolveBundleDir()
 	if dirErr != nil {
 		return embedded.AnsibleBundleResult{}, false, dirErr
 	}

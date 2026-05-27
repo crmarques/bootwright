@@ -99,10 +99,11 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 	checks = append(checks,
 		dirContextCheck("context-dir", ctx.BaseDir),
 		dirContextCheck("input-dir", ctx.InputDir),
-		dirContextCheck("state-dir", ctx.StateDir),
+		dirContextCheck("rendered-dir", ctx.RenderedDir),
 		dirContextCheck("secrets-dir", ctx.SecretsDir),
 		dirContextCheck("runtime-dir", ctx.RuntimeDir),
-		dirContextCheck("workflow-dir", ctx.WorkflowDir),
+		dirContextCheck("runs-dir", ctx.RunsDir),
+		dirContextCheck("managed-dir", ctx.ManagedDir),
 		secretsDirModeCheck(ctx.SecretsDir),
 	)
 	return checks

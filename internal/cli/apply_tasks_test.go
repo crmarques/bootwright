@@ -155,20 +155,22 @@ func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
 
 func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
 	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
+	runsDir := filepath.Join(t.TempDir(), "runs")
+	clusterLogPath := workflow.ApplyClusterLogPath(runsDir, "apply-test", "sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:             "wait.sno-libvirt",
 		Kind:           workflow.ApplyTaskKindInstallWait,
 		Label:          "wait install sno-libvirt",
 		Cluster:        "sno-libvirt",
 		Status:         workflow.TaskStatusPending,
-		ClusterLogPath: filepath.Join(runtimeDir, "workflow", "runs", "apply-test", "clusters", "sno-libvirt", "install.log"),
+		ClusterLogPath: clusterLogPath,
 	}}, time.Now())
 
 	var stdout bytes.Buffer
 	printApplyClusterLogPaths(&stdout, runtimeDir, ledger)
 
 	for _, want := range []string{
-		filepath.Join(runtimeDir, "workflow", "runs", "apply-test", "clusters", "sno-libvirt", "install.log"),
+		clusterLogPath,
 		workflow.OpenShiftInstallerLogPath(runtimeDir, "sno-libvirt"),
 	} {
 		if !strings.Contains(stdout.String(), want) {
@@ -194,8 +196,10 @@ echo ansible-stderr-line >&2
 			Metadata: v1alpha1.Metadata{Name: "env"},
 		}},
 	}
-	stateDir := filepath.Join(dir, "state")
+	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime-root")
+	runsDir := filepath.Join(dir, "runs")
+	managedDir := filepath.Join(dir, "managed")
 	task := workflow.ApplyTask{
 		Entry: workflow.TaskLedgerEntry{
 			ID:     "provider",
@@ -208,12 +212,13 @@ echo ansible-stderr-line >&2
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
 		State:             state,
-		StateDir:          stateDir,
+		RenderedDir:       renderedDir,
 		RuntimeDir:        runtimeDir,
+		RunsDir:           runsDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
-		HostStateDir:      filepath.Join(dir, "host-state"),
+		ManagedDir:        managedDir,
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",
@@ -227,10 +232,10 @@ echo ansible-stderr-line >&2
 	if !strings.Contains(stderr.String(), "ansible-stderr-line") {
 		t.Fatalf("stderr missing live ansible output:\n%s", stderr.String())
 	}
-	if strings.Contains(stdout.String(), "log "+stateDir) {
+	if strings.Contains(stdout.String(), "log "+runsDir) {
 		t.Fatalf("stdout should not point normal progress at the ansible log:\n%s", stdout.String())
 	}
-	logPath := workflow.TaskLogPath(runtimeDir, ledger.RunID, "provider")
+	logPath := workflow.TaskLogPath(runsDir, ledger.RunID, "provider")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read ansible output log: %v", err)
@@ -265,8 +270,10 @@ echo "ansible stderr ${cluster}" >&2
 			Metadata: v1alpha1.Metadata{Name: "env"},
 		}},
 	}
-	stateDir := filepath.Join(dir, "state")
+	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime-root")
+	runsDir := filepath.Join(dir, "runs")
+	managedDir := filepath.Join(dir, "managed")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -295,12 +302,13 @@ echo "ansible stderr ${cluster}" >&2
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
 		State:             state,
-		StateDir:          stateDir,
+		RenderedDir:       renderedDir,
 		RuntimeDir:        runtimeDir,
+		RunsDir:           runsDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
-		HostStateDir:      filepath.Join(dir, "host-state"),
+		ManagedDir:        managedDir,
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "cluster",
@@ -317,7 +325,7 @@ echo "ansible stderr ${cluster}" >&2
 		}
 	}
 	for _, cluster := range []string{"cluster-a", "cluster-b"} {
-		logPath := workflow.ApplyClusterLogPath(runtimeDir, ledger.RunID, cluster)
+		logPath := workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("read cluster log %s: %v", logPath, err)
@@ -356,8 +364,10 @@ rmdir "$lock_dir"
 		}},
 	}
 	lockDir := filepath.Join(dir, "same-host.lock")
-	stateDir := filepath.Join(dir, "state")
+	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime-root")
+	runsDir := filepath.Join(dir, "runs")
+	managedDir := filepath.Join(dir, "managed")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -386,12 +396,13 @@ rmdir "$lock_dir"
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if _, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, stateDir, workflow.RunOptions{
+	if _, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
 		State:             state,
-		StateDir:          stateDir,
+		RenderedDir:       renderedDir,
 		RuntimeDir:        runtimeDir,
+		RunsDir:           runsDir,
 		SecretsDir:        filepath.Join(dir, "secrets"),
-		HostStateDir:      filepath.Join(dir, "host-state"),
+		ManagedDir:        managedDir,
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "provider",

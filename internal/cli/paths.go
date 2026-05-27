@@ -8,23 +8,28 @@ import (
 )
 
 const (
-	ansibleVenvDirName = "ansible-venv"
+	ansibleVenvDirName    = "ansible-venv"
+	ansibleBundlesDirName = "ansible-bundles"
 )
 
 func defaultControllerCLIInstallDir() string {
 	return "/usr/local/bin"
 }
 
+func cacheDir() string {
+	return filepath.Join(contextstore.RootDir(), contextstore.CacheDirName)
+}
+
 func ansibleVenvDir() string {
-	return filepath.Join(contextstore.RootDir(), ansibleVenvDirName)
+	return filepath.Join(cacheDir(), ansibleVenvDirName)
 }
 
 func controllerRuntimeDir(contextName string) string {
 	ctx, err := contextstore.NewContext(contextName)
 	if err != nil {
-		return filepath.Join(contextstore.RootDir(), "contexts", contextName)
+		return filepath.Join(contextstore.RootDir(), "contexts", contextName, contextstore.RuntimeDirName)
 	}
-	return ctx.BaseDir
+	return ctx.RuntimeDir
 }
 
 func ansibleVenvBin(name string) string {

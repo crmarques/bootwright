@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	LedgerRelativePath = "workflow/current-apply.json"
-	LeaseRelativePath  = "workflow/current-apply.lease.json"
+	LedgerRelativePath = "current.json"
+	LeaseRelativePath  = "current.lease.json"
 
 	ApplyLeaseStaleAfter        = 2 * time.Minute
 	ApplyLeaseHeartbeatInterval = 15 * time.Second
@@ -123,16 +123,16 @@ func NewRunLedger(runID, target, scope string, limits ConcurrencyLimits, tasks [
 	}
 }
 
-func LedgerPath(stateDir string) string {
-	return filepath.Join(stateDir, LedgerRelativePath)
+func LedgerPath(runsDir string) string {
+	return filepath.Join(runsDir, LedgerRelativePath)
 }
 
-func LeasePath(stateDir string) string {
-	return filepath.Join(stateDir, LeaseRelativePath)
+func LeasePath(runsDir string) string {
+	return filepath.Join(runsDir, LeaseRelativePath)
 }
 
-func LoadRunLedger(stateDir string) (RunLedger, bool, error) {
-	path := LedgerPath(stateDir)
+func LoadRunLedger(runsDir string) (RunLedger, bool, error) {
+	path := LedgerPath(runsDir)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return RunLedger{}, false, nil
@@ -159,8 +159,8 @@ func NewRunLease(runID string, now time.Time) RunLease {
 	}
 }
 
-func LoadRunLease(stateDir string) (RunLease, bool, error) {
-	path := LeasePath(stateDir)
+func LoadRunLease(runsDir string) (RunLease, bool, error) {
+	path := LeasePath(runsDir)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return RunLease{}, false, nil
@@ -175,8 +175,8 @@ func LoadRunLease(stateDir string) (RunLease, bool, error) {
 	return lease, true, nil
 }
 
-func SaveRunLease(stateDir string, lease RunLease) error {
-	path := LeasePath(stateDir)
+func SaveRunLease(runsDir string, lease RunLease) error {
+	path := LeasePath(runsDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create apply lease directory: %w", err)
 	}
@@ -194,8 +194,8 @@ func SaveRunLease(stateDir string, lease RunLease) error {
 	return nil
 }
 
-func RemoveRunLease(stateDir string) error {
-	err := os.Remove(LeasePath(stateDir))
+func RemoveRunLease(runsDir string) error {
+	err := os.Remove(LeasePath(runsDir))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -205,8 +205,8 @@ func RemoveRunLease(stateDir string) error {
 	return nil
 }
 
-func SaveRunLedger(stateDir string, ledger RunLedger) error {
-	path := LedgerPath(stateDir)
+func SaveRunLedger(runsDir string, ledger RunLedger) error {
+	path := LedgerPath(runsDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create apply ledger directory: %w", err)
 	}
@@ -237,11 +237,11 @@ func (l RunLedger) Active() bool {
 	return l.Status == RunStatusRunning
 }
 
-func AssessRunActivity(stateDir string, ledger RunLedger, now time.Time) (RunActivity, error) {
+func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActivity, error) {
 	if !ledger.Active() {
 		return RunActivity{State: RunActivityTerminal}, nil
 	}
-	lease, found, err := LoadRunLease(stateDir)
+	lease, found, err := LoadRunLease(runsDir)
 	if err != nil {
 		return RunActivity{}, err
 	}
@@ -263,7 +263,7 @@ func AssessRunActivity(stateDir string, ledger RunLedger, now time.Time) (RunAct
 	return RunActivity{State: RunActivityActive, Detail: "apply lease heartbeat is fresh", Lease: &lease}, nil
 }
 
-func CancelRunLedger(stateDir string, ledger RunLedger, reason string, now time.Time) (RunLedger, error) {
+func CancelRunLedger(runsDir string, ledger RunLedger, reason string, now time.Time) (RunLedger, error) {
 	for i := range ledger.Tasks {
 		if taskTerminal(ledger.Tasks[i].Status) {
 			continue
@@ -274,10 +274,10 @@ func CancelRunLedger(stateDir string, ledger RunLedger, reason string, now time.
 		ledger.Tasks[i].SkippedReason = reason
 	}
 	ledger.Finish(RunStatusCancelled, now)
-	if err := SaveRunLedger(stateDir, ledger); err != nil {
+	if err := SaveRunLedger(runsDir, ledger); err != nil {
 		return ledger, err
 	}
-	if err := RemoveRunLease(stateDir); err != nil {
+	if err := RemoveRunLease(runsDir); err != nil {
 		return ledger, err
 	}
 	return ledger, nil

@@ -76,9 +76,9 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 		ValidityDays: 1,
 	})
 
-	stateDir := t.TempDir()
+	renderedDir := t.TempDir()
 	runtimeDir := t.TempDir()
-	result, err := render.ResolveInstaller(stateDir, runtimeDir, secretsDir, state)
+	result, err := render.ResolveInstaller(renderedDir, runtimeDir, secretsDir, state)
 	if err != nil {
 		t.Fatalf("ResolveInstaller: %v", err)
 	}

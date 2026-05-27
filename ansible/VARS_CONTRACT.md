@@ -56,7 +56,7 @@ bootwright_clusters:
         providedBy: { componentRef: { name: apps }, address: apps-ip }
     agentIsoPublishTargets:
       - stageHost: services-host
-        stagePath: "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"
+        stagePath: "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"
         fetchUrl: https://192.168.133.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso
         requiresHTTPS: true
         requiresByteRange: true

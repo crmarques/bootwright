@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
-func printApplyLedgerStatus(p *cliout.Printer, stateDir string, ledger workflow.RunLedger, found bool, loadErr error) {
+func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.RunLedger, found bool, loadErr error) {
 	p.Section("Current apply")
 	if loadErr != nil {
 		p.Status(cliout.StatusWarn, "Apply ledger", loadErr.Error())
@@ -33,7 +33,7 @@ func printApplyLedgerStatus(p *cliout.Printer, stateDir string, ledger workflow.
 		p.Fields([]cliout.Field{{Key: "Ended", Value: ledger.EndedAt.Format(time.RFC3339)}})
 	}
 	if ledger.Active() {
-		printApplyRunActivity(p, stateDir, ledger)
+		printApplyRunActivity(p, runsDir, ledger)
 	}
 	p.Section("Progress")
 	p.Progress("Tasks", progressFields(ledger))
@@ -43,8 +43,8 @@ func printApplyLedgerStatus(p *cliout.Printer, stateDir string, ledger workflow.
 	printApplyLedgerFailures(p, ledger)
 }
 
-func printApplyRunActivity(p *cliout.Printer, stateDir string, ledger workflow.RunLedger) {
-	activity, err := workflow.AssessRunActivity(stateDir, ledger, time.Now())
+func printApplyRunActivity(p *cliout.Printer, runsDir string, ledger workflow.RunLedger) {
+	activity, err := workflow.AssessRunActivity(runsDir, ledger, time.Now())
 	if err != nil {
 		p.Status(cliout.StatusWarn, "Lease", err.Error())
 		return

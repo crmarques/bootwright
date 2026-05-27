@@ -67,7 +67,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   # Render only one cluster's external tool input files
   bootwright render --output-dir ./rendered --scope managed-01 --sensitive
 
-  # Render placeholder installer files into the context state-dir
+  # Render placeholder installer files into the context rendered-dir
   bootwright render installer`,
 	}
 	cf := addCommonFlags()

@@ -87,7 +87,7 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 		if err != nil {
 			return failErr(1, err)
 		}
-		bundle, bundleSkipped, err := prepareInitialBundle(ctx.StateDir)
+		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -174,7 +174,7 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if err != nil {
 			return failErr(1, err)
 		}
-		bundle, bundleSkipped, err := prepareInitialBundle(ctx.StateDir)
+		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -304,7 +304,11 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			return failErr(2, err)
 		}
 		if purge && shouldRunContextRootChild() {
-			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, controllerRuntimeDir(name))) {
+			ctx, ctxErr := contextstore.NewContext(name)
+			if ctxErr != nil {
+				return failErr(2, ctxErr)
+			}
+			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
 				return failErr(1, errors.New("context delete aborted"))
 			}
 			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "delete", name, "--purge", "--yes"}, stdin, stdout, stderr, true)
@@ -377,8 +381,10 @@ func contextFields(ctx contextstore.Context) []output.Field {
 		{Key: "name", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
-		{Key: "state-dir", Value: ctx.StateDir},
+		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 		{Key: "runtime-dir", Value: ctx.RuntimeDir},
+		{Key: "runs-dir", Value: ctx.RunsDir},
+		{Key: "managed-dir", Value: ctx.ManagedDir},
 	}
 }

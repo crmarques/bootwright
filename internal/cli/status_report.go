@@ -33,12 +33,14 @@ type statusShared struct {
 }
 
 type statusContext struct {
-	Name       string `json:"name"`
-	ContextDir string `json:"contextDir"`
-	InputDir   string `json:"inputDir"`
-	StateDir   string `json:"stateDir"`
-	RuntimeDir string `json:"runtimeDir"`
-	SecretsDir string `json:"secretsDir"`
+	Name        string `json:"name"`
+	ContextDir  string `json:"contextDir"`
+	InputDir    string `json:"inputDir"`
+	RenderedDir string `json:"renderedDir"`
+	RuntimeDir  string `json:"runtimeDir"`
+	RunsDir     string `json:"runsDir"`
+	ManagedDir  string `json:"managedDir"`
+	SecretsDir  string `json:"secretsDir"`
 }
 
 type statusApplyRunActivity struct {
@@ -85,12 +87,14 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 
 	report := statusReport{
 		Context: statusContext{
-			Name:       ctx.Name,
-			ContextDir: ctx.BaseDir,
-			InputDir:   ctx.InputDir,
-			StateDir:   ctx.StateDir,
-			RuntimeDir: ctx.RuntimeDir,
-			SecretsDir: ctx.SecretsDir,
+			Name:        ctx.Name,
+			ContextDir:  ctx.BaseDir,
+			InputDir:    ctx.InputDir,
+			RenderedDir: ctx.RenderedDir,
+			RuntimeDir:  ctx.RuntimeDir,
+			RunsDir:     ctx.RunsDir,
+			ManagedDir:  ctx.ManagedDir,
+			SecretsDir:  ctx.SecretsDir,
 		},
 		Desired: statusDesired{
 			Source: stateSource(cf),
@@ -98,7 +102,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		},
 		Clusters:  []statusCluster{},
 		Shared:    []statusShared{},
-		NextSteps: nextStepHints(stateLoaded, state, ctx.StateDir, ctx.SecretsDir),
+		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.SecretsDir),
 	}
 	if loadErr != nil {
 		report.Desired.LoadError = loadErr.Error()
@@ -109,13 +113,13 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.Hosts = len(state.Hosts)
 		report.Desired.ClusterInfras = len(state.ClusterInfras)
 		report.Desired.ContainerClusters = len(state.ContainerClusters)
-		report.Clusters = buildStatusClusters(state, ctx.StateDir)
+		report.Clusters = buildStatusClusters(state, ctx.RenderedDir)
 		report.Shared = buildStatusShared(state)
 		report.Secrets, _ = declaredSecretEntries(ctx.SecretsDir, state)
 	}
-	if ledger, ok, err := workflow.LoadRunLedger(ctx.StateDir); err == nil && ok {
+	if ledger, ok, err := workflow.LoadRunLedger(ctx.RunsDir); err == nil && ok {
 		report.ApplyRun = &ledger
-		activity, _ := workflow.AssessRunActivity(ctx.StateDir, ledger, time.Now())
+		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
 		report.ApplyRunActivity = &statusApplyRunActivity{State: string(activity.State), Detail: activity.Detail}
 		report.NextSteps = ledgerNextSteps(ledger, activity, report.NextSteps)
 	} else if err != nil {
@@ -139,8 +143,8 @@ func buildStatusShared(state v1alpha1.State) []statusShared {
 	return out
 }
 
-func buildStatusClusters(state v1alpha1.State, stateDir string) []statusCluster {
-	freshness := loadEffectiveStateFreshness(state, stateDir)
+func buildStatusClusters(state v1alpha1.State, renderedDir string) []statusCluster {
+	freshness := loadEffectiveStateFreshness(state, renderedDir)
 	names := make([]string, 0, len(state.ContainerClusters))
 	byName := map[string]v1alpha1.ContainerCluster{}
 	for _, c := range state.ContainerClusters {
@@ -151,7 +155,7 @@ func buildStatusClusters(state v1alpha1.State, stateDir string) []statusCluster 
 	out := make([]statusCluster, 0, len(names))
 	for _, name := range names {
 		ocp := byName[name]
-		installer := installerInstallConfigPath(stateDir, name)
+		installer := installerInstallConfigPath(renderedDir, name)
 		result := freshnessForInstaller(freshness, installer)
 		entry := statusCluster{
 			Name:               name,

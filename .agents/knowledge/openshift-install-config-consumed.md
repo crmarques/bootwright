@@ -5,7 +5,7 @@
 Split agent apply reaches a node boot task and fails in `install_agent` with:
 
 ```text
-Missing install-config.yaml at <state-dir>/runtime/<cluster>/installer/install-config.yaml
+Missing install-config.yaml at <runtime-dir>/installer/<cluster>/install-config.yaml
 ```
 
 The preceding `create-agent-iso` task may have completed successfully.

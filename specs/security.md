@@ -87,9 +87,9 @@ Generated output boundaries are part of the safety contract:
   `sudo bootwright ...` invocation is treated as root-owned and uses root's
   home, PATH, registry, and file permissions.
 - User-authored YAML lives under
-  `/var/lib/bootwright/contexts/<context>/input-files/`.
+  `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
   Placeholder `openshift/` Secret manifests carry redacted data only.
 - Context-local secrets live under
   `/var/lib/bootwright/contexts/<context>/secrets/`; `secret show` prints a
@@ -99,13 +99,13 @@ Generated output boundaries are part of the safety contract:
   non-root Bootwright invocation internally re-execs through `sudo`, checks and
   reads of those external files run as the original caller.
 - Bootwright-managed secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`, with
+  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`, with
   restrictive file modes, and must never be versioned.
 - Bootwright-managed apply logs that can include external tool output live under
-  `/var/lib/bootwright/contexts/<context>/workflow/`, with restrictive file
+  `/var/lib/bootwright/contexts/<context>/runs/`, with restrictive file
   modes, and must never be versioned.
 - Per-cluster install records live under
-  `/var/lib/bootwright/contexts/<context>/state/workflow/cluster-installs/`.
+  `/var/lib/bootwright/contexts/<context>/runtime/install-records/`.
   They may contain cluster names, non-secret desired-input fingerprints,
   install phases, run IDs, timestamps, and node boot markers, but must not
   contain kubeconfigs, pull secrets, tokens, private keys, or other secret

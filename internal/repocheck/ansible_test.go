@@ -1389,8 +1389,8 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{
-		"bootwright_cluster_runtime_dir: \"{{ (bootwright_runtime_dir | default(bootwright_host_state_dir, true)) }}/runtime/{{ bootwright_current_cluster.name }}\"",
-		"bootwright_process_cleanup_pattern: \"runtime/{{ bootwright_current_cluster.name }}/\"",
+		"bootwright_cluster_runtime_dir: \"{{ bootwright_runtime_dir }}/installer/{{ bootwright_current_cluster.name }}\"",
+		"bootwright_process_cleanup_pattern: \"runtime/installer/{{ bootwright_current_cluster.name }}/\"",
 		"path: \"{{ bootwright_cluster_runtime_dir }}\"",
 	} {
 		if !strings.Contains(body, want) {

@@ -10,12 +10,13 @@
 
 - name: Resolve boot artifact paths
   ansible.builtin.set_fact:
-    bootwright_artifacts_state_dir: "{{ bootwright_host_state_dir }}/artifacts-server"
-    bootwright_artifacts_tls_dir: "{{ bootwright_host_state_dir }}/artifacts-server/tls"
-    bootwright_artifacts_tls_cert_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.crt"
-    bootwright_artifacts_tls_key_path: "{{ bootwright_host_state_dir }}/artifacts-server/tls/server.key"
-    bootwright_artifacts_root: "{{ bootwright_host_state_dir }}/artifacts-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
-    bootwright_artifacts_config_path: "{{ bootwright_host_state_dir }}/artifacts-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/nginx.conf"
+    bootwright_artifacts_root: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_artifacts_config_dir: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/config"
+    bootwright_artifacts_tls_dir: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls"
+    bootwright_artifacts_public_dir: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/public"
+    bootwright_artifacts_tls_cert_path: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls/server.crt"
+    bootwright_artifacts_tls_key_path: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/tls/server.key"
+    bootwright_artifacts_config_path: "{{ bootwright_managed_dir }}/services/artifact-server/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/config/nginx.conf"
     bootwright_artifacts_container_name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     bootwright_artifacts_https_enabled: "{{ (bootwright_component.listeners | selectattr('protocol', 'equalto', 'https') | list | length) > 0 }}"
   changed_when: false
@@ -35,9 +36,11 @@
     group: root
     mode: "{{ item.mode }}"
   loop:
-    - path: "{{ bootwright_artifacts_state_dir }}"
-      mode: "0755"
     - path: "{{ bootwright_artifacts_root }}"
+      mode: "0755"
+    - path: "{{ bootwright_artifacts_config_dir }}"
+      mode: "0755"
+    - path: "{{ bootwright_artifacts_public_dir }}"
       mode: "0755"
     - path: "{{ bootwright_artifacts_tls_dir }}"
       mode: "0700"
@@ -133,7 +136,7 @@
       {{
         [
           bootwright_artifacts_config_path ~ ':/etc/nginx/nginx.conf:ro,Z',
-          bootwright_artifacts_state_dir ~ ':/usr/share/nginx/html:ro,Z'
+          bootwright_artifacts_public_dir ~ ':/usr/share/nginx/html:ro,Z'
         ]
         + (
           [

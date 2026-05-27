@@ -23,7 +23,8 @@
     bootwright_libvirt_bridge: "{{ bootwright_libvirt_network.substrate.libvirt.bridge }}"
     bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
     bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
-    bootwright_libvirt_machine_root: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+    bootwright_libvirt_root: "{{ bootwright_managed_dir }}/substrate/libvirt/{{ bootwright_current_cluster.name }}"
+    bootwright_libvirt_machine_root: "{{ bootwright_managed_dir }}/substrate/libvirt/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
     bootwright_libvirt_domain_uuid: "{{ (bootwright_current_cluster.name ~ '-' ~ bootwright_component.name) | to_uuid }}"
   changed_when: false
 
@@ -38,7 +39,7 @@
 - name: Render libvirt network XML
   ansible.builtin.template:
     src: network.xml.j2
-    dest: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/network.xml"
+    dest: "{{ bootwright_libvirt_root }}/network.xml"
     owner: root
     group: root
     mode: "0644"
@@ -46,7 +47,7 @@
 
 - name: Slurp libvirt network XML
   ansible.builtin.slurp:
-    src: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/network.xml"
+    src: "{{ bootwright_libvirt_root }}/network.xml"
   register: bootwright_libvirt_net_xml_slurp
 
 - name: Define libvirt network

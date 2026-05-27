@@ -84,7 +84,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err := validateScopedApplySharedServices(state, scope.name, flags.clusterScope); err != nil {
 			return failErr(1, err)
 		}
-		plan, err := prepareScopedWorkflow(state, scope, flags.clusterScope, ctx.BaseDir, askBecomePass, dryRun)
+		plan, err := prepareScopedWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -102,7 +102,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		applyTarget := scope.applyTarget()
 		tasks := workflow.PlanApplyTasks(applyTarget, plan.state)
 		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
-		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(runtimeDir, "dry-run", tasks)
+		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(ctx.RunsDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
@@ -110,10 +110,10 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
-			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.StateDir); err != nil {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, ctx.BaseDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, ctx.ManagedDir); err != nil {
 				return err
 			}
 		}
@@ -145,7 +145,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if !dryRun && !plan.noRemoteWork {
 			reporter.BundleStart()
 		}
-		bundle, err := prepareWorkflowBundle(ctx.StateDir, dryRun || plan.noRemoteWork)
+		bundle, err := prepareWorkflowBundle(dryRun || plan.noRemoteWork)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -154,10 +154,11 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		runOpts := workflow.RunOptions{
 			State:              plan.state,
-			StateDir:           ctx.StateDir,
+			RenderedDir:        ctx.RenderedDir,
 			RuntimeDir:         runtimeDir,
+			RunsDir:            ctx.RunsDir,
 			SecretsDir:         ctx.SecretsDir,
-			HostStateDir:       ctx.BaseDir,
+			ManagedDir:         ctx.ManagedDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           scope.applyPlaybook,
@@ -177,7 +178,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
-			result, err := workflow.RenderOnly(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state)
+			result, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -188,17 +189,17 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if reporter != nil {
 			reporter.RenderStart()
 		}
-		renderResult, err := workflow.RenderOnly(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state)
+		renderResult, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state)
 		if err != nil {
 			return failErr(1, err)
 		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
-			if _, err := workflow.ResolveInstaller(ctx.StateDir, runtimeDir, ctx.SecretsDir, plan.state); err != nil {
+			if _, err := workflow.ResolveInstaller(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state); err != nil {
 				return failErr(1, err)
 			}
 		}
-		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr, runtimeDir), nil)
+		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr, runtimeDir), nil)
 		if err != nil {
 			return failErr(1, err)
 		}

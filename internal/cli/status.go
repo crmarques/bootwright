@@ -37,7 +37,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status [target]",
 		Short: "Report context state and the suggested next command",
-		Long: "Inspects the current context state-dir and secrets-dir, surfaces declared\n" +
+		Long: "Inspects the current context rendered-dir and secrets-dir, surfaces declared\n" +
 			"Environment/Provider/Infrastructure/ContainerCluster counts, reports which\n" +
 			"clusters have fresh, stale, missing, or unknown installer assets, and recommends the next\n" +
 			"command. Read-only.",
@@ -84,8 +84,10 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		{Key: "context", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
-		{Key: "state-dir", Value: ctx.StateDir},
+		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "runtime-dir", Value: ctx.RuntimeDir},
+		{Key: "runs-dir", Value: ctx.RunsDir},
+		{Key: "managed-dir", Value: ctx.ManagedDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 	})
 
@@ -101,7 +103,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		p.Status(cliout.StatusFail, "load", loadErr.Error())
 	case !stateLoaded:
 		p.Fields(fields)
-		p.Status(cliout.StatusFail, "load", "no desired state found in context input-files")
+		p.Status(cliout.StatusFail, "load", "no desired state found in context input")
 	default:
 		fields = append(fields, stateCountFields(state)...)
 		p.Fields(fields)
@@ -110,18 +112,18 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	if stateLoaded {
 		printSecretStatus(p, ctx.SecretsDir, state)
-		printClusterStatus(p, state, ctx.StateDir)
+		printClusterStatus(p, state, ctx.RenderedDir)
 		printSharedStatus(p, state)
 	}
 
-	ledger, ledgerFound, ledgerErr := workflow.LoadRunLedger(ctx.StateDir)
-	printApplyLedgerStatus(p, ctx.StateDir, ledger, ledgerFound, ledgerErr)
+	ledger, ledgerFound, ledgerErr := workflow.LoadRunLedger(ctx.RunsDir)
+	printApplyLedgerStatus(p, ctx.RunsDir, ledger, ledgerFound, ledgerErr)
 
 	p.Section("Next steps")
 	var items []cliout.Item
-	hints := nextStepHints(stateLoaded, state, ctx.StateDir, ctx.SecretsDir)
+	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
-		activity, _ := workflow.AssessRunActivity(ctx.StateDir, ledger, time.Now())
+		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
 		hints = ledgerNextSteps(ledger, activity, hints)
 	}
 	if ledgerErr != nil {
@@ -146,11 +148,11 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 		if err != nil {
 			return failErr(1, err)
 		}
-		ledger, found, err := workflow.LoadRunLedger(contextState.StateDir)
+		ledger, found, err := workflow.LoadRunLedger(contextState.RunsDir)
 		if err != nil || !found || ledger.Terminal() {
 			return nil
 		}
-		activity, err := workflow.AssessRunActivity(contextState.StateDir, ledger, time.Now())
+		activity, err := workflow.AssessRunActivity(contextState.RunsDir, ledger, time.Now())
 		if err != nil || activity.State == workflow.RunActivityStale {
 			return err
 		}
@@ -164,12 +166,12 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	}
 }
 
-func printClusterStatus(p *cliout.Printer, state v1alpha1.State, stateDir string) {
+func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir string) {
 	if len(state.ContainerClusters) == 0 {
 		return
 	}
 	p.Section("Clusters")
-	freshness := loadEffectiveStateFreshness(state, stateDir)
+	freshness := loadEffectiveStateFreshness(state, renderedDir)
 	names := make([]string, 0, len(state.ContainerClusters))
 	byName := map[string]v1alpha1.ContainerCluster{}
 	for _, ocp := range state.ContainerClusters {
@@ -181,7 +183,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, stateDir string
 		ocp := byName[name]
 		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
 		p.Status(cliout.StatusOK, name, detail)
-		installer := installerInstallConfigPath(stateDir, name)
+		installer := installerInstallConfigPath(renderedDir, name)
 		result := freshnessForInstaller(freshness, installer)
 		switch result.State {
 		case installerFreshnessFresh:
@@ -239,12 +241,12 @@ func printSecretStatus(p *cliout.Printer, secretsDir string, state v1alpha1.Stat
 	}
 }
 
-func nextStepHints(stateLoaded bool, state v1alpha1.State, stateDir string, secretsDir string) []string {
+func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, secretsDir string) []string {
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretNextStepHints(state, secretsDir)...)
 		hints = append(hints, "bootwright check bastion")
-		needsInstaller := clustersNeedingInstallerRender(state, stateDir)
+		needsInstaller := clustersNeedingInstallerRender(state, renderedDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints,
 				"bootwright apply infra --dry-run",
@@ -259,7 +261,7 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, stateDir string, secr
 		return hints
 	}
 	return []string{
-		"edit desired-state YAML under the context input-files directory",
+		"edit desired-state YAML under the context input directory",
 		"bootwright secret list",
 		"bootwright check all",
 	}
@@ -298,11 +300,11 @@ func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
 	return hints
 }
 
-func clustersNeedingInstallerRender(state v1alpha1.State, stateDir string) []string {
-	freshness := loadEffectiveStateFreshness(state, stateDir)
+func clustersNeedingInstallerRender(state v1alpha1.State, renderedDir string) []string {
+	freshness := loadEffectiveStateFreshness(state, renderedDir)
 	var needs []string
 	for _, ocp := range state.ContainerClusters {
-		path := installerInstallConfigPath(stateDir, ocp.Metadata.Name)
+		path := installerInstallConfigPath(renderedDir, ocp.Metadata.Name)
 		switch freshnessForInstaller(freshness, path).State {
 		case installerFreshnessFresh:
 			continue
@@ -332,8 +334,8 @@ func stateSource(cf *commonFlags) string {
 	return "(none)"
 }
 
-func installerInstallConfigPath(stateDir, clusterName string) string {
-	return filepath.Join(stateDir, render.InstallerRelativeDir, clusterName, "install-config.yaml")
+func installerInstallConfigPath(renderedDir, clusterName string) string {
+	return filepath.Join(renderedDir, render.InstallerRelativeDir, clusterName, "install-config.yaml")
 }
 
 func hasAnyState(s v1alpha1.State) bool {

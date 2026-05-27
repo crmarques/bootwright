@@ -9,8 +9,8 @@ import (
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
-func reconcileCurrentApplyBeforeMutation(stdout io.Writer, stateDir string) error {
-	ledger, found, err := workflow.LoadRunLedger(stateDir)
+func reconcileCurrentApplyBeforeMutation(stdout io.Writer, runsDir string) error {
+	ledger, found, err := workflow.LoadRunLedger(runsDir)
 	if err != nil {
 		return err
 	}
@@ -18,7 +18,7 @@ func reconcileCurrentApplyBeforeMutation(stdout io.Writer, stateDir string) erro
 		return nil
 	}
 	now := time.Now()
-	activity, err := workflow.AssessRunActivity(stateDir, ledger, now)
+	activity, err := workflow.AssessRunActivity(runsDir, ledger, now)
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func reconcileCurrentApplyBeforeMutation(stdout io.Writer, stateDir string) erro
 	case workflow.RunActivityActive:
 		return fmt.Errorf("apply run %s is still running; inspect it with bootwright status --watch", ledger.RunID)
 	case workflow.RunActivityStale:
-		cancelled, err := workflow.CancelRunLedger(stateDir, ledger, activity.Detail, now)
+		cancelled, err := workflow.CancelRunLedger(runsDir, ledger, activity.Detail, now)
 		if err != nil {
 			return err
 		}

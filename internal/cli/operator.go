@@ -202,7 +202,7 @@ func extractControllerCLIBundle() (string, func(), error) {
 		return "", nil, fmt.Errorf("create controller Ansible bundle temp directory: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(parent) }
-	bundleDir := filepath.Join(parent, ansibleBundleDirName)
+	bundleDir := filepath.Join(parent, controllerBundleDirName)
 	if err := embedded.ExtractAnsibleBundle(bundleDir, bundleVersionMarker()); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("extract controller Ansible bundle: %w", err)
@@ -211,10 +211,12 @@ func extractControllerCLIBundle() (string, func(), error) {
 }
 
 func controllerCLIBundleDisplayDir() string {
-	return filepath.Join(controllerCLITempParent, "bootwright-controller-ansible-*", ansibleBundleDirName)
+	return filepath.Join(controllerCLITempParent, "bootwright-controller-ansible-*", controllerBundleDirName)
 }
 
 const controllerCLITempParent = ansible.SystemTempDir
+
+const controllerBundleDirName = "bundle"
 
 const controllerCLIInventory = "_setup-controller.yaml"
 

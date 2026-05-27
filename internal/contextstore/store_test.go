@@ -24,6 +24,15 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 	if ctx.InputDir != filepath.Join(wantBase, InputDirName) {
 		t.Fatalf("InputDir = %q", ctx.InputDir)
 	}
+	if ctx.RenderedDir != filepath.Join(wantBase, RenderedDirName) {
+		t.Fatalf("RenderedDir = %q", ctx.RenderedDir)
+	}
+	if ctx.RunsDir != filepath.Join(wantBase, RunsDirName) {
+		t.Fatalf("RunsDir = %q", ctx.RunsDir)
+	}
+	if ctx.ManagedDir != filepath.Join(wantBase, ManagedDirName) {
+		t.Fatalf("ManagedDir = %q", ctx.ManagedDir)
+	}
 }
 
 func TestDefaultRegistryPathIgnoresSudoUser(t *testing.T) {
@@ -108,6 +117,8 @@ func TestLoadRejectsLegacyContextMapRegistry(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("Load accepted legacy context map registry")
+	} else if !strings.Contains(err.Error(), "legacy context registry map is not supported") {
+		t.Fatalf("Load returned unclear legacy registry error: %v", err)
 	}
 }
 
@@ -142,6 +153,30 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(ctx.BaseDir, managedroot.MarkerName)); err != nil {
 		t.Fatalf("context marker missing: %v", err)
+	}
+	for _, dir := range []string{
+		filepath.Join(root, CacheDirName),
+		filepath.Join(root, "contexts"),
+		ctx.BaseDir,
+		ctx.InputDir,
+		ctx.RenderedDir,
+		ctx.SecretsDir,
+		ctx.RuntimeDir,
+		ctx.RunsDir,
+		ctx.ManagedDir,
+		filepath.Join(ctx.ManagedDir, "services"),
+		filepath.Join(ctx.ManagedDir, "substrate"),
+	} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("expected directory %s: %v", dir, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%s is not a directory", dir)
+		}
+		if got := info.Mode().Perm(); got != 0o700 {
+			t.Fatalf("%s mode = %#o, want 0700", dir, got)
+		}
 	}
 }
 
@@ -200,7 +235,7 @@ func TestValidateNameRejectsInvalidNames(t *testing.T) {
 
 func TestImportInputsCollisionAndReplace(t *testing.T) {
 	source := t.TempDir()
-	inputDir := filepath.Join(t.TempDir(), "input-files")
+	inputDir := filepath.Join(t.TempDir(), InputDirName)
 	if err := os.WriteFile(filepath.Join(source, "environment.yaml"), []byte("one\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +261,7 @@ func TestImportInputsCollisionAndReplace(t *testing.T) {
 }
 
 func TestImportInputsRejectsSourceInsideTarget(t *testing.T) {
-	inputDir := filepath.Join(t.TempDir(), "input-files")
+	inputDir := filepath.Join(t.TempDir(), InputDirName)
 	if err := os.MkdirAll(inputDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +286,7 @@ func TestImportInputsRejectsYAMLSymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(source, "environment.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	inputDir := filepath.Join(t.TempDir(), "input-files")
+	inputDir := filepath.Join(t.TempDir(), InputDirName)
 	if _, err := ImportInputs([]string{source}, inputDir, false); err == nil {
 		t.Fatal("ImportInputs accepted a YAML symlink")
 	}
@@ -271,7 +306,7 @@ func TestImportInputsSkipsNonWorkspaceDirs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	inputDir := filepath.Join(t.TempDir(), "input-files")
+	inputDir := filepath.Join(t.TempDir(), InputDirName)
 	imported, err := ImportInputs([]string{source}, inputDir, false)
 	if err != nil {
 		t.Fatal(err)
@@ -288,10 +323,11 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 		Name:        "lab",
 		BaseDir:     home,
 		InputDir:    filepath.Join(home, InputDirName),
-		StateDir:    filepath.Join(home, StateDirName),
+		RenderedDir: filepath.Join(home, RenderedDirName),
 		SecretsDir:  filepath.Join(home, SecretsDirName),
 		RuntimeDir:  filepath.Join(home, RuntimeDirName),
-		WorkflowDir: filepath.Join(home, WorkflowDirName),
+		RunsDir:     filepath.Join(home, RunsDirName),
+		ManagedDir:  filepath.Join(home, ManagedDirName),
 	}
 	if err := SafePurgeBaseDir(ctx); err == nil {
 		t.Fatal("SafePurgeBaseDir unexpectedly removed home")
@@ -304,10 +340,11 @@ func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 		Name:        "lab",
 		BaseDir:     baseDir,
 		InputDir:    filepath.Join(baseDir, InputDirName),
-		StateDir:    filepath.Join(baseDir, StateDirName),
+		RenderedDir: filepath.Join(baseDir, RenderedDirName),
 		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
 		RuntimeDir:  filepath.Join(baseDir, RuntimeDirName),
-		WorkflowDir: filepath.Join(baseDir, WorkflowDirName),
+		RunsDir:     filepath.Join(baseDir, RunsDirName),
+		ManagedDir:  filepath.Join(baseDir, ManagedDirName),
 	}
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		t.Fatal(err)

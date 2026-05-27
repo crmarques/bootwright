@@ -23,11 +23,11 @@ SSH to `hostRef` is only needed for genuinely remote artifact hosts.
 
 Investigation:
 
-- Inspect `state/ansible/vars.yaml` for
+- Inspect `rendered/ansible/vars.yaml` for
   `bootwright_clusters[].components[].boot.agentIso`.
-- Inspect `state/ansible/inventory.yaml` for the `stageHost` host entry.
+- Inspect `rendered/ansible/inventory.yaml` for the `stageHost` host entry.
 - If `ansible_user` is present, it came from explicit `Host.spec.ssh.user`.
   Omit `spec.ssh.user` unless the provider host really needs a forced SSH
   login name.
 - If `stageHost` is the local controller, confirm the artifact directory exists
-  under `bootwright_host_state_dir` after `bootwright apply infra`.
+  under `bootwright_managed_dir` after `bootwright apply infra`.
