@@ -108,6 +108,52 @@ func TestAssessRunActivity(t *testing.T) {
 	}
 }
 
+func TestAssessRunActivityTreatsFreshLocalLeaseWithMissingProcessAsStale(t *testing.T) {
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, nil, now)
+	lease := NewRunLease("run-1", now)
+	dir := t.TempDir()
+	if err := SaveRunLease(dir, lease); err != nil {
+		t.Fatalf("SaveRunLease: %v", err)
+	}
+	previous := runLeaseProcessAlive
+	runLeaseProcessAlive = func(int) bool { return false }
+	defer func() { runLeaseProcessAlive = previous }()
+
+	activity, err := AssessRunActivity(dir, ledger, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("AssessRunActivity: %v", err)
+	}
+	if activity.State != RunActivityStale || activity.Detail != "apply lease process is not running" {
+		t.Fatalf("activity = %+v, want stale missing process", activity)
+	}
+}
+
+func TestAssessRunActivityDoesNotProbeRemoteHostLeaseProcess(t *testing.T) {
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, nil, now)
+	lease := NewRunLease("run-1", now)
+	lease.Hostname = "other-host"
+	dir := t.TempDir()
+	if err := SaveRunLease(dir, lease); err != nil {
+		t.Fatalf("SaveRunLease: %v", err)
+	}
+	previous := runLeaseProcessAlive
+	runLeaseProcessAlive = func(int) bool {
+		t.Fatal("remote host lease must not probe the local process table")
+		return false
+	}
+	defer func() { runLeaseProcessAlive = previous }()
+
+	activity, err := AssessRunActivity(dir, ledger, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("AssessRunActivity: %v", err)
+	}
+	if activity.State != RunActivityActive {
+		t.Fatalf("activity = %+v, want active", activity)
+	}
+}
+
 func TestCancelRunLedgerMarksNonTerminalTasksCancelled(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := NewRunLedger("run-1", "cluster", "", ConcurrencyLimits{}, []TaskLedgerEntry{

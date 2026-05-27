@@ -863,9 +863,10 @@ Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
 `failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes
 `<runs-dir>/current.lease.json`. Mutating workflow commands
-must block when the current apply ledger has a fresh lease. If the ledger still
-says `running` but its lease is missing or stale, the next `apply` or `destroy`
-marks that previous run `cancelled` before continuing.
+must block when the current apply ledger has a fresh lease whose local process
+is still running. If the ledger still says `running` but its lease is missing,
+stale, or points at a local process that has exited, the next `apply` or
+`destroy` marks that previous run `cancelled` before continuing.
 `bootwright status` reads local context state without contacting provider
 hosts, BMCs, or clusters. Text output summarizes desired-state load status,
 declared secret material presence, installer freshness, the current apply,

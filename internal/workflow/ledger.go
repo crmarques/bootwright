@@ -257,10 +257,26 @@ func AssessRunActivity(runsDir string, ledger RunLedger, now time.Time) (RunActi
 	if lease.HeartbeatAt.IsZero() {
 		return RunActivity{State: RunActivityStale, Detail: "apply lease has no heartbeat", Lease: &lease}, nil
 	}
+	if localLeaseProcessMissing(lease) {
+		return RunActivity{State: RunActivityStale, Detail: "apply lease process is not running", Lease: &lease}, nil
+	}
 	if now.UTC().Sub(lease.HeartbeatAt.UTC()) > ApplyLeaseStaleAfter {
 		return RunActivity{State: RunActivityStale, Detail: "apply lease heartbeat is stale", Lease: &lease}, nil
 	}
 	return RunActivity{State: RunActivityActive, Detail: "apply lease heartbeat is fresh", Lease: &lease}, nil
+}
+
+var runLeaseProcessAlive = processAlive
+
+func localLeaseProcessMissing(lease RunLease) bool {
+	if lease.Hostname == "" {
+		return false
+	}
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" || lease.Hostname != hostname {
+		return false
+	}
+	return lease.PID <= 0 || !runLeaseProcessAlive(lease.PID)
 }
 
 func CancelRunLedger(runsDir string, ledger RunLedger, reason string, now time.Time) (RunLedger, error) {
