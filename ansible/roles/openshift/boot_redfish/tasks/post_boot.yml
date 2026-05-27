@@ -11,6 +11,63 @@
     timeout: "{{ bootwright_node_ready_timeout_seconds | int }}"
   when: (bootwright_node_probe_address | length) > 0
 
+- name: Resolve node SSH auth probe key path
+  ansible.builtin.set_fact:
+    bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.adminSSHPrivateKeyPath | default('') }}"
+  changed_when: false
+
+- name: Check node SSH auth probe key
+  ansible.builtin.stat:
+    path: "{{ bootwright_node_ready_ssh_key_path }}"
+  register: bootwright_node_ready_ssh_key_stat
+  when:
+    - (bootwright_node_probe_address | length) > 0
+    - (bootwright_node_ready_ssh_key_path | length) > 0
+
+- name: Wait for node SSH to accept cluster admin key
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_node_ready_ssh_key_path }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=no
+      - -o
+      - UserKnownHostsFile=/dev/null
+      - -o
+      - "ConnectTimeout={{ bootwright_node_ready_ssh_connect_timeout_seconds | int }}"
+      - -o
+      - ConnectionAttempts=1
+      - "core@{{ bootwright_node_probe_address }}"
+      - "true"
+  register: bootwright_node_ready_ssh_auth
+  changed_when: false
+  failed_when: false
+  until: (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
+  retries: "{{ bootwright_node_ready_ssh_auth_retries | int }}"
+  delay: "{{ bootwright_node_ready_ssh_auth_delay_seconds | int }}"
+  when:
+    - (bootwright_node_probe_address | length) > 0
+    - bootwright_node_ready_ssh_key_stat.stat.exists | default(false)
+
+- name: Confirm node SSH accepted cluster admin key
+  ansible.builtin.assert:
+    that:
+      - (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
+    fail_msg: >-
+      Node {{ bootwright_component.name }} at {{ bootwright_node_probe_address }}
+      answered TCP/{{ bootwright_node_ready_probe_port | int }} but rejected the
+      cluster admin SSH key {{ bootwright_node_ready_ssh_key_path }}.
+      This usually means the IP is an old or wrong boot, the BMC booted disk
+      instead of the generated agent ISO, or the declared MAC/IP mapping points
+      at another host. Check Redfish virtual media, boot order, and
+      InfraProvider baremetal.interfaces for {{ bootwright_component.name }}.
+  when:
+    - (bootwright_node_probe_address | length) > 0
+    - bootwright_node_ready_ssh_key_stat.stat.exists | default(false)
+
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:
     url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"

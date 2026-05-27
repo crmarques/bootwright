@@ -108,7 +108,7 @@ func AllOn(fs FileSystem, renderedDir, runtimeDir, secretsDir string, state v1al
 		{path: result.EffectiveStatePath, value: state},
 		{path: result.LockPath, value: Lock(state)},
 		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
-		{path: result.VarsPath, value: Vars(state)},
+		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {
@@ -237,7 +237,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 		{path: result.EffectiveStatePath, value: state},
 		{path: result.LockPath, value: Lock(state)},
 		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
-		{path: result.VarsPath, value: Vars(state)},
+		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {

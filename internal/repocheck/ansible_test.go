@@ -201,6 +201,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	resolveAttachmentSourcesIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment sources")
 	resolveAttachedIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment result")
 	waitSSHIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to confirm live ISO boot complete")
+	sshAuthIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to accept cluster admin key")
+	sshAuthConfirmIdx := findAnsibleTask(t, postTasks, "Confirm node SSH accepted cluster admin key")
 	diskBootRefreshIdx := findAnsibleTask(t, postTasks, "Refresh Redfish system metadata before disk boot override")
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
@@ -221,8 +223,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(retryDelayIdx < retryEjectIdx && retryEjectIdx < refreshMediaIdx && refreshMediaIdx < mediaPreconditionIdx && mediaPreconditionIdx < verifyCertIdx && verifyCertIdx < standardBodyIdx && standardBodyIdx < vmmBodyIdx && vmmBodyIdx < insertIdx && insertIdx < requestStatusIdx && requestStatusIdx < taskRefIdx && taskRefIdx < taskURLIdx && taskURLIdx < waitTaskIdx && waitTaskIdx < captureTaskIdx && captureTaskIdx < taskResultIdx && taskResultIdx < failedTaskProbeIdx && failedTaskProbeIdx < mountedTaskProbeIdx && mountedTaskProbeIdx < waitMediaIdx && waitMediaIdx < resolveProbeAfterInsertIdx && resolveProbeAfterInsertIdx < patchPreconditionIdx && patchPreconditionIdx < patchAttemptIdx && patchAttemptIdx < patchMediaIdx && patchMediaIdx < waitPatchMediaIdx && waitPatchMediaIdx < resolveProbeAfterPatchIdx && resolveProbeAfterPatchIdx < captureMediaIdx && captureMediaIdx < resolveAttachmentSourcesIdx && resolveAttachmentSourcesIdx < resolveAttachedIdx) {
 		t.Fatalf("boot_redfish insert attempt must verify async task and virtual media insertion before reporting success")
 	}
-	if !(waitSSHIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
-		t.Fatalf("boot_redfish must wait for SSH before switching subsequent boots back to disk")
+	if !(waitSSHIdx < sshAuthIdx && sshAuthIdx < sshAuthConfirmIdx && sshAuthConfirmIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
+		t.Fatalf("boot_redfish must verify SSH auth before switching subsequent boots back to disk")
 	}
 
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
@@ -593,6 +595,20 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if got := postTasks[diskBootIdx]["changed_when"]; got != "(bootwright_redfish_disk_boot_patch.status | default(0) | int) in [200, 202, 204]" {
 		t.Fatalf("disk boot override must mark accepted PATCH responses changed, got %v", got)
+	}
+	sshAuth, ok := postTasks[sshAuthIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no command task", postTasks[sshAuthIdx]["name"])
+	}
+	if argv := fmt.Sprint(sshAuth["argv"]); !strings.Contains(argv, "BatchMode=yes") || !strings.Contains(argv, "core@{{ bootwright_node_probe_address }}") {
+		t.Fatalf("SSH auth probe must use noninteractive core SSH, got %v", sshAuth["argv"])
+	}
+	sshAuthAssert, ok := postTasks[sshAuthConfirmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert task", postTasks[sshAuthConfirmIdx]["name"])
+	}
+	if failMsg := fmt.Sprint(sshAuthAssert["fail_msg"]); !strings.Contains(failMsg, "rejected the") || !strings.Contains(failMsg, "declared MAC/IP mapping") {
+		t.Fatalf("SSH auth failure must explain stale boot and mapping risk, got %v", sshAuthAssert["fail_msg"])
 	}
 	diskAssert, ok := postTasks[diskBootConfirmIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
