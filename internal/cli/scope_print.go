@@ -43,7 +43,7 @@ func printWorkflowSummary(w io.Writer, title string, selected []Phase, askBecome
 		case dryRun:
 			p.Warning("Root phases", "sudo escalation is required; this is a dry run, no commands execute")
 		case askBecomePass:
-			p.Warning("Root phases", "Bootwright will ask once for the BECOME password and reuse it for this workflow")
+			p.Warning("Root phases", becomePasswordSummary("workflow"))
 		case os.Geteuid() == 0:
 			p.Warning("Root phases", "bootwright is running as root, no BECOME password prompt needed")
 		default:
@@ -62,7 +62,7 @@ func printWorkflowStart(w io.Writer, workflowName string, selected []Phase, askB
 	if rootPhaseCount(selected) > 0 {
 		p.List([]output.Item{{Label: workflowName + " [root]", Detail: "phases: " + phaseList(selected)}})
 		if askBecomePass {
-			p.Warning("Sudo", "Bootwright will ask once for the BECOME password for this workflow")
+			p.Warning("Sudo", becomePasswordSummary("workflow"))
 		}
 		return
 	}
@@ -74,7 +74,7 @@ func printPhaseStart(w io.Writer, phase Phase, askBecomePass bool) {
 	p.Section("Run")
 	if phase.NeedsRoot && askBecomePass {
 		p.List([]output.Item{{Label: phase.Name + " [root]", Detail: phase.Description}})
-		p.Warning("Sudo", "Bootwright will ask once for the BECOME password for this phase")
+		p.Warning("Sudo", becomePasswordSummary("phase"))
 		return
 	}
 	p.List([]output.Item{{Label: phase.Name, Detail: phase.Description}})
@@ -123,17 +123,6 @@ func phaseList(selected []Phase) string {
 		names = append(names, p.Name)
 	}
 	return strings.Join(names, ", ")
-}
-
-var askBecomePassDefault = func() bool {
-	switch os.Getenv(localRootSudoAuthEnv) {
-	case localSudoAuthPrompted:
-		return true
-	case localSudoAuthNonInteractive:
-		return false
-	default:
-		return os.Geteuid() != 0
-	}
 }
 
 // printDestroyPreview lists the user-visible resources `destroy` will

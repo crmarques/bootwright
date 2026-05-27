@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -124,24 +123,19 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		}
 		becomePassword := ""
 		becomePasswordFile := ""
-		if askBecomePass && (bootstrapPlanNeedsSudo(plan) || cliSpec != nil) {
+		needsBootstrapPassword := bootstrapPlanNeedsSudo(plan)
+		needsAnsiblePasswordFile := cliSpec != nil
+		if askBecomePass && (needsBootstrapPassword || needsAnsiblePasswordFile) && willPromptForBecomePassword(askBecomePass) {
 			output.NewContinuation(stderr).BlankLine()
-			password, err := readBecomePassword(stdin, stderr)
+		}
+		if askBecomePass && (needsBootstrapPassword || needsAnsiblePasswordFile) {
+			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, askBecomePass, needsBootstrapPassword, needsAnsiblePasswordFile)
 			if err != nil {
 				return failErr(1, err)
 			}
-			if password == "" {
-				return failErr(1, errors.New("BECOME password cannot be empty"))
-			}
-			becomePassword = password
-			if cliSpec != nil {
-				path, cleanup, err := writeBecomePasswordFile(password)
-				if err != nil {
-					return failErr(1, err)
-				}
-				defer cleanup()
-				becomePasswordFile = path
-			}
+			defer cleanup()
+			becomePassword = credential.Password
+			becomePasswordFile = credential.PasswordFile
 		}
 		if len(plan) > 0 || cliSpec != nil {
 			output.NewContinuation(stdout).Section("Run")
@@ -182,15 +176,4 @@ func bootstrapPlanUserSummary(plan []operator.BootstrapStep) string {
 		return "refresh local tools"
 	}
 	return strings.Join(parts, "; ")
-}
-
-func localRootSudoSummary() string {
-	switch os.Getenv(localRootSudoAuthEnv) {
-	case localSudoAuthNonInteractive:
-		return "ready (non-interactive)"
-	case localSudoAuthPrompted:
-		return "ready"
-	default:
-		return ""
-	}
 }

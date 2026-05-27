@@ -124,8 +124,20 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if !dryRun && !plan.noRemoteWork {
 			printWorkflowStart(stdout, workflowLabel, plan.selected, plan.askBecomePass)
 		}
+		become := becomeCredential{}
+		if !dryRun && !plan.noRemoteWork && willPromptForBecomePassword(plan.askBecomePass) {
+			cliout.NewContinuation(stderr).BlankLine()
+		}
+		if !dryRun && !plan.noRemoteWork {
+			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.askBecomePass, false, true)
+			if err != nil {
+				return failErr(1, err)
+			}
+			defer cleanup()
+			become = credential
+		}
 		reporter := newWorkflowReporter(stdout)
-		if plan.askBecomePass {
+		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
 		if !dryRun && !plan.noRemoteWork {
@@ -140,22 +152,23 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		}
 		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 		runResult, err := workflow.Run(c.Context(), workflow.RunOptions{
-			State:             plan.state,
-			StateDir:          ctx.StateDir,
-			RuntimeDir:        runtimeDir,
-			SecretsDir:        ctx.SecretsDir,
-			HostStateDir:      ctx.BaseDir,
-			Executable:        flags.executable,
-			BundleDir:         bundle.Dir,
-			Playbook:          playbook,
-			Limit:             plan.limit,
-			ExtraVarPairs:     plan.extraVarPairs,
-			ArtifactsBaseName: artifactsBaseName,
-			Check:             check,
-			AskBecomePass:     plan.askBecomePass,
-			UseControllingTTY: useControllingTTYForWorkflow(plan.selected, plan.askBecomePass),
-			DryRun:            dryRun,
-			Label:             workflowLabel,
+			State:              plan.state,
+			StateDir:           ctx.StateDir,
+			RuntimeDir:         runtimeDir,
+			SecretsDir:         ctx.SecretsDir,
+			HostStateDir:       ctx.BaseDir,
+			Executable:         flags.executable,
+			BundleDir:          bundle.Dir,
+			Playbook:           playbook,
+			Limit:              plan.limit,
+			ExtraVarPairs:      plan.extraVarPairs,
+			ArtifactsBaseName:  artifactsBaseName,
+			Check:              check,
+			AskBecomePass:      plan.askBecomePass && become.PasswordFile == "",
+			BecomePasswordFile: become.PasswordFile,
+			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
+			DryRun:             dryRun,
+			Label:              workflowLabel,
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)

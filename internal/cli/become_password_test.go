@@ -45,3 +45,53 @@ func TestPrepareBecomePasswordFileRejectsEmptyPassword(t *testing.T) {
 		t.Fatal("empty password should fail")
 	}
 }
+
+func TestPrepareBecomeCredentialReusesInheritedPasswordFile(t *testing.T) {
+	path, cleanup, err := writeBecomePasswordFile("secret")
+	if err != nil {
+		t.Fatalf("writeBecomePasswordFile: %v", err)
+	}
+	defer cleanup()
+	t.Setenv(localRootSudoAuthEnv, localSudoAuthPrompted)
+	t.Setenv(localRootBecomePasswordFileEnv, path)
+
+	var prompt bytes.Buffer
+	credential, credentialCleanup, err := prepareBecomeCredential(strings.NewReader("should-not-read\n"), &prompt, true, true, true)
+	if err != nil {
+		t.Fatalf("prepareBecomeCredential: %v", err)
+	}
+	defer credentialCleanup()
+	if prompt.String() != "" {
+		t.Fatalf("prompt = %q, want no prompt", prompt.String())
+	}
+	if credential.Password != "secret" {
+		t.Fatalf("password = %q, want inherited secret", credential.Password)
+	}
+	if credential.PasswordFile != path {
+		t.Fatalf("password file = %q, want %q", credential.PasswordFile, path)
+	}
+	if credential.Prompted {
+		t.Fatal("inherited password file should not be marked prompted")
+	}
+}
+
+func TestPrepareBecomeCredentialPromptsOnceForPasswordAndFile(t *testing.T) {
+	var prompt bytes.Buffer
+	credential, cleanup, err := prepareBecomeCredential(strings.NewReader("secret\n"), &prompt, true, true, true)
+	if err != nil {
+		t.Fatalf("prepareBecomeCredential: %v", err)
+	}
+	defer cleanup()
+	if prompt.String() != "BECOME password: " {
+		t.Fatalf("prompt = %q, want BECOME password prompt", prompt.String())
+	}
+	if credential.Password != "secret" {
+		t.Fatalf("password = %q, want secret", credential.Password)
+	}
+	if credential.PasswordFile == "" {
+		t.Fatal("password file is empty")
+	}
+	if !credential.Prompted {
+		t.Fatal("fresh password should be marked prompted")
+	}
+}
