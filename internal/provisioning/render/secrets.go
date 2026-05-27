@@ -155,7 +155,11 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 			out.PullSecret = merged
 		}
 	}
-	if eff, managedURL := clusterInstallProxyInputs(state, env, ci); eff != nil || managedURL != "" {
+	eff, managedURL, err := clusterInstallProxyInputs(state, env, ci)
+	if err != nil {
+		return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+	}
+	if eff != nil || managedURL != "" {
 		if eff == nil {
 			eff = &proxy.Effective{}
 		}

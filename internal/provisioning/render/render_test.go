@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -123,6 +124,72 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 				t.Fatalf("render.All: %v", err)
 			}
 		})
+	}
+}
+
+func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				ProxyFor: v1alpha1.EnvironmentProxyForSpec{
+					ClusterInstall: "managed",
+				},
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					Proxies: []v1alpha1.EnvironmentProxyComponent{{
+						Name:         "managed",
+						Type:         v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
+					}},
+				},
+			},
+		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "controller"},
+			Spec: v1alpha1.HostSpec{
+				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "127.0.0.1"}},
+				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "proxy"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Proxy: &v1alpha1.ProxyComponent{
+					Type:    v1alpha1.InfraComponentTypeSquid,
+					HostRef: v1alpha1.LocalObjectReference{Name: "controller"},
+					Port:    3128,
+				},
+			},
+		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{
+			Metadata: v1alpha1.Metadata{Name: "infra"},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster"},
+			Spec: v1alpha1.ContainerClusterSpec{
+				Install: v1alpha1.OCPInstallSpec{
+					PullSecretRef: v1alpha1.SecretRef{Name: "pull-secret"},
+					SSHKeyRef:     v1alpha1.SecretRef{Name: "ssh-key"},
+				},
+				Nodes: []v1alpha1.OCPNodeSpec{{
+					Hostname: "master-0",
+					Role:     v1alpha1.NodeRoleMaster,
+					MachineRef: v1alpha1.NodeMachineRef{
+						ClusterInfra: "infra",
+						Name:         "master-0",
+					},
+				}},
+			},
+		}},
+	}
+
+	_, err := render.InstallerConfig(state, state.ContainerClusters[0])
+	if err == nil {
+		t.Fatal("InstallerConfig succeeded, want managed proxy URL error")
+	}
+	if !strings.Contains(err.Error(), "has no routable address") {
+		t.Fatalf("InstallerConfig error = %q, want routable address failure", err)
 	}
 }
 
