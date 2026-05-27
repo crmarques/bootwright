@@ -908,7 +908,7 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 	}
 
 	nginx := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-nginx.conf.j2")
-	for _, want := range []string{"listen {{ listen_host }}:{{ listener.port }}", "ssl_certificate", "try_files $uri =404", "autoindex off"} {
+	for _, want := range []string{"user root;", "listen {{ listen_host }}:{{ listener.port }}", "ssl_certificate", "try_files $uri =404", "autoindex off"} {
 		if !strings.Contains(nginx, want) {
 			t.Fatalf("artifact nginx template missing %q", want)
 		}
