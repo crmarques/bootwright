@@ -97,6 +97,30 @@
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
 
+- name: Align agent ISO staging directory label with publish root
+  ansible.builtin.command:
+    argv:
+      - chcon
+      - "--reference={{ bootwright_agent_iso_stage_dir | dirname }}"
+      - "{{ bootwright_agent_iso_stage_dir }}"
+  register: bootwright_agent_iso_stage_dir_label
+  failed_when: false
+  changed_when: false
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true
+
+- name: Align staged agent ISO label with staging directory
+  ansible.builtin.command:
+    argv:
+      - chcon
+      - "--reference={{ bootwright_agent_iso_stage_dir }}"
+      - "{{ bootwright_agent_iso_stage_path }}"
+  register: bootwright_agent_iso_stage_file_label
+  failed_when: false
+  changed_when: false
+  delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
+  become: true
+
 - name: Probe staged agent ISO fetch URL
   ansible.builtin.uri:
     url: "{{ bootwright_agent_iso_fetch_url }}"
