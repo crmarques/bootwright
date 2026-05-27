@@ -28,6 +28,16 @@ func TestIsControllerLocalAddress(t *testing.T) {
 				&net.IPNet{IP: net.ParseIP("10.7.3.2"), Mask: net.CIDRMask(24, 32)},
 			}, nil
 		},
+		LookupIP: func(host string) ([]net.IP, error) {
+			switch host {
+			case "bastion-alias.example.test":
+				return []net.IP{net.ParseIP("10.7.3.2")}, nil
+			case "remote.example.test":
+				return []net.IP{net.ParseIP("10.7.3.3")}, nil
+			default:
+				return nil, &net.DNSError{Err: "not found", Name: host}
+			}
+		},
 	}}
 
 	cases := []struct {
@@ -40,6 +50,8 @@ func TestIsControllerLocalAddress(t *testing.T) {
 		{address: "controller.example.test", want: true},
 		{address: "10.7.3.2", want: true},
 		{address: "10.7.3.3", want: false},
+		{address: "bastion-alias.example.test", want: true},
+		{address: "remote.example.test", want: false},
 		{address: "bastion.example.test", want: false},
 	}
 	for _, tc := range cases {

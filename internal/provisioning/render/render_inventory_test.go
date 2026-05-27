@@ -1,6 +1,7 @@
 package render_test
 
 import (
+	"net"
 	"path/filepath"
 	"testing"
 
@@ -162,6 +163,39 @@ func TestInventoryUsesLocalConnectionForControllerHostnameHostRefs(t *testing.T)
 	}
 	if _, ok := serviceHost["ansible_ssh_private_key_file"]; ok {
 		t.Fatalf("controller-local bastion should not render SSH key material: %v", serviceHost)
+	}
+}
+
+func TestInventoryUsesLocalConnectionForControllerAddressAliasHostRefs(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	inv := render.InventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "fedora", nil
+		},
+		InterfaceAddrs: func() ([]net.Addr, error) {
+			return []net.Addr{
+				&net.IPNet{IP: net.ParseIP("192.168.140.5"), Mask: net.CIDRMask(24, 32)},
+			}, nil
+		},
+		LookupIP: func(host string) ([]net.IP, error) {
+			if host == "bastion.bootwright.test" {
+				return []net.IP{net.ParseIP("192.168.140.5")}, nil
+			}
+			return nil, &net.DNSError{Err: "not found", Name: host}
+		},
+	}})
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	serviceHost := hosts["bastion"].(map[string]any)
+	if got := serviceHost["ansible_connection"]; got != "local" {
+		t.Fatalf("ansible_connection = %v, want local for controller-local bastion alias: %v", got, serviceHost)
+	}
+	if _, ok := serviceHost["ansible_ssh_private_key_file"]; ok {
+		t.Fatalf("controller-local bastion alias should not render SSH key material: %v", serviceHost)
 	}
 }
 

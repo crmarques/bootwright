@@ -17,6 +17,7 @@ type Policy struct {
 type Deps struct {
 	Hostname       func() (string, error)
 	InterfaceAddrs func() ([]net.Addr, error)
+	LookupIP       func(string) ([]net.IP, error)
 }
 
 type Result struct {
@@ -30,6 +31,7 @@ func DefaultDeps() Deps {
 	return Deps{
 		Hostname:       os.Hostname,
 		InterfaceAddrs: net.InterfaceAddrs,
+		LookupIP:       net.LookupIP,
 	}
 }
 
@@ -53,16 +55,23 @@ func IsControllerLocalAddress(address string, policy Policy) bool {
 	if hostname, err := deps.Hostname(); err == nil && hostMatches(host, hostname) {
 		return true
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
 	addrs, err := deps.InterfaceAddrs()
 	if err != nil {
 		return false
 	}
-	for _, addr := range addrs {
-		if local := localIP(addr); local != nil && local.Equal(ip) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return addressMatchesLocalIP(ip, addrs)
+	}
+	if deps.LookupIP == nil {
+		return false
+	}
+	ips, err := deps.LookupIP(host)
+	if err != nil {
+		return false
+	}
+	for _, ip := range ips {
+		if addressMatchesLocalIP(ip, addrs) {
 			return true
 		}
 	}
@@ -124,4 +133,13 @@ func localIP(addr net.Addr) net.IP {
 	default:
 		return nil
 	}
+}
+
+func addressMatchesLocalIP(ip net.IP, addrs []net.Addr) bool {
+	for _, addr := range addrs {
+		if local := localIP(addr); local != nil && local.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
