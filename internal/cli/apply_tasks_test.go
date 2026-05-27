@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/workflow"
@@ -129,6 +130,50 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	}, tasks)
 	if limited.Parallelism != 2 || limited.ParallelismPerHost != 1 || limited.ParallelismRedfish != 2 {
 		t.Fatalf("explicit limits = %+v, want global=2 perHost=1 redfish=2", limited)
+	}
+}
+
+func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
+	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
+	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
+		ID:      "wait.sno-libvirt",
+		Kind:    workflow.ApplyTaskKindInstallWait,
+		Label:   "wait install sno-libvirt",
+		Cluster: "sno-libvirt",
+		Status:  workflow.TaskStatusPending,
+	}}, time.Now())
+	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(runtimeDir, "ansible-output.log"), time.Now())
+
+	var stdout bytes.Buffer
+	printApplyTaskStart(&stdout, runtimeDir, ledger, "wait.sno-libvirt")
+
+	want := workflow.OpenShiftInstallerLogPath(runtimeDir, "sno-libvirt")
+	if !strings.Contains(stdout.String(), want) {
+		t.Fatalf("wait task output missing installer log path %q:\n%s", want, stdout.String())
+	}
+}
+
+func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
+	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
+	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
+		ID:             "wait.sno-libvirt",
+		Kind:           workflow.ApplyTaskKindInstallWait,
+		Label:          "wait install sno-libvirt",
+		Cluster:        "sno-libvirt",
+		Status:         workflow.TaskStatusPending,
+		ClusterLogPath: filepath.Join(runtimeDir, "workflow", "runs", "apply-test", "clusters", "sno-libvirt", "install.log"),
+	}}, time.Now())
+
+	var stdout bytes.Buffer
+	printApplyClusterLogPaths(&stdout, runtimeDir, ledger)
+
+	for _, want := range []string{
+		filepath.Join(runtimeDir, "workflow", "runs", "apply-test", "clusters", "sno-libvirt", "install.log"),
+		workflow.OpenShiftInstallerLogPath(runtimeDir, "sno-libvirt"),
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("cluster log output missing %q:\n%s", want, stdout.String())
+		}
 	}
 }
 
@@ -259,7 +304,7 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:        executable,
 		BundleDir:         filepath.Join(dir, "bundle"),
 		ArtifactsBaseName: "cluster",
-	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr), nil)
+	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, runtimeDir), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}

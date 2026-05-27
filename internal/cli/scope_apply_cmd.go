@@ -197,7 +197,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 				return failErr(1, err)
 			}
 		}
-		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr), nil)
+		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.StateDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr, runtimeDir), nil)
 		if err != nil {
 			return failErr(1, err)
 		}
