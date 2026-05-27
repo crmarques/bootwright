@@ -53,6 +53,7 @@ type RunSpec struct {
 	ExtraVars          string
 	ExtraVarPairs      []string
 	ArtifactsDir       string
+	OutputLogPath      string
 	Check              bool
 	AskBecomePass      bool
 	BecomePasswordFile string
@@ -107,7 +108,16 @@ func (r CommandRunner) Run(ctx context.Context, spec RunSpec) error {
 	if err := os.Chmod(spec.ArtifactsDir, 0o700); err != nil {
 		return fmt.Errorf("chmod Ansible artifacts directory: %w", err)
 	}
-	outputLogPath := filepath.Join(spec.ArtifactsDir, OutputLogName)
+	outputLogPath := spec.OutputLogPath
+	if outputLogPath == "" {
+		outputLogPath = filepath.Join(spec.ArtifactsDir, OutputLogName)
+	}
+	if err := os.MkdirAll(filepath.Dir(outputLogPath), 0o700); err != nil {
+		return fmt.Errorf("create Ansible output log directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(outputLogPath), 0o700); err != nil {
+		return fmt.Errorf("chmod Ansible output log directory: %w", err)
+	}
 	outputLog, err := os.OpenFile(outputLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create Ansible output log: %w", err)

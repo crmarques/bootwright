@@ -770,10 +770,13 @@ contexts:
 
 All context data is derived from the fixed root-managed path
 `/var/lib/bootwright/contexts/<context>/`; `context init` imports one or more
-YAML files or directories into that context's `input-files/` directory. Input
+YAML files or directories into that context's `input/` directory. Input
 directories are walked for YAML files unless exactly one discovered
 `Environment` sets `spec.resources`, in which case only that environment file
 plus the listed files are loaded.
+Legacy map-shaped registries are rejected with an actionable reset message;
+operators may remove `~/.bootwright/contexts.yaml` and recreate contexts with
+`bootwright context init <name> -f <path> --yes`.
 Unknown fields are rejected at decode time, and all loaded objects are
 normalized and validated before any render or apply step.
 Context-backed commands fail before doing work when the selected context is
@@ -845,20 +848,21 @@ require either `destroy cluster` or `apply cluster --override` after the
 operator has reset or replaced target machines. If an interrupted run already
 booted nodes, apply resumes at `openshift-install agent wait-for
 install-complete` instead of creating a new ISO or rebooting machines.
-Every apply writes `<state-dir>/workflow/current-apply.json` atomically. The
+Every apply writes `<runs-dir>/current.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task
-`ansible-output.log` paths under the root-managed runtime directory.
+`ansible-output.log` paths under
+`<runs-dir>/history/<run>/tasks/<task>/`.
 Cluster-owned tasks also record
-`/var/lib/bootwright/contexts/<context>/workflow/runs/<run>/clusters/<cluster>/install.log`.
+`/var/lib/bootwright/contexts/<context>/runs/history/<run>/clusters/<cluster>/install.log`.
 Per-cluster install state is stored under
-`<state-dir>/workflow/cluster-installs/<cluster>.json`; it records the desired
+`<runtime-dir>/install-records/<cluster>.json`; it records the desired
 input fingerprint, install status, last safe phase, run ID, timestamps, and
 node boot markers, but not secret bytes.
 Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
 `failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes
-`<state-dir>/workflow/current-apply.lease.json`. Mutating workflow commands
+`<runs-dir>/current.lease.json`. Mutating workflow commands
 must block when the current apply ledger has a fresh lease. If the ledger still
 says `running` but its lease is missing or stale, the next `apply` or `destroy`
 marks that previous run `cancelled` before continuing.
@@ -881,24 +885,37 @@ Fixed storage layout:
 
 - The only user-writable registry is `~/.bootwright/contexts.yaml`.
 - The root-managed tree is `/var/lib/bootwright/`, mode `0700`.
-- Each context is `/var/lib/bootwright/contexts/<context>/` with
-  `input-files/`, `secrets/`, `state/`, `runtime/`, `workflow/`, and
-  `artifacts-server/tls/`.
-- Shared runtime files, including `ansible-venv`, live directly under
-  `/var/lib/bootwright/`.
+- `/var/lib/bootwright/` contains only shared cache/tooling and named
+  contexts:
+  - `cache/ansible-venv/`
+  - `cache/ansible-bundles/<version-or-digest>/`
+  - `contexts/<context>/`
+- Each context has `input/`, `secrets/`, `rendered/`, `runtime/`, `runs/`,
+  and `managed/`.
+- Rendered reviewable output lives under `rendered/`, including
+  `effective-state.yaml`, `bootwright.lock.yaml`, `ansible/{inventory,vars}.yaml`,
+  and `installer/<cluster>/`.
+- Secret-inlined installer inputs and install records live under `runtime/`.
+- Apply ledgers, leases, task logs, artifacts, and cluster install logs live
+  under `runs/`.
+- Managed host/service files live under `managed/services/`, `managed/bmc/`,
+  and `managed/substrate/`. Artifact server web roots mount only
+  `managed/services/artifact-server/<provider>-<name>/public/`; TLS keys and
+  generated config stay outside the served root.
 - `context init <name> -f <path> --yes` replaces the entire context directory
   after validating staged input.
 - `context update <name> -f <path>` requires an existing context and replaces
-  only `input-files/`, preserving secrets, state, runtime, and workflow data.
+  only `input/`, preserving secrets, rendered output, runtime data, run
+  history, and managed host/service files.
 
 Generated output boundaries:
 
 - User-authored YAML lives under
-  `/var/lib/bootwright/contexts/<context>/input-files/`.
+  `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
 - Bootwright-managed secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
+  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`.
 - External tool input exports written by
   `bootwright render --output-dir <dir> --sensitive` live under the
   requested output directory and include

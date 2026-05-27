@@ -15,7 +15,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 	reporter := newWorkflowReporter(&out)
 	reporter.BundleStart()
 	reporter.BundleReady(embedded.AnsibleBundleResult{
-		Dir:   "/state/ansible-bundle",
+		Dir:   "/var/lib/bootwright/cache/ansible-bundles/version=dev",
 		Files: 1425,
 	})
 	reporter.RenderStart()
@@ -25,7 +25,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 	for _, want := range []string{
 		"\n\nBootwright prerequisites\n",
 		"  - Prepare Ansible bundle: check cache and extract embedded roles/playbooks if needed\n",
-		"  [OK] Ansible bundle: extracted 1425 file(s) to /state/ansible-bundle\n",
+		"  [OK] Ansible bundle: extracted 1425 file(s) to /var/lib/bootwright/cache/ansible-bundles/version=dev\n",
 		"  - Render inputs: effective state, inventory, vars, and installer placeholders\n",
 		"  - Ansible: starting /usr/bin/ansible-playbook\n",
 	} {

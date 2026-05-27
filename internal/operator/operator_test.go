@@ -166,14 +166,14 @@ func TestCLIInstallSpecPlannedCommand(t *testing.T) {
 	spec := CLIInstallSpec{
 		OCPReleaseVersion: "4.21.12",
 		InstallDir:        "/usr/local/bin",
-		BundleDir:         "/state/ansible-bundle",
+		BundleDir:         "/var/lib/bootwright/cache/ansible-bundles/version=dev",
 		Executable:        "/venv/bin/ansible-playbook",
 	}
 	got := spec.PlannedCommand("inv.ini")
 	want := []string{
 		"/venv/bin/ansible-playbook",
-		"-i", "/state/ansible-bundle/inv.ini",
-		"/state/ansible-bundle/playbooks/targets/bastion/apply-clis.yml",
+		"-i", "/var/lib/bootwright/cache/ansible-bundles/version=dev/inv.ini",
+		"/var/lib/bootwright/cache/ansible-bundles/version=dev/playbooks/targets/bastion/apply-clis.yml",
 		"-e", "bootwright_openshift_release_version=4.21.12",
 		"-e", "bootwright_clis_install_dir=/usr/local/bin",
 	}

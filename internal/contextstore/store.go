@@ -19,12 +19,13 @@ const (
 	RegistryFileName    = "contexts.yaml"
 	InternalRegistryEnv = "BOOTWRIGHT_INTERNAL_REGISTRY"
 	DefaultRootDir      = "/var/lib/bootwright"
-	InputDirName        = "input-files"
-	StateDirName        = "state"
+	CacheDirName        = "cache"
+	InputDirName        = "input"
+	RenderedDirName     = "rendered"
 	SecretsDirName      = "secrets"
 	RuntimeDirName      = "runtime"
-	WorkflowDirName     = "workflow"
-	ArtifactsDirName    = "artifacts-server"
+	RunsDirName         = "runs"
+	ManagedDirName      = "managed"
 )
 
 type Store struct {
@@ -36,10 +37,11 @@ type Context struct {
 	Name        string   `yaml:"-" json:"name"`
 	BaseDir     string   `yaml:"-" json:"baseDir"`
 	InputDir    string   `yaml:"-" json:"inputDir"`
-	StateDir    string   `yaml:"-" json:"stateDir"`
+	RenderedDir string   `yaml:"-" json:"renderedDir"`
 	SecretsDir  string   `yaml:"-" json:"secretsDir"`
 	RuntimeDir  string   `yaml:"-" json:"runtimeDir"`
-	WorkflowDir string   `yaml:"-" json:"workflowDir"`
+	RunsDir     string   `yaml:"-" json:"runsDir"`
+	ManagedDir  string   `yaml:"-" json:"managedDir"`
 	InputPaths  []string `yaml:"-" json:"inputPaths"`
 }
 
@@ -102,10 +104,11 @@ func newContextAt(name, baseDir string) Context {
 		Name:        name,
 		BaseDir:     baseDir,
 		InputDir:    inputDir,
-		StateDir:    filepath.Join(baseDir, StateDirName),
+		RenderedDir: filepath.Join(baseDir, RenderedDirName),
 		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
 		RuntimeDir:  filepath.Join(baseDir, RuntimeDirName),
-		WorkflowDir: filepath.Join(baseDir, WorkflowDirName),
+		RunsDir:     filepath.Join(baseDir, RunsDirName),
+		ManagedDir:  filepath.Join(baseDir, ManagedDirName),
 		InputPaths:  []string{inputDir},
 	}
 }
@@ -129,6 +132,9 @@ func Load(path string) (Store, error) {
 	}
 	if err != nil {
 		return Store{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	if err := rejectLegacyContextMapRegistry(path, data); err != nil {
+		return Store{}, err
 	}
 	if err := yaml.Unmarshal(data, &store); err != nil {
 		return Store{}, fmt.Errorf("decode %s: %w", path, err)
@@ -223,12 +229,13 @@ func EnsureDirs(ctx Context) error {
 	for _, dir := range []string{
 		ctx.BaseDir,
 		ctx.InputDir,
-		ctx.StateDir,
+		ctx.RenderedDir,
 		ctx.SecretsDir,
 		ctx.RuntimeDir,
-		ctx.WorkflowDir,
-		filepath.Join(ctx.BaseDir, ArtifactsDirName),
-		filepath.Join(ctx.BaseDir, ArtifactsDirName, "tls"),
+		ctx.RunsDir,
+		ctx.ManagedDir,
+		filepath.Join(ctx.ManagedDir, "services"),
+		filepath.Join(ctx.ManagedDir, "substrate"),
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
@@ -258,6 +265,13 @@ func EnsureBaseDir(ctx Context) error {
 	if err := os.Chmod(contextsDir, 0o700); err != nil {
 		return fmt.Errorf("chmod %s: %w", contextsDir, err)
 	}
+	cacheDir := filepath.Join(root, CacheDirName)
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", cacheDir, err)
+	}
+	if err := os.Chmod(cacheDir, 0o700); err != nil {
+		return fmt.Errorf("chmod %s: %w", cacheDir, err)
+	}
 	_, err = managedroot.Ensure(ctx.BaseDir, 0o700)
 	return err
 }
@@ -286,17 +300,19 @@ func ValidateContext(ctx Context) error {
 	}
 	want := map[string]string{
 		"inputDir":    filepath.Join(baseDir, InputDirName),
-		"stateDir":    filepath.Join(baseDir, StateDirName),
+		"renderedDir": filepath.Join(baseDir, RenderedDirName),
 		"secretsDir":  filepath.Join(baseDir, SecretsDirName),
 		"runtimeDir":  filepath.Join(baseDir, RuntimeDirName),
-		"workflowDir": filepath.Join(baseDir, WorkflowDirName),
+		"runsDir":     filepath.Join(baseDir, RunsDirName),
+		"managedDir":  filepath.Join(baseDir, ManagedDirName),
 	}
 	got := map[string]string{
 		"inputDir":    ctx.InputDir,
-		"stateDir":    ctx.StateDir,
+		"renderedDir": ctx.RenderedDir,
 		"secretsDir":  ctx.SecretsDir,
 		"runtimeDir":  ctx.RuntimeDir,
-		"workflowDir": ctx.WorkflowDir,
+		"runsDir":     ctx.RunsDir,
+		"managedDir":  ctx.ManagedDir,
 	}
 	for field, raw := range got {
 		clean, err := cleanPath(raw)
@@ -305,6 +321,23 @@ func ValidateContext(ctx Context) error {
 		}
 		if clean != want[field] {
 			return fmt.Errorf("context %q %s must be %s, got %s", ctx.Name, field, want[field], clean)
+		}
+	}
+	return nil
+}
+
+func rejectLegacyContextMapRegistry(path string, data []byte) error {
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return nil
+	}
+	if len(node.Content) == 0 || node.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	root := node.Content[0]
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "contexts" && root.Content[i+1].Kind == yaml.MappingNode {
+			return fmt.Errorf("validate %s: legacy context registry map is not supported; remove %s and recreate contexts with `bootwright context init <name> -f <path> --yes`", path, path)
 		}
 	}
 	return nil

@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	// InstallerRelativeDir is the path under <state-dir> for generated
+	// InstallerRelativeDir is the path under <rendered-dir> for generated
 	// installer placeholder artifacts.
 	InstallerRelativeDir = "installer"
 
-	// RuntimeRelativeDir is the path under <state-dir> for local-only
+	// RuntimeRelativeDir is the path under <runtime-dir> for local-only
 	// runtime artifacts.
-	RuntimeRelativeDir = "runtime"
+	RuntimeRelativeDir = "installer"
 )
 
 // InstallerAsset is the per-cluster path pair for the placeholder
@@ -32,11 +32,11 @@ type InstallerAsset struct {
 	EffectiveInstallManifestsDir string
 }
 
-func InstallerAssets(stateDir, runtimeDir string, state v1alpha1.State) []InstallerAsset {
+func InstallerAssets(renderedDir, runtimeDir string, state v1alpha1.State) []InstallerAsset {
 	assets := make([]InstallerAsset, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
-		dir := filepath.Join(stateDir, InstallerRelativeDir, ocp.Metadata.Name)
-		workDir := filepath.Join(runtimeDir, RuntimeRelativeDir, ocp.Metadata.Name, "installer")
+		dir := filepath.Join(renderedDir, InstallerRelativeDir, ocp.Metadata.Name)
+		workDir := filepath.Join(runtimeDir, RuntimeRelativeDir, ocp.Metadata.Name)
 		assets = append(assets, InstallerAsset{
 			ClusterName:                  ocp.Metadata.Name,
 			Method:                       ocp.Spec.Install.Method,

@@ -94,7 +94,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			artifactsBaseName = infraDestroyHTTPServerArtifactsBaseName
 			workflowLabel = "infra destroy http-server"
 		} else {
-			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, ctx.BaseDir, askBecomePass, dryRun)
+			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -106,7 +106,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
 		if !dryRun {
-			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.StateDir); err != nil {
+			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
 		}
@@ -143,7 +143,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if !dryRun && !plan.noRemoteWork {
 			reporter.BundleStart()
 		}
-		bundle, err := prepareWorkflowBundle(ctx.StateDir, dryRun || plan.noRemoteWork)
+		bundle, err := prepareWorkflowBundle(dryRun || plan.noRemoteWork)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -153,10 +153,11 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 		runResult, err := workflow.Run(c.Context(), workflow.RunOptions{
 			State:              plan.state,
-			StateDir:           ctx.StateDir,
+			RenderedDir:        ctx.RenderedDir,
 			RuntimeDir:         runtimeDir,
+			RunsDir:            ctx.RunsDir,
 			SecretsDir:         ctx.SecretsDir,
-			HostStateDir:       ctx.BaseDir,
+			ManagedDir:         ctx.ManagedDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           playbook,

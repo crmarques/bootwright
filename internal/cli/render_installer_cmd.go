@@ -37,7 +37,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render")
-	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
+	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/ with secret material inlined for direct openshift-install consumption (mode 0600)")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
@@ -55,14 +55,14 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 			return failErr(1, err)
 		}
 		state = filterStateToClusters(state, names)
-		result, err := workflow.RenderOnly(ctx.StateDir, runtimeDir, ctx.SecretsDir, state)
+		result, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
 		}
 		var resolved render.Result
 		hasResolved := false
 		if sensitive {
-			resolved, err = workflow.ResolveInstaller(ctx.StateDir, runtimeDir, ctx.SecretsDir, state)
+			resolved, err = workflow.ResolveInstaller(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, state)
 			if err != nil {
 				return failErr(1, err)
 			}

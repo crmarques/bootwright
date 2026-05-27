@@ -20,7 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/stategraph"
 )
 
-const ClusterInstallRecordRelativeDir = "workflow/cluster-installs"
+const ClusterInstallRecordRelativeDir = "install-records"
 
 type ClusterInstallStatus string
 
@@ -91,12 +91,12 @@ func (c OCClusterAvailabilityChecker) Available(ctx context.Context, kubeconfigP
 	return strings.TrimSpace(string(out)) == "True", nil
 }
 
-func ClusterInstallRecordPath(stateDir, cluster string) string {
-	return filepath.Join(stateDir, ClusterInstallRecordRelativeDir, cluster+".json")
+func ClusterInstallRecordPath(runtimeDir, cluster string) string {
+	return filepath.Join(runtimeDir, ClusterInstallRecordRelativeDir, cluster+".json")
 }
 
-func LoadClusterInstallRecord(stateDir, cluster string) (ClusterInstallRecord, bool, error) {
-	path := ClusterInstallRecordPath(stateDir, cluster)
+func LoadClusterInstallRecord(runtimeDir, cluster string) (ClusterInstallRecord, bool, error) {
+	path := ClusterInstallRecordPath(runtimeDir, cluster)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return ClusterInstallRecord{}, false, nil
@@ -111,8 +111,8 @@ func LoadClusterInstallRecord(stateDir, cluster string) (ClusterInstallRecord, b
 	return record, true, nil
 }
 
-func SaveClusterInstallRecord(stateDir string, record ClusterInstallRecord) error {
-	path := ClusterInstallRecordPath(stateDir, record.Cluster)
+func SaveClusterInstallRecord(runtimeDir string, record ClusterInstallRecord) error {
+	path := ClusterInstallRecordPath(runtimeDir, record.Cluster)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create cluster install record directory: %w", err)
 	}
@@ -130,7 +130,7 @@ func SaveClusterInstallRecord(stateDir string, record ClusterInstallRecord) erro
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, stateDir, runtimeDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
+func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -144,7 +144,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, stateDir, runtimeDir
 		if err != nil {
 			return out, err
 		}
-		record, found, err := LoadClusterInstallRecord(stateDir, name)
+		record, found, err := LoadClusterInstallRecord(runtimeDir, name)
 		if err != nil {
 			return out, err
 		}
@@ -157,7 +157,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, stateDir, runtimeDir
 		}
 		kubeconfigPath := clusterKubeconfigPath(runtimeDir, state, name)
 		if !found {
-			adopted, err := adoptAvailableClusterRecord(ctx, stateDir, name, hash, runID, kubeconfigPath, checker, now)
+			adopted, err := adoptAvailableClusterRecord(ctx, runtimeDir, name, hash, runID, kubeconfigPath, checker, now)
 			if err != nil {
 				return out, err
 			}
@@ -190,7 +190,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, stateDir, runtimeDir
 	return out, nil
 }
 
-func adoptAvailableClusterRecord(ctx context.Context, stateDir, name, hash, runID, kubeconfigPath string, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
+func adoptAvailableClusterRecord(ctx context.Context, runtimeDir, name, hash, runID, kubeconfigPath string, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
 	if _, err := os.Stat(kubeconfigPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
@@ -215,7 +215,7 @@ func adoptAvailableClusterRecord(ctx context.Context, stateDir, name, hash, runI
 		UpdatedAt:   t,
 		InstalledAt: &t,
 	}
-	if err := SaveClusterInstallRecord(stateDir, record); err != nil {
+	if err := SaveClusterInstallRecord(runtimeDir, record); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -238,7 +238,7 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	}
 }
 
-func MarkClusterInstallTaskStarted(stateDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskStarted(runtimeDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -250,7 +250,7 @@ func MarkClusterInstallTaskStarted(stateDir, runID string, task ApplyTask, now t
 	if err != nil {
 		return err
 	}
-	record, found, err := LoadClusterInstallRecord(stateDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -263,10 +263,10 @@ func MarkClusterInstallTaskStarted(stateDir, runID string, task ApplyTask, now t
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
 	record.InstalledAt = nil
-	return SaveClusterInstallRecord(stateDir, record)
+	return SaveClusterInstallRecord(runtimeDir, record)
 }
 
-func MarkClusterInstallTaskSucceeded(stateDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskSucceeded(runtimeDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskSuccessPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -274,7 +274,7 @@ func MarkClusterInstallTaskSucceeded(stateDir, runID string, task ApplyTask, now
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	record, found, err := LoadClusterInstallRecord(stateDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -299,10 +299,10 @@ func MarkClusterInstallTaskSucceeded(stateDir, runID string, task ApplyTask, now
 	if task.Entry.Kind == ApplyTaskKindNodeBoot {
 		record.Nodes = bootedClusterNodes(task.State, task.Entry.Cluster, now)
 	}
-	return SaveClusterInstallRecord(stateDir, record)
+	return SaveClusterInstallRecord(runtimeDir, record)
 }
 
-func MarkClusterInstallTaskFailed(stateDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskFailed(runtimeDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -310,7 +310,7 @@ func MarkClusterInstallTaskFailed(stateDir, runID string, task ApplyTask, now ti
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	record, found, err := LoadClusterInstallRecord(stateDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -326,7 +326,7 @@ func MarkClusterInstallTaskFailed(stateDir, runID string, task ApplyTask, now ti
 	record.Phase = phase
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
-	return SaveClusterInstallRecord(stateDir, record)
+	return SaveClusterInstallRecord(runtimeDir, record)
 }
 
 func clusterInstallTaskStartPhase(kind string) (ClusterInstallPhase, bool) {
@@ -407,7 +407,7 @@ func clusterKubeconfigPath(runtimeDir string, state v1alpha1.State, clusterName 
 			return filepath.Join(asset.WorkDir, "auth", "kubeconfig")
 		}
 	}
-	return filepath.Join(runtimeDir, render.RuntimeRelativeDir, clusterName, "installer", "auth", "kubeconfig")
+	return filepath.Join(runtimeDir, render.RuntimeRelativeDir, clusterName, "auth", "kubeconfig")
 }
 
 func installTaskClusterNames(tasks []ApplyTask) []string {

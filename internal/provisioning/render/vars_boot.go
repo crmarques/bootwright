@@ -100,7 +100,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 	}
 	systemID := ansibleUUIDv5(clusterName + "-" + m.Name)
 
-	stageDir := fmt.Sprintf("{{ bootwright_host_state_dir }}/bmc/%s/vmedia", m.From.Provider)
+	stageDir := fmt.Sprintf("{{ bootwright_managed_dir }}/bmc/%s/vmedia", m.From.Provider)
 	return map[string]any{
 		"redfish": map[string]any{
 			"baseUrl":       fmt.Sprintf("http://%s:%d", hostAddr, port),
@@ -151,7 +151,7 @@ func baremetalAgentISOTarget(state v1alpha1.State, isoBasename string) (stageHos
 		return "", "", ""
 	}
 	hostRef := server.Config.HostRef.Name
-	stagePath = fmt.Sprintf("{{ bootwright_host_state_dir }}/artifacts-server/%s/%s", agentISOPublishTokenExpr, isoBasename)
+	stagePath = fmt.Sprintf("{{ bootwright_managed_dir }}/services/artifact-server/%s-%s/public/%s/%s", v1alpha1.KindInfraComponent, server.Component.Metadata.Name, agentISOPublishTokenExpr, isoBasename)
 	fetchURL = artifactEndpointFetchURL(state, server, server.Entry.Routes.RedfishVirtualMedia.Endpoint, agentISOPublishTokenExpr, isoBasename)
 	if fetchURL == "" {
 		return "", "", ""

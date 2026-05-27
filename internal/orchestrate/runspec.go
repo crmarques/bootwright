@@ -15,16 +15,18 @@ import (
 type RunSpecConfig struct {
 	Executable         string
 	BundleDir          string
-	StateDir           string
+	RenderedDir        string
 	RuntimeDir         string
+	RunsDir            string
 	SecretsDir         string
-	HostStateDir       string
+	ManagedDir         string
 	InventoryPath      string
 	VarsPath           string
 	Playbook           string
 	Limit              string
 	Forks              int
 	ArtifactsDir       string
+	OutputLogPath      string
 	ExtraVarPairs      []string
 	Check              bool
 	AskBecomePass      bool
@@ -33,27 +35,32 @@ type RunSpecConfig struct {
 }
 
 func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
-	stateDirAbs, err := filepath.Abs(cfg.StateDir)
+	renderedDirAbs, err := filepath.Abs(cfg.RenderedDir)
 	if err != nil {
-		return ansible.RunSpec{}, fmt.Errorf("resolve state dir: %w", err)
+		return ansible.RunSpec{}, fmt.Errorf("resolve rendered dir: %w", err)
 	}
 	runtimeDirAbs, err := filepath.Abs(cfg.RuntimeDir)
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve runtime dir: %w", err)
 	}
+	runsDirAbs, err := filepath.Abs(cfg.RunsDir)
+	if err != nil {
+		return ansible.RunSpec{}, fmt.Errorf("resolve runs dir: %w", err)
+	}
 	secretsDirAbs, err := filepath.Abs(cfg.SecretsDir)
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve secrets dir: %w", err)
 	}
-	hostStateDirAbs, err := filepath.Abs(cfg.HostStateDir)
+	managedDirAbs, err := filepath.Abs(cfg.ManagedDir)
 	if err != nil {
-		return ansible.RunSpec{}, fmt.Errorf("resolve host state dir: %w", err)
+		return ansible.RunSpec{}, fmt.Errorf("resolve managed dir: %w", err)
 	}
 	pairs := []string{
-		"bootwright_state_dir=" + stateDirAbs,
+		"bootwright_rendered_dir=" + renderedDirAbs,
 		"bootwright_runtime_dir=" + runtimeDirAbs,
+		"bootwright_runs_dir=" + runsDirAbs,
 		"bootwright_secrets_dir=" + secretsDirAbs,
-		"bootwright_host_state_dir=" + hostStateDirAbs,
+		"bootwright_managed_dir=" + managedDirAbs,
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)
 	return ansible.RunSpec{
@@ -69,17 +76,10 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		ExtraVars:          cfg.VarsPath,
 		ExtraVarPairs:      pairs,
 		ArtifactsDir:       cfg.ArtifactsDir,
+		OutputLogPath:      cfg.OutputLogPath,
 		Check:              cfg.Check,
 		AskBecomePass:      cfg.AskBecomePass,
 		BecomePasswordFile: cfg.BecomePasswordFile,
 		UseControllingTTY:  cfg.UseControllingTTY,
 	}, nil
-}
-
-func AbsHostStateDir(hostStateDir string) (string, error) {
-	hostStateDirAbs, err := filepath.Abs(hostStateDir)
-	if err != nil {
-		return "", fmt.Errorf("resolve host state dir: %w", err)
-	}
-	return hostStateDirAbs, nil
 }

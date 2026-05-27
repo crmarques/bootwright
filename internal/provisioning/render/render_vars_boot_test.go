@@ -77,7 +77,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "lab-host",
-			wantStagePath: "{{ bootwright_host_state_dir }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
+			wantStagePath: "{{ bootwright_managed_dir }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 			wantFetchURL:  "http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 		},
 		{
@@ -87,7 +87,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "services-host",
-			wantStagePath: "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
+			wantStagePath: "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
 			wantFetchURL:  "https://192.168.132.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso",
 		},
 	}
@@ -269,7 +269,7 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	machine := firstMachineComponent(t, cluster)
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
-	wantStagePath := "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso"
+	wantStagePath := "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso"
 	if got := iso["stagePath"]; got != wantStagePath {
 		t.Errorf("agentIso.stagePath got %v, want %q", got, wantStagePath)
 	}
@@ -292,7 +292,7 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 	target := targets[0].(map[string]any)
 	wants := map[string]any{
 		"stageHost":         "bastion",
-		"stagePath":         "{{ bootwright_host_state_dir }}/artifacts-server/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
+		"stagePath":         "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
 		"fetchUrl":          "https://192.168.140.5:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-3-nodes-ocp-baremetal.iso",
 		"requiresHTTPS":     true,
 		"requiresByteRange": true,
@@ -306,18 +306,18 @@ func TestAgentISOPublishTargetsDeduplicateClusterISO(t *testing.T) {
 
 func TestInstallerAssetsAreClusterScopedForMultipleClusters(t *testing.T) {
 	state := twoClusterBareMetalPublicationState(t)
-	stateDir := "/state"
+	renderedDir := "/rendered"
 	runtimeDir := "/runtime-root"
 
-	assets := render.InstallerAssets(stateDir, runtimeDir, state)
+	assets := render.InstallerAssets(renderedDir, runtimeDir, state)
 	if len(assets) != 2 {
 		t.Fatalf("installer assets got %d, want 2", len(assets))
 	}
 
 	seenDirs := map[string]bool{}
 	for _, asset := range assets {
-		wantDir := filepath.Join(stateDir, "installer", asset.ClusterName)
-		wantWorkDir := filepath.Join(runtimeDir, "runtime", asset.ClusterName, "installer")
+		wantDir := filepath.Join(renderedDir, "installer", asset.ClusterName)
+		wantWorkDir := filepath.Join(runtimeDir, "installer", asset.ClusterName)
 		if asset.Dir != wantDir {
 			t.Errorf("%s Dir got %q, want %q", asset.ClusterName, asset.Dir, wantDir)
 		}
@@ -374,7 +374,7 @@ func TestBareMetalMultiClusterPublicationUsesUniqueClusterISOsOnSharedHTTPRoot(t
 
 		root := strings.Split(stagePath, "/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/")[0]
 		roots[root] = true
-		if root != "{{ bootwright_host_state_dir }}/artifacts-server" {
+		if root != "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public" {
 			t.Errorf("%s publish root got %q", clusterName, root)
 		}
 	}

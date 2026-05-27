@@ -207,8 +207,8 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	if len(report.Command) == 0 {
 		t.Fatalf("dry-run report did not include planned command: %+v", report)
 	}
-	if !strings.HasPrefix(report.Render.EffectiveStatePath, ctx.StateDir) {
-		t.Fatalf("effective state path %q is outside state dir %q", report.Render.EffectiveStatePath, ctx.StateDir)
+	if !strings.HasPrefix(report.Render.EffectiveStatePath, ctx.RenderedDir) {
+		t.Fatalf("effective state path %q is outside state dir %q", report.Render.EffectiveStatePath, ctx.RenderedDir)
 	}
 }
 
@@ -305,8 +305,8 @@ func TestRenderInstallerScopedFixtureJSON(t *testing.T) {
 	if cluster.Name != "sno-libvirt" {
 		t.Fatalf("rendered cluster name = %q, want sno-libvirt", cluster.Name)
 	}
-	if !strings.HasPrefix(cluster.InstallConfigPath, filepath.Join(ctx.StateDir, render.InstallerRelativeDir)) {
-		t.Fatalf("install config path %q is outside installer state dir %q", cluster.InstallConfigPath, ctx.StateDir)
+	if !strings.HasPrefix(cluster.InstallConfigPath, filepath.Join(ctx.RenderedDir, render.InstallerRelativeDir)) {
+		t.Fatalf("install config path %q is outside installer state dir %q", cluster.InstallConfigPath, ctx.RenderedDir)
 	}
 }
 
@@ -345,11 +345,10 @@ func TestContextInitPreparesAnsibleBundle(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.NewContext("test")
+	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundleDir := filepath.Join(ctx.StateDir, ansibleBundleDirName)
 	for _, rel := range []string{
 		"ansible.cfg",
 		"playbooks/checks/preflight.yml",
@@ -574,7 +573,7 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	secretPath := filepath.Join(ctx.SecretsDir, "manual-secret")
-	statePath := filepath.Join(ctx.StateDir, "manual-state")
+	statePath := filepath.Join(ctx.RenderedDir, "manual-state")
 	runtimePath := filepath.Join(ctx.RuntimeDir, "manual-runtime")
 	for path, body := range map[string]string{
 		secretPath:  "secret\n",
@@ -741,7 +740,7 @@ func TestContextDeleteWithoutPurgeDoesNotRequireContextDirAccess(t *testing.T) {
 
 func TestContextDeleteRemovesOnlyRegistryEntryWithoutPurge(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	keepPath := filepath.Join(ctx.StateDir, "keep")
+	keepPath := filepath.Join(ctx.RenderedDir, "keep")
 	if err := os.WriteFile(keepPath, []byte("state\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -771,7 +770,7 @@ func TestContextDeleteRemovesOnlyRegistryEntryWithoutPurge(t *testing.T) {
 
 func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	keepPath := filepath.Join(ctx.StateDir, "keep")
+	keepPath := filepath.Join(ctx.RenderedDir, "keep")
 	if err := os.WriteFile(keepPath, []byte("state\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -2089,7 +2088,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("unknown", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		installer := installerInstallConfigPath(cf.ctx.StateDir, "sno-libvirt")
+		installer := installerInstallConfigPath(cf.ctx.RenderedDir, "sno-libvirt")
 		if err := os.MkdirAll(filepath.Dir(installer), 0o755); err != nil {
 			t.Fatalf("mkdir installer dir: %v", err)
 		}
@@ -2106,7 +2105,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("installer stat error", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		installer := installerInstallConfigPath(cf.ctx.StateDir, "sno-libvirt")
+		installer := installerInstallConfigPath(cf.ctx.RenderedDir, "sno-libvirt")
 		if err := os.MkdirAll(installer, 0o755); err != nil {
 			t.Fatalf("mkdir installer path: %v", err)
 		}
@@ -2123,7 +2122,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("fresh", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.RenderedDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		report, err := buildStatusReport(cf)
@@ -2136,7 +2135,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("stale", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.StateDir, t.TempDir(), t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.RenderedDir, t.TempDir(), t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		stale := state
@@ -2145,7 +2144,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal stale state: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(cf.ctx.StateDir, "effective-state.yaml"), data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(cf.ctx.RenderedDir, "effective-state.yaml"), data, 0o644); err != nil {
 			t.Fatalf("write stale effective state: %v", err)
 		}
 		report, err := buildStatusReport(cf)
@@ -2168,10 +2167,10 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	ledger.MarkOK("provider", now.Add(time.Second))
 	ledger.MarkOK("iso.sno-libvirt", now.Add(2*time.Second))
 	ledger.MarkRunning("boot.sno-libvirt", "/tmp/boot.log", now.Add(3*time.Second))
-	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
-	if err := workflow.SaveRunLease(ctx.StateDir, workflow.NewRunLease("apply-test", time.Now().UTC())); err != nil {
+	if err := workflow.SaveRunLease(ctx.RunsDir, workflow.NewRunLease("apply-test", time.Now().UTC())); err != nil {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
 
@@ -2192,7 +2191,7 @@ func TestStatusReportsStaleApplyLedger(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt"},
 	}, now)
-	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
 
@@ -2215,7 +2214,7 @@ func TestStatusJSONIncludesApplyLedger(t *testing.T) {
 	ledger := workflow.NewRunLedger("apply-json", "infra", "", workflow.ConcurrencyLimits{Parallelism: 1}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: "providerServices", Label: "provider services"},
 	}, time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC))
-	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
 
@@ -2236,20 +2235,20 @@ func TestStatusJSONIncludesApplyLedger(t *testing.T) {
 }
 
 func TestReconcileCurrentApplyCancelsStaleLedger(t *testing.T) {
-	stateDir := t.TempDir()
+	runsDir := t.TempDir()
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt"},
 	}, now)
-	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(runsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
 
 	var stdout bytes.Buffer
-	if err := reconcileCurrentApplyBeforeMutation(&stdout, stateDir); err != nil {
+	if err := reconcileCurrentApplyBeforeMutation(&stdout, runsDir); err != nil {
 		t.Fatalf("reconcileCurrentApplyBeforeMutation: %v", err)
 	}
-	loaded, ok, err := workflow.LoadRunLedger(stateDir)
+	loaded, ok, err := workflow.LoadRunLedger(runsDir)
 	if err != nil {
 		t.Fatalf("LoadRunLedger: %v", err)
 	}
@@ -2262,22 +2261,22 @@ func TestReconcileCurrentApplyCancelsStaleLedger(t *testing.T) {
 }
 
 func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
-	stateDir := t.TempDir()
+	runsDir := t.TempDir()
 	now := time.Now().UTC()
 	ledger := workflow.NewRunLedger("apply-active", "cluster", "", workflow.ConcurrencyLimits{}, nil, now)
-	if err := workflow.SaveRunLedger(stateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(runsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
-	if err := workflow.SaveRunLease(stateDir, workflow.NewRunLease("apply-active", now)); err != nil {
+	if err := workflow.SaveRunLease(runsDir, workflow.NewRunLease("apply-active", now)); err != nil {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
 
 	var stdout bytes.Buffer
-	err := reconcileCurrentApplyBeforeMutation(&stdout, stateDir)
+	err := reconcileCurrentApplyBeforeMutation(&stdout, runsDir)
 	if err == nil || !strings.Contains(err.Error(), "apply run apply-active is still running") {
 		t.Fatalf("expected active apply error, got %v", err)
 	}
-	loaded, _, err := workflow.LoadRunLedger(stateDir)
+	loaded, _, err := workflow.LoadRunLedger(runsDir)
 	if err != nil {
 		t.Fatalf("LoadRunLedger: %v", err)
 	}
@@ -2381,7 +2380,7 @@ func TestStatusWatchStopsWhenNoRunLedgerExists(t *testing.T) {
 func TestStatusWatchStopsWhenApplyLedgerIsStale(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-stale-watch", "cluster", "", workflow.ConcurrencyLimits{}, nil, time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC))
-	if err := workflow.SaveRunLedger(ctx.StateDir, ledger); err != nil {
+	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
 

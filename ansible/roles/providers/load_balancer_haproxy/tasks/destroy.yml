@@ -15,7 +15,7 @@
 
 - name: Remove load balancer state directory
   ansible.builtin.file:
-    path: "{{ bootwright_host_state_dir }}/load-balancers/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    path: "{{ bootwright_managed_dir }}/services/load-balancer/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
     state: absent
 
 # The HAProxy VIP sysctl drop-in is host-wide (one file shared by every

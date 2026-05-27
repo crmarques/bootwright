@@ -1,5 +1,5 @@
 package cli
 
-func resolvedOCPBinaryPairs(_ []Phase, _ string) []string {
+func resolvedOCPBinaryPairs(_ []Phase) []string {
 	return nil
 }

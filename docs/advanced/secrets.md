@@ -109,7 +109,7 @@ When proxy credentials would be embedded in those exports, rerun it as
   tokens.
 - Effective install / agent configs and `openshift/` manifests with resolved
   secrets (these live under
-  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/` with
+  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/` with
   mode `0600` and are never committed).
 - Generated self-signed cert/key material outside the local secrets
   directory.

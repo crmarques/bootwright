@@ -10,14 +10,14 @@ import (
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 )
 
-// The render package documents file mode 0o700 for state directories
-// and 0o600 for state files. The literals are repeated here on purpose:
+// The render package documents file mode 0o700 for local directories
+// and 0o600 for local files. The literals are repeated here on purpose:
 // changing the production constants without intent will fail these
 // assertions and force the test author to reckon with the security
 // implication.
 const (
-	wantStateDirMode  os.FileMode = 0o700
-	wantStateFileMode os.FileMode = 0o600
+	wantLocalDirMode  os.FileMode = 0o700
+	wantLocalFileMode os.FileMode = 0o600
 )
 
 // recordingFS captures every side-effect AllOn / ResolveInstallerOn
@@ -59,7 +59,7 @@ func (r *recordingFS) RemoveAll(path string) error {
 
 // TestAllOnEveryDirectoryIsTightenedTo0700 fails if AllOn ever creates
 // a directory without immediately chmod'ing it down to 0700, or if the
-// state-dir mode constant drifts away from 0700. This is the seam the
+// local-dir mode constant drifts away from 0700. This is the seam the
 // review's "Render writes are not behind an interface" finding asked
 // for: the security boundary is now testable without disk I/O.
 func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
@@ -69,9 +69,9 @@ func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	stateDir := "/synthetic/state"
+	renderedDir := "/synthetic/rendered"
 	runtimeDir := "/synthetic/runtime-root"
-	if _, err := render.AllOn(fs, stateDir, runtimeDir, "/synthetic/secrets", state); err != nil {
+	if _, err := render.AllOn(fs, renderedDir, runtimeDir, "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -79,12 +79,12 @@ func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
 		t.Fatal("AllOn made no MkdirAll calls; nothing to assert")
 	}
 	for _, m := range fs.mkdirs {
-		if m.mode != wantStateDirMode {
-			t.Errorf("MkdirAll(%q) mode %#o, want %#o", m.path, m.mode, wantStateDirMode)
+		if m.mode != wantLocalDirMode {
+			t.Errorf("MkdirAll(%q) mode %#o, want %#o", m.path, m.mode, wantLocalDirMode)
 		}
 	}
-	// Every MkdirAll must be matched by a Chmod with stateDirMode for
-	// the same path — defends the comment on ensureStateDir.
+	// Every MkdirAll must be matched by a Chmod with localDirMode for
+	// the same path — defends the comment on ensureLocalDir.
 	chmoddedDirs := map[string]os.FileMode{}
 	for _, c := range fs.chmods {
 		chmoddedDirs[c.path] = c.mode
@@ -95,14 +95,14 @@ func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
 			t.Errorf("MkdirAll(%q) has no matching Chmod call; security boundary lost", m.path)
 			continue
 		}
-		if mode != wantStateDirMode {
-			t.Errorf("Chmod(%q) = %#o, want %#o", m.path, mode, wantStateDirMode)
+		if mode != wantLocalDirMode {
+			t.Errorf("Chmod(%q) = %#o, want %#o", m.path, mode, wantLocalDirMode)
 		}
 	}
 }
 
 // TestAllOnEveryFileWrittenAt0600 confirms every WriteAtomic call uses
-// stateFileMode (0o600). Removing the mode constant or accidentally
+// localFileMode (0o600). Removing the mode constant or accidentally
 // passing 0o644 would silently leak secret-bearing artifacts to other
 // local users.
 func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
@@ -112,7 +112,7 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	if _, err := render.AllOn(fs, "/synthetic/state", "/synthetic/runtime-root", "/synthetic/secrets", state); err != nil {
+	if _, err := render.AllOn(fs, "/synthetic/rendered", "/synthetic/runtime-root", "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -120,13 +120,13 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 		t.Fatal("AllOn made no WriteAtomic calls")
 	}
 	for _, w := range fs.writes {
-		if w.mode != wantStateFileMode {
-			t.Errorf("WriteAtomic(%q) mode %#o, want %#o", w.path, w.mode, wantStateFileMode)
+		if w.mode != wantLocalFileMode {
+			t.Errorf("WriteAtomic(%q) mode %#o, want %#o", w.path, w.mode, wantLocalFileMode)
 		}
 	}
 	// And every write should land inside one of the directories AllOn
 	// announced via MkdirAll — catches a stray write that escapes the
-	// state dir.
+	// rendered/runtime tree.
 	dirs := make([]string, 0, len(fs.mkdirs))
 	for _, m := range fs.mkdirs {
 		dirs = append(dirs, m.path)
@@ -162,33 +162,33 @@ func TestResolveInstallerWritesEffectiveFilesUnderRuntimeDir(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	stateDir := "/synthetic/state"
-	runtimeDir := "/var/lib/bootwright/contexts/lab"
-	if _, err := render.ResolveInstallerOn(fs, stateDir, runtimeDir, secretsDir, state); err != nil {
+	renderedDir := "/synthetic/rendered"
+	runtimeDir := "/var/lib/bootwright/contexts/lab/runtime"
+	if _, err := render.ResolveInstallerOn(fs, renderedDir, runtimeDir, secretsDir, state); err != nil {
 		t.Fatalf("ResolveInstallerOn: %v", err)
 	}
 
 	var paths []string
 	for _, w := range fs.writes {
 		paths = append(paths, w.path)
-		if w.mode != wantStateFileMode {
-			t.Errorf("WriteAtomic(%q) mode %#o, want %#o", w.path, w.mode, wantStateFileMode)
+		if w.mode != wantLocalFileMode {
+			t.Errorf("WriteAtomic(%q) mode %#o, want %#o", w.path, w.mode, wantLocalFileMode)
 		}
 	}
 	for _, want := range []string{
-		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "install-config.yaml"),
-		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "agent-config.yaml"),
+		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "install-config.yaml"),
+		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "agent-config.yaml"),
 	} {
 		if !slices.Contains(paths, want) {
 			t.Fatalf("effective installer writes = %v, missing %s", paths, want)
 		}
 	}
 	for _, forbidden := range []string{
-		filepath.Join(stateDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "install-config.yaml"),
-		filepath.Join(stateDir, render.RuntimeRelativeDir, "sno-libvirt", "installer", "agent-config.yaml"),
+		filepath.Join(renderedDir, render.RuntimeRelativeDir, "sno-libvirt", "install-config.yaml"),
+		filepath.Join(renderedDir, render.RuntimeRelativeDir, "sno-libvirt", "agent-config.yaml"),
 	} {
 		if slices.Contains(paths, forbidden) {
-			t.Fatalf("effective installer output leaked under state dir: %s", forbidden)
+			t.Fatalf("effective installer output leaked under rendered dir: %s", forbidden)
 		}
 	}
 }

@@ -18,9 +18,11 @@ type scopeDryRunReport struct {
 	PlanOnly         bool              `json:"planOnly"`
 	ReadinessChecks  string            `json:"readinessChecks"`
 	Phases           []string          `json:"phases"`
-	StateDir         string            `json:"stateDir"`
+	RenderedDir      string            `json:"renderedDir"`
 	RuntimeDir       string            `json:"runtimeDir"`
+	RunsDir          string            `json:"runsDir"`
 	SecretsDir       string            `json:"secretsDir"`
+	ManagedDir       string            `json:"managedDir"`
 	ContextDir       string            `json:"contextDir"`
 	BundleDir        string            `json:"bundleDir"`
 	Playbook         string            `json:"playbook"`
@@ -58,17 +60,18 @@ type scopeDryRunApply struct {
 func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
 	ctx := cf.ctx
 	runtimeDir := controllerRuntimeDir(ctx.Name)
-	bundleDir, err := resolveBundleDir(ctx.StateDir)
+	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		return failErr(1, err)
 	}
 	runner := ansible.CommandRunner{Stdout: io.Discard, Stderr: io.Discard}
 	runResult, err := workflow.Run(cmd.Context(), workflow.RunOptions{
 		State:             state,
-		StateDir:          ctx.StateDir,
+		RenderedDir:       ctx.RenderedDir,
 		RuntimeDir:        runtimeDir,
+		RunsDir:           ctx.RunsDir,
 		SecretsDir:        ctx.SecretsDir,
-		HostStateDir:      ctx.BaseDir,
+		ManagedDir:        ctx.ManagedDir,
 		Executable:        flags.executable,
 		BundleDir:         bundleDir,
 		Playbook:          playbook,
@@ -92,9 +95,11 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		PlanOnly:         true,
 		ReadinessChecks:  "not run; run bootwright check " + scope.name,
 		Phases:           selectedPhaseNames(selected),
-		StateDir:         ctx.StateDir,
+		RenderedDir:      ctx.RenderedDir,
 		RuntimeDir:       runtimeDir,
+		RunsDir:          ctx.RunsDir,
 		SecretsDir:       ctx.SecretsDir,
+		ManagedDir:       ctx.ManagedDir,
 		ContextDir:       ctx.BaseDir,
 		BundleDir:        bundleDir,
 		Playbook:         playbook,

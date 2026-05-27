@@ -36,8 +36,8 @@ func freshnessForInstaller(freshness effectiveStateFreshness, installerPath stri
 	return freshness
 }
 
-func loadEffectiveStateFreshness(current v1alpha1.State, stateDir string) effectiveStateFreshness {
-	path := filepath.Join(stateDir, "effective-state.yaml")
+func loadEffectiveStateFreshness(current v1alpha1.State, renderedDir string) effectiveStateFreshness {
+	path := filepath.Join(renderedDir, "effective-state.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return effectiveStateFreshness{State: installerFreshnessUnknown, Path: path, Error: err.Error()}

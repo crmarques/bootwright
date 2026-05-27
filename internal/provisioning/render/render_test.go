@@ -46,10 +46,10 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 				t.Fatalf("LoadNormalizeValidate: %v", err)
 			}
 
-			stateDir := t.TempDir()
+			renderedDir := t.TempDir()
 			runtimeDir := t.TempDir()
 			secretsDir := t.TempDir() // empty — All() must not consult it
-			result, err := render.All(stateDir, runtimeDir, secretsDir, state)
+			result, err := render.All(renderedDir, runtimeDir, secretsDir, state)
 			if err != nil {
 				t.Fatalf("render.All: %v", err)
 			}
@@ -62,10 +62,10 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 			} {
 				assertFileMode(t, path, 0o600)
 			}
-			// The state directory and every subdir under it hold
+			// The rendered directory and every subdir under it hold
 			// operator-facing rendered artifacts. Mode 0700 keeps
-			// local state private and matches the runtime boundary.
-			assertDirMode(t, stateDir, 0o700)
+			// local files private and matches the runtime boundary.
+			assertDirMode(t, renderedDir, 0o700)
 			assertDirMode(t, filepath.Dir(result.InventoryPath), 0o700)
 			assertDirMode(t, result.ArtifactsDir, 0o700)
 
@@ -126,28 +126,28 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 	}
 }
 
-// TestAllTightensLooseStateDirMode verifies render.All chmods a
-// pre-existing state directory that was created with looser permissions
+// TestAllTightensLooseRenderedDirMode verifies render.All chmods a
+// pre-existing rendered directory that was created with looser permissions
 // back down to 0700. The Chmod-after-MkdirAll sequence in render.go is
-// the only thing that guards against a state dir created by a user
+// the only thing that guards against a rendered dir created by a user
 // umask of 0022 (which leaves 0755); removing that Chmod would silently
 // expose secret material to other local users. This test fails fast if
 // the Chmod call disappears or its mode constant drifts.
-func TestAllTightensLooseStateDirMode(t *testing.T) {
+func TestAllTightensLooseRenderedDirMode(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	stateDir := t.TempDir()
-	if err := os.Chmod(stateDir, 0o755); err != nil {
+	renderedDir := t.TempDir()
+	if err := os.Chmod(renderedDir, 0o755); err != nil {
 		t.Fatalf("seed loose mode: %v", err)
 	}
 	secretsDir := t.TempDir()
-	if _, err := render.All(stateDir, t.TempDir(), secretsDir, state); err != nil {
+	if _, err := render.All(renderedDir, t.TempDir(), secretsDir, state); err != nil {
 		t.Fatalf("render.All: %v", err)
 	}
-	assertDirMode(t, stateDir, 0o700)
+	assertDirMode(t, renderedDir, 0o700)
 }
 
 // TestAllIsStableAcrossRuns asserts render.All produces byte-identical

@@ -11,23 +11,23 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// File modes for everything the renderer writes. State directories and
+// File modes for everything the renderer writes. Rendered directories and
 // runtime work dirs are owner-only because they hold rendered install-config
 // copies; the YAML files themselves are written 0600 for the same reason.
 const (
-	stateDirMode  os.FileMode = 0o700
-	stateFileMode os.FileMode = 0o600
+	localDirMode  os.FileMode = 0o700
+	localFileMode os.FileMode = 0o600
 )
 
 // FileSystem is the side-effect surface render uses to materialize
 // state to disk. The default implementation calls os.* directly; tests
 // can substitute a recording implementation to assert security
 // invariants (every directory is followed by an explicit Chmod, every
-// file is written with stateFileMode) without touching real disk.
+// file is written with localFileMode) without touching real disk.
 //
 // Mode arguments are honoured by both the os and recording
 // implementations; callers MUST pass the documented constants
-// (stateDirMode / stateFileMode) so the security boundary stays
+// (localDirMode / localFileMode) so the security boundary stays
 // audit-able from one place.
 type FileSystem interface {
 	MkdirAll(path string, mode os.FileMode) error
@@ -73,31 +73,31 @@ type Result struct {
 }
 
 // All writes effective-state, lock, Ansible inventory + vars, and
-// per-cluster installer placeholders. `stateDir` is the Bootwright context
-// state directory, `runtimeDir` is the root-managed local runtime directory,
+// per-cluster installer placeholders. `renderedDir` is the Bootwright context
+// rendered directory, `runtimeDir` is the local execution runtime directory,
 // and `secretsDir` is the local secrets dir. Uses the
 // default os-backed FileSystem; tests use AllOn to inject a substitute.
-func All(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return AllOn(defaultFS, stateDir, runtimeDir, secretsDir, state)
+func All(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return AllOn(defaultFS, renderedDir, runtimeDir, secretsDir, state)
 }
 
 // AllOn is All parameterised on FileSystem so tests can assert mode invariants
 // without touching disk. Production callers use All.
-func AllOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+func AllOn(fs FileSystem, renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{
-		EffectiveStatePath: filepath.Join(stateDir, "effective-state.yaml"),
-		LockPath:           filepath.Join(stateDir, "bootwright.lock.yaml"),
-		InventoryPath:      filepath.Join(stateDir, "ansible", "inventory.yaml"),
-		VarsPath:           filepath.Join(stateDir, "ansible", "vars.yaml"),
-		ArtifactsDir:       filepath.Join(stateDir, "ansible", "artifacts"),
-		InstallerAssets:    InstallerAssets(stateDir, runtimeDir, state),
+		EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml"),
+		LockPath:           filepath.Join(renderedDir, "bootwright.lock.yaml"),
+		InventoryPath:      filepath.Join(renderedDir, "ansible", "inventory.yaml"),
+		VarsPath:           filepath.Join(renderedDir, "ansible", "vars.yaml"),
+		ArtifactsDir:       filepath.Join(renderedDir, "ansible", "artifacts"),
+		InstallerAssets:    InstallerAssets(renderedDir, runtimeDir, state),
 	}
-	dirs := []string{stateDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
+	dirs := []string{renderedDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
 		dirs = append(dirs, asset.Dir)
 	}
 	for _, dir := range dirs {
-		if err := ensureStateDir(fs, dir); err != nil {
+		if err := ensureLocalDir(fs, dir); err != nil {
 			return result, err
 		}
 	}
@@ -138,17 +138,17 @@ func AllOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha
 	return result, nil
 }
 
-// ensureStateDir creates `dir` with stateDirMode and tightens the mode
+// ensureLocalDir creates `dir` with localDirMode and tightens the mode
 // even when the directory already existed. MkdirAll is a no-op (and
 // leaves the existing mode untouched) when the path exists; without
 // the explicit Chmod a directory created by a user umask of 0022
 // would silently be 0755 and expose subsequent secret material. Keep
 // this helper so the security boundary is named in one place.
-func ensureStateDir(fs FileSystem, dir string) error {
-	if err := fs.MkdirAll(dir, stateDirMode); err != nil {
+func ensureLocalDir(fs FileSystem, dir string) error {
+	if err := fs.MkdirAll(dir, localDirMode); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)
 	}
-	if err := fs.Chmod(dir, stateDirMode); err != nil {
+	if err := fs.Chmod(dir, localDirMode); err != nil {
 		return fmt.Errorf("chmod %s: %w", dir, err)
 	}
 	return nil
@@ -156,17 +156,17 @@ func ensureStateDir(fs FileSystem, dir string) error {
 
 // ResolveInstaller writes install-config / agent-config with real
 // secret material inlined under each cluster's runtime work dir.
-// Placeholder copies under the state installer dir are left untouched.
+// Placeholder copies under the rendered installer dir are left untouched.
 // Uses the default os-backed FileSystem; tests use ResolveInstallerOn.
-func ResolveInstaller(stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerOn(defaultFS, stateDir, runtimeDir, secretsDir, state)
+func ResolveInstaller(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ResolveInstallerOn(defaultFS, renderedDir, runtimeDir, secretsDir, state)
 }
 
 // ResolveInstallerOn is ResolveInstaller parameterised on FileSystem so
 // tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk. Production callers use ResolveInstaller.
-func ResolveInstallerOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	result := Result{InstallerAssets: InstallerAssets(stateDir, runtimeDir, state)}
+func ResolveInstallerOn(fs FileSystem, renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	result := Result{InstallerAssets: InstallerAssets(renderedDir, runtimeDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
 		secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
@@ -174,7 +174,7 @@ func ResolveInstallerOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, 
 			return result, err
 		}
 		for _, dir := range runtimeInstallerDirs(runtimeDir, asset) {
-			if err := ensureStateDir(fs, dir); err != nil {
+			if err := ensureLocalDir(fs, dir); err != nil {
 				return result, err
 			}
 		}
@@ -201,11 +201,11 @@ func ResolveInstallerOn(fs FileSystem, stateDir, runtimeDir, secretsDir string, 
 
 func runtimeInstallerDirs(runtimeDir string, asset InstallerAsset) []string {
 	clusterDir := filepath.Dir(asset.WorkDir)
-	return []string{runtimeDir, filepath.Join(runtimeDir, RuntimeRelativeDir), clusterDir, asset.WorkDir}
+	return []string{runtimeDir, clusterDir, asset.WorkDir}
 }
 
 func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	cleanOutputDir, err := managedroot.Ensure(outputDir, stateDirMode)
+	cleanOutputDir, err := managedroot.Ensure(outputDir, localDirMode)
 	if err != nil {
 		return Result{}, err
 	}
@@ -226,7 +226,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 		dirs = append(dirs, asset.Dir)
 	}
 	for _, dir := range dirs {
-		if err := ensureStateDir(fs, dir); err != nil {
+		if err := ensureLocalDir(fs, dir); err != nil {
 			return result, err
 		}
 	}
@@ -285,7 +285,7 @@ func writeYAML(fs FileSystem, path string, value any) error {
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
-	if err := fs.WriteAtomic(path, data, stateFileMode); err != nil {
+	if err := fs.WriteAtomic(path, data, localFileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -298,7 +298,7 @@ func writeInstallerManifests(fs FileSystem, dir string, manifests []InstallerMan
 	if len(manifests) == 0 {
 		return nil
 	}
-	if err := ensureStateDir(fs, dir); err != nil {
+	if err := ensureLocalDir(fs, dir); err != nil {
 		return err
 	}
 	for _, manifest := range manifests {

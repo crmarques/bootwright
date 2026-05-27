@@ -36,7 +36,7 @@ Start from an example, copy it to a working directory, then edit the copy for
 your environment:
 
 ```text
-ls -l <input-files-dir>
+ls -l <input-dir>
 ```
 
 Canonical input examples live under
@@ -109,7 +109,7 @@ or service host.
 Create the context from the edited directory:
 
 ```text
-bootwright context init lab -f <input-files-dir>
+bootwright context init lab -f <input-dir>
 bootwright context validate
 bootwright context current
 bootwright secret list
@@ -118,11 +118,12 @@ bootwright secret list
 Bootwright records only the selected context names in
 `~/.bootwright/contexts.yaml`. Context data lives under
 `/var/lib/bootwright/contexts/<context-name>/`, and the imported authoring copy
-lives at `input-files/` inside that directory.
+lives at `input/` inside that directory.
 
 Re-run `context init` with `--yes` to replace the entire context directory, or
-use `bootwright context update lab -f <input-files-dir>` to replace only
-`input-files/` while preserving secrets, state, and runtime data.
+use `bootwright context update lab -f <input-dir>` to replace only
+`input/` while preserving secrets, rendered output, runtime data, run history,
+and managed host/service files.
 
 ## 4. Set Secrets
 
@@ -233,11 +234,11 @@ This does not destroy cluster nodes or the rest of the infrastructure.
 ## Output Boundaries
 
 - Authored YAML lives under
-  `/var/lib/bootwright/contexts/<context>/input-files/`.
+  `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/state/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
 - Secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/<cluster>/installer/`.
+  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`.
 - `render --output-dir <dir> --sensitive` writes secret-inlined external tool
   inputs under the requested directory; keep it local and unversioned.
 
@@ -249,7 +250,7 @@ user kubeconfig:
 ```text
 export CLUSTER=<cluster-name>
 export BOOTWRIGHT_CONTEXT="$(bootwright context current --short)"
-export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/runtime/${CLUSTER}/installer/auth/kubeconfig"
+export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/runtime/installer/${CLUSTER}/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 

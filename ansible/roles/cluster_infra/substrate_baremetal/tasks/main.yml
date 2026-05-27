@@ -8,7 +8,7 @@
 
 - name: Resolve baremetal manifest paths
   ansible.builtin.set_fact:
-    bootwright_baremetal_root: "{{ bootwright_host_state_dir }}/clusters/{{ bootwright_current_cluster.name }}/baremetal"
+    bootwright_baremetal_root: "{{ bootwright_managed_dir }}/substrate/baremetal/{{ bootwright_current_cluster.name }}"
   changed_when: false
 
 - name: Create baremetal state directory

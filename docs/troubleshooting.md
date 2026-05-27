@@ -89,7 +89,7 @@ the ISO, verify reachability from the BMC network and prefer an IP-address
 ## Context Input Looks Stale
 
 `context init` imports files into
-`/var/lib/bootwright/contexts/<context>/input-files/`. If you edited the source
+`/var/lib/bootwright/contexts/<context>/input/`. If you edited the source
 directory after import and only want to refresh inputs, rerun:
 
 ```text
