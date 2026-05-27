@@ -951,8 +951,8 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if got := stderr.String(); got != "SUDO password: " {
 		t.Fatalf("stderr prompt = %q, want SUDO password prompt", got)
 	}
-	if len(calls) != 3 {
-		t.Fatalf("sudo calls = %v, want validate, refresh, command", calls)
+	if len(calls) != 4 {
+		t.Fatalf("sudo calls = %v, want validate, refresh, timeout lookup, command", calls)
 	}
 	if !reflect.DeepEqual(calls[0], []string{"-n", "-v"}) {
 		t.Fatalf("first sudo call = %v, want noninteractive validation", calls[0])
@@ -960,12 +960,15 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if !reflect.DeepEqual(calls[1], []string{"-S", "-p", "", "-v"}) {
 		t.Fatalf("second sudo call = %v, want password validation", calls[1])
 	}
-	commandIndex := localRootCommandIndex(t, calls[2], home, localSudoAuthPrompted)
-	if got := localRootEnvValue(calls[2], localRootBecomePasswordFileEnv); got != "" {
-		t.Fatalf("check command should not receive a become password file: %v", calls[2])
+	if !reflect.DeepEqual(calls[2], []string{"-V"}) {
+		t.Fatalf("third sudo call = %v, want timeout lookup", calls[2])
 	}
-	if !reflect.DeepEqual(calls[2][commandIndex:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
-		t.Fatalf("third sudo call = %v", calls[2])
+	commandIndex := localRootCommandIndex(t, calls[3], home, localSudoAuthPrompted)
+	if got := localRootEnvValue(calls[3], localRootBecomePasswordFileEnv); got != "" {
+		t.Fatalf("check command should not receive a become password file: %v", calls[3])
+	}
+	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+		t.Fatalf("fourth sudo call = %v", calls[3])
 	}
 }
 
@@ -1001,17 +1004,20 @@ func TestEnsureLocalRootForBecomeCommandExportsPasswordFile(t *testing.T) {
 	if !handled || code != 0 {
 		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
 	}
-	if len(calls) != 3 {
-		t.Fatalf("sudo calls = %v, want validate, refresh, command", calls)
+	if len(calls) != 4 {
+		t.Fatalf("sudo calls = %v, want validate, refresh, timeout lookup, command", calls)
 	}
-	commandIndex := localRootCommandIndex(t, calls[2], home, localSudoAuthPrompted)
-	if got := localRootEnvValue(calls[2], localRootBecomePasswordFileEnv); got == "" {
-		t.Fatalf("apply command missing inherited become password file: %v", calls[2])
+	if !reflect.DeepEqual(calls[2], []string{"-V"}) {
+		t.Fatalf("third sudo call = %v, want timeout lookup", calls[2])
+	}
+	commandIndex := localRootCommandIndex(t, calls[3], home, localSudoAuthPrompted)
+	if got := localRootEnvValue(calls[3], localRootBecomePasswordFileEnv); got == "" {
+		t.Fatalf("apply command missing inherited become password file: %v", calls[3])
 	} else if _, err := os.Stat(got); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("inherited become password file was not cleaned up: %v", err)
 	}
-	if !reflect.DeepEqual(calls[2][commandIndex:], []string{"/usr/local/bin/bootwright", "apply", "infra", "--yes"}) {
-		t.Fatalf("third sudo call = %v", calls[2])
+	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "apply", "infra", "--yes"}) {
+		t.Fatalf("fourth sudo call = %v", calls[3])
 	}
 }
 
@@ -1057,8 +1063,8 @@ func TestEnsureLocalRootForArgsRetriesInvalidSudoPassword(t *testing.T) {
 	if !strings.Contains(stderr.String(), "Sorry, try again.") {
 		t.Fatalf("stderr missing sudo retry diagnostic: %q", stderr.String())
 	}
-	if len(calls) != 5 {
-		t.Fatalf("sudo calls = %v, want noninteractive validation, three password attempts, command", calls)
+	if len(calls) != 6 {
+		t.Fatalf("sudo calls = %v, want noninteractive validation, three password attempts, timeout lookup, command", calls)
 	}
 }
 
@@ -1347,6 +1353,9 @@ func TestLocalRootGateSudoPromptHelperProcess(t *testing.T) {
 			fmt.Fprintln(os.Stderr, "sudo: 1 incorrect password attempt")
 			os.Exit(1)
 		}
+		os.Exit(0)
+	case reflect.DeepEqual(sudoArgs, []string{"-V"}):
+		fmt.Fprintln(os.Stdout, "Authentication timestamp timeout: 4.0 minutes")
 		os.Exit(0)
 	case len(sudoArgs) >= 2 && sudoArgs[0] == "-n" && sudoArgs[1] == "env":
 		path := localRootEnvValue(sudoArgs, localRootBecomePasswordFileEnv)
