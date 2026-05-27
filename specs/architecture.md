@@ -15,7 +15,10 @@ YAML desired state
 ```
 
 Apply execution records a durable run ledger under the context state directory
-and a short-lived local lease for the process updating it. The ledger is the
+and a short-lived local lease for the process updating it. Cluster install
+tasks also record per-cluster install state with a non-secret desired-input
+fingerprint so repeated applies can skip completed installs and resume only
+from known-safe phases. The ledger is the
 operator-facing status source for long-running work: each planned task has a
 stable ID, dependency list, status, log path, and optional cluster, node, or
 host association. Human apply output summarizes task progress from that ledger.

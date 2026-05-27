@@ -104,6 +104,12 @@ Generated output boundaries are part of the safety contract:
 - Bootwright-managed apply logs that can include external tool output live under
   `/var/lib/bootwright/contexts/<context>/workflow/`, with restrictive file
   modes, and must never be versioned.
+- Per-cluster install records live under
+  `/var/lib/bootwright/contexts/<context>/state/workflow/cluster-installs/`.
+  They may contain cluster names, non-secret desired-input fingerprints,
+  install phases, run IDs, timestamps, and node boot markers, but must not
+  contain kubeconfigs, pull secrets, tokens, private keys, or other secret
+  bytes.
 - The generated OpenShift kubeadmin password is copied into
   `/var/lib/bootwright/contexts/<context>/secrets/<cluster>-kubeadmin-password`
   with mode `0600` after a successful agent install.

@@ -175,6 +175,11 @@ bootwright status
 converges provider hosts, substrate state, and managed infra components.
 `apply cluster` creates the agent ISO, boots every declared node, and waits for
 `openshift-install agent wait-for install-complete`.
+Running `apply cluster --yes` again skips cluster install tasks when the prior
+install record, rendered desired-input fingerprint, and kubeconfig availability
+probe all match. If an interrupted apply already booted nodes, the next apply
+resumes at the install wait phase instead of recreating the ISO or rebooting
+machines.
 
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an
