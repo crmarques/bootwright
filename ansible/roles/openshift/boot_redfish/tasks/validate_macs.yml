@@ -1,0 +1,109 @@
+---
+- name: Refresh Redfish system metadata for declared MAC validation
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_system_mac_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Resolve Redfish EthernetInterface collection
+  ansible.builtin.set_fact:
+    bootwright_redfish_ethernet_interfaces_path: >-
+      {{
+        (
+          ((bootwright_redfish_system_mac_probe.json | default({})).EthernetInterfaces | default({})).get('@odata.id', '')
+        )
+        | default('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/EthernetInterfaces', true)
+      }}
+  changed_when: false
+
+- name: List Redfish EthernetInterface members
+  ansible.builtin.uri:
+    url: >-
+      {{
+        bootwright_redfish_ethernet_interfaces_path
+        if (bootwright_redfish_ethernet_interfaces_path | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_ethernet_interfaces_path)
+        if (bootwright_redfish_ethernet_interfaces_path | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_ethernet_interfaces_path)
+      }}
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_ethernet_interfaces_list
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+
+- name: Probe Redfish EthernetInterface members
+  ansible.builtin.uri:
+    url: >-
+      {{
+        item['@odata.id']
+        if (item['@odata.id'] | regex_search('^https?://'))
+        else (bootwright_component.boot.redfish.baseUrl ~ item['@odata.id'])
+        if (item['@odata.id'] | regex_search('^/'))
+        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ item['@odata.id'])
+      }}
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  loop: "{{ bootwright_redfish_ethernet_interfaces_list.json.Members | default([]) }}"
+  register: bootwright_redfish_ethernet_interface_member_probes
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when: (bootwright_redfish_ethernet_interfaces_list.status | default(0) | int) == 200
+
+- name: Compare declared interface MACs with Redfish inventory
+  ansible.builtin.set_fact:
+    bootwright_redfish_mac_validation: >-
+      {{
+        bootwright_component.interfaces | default([])
+        | bootwright_redfish_mac_validation(
+          (bootwright_redfish_ethernet_interface_member_probes | default({})).results | default([])
+        )
+      }}
+  changed_when: false
+
+- name: Report unsupported Redfish EthernetInterface MAC inventory
+  ansible.builtin.debug:
+    msg: >-
+      Redfish BMC did not expose EthernetInterface MAC inventory for
+      {{ bootwright_component.name }}; declared MAC validation skipped.
+  when: not (bootwright_redfish_mac_validation.supported | default(false) | bool)
+
+- name: Confirm declared interface MACs exist in Redfish inventory
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_mac_validation.missing | default([]) | length) == 0
+    fail_msg: >-
+      Redfish MAC inventory for {{ bootwright_component.name }} does not contain
+      declared interface MAC(s):
+      {{ bootwright_redfish_mac_validation.missing | map(attribute='display') | list | join(', ') }}.
+      Observed Redfish MACs:
+      {{ bootwright_redfish_mac_validation.observed | default([]) | join(', ') }}.
+      Check InfraProvider baremetal.interfaces against the server's physical NICs.
+    success_msg: >-
+      Redfish MAC inventory confirmed all declared interface MACs for
+      {{ bootwright_component.name }}.
+  when: bootwright_redfish_mac_validation.supported | default(false) | bool

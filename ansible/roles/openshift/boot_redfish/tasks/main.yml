@@ -19,6 +19,13 @@
 - name: Prepare Redfish virtual media
   ansible.builtin.import_tasks: media_prepare.yml
 
+- name: Validate declared MACs against Redfish inventory
+  ansible.builtin.import_tasks: validate_macs.yml
+  when:
+    - bootwright_redfish_action_effective == 'boot'
+    - bootwright_component.boot.redfish.setBootSource | default(true) | bool
+    - (bootwright_component.interfaces | default([]) | length) > 0
+
 - name: Power node from virtual media
   ansible.builtin.import_tasks: power.yml
   when: bootwright_redfish_action_effective == 'boot'

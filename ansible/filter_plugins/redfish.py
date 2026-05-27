@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit
+
+
+_MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
 
 def bootwright_redfish_action_targets(resource, action_name):
@@ -100,6 +104,49 @@ def bootwright_redfish_vmedia_attached(resource, expected_image, expected_protoc
     return _image_matches(resource.get("Image"), expected_image)
 
 
+def bootwright_redfish_ethernet_macs(results):
+    if isinstance(results, dict):
+        results = results.get("results", [])
+    if not isinstance(results, list):
+        return []
+    macs = set()
+    for result in results:
+        if not isinstance(result, dict) or _status_code(result.get("status")) != 200:
+            continue
+        resource = result.get("json")
+        if not isinstance(resource, dict):
+            continue
+        for field in ("MACAddress", "PermanentMACAddress"):
+            mac = _canonical_mac(resource.get(field))
+            if mac:
+                macs.add(mac)
+    return sorted(macs)
+
+
+def bootwright_redfish_mac_validation(declared_interfaces, redfish_results):
+    declared = []
+    if isinstance(declared_interfaces, list):
+        for iface in declared_interfaces:
+            if not isinstance(iface, dict):
+                continue
+            mac = _canonical_mac(iface.get("macAddress"))
+            if not mac:
+                continue
+            name = _string(iface.get("name"))
+            display = f"{name}={mac}" if name else mac
+            declared.append({"name": name, "macAddress": mac, "display": display})
+
+    observed = bootwright_redfish_ethernet_macs(redfish_results)
+    observed_set = set(observed)
+    missing = [iface for iface in declared if iface["macAddress"] not in observed_set]
+    return {
+        "supported": len(observed) > 0,
+        "declared": declared,
+        "observed": observed,
+        "missing": missing,
+    }
+
+
 def _action_info_accepts_vmm_control(action_info):
     if not isinstance(action_info, dict):
         return False
@@ -187,11 +234,25 @@ def _string(value):
     return value if isinstance(value, str) else ""
 
 
+def _canonical_mac(value):
+    text = _string(value).strip().lower()
+    compact = re.sub(r"[^0-9a-f]", "", text)
+    if len(compact) == 12:
+        text = ":".join(compact[i : i + 2] for i in range(0, 12, 2))
+    else:
+        text = text.replace("-", ":")
+    if _MAC_RE.match(text):
+        return text
+    return ""
+
+
 class FilterModule:
     def filters(self):
         return {
             "bootwright_redfish_action_descriptors": bootwright_redfish_action_descriptors,
             "bootwright_redfish_action_targets": bootwright_redfish_action_targets,
+            "bootwright_redfish_ethernet_macs": bootwright_redfish_ethernet_macs,
+            "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,
             "bootwright_redfish_vmm_control_actions": bootwright_redfish_vmm_control_actions,
         }
