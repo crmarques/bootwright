@@ -92,7 +92,7 @@
       ansible.builtin.find:
         paths: "{{ bootwright_install_work_dir }}"
         patterns: "agent.*.iso"
-        file_type: file
+        file_type: any
       register: bootwright_remote_agent_iso_cleanup_find
       when: bootwright_install_wait.rc == 0
 

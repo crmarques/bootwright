@@ -669,6 +669,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	validateIdx := findAnsibleTask(t, tasks, "Validate agent ISO publish target")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
 	localityIdx := findAnsibleTask(t, tasks, "Determine agent ISO publish locality")
+	alreadyStagedIdx := findAnsibleTask(t, tasks, "Determine whether agent ISO is already staged")
 	createDirIdx := findAnsibleTask(t, tasks, "Create agent ISO staging directory")
 	linkIdx := findAnsibleTask(t, tasks, "Link agent ISO at the BMC fetch location")
 	sameHostCopyIdx := findAnsibleTask(t, tasks, "Copy agent ISO within the BMC fetch host")
@@ -679,7 +680,7 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(resolveIdx < validateIdx && validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < dirLabelIdx && dirLabelIdx < fileLabelIdx && fileLabelIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+	if !(resolveIdx < validateIdx && validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < alreadyStagedIdx && alreadyStagedIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < dirLabelIdx && dirLabelIdx < fileLabelIdx && fileLabelIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
 		t.Fatalf("install_agent must validate the target, stage the ISO, and probe fetch reachability before node boot")
 	}
 
@@ -742,8 +743,11 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if got := tasks[linkIdx]["become"]; got != true {
 		t.Fatalf("stage link must use remote become, got %v", got)
 	}
-	if got := tasks[linkIdx]["when"]; got != "bootwright_agent_iso_stage_local_to_install_host | bool" {
-		t.Fatalf("stage link when got %v", got)
+	if !stringListContains(tasks[linkIdx]["when"], "bootwright_agent_iso_stage_local_to_install_host | bool") {
+		t.Fatalf("stage link when got %v", tasks[linkIdx]["when"])
+	}
+	if !stringListContains(tasks[linkIdx]["when"], "not (bootwright_agent_iso_already_staged | bool)") {
+		t.Fatalf("stage link must skip direct-generated ISOs, got %v", tasks[linkIdx]["when"])
 	}
 
 	sameHostCopy, ok := tasks[sameHostCopyIdx]["ansible.builtin.command"].(map[string]any)
@@ -760,6 +764,9 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	}
 	if !stringListContains(tasks[sameHostCopyIdx]["when"], "bootwright_agent_iso_stage_local_to_install_host | bool") {
 		t.Fatalf("same-host stage copy must require same-host publishing, got %v", tasks[sameHostCopyIdx]["when"])
+	}
+	if !stringListContains(tasks[sameHostCopyIdx]["when"], "not (bootwright_agent_iso_already_staged | bool)") {
+		t.Fatalf("same-host stage copy must skip direct-generated ISOs, got %v", tasks[sameHostCopyIdx]["when"])
 	}
 	if !stringListContains(tasks[sameHostCopyIdx]["when"], "bootwright_agent_iso_stage_link.rc | default(1) != 0") {
 		t.Fatalf("same-host stage copy must only run after hard-link fallback, got %v", tasks[sameHostCopyIdx]["when"])
@@ -781,8 +788,11 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	if got := tasks[crossHostCopyIdx]["become"]; got != true {
 		t.Fatalf("stage copy must use remote become, got %v", got)
 	}
-	if got := tasks[crossHostCopyIdx]["when"]; got != "not (bootwright_agent_iso_stage_local_to_install_host | bool)" {
-		t.Fatalf("cross-host stage copy when got %v", got)
+	if !stringListContains(tasks[crossHostCopyIdx]["when"], "not (bootwright_agent_iso_stage_local_to_install_host | bool)") {
+		t.Fatalf("cross-host stage copy when got %v", tasks[crossHostCopyIdx]["when"])
+	}
+	if !stringListContains(tasks[crossHostCopyIdx]["when"], "not (bootwright_agent_iso_already_staged | bool)") {
+		t.Fatalf("cross-host stage copy must skip already-staged ISOs, got %v", tasks[crossHostCopyIdx]["when"])
 	}
 
 	restrict, ok := tasks[restrictIdx]["ansible.builtin.file"].(map[string]any)
@@ -1272,6 +1282,18 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	localDirIdx := findAnsibleTask(t, tasks, "Create local installer artifact directory")
 	previousTokenIdx := findAnsibleTask(t, tasks, "Read previous agent ISO publish token")
 	previousCleanupIdx := findAnsibleTask(t, tasks, "Remove previous staged agent ISO publish directories")
+	generateTokenIdx := findAnsibleTask(t, tasks, "Generate agent ISO publish token")
+	recordTokenIdx := findAnsibleTask(t, tasks, "Record agent ISO publish token")
+	directTargetIdx := findAnsibleTask(t, tasks, "Resolve direct agent ISO publish target")
+	directPathIdx := findAnsibleTask(t, tasks, "Resolve direct agent ISO stage path")
+	directDirIdx := findAnsibleTask(t, tasks, "Resolve direct agent ISO staging directory")
+	createDirectDirIdx := findAnsibleTask(t, tasks, "Create direct agent ISO staging directory")
+	removeDirectPathIdx := findAnsibleTask(t, tasks, "Remove direct staged agent ISO output path")
+	linkDirectPathIdx := findAnsibleTask(t, tasks, "Link installer agent ISO output to direct publish path")
+	createISOIdx := findAnsibleTask(t, tasks, "Create agent ISO")
+	statDirectIdx := findAnsibleTask(t, tasks, "Stat direct generated agent ISO")
+	locateISOIdx := findAnsibleTask(t, tasks, "Locate generated agent ISO")
+	setPathIdx := findAnsibleTask(t, tasks, "Set agent ISO path")
 	decisionIdx := findAnsibleTask(t, tasks, "Determine whether local agent ISO transfer is needed")
 	userIdx := findAnsibleTask(t, tasks, "Resolve SSH transfer user")
 	transferIdx := findAnsibleTask(t, tasks, "Transfer generated agent ISO to local runtime state")
@@ -1279,7 +1301,7 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	setLocalIdx := findAnsibleTask(t, tasks, "Set local generated agent ISO path")
 	publishIdx := findAnsibleTask(t, tasks, "Publish generated agent ISO")
 	removeLocalIdx := findAnsibleTask(t, tasks, "Remove local generated agent ISO transfer copy")
-	if !(localDirIdx < previousTokenIdx && previousTokenIdx < previousCleanupIdx && previousCleanupIdx < decisionIdx && decisionIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx && recordIdx < setLocalIdx && setLocalIdx < publishIdx && publishIdx < removeLocalIdx) {
+	if !(localDirIdx < previousTokenIdx && previousTokenIdx < previousCleanupIdx && previousCleanupIdx < generateTokenIdx && generateTokenIdx < recordTokenIdx && recordTokenIdx < directTargetIdx && directTargetIdx < directPathIdx && directPathIdx < directDirIdx && directDirIdx < createDirectDirIdx && createDirectDirIdx < removeDirectPathIdx && removeDirectPathIdx < linkDirectPathIdx && linkDirectPathIdx < createISOIdx && createISOIdx < statDirectIdx && statDirectIdx < locateISOIdx && locateISOIdx < setPathIdx && setPathIdx < decisionIdx && decisionIdx < userIdx && userIdx < transferIdx && transferIdx < recordIdx && recordIdx < setLocalIdx && setLocalIdx < publishIdx && publishIdx < removeLocalIdx) {
 		t.Fatalf("install_agent must clean stale publish state, transfer only when needed, publish, then remove local ISO copies")
 	}
 
@@ -1291,6 +1313,50 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	}
 	if got := tasks[previousCleanupIdx]["ansible.builtin.include_tasks"]; got != "cleanup_iso_target.yml" {
 		t.Fatalf("previous publish cleanup must reuse cleanup_iso_target.yml, got %v", got)
+	}
+
+	if got := tasks[recordTokenIdx]["delegate_to"]; got != "localhost" {
+		t.Fatalf("publish token record must run locally, got %v", got)
+	}
+	if got := tasks[recordTokenIdx]["no_log"]; got != true {
+		t.Fatalf("publish token record must be hidden, got %v", got)
+	}
+	directTarget, ok := tasks[directTargetIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[directTargetIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(directTarget["bootwright_agent_iso_direct_publish_target"]), "selectattr('stageHost', 'equalto', bootwright_host_name | default(inventory_hostname))") {
+		t.Fatalf("direct publish target must select same-host stage targets, got %v", directTarget)
+	}
+	directPath, ok := tasks[directPathIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[directPathIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(directPath["bootwright_agent_iso_direct_stage_path"]), "replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)") {
+		t.Fatalf("direct stage path must substitute the generated token, got %v", directPath)
+	}
+	linkDirect, ok := tasks[linkDirectPathIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", tasks[linkDirectPathIdx]["name"])
+	}
+	if got := linkDirect["src"]; got != "{{ bootwright_agent_iso_direct_stage_path }}" {
+		t.Fatalf("direct ISO link src got %v", got)
+	}
+	if got := linkDirect["dest"]; got != "{{ bootwright_install_work_dir }}/agent.x86_64.iso" {
+		t.Fatalf("direct ISO link dest got %v", got)
+	}
+	if got := linkDirect["state"]; got != "link" {
+		t.Fatalf("direct ISO output must be a symlink, got %v", got)
+	}
+	if got := linkDirect["force"]; got != true {
+		t.Fatalf("direct ISO output link must replace stale paths, got %v", got)
+	}
+	pathFact, ok := tasks[setPathIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[setPathIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(pathFact["bootwright_agent_iso_path"]), "bootwright_agent_iso_direct_stage_path") {
+		t.Fatalf("generated ISO path must prefer direct publish output, got %v", pathFact)
 	}
 
 	decision, ok := tasks[decisionIdx]["ansible.builtin.set_fact"].(map[string]any)
