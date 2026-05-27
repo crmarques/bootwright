@@ -18,6 +18,10 @@ import (
 // vars_dispatch.go so each concern stays under the size lint and
 // editing one shape (e.g. networking) doesn't touch the rest.
 func Vars(state v1alpha1.State) map[string]any {
+	return VarsWithSecretsDir(state, "")
+}
+
+func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any {
 	env := primaryEnvironment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
@@ -35,6 +39,9 @@ func Vars(state v1alpha1.State) map[string]any {
 			"components":             componentsVars(state, ci, ocp),
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
+		}
+		if keyPath := clusterAdminSSHPrivateKeyPath(env, ocp, secretsDir); keyPath != "" {
+			entry["adminSSHPrivateKeyPath"] = keyPath
 		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)

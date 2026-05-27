@@ -43,6 +43,7 @@ bootwright_clusters:
   - name: prod-3node
     installMode: connected
     installMethod: agent
+    adminSSHPrivateKeyPath: /home/user/.ssh/bootwright-ssh-key
     baseDomain: example.test
     distribution:
       type: openshift
