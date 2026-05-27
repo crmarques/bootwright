@@ -16,6 +16,8 @@ _spec.loader.exec_module(_module)
 
 bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descriptors
 bootwright_redfish_action_targets = _module.bootwright_redfish_action_targets
+bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
+bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
 bootwright_redfish_vmedia_attached = _module.bootwright_redfish_vmedia_attached
 bootwright_redfish_vmm_control_actions = _module.bootwright_redfish_vmm_control_actions
 
@@ -262,11 +264,64 @@ class RedfishVirtualMediaAttached(unittest.TestCase):
         )
 
 
+class RedfishMACInventory(unittest.TestCase):
+    def test_collects_mac_fields_from_successful_members(self):
+        results = [
+            {"status": 200, "json": {"MACAddress": "AA-BB-CC-DD-EE-01"}},
+            {"status": 200, "json": {"PermanentMACAddress": "aa:bb:cc:dd:ee:02"}},
+            {"status": 200, "json": {"MACAddress": "AABBCCDDEE03"}},
+            {"status": 404, "json": {"MACAddress": "aa:bb:cc:dd:ee:03"}},
+            {"status": 200, "json": {"MACAddress": "not-a-mac"}},
+        ]
+
+        got = bootwright_redfish_ethernet_macs(results)
+
+        self.assertEqual(
+            got,
+            ["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:03"],
+        )
+
+    def test_reports_missing_declared_macs_when_inventory_is_supported(self):
+        declared = [
+            {"name": "ens65f0", "macAddress": "AA:BB:CC:DD:EE:01"},
+            {"name": "ens66f0", "macAddress": "aa:bb:cc:dd:ee:02"},
+        ]
+        results = [
+            {"status": 200, "json": {"MACAddress": "aa:bb:cc:dd:ee:01"}},
+        ]
+
+        got = bootwright_redfish_mac_validation(declared, results)
+
+        self.assertTrue(got["supported"])
+        self.assertEqual(got["observed"], ["aa:bb:cc:dd:ee:01"])
+        self.assertEqual(
+            got["missing"],
+            [
+                {
+                    "name": "ens66f0",
+                    "macAddress": "aa:bb:cc:dd:ee:02",
+                    "display": "ens66f0=aa:bb:cc:dd:ee:02",
+                }
+            ],
+        )
+
+    def test_marks_inventory_unsupported_when_redfish_exposes_no_macs(self):
+        got = bootwright_redfish_mac_validation(
+            [{"name": "ens65f0", "macAddress": "aa:bb:cc:dd:ee:01"}],
+            [{"status": 200, "json": {"Name": "NIC.Slot.1"}}],
+        )
+
+        self.assertFalse(got["supported"])
+        self.assertEqual(got["observed"], [])
+
+
 class FilterRegistration(unittest.TestCase):
     def test_filter_module_exposes_filter(self):
         registered = _module.FilterModule().filters()
         self.assertIn("bootwright_redfish_action_descriptors", registered)
         self.assertIn("bootwright_redfish_action_targets", registered)
+        self.assertIn("bootwright_redfish_ethernet_macs", registered)
+        self.assertIn("bootwright_redfish_mac_validation", registered)
         self.assertIn("bootwright_redfish_vmedia_attached", registered)
         self.assertIn("bootwright_redfish_vmm_control_actions", registered)
         self.assertIs(
@@ -274,6 +329,14 @@ class FilterRegistration(unittest.TestCase):
             bootwright_redfish_action_descriptors,
         )
         self.assertIs(registered["bootwright_redfish_action_targets"], bootwright_redfish_action_targets)
+        self.assertIs(
+            registered["bootwright_redfish_ethernet_macs"],
+            bootwright_redfish_ethernet_macs,
+        )
+        self.assertIs(
+            registered["bootwright_redfish_mac_validation"],
+            bootwright_redfish_mac_validation,
+        )
         self.assertIs(
             registered["bootwright_redfish_vmedia_attached"],
             bootwright_redfish_vmedia_attached,

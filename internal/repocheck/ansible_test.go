@@ -119,10 +119,20 @@ func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/main.yml")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
+	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
 	powerIdx := findAnsibleTask(t, mainTasks, "Power node from virtual media")
 	postIdx := findAnsibleTask(t, mainTasks, "Set post-boot Redfish boot device")
-	if !(prepareIdx < powerIdx && powerIdx < postIdx) {
-		t.Fatalf("boot_redfish imports must run media_prepare, power, then post_boot")
+	if !(prepareIdx < validateMACsIdx && validateMACsIdx < powerIdx && powerIdx < postIdx) {
+		t.Fatalf("boot_redfish imports must run media_prepare, MAC validation, power, then post_boot")
+	}
+	for _, want := range []string{
+		"bootwright_redfish_action_effective == 'boot'",
+		"bootwright_component.boot.redfish.setBootSource | default(true) | bool",
+		"(bootwright_component.interfaces | default([]) | length) > 0",
+	} {
+		if !stringListContains(mainTasks[validateMACsIdx]["when"], want) {
+			t.Fatalf("boot_redfish MAC validation when missing %q: %v", want, mainTasks[validateMACsIdx]["when"])
+		}
 	}
 	if got := mainTasks[powerIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
 		t.Fatalf("boot_redfish power tasks must only run for boot action, got when=%v", got)
@@ -896,11 +906,72 @@ func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
 	}
 }
 
+func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml")
+	systemIdx := findAnsibleTask(t, tasks, "Refresh Redfish system metadata for declared MAC validation")
+	collectionIdx := findAnsibleTask(t, tasks, "List Redfish EthernetInterface members")
+	memberIdx := findAnsibleTask(t, tasks, "Probe Redfish EthernetInterface members")
+	compareIdx := findAnsibleTask(t, tasks, "Compare declared interface MACs with Redfish inventory")
+	reportIdx := findAnsibleTask(t, tasks, "Report unsupported Redfish EthernetInterface MAC inventory")
+	confirmIdx := findAnsibleTask(t, tasks, "Confirm declared interface MACs exist in Redfish inventory")
+	if !(systemIdx < collectionIdx && collectionIdx < memberIdx && memberIdx < compareIdx && compareIdx < reportIdx && reportIdx < confirmIdx) {
+		t.Fatalf("MAC validation must discover system/collection/members, compare, then report")
+	}
+	for _, idx := range []int{systemIdx, collectionIdx, memberIdx} {
+		uri, ok := tasks[idx]["ansible.builtin.uri"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no uri body", tasks[idx]["name"])
+		}
+		for _, want := range []string{
+			"bootwright_redfish_credentials.username",
+			"bootwright_redfish_credentials.password",
+			"bootwright_redfish_cred_path",
+		} {
+			if !strings.Contains(fmt.Sprint(uri), want) && !strings.Contains(fmt.Sprint(tasks[idx]["no_log"]), want) {
+				t.Fatalf("%s must use credential-safe Redfish request fields containing %q", tasks[idx]["name"], want)
+			}
+		}
+		if !strings.Contains(fmt.Sprint(tasks[idx]["no_log"]), "bootwright_redfish_cred_path") {
+			t.Fatalf("%s must hide uri output when credentials are used", tasks[idx]["name"])
+		}
+	}
+	collectionURI := tasks[collectionIdx]["ansible.builtin.uri"].(map[string]any)
+	if !strings.Contains(fmt.Sprint(collectionURI["url"]), "bootwright_redfish_ethernet_interfaces_path") {
+		t.Fatalf("EthernetInterface collection URL must use resolved collection path, got %v", collectionURI["url"])
+	}
+	memberURI := tasks[memberIdx]["ansible.builtin.uri"].(map[string]any)
+	if !strings.Contains(fmt.Sprint(memberURI["url"]), "item['@odata.id']") {
+		t.Fatalf("EthernetInterface member probe must dereference member @odata.id, got %v", memberURI["url"])
+	}
+	compare, ok := tasks[compareIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[compareIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(compare["bootwright_redfish_mac_validation"]), "bootwright_redfish_mac_validation") {
+		t.Fatalf("MAC comparison must use Redfish MAC validation filter, got %v", compare)
+	}
+	assertBody, ok := tasks[confirmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert body", tasks[confirmIdx]["name"])
+	}
+	if !stringListContains(assertBody["that"], "(bootwright_redfish_mac_validation.missing | default([]) | length) == 0") {
+		t.Fatalf("MAC confirmation must fail on missing declared MACs, got %v", assertBody["that"])
+	}
+	failMsg := fmt.Sprint(assertBody["fail_msg"])
+	if !strings.Contains(failMsg, "Observed Redfish MACs") || !strings.Contains(failMsg, "bootwright_redfish_mac_validation.observed") {
+		t.Fatalf("MAC failure message must include observed Redfish MACs, got %v", assertBody["fail_msg"])
+	}
+	if !strings.Contains(failMsg, "baremetal.interfaces") {
+		t.Fatalf("MAC failure message must point operators to baremetal.interfaces, got %v", assertBody["fail_msg"])
+	}
+}
+
 func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 	for _, path := range []string{
 		"ansible/roles/openshift/boot_redfish/defaults/main.yml",
 		"ansible/roles/openshift/boot_redfish/tasks/main.yml",
 		"ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml",
 		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
 		"ansible/roles/openshift/boot_redfish/tasks/post_boot.yml",
 		"ansible/roles/openshift/boot_redfish/tasks/validate_stage.yml",
