@@ -857,6 +857,29 @@ func TestLocalRootGateArgs(t *testing.T) {
 	}
 }
 
+func TestLocalRootGateBecomeArgs(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{args: []string{"apply", "bastion"}, want: true},
+		{args: []string{"apply", "infra"}, want: true},
+		{args: []string{"apply", "cluster"}, want: true},
+		{args: []string{"apply", "all"}, want: true},
+		{args: []string{"destroy", "infra"}, want: true},
+		{args: []string{"destroy", "cluster"}, want: true},
+		{args: []string{"check", "infra"}, want: false},
+		{args: []string{"secret", "set", "pull-secret"}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			if got := argsMayUseBecome(tc.args); got != tc.want {
+				t.Fatalf("argsMayUseBecome(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	home := setTestHomeAndRoot(t)
 	previous := localRootGate
@@ -937,7 +960,57 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if !reflect.DeepEqual(calls[1], []string{"-S", "-p", "", "-v"}) {
 		t.Fatalf("second sudo call = %v, want password validation", calls[1])
 	}
-	if len(calls[2]) != 10 || calls[2][0] != "-n" || calls[2][1] != "env" || !strings.HasPrefix(calls[2][2], contextstore.InternalRegistryEnv+"=") || calls[2][3] != localroot.InternalEnv+"=1" || calls[2][4] != secret.InternalCallerHomeEnv+"="+home || calls[2][5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || calls[2][6] != localRootSudoAuthEnv+"="+localSudoAuthPrompted || !reflect.DeepEqual(calls[2][7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	commandIndex := localRootCommandIndex(t, calls[2], home, localSudoAuthPrompted)
+	if got := localRootEnvValue(calls[2], localRootBecomePasswordFileEnv); got != "" {
+		t.Fatalf("check command should not receive a become password file: %v", calls[2])
+	}
+	if !reflect.DeepEqual(calls[2][commandIndex:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+		t.Fatalf("third sudo call = %v", calls[2])
+	}
+}
+
+func TestEnsureLocalRootForBecomeCommandExportsPasswordFile(t *testing.T) {
+	home := setTestHomeAndRoot(t)
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+	previousTTY := openControllingTTY
+	openControllingTTY = func() (*os.File, error) { return nil, os.ErrNotExist }
+	defer func() { openControllingTTY = previousTTY }()
+
+	var calls [][]string
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			if name != "sudo" {
+				t.Fatalf("command name = %q, want sudo", name)
+			}
+			calls = append(calls, append([]string(nil), args...))
+			helperArgs := append([]string{"-test.run=TestLocalRootGateSudoPromptHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_SUDO_PROMPT_HELPER=1")
+			return cmd
+		},
+	}
+
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"apply", "infra", "--yes"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("ensureLocalRootForArgs: %v", err)
+	}
+	if !handled || code != 0 {
+		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("sudo calls = %v, want validate, refresh, command", calls)
+	}
+	commandIndex := localRootCommandIndex(t, calls[2], home, localSudoAuthPrompted)
+	if got := localRootEnvValue(calls[2], localRootBecomePasswordFileEnv); got == "" {
+		t.Fatalf("apply command missing inherited become password file: %v", calls[2])
+	} else if _, err := os.Stat(got); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("inherited become password file was not cleaned up: %v", err)
+	}
+	if !reflect.DeepEqual(calls[2][commandIndex:], []string{"/usr/local/bin/bootwright", "apply", "infra", "--yes"}) {
 		t.Fatalf("third sudo call = %v", calls[2])
 	}
 }
@@ -1276,6 +1349,13 @@ func TestLocalRootGateSudoPromptHelperProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	case len(sudoArgs) >= 2 && sudoArgs[0] == "-n" && sudoArgs[1] == "env":
+		path := localRootEnvValue(sudoArgs, localRootBecomePasswordFileEnv)
+		if path != "" {
+			body, err := os.ReadFile(path)
+			if err != nil || string(body) != "secret\n" {
+				os.Exit(2)
+			}
+		}
 		os.Exit(0)
 	default:
 		os.Exit(2)
@@ -2252,6 +2332,31 @@ func commandContains(command []string, arg string) bool {
 		}
 	}
 	return false
+}
+
+func localRootCommandIndex(t *testing.T, args []string, home, auth string) int {
+	t.Helper()
+	if len(args) < 8 || args[0] != "-n" || args[1] != "env" || !strings.HasPrefix(args[2], contextstore.InternalRegistryEnv+"=") || args[3] != localroot.InternalEnv+"=1" || args[4] != secret.InternalCallerHomeEnv+"="+home || args[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || args[6] != localRootSudoAuthEnv+"="+auth {
+		t.Fatalf("local root args prefix = %v", args)
+	}
+	index := 7
+	if index < len(args) && strings.HasPrefix(args[index], localRootBecomePasswordFileEnv+"=") {
+		index++
+	}
+	if index >= len(args) {
+		t.Fatalf("local root args missing executable: %v", args)
+	}
+	return index
+}
+
+func localRootEnvValue(args []string, key string) string {
+	prefix := key + "="
+	for _, arg := range args {
+		if strings.HasPrefix(arg, prefix) {
+			return strings.TrimPrefix(arg, prefix)
+		}
+	}
+	return ""
 }
 
 func initTestContext(t *testing.T, fixtureName string) contextstore.Context {

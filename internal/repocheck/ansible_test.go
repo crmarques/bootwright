@@ -1036,6 +1036,13 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 		if strings.ToLower(value) != "false" {
 			t.Fatalf("%s must disable SSH pipelining; remote sudo requiretty hosts fail before fact gathering", path)
 		}
+		args, ok := ansibleCfgValue(cfg, "ssh_connection", "ssh_common_args")
+		if !ok {
+			t.Fatalf("%s must explicitly configure SSH common args", path)
+		}
+		if !strings.Contains(args, "StrictHostKeyChecking=accept-new") {
+			t.Fatalf("%s SSH common args must accept new host keys without accepting changed keys; got %q", path, args)
+		}
 	}
 }
 
