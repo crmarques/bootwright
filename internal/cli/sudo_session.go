@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -96,6 +97,22 @@ func (s *localSudoSession) validateNonInteractive(ctx context.Context) error {
 func (s *localSudoSession) refresh(ctx context.Context) error {
 	cmd := s.commandContext(ctx, "sudo", "-S", "-p", "", "-v")
 	cmd.Stdin = strings.NewReader(s.password + "\n")
-	cmd.Stderr = s.stderr
-	return cmd.Run()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if stderr.Len() > 0 && s.stderr != nil {
+		_, _ = s.stderr.Write(filterLocalSudoValidationStderr(stderr.String()))
+	}
+	return err
+}
+
+func filterLocalSudoValidationStderr(stderr string) []byte {
+	var out strings.Builder
+	for _, line := range strings.SplitAfter(stderr, "\n") {
+		if strings.TrimRight(line, "\r\n") == "sudo: no password was provided" {
+			continue
+		}
+		out.WriteString(line)
+	}
+	return []byte(out.String())
 }

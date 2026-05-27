@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -977,6 +978,12 @@ func TestEnsureLocalRootForArgsRetriesInvalidSudoPassword(t *testing.T) {
 	if got := strings.Count(stderr.String(), "SUDO password: "); got != 3 {
 		t.Fatalf("sudo prompt count = %d, stderr=%q", got, stderr.String())
 	}
+	if strings.Contains(stderr.String(), "sudo: no password was provided") {
+		t.Fatalf("stderr includes sudo EOF diagnostic: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Sorry, try again.") {
+		t.Fatalf("stderr missing sudo retry diagnostic: %q", stderr.String())
+	}
 	if len(calls) != 5 {
 		t.Fatalf("sudo calls = %v, want noninteractive validation, three password attempts, command", calls)
 	}
@@ -1258,8 +1265,14 @@ func TestLocalRootGateSudoPromptHelperProcess(t *testing.T) {
 		os.Exit(1)
 	case reflect.DeepEqual(sudoArgs, []string{"-S", "-p", "", "-v"}):
 		body, err := io.ReadAll(os.Stdin)
-		if err != nil || string(body) != "secret\n" {
+		if err != nil {
 			os.Exit(2)
+		}
+		if string(body) != "secret\n" {
+			fmt.Fprintln(os.Stderr, "Sorry, try again.")
+			fmt.Fprintln(os.Stderr, "sudo: no password was provided")
+			fmt.Fprintln(os.Stderr, "sudo: 1 incorrect password attempt")
+			os.Exit(1)
 		}
 		os.Exit(0)
 	case len(sudoArgs) >= 2 && sudoArgs[0] == "-n" && sudoArgs[1] == "env":
