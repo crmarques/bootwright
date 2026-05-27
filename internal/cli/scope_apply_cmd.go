@@ -126,18 +126,20 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if !dryRun && !plan.noRemoteWork {
 			printWorkflowStart(stdout, scope.name, plan.selected, plan.askBecomePass)
 		}
-		becomePasswordFile := ""
-		if !dryRun && !plan.noRemoteWork && plan.askBecomePass {
+		become := becomeCredential{}
+		if !dryRun && !plan.noRemoteWork && willPromptForBecomePassword(plan.askBecomePass) {
 			cliout.NewContinuation(stderr).BlankLine()
-			path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
+		}
+		if !dryRun && !plan.noRemoteWork {
+			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.askBecomePass, false, true)
 			if err != nil {
 				return failErr(1, err)
 			}
 			defer cleanup()
-			becomePasswordFile = path
+			become = credential
 		}
 		reporter := newWorkflowReporter(stdout)
-		if plan.askBecomePass {
+		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
 		if !dryRun && !plan.noRemoteWork {
@@ -164,9 +166,9 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			ExtraVarPairs:      plan.extraVarPairs,
 			ArtifactsBaseName:  scope.artifactsBaseName,
 			Check:              check,
-			AskBecomePass:      plan.askBecomePass && becomePasswordFile == "",
-			BecomePasswordFile: becomePasswordFile,
-			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && becomePasswordFile == ""),
+			AskBecomePass:      plan.askBecomePass && become.PasswordFile == "",
+			BecomePasswordFile: become.PasswordFile,
+			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
 			DryRun:             dryRun,
 			ResolveInstaller:   plan.targetsClusters,
 			Label:              scope.name + " apply",

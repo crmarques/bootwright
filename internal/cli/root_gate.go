@@ -57,13 +57,18 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	}
 	stopKeepAlive := sudoSession.keepAlive(ctx)
 	defer stopKeepAlive()
+	childEnv, cleanupChildEnv, err := sudoSession.childEnv(argsMayUseBecome(args))
+	if err != nil {
+		return 1, err
+	}
+	defer cleanupChildEnv()
 	rootArgs := execution.LocalRootCommandArgs(
 		contextstore.InternalRegistryEnv,
 		registry.tempPath,
 		callerHome,
 		os.Getenv("PATH"),
 		exe,
-		[]string{localRootSudoAuthEnv + "=" + sudoSession.authMethod},
+		childEnv,
 		args,
 	)
 	cmdArgs := sudoSession.sudoArgs(rootArgs...)
@@ -172,4 +177,23 @@ func argsContainHelp(args []string) bool {
 
 func argsMayMutateRegistry(args []string) bool {
 	return len(args) >= 2 && args[0] == "context" && (args[1] == "init" || args[1] == "update" || args[1] == "delete")
+}
+
+func argsMayUseBecome(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[0] {
+	case "apply":
+		switch args[1] {
+		case "bastion", "infra", "cluster", "all":
+			return true
+		}
+	case "destroy":
+		switch args[1] {
+		case "infra", "cluster":
+			return true
+		}
+	}
+	return false
 }

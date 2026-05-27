@@ -14,6 +14,7 @@ import (
 const localSudoKeepAliveInterval = time.Minute
 const localSudoPasswordAttempts = 3
 const localRootSudoAuthEnv = "BOOTWRIGHT_INTERNAL_LOCAL_SUDO_AUTH"
+const localRootBecomePasswordFileEnv = "BOOTWRIGHT_INTERNAL_BECOME_PASSWORD_FILE"
 
 const (
 	localSudoAuthNonInteractive = "noninteractive"
@@ -61,6 +62,19 @@ func newLocalSudoSession(ctx context.Context, stdin io.Reader, stderr io.Writer,
 func (s *localSudoSession) sudoArgs(args ...string) []string {
 	out := []string{"-n"}
 	return append(out, args...)
+}
+
+func (s *localSudoSession) childEnv(includeBecomePassword bool) ([]string, func(), error) {
+	env := []string{localRootSudoAuthEnv + "=" + s.authMethod}
+	if s.password == "" || !includeBecomePassword {
+		return env, func() {}, nil
+	}
+	path, cleanup, err := writeBecomePasswordFile(s.password)
+	if err != nil {
+		return nil, nil, err
+	}
+	env = append(env, localRootBecomePasswordFileEnv+"="+path)
+	return env, cleanup, nil
 }
 
 func (s *localSudoSession) keepAlive(ctx context.Context) func() {

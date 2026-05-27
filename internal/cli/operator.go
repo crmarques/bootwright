@@ -175,14 +175,16 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 	for k, v := range extraEnv {
 		ansibleEnv[k] = v
 	}
-	if askBecomePass && becomePasswordFile == "" {
+	if askBecomePass && becomePasswordFile == "" && willPromptForBecomePassword(askBecomePass) {
 		output.NewContinuation(stderr).BlankLine()
-		path, cleanup, err := prepareBecomePasswordFile(stdin, stderr)
+	}
+	if askBecomePass && becomePasswordFile == "" {
+		credential, cleanup, err := prepareBecomeCredential(stdin, stderr, askBecomePass, false, true)
 		if err != nil {
 			return err
 		}
 		defer cleanup()
-		becomePasswordFile = path
+		becomePasswordFile = credential.PasswordFile
 	}
 	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIInventory), askBecomePass, becomePasswordFile)
 	env := operator.MergeBootstrapEnv(os.Environ(), ansibleEnv)
