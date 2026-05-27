@@ -665,10 +665,12 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	sameHostCopyIdx := findAnsibleTask(t, tasks, "Copy agent ISO within the BMC fetch host")
 	crossHostCopyIdx := findAnsibleTask(t, tasks, "Copy agent ISO to the BMC fetch host")
 	restrictIdx := findAnsibleTask(t, tasks, "Restrict staged agent ISO permissions")
+	dirLabelIdx := findAnsibleTask(t, tasks, "Align agent ISO staging directory label with publish root")
+	fileLabelIdx := findAnsibleTask(t, tasks, "Align staged agent ISO label with staging directory")
 	fetchProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO fetch URL")
 	rangeProbeIdx := findAnsibleTask(t, tasks, "Probe staged agent ISO byte-range fetch")
 	fetchConfirmIdx := findAnsibleTask(t, tasks, "Confirm staged agent ISO fetch URL is reachable")
-	if !(resolveIdx < validateIdx && validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
+	if !(resolveIdx < validateIdx && validateIdx < dirIdx && dirIdx < localityIdx && localityIdx < createDirIdx && createDirIdx < linkIdx && linkIdx < sameHostCopyIdx && sameHostCopyIdx < crossHostCopyIdx && crossHostCopyIdx < restrictIdx && restrictIdx < dirLabelIdx && dirLabelIdx < fileLabelIdx && fileLabelIdx < fetchProbeIdx && fetchProbeIdx < rangeProbeIdx && rangeProbeIdx < fetchConfirmIdx) {
 		t.Fatalf("install_agent must validate the target, stage the ISO, and probe fetch reachability before node boot")
 	}
 
@@ -780,6 +782,42 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 	}
 	if got := restrict["path"]; got != "{{ bootwright_agent_iso_stage_path }}" {
 		t.Fatalf("restrict path got %v", got)
+	}
+
+	for _, tc := range []struct {
+		idx       int
+		reference string
+		target    string
+	}{
+		{
+			idx:       dirLabelIdx,
+			reference: "--reference={{ bootwright_agent_iso_stage_dir | dirname }}",
+			target:    "{{ bootwright_agent_iso_stage_dir }}",
+		},
+		{
+			idx:       fileLabelIdx,
+			reference: "--reference={{ bootwright_agent_iso_stage_dir }}",
+			target:    "{{ bootwright_agent_iso_stage_path }}",
+		},
+	} {
+		label, ok := tasks[tc.idx]["ansible.builtin.command"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no command body", tasks[tc.idx]["name"])
+		}
+		for _, want := range []string{"chcon", tc.reference, tc.target} {
+			if !stringListContains(label["argv"], want) {
+				t.Fatalf("%s command missing %q: %v", tasks[tc.idx]["name"], want, label["argv"])
+			}
+		}
+		if got := tasks[tc.idx]["delegate_to"]; got != "{{ bootwright_agent_iso_publish_target.stageHost }}" {
+			t.Fatalf("%s delegate got %v", tasks[tc.idx]["name"], got)
+		}
+		if got := tasks[tc.idx]["become"]; got != true {
+			t.Fatalf("%s must use remote become, got %v", tasks[tc.idx]["name"], got)
+		}
+		if got := tasks[tc.idx]["failed_when"]; got != false {
+			t.Fatalf("%s must tolerate hosts without chcon, got failed_when=%v", tasks[tc.idx]["name"], got)
+		}
 	}
 
 	fetchProbe, ok := tasks[fetchProbeIdx]["ansible.builtin.uri"].(map[string]any)
