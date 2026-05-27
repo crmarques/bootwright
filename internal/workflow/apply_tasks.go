@@ -236,7 +236,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
 	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
 	var err error
-	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.RuntimeDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
+	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.RuntimeDir, opts.SecretsDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
 	if err != nil {
 		return RunLedger{}, err
 	}
@@ -513,19 +513,19 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	}
 	runner := runnerFactory(stdout, stderr)
 	now := time.Now()
-	if err := MarkClusterInstallTaskStarted(opts.RuntimeDir, runID, task, now); err != nil {
+	if err := MarkClusterInstallTaskStarted(opts.RuntimeDir, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	result, err := Run(ctx, taskOpts, runner, nil)
 	now = time.Now()
 	if err != nil {
-		if recordErr := MarkClusterInstallTaskFailed(opts.RuntimeDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskFailed(opts.RuntimeDir, opts.SecretsDir, runID, task, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 	}
 	if !result.Skipped {
-		if recordErr := MarkClusterInstallTaskSucceeded(opts.RuntimeDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskSucceeded(opts.RuntimeDir, opts.SecretsDir, runID, task, now); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}

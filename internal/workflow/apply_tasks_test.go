@@ -78,11 +78,12 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	dir := t.TempDir()
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime")
 	runsDir := filepath.Join(dir, "runs")
 	managedDir := filepath.Join(dir, "managed")
-	hash, err := clusterInstallDesiredHash(state, "sno-libvirt")
+	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
@@ -114,7 +115,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 		RenderedDir:                renderedDir,
 		RuntimeDir:                 runtimeDir,
 		RunsDir:                    runsDir,
-		SecretsDir:                 filepath.Join(dir, "secrets"),
+		SecretsDir:                 secretsDir,
 		ManagedDir:                 managedDir,
 		BundleDir:                  filepath.Join(dir, "bundle"),
 		ClusterAvailabilityChecker: checker,
@@ -141,6 +142,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	dir := t.TempDir()
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime")
 	runsDir := filepath.Join(dir, "runs")
@@ -160,7 +162,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 		RenderedDir: renderedDir,
 		RuntimeDir:  runtimeDir,
 		RunsDir:     runsDir,
-		SecretsDir:  filepath.Join(dir, "secrets"),
+		SecretsDir:  secretsDir,
 		ManagedDir:  managedDir,
 		BundleDir:   filepath.Join(dir, "bundle"),
 	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
@@ -178,11 +180,12 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	dir := t.TempDir()
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
 	runtimeDir := filepath.Join(dir, "runtime")
 	runsDir := filepath.Join(dir, "runs")
 	managedDir := filepath.Join(dir, "managed")
-	hash, err := clusterInstallDesiredHash(state, "sno-libvirt")
+	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
@@ -203,7 +206,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 		RenderedDir: renderedDir,
 		RuntimeDir:  runtimeDir,
 		RunsDir:     runsDir,
-		SecretsDir:  filepath.Join(dir, "secrets"),
+		SecretsDir:  secretsDir,
 		ManagedDir:  managedDir,
 		BundleDir:   filepath.Join(dir, "bundle"),
 	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
@@ -244,6 +247,33 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	}
 }
 
+func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T) {
+	dir := t.TempDir()
+	state := loadWorkflowFixtureState(t, "004-3nodes-emul-baremetal")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
+	clusterName := "3-nodes-ocp-emul-baremetal"
+
+	first, err := clusterInstallDesiredHash(state, clusterName, secretsDir)
+	if err != nil {
+		t.Fatalf("clusterInstallDesiredHash first: %v", err)
+	}
+	proxyCreds := filepath.Join(secretsDir, "proxy-credentials")
+	if err := os.WriteFile(proxyCreds, []byte("proxy:changed-secret\n"), 0o600); err != nil {
+		t.Fatalf("write proxy credentials: %v", err)
+	}
+	changedAt := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(proxyCreds, changedAt, changedAt); err != nil {
+		t.Fatalf("chtimes proxy credentials: %v", err)
+	}
+	second, err := clusterInstallDesiredHash(state, clusterName, secretsDir)
+	if err != nil {
+		t.Fatalf("clusterInstallDesiredHash second: %v", err)
+	}
+	if first == second {
+		t.Fatal("cluster install desired hash did not change after proxy credentials changed")
+	}
+}
+
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
 	t.Helper()
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "desiredstate", "testdata", "good", name)})
@@ -251,4 +281,31 @@ func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
 		t.Fatalf("load fixture %s: %v", name, err)
 	}
 	return state
+}
+
+func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
+	t.Helper()
+	home := filepath.Join(root, "home")
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatalf("mkdir ssh dir: %v", err)
+	}
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(filepath.Join(sshDir, "bootwright-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n"), 0o600); err != nil {
+		t.Fatalf("write ssh public key: %v", err)
+	}
+	secretsDir := filepath.Join(root, "secrets")
+	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+		t.Fatalf("mkdir secrets dir: %v", err)
+	}
+	files := map[string]string{
+		"openshift-pull-secret": `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		"proxy-credentials":     "proxy:secret\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return secretsDir
 }
