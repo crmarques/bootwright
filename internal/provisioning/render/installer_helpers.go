@@ -50,16 +50,15 @@ func pickURL(declared, derived, withCreds string) string {
 	return derived
 }
 
-func managedProxyClientURLForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra) string {
-	u, _ := proxy.ManagedProxyURL(state, ci)
-	return u
-}
-
-func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, ci v1alpha1.ClusterInfra) (*proxy.Effective, string) {
+func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, ci v1alpha1.ClusterInfra) (*proxy.Effective, string, error) {
 	if env == nil {
-		return nil, ""
+		return nil, "", nil
 	}
-	return proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall), managedProxyClientURLForCluster(state, ci)
+	managedURL, err := proxy.ManagedProxyURL(state, ci)
+	if err != nil {
+		return nil, "", err
+	}
+	return proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall), managedURL, nil
 }
 
 func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, env *v1alpha1.Environment) string {

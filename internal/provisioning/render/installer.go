@@ -118,7 +118,10 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 	if mirrors := imageDigestSourcesConfig(installerImageDigestSources(state, ci, ocp, env)); len(mirrors) > 0 {
 		base["imageDigestSources"] = mirrors
 	}
-	eff, managedURL := clusterInstallProxyInputs(state, env, ci)
+	eff, managedURL, err := clusterInstallProxyInputs(state, env, ci)
+	if err != nil {
+		return nil, err
+	}
 	if pc := installerProxyConfig(eff, secrets, managedURL); pc != nil {
 		base["proxy"] = pc
 	}
