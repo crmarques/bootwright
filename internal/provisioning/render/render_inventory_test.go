@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/locality"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 )
 
@@ -18,7 +19,11 @@ func TestInventoryStructure(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := render.Inventory(state, "")
+	inv := render.InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
 	all, ok := inv["all"].(map[string]any)
 	if !ok {
 		t.Fatalf("inventory missing 'all' root: %v", inv)
@@ -77,7 +82,11 @@ func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 
-	inv := render.Inventory(state, "")
+	inv := render.InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	controller := hosts["localhost"].(map[string]any)
@@ -131,6 +140,31 @@ func TestInventoryUsesLocalConnectionForLoopbackHostRefs(t *testing.T) {
 	}
 }
 
+func TestInventoryUsesLocalConnectionForControllerHostnameHostRefs(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	inv := render.InventoryWithLocalityPolicy(state, "/context/secrets", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "bastion", nil
+		},
+	}})
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	serviceHost := hosts["bastion"].(map[string]any)
+	if got := serviceHost["ansible_connection"]; got != "local" {
+		t.Fatalf("ansible_connection = %v, want local for controller-local bastion: %v", got, serviceHost)
+	}
+	if got := serviceHost["ansible_host"]; got != "bastion.bootwright.test" {
+		t.Fatalf("ansible_host = %v, want bastion.bootwright.test", got)
+	}
+	if _, ok := serviceHost["ansible_ssh_private_key_file"]; ok {
+		t.Fatalf("controller-local bastion should not render SSH key material: %v", serviceHost)
+	}
+}
+
 func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
@@ -138,7 +172,11 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	}
 	state.Hosts[0].Spec.SSH.User = "provider-admin"
 
-	inv := render.Inventory(state, "")
+	inv := render.InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)

@@ -6,8 +6,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/artifactpub"
+	"github.com/crmarques/bootwright/internal/locality"
 	"github.com/crmarques/bootwright/internal/secret"
-	"github.com/crmarques/bootwright/internal/stateview"
 )
 
 // Inventory builds the Ansible inventory tree per ADR-0002 § role
@@ -24,6 +24,10 @@ import (
 // needs to filter hosts by hostRef in its task body. The providers
 // layer targets `bootwright_provider_hosts` for service convergence.
 func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
+	return InventoryWithLocalityPolicy(state, secretsDir, locality.DefaultPolicy)
+}
+
+func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
 	infraHostSet := infraReferencedHosts(state)
 	serviceHostSet := serviceReferencedHosts(state)
 	bootHostSet := bootReferencedHosts(state)
@@ -42,7 +46,7 @@ func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 		if !ok || h.Spec.SSH == nil {
 			continue
 		}
-		hosts[name] = hostInventoryEntry(h, env, secretsDir)
+		hosts[name] = hostInventoryEntry(h, env, secretsDir, localPolicy)
 	}
 	if len(ocpHostSet) > 0 {
 		hosts["localhost"] = localhostInventoryEntry()
@@ -134,13 +138,13 @@ func AgentNodeHostName(clusterName, machineName string) string {
 	return clusterName + "__" + machineName
 }
 
-func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string) map[string]any {
+func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
 	sshAddress := v1alpha1.HostSSHAddress(h)
 	entry := map[string]any{
 		"ansible_host":         sshAddress,
 		"bootwright_host_name": h.Metadata.Name,
 	}
-	if stateview.IsLoopbackAlias(sshAddress) {
+	if locality.IsControllerLocalHost(h, localPolicy) {
 		entry["ansible_connection"] = "local"
 		return entry
 	}

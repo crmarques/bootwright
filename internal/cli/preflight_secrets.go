@@ -10,9 +10,9 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/locality"
 	"github.com/crmarques/bootwright/internal/safefs"
 	"github.com/crmarques/bootwright/internal/secret"
-	"github.com/crmarques/bootwright/internal/stateview"
 )
 
 type secretRefRequirement struct {
@@ -34,7 +34,11 @@ const (
 )
 
 func secretRefChecks(state v1alpha1.State, secretsDir string, selected []Phase, deps preflightDeps) []preflightCheck {
-	requirements := collectSecretRefRequirements(state)
+	return secretRefChecksWithLocalityPolicy(state, secretsDir, selected, deps, locality.DefaultPolicy)
+}
+
+func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, selected []Phase, deps preflightDeps, localPolicy locality.Policy) []preflightCheck {
+	requirements := collectSecretRefRequirementsWithLocalityPolicy(state, localPolicy)
 	var inScope []secretRefRequirement
 	needsSecretsDir := false
 	for _, req := range requirements {
@@ -70,7 +74,7 @@ func secretRefChecks(state v1alpha1.State, secretsDir string, selected []Phase, 
 	return checks
 }
 
-func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
+func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localPolicy locality.Policy) []secretRefRequirement {
 	var out []secretRefRequirement
 
 	if env := environmentForChecks(state); env != nil {
@@ -116,7 +120,7 @@ func collectSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
 		if h.Spec.SSH == nil || h.Spec.SSH.KeyRef.Name == "" {
 			continue
 		}
-		if stateview.IsLoopbackAlias(v1alpha1.HostSSHAddress(h)) {
+		if locality.IsControllerLocalHost(h, localPolicy) {
 			continue
 		}
 		out = append(out, secretRefRequirement{

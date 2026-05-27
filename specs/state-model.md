@@ -395,9 +395,10 @@ Rules:
   does not render `ansible_user`; SSH chooses the local account or configured
   host-specific user. Set `spec.ssh.user` only when Bootwright must force a
   provider-host SSH login name.
-- When the resolved SSH endpoint is `localhost` or a loopback address,
-  Bootwright treats the host as controller-local, uses Ansible local
-  connection, and does not require host SSH key material for preflight.
+- When the resolved SSH endpoint is `localhost`, a loopback address, the
+  current controller hostname, or a local interface address, Bootwright treats
+  the host as controller-local, uses Ansible local connection, and does not
+  require host SSH key material for preflight.
 - `spec.ssh.keyRef.name`, when set, references `Environment.spec.secrets`.
 - `spec.capabilities[]` is a typed tag list used by provider capabilities to
   select hosts for substrate or service work.

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/locality"
 )
 
 func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {
@@ -130,11 +131,15 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 
 func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
-	})
+	}, locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
 
 	for _, check := range checks {
 		if check.Name == "host bastion sshKeyRef" {
@@ -158,6 +163,25 @@ func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
 	for _, check := range checks {
 		if check.Name == "host services-host sshKeyRef" {
 			t.Fatalf("loopback host SSH key should not be required: %+v", checks)
+		}
+	}
+}
+
+func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
+	state := loadFixtureState(t, "005-3nodes-baremetal")
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	}, locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "bastion", nil
+		},
+	}})
+
+	for _, check := range checks {
+		if check.Name == "host bastion sshKeyRef" {
+			t.Fatalf("controller-local host SSH key should not be required: %+v", checks)
 		}
 	}
 }
