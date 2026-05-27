@@ -260,20 +260,7 @@
   changed_when: false
 
 - name: Eject any previously inserted virtual media (idempotent)
-  ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_eject_url }}"
-    method: POST
-    body_format: json
-    body: "{{ bootwright_redfish_vmedia_eject_body }}"
-    status_code: [200, 202, 204, 400, 404, 409, 500]
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
-  failed_when: false
-  changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  ansible.builtin.include_tasks: eject_media.yml
 
 - name: Run virtual-media backend preparation
   ansible.builtin.include_role:

@@ -1,4 +1,15 @@
 ---
+- name: Select Redfish boot action
+  ansible.builtin.set_fact:
+    bootwright_redfish_action_effective: "{{ bootwright_redfish_action | default('boot') }}"
+  changed_when: false
+
+- name: Validate selected Redfish boot action
+  ansible.builtin.assert:
+    that:
+      - bootwright_redfish_action_effective in ['boot', 'cleanup_media']
+    fail_msg: "Unsupported boot_redfish action {{ bootwright_redfish_action_effective }}"
+
 - name: Validate Redfish boot inputs
   ansible.builtin.import_tasks: validate_stage.yml
 
@@ -10,6 +21,8 @@
 
 - name: Power node from virtual media
   ansible.builtin.import_tasks: power.yml
+  when: bootwright_redfish_action_effective == 'boot'
 
 - name: Set post-boot Redfish boot device
   ansible.builtin.import_tasks: post_boot.yml
+  when: bootwright_redfish_action_effective == 'boot'
