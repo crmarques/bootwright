@@ -219,6 +219,7 @@ func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1al
 		seen[m.Name] = true
 		errs = append(errs, validateClusterMachineFrom(prefix, ci, m, providers)...)
 		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs)...)
+		errs = append(errs, validateBareMetalMachineNetworkInterfaces(prefix, m, providers, networkConfigs)...)
 	}
 	return errs
 }
@@ -312,6 +313,43 @@ func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachin
 		for _, ipaddr := range addr.IPv6 {
 			errs = append(errs, validateOverlayAddress(owner+".ipv6", ipaddr, networkConfig)...)
 		}
+	}
+	return errs
+}
+
+func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+	if m.From.Provider == "" || m.From.Name == "" || m.From.Profile != "" || m.NetworkConfig.Ref.Name == "" {
+		return nil
+	}
+	provider, ok := providers[m.From.Provider]
+	if !ok {
+		return nil
+	}
+	machine, ok := lookupMachine(provider, m.From.Name)
+	if !ok || machine.BareMetal == nil {
+		return nil
+	}
+	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	if !ok {
+		return nil
+	}
+	required := templateBareMetalInterfaceNames(networkConfig)
+	if len(required) == 0 {
+		return nil
+	}
+	declared := map[string]bool{}
+	for _, iface := range machine.BareMetal.Interfaces {
+		if iface.Name != "" {
+			declared[iface.Name] = true
+		}
+	}
+	var errs []string
+	for _, name := range required {
+		if declared[name] {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("%s.networkConfig.ref %q requires baremetal interface %q but InfraProvider/%s spec.machines[%s].baremetal.interfaces does not declare it",
+			prefix, networkConfig.Metadata.Name, name, provider.Metadata.Name, machine.Name))
 	}
 	return errs
 }

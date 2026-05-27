@@ -55,6 +55,51 @@ func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	}
 }
 
+func TestBareMetalMachineNetworkTemplateRequiresDeclaredInterfaces(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["network.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata: { name: cluster-net }
+spec:
+  machineNetwork:
+    - { cidr: 192.168.132.0/24 }
+  template:
+    networkConfig:
+      interfaces:
+        - { name: primary, type: ethernet, controller: bond0, state: up, ipv4: { enabled: false }, ipv6: { enabled: false } }
+        - { name: secondary, type: ethernet, controller: bond0, state: up, ipv4: { enabled: false }, ipv6: { enabled: false } }
+        - name: bond0
+          type: bond
+          state: up
+          link-aggregation:
+            mode: 802.3ad
+            port: [primary, secondary]
+          ipv4: { enabled: false }
+          ipv6: { enabled: false }
+        - name: bond0.132
+          type: vlan
+          state: up
+          vlan: { base-iface: bond0, id: 132 }
+          ipv4: { enabled: true, dhcp: false }
+          ipv6: { enabled: false }
+      routes:
+        config:
+          - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: bond0.132, table-id: 254 }
+  physical: {}
+`
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "interface: primary", "interface: bond0.132", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected missing baremetal interface error, got nil")
+	}
+	want := `spec.components.machines[master-0].networkConfig.ref "cluster-net" requires baremetal interface "secondary" but InfraProvider/rack spec.machines[srv1].baremetal.interfaces does not declare it`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
 func TestArtifactServerEndpointNamesAreRouteSelectors(t *testing.T) {
 	files := newBaselineFiles()
 	files["hosts.yaml"] = strings.Replace(files["hosts.yaml"],

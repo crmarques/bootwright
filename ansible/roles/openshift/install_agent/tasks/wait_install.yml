@@ -2,6 +2,10 @@
 - name: Wait for agent install completion when install is not already complete
   when: not bootwright_install_already_complete
   block:
+    - name: Show agent install log path
+      ansible.builtin.debug:
+        msg: "Follow agent install progress with: sudo tail -f {{ bootwright_install_work_dir }}/.openshift_install.log"
+
     - name: Wait for agent install completion
       ansible.builtin.command:
         argv:
