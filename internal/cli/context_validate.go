@@ -92,6 +92,10 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 	} else {
 		checks = append(checks, okContextCheck("name", ctx.Name))
 	}
+	if err := contextstore.ValidateContext(ctx); err != nil {
+		checks = append(checks, missingContextCheck("path layout", err.Error(), "bootwright context init <name> -f <path> --yes"))
+		return checks
+	}
 	checks = append(checks,
 		dirContextCheck("context-dir", ctx.BaseDir),
 		dirContextCheck("input-dir", ctx.InputDir),

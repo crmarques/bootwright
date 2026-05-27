@@ -79,9 +79,6 @@ func NewContext(name string) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	if _, err := managedroot.ValidatePath(baseDir); err != nil {
-		return Context{}, err
-	}
 	return newContextAt(name, baseDir), nil
 }
 
@@ -174,9 +171,6 @@ func Current(store Store) (Context, error) {
 	}
 	ctx, err := NewContext(store.Current)
 	if err != nil {
-		return Context{}, err
-	}
-	if err := ValidateContext(ctx); err != nil {
 		return Context{}, err
 	}
 	return ctx, nil

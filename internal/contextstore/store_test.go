@@ -79,6 +79,27 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 	}
 }
 
+func TestCurrentDerivesContextWithoutTraversingProtectedRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	contextsDir := filepath.Join(root, "contexts")
+	if err := os.MkdirAll(contextsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(contextsDir, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(contextsDir, 0o700) })
+
+	current, err := Current(Store{Current: "lab", Contexts: []string{"lab"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.BaseDir != filepath.Join(contextsDir, "lab") {
+		t.Fatalf("BaseDir = %q", current.BaseDir)
+	}
+}
+
 func TestLoadRejectsLegacyContextMapRegistry(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "contexts.yaml")
 	body := []byte("current: lab\ncontexts:\n  lab:\n    baseDir: /tmp/lab\n")

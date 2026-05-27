@@ -124,11 +124,18 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(prepareIdx < powerIdx && powerIdx < postIdx) {
 		t.Fatalf("boot_redfish imports must run media_prepare, power, then post_boot")
 	}
+	if got := mainTasks[powerIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
+		t.Fatalf("boot_redfish power tasks must only run for boot action, got when=%v", got)
+	}
+	if got := mainTasks[postIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
+		t.Fatalf("boot_redfish post-boot tasks must only run for boot action, got when=%v", got)
+	}
 
 	prepareTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml")
 	mediaTasks := readAnsibleTasks(t, "ansible/roles/openshift/media_libvirt/tasks/main.yml")
 	powerTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/power.yml")
 	insertAttemptTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/insert_media_attempt.yml")
+	ejectTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/eject_media.yml")
 	postTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
@@ -188,9 +195,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
 	diskBootConfirmIdx := findAnsibleTask(t, postTasks, "Confirm subsequent disk boot override was accepted")
-	vmediaEjectIdx := findAnsibleTask(t, postTasks, "Eject virtual media after live ISO boot")
-	vmediaEjectWaitIdx := findAnsibleTask(t, postTasks, "Wait for virtual media to report ejected agent ISO")
-	vmediaEjectConfirmIdx := findAnsibleTask(t, postTasks, "Confirm virtual media is ejected after live ISO boot")
 
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
@@ -210,13 +214,11 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(waitSSHIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
 		t.Fatalf("boot_redfish must wait for SSH before switching subsequent boots back to disk")
 	}
-	if !(diskBootConfirmIdx < vmediaEjectIdx && vmediaEjectIdx < vmediaEjectWaitIdx && vmediaEjectWaitIdx < vmediaEjectConfirmIdx) {
-		t.Fatalf("boot_redfish must accept disk boot override before ejecting virtual media through Redfish")
-	}
 
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
 	assertIncludeTasksFile(t, mediaTasks[preLiveIdx], "eject.yml")
 	assertIncludeTasksFile(t, mediaTasks[preConfigIdx], "eject.yml")
+	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject_media.yml")
 	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "insert_media_attempt.yml")
 	assertIncludeTasksApplyWhen(t, powerTasks[retryInsertIdx], "not (bootwright_redfish_vmedia_attached | bool)")
 	if got := powerTasks[retryInsertIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
@@ -592,59 +594,56 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !strings.Contains(diskAssert["fail_msg"].(string), "future reboots may keep using") {
 		t.Fatalf("disk boot assertion must explain rejected override risk, got %v", diskAssert["fail_msg"])
 	}
-	ejectURI, ok := postTasks[vmediaEjectIdx]["ansible.builtin.uri"].(map[string]any)
+	for _, task := range []string{
+		"Eject virtual media after live ISO boot",
+		"Wait for virtual media to report ejected agent ISO",
+		"Confirm virtual media is ejected after live ISO boot",
+	} {
+		if idx := findAnsibleTaskIndex(postTasks, task); idx >= 0 {
+			t.Fatalf("post-boot task %q must not run while the agent ISO can still be read", task)
+		}
+	}
+	ejectIdx := findAnsibleTask(t, ejectTasks, "Eject virtual media")
+	waitEjectIdx := findAnsibleTask(t, ejectTasks, "Wait for virtual media to report ejected")
+	confirmEjectIdx := findAnsibleTask(t, ejectTasks, "Confirm virtual media is ejected")
+	if !(ejectIdx < waitEjectIdx && waitEjectIdx < confirmEjectIdx) {
+		t.Fatalf("virtual media cleanup must eject, wait, then assert detached state")
+	}
+	ejectURI, ok := ejectTasks[ejectIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no uri task", postTasks[vmediaEjectIdx]["name"])
+		t.Fatalf("%s has no uri task", ejectTasks[ejectIdx]["name"])
 	}
 	if got := ejectURI["url"]; got != "{{ bootwright_redfish_vmedia_eject_url }}" {
-		t.Fatalf("post-boot virtual media eject must use resolved Redfish URL, got %v", got)
+		t.Fatalf("virtual media eject must use resolved Redfish URL, got %v", got)
 	}
-	if got := ejectURI["body"]; got != "{{ bootwright_redfish_vmedia_eject_body }}" {
-		t.Fatalf("post-boot virtual media eject must use resolved Redfish body, got %v", got)
-	}
-	if got := postTasks[vmediaEjectIdx]["register"]; got != "bootwright_redfish_vmedia_eject" {
-		t.Fatalf("post-boot virtual media eject must register Redfish response, got %v", got)
-	}
-	if got := postTasks[vmediaEjectIdx]["changed_when"]; got != "(bootwright_redfish_vmedia_eject.status | default(0) | int) in [200, 202, 204]" {
-		t.Fatalf("post-boot virtual media eject must mark accepted responses changed, got %v", got)
-	}
-	waitURI, ok := postTasks[vmediaEjectWaitIdx]["ansible.builtin.uri"].(map[string]any)
+	waitURI, ok := ejectTasks[waitEjectIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no uri task", postTasks[vmediaEjectWaitIdx]["name"])
+		t.Fatalf("%s has no uri task", ejectTasks[waitEjectIdx]["name"])
 	}
 	if got := waitURI["url"]; got != "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}" {
-		t.Fatalf("post-boot virtual media eject wait must poll VirtualMedia member, got %v", got)
+		t.Fatalf("virtual media eject wait must poll VirtualMedia member, got %v", got)
 	}
-	if got := postTasks[vmediaEjectWaitIdx]["register"]; got != "bootwright_redfish_vmedia_eject_probe" {
-		t.Fatalf("post-boot virtual media eject wait must register probe, got %v", got)
+	if got := ejectTasks[waitEjectIdx]["register"]; got != "bootwright_redfish_vmedia_eject_probe" {
+		t.Fatalf("virtual media eject wait must register probe, got %v", got)
 	}
-	if got := postTasks[vmediaEjectWaitIdx]["retries"]; got != "{{ bootwright_redfish_vmedia_eject_retries }}" {
-		t.Fatalf("post-boot virtual media eject wait must use eject retries default, got %v", got)
+	if got := ejectTasks[waitEjectIdx]["retries"]; got != "{{ bootwright_redfish_vmedia_eject_retries }}" {
+		t.Fatalf("virtual media eject wait must use eject retries default, got %v", got)
 	}
-	if got := postTasks[vmediaEjectWaitIdx]["delay"]; got != "{{ bootwright_redfish_vmedia_eject_delay_seconds }}" {
-		t.Fatalf("post-boot virtual media eject wait must use eject delay default, got %v", got)
+	if got := ejectTasks[waitEjectIdx]["delay"]; got != "{{ bootwright_redfish_vmedia_eject_delay_seconds }}" {
+		t.Fatalf("virtual media eject wait must use eject delay default, got %v", got)
 	}
-	until := fmt.Sprint(postTasks[vmediaEjectWaitIdx]["until"])
-	for _, want := range []string{"not (", "bootwright_redfish_vmedia_attached", "bootwright_component.boot.agentIso.fetchUrl", "bootwright_redfish_vmedia_transfer_protocol"} {
+	until := fmt.Sprint(ejectTasks[waitEjectIdx]["until"])
+	for _, want := range []string{"Inserted", "default(false)", "not ("} {
 		if !strings.Contains(until, want) {
-			t.Fatalf("post-boot virtual media eject wait missing %q in until=%v", want, until)
+			t.Fatalf("virtual media eject wait missing %q in until=%v", want, until)
 		}
 	}
-	ejectAssert, ok := postTasks[vmediaEjectConfirmIdx]["ansible.builtin.assert"].(map[string]any)
+	ejectAssert, ok := ejectTasks[confirmEjectIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no assert task", postTasks[vmediaEjectConfirmIdx]["name"])
+		t.Fatalf("%s has no assert task", ejectTasks[confirmEjectIdx]["name"])
 	}
-	if !stringListContains(ejectAssert["that"], "(bootwright_redfish_vmedia_eject_probe.status | default(0) | int) in [200, 404]") {
-		t.Fatalf("post-boot virtual media eject assertion must require readable media state, got %v", ejectAssert["that"])
-	}
-	ejectAssertThat := fmt.Sprint(ejectAssert["that"])
-	if !strings.Contains(ejectAssertThat, "not (") || !strings.Contains(ejectAssertThat, "bootwright_redfish_vmedia_attached") {
-		t.Fatalf("post-boot virtual media eject assertion must require detached agent ISO, got %v", ejectAssert["that"])
-	}
-	for _, want := range []string{"Eject HTTP status", "observed HTTP status", "Inserted", "Image", "TransferProtocolType"} {
-		if !strings.Contains(ejectAssert["fail_msg"].(string), want) {
-			t.Fatalf("post-boot virtual media eject assertion must include %q, got %v", want, ejectAssert["fail_msg"])
-		}
+	if !stringListContains(ejectAssert["that"], "not (bootwright_redfish_vmedia_eject_probe.json.Inserted | default(false) | bool)") {
+		t.Fatalf("virtual media eject assertion must require detached media, got %v", ejectAssert["that"])
 	}
 	defaults := readRepoFile(t, "ansible/roles/openshift/boot_redfish/defaults/main.yml")
 	for _, want := range []string{"bootwright_redfish_vmedia_eject_retries", "bootwright_redfish_vmedia_eject_delay_seconds"} {
@@ -1307,6 +1306,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 	recordIdx := findAnsibleTask(t, tasks, "Record local kubeconfig path")
+	cleanRedfishIdx := findAnsibleTask(t, tasks, "Clean Redfish virtual media after successful install")
 	findRemoteIdx := findAnsibleTask(t, tasks, "Find remote generated agent ISO files")
 	removeRemoteIdx := findAnsibleTask(t, tasks, "Remove remote generated agent ISO files")
 	removeBootArtifactsIdx := findAnsibleTask(t, tasks, "Remove remote generated boot artifacts")
@@ -1314,8 +1314,19 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	removeLocalIdx := findAnsibleTask(t, tasks, "Remove local generated agent ISO files")
 	removeRemotePathIdx := findAnsibleTask(t, tasks, "Remove remote agent ISO path record")
 	removeLocalPathIdx := findAnsibleTask(t, tasks, "Remove local agent ISO path record")
-	if !(recordIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
+	if !(recordIdx < cleanRedfishIdx && cleanRedfishIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
 		t.Fatalf("wait_install must fetch credentials before removing generated ISO artifacts")
+	}
+	assertIncludeRoleName(t, tasks[cleanRedfishIdx], "boot_redfish")
+	if got := tasks[cleanRedfishIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "bootApplyRole") || !strings.Contains(fmt.Sprint(got), "boot_redfish") {
+		t.Fatalf("Redfish cleanup must loop over boot_redfish components, got %v", got)
+	}
+	cleanVars, ok := tasks[cleanRedfishIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no vars", tasks[cleanRedfishIdx]["name"])
+	}
+	if got := cleanVars["bootwright_redfish_action"]; got != "cleanup_media" {
+		t.Fatalf("Redfish cleanup action got %v", got)
 	}
 
 	remoteFind, ok := tasks[findRemoteIdx]["ansible.builtin.find"].(map[string]any)
@@ -1341,7 +1352,7 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if got := tasks[removeLocalPathIdx]["delegate_to"]; got != "localhost" {
 		t.Fatalf("local ISO path cleanup must run locally, got %v", got)
 	}
-	for _, idx := range []int{findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
+	for _, idx := range []int{cleanRedfishIdx, findRemoteIdx, removeRemoteIdx, removeBootArtifactsIdx, findLocalIdx, removeLocalIdx, removeRemotePathIdx, removeLocalPathIdx} {
 		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
 			t.Fatalf("%s must only clean after successful wait, got when=%v", tasks[idx]["name"], got)
 		}

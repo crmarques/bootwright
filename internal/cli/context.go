@@ -323,13 +323,15 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if !contextstore.Contains(store, name) {
 			return failf(1, "context %q not found", name)
 		}
-		ctx, err := contextstore.NewContext(name)
-		if err != nil {
-			return failErr(2, err)
-		}
-		ctx.Name = name
-		if purge && !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
-			return failErr(1, errors.New("context delete aborted"))
+		var ctx contextstore.Context
+		if purge {
+			ctx, err = contextstore.NewContext(name)
+			if err != nil {
+				return failErr(2, err)
+			}
+			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
+				return failErr(1, errors.New("context delete aborted"))
+			}
 		}
 		contextstore.Remove(&store, name)
 		if err := contextstore.Save(registry, store); err != nil {
