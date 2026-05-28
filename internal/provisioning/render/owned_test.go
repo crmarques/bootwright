@@ -134,7 +134,7 @@ func TestOwnedAgentConfigKeysAllHaveWriters(t *testing.T) {
 	conditional := map[string]string{
 		"minimalISO":           "set only when ContainerCluster.spec.install.mode=disconnected",
 		"bootArtifactsBaseURL": "set only when ContainerCluster.spec.install.mode=disconnected",
-		"additionalNTPSources": "set only when Environment.spec.ntpSources is declared",
+		"additionalNTPSources": "set only when Environment.spec.infraComponents.ntpSources is declared",
 	}
 	for _, k := range owned {
 		if slices.Contains(alwaysOwnedAgentConfigKeys, k) {

@@ -64,7 +64,7 @@ Edit these first:
 - `Environment.spec.containerClusters[]` if the environment should select only
   part of the loaded fleet.
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
-  external or managed proxy, DNS, artifact, or registry services.
+  external or managed proxy, DNS, artifact, registry, or NTP services.
 - `Host.spec.addresses[]` and SSH key references for provider/service hosts.
 - Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`.
 - Machine CIDRs and NMState templates in `networks.yaml`.

@@ -63,7 +63,6 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentRegistries(env)...)
 		errs = append(errs, validateEnvironmentClusterTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)
-		errs = append(errs, validateEnvironmentNTPSources(env)...)
 	}
 	return errs
 }
@@ -101,6 +100,7 @@ func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1
 	errs = append(errs, validateEnvironmentNameResolutionComponents(env, components)...)
 	errs = append(errs, validateEnvironmentArtifactServerComponents(env, components)...)
 	errs = append(errs, validateEnvironmentRegistryComponents(env, components)...)
+	errs = append(errs, validateEnvironmentNTPSources(env)...)
 	return errs
 }
 
@@ -145,19 +145,14 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 	return errs
 }
 
-// validateEnvironmentNTPSources enforces that each ntpSources entry is
-// either a parseable IP or a DNS hostname, with no duplicates. The
-// renderer projects this list into agent-config.yaml's
-// additionalNTPSources and (for libvirt-flavored networks) into DHCP
-// option 42; both consumers expect well-formed entries.
 func validateEnvironmentNTPSources(env v1alpha1.Environment) []string {
-	if len(env.Spec.NTPSources) == 0 {
+	if len(env.Spec.InfraComponents.NTPSources) == 0 {
 		return nil
 	}
 	var errs []string
-	owner := fmt.Sprintf("Environment/%s spec.ntpSources", env.Metadata.Name)
+	owner := fmt.Sprintf("Environment/%s spec.infraComponents.ntpSources", env.Metadata.Name)
 	seen := map[string]bool{}
-	for i, s := range env.Spec.NTPSources {
+	for i, s := range env.Spec.InfraComponents.NTPSources {
 		if s == "" {
 			errs = append(errs, fmt.Sprintf("%s[%d] must not be empty", owner, i))
 			continue

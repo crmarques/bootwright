@@ -20,15 +20,6 @@ type EnvironmentSpec struct {
 	ClusterTrust      *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
 	Secrets           map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
-	// NTPSources is the operator-supplied list of NTP servers the
-	// cluster nodes should chrony against during install. The renderer
-	// projects this into agent-config.yaml as additionalNTPSources;
-	// libvirt-flavored networks additionally advertise it as DHCP
-	// option 42 (RFC 2132) so the live ISO's early-boot phase can sync
-	// before nmstate flips to static. Entries are IPs or DNS hostnames
-	// (option 42 entries that are not IPs are dropped at render time
-	// since the option encodes IPv4 addresses only).
-	NTPSources []string `yaml:"ntpSources,omitempty" json:"ntpSources,omitempty"`
 }
 
 type EnvironmentProxyForSpec struct {
@@ -41,6 +32,7 @@ type EnvironmentInfraComponentsSpec struct {
 	NameResolution  []EnvironmentNameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
 	ArtifactServers []EnvironmentArtifactServerComponent `yaml:"artifactServers,omitempty" json:"artifactServers,omitempty"`
 	Registries      []EnvironmentRegistryComponent       `yaml:"registries,omitempty" json:"registries,omitempty"`
+	NTPSources      []string                             `yaml:"ntpSources,omitempty" json:"ntpSources,omitempty"`
 }
 
 type EnvironmentArtifactRoutes struct {

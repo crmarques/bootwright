@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -459,6 +460,33 @@ func TestAgentConfigRendersLibvirtGeneratedInterface(t *testing.T) {
 	machinePrimary := machineInterfaces[0].(map[string]any)
 	if got := machinePrimary["macAddress"]; got != "52:54:00:16:3c:f8" {
 		t.Errorf("vars machine interface macAddress got %v, want deterministic libvirt MAC", got)
+	}
+}
+
+func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.InfraComponents.NTPSources = []string{"ntp.example.test", "192.168.132.1"}
+
+	agent, err := render.AgentConfig(state, state.ContainerClusters[0])
+	if err != nil {
+		t.Fatalf("AgentConfig: %v", err)
+	}
+	want := []any{"ntp.example.test", "192.168.132.1"}
+	if got := agent["additionalNTPSources"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("additionalNTPSources got %v, want %v", got, want)
+	}
+
+	vars := render.Vars(state)
+	env := vars["bootwright_environment"].(map[string]any)
+	if _, ok := env["ntpSources"]; ok {
+		t.Fatalf("bootwright_environment rendered top-level ntpSources: %v", env["ntpSources"])
+	}
+	infra := env["infraComponents"].(map[string]any)
+	if got := infra["ntpSources"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("infraComponents.ntpSources got %v, want %v", got, want)
 	}
 }
 

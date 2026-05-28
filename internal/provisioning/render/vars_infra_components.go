@@ -69,6 +69,9 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 		}
 		out["registries"] = values
 	}
+	if len(env.Spec.InfraComponents.NTPSources) > 0 {
+		out["ntpSources"] = stringSliceAny(env.Spec.InfraComponents.NTPSources)
+	}
 	if len(out) == 0 {
 		return nil
 	}

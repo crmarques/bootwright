@@ -126,13 +126,6 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if len(env.Spec.ComponentImages) > 0 {
 		out["componentImages"] = componentImagesVars(env.Spec.ComponentImages)
 	}
-	if len(env.Spec.NTPSources) > 0 {
-		ntp := make([]any, 0, len(env.Spec.NTPSources))
-		for _, s := range env.Spec.NTPSources {
-			ntp = append(ntp, s)
-		}
-		out["ntpSources"] = ntp
-	}
 	return out
 }
 
