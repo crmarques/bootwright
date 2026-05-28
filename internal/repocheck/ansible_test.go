@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -226,29 +227,60 @@ func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 
 func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
-	resolveIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution user")
-	statIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
+	contextIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution context")
+	prefixIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key caller command prefix")
+	checkIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
 	authIdx := findAnsibleTask(t, tasks, "Wait for node SSH to accept cluster admin key")
-	if !(resolveIdx < statIdx && resolveIdx < authIdx) {
-		t.Fatalf("SSH auth probe execution user must resolve before key access tasks")
+	if !(contextIdx < prefixIdx && prefixIdx < checkIdx && checkIdx < authIdx) {
+		t.Fatalf("SSH auth probe command prefix must resolve before key access tasks")
 	}
 
-	setFact, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	setFact, ok := tasks[contextIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
-		t.Fatalf("execution user task is not set_fact: %v", tasks[resolveIdx])
+		t.Fatalf("execution context task is not set_fact: %v", tasks[contextIdx])
 	}
-	expr := fmt.Sprint(setFact["bootwright_node_ready_ssh_key_become_user"])
+	expr := fmt.Sprint(setFact["bootwright_node_ready_ssh_key_exec_user"])
 	for _, want := range []string{"BOOTWRIGHT_INTERNAL_LOCAL_ROOT", "SUDO_UID", "'#'"} {
 		if !strings.Contains(expr, want) {
 			t.Fatalf("execution user expression missing %q: %s", want, expr)
 		}
 	}
-	for _, task := range []map[string]any{tasks[statIdx], tasks[authIdx]} {
-		if got := task["become"]; got != "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}" {
-			t.Fatalf("%s become = %v", task["name"], got)
+	prefixFact, ok := tasks[prefixIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("command prefix task is not set_fact: %v", tasks[prefixIdx])
+	}
+	prefix, ok := prefixFact["bootwright_node_ready_ssh_key_command_prefix"].([]any)
+	if !ok {
+		t.Fatalf("command prefix is not a list: %v", prefixFact)
+	}
+	for _, want := range []string{"sudo", "-n", "-u", "{{ bootwright_node_ready_ssh_key_exec_user }}", "--"} {
+		if !slices.Contains(prefix, any(want)) {
+			t.Fatalf("command prefix missing %q: %v", want, prefix)
 		}
-		if got := task["become_user"]; got != "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}" {
-			t.Fatalf("%s become_user = %v", task["name"], got)
+	}
+	checkCommand, ok := tasks[checkIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("key check task is not command: %v", tasks[checkIdx])
+	}
+	checkArgv := fmt.Sprint(checkCommand["argv"])
+	for _, want := range []string{"bootwright_node_ready_ssh_key_command_prefix", "'test'", "'-f'", "bootwright_node_ready_ssh_key_path"} {
+		if !strings.Contains(checkArgv, want) {
+			t.Fatalf("key check argv missing %q: %s", want, checkArgv)
+		}
+	}
+	authCommand, ok := tasks[authIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("SSH auth task is not command: %v", tasks[authIdx])
+	}
+	authArgv := fmt.Sprint(authCommand["argv"])
+	for _, want := range []string{"bootwright_node_ready_ssh_key_command_prefix", "'ssh'", "bootwright_node_ready_ssh_key_path"} {
+		if !strings.Contains(authArgv, want) {
+			t.Fatalf("SSH auth argv missing %q: %s", want, authArgv)
+		}
+	}
+	for _, task := range []map[string]any{tasks[checkIdx], tasks[authIdx]} {
+		if _, ok := task["become_user"]; ok {
+			t.Fatalf("%s must not use Ansible become_user for caller key access", task["name"])
 		}
 	}
 }
@@ -750,7 +782,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no command task", postTasks[sshAuthIdx]["name"])
 	}
-	if argv := fmt.Sprint(sshAuth["argv"]); !strings.Contains(argv, "BatchMode=yes") || !strings.Contains(argv, "core@{{ bootwright_node_probe_address }}") {
+	if argv := fmt.Sprint(sshAuth["argv"]); !strings.Contains(argv, "BatchMode=yes") || !strings.Contains(argv, "core@") || !strings.Contains(argv, "bootwright_node_probe_address") {
 		t.Fatalf("SSH auth probe must use noninteractive core SSH, got %v", sshAuth["argv"])
 	}
 	sshAuthAssert, ok := postTasks[sshAuthConfirmIdx]["ansible.builtin.assert"].(map[string]any)
