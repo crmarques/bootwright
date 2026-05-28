@@ -23,7 +23,7 @@ type OCPInstallSpec struct {
 	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
 	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
 	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	NodeSSH           NodeSSHSpec      `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
+	NodeSSH                   NodeSSHSpec              `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
 	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
 }

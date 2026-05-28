@@ -230,7 +230,7 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 	contextIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution context")
 	prefixIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key caller command prefix")
 	checkIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
-	authIdx := findAnsibleTask(t, tasks, "Wait for node SSH to accept cluster admin key")
+	authIdx := findAnsibleTask(t, tasks, "Wait for node SSH to accept configured key")
 	if !(contextIdx < prefixIdx && prefixIdx < checkIdx && checkIdx < authIdx) {
 		t.Fatalf("SSH auth probe command prefix must resolve before key access tasks")
 	}
@@ -371,8 +371,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	resolveAttachmentSourcesIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment sources")
 	resolveAttachedIdx := findAnsibleTask(t, insertAttemptTasks, "Resolve virtual media attachment result")
 	waitSSHIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to confirm live ISO boot complete")
-	sshAuthIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to accept cluster admin key")
-	sshAuthConfirmIdx := findAnsibleTask(t, postTasks, "Confirm node SSH accepted cluster admin key")
+	sshAuthIdx := findAnsibleTask(t, postTasks, "Wait for node SSH to accept configured key")
+	sshAuthConfirmIdx := findAnsibleTask(t, postTasks, "Confirm node SSH accepted configured key")
 	diskBootRefreshIdx := findAnsibleTask(t, postTasks, "Refresh Redfish system metadata before disk boot override")
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")

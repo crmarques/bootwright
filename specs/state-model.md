@@ -779,7 +779,8 @@ Validation rejects:
 - Any old network reference field under providers, machines, or endpoints.
 - Any old cluster-to-infra top-level reference on `ContainerCluster`.
 - Removed `ContainerCluster.spec.install` fields: `baseDomain`,
-  `imageDigestSources`, `installConfigOverrides`, and `agentConfigOverrides`.
+  `imageDigestSources`, `installConfigOverrides`, `agentConfigOverrides`,
+  `sshKeyRef`, and `clusterAdminSSH`.
 - Multiple `ClusterInfra` references inside one `ContainerCluster`.
 - `ContainerCluster` node references that do not resolve to a selected machine.
 - OpenShift clusters without a pull secret reference after normalization.

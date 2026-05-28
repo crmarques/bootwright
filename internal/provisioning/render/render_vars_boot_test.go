@@ -65,8 +65,8 @@ func TestVarsProjectNodeSSHPrivateKeyPath(t *testing.T) {
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	want := filepath.Join(sourceDir, "keys", "admin")
-	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
-		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
+	if got := cluster["nodeSSHPrivateKeyPath"]; got != want {
+		t.Fatalf("nodeSSHPrivateKeyPath got %v, want %s", got, want)
 	}
 }
 
@@ -84,8 +84,8 @@ func TestVarsProjectGeneratedNodeSSHPrivateKeyPath(t *testing.T) {
 	vars := render.VarsWithSecretsDir(state, secretsDir)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	want := filepath.Join(secretsDir, v1alpha1.DefaultNodeSSHKeyName)
-	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
-		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
+	if got := cluster["nodeSSHPrivateKeyPath"]; got != want {
+		t.Fatalf("nodeSSHPrivateKeyPath got %v, want %s", got, want)
 	}
 }
 
@@ -105,8 +105,8 @@ func TestVarsProjectSplitNodeSSHPrivateKeyPath(t *testing.T) {
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	want := filepath.Join(sourceDir, "keys", "admin")
-	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
-		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
+	if got := cluster["nodeSSHPrivateKeyPath"]; got != want {
+		t.Fatalf("nodeSSHPrivateKeyPath got %v, want %s", got, want)
 	}
 }
 

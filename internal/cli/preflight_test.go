@@ -176,7 +176,7 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	}})
 
 	for _, check := range checks {
-		if check.Name == "host bastion sshKeyRef" {
+		if check.Name == "host bastion keyRef" {
 			if check.Status == "OK" {
 				t.Fatalf("host SSH key check unexpectedly passed: %+v", check)
 			}
@@ -195,7 +195,7 @@ func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
 	})
 
 	for _, check := range checks {
-		if check.Name == "host services-host sshKeyRef" {
+		if check.Name == "host services-host keyRef" {
 			t.Fatalf("loopback host SSH key should not be required: %+v", checks)
 		}
 	}
@@ -214,7 +214,7 @@ func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
 	}})
 
 	for _, check := range checks {
-		if check.Name == "host bastion sshKeyRef" {
+		if check.Name == "host bastion keyRef" {
 			t.Fatalf("controller-local host SSH key should not be required: %+v", checks)
 		}
 	}

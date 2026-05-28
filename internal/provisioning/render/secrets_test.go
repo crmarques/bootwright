@@ -156,8 +156,8 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
-				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
-				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
+				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
+				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname:   "master-0",
@@ -344,9 +344,9 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
-				Mode:            v1alpha1.InstallModeDisconnected,
-				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
-				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
+				Mode:          v1alpha1.InstallModeDisconnected,
+				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
+				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",

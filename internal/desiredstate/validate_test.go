@@ -260,6 +260,20 @@ spec:
 			wantSubstring: "field sshKeyRef not found",
 		},
 		{
+			name: "containercluster-clusteradminssh-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "field clusterAdminSSH not found",
+		},
+		{
+			name: "environment-default-clusteradminssh-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  baseDomain: bootwright.test\n",
+				"  baseDomain: bootwright.test\n  defaults:\n    install:\n      clusterAdminSSH:\n        keyPairRef: { name: cluster-admin-ssh-key }\n", 1)},
+			wantSubstring: "field clusterAdminSSH not found",
+		},
+		{
 			name: "host-ssh-address-rejected",
 			files: map[string]string{"hosts.yaml": strings.Replace(newHostsYAML,
 				"addressName: ssh",
