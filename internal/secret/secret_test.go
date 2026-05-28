@@ -58,6 +58,49 @@ func TestResolveKeyFilePathUsesProcessHomeWithoutInternalCaller(t *testing.T) {
 	}
 }
 
+func TestResolveSSHKeyPairMaterialPaths(t *testing.T) {
+	env := &v1alpha1.Environment{
+		Spec: v1alpha1.EnvironmentSpec{
+			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"cluster-admin-pub-key": {
+					Generated: &v1alpha1.EnvironmentSecretGenerated{
+						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+					},
+				},
+			},
+		},
+	}
+	secretsDir := filepath.Join("context", "secrets")
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key") {
+		t.Fatalf("private path = %q", got)
+	}
+	if got := ResolveSSHPublicKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key.pub") {
+		t.Fatalf("public path = %q", got)
+	}
+}
+
+func TestResolveContextStorageSSHFileSourcePaths(t *testing.T) {
+	env := &v1alpha1.Environment{
+		SourcePath: filepath.Join("/input", "environment.yaml"),
+		Spec: v1alpha1.EnvironmentSpec{
+			SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
+			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"cluster-admin-pub-key": {File: "keys/admin"},
+			},
+		},
+	}
+	secretsDir := filepath.Join("context", "secrets")
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key") {
+		t.Fatalf("context private path = %q", got)
+	}
+	if got := ResolveSSHPublicKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key.pub") {
+		t.Fatalf("context public path = %q", got)
+	}
+	if got := ResolveSourceMaterialPath("cluster-admin-pub-key", env, MaterialSSHPublic); got != filepath.Join("/input", "keys", "admin.pub") {
+		t.Fatalf("source public path = %q", got)
+	}
+}
+
 func TestParseBMCCredentials(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -156,6 +199,23 @@ func TestGenerateBMCPasswordIsUrlSafe(t *testing.T) {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
 			t.Errorf("non-URL-safe char in password: %q", c)
 		}
+	}
+}
+
+func TestSSHKeyPairPEM(t *testing.T) {
+	privateKey, publicKey, err := SSHKeyPairPEM(v1alpha1.GeneratedSSHKeyPairSpec{
+		Type:    v1alpha1.SSHKeyPairTypeEd25519,
+		Comment: "bootwright-cluster-admin",
+	})
+	if err != nil {
+		t.Fatalf("SSHKeyPairPEM: %v", err)
+	}
+	if !strings.Contains(string(privateKey), "OPENSSH PRIVATE KEY") {
+		t.Fatalf("private key missing OpenSSH header:\n%s", privateKey)
+	}
+	public := string(publicKey)
+	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.HasSuffix(public, " bootwright-cluster-admin\n") {
+		t.Fatalf("public key = %q", public)
 	}
 }
 

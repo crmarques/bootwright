@@ -180,7 +180,7 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked bool,
 		case strings.Contains(label, "sshKeyRef") && !contextBacked:
 			remediation = "create the file declared by Environment.spec.secrets[" + refName + "].file"
 		case contextBacked:
-			remediation = "create " + path + " with bootwright secret set or declare Environment.spec.secrets[" + refName + "].file"
+			remediation = "bootwright secret materialize or create " + path + " with bootwright secret set"
 		}
 		return failCheck(checkGroupSecretMaterial, name, path+" missing", "Referenced secret material is required before apply", remediation)
 	}

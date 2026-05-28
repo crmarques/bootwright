@@ -55,8 +55,11 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 }
 
 func existingSecretPaths(secretsDir, name string) ([]string, error) {
-	paths := []string{filepath.Join(secretsDir, name)}
-	keyPath := filepath.Join(secretsDir, name+".key")
+	paths := []string{
+		filepath.Join(secretsDir, name),
+		filepath.Join(secretsDir, name+".key"),
+		filepath.Join(secretsDir, name+".pub"),
+	}
 	var out []string
 	for _, path := range paths {
 		exists, err := safefs.RegularFileExists(path)
@@ -66,13 +69,6 @@ func existingSecretPaths(secretsDir, name string) ([]string, error) {
 		if exists {
 			out = append(out, path)
 		}
-	}
-	exists, err := safefs.RegularFileExists(keyPath)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		out = append(out, keyPath)
 	}
 	return out, nil
 }

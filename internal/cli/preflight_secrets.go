@@ -21,7 +21,7 @@ type secretRefRequirement struct {
 	phases        []string
 	source        secretRefSource
 	generatedKind string
-	publicKey     bool
+	role          secret.MaterialRole
 	tlsPair       bool
 }
 
@@ -63,13 +63,17 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 			checks = append(checks, tlsSecretFileChecks(req, env, secretsDir, deps)...)
 			continue
 		}
+		if req.source == secretRefSourceGenerated && req.generatedKind == "sshKeyPair" {
+			checks = append(checks, generatedSSHKeyPairChecks(req, env, secretsDir, deps)...)
+			continue
+		}
 		if req.source == secretRefSourceGenerated {
 			path := filepath.Join(secretsDir, req.refName)
 			checks = append(checks, generatedSecretCheck(req.refName, path, req.label, req.generatedKind, deps))
 			continue
 		}
-		path := resolvedSecretPath(req.refName, env, secretsDir)
-		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.publicKey, req.source == secretRefSourceContext, deps))
+		path := secret.ResolveMaterialPath(req.refName, env, secretsDir, req.role)
+		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, deps))
 	}
 	return checks
 }
@@ -127,6 +131,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			refName: h.Spec.SSH.KeyRef.Name,
 			label:   fmt.Sprintf("host %s sshKeyRef", h.Metadata.Name),
 			phases:  []string{"provider", "cluster", "clusters"},
+			role:    secret.MaterialSSHPrivate,
 		})
 	}
 	for _, p := range state.InfraProviders {
@@ -181,10 +186,10 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		}
 		if install.SSHKeyRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName:   install.SSHKeyRef.Name,
-				label:     cluster.Metadata.Name + " sshKeyRef",
-				phases:    []string{"clusters"},
-				publicKey: true,
+				refName: install.SSHKeyRef.Name,
+				label:   cluster.Metadata.Name + " sshKeyRef",
+				phases:  []string{"clusters"},
+				role:    secret.MaterialSSHPublic,
 			})
 		}
 		for i, ref := range install.AdditionalTrustBundleRefs {
@@ -233,7 +238,8 @@ func environmentForChecks(state v1alpha1.State) *v1alpha1.Environment {
 
 func resolveSecretRequirementSources(state v1alpha1.State, requirements []secretRefRequirement) []secretRefRequirement {
 	declared := map[string]v1alpha1.EnvironmentSecretSpec{}
-	if env := primaryEnvironmentForSync(state); env != nil {
+	env := primaryEnvironmentForSync(state)
+	if env != nil {
 		for name, spec := range env.Spec.Secrets {
 			declared[name] = spec
 		}
@@ -248,7 +254,7 @@ func resolveSecretRequirementSources(state v1alpha1.State, requirements []secret
 		case spec.Generated != nil:
 			requirements[i].source = secretRefSourceGenerated
 			requirements[i].generatedKind = generatedSecretKind(spec)
-		case spec.File == "":
+		case spec.File == "" || env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext:
 			requirements[i].source = secretRefSourceContext
 		default:
 			requirements[i].source = secretRefSourceFile
@@ -266,6 +272,8 @@ func generatedSecretKind(spec v1alpha1.EnvironmentSecretSpec) string {
 		return "credentials"
 	case spec.Generated.SelfSignedCertificate != nil:
 		return "selfSignedCertificate"
+	case spec.Generated.SSHKeyPair != nil:
+		return "sshKeyPair"
 	default:
 		return ""
 	}
@@ -277,6 +285,15 @@ func tlsSecretFileChecks(req secretRefRequirement, env *v1alpha1.Environment, se
 	return []preflightCheck{
 		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
 		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
+	}
+}
+
+func generatedSSHKeyPairChecks(req secretRefRequirement, env *v1alpha1.Environment, secretsDir string, deps preflightDeps) []preflightCheck {
+	privatePath := secret.ResolveSSHPrivateKeyPath(req.refName, env, secretsDir)
+	publicPath := secret.ResolveSSHPublicKeyPath(req.refName, env, secretsDir)
+	return []preflightCheck{
+		generatedSecretCheck(req.refName, privatePath, req.label+" private", "sshKeyPair", deps),
+		generatedSecretCheck(req.refName, publicPath, req.label+" public", "sshKeyPair", deps),
 	}
 }
 

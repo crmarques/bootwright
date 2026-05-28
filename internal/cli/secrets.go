@@ -21,6 +21,7 @@ func newSecretCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Co
 	}
 	cmd.AddCommand(
 		newSecretSetCmd(stdout),
+		newSecretMaterializeCmd(stdout, stderr),
 		newSecretGenerateCmd(stdout, stderr),
 		newSecretListCmd(stdout),
 		newSecretShowCmd(stdout),

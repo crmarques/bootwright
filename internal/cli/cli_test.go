@@ -2302,11 +2302,13 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 		t.Fatalf("mkdir ssh dir: %v", err)
 	}
 	secrets := map[string]string{
-		filepath.Join(ctx.SecretsDir, "openshift-pull-secret"): `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		filepath.Join(ctx.SecretsDir, "bmc-credentials"):       "admin:password\n",
-		filepath.Join(ctx.SecretsDir, "proxy-credentials"):     "proxy:password\n",
-		filepath.Join(sshDir, "bootwright-ssh-key"):            "fake-private-key\n",
-		filepath.Join(sshDir, "bootwright-ssh-key.pub"):        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
+		filepath.Join(ctx.SecretsDir, "openshift-pull-secret"):     `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key"):     "fake-private-key\n",
+		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
+		filepath.Join(ctx.SecretsDir, "bmc-credentials"):           "admin:password\n",
+		filepath.Join(ctx.SecretsDir, "proxy-credentials"):         "proxy:password\n",
+		filepath.Join(sshDir, "bootwright-ssh-key"):                "fake-private-key\n",
+		filepath.Join(sshDir, "bootwright-ssh-key.pub"):            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
 	}
 	for path, body := range secrets {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -24,6 +24,9 @@ func Normalize(state *v1alpha1.State) {
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {
+	if env.Spec.SecretStorage.Mode == "" {
+		env.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeSource
+	}
 	for name, secret := range env.Spec.Secrets {
 		if secret.Generated == nil {
 			continue
@@ -33,6 +36,9 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 		}
 		if creds := secret.Generated.Credentials; creds != nil && creds.Username == "" {
 			creds.Username = "admin"
+		}
+		if keyPair := secret.Generated.SSHKeyPair; keyPair != nil && keyPair.Type == "" {
+			keyPair.Type = v1alpha1.SSHKeyPairTypeEd25519
 		}
 		env.Spec.Secrets[name] = secret
 	}

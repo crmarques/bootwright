@@ -74,6 +74,11 @@ const (
 	EnvironmentComponentExternal = "external"
 	EnvironmentComponentManaged  = "managed"
 
+	SecretStorageModeSource  = "source"
+	SecretStorageModeContext = "context"
+
+	SSHKeyPairTypeEd25519 = "ed25519"
+
 	InfraComponentTypeHAProxy        = "haProxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"

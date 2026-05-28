@@ -192,20 +192,11 @@
   delegate_to: localhost
   become: false
 
-- name: Ensure context secrets directory exists for kubeadmin password
-  ansible.builtin.file:
-    path: "{{ bootwright_secrets_dir }}"
-    state: directory
-    mode: "0700"
-  delegate_to: localhost
-  become: false
-  when: bootwright_local_kubeadmin_password_stat.stat.exists
-
 - name: Save kubeadmin password to context secrets
-  ansible.builtin.copy:
-    src: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-    dest: "{{ bootwright_secrets_dir }}/{{ bootwright_current_cluster.name }}-kubeadmin-password"
-    mode: "0600"
-  delegate_to: localhost
-  become: false
+  ansible.builtin.include_role:
+    name: context_secret
+    tasks_from: save_file
+  vars:
+    bootwright_context_secret_name: "{{ bootwright_current_cluster.name }}-kubeadmin-password"
+    bootwright_context_secret_source: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
   when: bootwright_local_kubeadmin_password_stat.stat.exists

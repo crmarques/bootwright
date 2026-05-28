@@ -202,6 +202,16 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s %q uses file-sourced TLS material but Environment/%s spec.secrets[%s].keyFile is empty", owner, ref.Name, env.Metadata.Name, ref.Name))
 		}
 	}
+	requireSSHKey := func(owner string, ref v1alpha1.SecretRef) {
+		require(owner, ref)
+		if ref.Name == "" || !declared[ref.Name] {
+			return
+		}
+		spec := env.Spec.Secrets[ref.Name]
+		if spec.Generated != nil && spec.Generated.SSHKeyPair == nil {
+			errs = append(errs, fmt.Sprintf("%s %q uses generated material but Environment/%s spec.secrets[%s].generated is not sshKeyPair", owner, ref.Name, env.Metadata.Name, ref.Name))
+		}
+	}
 	for i, entry := range env.Spec.InfraComponents.Proxies {
 		if entry.Connection != nil && entry.Connection.Auth != nil {
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].connection.auth.proxyAuthRef", env.Metadata.Name, i), entry.Connection.Auth.ProxyAuthRef)
@@ -219,7 +229,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	for _, h := range state.Hosts {
 		if h.Spec.SSH != nil {
-			require(fmt.Sprintf("Host/%s spec.ssh.keyRef", h.Metadata.Name), h.Spec.SSH.KeyRef)
+			requireSSHKey(fmt.Sprintf("Host/%s spec.ssh.keyRef", h.Metadata.Name), h.Spec.SSH.KeyRef)
 		}
 	}
 	for _, p := range state.InfraProviders {
@@ -245,7 +255,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	for _, ocp := range state.ContainerClusters {
 		require(fmt.Sprintf("ContainerCluster/%s install.pullSecretRef", ocp.Metadata.Name), ocp.Spec.Install.PullSecretRef)
-		require(fmt.Sprintf("ContainerCluster/%s install.sshKeyRef", ocp.Metadata.Name), ocp.Spec.Install.SSHKeyRef)
+		requireSSHKey(fmt.Sprintf("ContainerCluster/%s install.sshKeyRef", ocp.Metadata.Name), ocp.Spec.Install.SSHKeyRef)
 		for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
 			require(fmt.Sprintf("ContainerCluster/%s install.additionalTrustBundleRefs[%d]", ocp.Metadata.Name, i), ref)
 		}

@@ -18,13 +18,13 @@ The case context input references four or five secrets through
 
 | Secret | Form | Required for |
 | --- | --- | --- |
-| `cluster-admin-pub-key` | `~/.ssh/bootwright-ssh-key.pub` | OpenShift cluster-admin SSH access |
+| `cluster-admin-pub-key` | Context-local generated SSH key pair | OpenShift cluster-admin SSH access |
 | `provider-host-ssh` | `~/.ssh/bootwright-ssh-key` | Bastion→host SSH |
 | `openshift-pull-secret` | Context-local, set from the pull-secret JSON | `render installer`, `apply cluster` |
 | `proxy-credentials` (optional) | Context-local generated or set — see [proxy.md](proxy.md) | `apply bastion`, install-config proxy block |
 | `bmc-credentials` | Context-local generated or set | `apply infra`, `apply cluster` |
 
-Confirm the SSH key pair, then set the pull secret:
+Confirm the provider-host SSH key pair, then set the pull secret:
 
 ```bash
 test -r ~/.ssh/bootwright-ssh-key
@@ -152,10 +152,10 @@ per-machine overlays in `cluster-infra.yaml` under
 or bootkube journals:
 
 ```bash
-ssh -i ~/.ssh/bootwright-ssh-key core@<node-ip> \
+sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/cluster-admin-pub-key" core@<node-ip> \
   sudo journalctl -fu assisted-service.service
 # or, after bootstrap kicks off:
-ssh -i ~/.ssh/bootwright-ssh-key core@<node-ip> \
+sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/cluster-admin-pub-key" core@<node-ip> \
   sudo journalctl -fu bootkube.service
 ```
 

@@ -43,10 +43,16 @@ spec:
     - cluster-infra.yaml
     - container-cluster.yaml
 
+  secretStorage:
+    mode: context
+
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key:
-      file: ~/.ssh/bootwright-ssh-key.pub
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
     provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
@@ -153,12 +159,20 @@ Rules:
 - `infraComponents.artifactServers[].routes.clusterInstall.endpoint` selects
   the artifact server endpoint used for disconnected agent-install boot
   artifacts.
+- `secretStorage.mode` defaults to `source`. `source` preserves each declared
+  secret source at runtime: `file:` resolves to the declared local path and
+  context-local/generated material resolves under the context secrets directory.
+  `context` makes workflows resolve declared material from
+  `<context>/secrets/` after `bootwright secret materialize` copies file-sourced
+  entries into context storage.
 - `secrets` declares names, not bytes. An empty entry resolves to
   `<context>/secrets/<name>` and must be populated with `bootwright secret set`
-  before the consuming workflow runs. `file:` resolves to the declared local
-  path. `generated:` resolves under the context secrets directory; generated
-  credentials may be populated with either `bootwright secret set` or
-  `bootwright secret generate`.
+  before the consuming workflow runs. `generated:` resolves under the context
+  secrets directory; generated credentials may be populated with either
+  `bootwright secret set` or `bootwright secret generate`.
+- `generated.sshKeyPair` creates an SSH private key at
+  `<context>/secrets/<name>` and the matching OpenSSH public key at
+  `<context>/secrets/<name>.pub`; only `type: ed25519` is accepted.
 - TLS-pair consumers use the certificate at `file:` plus the private key at
   `keyFile:` for file-sourced secrets. Context-local and generated TLS pairs
   resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
@@ -806,8 +820,10 @@ bootwright context use lab
 bootwright print-env [--sensitive]
 bootwright secret list
 bootwright secret show --name <secret-name>
+bootwright secret show --name <secret-name> --part public
 bootwright secret set openshift-pull-secret --pull-secret <path>
 bootwright secret generate
+bootwright secret materialize
 bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes

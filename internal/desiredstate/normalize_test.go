@@ -30,6 +30,34 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	}
 }
 
+func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"cluster-admin-pub-key": {
+						Generated: &v1alpha1.EnvironmentSecretGenerated{
+							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{},
+						},
+					},
+				},
+			},
+		}},
+	}
+
+	Normalize(&state)
+
+	env := state.Environments[0]
+	if got := env.Spec.SecretStorage.Mode; got != v1alpha1.SecretStorageModeSource {
+		t.Fatalf("SecretStorage.Mode = %q, want %q", got, v1alpha1.SecretStorageModeSource)
+	}
+	if got := env.Spec.Secrets["cluster-admin-pub-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
+		t.Fatalf("SSHKeyPair.Type = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
+	}
+}
+
 func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{

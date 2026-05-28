@@ -70,6 +70,25 @@ func TestVarsProjectClusterAdminSSHPrivateKeyPath(t *testing.T) {
 	}
 }
 
+func TestVarsProjectGeneratedClusterAdminSSHPrivateKeyPath(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.Secrets[v1alpha1.DefaultClusterSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+		},
+	}
+	secretsDir := t.TempDir()
+	vars := render.VarsWithSecretsDir(state, secretsDir)
+	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
+	want := filepath.Join(secretsDir, v1alpha1.DefaultClusterSSHKeyName)
+	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
+		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
+	}
+}
+
 // TestMachineBootBlockProjectsSubstrateBlind pins the boot_redfish
 // contract: every Redfish-driven machine carries a fully-resolved
 // boot.{redfish,agentIso} tuple so the role does NOT branch on

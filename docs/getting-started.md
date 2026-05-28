@@ -142,6 +142,7 @@ secrets directory. Run the commands that match the names declared in
 ```text
 bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pull-secret.json"
 bootwright secret generate
+bootwright secret materialize
 bootwright secret list
 ```
 

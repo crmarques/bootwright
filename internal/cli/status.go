@@ -273,7 +273,9 @@ func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
 		return nil
 	}
 	generatedMissing := false
+	materializedMissing := false
 	contextMissing := ""
+	env := primaryEnvironmentForSync(state)
 	for _, entry := range entries {
 		if entry.Present {
 			continue
@@ -282,11 +284,18 @@ func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
 			generatedMissing = true
 			continue
 		}
+		if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && strings.HasPrefix(entry.Type, "file") {
+			materializedMissing = true
+			continue
+		}
 		if entry.Type == "context" && contextMissing == "" {
 			contextMissing = entry.Name
 		}
 	}
 	var hints []string
+	if materializedMissing {
+		hints = append(hints, "bootwright secret materialize")
+	}
 	if generatedMissing {
 		hints = append(hints, "bootwright secret generate")
 	}

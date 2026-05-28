@@ -13,6 +13,15 @@ import (
 
 const InternalCallerHomeEnv = localroot.CallerHomeEnv
 
+type MaterialRole string
+
+const (
+	MaterialPrimary    MaterialRole = "primary"
+	MaterialTLSKey     MaterialRole = "tls-key"
+	MaterialSSHPrivate MaterialRole = "ssh-private"
+	MaterialSSHPublic  MaterialRole = "ssh-public"
+)
+
 func ResolveKeyFilePath(file, envSourceDir string) (string, error) {
 	if file == "" {
 		return "", errors.New("file source is empty")
@@ -51,31 +60,133 @@ func callerHomeDir() (string, error) {
 // resolve to their declared path; context-backed and generated secrets resolve
 // inside secretsDir.
 func ResolvePath(name string, env *v1alpha1.Environment, secretsDir string) string {
+	return ResolveMaterialPath(name, env, secretsDir, MaterialPrimary)
+}
+
+func ResolveMaterialPath(name string, env *v1alpha1.Environment, secretsDir string, role MaterialRole) string {
 	if name == "" {
 		return ""
 	}
-	if env != nil {
-		if secret, ok := env.Spec.Secrets[name]; ok && secret.File != "" {
-			envSourceDir := filepath.Dir(env.SourcePath)
-			if path, err := ResolveKeyFilePath(secret.File, envSourceDir); err == nil {
-				return path
-			}
+	if shouldUseContextSecretPath(name, env, role) {
+		return contextMaterialPath(name, secretsDir, role)
+	}
+	if secret, ok := environmentSecretSpec(name, env); ok {
+		if path, ok := sourceMaterialPath(secret, env, role); ok {
+			return path
 		}
 	}
-	return filepath.Join(secretsDir, name)
+	return contextMaterialPath(name, secretsDir, fallbackRole(role))
 }
 
 func ResolveTLSKeyPath(name string, env *v1alpha1.Environment, secretsDir string) string {
+	return ResolveMaterialPath(name, env, secretsDir, MaterialTLSKey)
+}
+
+func ResolveSSHPrivateKeyPath(name string, env *v1alpha1.Environment, secretsDir string) string {
+	return ResolveMaterialPath(name, env, secretsDir, MaterialSSHPrivate)
+}
+
+func ResolveSSHPublicKeyPath(name string, env *v1alpha1.Environment, secretsDir string) string {
+	return ResolveMaterialPath(name, env, secretsDir, MaterialSSHPublic)
+}
+
+func ResolveSourceMaterialPath(name string, env *v1alpha1.Environment, role MaterialRole) string {
 	if name == "" {
 		return ""
 	}
-	if env != nil {
-		if secret, ok := env.Spec.Secrets[name]; ok && secret.KeyFile != "" {
-			envSourceDir := filepath.Dir(env.SourcePath)
-			if path, err := ResolveKeyFilePath(secret.KeyFile, envSourceDir); err == nil {
-				return path
-			}
-		}
+	spec, ok := environmentSecretSpec(name, env)
+	if !ok {
+		return ""
 	}
-	return filepath.Join(secretsDir, name+".key")
+	if path, ok := sourceMaterialPath(spec, env, role); ok {
+		return path
+	}
+	return ""
+}
+
+func environmentSecretSpec(name string, env *v1alpha1.Environment) (v1alpha1.EnvironmentSecretSpec, bool) {
+	if env == nil {
+		return v1alpha1.EnvironmentSecretSpec{}, false
+	}
+	secret, ok := env.Spec.Secrets[name]
+	return secret, ok
+}
+
+func shouldUseContextSecretPath(name string, env *v1alpha1.Environment, role MaterialRole) bool {
+	spec, ok := environmentSecretSpec(name, env)
+	if !ok {
+		return false
+	}
+	if env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext {
+		return true
+	}
+	if spec.Generated == nil {
+		return false
+	}
+	if role == MaterialSSHPublic {
+		return spec.Generated.SSHKeyPair != nil
+	}
+	return true
+}
+
+func sourceMaterialPath(spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, role MaterialRole) (string, bool) {
+	envSourceDir := filepath.Dir(env.SourcePath)
+	switch role {
+	case MaterialTLSKey:
+		if spec.KeyFile == "" {
+			return "", false
+		}
+		path, err := ResolveKeyFilePath(spec.KeyFile, envSourceDir)
+		return path, err == nil
+	case MaterialSSHPublic:
+		if spec.File == "" {
+			return "", false
+		}
+		path, err := ResolveKeyFilePath(sshPublicPath(spec.File), envSourceDir)
+		return path, err == nil
+	case MaterialSSHPrivate:
+		if spec.File == "" {
+			return "", false
+		}
+		path, err := ResolveKeyFilePath(sshPrivatePath(spec.File), envSourceDir)
+		return path, err == nil
+	default:
+		if spec.File == "" {
+			return "", false
+		}
+		path, err := ResolveKeyFilePath(spec.File, envSourceDir)
+		return path, err == nil
+	}
+}
+
+func contextMaterialPath(name, secretsDir string, role MaterialRole) string {
+	switch role {
+	case MaterialTLSKey:
+		return filepath.Join(secretsDir, name+".key")
+	case MaterialSSHPublic:
+		return filepath.Join(secretsDir, name+".pub")
+	default:
+		return filepath.Join(secretsDir, name)
+	}
+}
+
+func fallbackRole(role MaterialRole) MaterialRole {
+	if role == MaterialTLSKey {
+		return MaterialTLSKey
+	}
+	return MaterialPrimary
+}
+
+func sshPrivatePath(path string) string {
+	if strings.HasSuffix(path, ".pub") {
+		return strings.TrimSuffix(path, ".pub")
+	}
+	return path
+}
+
+func sshPublicPath(path string) string {
+	if strings.HasSuffix(path, ".pub") {
+		return path
+	}
+	return path + ".pub"
 }
