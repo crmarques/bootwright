@@ -43,11 +43,10 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Connection == nil {
 		return nil
 	}
-	noProxy := merge(entry.Connection.NoProxy, auto(state, env))
 	eff := &Effective{
 		HTTP:    entry.Connection.HTTPProxy,
 		HTTPS:   entry.Connection.HTTPSProxy,
-		NoProxy: expandCIDRNoProxy(noProxy, noProxyTargets(state)),
+		NoProxy: ResolveNoProxy(state, env, entry.Connection.NoProxy),
 	}
 	if entry.Connection.Auth != nil {
 		eff.Auth = entry.Connection.Auth.ProxyAuthRef
@@ -56,6 +55,14 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 		return nil
 	}
 	return eff
+}
+
+func ResolveNoProxy(state v1alpha1.State, env *v1alpha1.Environment, user []string) []string {
+	var inferred []string
+	if env != nil {
+		inferred = auto(state, env)
+	}
+	return expandCIDRNoProxy(merge(user, inferred), noProxyTargets(state))
 }
 
 func SelectedProxy(env v1alpha1.Environment, name string) (v1alpha1.EnvironmentProxyComponent, bool) {

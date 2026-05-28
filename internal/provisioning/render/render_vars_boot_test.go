@@ -717,6 +717,44 @@ func TestProxyForControlsRuntimeAndInstallerRendering(t *testing.T) {
 	}
 }
 
+func TestManagedClusterInstallProxyRendersNoProxy(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	cfg, err := render.InstallerConfig(state, state.ContainerClusters[0])
+	if err != nil {
+		t.Fatalf("InstallerConfig: %v", err)
+	}
+	proxyBlock, ok := cfg["proxy"].(map[string]any)
+	if !ok {
+		t.Fatalf("install-config missing proxy block: %v", cfg["proxy"])
+	}
+	for _, key := range []string{"httpProxy", "httpsProxy"} {
+		if got := proxyBlock[key]; got != "http://192.168.132.1:3128" {
+			t.Fatalf("proxy.%s got %v, want managed proxy URL", key, got)
+		}
+	}
+	noProxy, ok := proxyBlock["noProxy"].(string)
+	if !ok {
+		t.Fatalf("proxy.noProxy got %T, want string", proxyBlock["noProxy"])
+	}
+	for _, want := range []string{
+		".bootwright.test",
+		".sno-libvirt.bootwright.test",
+		"192.168.132.0/24",
+		"192.168.132.1",
+		"192.168.132.10",
+		"192.168.132.11",
+		"10.128.0.0/14",
+		"172.30.0.0/16",
+	} {
+		if !commaListContains(noProxy, want) {
+			t.Fatalf("proxy.noProxy missing %q: %s", want, noProxy)
+		}
+	}
+}
+
 // TestMachineEmulatedBMCAbsentForBareMetal pins the negative half of
 // the projection: from.name baremetal machines never carry a
 // bmcEmulated block — they speak a vendor BMC, not an emulated one,
@@ -865,4 +903,13 @@ func clustersByName(t *testing.T, vars map[string]any) map[string]map[string]any
 		out[cluster["name"].(string)] = cluster
 	}
 	return out
+}
+
+func commaListContains(list, want string) bool {
+	for _, item := range strings.Split(list, ",") {
+		if strings.TrimSpace(item) == want {
+			return true
+		}
+	}
+	return false
 }
