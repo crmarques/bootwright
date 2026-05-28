@@ -121,3 +121,11 @@ VIPs are validated against the machine networks selected by cluster machines.
 may still come from the `NetworkConfig` NMState template; resolved DNS refs are
 appended to the rendered `dns-resolver.config.server` list. Keep `dnsRefs`
 outside `template.networkConfig`; that map is raw NMState.
+
+Managed name-resolution services render records for `api`, `api-int`, and the
+cluster apps wildcard for each consuming cluster. Use
+`additionalIngressHosts[]` on the environment entry or the managed
+`InfraComponent.spec.nameResolution` when specific ingress hostnames, such as
+console or OAuth routes, must resolve before the cluster DNS operator is ready.
+Those hostnames point at the consuming cluster's ingress VIP, and values from
+the environment entry and component merge for shared services.

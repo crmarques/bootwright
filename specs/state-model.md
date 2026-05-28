@@ -164,6 +164,13 @@ Rules:
   Component entries are either `external` with direct access configuration, or
   `managed` with `componentRef.name` pointing at an `InfraComponent` arm of
   the matching kind.
+- External artifact server entries use `spec.redfishVirtualMediaURL` and/or
+  `spec.clusterInstallURL`. Managed artifact server entries use
+  `componentRef.name` plus `routes` endpoint selectors.
+- `infraComponents.nameResolution[].additionalIngressHosts[]` is optional.
+  Values from environment entries and managed
+  `InfraComponent.spec.nameResolution.additionalIngressHosts[]` merge into DNS
+  host records that point at each consuming cluster's ingress VIP.
 - `proxyFor.bootwright` and `proxyFor.clusterInstall` select entries from
   `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
   reserved value that disables proxy use for that consumer.
@@ -187,6 +194,13 @@ Rules:
 - `generated.sshKeyPair` creates an SSH private key at
   `<context>/secrets/<name>` and the matching OpenSSH public key at
   `<context>/secrets/<name>.pub`; only `type: ed25519` is accepted.
+- `generated.credentials` creates one `username:password` line at
+  `<context>/secrets/<name>`. `username` defaults to `admin` and must not
+  contain whitespace, newlines, or `:`.
+- `generated.selfSignedCertificate` creates a PEM certificate at
+  `<context>/secrets/<name>` and a PEM key at `<context>/secrets/<name>.key`.
+  `commonName` is required; `dnsNames[]`, `ipAddresses[]`, and
+  `validityDays` are optional, and `validityDays` defaults to `3650`.
 - TLS-pair consumers use the certificate at `file:` plus the private key at
   `keyFile:` for file-sourced secrets. Context-local and generated TLS pairs
   resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
@@ -441,8 +455,11 @@ Rules:
   current controller hostname, or a local interface address, Bootwright treats
   the host as controller-local, uses Ansible local connection, and does not
   require host SSH key material for preflight.
-- `spec.ssh.keyRef.name`, when set, references `Environment.spec.secrets`.
-- `spec.capabilities[]` is a typed tag list used by provider capabilities to
+- `spec.ssh.keyRef.name` is required and references
+  `Environment.spec.secrets`. Controller-local hosts still do not require host
+  SSH key material during preflight.
+- `spec.capabilities[]` is required. The current canonical tags are `libvirt`
+  and `container-runtime`; provider and service capabilities use them to
   select hosts for substrate or service work.
 
 ## InfraProvider
@@ -618,6 +635,10 @@ Rules:
 - `proxy.endpoints[]`, `nameResolution.endpoints[]`, and
   `registry.endpoints[]`, when set, use `hostAddress` values that must match
   `Host.spec.addresses[].name` on their component `hostRef`.
+- `nameResolution.additionalIngressHosts[]` adds explicit host records that
+  point at the consuming cluster's ingress VIP. Entries from the component and
+  matching environment service catalog entry merge without mutating authored
+  desired state.
 
 ## ClusterInfra
 
@@ -759,6 +780,10 @@ Bootwright renders:
   deterministic generated MACs for virtual substrates that Bootwright creates.
 - Provider or generated machine MACs into matching NMState interfaces when
   present.
+- `agent-config.yaml minimalISO` and `bootArtifactsBaseURL` for disconnected
+  installs that select an artifact server `clusterInstall` route.
+- `agent-config.yaml additionalNTPSources` from
+  `Environment.spec.infraComponents.ntpSources[]`.
 - Install-time OpenShift extra manifests under `openshift/` for declared API
   and ingress serving certificates. Placeholder render output redacts Secret
   data; runtime and `--sensitive` output include TLS material.
@@ -839,32 +864,51 @@ bootwright example init lab --output ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context validate
+bootwright context list
 bootwright context use lab
+bootwright context current [--short]
+bootwright context delete lab [--purge --yes]
 bootwright print-env [--sensitive]
 bootwright secret list
+bootwright secret list --output json
 bootwright secret show --name <secret-name>
 bootwright secret show --name <secret-name> --part public
 bootwright secret set openshift-pull-secret --pull-secret <path>
 bootwright secret generate
 bootwright secret materialize
+bootwright secret delete <secret-name> --yes
 bootwright check syntax
+bootwright check syntax --output json
 bootwright check bastion
+bootwright check all [--dry-run]
 bootwright apply bastion --yes
 bootwright check infra
+bootwright check infra --dry-run --output json
 bootwright render installer --scope <cluster>
+bootwright render installer --sensitive
+bootwright render installer --output json
 bootwright render --output-dir ./rendered --sensitive
 bootwright apply infra --dry-run
+bootwright apply infra --dry-run --output json
 bootwright apply infra --yes
 bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
 bootwright check cluster
+bootwright check cluster --dry-run --output json
 bootwright apply cluster --dry-run
+bootwright apply cluster --dry-run --output json
 bootwright apply cluster --yes
 bootwright apply cluster --override --yes
+bootwright apply all --dry-run
+bootwright apply all --dry-run --output json
+bootwright apply all --yes
 bootwright status
 bootwright status --watch
+bootwright status --output json
 bootwright destroy cluster --yes
+bootwright destroy cluster --dry-run --output json
 bootwright destroy infra --yes
+bootwright destroy infra --dry-run --output json
 bootwright destroy infra --scope http-server --yes
 ```
 
