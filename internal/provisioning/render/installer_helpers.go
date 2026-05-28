@@ -58,7 +58,11 @@ func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, 
 	if err != nil {
 		return nil, "", err
 	}
-	return proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall), managedURL, nil
+	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall)
+	if eff == nil && managedURL != "" {
+		eff = &proxy.Effective{NoProxy: proxy.ResolveNoProxy(state, env, nil)}
+	}
+	return eff, managedURL, nil
 }
 
 func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, env *v1alpha1.Environment) string {

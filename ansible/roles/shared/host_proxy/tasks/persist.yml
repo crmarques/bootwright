@@ -17,8 +17,8 @@
           http_proxy={{ bootwright_proxy_http_effective }}
           https_proxy={{ bootwright_proxy_https_effective }}
           no_proxy={{ bootwright_proxy_no }}
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
-      when: (bootwright_proxy_credentials_ref | length) == 0
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      when: not bootwright_proxy_credentialed_url
 
     - name: Render /etc/profile.d/bootwright-proxy.sh
       ansible.builtin.copy:
@@ -33,24 +33,24 @@
           export http_proxy="{{ bootwright_proxy_http_effective }}"
           export https_proxy="{{ bootwright_proxy_https_effective }}"
           export no_proxy="{{ bootwright_proxy_no }}"
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
-      when: (bootwright_proxy_credentials_ref | length) == 0
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      when: not bootwright_proxy_credentialed_url
 
     # Strip bare-URL leftovers from older runs; env vars from /etc/environment
     # beat /root/.pip/pip.conf, causing pip to skip Proxy-Authorization → 407.
-    - name: Remove stale /etc/environment proxy block when creds_ref is set
+    - name: Remove stale /etc/environment proxy block when credentials are in URLs
       ansible.builtin.blockinfile:
         path: /etc/environment
         marker: "# {mark} ANSIBLE MANAGED BLOCK bootwright-proxy"
         state: absent
       failed_when: false
-      when: (bootwright_proxy_credentials_ref | length) > 0
+      when: bootwright_proxy_credentialed_url
 
-    - name: Remove stale /etc/profile.d/bootwright-proxy.sh when creds_ref is set
+    - name: Remove stale /etc/profile.d/bootwright-proxy.sh when credentials are in URLs
       ansible.builtin.file:
         path: /etc/profile.d/bootwright-proxy.sh
         state: absent
-      when: (bootwright_proxy_credentials_ref | length) > 0
+      when: bootwright_proxy_credentialed_url
 
     - name: Stat dnf.conf
       ansible.builtin.stat:
@@ -65,9 +65,20 @@
         insertafter: '^\[main\]'
         owner: root
         group: root
-        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
-      when: bootwright_proxy_dnf_stat.stat.exists
+        mode: "{{ '0600' if bootwright_proxy_credentialed_url else '0644' }}"
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      when:
+        - bootwright_proxy_has_url
+        - bootwright_proxy_dnf_stat.stat.exists
+
+    - name: Strip stale dnf proxy line when URL proxy is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        regexp: '^proxy='
+        state: absent
+      when:
+        - not bootwright_proxy_has_url
+        - bootwright_proxy_dnf_stat.stat.exists
 
     - name: Stat yum.conf (RHEL 7 / legacy)
       ansible.builtin.stat:
@@ -82,9 +93,20 @@
         insertafter: '^\[main\]'
         owner: root
         group: root
-        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
-      when: bootwright_proxy_yum_stat.stat.exists
+        mode: "{{ '0600' if bootwright_proxy_credentialed_url else '0644' }}"
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      when:
+        - bootwright_proxy_has_url
+        - bootwright_proxy_yum_stat.stat.exists
+
+    - name: Strip stale yum proxy line when URL proxy is disabled
+      ansible.builtin.lineinfile:
+        path: /etc/yum.conf
+        regexp: '^proxy='
+        state: absent
+      when:
+        - not bootwright_proxy_has_url
+        - bootwright_proxy_yum_stat.stat.exists
 
     - name: Ensure pip config directory
       ansible.builtin.file:
@@ -93,6 +115,7 @@
         owner: root
         group: root
         mode: "0700"
+      when: bootwright_proxy_has_url
 
     - name: Render pip proxy config
       ansible.builtin.copy:
@@ -103,7 +126,14 @@
         content: |
           [global]
           proxy = {{ bootwright_proxy_primary }}
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
+      when: bootwright_proxy_has_url
+
+    - name: Remove stale pip proxy config when URL proxy is disabled
+      ansible.builtin.file:
+        path: /root/.pip/pip.conf
+        state: absent
+      when: not bootwright_proxy_has_url
 
     # No containers.conf.d drop-in is written: podman reads it for rootless
     # too, so 0600 breaks non-root `podman` and 0644 leaks credentials.
@@ -149,11 +179,11 @@
         dest: /etc/systemd/system.conf.d/10-bootwright-proxy.conf
         owner: root
         group: root
-        mode: "{{ '0600' if (bootwright_proxy_credentials_ref | length) > 0 else '0644' }}"
+        mode: "{{ '0600' if bootwright_proxy_credentialed_url else '0644' }}"
         content: |
           [Manager]
           DefaultEnvironment="HTTP_PROXY={{ bootwright_proxy_http_effective }}" "HTTPS_PROXY={{ bootwright_proxy_https_effective }}" "NO_PROXY={{ bootwright_proxy_no }}" "http_proxy={{ bootwright_proxy_http_effective }}" "https_proxy={{ bootwright_proxy_https_effective }}" "no_proxy={{ bootwright_proxy_no }}"
-      no_log: "{{ (bootwright_proxy_credentials_ref | length) > 0 }}"
+      no_log: "{{ bootwright_proxy_credentialed_url }}"
       register: bootwright_proxy_systemd_dropin
 
     - name: Reload systemd manager when proxy drop-in changed
@@ -168,6 +198,7 @@
         host: "{{ bootwright_proxy_primary | urlsplit('hostname') }}"
         port: "{{ bootwright_proxy_primary | urlsplit('port') | default(3128, true) }}"
         timeout: 10
+      when: bootwright_proxy_has_url
 
 # Strip prior artifacts when disabled: systemd's DefaultEnvironment keeps
 # injecting HTTPS_PROXY into sshd sessions otherwise, so later ansible runs
