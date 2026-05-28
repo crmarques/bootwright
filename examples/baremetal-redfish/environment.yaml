@@ -1,23 +1,17 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: demo-baremetal-fleet
+  name: demo-fleet
 spec:
   baseDomain: example.test
 
   resources:
-    - shared/hosts.yaml
-    - shared/networks.yaml
-    - shared/provider.yaml
-    - shared/infra-component.yaml
-    - demo-ocp-a/cluster-infra.yaml
-    - demo-ocp-a/container-cluster.yaml
-    - demo-ocp-b/cluster-infra.yaml
-    - demo-ocp-b/container-cluster.yaml
-
-  containerClusters:
-    - demo-ocp-a
-    - demo-ocp-b
+    - hosts.yaml
+    - networks.yaml
+    - provider.yaml
+    - infra-component.yaml
+    - cluster-infra.yaml
+    - container-cluster.yaml
 
   secrets:
     openshift-pull-secret: null

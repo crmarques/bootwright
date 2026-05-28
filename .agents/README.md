@@ -55,5 +55,9 @@ not scan or bulk-load the full knowledge directory.
   it repeatedly during the same request unless later edits can invalidate the
   previous result. If `make check` cannot run or fails, report the blocker
   instead of a successful handoff.
+- During investigation or iterative fixes, prefer the smallest direct targeted
+  command that answers the current question. Do not run aggregate checks or
+  their member commands in a way that duplicates a final completed `make check`
+  unless later edits or failure diagnosis require it.
 - Before completing implementation work, run the validation required by the
   applicable skills and report anything that could not be run.

@@ -50,9 +50,9 @@ ls -l ./my-sno-lab
 Canonical input examples live under
 [`examples/`](https://github.com/crmarques/bootwright/tree/main/examples).
 Use `sno-libvirt-redfish` for the smallest single-node lab with emulated
-Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab, or
-`baremetal-redfish-fleet` for real bare-metal hosts with Redfish virtual
-media.
+Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab,
+`baremetal-redfish` for real bare-metal hosts with Redfish virtual media, or
+`baremetal-redfish-fleet` for a two-cluster bare-metal input layout.
 
 The copied directory contains desired-state files for the relevant kinds:
 

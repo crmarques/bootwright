@@ -39,8 +39,8 @@ Confirm connected provider-swap examples keep `Environment` and `ContainerCluste
 files byte-identical:
 
 ```text
-diff -u examples/libvirt-redfish-fleet/environment.yaml examples/baremetal-redfish-fleet/environment.yaml
-diff -u examples/libvirt-redfish-fleet/container-cluster.yaml examples/baremetal-redfish-fleet/container-cluster.yaml
+diff -u examples/libvirt-redfish-fleet/environment.yaml examples/baremetal-redfish/environment.yaml
+diff -u examples/libvirt-redfish-fleet/container-cluster.yaml examples/baremetal-redfish/container-cluster.yaml
 ```
 
 Report any remaining stale term only when it is intentionally deferred to the

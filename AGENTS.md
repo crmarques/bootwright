@@ -43,6 +43,10 @@ making changes, load only the specs that match the user request.
   it repeatedly during the same request unless later edits can invalidate the
   previous result. If `make check` cannot run or fails, report the blocker
   instead of a successful handoff.
+- During investigation or iterative fixes, prefer the smallest direct targeted
+  command that answers the current question. Do not run aggregate checks or
+  their member commands in a way that duplicates a final completed `make check`
+  unless later edits or failure diagnosis require it.
 - Before completing implementation work, use the
   `/.agents/skills/implementation-validation/` skill.
 

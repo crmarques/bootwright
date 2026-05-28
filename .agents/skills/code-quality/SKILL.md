@@ -29,6 +29,12 @@ report any check that could not be run, including the reason:
 also pass; deletions in this skill can break tests that imported the
 removed symbol.
 
+If `make check` has already completed for the final edit set, it satisfies
+the `go vet ./...` and plain `go test ./...` coverage above. Do not rerun
+those commands just to satisfy this skill; run only the checks not covered by
+`make check`, such as `go build ./...`, `staticcheck ./...`, and required race
+tests.
+
 ## Standards
 
 - No dead code. Delete unused exported and unexported functions,
