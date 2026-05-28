@@ -134,7 +134,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		}
 		out = append(out, secretRefRequirement{
 			refName: h.Spec.SSH.KeyRef.Name,
-			label:   fmt.Sprintf("host %s sshKeyRef", h.Metadata.Name),
+			label:   fmt.Sprintf("host %s keyRef", h.Metadata.Name),
 			phases:  []string{"provider", "cluster", "clusters"},
 			role:    secret.MaterialSSHPrivate,
 		})

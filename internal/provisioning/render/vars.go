@@ -41,7 +41,7 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
 		if keyPath := nodeSSHPrivateKeyPath(env, ocp, secretsDir); keyPath != "" {
-			entry["adminSSHPrivateKeyPath"] = keyPath
+			entry["nodeSSHPrivateKeyPath"] = keyPath
 		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)
@@ -160,7 +160,7 @@ func hostsVars(state v1alpha1.State) []any {
 			entry["sshAddress"] = v1alpha1.HostSSHAddress(h)
 			entry["sshAddressName"] = h.Spec.SSH.AddressName
 			entry["sshUser"] = h.Spec.SSH.User
-			entry["sshKeyRef"] = h.Spec.SSH.KeyRef.Name
+			entry["sshKeyName"] = h.Spec.SSH.KeyRef.Name
 		}
 		out = append(out, entry)
 	}

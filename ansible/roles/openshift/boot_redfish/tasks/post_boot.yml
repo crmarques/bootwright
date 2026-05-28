@@ -13,7 +13,7 @@
 
 - name: Resolve node SSH auth probe key path
   ansible.builtin.set_fact:
-    bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.adminSSHPrivateKeyPath | default('') }}"
+    bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
   changed_when: false
 
 - name: Resolve node SSH auth probe key execution context
@@ -49,7 +49,7 @@
     - (bootwright_node_probe_address | length) > 0
     - (bootwright_node_ready_ssh_key_path | length) > 0
 
-- name: Wait for node SSH to accept cluster admin key
+- name: Wait for node SSH to accept configured key
   ansible.builtin.command:
     argv: >-
       {{
@@ -82,7 +82,7 @@
     - (bootwright_node_probe_address | length) > 0
     - (bootwright_node_ready_ssh_key_check.rc | default(1) | int) == 0
 
-- name: Confirm node SSH accepted cluster admin key
+- name: Confirm node SSH accepted configured key
   ansible.builtin.assert:
     that:
       - (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0

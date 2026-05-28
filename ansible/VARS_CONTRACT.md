@@ -46,7 +46,7 @@ bootwright_clusters:
   - name: prod-3node
     installMode: connected
     installMethod: agent
-    adminSSHPrivateKeyPath: /var/lib/bootwright/contexts/lab/secrets/cluster-admin-ssh-key
+    nodeSSHPrivateKeyPath: /var/lib/bootwright/contexts/lab/secrets/cluster-admin-ssh-key
     baseDomain: example.test
     distribution:
       type: openshift

@@ -86,7 +86,7 @@ const (
 
 	// Default secret names that the renderer falls back to when the
 	// ContainerCluster does not override them.
-	DefaultPullSecretName    = "openshift-pull-secret"
+	DefaultPullSecretName = "openshift-pull-secret"
 	DefaultNodeSSHKeyName = "cluster-admin-ssh-key"
 
 	// Default validity window for generated self-signed certificates.
