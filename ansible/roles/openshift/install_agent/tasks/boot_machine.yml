@@ -75,6 +75,7 @@
             }, recursive=true)
           }}
       changed_when: false
+      no_log: true
       when:
         - bootwright_selected_component.boot is defined
         - bootwright_selected_component.boot.agentIso is defined

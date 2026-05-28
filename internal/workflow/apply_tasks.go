@@ -71,6 +71,13 @@ type ApplyReporter interface {
 
 type ApplyTaskRunnerFactory func(stdout io.Writer, stderr io.Writer) ansible.Runner
 
+type PreparedApplyTaskGraph struct {
+	RunID     string
+	StartedAt time.Time
+	Tasks     []ApplyTask
+	Limits    ConcurrencyLimits
+}
+
 func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
@@ -217,9 +224,46 @@ func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 	return tasks
 }
 
-func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
+	if strings.TrimSpace(opts.RuntimeDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("runtime dir is required")
+	}
+	if strings.TrimSpace(opts.RenderedDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("rendered dir is required")
+	}
+	if strings.TrimSpace(opts.ManagedDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("managed dir is required")
+	}
+	if strings.TrimSpace(runsDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("runs dir is required")
+	}
+	opts.RunsDir = runsDir
+	limits = ResolveApplyConcurrencyLimits(limits, tasks)
+	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
+	var err error
+	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.RuntimeDir, opts.SecretsDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
+	if err != nil {
+		return PreparedApplyTaskGraph{}, err
+	}
+	return PreparedApplyTaskGraph{
+		RunID:     runID,
+		StartedAt: startedAt,
+		Tasks:     tasks,
+		Limits:    limits,
+	}, nil
+}
+
+func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, tasks []ApplyTask, limits ConcurrencyLimits, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+	prepared, err := PrepareApplyTaskGraph(ctx, runsDir, opts, tasks, limits)
+	if err != nil {
+		return RunLedger{}, err
+	}
+	return RunPreparedApplyTaskGraph(ctx, stdout, stderr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory)
+}
+
+func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	if strings.TrimSpace(opts.RuntimeDir) == "" {
 		return RunLedger{}, fmt.Errorf("runtime dir is required")
 	}
@@ -232,14 +276,17 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	if strings.TrimSpace(runsDir) == "" {
 		return RunLedger{}, fmt.Errorf("runs dir is required")
 	}
-	opts.RunsDir = runsDir
-	limits = ResolveApplyConcurrencyLimits(limits, tasks)
-	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
-	var err error
-	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.RuntimeDir, opts.SecretsDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
-	if err != nil {
-		return RunLedger{}, err
+	if strings.TrimSpace(prepared.RunID) == "" {
+		return RunLedger{}, fmt.Errorf("apply run ID is required")
 	}
+	if prepared.StartedAt.IsZero() {
+		return RunLedger{}, fmt.Errorf("apply start time is required")
+	}
+	opts.RunsDir = runsDir
+	tasks := prepared.Tasks
+	limits := ResolveApplyConcurrencyLimits(prepared.Limits, tasks)
+	runID := prepared.RunID
+	startedAt := prepared.StartedAt
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	if err := SaveRunLedger(runsDir, ledger); err != nil {
 		return ledger, err

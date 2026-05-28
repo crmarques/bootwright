@@ -79,6 +79,7 @@
       Inserted: true
       TransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
   changed_when: false
+  no_log: true
   when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'standard-insert-media'
 
 - name: Build Redfish VMM virtual media request body
@@ -87,6 +88,7 @@
       VmmControlType: Connect
       Image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
   changed_when: false
+  no_log: true
   when: (bootwright_redfish_vmedia_action_body_style | default('standard-insert-media')) == 'vmm-control'
 
 - name: Insert the agent ISO as virtual media
@@ -104,7 +106,7 @@
   register: bootwright_redfish_insert_media
   failed_when: false
   changed_when: (bootwright_redfish_insert_media.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: true
 
 - name: Resolve Redfish InsertMedia request status
   ansible.builtin.set_fact:
@@ -171,7 +173,7 @@
   delay: "{{ bootwright_redfish_insert_task_delay_seconds }}"
   failed_when: false
   changed_when: false
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: true
   when:
     - bootwright_redfish_insert_request_succeeded | bool
     - bootwright_redfish_insert_task_url | length > 0
@@ -213,6 +215,7 @@
           else 0
         }}
   changed_when: false
+  no_log: true
 
 - name: Resolve Redfish InsertMedia task result
   ansible.builtin.set_fact:
@@ -385,7 +388,7 @@
   register: bootwright_redfish_vmedia_patch_insert
   failed_when: false
   changed_when: (bootwright_redfish_vmedia_patch_insert.status | default(0) | int) in [200, 202, 204]
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  no_log: true
   when: bootwright_redfish_vmedia_patch_attempted | bool
 
 - name: Wait for virtual media to report inserted agent ISO after PATCH fallback
@@ -438,6 +441,13 @@
       status: "{{ bootwright_redfish_vmedia_probe.status | default('unknown') }}"
       inserted: "{{ bootwright_redfish_vmedia_probe.json.Inserted | default(false) | bool }}"
       image: "{{ bootwright_redfish_vmedia_probe.json.Image | default('', true) }}"
+      imageRedacted: >-
+        {{
+          ((bootwright_redfish_vmedia_probe.json.Image | default('', true))
+          | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+          if (bootwright_agent_iso_publish_token | default('') | length) > 0
+          else (bootwright_redfish_vmedia_probe.json.Image | default('', true))
+        }}
       imageName: "{{ bootwright_redfish_vmedia_probe.json.ImageName | default('', true) }}"
       connectedVia: "{{ bootwright_redfish_vmedia_probe.json.ConnectedVia | default('', true) }}"
       mediaTypes: "{{ bootwright_redfish_vmedia_probe.json.MediaTypes | default([]) }}"
@@ -458,8 +468,16 @@
       insertTaskState: "{{ bootwright_redfish_insert_task_status.taskState | default('', true) }}"
       insertTaskStatus: "{{ bootwright_redfish_insert_task_status.taskStatus | default('', true) }}"
       insertTaskMessages: "{{ bootwright_redfish_insert_task_status.messages | default([]) }}"
+      insertTaskMessagesRedacted: >-
+        {{
+          ((bootwright_redfish_insert_task_status.messages | default([]) | string)
+          | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+          if (bootwright_agent_iso_publish_token | default('') | length) > 0
+          else (bootwright_redfish_insert_task_status.messages | default([]))
+        }}
       insertTaskMounted: "{{ bootwright_redfish_insert_task_mounted | default(false) | bool }}"
   changed_when: false
+  no_log: true
 
 - name: Resolve virtual media attachment sources
   ansible.builtin.set_fact:

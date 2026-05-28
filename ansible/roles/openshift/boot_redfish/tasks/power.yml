@@ -4,6 +4,17 @@
     bootwright_redfish_vmedia_transfer_protocol: "{{ bootwright_component.boot.agentIso.fetchUrl | ansible.builtin.urlsplit('scheme') | upper }}"
   changed_when: false
 
+- name: Resolve redacted agent ISO fetch URL
+  ansible.builtin.set_fact:
+    bootwright_redfish_agent_iso_fetch_url_redacted: >-
+      {{
+        (bootwright_component.boot.agentIso.fetchUrl
+        | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+        if (bootwright_agent_iso_publish_token | default('') | length) > 0
+        else bootwright_component.boot.agentIso.fetchUrl
+      }}
+  changed_when: false
+
 - name: Initialize Redfish virtual media insertion status
   ansible.builtin.set_fact:
     bootwright_redfish_vmedia_attached: false
@@ -44,6 +55,7 @@
       insertTaskState: ""
       insertTaskStatus: ""
       insertTaskMessages: []
+      insertTaskMessagesRedacted: []
       insertTaskMounted: false
   changed_when: false
 
@@ -162,17 +174,17 @@
       {{ bootwright_redfish_vmedia_status.member }} after
       {{ bootwright_redfish_vmedia_status.insertAttempt }} of
       {{ bootwright_redfish_insert_media_retries }} InsertMedia attempt(s).
-      Expected Image={{ bootwright_component.boot.agentIso.fetchUrl }};
+      Expected Image={{ bootwright_redfish_agent_iso_fetch_url_redacted }};
       last InsertMedia HTTP status={{ bootwright_redfish_vmedia_status.insertStatus }},
       task URL={{ bootwright_redfish_vmedia_status.insertTaskURL | default('<not reported>', true) }},
       task HTTP status={{ bootwright_redfish_vmedia_status.insertTaskHTTPStatus }},
       TaskState={{ bootwright_redfish_vmedia_status.insertTaskState | default('<not reported>', true) }},
       TaskStatus={{ bootwright_redfish_vmedia_status.insertTaskStatus | default('<not reported>', true) }},
       TaskMounted={{ bootwright_redfish_vmedia_status.insertTaskMounted | default(false) }},
-      Task messages={{ bootwright_redfish_vmedia_status.insertTaskMessages }};
+      Task messages={{ bootwright_redfish_vmedia_status.insertTaskMessagesRedacted | default(bootwright_redfish_vmedia_status.insertTaskMessages) }};
       observed
       Inserted={{ bootwright_redfish_vmedia_status.inserted }},
-      Image={{ bootwright_redfish_vmedia_status.image | default('<not reported>', true) }},
+      Image={{ bootwright_redfish_vmedia_status.imageRedacted | default('<not reported>', true) }},
       ImageName={{ bootwright_redfish_vmedia_status.imageName | default('<not reported>', true) }},
       ConnectedVia={{ bootwright_redfish_vmedia_status.connectedVia | default('<not reported>', true) }},
       MediaTypes={{ bootwright_redfish_vmedia_status.mediaTypes }},
@@ -192,7 +204,7 @@
     success_msg: >-
       Redfish virtual media attachment accepted on {{ bootwright_redfish_vmedia_status.member }}
       via {{ 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},
-      with Image={{ bootwright_redfish_vmedia_status.image | default('<not reported>', true) }},
+      with Image={{ bootwright_redfish_vmedia_status.imageRedacted | default('<not reported>', true) }},
       Inserted={{ bootwright_redfish_vmedia_status.inserted }},
       ConnectedVia={{ bootwright_redfish_vmedia_status.connectedVia | default('<not reported>', true) }},
       Observed TransferProtocolType={{ bootwright_redfish_vmedia_status.observedTransferProtocolType | default('<not reported>', true) }},

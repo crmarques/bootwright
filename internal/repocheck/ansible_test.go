@@ -1114,6 +1114,34 @@ func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
 	}
 }
 
+func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
+	for _, rel := range []string{
+		"ansible/roles/openshift/install_agent/tasks/cleanup_iso_target.yml",
+		"ansible/roles/openshift/install_agent/tasks/create_iso.yml",
+		"ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
+	} {
+		tasks := readAnsibleTasks(t, rel)
+		var messages []string
+		collectAnsibleMessages(tasks, &messages)
+		for _, msg := range messages {
+			for _, forbidden := range []string{
+				"{{ bootwright_agent_iso_fetch_url }}",
+				"{{ bootwright_agent_iso_stage_path }}",
+				"{{ bootwright_agent_iso_direct_stage_path |",
+				"{{ bootwright_agent_iso_publish_stage_dir }}",
+				"{{ bootwright_component.boot.agentIso.fetchUrl }}",
+				"{{ bootwright_redfish_vmedia_status.image |",
+				"{{ bootwright_redfish_vmedia_status.insertTaskMessages }}",
+			} {
+				if strings.Contains(msg, forbidden) {
+					t.Fatalf("%s message prints tokenized agent ISO value %q:\n%s", rel, forbidden, msg)
+				}
+			}
+		}
+	}
+}
+
 func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml")
 	systemIdx := findAnsibleTask(t, tasks, "Refresh Redfish system metadata for declared MAC validation")
@@ -1930,6 +1958,37 @@ func nestedAnsibleTasks(t *testing.T, task map[string]any, key string) []map[str
 		tasks = append(tasks, child)
 	}
 	return tasks
+}
+
+func collectAnsibleMessages(tasks []map[string]any, out *[]string) {
+	for _, task := range tasks {
+		for _, module := range []string{"ansible.builtin.assert", "ansible.builtin.debug", "ansible.builtin.fail"} {
+			switch body := task[module].(type) {
+			case map[string]any:
+				for _, key := range []string{"fail_msg", "success_msg", "msg"} {
+					if value, ok := body[key]; ok {
+						*out = append(*out, fmt.Sprint(value))
+					}
+				}
+			case string:
+				*out = append(*out, body)
+			}
+		}
+		for _, key := range []string{"block", "rescue", "always"} {
+			raw, ok := task[key].([]any)
+			if !ok {
+				continue
+			}
+			children := make([]map[string]any, 0, len(raw))
+			for _, item := range raw {
+				child, ok := item.(map[string]any)
+				if ok {
+					children = append(children, child)
+				}
+			}
+			collectAnsibleMessages(children, out)
+		}
+	}
 }
 
 func hasHostProxyFactsImport(tasks []any) bool {

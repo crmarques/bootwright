@@ -2288,6 +2288,85 @@ func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
 	}
 }
 
+func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses POSIX shell scripts")
+	}
+	ctx := initTestContext(t, "005-3nodes-baremetal")
+	home := os.Getenv("HOME")
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatalf("mkdir ssh dir: %v", err)
+	}
+	secrets := map[string]string{
+		filepath.Join(ctx.SecretsDir, "openshift-pull-secret"): `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		filepath.Join(ctx.SecretsDir, "bmc-credentials"):       "admin:password\n",
+		filepath.Join(ctx.SecretsDir, "proxy-credentials"):     "proxy:password\n",
+		filepath.Join(sshDir, "bootwright-ssh-key"):            "fake-private-key\n",
+		filepath.Join(sshDir, "bootwright-ssh-key.pub"):        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
+	}
+	for path, body := range secrets {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	fakeBin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+		t.Fatalf("mkdir fake bin: %v", err)
+	}
+	fakeAnsible := filepath.Join(fakeBin, "ansible-playbook")
+	for name, body := range map[string]string{
+		"python3":          "#!/bin/sh\nexit 0\n",
+		"ansible-playbook": "#!/bin/sh\nprintf '%s\\n' 'ansible should not run' >&2\nexit 33\n",
+	} {
+		path := filepath.Join(fakeBin, name)
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("write fake %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	clusterName := "3-nodes-ocp-baremetal"
+	if err := workflow.SaveClusterInstallRecord(ctx.RuntimeDir, workflow.ClusterInstallRecord{
+		Cluster:     clusterName,
+		DesiredHash: "sha256:old",
+		Status:      workflow.ClusterInstallStatusInstalling,
+		Phase:       workflow.ClusterInstallPhaseNodesBooted,
+		UpdatedAt:   time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+	installConfig := filepath.Join(ctx.RuntimeDir, render.RuntimeRelativeDir, clusterName, "install-config.yaml")
+	if err := os.MkdirAll(filepath.Dir(installConfig), 0o700); err != nil {
+		t.Fatalf("mkdir runtime installer dir: %v", err)
+	}
+	const sentinel = "sentinel runtime installer input\n"
+	if err := os.WriteFile(installConfig, []byte(sentinel), 0o600); err != nil {
+		t.Fatalf("write sentinel install-config: %v", err)
+	}
+
+	stdout, stderr, code := runCLI(t, "apply", "cluster", "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
+	if code == 0 {
+		t.Fatalf("apply cluster unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "different install inputs") {
+		t.Fatalf("apply cluster stderr missing install mismatch:\n%s", stderr)
+	}
+	data, err := os.ReadFile(installConfig)
+	if err != nil {
+		t.Fatalf("read sentinel install-config: %v", err)
+	}
+	if string(data) != sentinel {
+		t.Fatalf("runtime install-config was rewritten before install-state reconciliation:\n%s", data)
+	}
+	if strings.Contains(stdout, "Resolve installer") || strings.Contains(stderr, "ansible should not run") {
+		t.Fatalf("apply progressed past install-state reconciliation\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
 func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	initTestContext(t, "005-3nodes-baremetal")
 	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--ask-become-pass=true")
