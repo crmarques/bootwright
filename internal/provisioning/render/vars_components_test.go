@@ -30,6 +30,12 @@ func TestNormalizeRedfishURL(t *testing.T) {
 			wantSystemID: "Self",
 		},
 		{
+			name:         "ironic_virtualmedia_https_with_system_id",
+			in:           "redfish-virtualmedia+https://10.1.255.61/redfish/v1/Systems/1",
+			wantBase:     "https://10.1.255.61",
+			wantSystemID: "1",
+		},
+		{
 			name:         "virtualmedia_default_https_with_system_id",
 			in:           "redfish-virtualmedia://bmc.example.com/redfish/v1/Systems/1",
 			wantBase:     "https://bmc.example.com",

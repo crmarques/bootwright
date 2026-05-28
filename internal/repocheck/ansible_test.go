@@ -150,6 +150,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
 	probeMediaIdx := findAnsibleTask(t, prepareTasks, "Probe Redfish VirtualMedia members")
+	confirmMediaCandidatesIdx := findAnsibleTask(t, prepareTasks, "Confirm Redfish VirtualMedia candidates were found")
 	resolveMediaIdx := findAnsibleTask(t, prepareTasks, "Resolve VirtualMedia member")
 	resolveManagerIdx := findAnsibleTask(t, prepareTasks, "Resolve Redfish manager member for VirtualMedia")
 	resolveSecurityServiceIdx := findAnsibleTask(t, prepareTasks, "Resolve Redfish manager SecurityService member")
@@ -211,6 +212,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
 	}
+	if !(probeMediaIdx < confirmMediaCandidatesIdx && confirmMediaCandidatesIdx < resolveMediaIdx) {
+		t.Fatalf("boot_redfish must report failed VirtualMedia discovery before selecting media")
+	}
 	if !(redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("media backend preparation must run after Redfish eject")
 	}
@@ -238,6 +242,15 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if got, ok := powerTasks[retryInsertIdx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_insert_media_retries") {
 		t.Fatalf("virtual media retry loop must use configured retry count, got loop=%v", powerTasks[retryInsertIdx]["loop"])
+	}
+	mediaCandidatesAssert, ok := prepareTasks[confirmMediaCandidatesIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert task", prepareTasks[confirmMediaCandidatesIdx]["name"])
+	}
+	for _, want := range []string{"System VirtualMedia URL", "bootwright_redfish_system_vmedia_url", "Manager VirtualMedia URLs", "bootwright_redfish_manager_vmedia_urls", "VirtualMedia member URLs", "bootwright_redfish_vmedia_member_urls", "status="} {
+		if !strings.Contains(mediaCandidatesAssert["fail_msg"].(string), want) {
+			t.Fatalf("VirtualMedia discovery assertion must include %q, got %v", want, mediaCandidatesAssert["fail_msg"])
+		}
 	}
 	securityServiceFact, ok := prepareTasks[resolveSecurityServiceIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
