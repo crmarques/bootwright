@@ -170,6 +170,51 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 	}
 }
 
+func TestResolveNoProxyExpandsCIDREntriesForKnownBMCIPs(t *testing.T) {
+	env := envWithExternalProxy()
+	env.Spec.InfraComponents.Proxies[0].Connection.NoProxy = []string{"10.0.0.0/8"}
+	state := stateWithBareMetalBMC("redfish-virtualmedia+https://10.1.255.61/redfish/v1/Systems/1")
+
+	got := Resolve(state, env)
+	if got == nil {
+		t.Fatal("Resolve returned nil")
+	}
+	for _, want := range []string{"10.0.0.0/8", "10.1.255.61"} {
+		if !slices.Contains(got.NoProxy, want) {
+			t.Fatalf("NoProxy missing %q; got %v", want, got.NoProxy)
+		}
+	}
+}
+
+func TestResolveNoProxyDoesNotBypassBMCWithoutMatchingCIDR(t *testing.T) {
+	env := envWithExternalProxy()
+	state := stateWithBareMetalBMC("redfish-virtualmedia+https://10.1.255.61/redfish/v1/Systems/1")
+
+	got := Resolve(state, env)
+	if got == nil {
+		t.Fatal("Resolve returned nil")
+	}
+	if slices.Contains(got.NoProxy, "10.1.255.61") {
+		t.Fatalf("NoProxy should not include unmatched BMC IP: %v", got.NoProxy)
+	}
+}
+
+func stateWithBareMetalBMC(address string) v1alpha1.State {
+	return v1alpha1.State{
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "provider"},
+			Spec: v1alpha1.InfraProviderSpec{
+				Machines: []v1alpha1.MachineCapability{{
+					Name: "master-0",
+					BareMetal: &v1alpha1.MachineBareMetalCapability{
+						BMC: v1alpha1.BMCSpec{Address: address},
+					},
+				}},
+			},
+		}},
+	}
+}
+
 func TestManagedProxyURL(t *testing.T) {
 	state := stateWithManagedProxy()
 	got, err := ManagedProxyURL(state, state.ClusterInfras[0])

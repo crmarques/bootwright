@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -42,10 +43,11 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Connection == nil {
 		return nil
 	}
+	noProxy := merge(entry.Connection.NoProxy, auto(state, env))
 	eff := &Effective{
 		HTTP:    entry.Connection.HTTPProxy,
 		HTTPS:   entry.Connection.HTTPSProxy,
-		NoProxy: merge(entry.Connection.NoProxy, auto(state, env)),
+		NoProxy: expandCIDRNoProxy(noProxy, noProxyTargets(state)),
 	}
 	if entry.Connection.Auth != nil {
 		eff.Auth = entry.Connection.Auth.ProxyAuthRef
@@ -163,13 +165,95 @@ func merge(user, auto []string) []string {
 	return out
 }
 
+func expandCIDRNoProxy(entries, targets []string) []string {
+	prefixes := noProxyCIDRs(entries)
+	if len(prefixes) == 0 || len(targets) == 0 {
+		return entries
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		seen[entry] = true
+	}
+	for _, target := range sortedUniqueStrings(targets) {
+		addr, ok := noProxyTargetAddr(target)
+		if !ok {
+			continue
+		}
+		for _, prefix := range prefixes {
+			if !prefix.Contains(addr) {
+				continue
+			}
+			literal := addr.String()
+			if !seen[literal] {
+				seen[literal] = true
+				entries = append(entries, literal)
+			}
+			break
+		}
+	}
+	return entries
+}
+
+func noProxyCIDRs(entries []string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, entry := range entries {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(entry))
+		if err == nil {
+			out = append(out, prefix)
+		}
+	}
+	return out
+}
+
+func noProxyTargets(state v1alpha1.State) []string {
+	var out []string
+	for _, provider := range state.InfraProviders {
+		for _, machine := range provider.Spec.Machines {
+			if machine.BareMetal == nil {
+				continue
+			}
+			if host := hostFromAddress(machine.BareMetal.BMC.Address); host != "" {
+				out = append(out, host)
+			}
+		}
+	}
+	return out
+}
+
+func noProxyTargetAddr(target string) (netip.Addr, bool) {
+	addr, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(target), "[]"))
+	return addr, err == nil
+}
+
+func sortedUniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func MirrorHost(raw string) string {
+	return hostFromAddress(raw)
+}
+
+func hostFromAddress(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
 	if u, err := url.Parse(raw); err == nil && u.Host != "" {
 		return u.Hostname()
+	}
+	if i := strings.Index(raw, "/"); i >= 0 {
+		raw = raw[:i]
 	}
 	if host, _, err := net.SplitHostPort(raw); err == nil {
 		return host
