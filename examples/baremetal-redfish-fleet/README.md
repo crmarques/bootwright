@@ -1,19 +1,19 @@
 # Baremetal Redfish Fleet Example
 
-This example maps the same three-node OpenShift control-plane intent from
-`examples/libvirt-redfish-fleet` to explicit bare-metal inventory with Redfish
-virtual media.
+This example prepares two three-node OpenShift clusters from one bare-metal
+Redfish inventory.
 
-It is paired with `examples/libvirt-redfish-fleet` to show the provider swap
-contract. `environment.yaml` and `container-cluster.yaml` should remain
-byte-identical between the two examples when cluster intent is unchanged.
+The layout keeps fleet-wide selection in `environment.yaml`, shared services
+and provider inventory in `shared/`, and cluster-specific install intent in
+one directory per cluster:
 
-Provider-owned files in this variant:
-
-| File | Why it differs |
+| Path | Owns |
 | --- | --- |
-| `hosts.yaml` | Declares provider, BMC, and service reachability for real hosts |
-| `networks.yaml` | Uses the physical machine network and host NMState template |
-| `provider.yaml` | Uses explicit bare-metal machines, MAC addresses, and Redfish BMC endpoints |
-| `infra-component.yaml` | Publishes artifact routes reachable by physical BMCs |
-| `cluster-infra.yaml` | Selects bare-metal machines and operator-owned external VIPs |
+| `environment.yaml` | Fleet defaults, selected resources, secrets, and cluster list |
+| `shared/` | Service host, artifact server, machine network, and bare-metal inventory |
+| `demo-ocp-a/` | `demo-ocp-a` cluster infrastructure and container cluster intent |
+| `demo-ocp-b/` | `demo-ocp-b` cluster infrastructure and container cluster intent |
+
+Both clusters share `fleet-machine-net`, `artifact-server`, and
+`fleet-baremetal-provider`. Each cluster selects distinct machines, external
+VIPs, and static node addresses.

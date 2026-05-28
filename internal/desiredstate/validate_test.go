@@ -1110,6 +1110,43 @@ func TestEnvironmentResourcesRequireReferencedInfraComponent(t *testing.T) {
 	}
 }
 
+func TestEnvironmentResourcesSupportSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"environment.yaml": newEnvironmentYAMLWithResources(
+			"shared/hosts.yaml",
+			"shared/network.yaml",
+			"shared/provider.yaml",
+			"shared/infra-component.yaml",
+			"clusters/sno/cluster.yaml",
+		),
+		"shared/hosts.yaml":           newHostsYAML,
+		"shared/network.yaml":         newNetworkConfigYAML,
+		"shared/provider.yaml":        newProviderYAML,
+		"shared/infra-component.yaml": newInfraComponentYAML,
+		"clusters/sno/cluster.yaml":   newClusterYAML,
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := len(state.ContainerClusters); got != 1 {
+		t.Fatalf("ContainerClusters = %d, want 1", got)
+	}
+	if got := state.ContainerClusters[0].SourcePath; !strings.Contains(filepath.ToSlash(got), "clusters/sno/cluster.yaml") {
+		t.Fatalf("cluster SourcePath = %q, want nested cluster resource", got)
+	}
+}
+
 func TestEnvironmentResourcesDoNotHideInvalidImportedFiles(t *testing.T) {
 	cases := []struct {
 		name           string

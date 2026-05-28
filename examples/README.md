@@ -21,9 +21,11 @@ Current examples:
   Bootwright-managed mirror registry component.
 - `libvirt-redfish-fleet`: compact three-node OpenShift cluster on a libvirt
   provider with Redfish BMC emulation and Bootwright-provisioned HAProxy VIPs.
-- `baremetal-redfish-fleet`: the same `Environment` and `ContainerCluster`
+- `baremetal-redfish`: the same `Environment` and `ContainerCluster`
   intent mapped to explicit bare-metal inventory with operator-owned external
   VIPs.
+- `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common
+  services and provider inventory through a subdirectory layout.
 
 The two examples intentionally keep `environment.yaml` and
 `container-cluster.yaml` byte-identical. Provider swaps should normally change
@@ -37,7 +39,7 @@ Provider swap invariant:
 
 | Variant | Files that change | Files that should not change |
 | --- | --- | --- |
-| `libvirt-redfish-fleet` to `baremetal-redfish-fleet` | `hosts.yaml`, `networks.yaml`, `provider.yaml`, `cluster-infra.yaml`, `infra-component.yaml` | `environment.yaml`, `container-cluster.yaml` |
+| `libvirt-redfish-fleet` to `baremetal-redfish` | `hosts.yaml`, `networks.yaml`, `provider.yaml`, `cluster-infra.yaml`, `infra-component.yaml` | `environment.yaml`, `container-cluster.yaml` |
 
 Single-node mode variants:
 

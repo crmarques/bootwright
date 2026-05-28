@@ -260,6 +260,42 @@ func TestImportInputsCollisionAndReplace(t *testing.T) {
 	}
 }
 
+func TestImportInputsPreservesSubdirectoryLayout(t *testing.T) {
+	source := t.TempDir()
+	files := map[string]string{
+		"environment.yaml":                  "env\n",
+		"shared/provider.yaml":              "provider\n",
+		"demo-ocp-a/container-cluster.yaml": "cluster-a\n",
+		"demo-ocp-b/container-cluster.yaml": "cluster-b\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(source, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	inputDir := filepath.Join(t.TempDir(), InputDirName)
+	imported, err := ImportInputs([]string{source}, inputDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(imported) != len(files) {
+		t.Fatalf("imported = %v, want %d files", imported, len(files))
+	}
+	for name, content := range files {
+		body, err := os.ReadFile(filepath.Join(inputDir, name))
+		if err != nil {
+			t.Fatalf("read imported %s: %v", name, err)
+		}
+		if string(body) != content {
+			t.Fatalf("imported %s = %q, want %q", name, string(body), content)
+		}
+	}
+}
+
 func TestImportInputsRejectsSourceInsideTarget(t *testing.T) {
 	inputDir := filepath.Join(t.TempDir(), InputDirName)
 	if err := os.MkdirAll(inputDir, 0o700); err != nil {

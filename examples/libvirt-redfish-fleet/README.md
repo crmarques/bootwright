@@ -3,7 +3,7 @@
 This example maps one three-node OpenShift control plane to libvirt virtual
 machines with emulated Redfish BMC access.
 
-It is paired with `examples/baremetal-redfish-fleet` to show the provider swap
+It is paired with `examples/baremetal-redfish` to show the provider swap
 contract. `environment.yaml` and `container-cluster.yaml` should remain
 byte-identical between the two examples when cluster intent is unchanged.
 
