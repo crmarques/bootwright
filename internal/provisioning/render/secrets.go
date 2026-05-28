@@ -83,7 +83,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	if sshName == "" {
 		return out, fmt.Errorf("%s: sshKeyRef is empty; declare Environment.spec.secrets.%s or set ContainerCluster.spec.install.sshKeyRef", ocp.Metadata.Name, v1alpha1.DefaultClusterSSHKeyName)
 	}
-	sshPath := secret.ResolvePath(sshName, env, secretsDir)
+	sshPath := secret.ResolveSSHPublicKeyPath(sshName, env, secretsDir)
 	sshKey, err := readSecretFile(sshPath, "cluster admin public key")
 	if err != nil {
 		return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)

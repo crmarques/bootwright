@@ -56,6 +56,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		if env.Spec.BaseDomain == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
+		errs = append(errs, validateEnvironmentSecretStorage(env)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentContainerClusters(env, state)...)
 		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
@@ -65,6 +66,16 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateComponentImages(env)...)
 	}
 	return errs
+}
+
+func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {
+	switch env.Spec.SecretStorage.Mode {
+	case "", v1alpha1.SecretStorageModeSource, v1alpha1.SecretStorageModeContext:
+		return nil
+	default:
+		return []string{fmt.Sprintf("Environment/%s spec.secretStorage.mode %q must be one of {%s, %s}",
+			env.Metadata.Name, env.Spec.SecretStorage.Mode, v1alpha1.SecretStorageModeSource, v1alpha1.SecretStorageModeContext)}
+	}
 }
 
 func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
@@ -220,27 +231,46 @@ func validateEnvironmentClusterTrust(env v1alpha1.Environment) []string {
 
 func validateGeneratedSecret(envName, secretName string, gen *v1alpha1.EnvironmentSecretGenerated) []string {
 	var errs []string
-	hasCreds := gen.Credentials != nil
-	hasCert := gen.SelfSignedCertificate != nil
+	kinds := 0
+	if gen.Credentials != nil {
+		kinds++
+	}
+	if gen.SelfSignedCertificate != nil {
+		kinds++
+	}
+	if gen.SSHKeyPair != nil {
+		kinds++
+	}
 	switch {
-	case hasCreds && hasCert:
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated sets both credentials and selfSignedCertificate; pick exactly one", envName, secretName))
-	case !hasCreds && !hasCert:
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated requires one of {credentials, selfSignedCertificate}", envName, secretName))
-	case hasCert:
+	case kinds > 1:
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated sets more than one generated kind; pick exactly one of {credentials, selfSignedCertificate, sshKeyPair}", envName, secretName))
+	case kinds == 0:
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated requires one of {credentials, selfSignedCertificate, sshKeyPair}", envName, secretName))
+	case gen.SelfSignedCertificate != nil:
 		if gen.SelfSignedCertificate.CommonName == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.selfSignedCertificate.commonName is required", envName, secretName))
 		}
 		if gen.SelfSignedCertificate.ValidityDays < 0 {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.selfSignedCertificate.validityDays must not be negative", envName, secretName))
 		}
-	case hasCreds:
+	case gen.Credentials != nil:
 		username := gen.Credentials.Username
 		if username != "" && strings.TrimSpace(username) != username {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.credentials.username must not contain leading or trailing whitespace", envName, secretName))
 		}
 		if strings.ContainsAny(username, ":\r\n\t ") {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.credentials.username must not contain whitespace, colon, or newlines", envName, secretName))
+		}
+	case gen.SSHKeyPair != nil:
+		keyType := gen.SSHKeyPair.Type
+		if keyType != "" && keyType != v1alpha1.SSHKeyPairTypeEd25519 {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.type %q must be %q", envName, secretName, keyType, v1alpha1.SSHKeyPairTypeEd25519))
+		}
+		if strings.TrimSpace(gen.SSHKeyPair.Comment) != gen.SSHKeyPair.Comment {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.comment must not contain leading or trailing whitespace", envName, secretName))
+		}
+		if strings.ContainsAny(gen.SSHKeyPair.Comment, "\r\n") {
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.secrets[%s].generated.sshKeyPair.comment must not contain newlines", envName, secretName))
 		}
 	}
 	return errs

@@ -8,7 +8,10 @@ spec:
   secrets:
     openshift-pull-secret: null
     cluster-admin-pub-key:
-      file: ~/.ssh/bootwright-ssh-key.pub
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
     provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:

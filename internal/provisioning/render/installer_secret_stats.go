@@ -30,6 +30,9 @@ func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerClust
 		if ref.tlsKey {
 			path = secret.ResolveTLSKeyPath(ref.name, env, secretsDir)
 		}
+		if ref.sshPublic {
+			path = secret.ResolveSSHPublicKeyPath(ref.name, env, secretsDir)
+		}
 		key := ref.label + "\x00" + ref.name + "\x00" + path
 		if seen[key] {
 			continue
@@ -61,15 +64,16 @@ func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerClust
 }
 
 type installerSecretRef struct {
-	label  string
-	name   string
-	tlsKey bool
+	label     string
+	name      string
+	tlsKey    bool
+	sshPublic bool
 }
 
 func installerSecretRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []installerSecretRef {
 	refs := []installerSecretRef{
 		{label: "pullSecretRef", name: ocp.Spec.Install.PullSecretRef.Name},
-		{label: "sshKeyRef", name: ocp.Spec.Install.SSHKeyRef.Name},
+		{label: "sshKeyRef", name: ocp.Spec.Install.SSHKeyRef.Name, sshPublic: true},
 	}
 	for _, ref := range additionalTrustBundleRefs(state, ocp) {
 		refs = append(refs, installerSecretRef{label: "additionalTrustBundleRef", name: ref.Name})

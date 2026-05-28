@@ -8,13 +8,13 @@ import (
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 )
 
-func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
+func newSecretMaterializeCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "generate",
-		Short: "Generate local install secret material requested by desired state",
+		Use:   "materialize",
+		Short: "Materialize generated and context-storage secret material",
 		Args:  cobra.NoArgs,
-		Example: `  # Materialize every "generated:" secret declared by the current context
-  bootwright secret generate`,
+		Example: `  # Generate declared generated secrets and copy file-sourced secrets when enabled
+  bootwright secret materialize`,
 	}
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
@@ -27,7 +27,10 @@ func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		return runSecretMaterialize(stdout, "secret generate", ctx.SecretsDir, state, secretMaterializeOptions{Generated: true}, cliout.StatusSkip)
+		return runSecretMaterialize(stdout, "secret materialize", ctx.SecretsDir, state, secretMaterializeOptions{
+			Generated:   true,
+			FileSources: true,
+		}, cliout.StatusSkip)
 	}
 	return cmd
 }

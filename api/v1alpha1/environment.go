@@ -14,6 +14,7 @@ type EnvironmentSpec struct {
 	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	SecretStorage     EnvironmentSecretStorageSpec             `yaml:"secretStorage,omitempty" json:"secretStorage,omitempty"`
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
 	InfraComponents   EnvironmentInfraComponentsSpec           `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
@@ -25,6 +26,10 @@ type EnvironmentSpec struct {
 type EnvironmentProxyForSpec struct {
 	Bootwright     string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
 	ClusterInstall string `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
+}
+
+type EnvironmentSecretStorageSpec struct {
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
 type EnvironmentInfraComponentsSpec struct {
@@ -99,10 +104,16 @@ type EnvironmentClusterTrustSpec struct {
 type EnvironmentSecretGenerated struct {
 	Credentials           *GeneratedCredentialsSpec  `yaml:"credentials,omitempty" json:"credentials,omitempty"`
 	SelfSignedCertificate *SelfSignedCertificateSpec `yaml:"selfSignedCertificate,omitempty" json:"selfSignedCertificate,omitempty"`
+	SSHKeyPair            *GeneratedSSHKeyPairSpec   `yaml:"sshKeyPair,omitempty" json:"sshKeyPair,omitempty"`
 }
 
 type GeneratedCredentialsSpec struct {
 	Username string `yaml:"username,omitempty" json:"username,omitempty"`
+}
+
+type GeneratedSSHKeyPairSpec struct {
+	Type    string `yaml:"type,omitempty" json:"type,omitempty"`
+	Comment string `yaml:"comment,omitempty" json:"comment,omitempty"`
 }
 
 type SelfSignedCertificateSpec struct {

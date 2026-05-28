@@ -25,6 +25,7 @@ bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
+bootwright secret materialize
 bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
@@ -136,6 +137,7 @@ bootwright context current
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
+bootwright secret materialize
 bootwright secret list
 bootwright print-env [--sensitive]
 bootwright check syntax

@@ -129,6 +129,40 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	}
 }
 
+func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments[0].Spec.Secrets[v1alpha1.DefaultClusterSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+		},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var privateCheck, publicCheck *preflightCheck
+	for i := range checks {
+		check := &checks[i]
+		switch check.Name {
+		case "sno-libvirt sshKeyRef private":
+			privateCheck = check
+		case "sno-libvirt sshKeyRef public":
+			publicCheck = check
+		}
+	}
+	if privateCheck == nil || publicCheck == nil {
+		t.Fatalf("missing generated SSH key pair checks: %+v", checks)
+	}
+	if !strings.Contains(privateCheck.Evidence, "/context/secrets/cluster-admin-pub-key missing") {
+		t.Fatalf("private evidence = %q", privateCheck.Evidence)
+	}
+	if !strings.Contains(publicCheck.Evidence, "/context/secrets/cluster-admin-pub-key.pub missing") {
+		t.Fatalf("public evidence = %q", publicCheck.Evidence)
+	}
+}
+
 func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
 	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{

@@ -1,0 +1,16 @@
+---
+- name: Ensure context secrets directory exists
+  ansible.builtin.file:
+    path: "{{ bootwright_secrets_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Save file to context secret
+  ansible.builtin.copy:
+    src: "{{ bootwright_context_secret_source }}"
+    dest: "{{ bootwright_secrets_dir }}/{{ bootwright_context_secret_name }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false

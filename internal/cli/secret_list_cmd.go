@@ -118,6 +118,8 @@ func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1al
 			return "file:tls"
 		}
 		return "context:tls"
+	case spec.Generated != nil && spec.Generated.SSHKeyPair != nil:
+		return "generated:sshKeyPair"
 	case spec.File != "":
 		return "file"
 	case spec.Generated != nil && spec.Generated.Credentials != nil:
@@ -130,9 +132,15 @@ func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1al
 }
 
 func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []string {
-	path := resolvedSecretPath(name, env, secretsDir)
+	path := secret.ResolveMaterialPath(name, env, secretsDir, secret.MaterialPrimary)
+	if spec.Generated != nil && spec.Generated.SSHKeyPair != nil {
+		return []string{path, secret.ResolveSSHPublicKeyPath(name, env, secretsDir)}
+	}
 	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
 		return []string{path, secret.ResolveTLSKeyPath(name, env, secretsDir)}
+	}
+	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && secretConsumedAsClusterSSH(name, state) {
+		return []string{secret.ResolveSSHPrivateKeyPath(name, env, secretsDir), secret.ResolveSSHPublicKeyPath(name, env, secretsDir)}
 	}
 	return []string{path}
 }
@@ -151,6 +159,24 @@ func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
 			}
 		}
 		if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func secretConsumedAsClusterSSH(name string, state v1alpha1.State) bool {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Spec.Install.SSHKeyRef.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {
+	for _, host := range state.Hosts {
+		if host.Spec.SSH != nil && host.Spec.SSH.KeyRef.Name == name {
 			return true
 		}
 	}

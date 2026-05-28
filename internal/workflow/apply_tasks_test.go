@@ -356,8 +356,9 @@ func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
 		t.Fatalf("mkdir secrets dir: %v", err)
 	}
 	files := map[string]string{
-		"openshift-pull-secret": `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		"proxy-credentials":     "proxy:secret\n",
+		"openshift-pull-secret":     `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		"cluster-admin-pub-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
+		"proxy-credentials":         "proxy:secret\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {

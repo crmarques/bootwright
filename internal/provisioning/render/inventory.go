@@ -151,7 +151,7 @@ func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir s
 	if h.Spec.SSH.User != "" {
 		entry["ansible_user"] = h.Spec.SSH.User
 	}
-	if path := secret.ResolvePath(h.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
 	return entry

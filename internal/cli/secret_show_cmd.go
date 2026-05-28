@@ -14,12 +14,14 @@ import (
 
 func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 	var name string
+	part := "primary"
 	cmd := &cobra.Command{
 		Use:   "show --name <secret-name>",
 		Short: "Print context-local secret material",
 		Args:  cobra.NoArgs,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "context-local secret name to print")
+	cmd.Flags().StringVar(&part, "part", part, "secret material part: primary|private|public|tls-key")
 	_ = cmd.MarkFlagRequired("name")
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
@@ -30,7 +32,10 @@ func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 		if !desiredstate.IsDNSLabel(name) {
 			return failf(2, "--name must be a lowercase DNS label")
 		}
-		path := filepath.Join(ctx.SecretsDir, name)
+		path, err := localSecretPartPath(ctx.SecretsDir, name, part)
+		if err != nil {
+			return failErr(2, err)
+		}
 		exists, err := safefs.RegularFileExists(path)
 		if err != nil {
 			return failErr(1, err)
@@ -48,4 +53,17 @@ func newSecretShowCmd(stdout io.Writer) *cobra.Command {
 		return nil
 	}
 	return cmd
+}
+
+func localSecretPartPath(secretsDir, name, part string) (string, error) {
+	switch part {
+	case "primary", "private":
+		return filepath.Join(secretsDir, name), nil
+	case "public":
+		return filepath.Join(secretsDir, name+".pub"), nil
+	case "tls-key":
+		return filepath.Join(secretsDir, name+".key"), nil
+	default:
+		return "", fmt.Errorf("--part must be one of primary, private, public, tls-key")
+	}
 }

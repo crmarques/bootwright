@@ -1738,27 +1738,63 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
 	saveIdx := findAnsibleTask(t, tasks, "Save kubeadmin password to context secrets")
-	save, ok := tasks[saveIdx]["ansible.builtin.copy"].(map[string]any)
+	include, ok := tasks[saveIdx]["ansible.builtin.include_role"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no copy body", tasks[saveIdx]["name"])
+		t.Fatalf("%s has no include_role body", tasks[saveIdx]["name"])
 	}
-	if got := save["src"]; got != "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password" {
+	if got := include["name"]; got != "context_secret" {
+		t.Fatalf("kubeadmin password save role got %v", got)
+	}
+	if got := include["tasks_from"]; got != "save_file" {
+		t.Fatalf("kubeadmin password save tasks_from got %v", got)
+	}
+	vars, ok := tasks[saveIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no vars", tasks[saveIdx]["name"])
+	}
+	if got := vars["bootwright_context_secret_source"]; got != "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password" {
 		t.Fatalf("kubeadmin password source got %v", got)
 	}
-	if got := save["dest"]; got != "{{ bootwright_secrets_dir }}/{{ bootwright_current_cluster.name }}-kubeadmin-password" {
-		t.Fatalf("kubeadmin password secret dest got %v", got)
-	}
-	if got := save["mode"]; got != "0600" {
-		t.Fatalf("kubeadmin password secret mode got %v", got)
-	}
-	if got := tasks[saveIdx]["delegate_to"]; got != "localhost" {
-		t.Fatalf("kubeadmin password save must be local, got %v", got)
-	}
-	if got := tasks[saveIdx]["become"]; got != false {
-		t.Fatalf("kubeadmin password local save should not become remotely, got %v", got)
+	if got := vars["bootwright_context_secret_name"]; got != "{{ bootwright_current_cluster.name }}-kubeadmin-password" {
+		t.Fatalf("kubeadmin password secret name got %v", got)
 	}
 	if got := tasks[saveIdx]["when"]; got != "bootwright_local_kubeadmin_password_stat.stat.exists" {
 		t.Fatalf("kubeadmin password save when got %v", got)
+	}
+
+	roleTasks := readAnsibleTasks(t, "ansible/roles/shared/context_secret/tasks/save_file.yml")
+	ensureIdx := findAnsibleTask(t, roleTasks, "Ensure context secrets directory exists")
+	ensure, ok := roleTasks[ensureIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", roleTasks[ensureIdx]["name"])
+	}
+	if got := ensure["path"]; got != "{{ bootwright_secrets_dir }}" {
+		t.Fatalf("context secret dir path got %v", got)
+	}
+	if got := ensure["mode"]; got != "0700" {
+		t.Fatalf("context secret dir mode got %v", got)
+	}
+	copyIdx := findAnsibleTask(t, roleTasks, "Save file to context secret")
+	copyTask, ok := roleTasks[copyIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no copy body", roleTasks[copyIdx]["name"])
+	}
+	if got := copyTask["src"]; got != "{{ bootwright_context_secret_source }}" {
+		t.Fatalf("context secret source got %v", got)
+	}
+	if got := copyTask["dest"]; got != "{{ bootwright_secrets_dir }}/{{ bootwright_context_secret_name }}" {
+		t.Fatalf("context secret dest got %v", got)
+	}
+	if got := copyTask["mode"]; got != "0600" {
+		t.Fatalf("context secret mode got %v", got)
+	}
+	for _, idx := range []int{ensureIdx, copyIdx} {
+		if got := roleTasks[idx]["delegate_to"]; got != "localhost" {
+			t.Fatalf("%s must run locally, got %v", roleTasks[idx]["name"], got)
+		}
+		if got := roleTasks[idx]["become"]; got != false {
+			t.Fatalf("%s must not become remotely, got %v", roleTasks[idx]["name"], got)
+		}
 	}
 }
 

@@ -124,6 +124,58 @@ func TestReadUserPassFileMissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
+	secretsDir := t.TempDir()
+	for name, content := range map[string]string{
+		"pull":    `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		"ssh":     "PRIVATE\n",
+		"ssh.pub": "ssh-ed25519 AAAA generated\n",
+	} {
+		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"pull": {},
+					"ssh": {
+						Generated: &v1alpha1.EnvironmentSecretGenerated{
+							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+						},
+					},
+				},
+			},
+		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{Metadata: v1alpha1.Metadata{Name: "infra"}}},
+	}
+	ocp := v1alpha1.ContainerCluster{
+		Metadata: v1alpha1.Metadata{Name: "ocp"},
+		Spec: v1alpha1.ContainerClusterSpec{
+			Install: v1alpha1.OCPInstallSpec{
+				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
+				SSHKeyRef:     v1alpha1.SecretRef{Name: "ssh"},
+			},
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-0"},
+			}},
+		},
+	}
+
+	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	if err != nil {
+		t.Fatalf("LoadInstallerSecrets: %v", err)
+	}
+	if secrets.SSHKey != "ssh-ed25519 AAAA generated" {
+		t.Fatalf("SSHKey = %q", secrets.SSHKey)
+	}
+}
+
 func TestMergeMirrorAuth(t *testing.T) {
 	original := `{"auths":{"quay.io":{"auth":"ZXhpc3Q="}}}`
 	merged, err := mergeMirrorAuth(original, "mirror.local:5000", userPass{Username: "alice", Password: "s3cret"})

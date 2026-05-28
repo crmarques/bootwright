@@ -41,8 +41,9 @@ sudo -v
 test -s ~/pull-secret.json
 ```
 
-Generate (or reuse) the SSH key the cluster nodes will authorize and the
-bastion will use to reach the provider host(s):
+Generate (or reuse) the SSH key the bastion will use to reach the provider
+host(s). Cluster admin SSH keys are generated into the Bootwright context
+secrets directory by `bootwright secret generate`.
 
 ```bash
 install -d -m 0700 ~/.ssh

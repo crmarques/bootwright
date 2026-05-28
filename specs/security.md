@@ -9,7 +9,10 @@ path, but never carries secret bytes.
 state. An empty entry is context-local material written under the current
 context secrets directory, `file:` points at operator-owned local material, and
 `generated:` describes material Bootwright can create under the context secrets
-directory. Other kinds reference those names with `SecretRef`.
+directory. `Environment.spec.secretStorage.mode` defaults to `source`; `context`
+requires `bootwright secret materialize` to copy file-sourced entries into the
+context secrets directory before workflows read them. Other kinds reference
+those names with `SecretRef`.
 
 Sensitive material includes pull secrets, SSH private keys, TLS private keys,
 BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
@@ -95,6 +98,8 @@ Generated output boundaries are part of the safety contract:
   `/var/lib/bootwright/contexts/<context>/secrets/`; `secret show` prints a
   named context-local secret as raw bytes and must not read external `file:`
   sources.
+- Generated SSH key pairs live under the context secrets directory with the
+  private key at `<name>` and public key at `<name>.pub`, both mode `0600`.
 - External `file:` secret sources are operator-owned local material. When a
   non-root Bootwright invocation internally re-execs through `sudo`, checks and
   reads of those external files run as the original caller.

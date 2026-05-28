@@ -241,7 +241,10 @@ spec:
   secrets:
     openshift-pull-secret:
     cluster-admin-pub-key:
-      file: ~/.ssh/id_rsa.pub
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
 {{.EnvSecrets}}
 `
 

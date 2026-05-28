@@ -219,6 +219,31 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	}
 }
 
+func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.Secrets["provider-host-ssh"] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+		},
+	}
+	secretsDir := t.TempDir()
+	inv := render.InventoryWithLocalityPolicy(state, secretsDir, locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	serviceHost := hosts["bastion"].(map[string]any)
+	want := filepath.Join(secretsDir, "provider-host-ssh")
+	if got := serviceHost["ansible_ssh_private_key_file"]; got != want {
+		t.Fatalf("ansible_ssh_private_key_file got %v, want %s", got, want)
+	}
+}
+
 func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
