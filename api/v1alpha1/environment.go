@@ -14,6 +14,7 @@ type EnvironmentSpec struct {
 	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	SecretStorage     EnvironmentSecretStorageSpec             `yaml:"secretStorage,omitempty" json:"secretStorage,omitempty"`
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
 	InfraComponents   EnvironmentInfraComponentsSpec           `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
@@ -21,6 +22,15 @@ type EnvironmentSpec struct {
 	ClusterTrust      *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
 	Secrets           map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
+}
+
+type EnvironmentDefaultsSpec struct {
+	Install EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
+}
+
+type EnvironmentInstallDefaultsSpec struct {
+	PullSecretRef   SecretRef           `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
+	ClusterAdminSSH ClusterAdminSSHSpec `yaml:"clusterAdminSSH,omitempty" json:"clusterAdminSSH,omitempty"`
 }
 
 type EnvironmentProxyForSpec struct {

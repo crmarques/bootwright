@@ -240,7 +240,7 @@ spec:
 {{.Substrate.EnvArtifactServer}}
   secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key:
+    cluster-admin-ssh-key:
       generated:
         sshKeyPair:
           type: ed25519

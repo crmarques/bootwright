@@ -310,16 +310,21 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 		out = append(out, fileSecretCopyRequest{name: name, source: sourcePath, target: targetPath})
 	}
 	for _, name := range names {
-		switch {
-		case secretConsumedAsTLS(name, state):
+		added := false
+		if secretConsumedAsTLS(name, state) {
 			add(name, secret.MaterialPrimary)
 			add(name, secret.MaterialTLSKey)
-		case secretConsumedAsClusterSSH(name, state):
+			added = true
+		}
+		if secretConsumedAsClusterSSHPublic(name, state) {
 			add(name, secret.MaterialSSHPublic)
+			added = true
+		}
+		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
 			add(name, secret.MaterialSSHPrivate)
-		case secretConsumedAsHostSSH(name, state):
-			add(name, secret.MaterialSSHPrivate)
-		default:
+			added = true
+		}
+		if !added {
 			add(name, secret.MaterialPrimary)
 		}
 		if env.Spec.Secrets[name].KeyFile != "" {

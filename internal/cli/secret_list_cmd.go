@@ -139,8 +139,15 @@ func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1al
 	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
 		return []string{path, secret.ResolveTLSKeyPath(name, env, secretsDir)}
 	}
-	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && secretConsumedAsClusterSSH(name, state) {
-		return []string{secret.ResolveSSHPrivateKeyPath(name, env, secretsDir), secret.ResolveSSHPublicKeyPath(name, env, secretsDir)}
+	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secretConsumedAsClusterSSH(name, state) || secretConsumedAsHostSSH(name, state)) {
+		var paths []string
+		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
+			paths = append(paths, secret.ResolveSSHPrivateKeyPath(name, env, secretsDir))
+		}
+		if secretConsumedAsClusterSSHPublic(name, state) {
+			paths = append(paths, secret.ResolveSSHPublicKeyPath(name, env, secretsDir))
+		}
+		return paths
 	}
 	return []string{path}
 }
@@ -166,8 +173,23 @@ func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
 }
 
 func secretConsumedAsClusterSSH(name string, state v1alpha1.State) bool {
+	return secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsClusterSSHPrivate(name, state)
+}
+
+func secretConsumedAsClusterSSHPublic(name string, state v1alpha1.State) bool {
 	for _, cluster := range state.ContainerClusters {
-		if cluster.Spec.Install.SSHKeyRef.Name == name {
+		ssh := cluster.Spec.Install.ClusterAdminSSH
+		if ssh.KeyPairRef.Name == name || ssh.PublicKeyRef.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func secretConsumedAsClusterSSHPrivate(name string, state v1alpha1.State) bool {
+	for _, cluster := range state.ContainerClusters {
+		ssh := cluster.Spec.Install.ClusterAdminSSH
+		if ssh.KeyPairRef.Name == name || ssh.PrivateKeyRef.Name == name {
 			return true
 		}
 	}

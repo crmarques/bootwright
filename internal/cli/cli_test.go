@@ -2303,8 +2303,8 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 	}
 	secrets := map[string]string{
 		filepath.Join(ctx.SecretsDir, "openshift-pull-secret"):     `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key"):     "fake-private-key\n",
-		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
+		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key"):     "fake-private-key\n",
+		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
 		filepath.Join(ctx.SecretsDir, "bmc-credentials"):           "admin:password\n",
 		filepath.Join(ctx.SecretsDir, "proxy-credentials"):         "proxy:password\n",
 		filepath.Join(sshDir, "bootwright-ssh-key"):                "fake-private-key\n",

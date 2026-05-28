@@ -9,7 +9,7 @@ func clusterAdminSSHPrivateKeyPath(env *v1alpha1.Environment, ocp v1alpha1.Conta
 	if env == nil {
 		return ""
 	}
-	ref := ocp.Spec.Install.SSHKeyRef.Name
+	ref := ocp.Spec.Install.ClusterAdminSSH.PrivateMaterialRef().Name
 	if ref == "" {
 		return ""
 	}

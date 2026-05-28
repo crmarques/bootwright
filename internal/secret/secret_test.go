@@ -62,7 +62,7 @@ func TestResolveSSHKeyPairMaterialPaths(t *testing.T) {
 	env := &v1alpha1.Environment{
 		Spec: v1alpha1.EnvironmentSpec{
 			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-pub-key": {
+				"cluster-admin-ssh-key": {
 					Generated: &v1alpha1.EnvironmentSecretGenerated{
 						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 					},
@@ -71,10 +71,10 @@ func TestResolveSSHKeyPairMaterialPaths(t *testing.T) {
 		},
 	}
 	secretsDir := filepath.Join("context", "secrets")
-	if got := ResolveSSHPrivateKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key") {
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
 		t.Fatalf("private path = %q", got)
 	}
-	if got := ResolveSSHPublicKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key.pub") {
+	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
 		t.Fatalf("public path = %q", got)
 	}
 }
@@ -85,18 +85,18 @@ func TestResolveContextStorageSSHFileSourcePaths(t *testing.T) {
 		Spec: v1alpha1.EnvironmentSpec{
 			SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
 			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-pub-key": {File: "keys/admin"},
+				"cluster-admin-ssh-key": {File: "keys/admin"},
 			},
 		},
 	}
 	secretsDir := filepath.Join("context", "secrets")
-	if got := ResolveSSHPrivateKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key") {
+	if got := ResolveSSHPrivateKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key") {
 		t.Fatalf("context private path = %q", got)
 	}
-	if got := ResolveSSHPublicKeyPath("cluster-admin-pub-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-pub-key.pub") {
+	if got := ResolveSSHPublicKeyPath("cluster-admin-ssh-key", env, secretsDir); got != filepath.Join(secretsDir, "cluster-admin-ssh-key.pub") {
 		t.Fatalf("context public path = %q", got)
 	}
-	if got := ResolveSourceMaterialPath("cluster-admin-pub-key", env, MaterialSSHPublic); got != filepath.Join("/input", "keys", "admin.pub") {
+	if got := ResolveSourceMaterialPath("cluster-admin-ssh-key", env, MaterialSSHPublic); got != filepath.Join("/input", "keys", "admin.pub") {
 		t.Fatalf("source public path = %q", got)
 	}
 }

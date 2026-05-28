@@ -15,7 +15,7 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec: v1alpha1.EnvironmentSpec{
 			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-pub-key": {
+				"cluster-admin-ssh-key": {
 					Generated: &v1alpha1.EnvironmentSecretGenerated{
 						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{
 							Type:    v1alpha1.SSHKeyPairTypeEd25519,
@@ -31,10 +31,10 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeSecrets: %v", err)
 	}
-	if len(results) != 1 || results[0].name != "cluster-admin-pub-key" {
+	if len(results) != 1 || results[0].name != "cluster-admin-ssh-key" {
 		t.Fatalf("results = %+v", results)
 	}
-	privatePath := filepath.Join(secretsDir, "cluster-admin-pub-key")
+	privatePath := filepath.Join(secretsDir, "cluster-admin-ssh-key")
 	publicPath := privatePath + ".pub"
 	privateBody := readTestFile(t, privatePath)
 	publicBody := readTestFile(t, publicPath)
@@ -77,14 +77,14 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 			Spec: v1alpha1.EnvironmentSpec{
 				SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
 				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-admin-pub-key": {File: privateSource},
+					"cluster-admin-ssh-key": {File: privateSource},
 				},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
 			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
-				SSHKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-pub-key"},
+				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "cluster-admin-ssh-key"}},
 			}},
 		}},
 	}
@@ -96,14 +96,63 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two SSH key copies", results)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-pub-key")); got != "PRIVATE\n" {
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-ssh-key")); got != "PRIVATE\n" {
 		t.Fatalf("private copy = %q", got)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-pub-key.pub")); got != "ssh-ed25519 AAAA test\n" {
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-ssh-key.pub")); got != "ssh-ed25519 AAAA test\n" {
 		t.Fatalf("public copy = %q", got)
 	}
-	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-pub-key"), 0o600)
-	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-pub-key.pub"), 0o600)
+	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-ssh-key"), 0o600)
+	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-ssh-key.pub"), 0o600)
+}
+
+func TestMaterializeCopiesSplitClusterAdminSSHFileSources(t *testing.T) {
+	sourceDir := t.TempDir()
+	privateSource := filepath.Join(sourceDir, "id_ed25519")
+	publicSource := filepath.Join(sourceDir, "admin.pub")
+	if err := os.WriteFile(privateSource, []byte("PRIVATE\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(publicSource, []byte("ssh-ed25519 AAAA split\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	secretsDir := t.TempDir()
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata:   v1alpha1.Metadata{Name: "env"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"cluster-admin-public":  {File: publicSource},
+					"cluster-admin-private": {File: privateSource},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster"},
+			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
+				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+					PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-admin-public"},
+					PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-private"},
+				},
+			}},
+		}},
+	}
+
+	results, err := materializeSecrets(secretsDir, state, secretMaterializeOptions{FileSources: true})
+	if err != nil {
+		t.Fatalf("materializeSecrets: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v, want two SSH key copies", results)
+	}
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-private")); got != "PRIVATE\n" {
+		t.Fatalf("private copy = %q", got)
+	}
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-public.pub")); got != "ssh-ed25519 AAAA split\n" {
+		t.Fatalf("public copy = %q", got)
+	}
 }
 
 func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
@@ -116,20 +165,20 @@ func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	if strings.Contains(stdout, "OPENSSH PRIVATE KEY") {
 		t.Fatalf("secret generate leaked private key:\n%s", stdout)
 	}
-	public, stderr, code := runCLI(t, "secret", "show", "--name", "cluster-admin-pub-key", "--part", "public")
+	public, stderr, code := runCLI(t, "secret", "show", "--name", "cluster-admin-ssh-key", "--part", "public")
 	if code != 0 {
 		t.Fatalf("secret show public exited %d, stderr=%q", code, stderr)
 	}
 	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.Contains(public, " bootwright-cluster-admin\n") {
 		t.Fatalf("public part = %q", public)
 	}
-	_, stderr, code = runCLI(t, "secret", "delete", "cluster-admin-pub-key", "--yes")
+	_, stderr, code = runCLI(t, "secret", "delete", "cluster-admin-ssh-key", "--yes")
 	if code != 0 {
 		t.Fatalf("secret delete exited %d, stderr=%q", code, stderr)
 	}
 	for _, path := range []string{
-		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key"),
-		filepath.Join(ctx.SecretsDir, "cluster-admin-pub-key.pub"),
+		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key"),
+		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key.pub"),
 	} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("%s still exists after delete: %v", path, err)

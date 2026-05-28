@@ -253,6 +253,13 @@ spec:
 			wantSubstring: "field installMode not found",
 		},
 		{
+			name: "containercluster-sshkeyref-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    sshKeyRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "field sshKeyRef not found",
+		},
+		{
 			name: "host-ssh-address-rejected",
 			files: map[string]string{"hosts.yaml": strings.Replace(newHostsYAML,
 				"addressName: ssh",
@@ -401,9 +408,9 @@ spec:
 		{
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    cluster-admin-pub-key: { file: ~/ssh.pub }",
-				"    cluster-admin-pub-key: { generated: { sshKeyPair: { type: rsa } } }", 1)},
-			wantSubstring: `spec.secrets[cluster-admin-pub-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
+				"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
+				"    cluster-admin-ssh-key: { generated: { sshKeyPair: { type: rsa } } }", 1)},
+			wantSubstring: `spec.secrets[cluster-admin-ssh-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
 		},
 		{
 			name: "generated-secret-multiple-kinds-rejected",
@@ -415,9 +422,23 @@ spec:
 		{
 			name: "generated-non-ssh-key-for-ssh-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    cluster-admin-pub-key: { file: ~/ssh.pub }",
-				"    cluster-admin-pub-key:\n      generated: { credentials: { username: admin } }", 1)},
-			wantSubstring: `install.sshKeyRef "cluster-admin-pub-key" uses generated material but Environment/env spec.secrets[cluster-admin-pub-key].generated is not sshKeyPair`,
+				"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
+				"    cluster-admin-ssh-key:\n      generated: { credentials: { username: admin } }", 1)},
+			wantSubstring: `install.clusterAdminSSH.keyPairRef "cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[cluster-admin-ssh-key].generated is not sshKeyPair`,
+		},
+		{
+			name: "cluster-admin-ssh-mixed-refs-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }\n      publicKeyRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "spec.install.clusterAdminSSH must use either keyPairRef or publicKeyRef/privateKeyRef, not both",
+		},
+		{
+			name: "cluster-admin-ssh-private-only-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"    pullSecretRef: { name: openshift-pull-secret }",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      privateKeyRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "spec.install.clusterAdminSSH publicKeyRef.name is required when keyPairRef.name is empty",
 		},
 		{
 			name: "clustertrust-duplicate-ref-rejected",
@@ -495,6 +516,30 @@ spec:
 				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
 			}
 		})
+	}
+}
+
+func TestClusterAdminSSHSplitRefsValidate(t *testing.T) {
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
+		"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
+		"    cluster-admin-public: { file: ~/ssh.pub }\n    cluster-admin-private: { file: ~/ssh }", 1)
+	files["cluster.yaml"] = strings.Replace(newClusterYAML,
+		"    pullSecretRef: { name: openshift-pull-secret }",
+		"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	ssh := state.ContainerClusters[0].Spec.Install.ClusterAdminSSH
+	if got := ssh.PublicKeyRef.Name; got != "cluster-admin-public" {
+		t.Fatalf("PublicKeyRef.Name = %q, want cluster-admin-public", got)
+	}
+	if got := ssh.PrivateKeyRef.Name; got != "cluster-admin-private" {
+		t.Fatalf("PrivateKeyRef.Name = %q, want cluster-admin-private", got)
 	}
 }
 
@@ -1467,7 +1512,7 @@ spec:
 
   secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key: { file: ~/ssh.pub }
+    cluster-admin-ssh-key: { file: ~/ssh.pub }
     provider-host-ssh: { file: ~/ssh }
     vcenter-credentials: { file: ~/vcenter }
 `,
@@ -1553,7 +1598,8 @@ spec:
     release: { version: 4.21.15 }
   install:
     pullSecretRef: { name: openshift-pull-secret }
-    sshKeyRef: { name: cluster-admin-pub-key }
+    clusterAdminSSH:
+      keyPairRef: { name: cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }
@@ -1634,7 +1680,7 @@ spec:
 
   secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key: { file: ~/ssh.pub }
+    cluster-admin-ssh-key: { file: ~/ssh.pub }
     provider-host-ssh: { file: ~/ssh }
     bmc-credentials:
       generated: { credentials: { username: admin } }
@@ -1667,7 +1713,7 @@ spec:
 	}
 	b.WriteString(`  secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key: { file: ~/ssh.pub }
+    cluster-admin-ssh-key: { file: ~/ssh.pub }
     provider-host-ssh: { file: ~/ssh }
     bmc-credentials:
       generated: { credentials: { username: admin } }

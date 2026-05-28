@@ -46,9 +46,17 @@ spec:
   secretStorage:
     mode: context
 
+  defaults:
+    install:
+      pullSecretRef:
+        name: openshift-pull-secret
+      clusterAdminSSH:
+        keyPairRef:
+          name: cluster-admin-ssh-key
+
   secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key:
+    cluster-admin-ssh-key:
       generated:
         sshKeyPair:
           type: ed25519
@@ -142,6 +150,12 @@ Rules:
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
   `ContainerCluster`.
+- `defaults.install.pullSecretRef`, when set, is copied into selected
+  OpenShift `ContainerCluster` install specs that omit `pullSecretRef`.
+  Omitted means the conventional `openshift-pull-secret` secret name.
+- `defaults.install.clusterAdminSSH`, when set, is copied into selected
+  `ContainerCluster` install specs that omit `clusterAdminSSH`. Omitted means
+  `keyPairRef.name: cluster-admin-ssh-key`.
 - Bootwright and OpenShift installer actions run on the bastion host where the
   CLI is invoked. Desired state does not select that execution host.
 - `infraComponents.proxies[]`, `infraComponents.nameResolution[]`,
@@ -215,8 +229,9 @@ spec:
     mode: connected
     pullSecretRef:
       name: openshift-pull-secret
-    sshKeyRef:
-      name: cluster-admin-pub-key
+    clusterAdminSSH:
+      keyPairRef:
+        name: cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - name: cluster-extra-ca
     servingCertificates:
@@ -268,6 +283,13 @@ Rules:
 
 - `install.mode` defaults to `connected`.
 - `install.method` defaults to `agent`; other methods are not accepted yet.
+- `install.clusterAdminSSH` selects the SSH key material authorized during
+  install and, when available, the private key Bootwright uses for
+  post-install cluster-admin SSH probes. `keyPairRef` names one `SecretRef`
+  that owns both halves. For split ownership, use `publicKeyRef` for
+  `install-config.yaml` and optional `privateKeyRef` for local probe access.
+  A cluster admin SSH spec must use either `keyPairRef` or
+  `publicKeyRef`/`privateKeyRef`, not both.
 - `install.baseDomain`, `install.imageDigestSources`,
   `install.installConfigOverrides`, and `install.agentConfigOverrides` are not
   user API. Base domain belongs to `Environment.spec.baseDomain`; registry

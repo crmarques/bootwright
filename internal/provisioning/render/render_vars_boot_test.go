@@ -89,6 +89,27 @@ func TestVarsProjectGeneratedClusterAdminSSHPrivateKeyPath(t *testing.T) {
 	}
 }
 
+func TestVarsProjectSplitClusterAdminSSHPrivateKeyPath(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.ContainerClusters[0].Spec.Install.ClusterAdminSSH = v1alpha1.ClusterAdminSSHSpec{
+		PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-admin-public"},
+		PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-private"},
+	}
+	state.Environments[0].Spec.Secrets["cluster-admin-public"] = v1alpha1.EnvironmentSecretSpec{File: "keys/admin.pub"}
+	state.Environments[0].Spec.Secrets["cluster-admin-private"] = v1alpha1.EnvironmentSecretSpec{File: "keys/admin"}
+	sourceDir := t.TempDir()
+	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
+	vars := render.VarsWithSecretsDir(state, t.TempDir())
+	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
+	want := filepath.Join(sourceDir, "keys", "admin")
+	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
+		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
+	}
+}
+
 // TestMachineBootBlockProjectsSubstrateBlind pins the boot_redfish
 // contract: every Redfish-driven machine carries a fully-resolved
 // boot.{redfish,agentIso} tuple so the role does NOT branch on

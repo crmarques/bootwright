@@ -38,7 +38,7 @@ func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClu
 	}
 	out := InstallerSecrets{
 		PullSecret: pullSecret,
-		SSHKey:     secretRefPlaceholder("ssh-key", ocp.Spec.Install.SSHKeyRef.Name),
+		SSHKey:     secretRefPlaceholder("ssh-key", ocp.Spec.Install.ClusterAdminSSH.PublicMaterialRef().Name),
 		TLSPairs:   map[string]InstallerTLSSecret{},
 	}
 	if refs := additionalTrustBundleRefs(state, ocp); len(refs) > 0 {
@@ -79,9 +79,9 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 		out.PullSecret = "{}"
 	}
 
-	sshName := ocp.Spec.Install.SSHKeyRef.Name
+	sshName := ocp.Spec.Install.ClusterAdminSSH.PublicMaterialRef().Name
 	if sshName == "" {
-		return out, fmt.Errorf("%s: sshKeyRef is empty; declare Environment.spec.secrets.%s or set ContainerCluster.spec.install.sshKeyRef", ocp.Metadata.Name, v1alpha1.DefaultClusterSSHKeyName)
+		return out, fmt.Errorf("%s: clusterAdminSSH public key is empty; declare Environment.spec.secrets.%s or set ContainerCluster.spec.install.clusterAdminSSH", ocp.Metadata.Name, v1alpha1.DefaultClusterSSHKeyName)
 	}
 	sshPath := secret.ResolveSSHPublicKeyPath(sshName, env, secretsDir)
 	sshKey, err := readSecretFile(sshPath, "cluster admin public key")
