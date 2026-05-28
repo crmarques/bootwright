@@ -2,7 +2,7 @@ package desiredstate
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func validateClusterAdminSSHSpec(owner string, spec v1alpha1.ClusterAdminSSHSpec, required bool) []string {
+func validateNodeSSHSpec(owner string, spec v1alpha1.NodeSSHSpec, required bool) []string {
 	if spec.IsZero() {
 		if required {
 			return []string{owner + " requires keyPairRef.name or publicKeyRef.name"}

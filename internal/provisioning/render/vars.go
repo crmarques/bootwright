@@ -40,7 +40,7 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
-		if keyPath := clusterAdminSSHPrivateKeyPath(env, ocp, secretsDir); keyPath != "" {
+		if keyPath := nodeSSHPrivateKeyPath(env, ocp, secretsDir); keyPath != "" {
 			entry["adminSSHPrivateKeyPath"] = keyPath
 		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {

@@ -84,7 +84,7 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
 			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
-				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "cluster-admin-ssh-key"}},
+				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "cluster-admin-ssh-key"}},
 			}},
 		}},
 	}
@@ -106,7 +106,7 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-ssh-key.pub"), 0o600)
 }
 
-func TestMaterializeCopiesSplitClusterAdminSSHFileSources(t *testing.T) {
+func TestMaterializeCopiesSplitNodeSSHFileSources(t *testing.T) {
 	sourceDir := t.TempDir()
 	privateSource := filepath.Join(sourceDir, "id_ed25519")
 	publicSource := filepath.Join(sourceDir, "admin.pub")
@@ -132,7 +132,7 @@ func TestMaterializeCopiesSplitClusterAdminSSHFileSources(t *testing.T) {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
 			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
-				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+				NodeSSH: v1alpha1.NodeSSHSpec{
 					PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-admin-public"},
 					PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-private"},
 				},

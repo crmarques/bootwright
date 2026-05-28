@@ -424,21 +424,21 @@ spec:
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
 				"    cluster-admin-ssh-key:\n      generated: { credentials: { username: admin } }", 1)},
-			wantSubstring: `install.clusterAdminSSH.keyPairRef "cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[cluster-admin-ssh-key].generated is not sshKeyPair`,
+			wantSubstring: `install.nodeSSH.keyPairRef "cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[cluster-admin-ssh-key].generated is not sshKeyPair`,
 		},
 		{
 			name: "cluster-admin-ssh-mixed-refs-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }\n      publicKeyRef: { name: cluster-admin-ssh-key }", 1)},
-			wantSubstring: "spec.install.clusterAdminSSH must use either keyPairRef or publicKeyRef/privateKeyRef, not both",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }\n      publicKeyRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "spec.install.nodeSSH must use either keyPairRef or publicKeyRef/privateKeyRef, not both",
 		},
 		{
 			name: "cluster-admin-ssh-private-only-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      privateKeyRef: { name: cluster-admin-ssh-key }", 1)},
-			wantSubstring: "spec.install.clusterAdminSSH publicKeyRef.name is required when keyPairRef.name is empty",
+				"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      privateKeyRef: { name: cluster-admin-ssh-key }", 1)},
+			wantSubstring: "spec.install.nodeSSH publicKeyRef.name is required when keyPairRef.name is empty",
 		},
 		{
 			name: "clustertrust-duplicate-ref-rejected",
@@ -519,14 +519,14 @@ spec:
 	}
 }
 
-func TestClusterAdminSSHSplitRefsValidate(t *testing.T) {
+func TestNodeSSHSplitRefsValidate(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
 		"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
 		"    cluster-admin-public: { file: ~/ssh.pub }\n    cluster-admin-private: { file: ~/ssh }", 1)
 	files["cluster.yaml"] = strings.Replace(newClusterYAML,
 		"    pullSecretRef: { name: openshift-pull-secret }",
-		"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
+		"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
 
@@ -534,7 +534,7 @@ func TestClusterAdminSSHSplitRefsValidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	ssh := state.ContainerClusters[0].Spec.Install.ClusterAdminSSH
+	ssh := state.ContainerClusters[0].Spec.Install.NodeSSH
 	if got := ssh.PublicKeyRef.Name; got != "cluster-admin-public" {
 		t.Fatalf("PublicKeyRef.Name = %q, want cluster-admin-public", got)
 	}
@@ -1635,7 +1635,7 @@ spec:
     release: { version: 4.21.15 }
   install:
     pullSecretRef: { name: openshift-pull-secret }
-    clusterAdminSSH:
+    nodeSSH:
       keyPairRef: { name: cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:

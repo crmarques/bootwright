@@ -30,7 +30,7 @@ type EnvironmentDefaultsSpec struct {
 
 type EnvironmentInstallDefaultsSpec struct {
 	PullSecretRef   SecretRef           `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	ClusterAdminSSH ClusterAdminSSHSpec `yaml:"clusterAdminSSH,omitempty" json:"clusterAdminSSH,omitempty"`
+	NodeSSH NodeSSHSpec `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 }
 
 type EnvironmentProxyForSpec struct {

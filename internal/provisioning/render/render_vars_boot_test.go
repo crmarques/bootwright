@@ -52,14 +52,14 @@ func TestVarsProjectResolvedComponentImages(t *testing.T) {
 	}
 }
 
-func TestVarsProjectClusterAdminSSHPrivateKeyPath(t *testing.T) {
+func TestVarsProjectNodeSSHPrivateKeyPath(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	sourceDir := t.TempDir()
 	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultClusterSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
 		File: "keys/admin.pub",
 	}
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
@@ -70,12 +70,12 @@ func TestVarsProjectClusterAdminSSHPrivateKeyPath(t *testing.T) {
 	}
 }
 
-func TestVarsProjectGeneratedClusterAdminSSHPrivateKeyPath(t *testing.T) {
+func TestVarsProjectGeneratedNodeSSHPrivateKeyPath(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultClusterSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
@@ -83,18 +83,18 @@ func TestVarsProjectGeneratedClusterAdminSSHPrivateKeyPath(t *testing.T) {
 	secretsDir := t.TempDir()
 	vars := render.VarsWithSecretsDir(state, secretsDir)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
-	want := filepath.Join(secretsDir, v1alpha1.DefaultClusterSSHKeyName)
+	want := filepath.Join(secretsDir, v1alpha1.DefaultNodeSSHKeyName)
 	if got := cluster["adminSSHPrivateKeyPath"]; got != want {
 		t.Fatalf("adminSSHPrivateKeyPath got %v, want %s", got, want)
 	}
 }
 
-func TestVarsProjectSplitClusterAdminSSHPrivateKeyPath(t *testing.T) {
+func TestVarsProjectSplitNodeSSHPrivateKeyPath(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.ContainerClusters[0].Spec.Install.ClusterAdminSSH = v1alpha1.ClusterAdminSSHSpec{
+	state.ContainerClusters[0].Spec.Install.NodeSSH = v1alpha1.NodeSSHSpec{
 		PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-admin-public"},
 		PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-admin-private"},
 	}

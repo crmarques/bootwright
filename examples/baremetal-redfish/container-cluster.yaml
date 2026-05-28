@@ -13,7 +13,7 @@ spec:
     mode: connected
     pullSecretRef:
       name: openshift-pull-secret
-    clusterAdminSSH:
+    nodeSSH:
       keyPairRef:
         name: cluster-admin-ssh-key
 

@@ -23,29 +23,29 @@ type OCPInstallSpec struct {
 	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
 	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
 	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
-	ClusterAdminSSH           ClusterAdminSSHSpec      `yaml:"clusterAdminSSH,omitempty" json:"clusterAdminSSH,omitempty"`
+	NodeSSH           NodeSSHSpec      `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
 	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
 }
 
-type ClusterAdminSSHSpec struct {
+type NodeSSHSpec struct {
 	KeyPairRef    SecretRef `yaml:"keyPairRef,omitempty" json:"keyPairRef,omitempty"`
 	PublicKeyRef  SecretRef `yaml:"publicKeyRef,omitempty" json:"publicKeyRef,omitempty"`
 	PrivateKeyRef SecretRef `yaml:"privateKeyRef,omitempty" json:"privateKeyRef,omitempty"`
 }
 
-func (s ClusterAdminSSHSpec) IsZero() bool {
+func (s NodeSSHSpec) IsZero() bool {
 	return s.KeyPairRef.Name == "" && s.PublicKeyRef.Name == "" && s.PrivateKeyRef.Name == ""
 }
 
-func (s ClusterAdminSSHSpec) PublicMaterialRef() SecretRef {
+func (s NodeSSHSpec) PublicMaterialRef() SecretRef {
 	if s.KeyPairRef.Name != "" {
 		return s.KeyPairRef
 	}
 	return s.PublicKeyRef
 }
 
-func (s ClusterAdminSSHSpec) PrivateMaterialRef() SecretRef {
+func (s NodeSSHSpec) PrivateMaterialRef() SecretRef {
 	if s.KeyPairRef.Name != "" {
 		return s.KeyPairRef
 	}

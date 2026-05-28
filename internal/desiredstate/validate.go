@@ -223,7 +223,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 	}
 	require(fmt.Sprintf("Environment/%s spec.defaults.install.pullSecretRef", env.Metadata.Name), env.Spec.Defaults.Install.PullSecretRef)
-	requireClusterAdminSSH(fmt.Sprintf("Environment/%s spec.defaults.install.clusterAdminSSH", env.Metadata.Name), env.Spec.Defaults.Install.ClusterAdminSSH, requireSSHKey)
+	requireNodeSSH(fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name), env.Spec.Defaults.Install.NodeSSH, requireSSHKey)
 	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil {
 		owner := fmt.Sprintf("Environment/%s spec.registries.mirror", env.Metadata.Name)
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
@@ -257,7 +257,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	for _, ocp := range state.ContainerClusters {
 		require(fmt.Sprintf("ContainerCluster/%s install.pullSecretRef", ocp.Metadata.Name), ocp.Spec.Install.PullSecretRef)
-		requireClusterAdminSSH(fmt.Sprintf("ContainerCluster/%s install.clusterAdminSSH", ocp.Metadata.Name), ocp.Spec.Install.ClusterAdminSSH, requireSSHKey)
+		requireNodeSSH(fmt.Sprintf("ContainerCluster/%s install.nodeSSH", ocp.Metadata.Name), ocp.Spec.Install.NodeSSH, requireSSHKey)
 		for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
 			require(fmt.Sprintf("ContainerCluster/%s install.additionalTrustBundleRefs[%d]", ocp.Metadata.Name, i), ref)
 		}
@@ -275,7 +275,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	return errs
 }
 
-func requireClusterAdminSSH(owner string, spec v1alpha1.ClusterAdminSSHSpec, requireSSHKey func(string, v1alpha1.SecretRef)) {
+func requireNodeSSH(owner string, spec v1alpha1.NodeSSHSpec, requireSSHKey func(string, v1alpha1.SecretRef)) {
 	if spec.KeyPairRef.Name != "" {
 		requireSSHKey(owner+".keyPairRef", spec.KeyPairRef)
 	}
