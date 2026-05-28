@@ -84,6 +84,29 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
+	for _, path := range []string{
+		"ansible/roles/cluster_infra/external_validate/tasks/bmc.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/eject_media.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/insert_media_attempt.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/post_boot.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
+		"ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml",
+		"ansible/roles/providers/bmc_emulated/tasks/sushy.yml",
+	} {
+		for _, task := range readAnsibleTasks(t, path) {
+			uri, ok := task["ansible.builtin.uri"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, ok := uri["use_proxy"]; ok {
+				t.Fatalf("%s task %q must honor bootwright_proxy_env instead of overriding use_proxy", path, task["name"])
+			}
+		}
+	}
+}
+
 func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/playbooks/layers/openshift/boot-agent-machine.yml")
 	if len(plays) != 1 {
