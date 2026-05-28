@@ -23,9 +23,14 @@
       }}
   changed_when: false
 
+- name: Resolve Redfish System VirtualMedia collection URL
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_vmedia_url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia"
+  changed_when: false
+
 - name: List VirtualMedia members for the target system
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia"
+    url: "{{ bootwright_redfish_system_vmedia_url }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -55,9 +60,20 @@
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
+- name: Initialize Redfish manager VirtualMedia collection URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_manager_vmedia_urls: []
+  changed_when: false
+
+- name: Collect Redfish manager VirtualMedia collection URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_manager_vmedia_urls: "{{ bootwright_redfish_manager_vmedia_urls + [bootwright_component.boot.redfish.baseUrl ~ item['@odata.id'] ~ '/VirtualMedia'] }}"
+  loop: "{{ bootwright_redfish_managers_list.json.Members | default([]) }}"
+  changed_when: false
+
 - name: List VirtualMedia members for Redfish managers
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ item['@odata.id'] }}/VirtualMedia"
+    url: "{{ item }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -66,7 +82,7 @@
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
-  loop: "{{ bootwright_redfish_managers_list.json.Members | default([]) }}"
+  loop: "{{ bootwright_redfish_manager_vmedia_urls }}"
   register: bootwright_redfish_manager_vm_lists
   failed_when: false
   changed_when: false
@@ -90,9 +106,20 @@
   when: (bootwright_redfish_vm_list.status | default(0) | int) == 200
   changed_when: false
 
+- name: Initialize Redfish VirtualMedia member URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member_urls: []
+  changed_when: false
+
+- name: Collect Redfish VirtualMedia member URLs
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_member_urls: "{{ bootwright_redfish_vmedia_member_urls + [bootwright_component.boot.redfish.baseUrl ~ item['@odata.id']] }}"
+  loop: "{{ bootwright_redfish_vmedia_member_refs }}"
+  changed_when: false
+
 - name: Probe Redfish VirtualMedia members
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ item['@odata.id'] }}"
+    url: "{{ item }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -101,7 +128,7 @@
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
-  loop: "{{ bootwright_redfish_vmedia_member_refs }}"
+  loop: "{{ bootwright_redfish_vmedia_member_urls }}"
   register: bootwright_redfish_vmedia_member_probes
   failed_when: false
   changed_when: false
@@ -118,8 +145,18 @@
       - (bootwright_redfish_vmedia_candidates | length) > 0
     fail_msg: >-
       Redfish BMC did not expose any usable VirtualMedia members under
-      /redfish/v1/Managers/*/VirtualMedia or
-      /redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia.
+      the Redfish URLs Bootwright tried. System VirtualMedia URL:
+      {{ bootwright_redfish_system_vmedia_url }} status={{
+      bootwright_redfish_vm_list.status | default('unavailable') }}.
+      Manager VirtualMedia URLs: {{
+      (bootwright_redfish_manager_vmedia_urls | default([]) | join(', '))
+      | default('none', true) }} statuses={{
+      (bootwright_redfish_manager_vm_lists.results | default([]) | map(attribute='status') | list | join(', '))
+      | default('none', true) }}. VirtualMedia member URLs: {{
+      (bootwright_redfish_vmedia_member_urls | default([]) | join(', '))
+      | default('none', true) }} statuses={{
+      (bootwright_redfish_vmedia_member_probes.results | default([]) | map(attribute='status') | list | join(', '))
+      | default('none', true) }}.
 
 - name: Resolve VirtualMedia member
   ansible.builtin.set_fact:
