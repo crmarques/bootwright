@@ -151,9 +151,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, secretsD
 		if override {
 			continue
 		}
-		hashMatches := !found || record.DesiredHash == "" || record.DesiredHash == hash
+		hashMatches := !found || record.DesiredHash == hash
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
-			return out, fmt.Errorf("ContainerCluster/%s already has install state for different install inputs after node boot; run bootwright destroy cluster --yes or bootwright apply cluster --override --yes after resetting target machines", name)
+			return out, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy cluster --yes or bootwright apply cluster --override --yes after resetting target machines", name)
 		}
 		kubeconfigPath := clusterKubeconfigPath(runtimeDir, state, name)
 		if !found {

@@ -142,15 +142,9 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		if !dryRun && !plan.noRemoteWork {
-			reporter.BundleStart()
-		}
-		bundle, err := prepareWorkflowBundle(dryRun || plan.noRemoteWork)
+		bundle, err := prepareWorkflowBundle(true)
 		if err != nil {
 			return failErr(1, err)
-		}
-		if !dryRun && !plan.noRemoteWork {
-			reporter.BundleReady(bundle)
 		}
 		runOpts := workflow.RunOptions{
 			State:              plan.state,
@@ -193,13 +187,26 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
+		prepared, err := workflow.PrepareApplyTaskGraph(c.Context(), ctx.RunsDir, runOpts, tasks, limits)
+		if err != nil {
+			return failErr(1, err)
+		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
 			if _, err := workflow.ResolveInstaller(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state); err != nil {
 				return failErr(1, err)
 			}
 		}
-		ledger, err := workflow.RunApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, tasks, limits, newApplyReporter(stdout, stderr, runtimeDir), nil)
+		if !plan.noRemoteWork {
+			reporter.BundleStart()
+			bundle, err = prepareWorkflowBundle(false)
+			if err != nil {
+				return failErr(1, err)
+			}
+			reporter.BundleReady(bundle)
+			runOpts.BundleDir = bundle.Dir
+		}
+		ledger, err := workflow.RunPreparedApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, prepared, newApplyReporter(stdout, stderr, runtimeDir), nil)
 		if err != nil {
 			return failErr(1, err)
 		}

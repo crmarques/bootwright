@@ -131,10 +131,18 @@
             | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token)
           }}
       changed_when: false
+      no_log: true
 
     - name: Resolve direct agent ISO staging directory
       ansible.builtin.set_fact:
         bootwright_agent_iso_direct_stage_dir: "{{ bootwright_agent_iso_direct_stage_path | dirname }}"
+      changed_when: false
+      no_log: true
+      when: (bootwright_agent_iso_direct_stage_path | length) > 0
+
+    - name: Resolve redacted direct agent ISO stage path
+      ansible.builtin.set_fact:
+        bootwright_agent_iso_direct_stage_path_redacted: "{{ bootwright_agent_iso_direct_stage_path | replace(bootwright_agent_iso_publish_token, '<redacted>') }}"
       changed_when: false
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
@@ -147,6 +155,7 @@
         mode: "0700"
       delegate_to: "{{ bootwright_agent_iso_direct_publish_target.stageHost | default(inventory_hostname) }}"
       become: true
+      no_log: true
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Remove direct staged agent ISO output path
@@ -155,6 +164,7 @@
         state: absent
       delegate_to: "{{ bootwright_agent_iso_direct_publish_target.stageHost | default(inventory_hostname) }}"
       become: true
+      no_log: true
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Link installer agent ISO output to direct publish path
@@ -163,6 +173,7 @@
         dest: "{{ bootwright_install_work_dir }}/agent.x86_64.iso"
         state: link
         force: true
+      no_log: true
       when: (bootwright_agent_iso_direct_stage_path | length) > 0
 
     - name: Create agent ISO
@@ -182,6 +193,7 @@
       ansible.builtin.stat:
         path: "{{ bootwright_agent_iso_direct_stage_path }}"
       register: bootwright_agent_iso_direct_stat
+      no_log: true
       when: (bootwright_agent_iso_direct_stage_path | default('') | length) > 0
 
     - name: Locate generated agent ISO
@@ -196,7 +208,7 @@
         msg: >-
           openshift-install did not produce an agent ISO under
           {{ bootwright_install_work_dir }} or
-          {{ bootwright_agent_iso_direct_stage_path | default('<direct publish path unavailable>') }}
+          {{ bootwright_agent_iso_direct_stage_path_redacted | default('<direct publish path unavailable>') }}
       when:
         - not (bootwright_agent_iso_direct_stat.stat.isreg | default(false))
         - bootwright_agent_iso_find.matched == 0
@@ -210,12 +222,14 @@
             else (bootwright_agent_iso_find.files | sort(attribute='mtime', reverse=true) | map(attribute='path') | first)
           }}
       changed_when: false
+      no_log: true
 
     - name: Record generated agent ISO path
       ansible.builtin.copy:
         dest: "{{ bootwright_install_work_dir }}/agent-iso.path"
         mode: "0600"
         content: "{{ bootwright_agent_iso_path }}\n"
+      no_log: true
 
     - name: Determine whether local agent ISO transfer is needed
       ansible.builtin.set_fact:
@@ -288,6 +302,7 @@
         content: "{{ (bootwright_install_local_work_dir ~ '/' ~ (bootwright_agent_iso_path | basename)) if (bootwright_agent_iso_requires_local_copy | bool) else bootwright_agent_iso_path }}\n"
       delegate_to: localhost
       become: false
+      no_log: true
 
     - name: Set local generated agent ISO path
       ansible.builtin.set_fact:

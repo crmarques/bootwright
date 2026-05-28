@@ -177,6 +177,63 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	}
 }
 
+func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
+	cases := []struct {
+		name   string
+		status ClusterInstallStatus
+		phase  ClusterInstallPhase
+	}{
+		{
+			name:   "nodes booted",
+			status: ClusterInstallStatusInstalling,
+			phase:  ClusterInstallPhaseNodesBooted,
+		},
+		{
+			name:   "installed",
+			status: ClusterInstallStatusInstalled,
+			phase:  ClusterInstallPhaseComplete,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+			secretsDir := writeWorkflowInstallerSecrets(t, dir)
+			renderedDir := filepath.Join(dir, "rendered")
+			runtimeDir := filepath.Join(dir, "runtime")
+			runsDir := filepath.Join(dir, "runs")
+			managedDir := filepath.Join(dir, "managed")
+			if err := SaveClusterInstallRecord(runtimeDir, ClusterInstallRecord{
+				Cluster:   "sno-libvirt",
+				Status:    tc.status,
+				Phase:     tc.phase,
+				UpdatedAt: time.Now().UTC(),
+			}); err != nil {
+				t.Fatalf("SaveClusterInstallRecord: %v", err)
+			}
+			calls := 0
+			_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
+				State:       state,
+				RenderedDir: renderedDir,
+				RuntimeDir:  runtimeDir,
+				RunsDir:     runsDir,
+				SecretsDir:  secretsDir,
+				ManagedDir:  managedDir,
+				BundleDir:   filepath.Join(dir, "bundle"),
+			}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+				calls++
+				return &fakeRunner{}
+			})
+			if err == nil || !strings.Contains(err.Error(), "missing or different install inputs") {
+				t.Fatalf("RunApplyTaskGraph error = %v, want missing or different install inputs", err)
+			}
+			if calls != 0 {
+				t.Fatalf("runner factory calls = %d, want 0", calls)
+			}
+		})
+	}
+}
+
 func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	dir := t.TempDir()
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")

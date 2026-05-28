@@ -4,6 +4,13 @@
     bootwright_agent_iso_stage_path: "{{ bootwright_agent_iso_publish_target.stagePath | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
     bootwright_agent_iso_fetch_url: "{{ bootwright_agent_iso_publish_target.fetchUrl | replace(bootwright_agent_iso_publish_token_placeholder, bootwright_agent_iso_publish_token) }}"
   changed_when: false
+  no_log: true
+
+- name: Resolve redacted agent ISO publish target
+  ansible.builtin.set_fact:
+    bootwright_agent_iso_stage_path_redacted: "{{ bootwright_agent_iso_stage_path | replace(bootwright_agent_iso_publish_token, '<redacted>') }}"
+    bootwright_agent_iso_fetch_url_redacted: "{{ bootwright_agent_iso_fetch_url | replace(bootwright_agent_iso_publish_token, '<redacted>') }}"
+  changed_when: false
 
 - name: Validate agent ISO publish target
   ansible.builtin.assert:
@@ -22,13 +29,14 @@
         ((bootwright_agent_iso_fetch_url | ansible.builtin.urlsplit('scheme') | lower) == 'https')
     fail_msg: >-
       Invalid agent ISO publish target for {{ bootwright_current_cluster.name }}:
-      stagePath={{ bootwright_agent_iso_stage_path }},
-      fetchUrl={{ bootwright_agent_iso_fetch_url }}.
+      stagePath={{ bootwright_agent_iso_stage_path_redacted }},
+      fetchUrl={{ bootwright_agent_iso_fetch_url_redacted }}.
 
 - name: Resolve agent ISO staging directory
   ansible.builtin.set_fact:
     bootwright_agent_iso_stage_dir: "{{ bootwright_agent_iso_stage_path | dirname }}"
   changed_when: false
+  no_log: true
 
 - name: Determine agent ISO publish locality
   ansible.builtin.set_fact:
@@ -39,6 +47,7 @@
   ansible.builtin.set_fact:
     bootwright_agent_iso_already_staged: "{{ bootwright_agent_iso_path == bootwright_agent_iso_stage_path }}"
   changed_when: false
+  no_log: true
 
 - name: Create agent ISO staging directory
   ansible.builtin.file:
@@ -49,6 +58,7 @@
     mode: "0700"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
 
 - name: Link agent ISO at the BMC fetch location
   ansible.builtin.command:
@@ -61,6 +71,7 @@
   changed_when: bootwright_agent_iso_stage_link.rc == 0
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
   when:
     - bootwright_agent_iso_stage_local_to_install_host | bool
     - not (bootwright_agent_iso_already_staged | bool)
@@ -80,6 +91,7 @@
   changed_when: true
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
   when:
     - bootwright_agent_iso_stage_local_to_install_host | bool
     - not (bootwright_agent_iso_already_staged | bool)
@@ -94,6 +106,7 @@
     mode: "0600"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
   when:
     - not (bootwright_agent_iso_stage_local_to_install_host | bool)
     - not (bootwright_agent_iso_already_staged | bool)
@@ -106,6 +119,7 @@
     mode: "0600"
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
 
 - name: Align agent ISO staging directory label with publish root
   ansible.builtin.command:
@@ -118,6 +132,7 @@
   changed_when: false
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
 
 - name: Align staged agent ISO label with staging directory
   ansible.builtin.command:
@@ -130,6 +145,7 @@
   changed_when: false
   delegate_to: "{{ bootwright_agent_iso_publish_target.stageHost }}"
   become: true
+  no_log: true
 
 - name: Probe staged agent ISO fetch URL
   ansible.builtin.uri:
@@ -144,6 +160,7 @@
   become: false
   failed_when: false
   changed_when: false
+  no_log: true
 
 - name: Probe staged agent ISO byte-range fetch
   ansible.builtin.uri:
@@ -160,6 +177,7 @@
   become: false
   failed_when: false
   changed_when: false
+  no_log: true
   when: bootwright_agent_iso_publish_target.requiresByteRange | default(false) | bool
 
 - name: Confirm staged agent ISO fetch URL is reachable
@@ -173,7 +191,7 @@
     fail_msg: >-
       The staged agent ISO URL is not reachable from
       {{ bootwright_agent_iso_publish_target.stageHost }}:
-      {{ bootwright_agent_iso_fetch_url }} returned HEAD status
+      {{ bootwright_agent_iso_fetch_url_redacted }} returned HEAD status
       {{ bootwright_agent_iso_fetch_probe.status | default('unknown') }} and
       byte-range status
       {{ bootwright_agent_iso_range_probe.status | default('not attempted') }}.
