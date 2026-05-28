@@ -131,7 +131,7 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 
 func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultClusterSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
@@ -146,9 +146,9 @@ func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	for i := range checks {
 		check := &checks[i]
 		switch check.Name {
-		case "sno-libvirt clusterAdminSSH keyPairRef private":
+		case "sno-libvirt nodeSSH keyPairRef private":
 			privateCheck = check
-		case "sno-libvirt clusterAdminSSH keyPairRef public":
+		case "sno-libvirt nodeSSH keyPairRef public":
 			publicCheck = check
 		}
 	}

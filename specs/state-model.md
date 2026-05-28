@@ -50,7 +50,7 @@ spec:
     install:
       pullSecretRef:
         name: openshift-pull-secret
-      clusterAdminSSH:
+      nodeSSH:
         keyPairRef:
           name: cluster-admin-ssh-key
 
@@ -153,8 +153,8 @@ Rules:
 - `defaults.install.pullSecretRef`, when set, is copied into selected
   OpenShift `ContainerCluster` install specs that omit `pullSecretRef`.
   Omitted means the conventional `openshift-pull-secret` secret name.
-- `defaults.install.clusterAdminSSH`, when set, is copied into selected
-  `ContainerCluster` install specs that omit `clusterAdminSSH`. Omitted means
+- `defaults.install.nodeSSH`, when set, is copied into selected
+  `ContainerCluster` install specs that omit `nodeSSH`. Omitted means
   `keyPairRef.name: cluster-admin-ssh-key`.
 - Bootwright and OpenShift installer actions run on the bastion host where the
   CLI is invoked. Desired state does not select that execution host.
@@ -229,7 +229,7 @@ spec:
     mode: connected
     pullSecretRef:
       name: openshift-pull-secret
-    clusterAdminSSH:
+    nodeSSH:
       keyPairRef:
         name: cluster-admin-ssh-key
     additionalTrustBundleRefs:
@@ -283,12 +283,12 @@ Rules:
 
 - `install.mode` defaults to `connected`.
 - `install.method` defaults to `agent`; other methods are not accepted yet.
-- `install.clusterAdminSSH` selects the SSH key material authorized during
+- `install.nodeSSH` selects the SSH key material authorized during
   install and, when available, the private key Bootwright uses for
-  post-install cluster-admin SSH probes. `keyPairRef` names one `SecretRef`
+  post-install node SSH probes. `keyPairRef` names one `SecretRef`
   that owns both halves. For split ownership, use `publicKeyRef` for
   `install-config.yaml` and optional `privateKeyRef` for local probe access.
-  A cluster admin SSH spec must use either `keyPairRef` or
+  A node SSH spec must use either `keyPairRef` or
   `publicKeyRef`/`privateKeyRef`, not both.
 - `install.baseDomain`, `install.imageDigestSources`,
   `install.installConfigOverrides`, and `install.agentConfigOverrides` are not

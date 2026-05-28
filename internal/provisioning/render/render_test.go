@@ -171,7 +171,7 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 			Spec: v1alpha1.ContainerClusterSpec{
 				Install: v1alpha1.OCPInstallSpec{
 					PullSecretRef:   v1alpha1.SecretRef{Name: "pull-secret"},
-					ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh-key"}},
+					NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh-key"}},
 				},
 				Nodes: []v1alpha1.OCPNodeSpec{{
 					Hostname: "master-0",

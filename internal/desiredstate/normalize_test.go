@@ -25,8 +25,8 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	if got := install.PullSecretRef.Name; got != v1alpha1.DefaultPullSecretName {
 		t.Fatalf("PullSecretRef.Name = %q, want %q", got, v1alpha1.DefaultPullSecretName)
 	}
-	if got := install.ClusterAdminSSH.KeyPairRef.Name; got != v1alpha1.DefaultClusterSSHKeyName {
-		t.Fatalf("ClusterAdminSSH.KeyPairRef.Name = %q, want %q", got, v1alpha1.DefaultClusterSSHKeyName)
+	if got := install.NodeSSH.KeyPairRef.Name; got != v1alpha1.DefaultNodeSSHKeyName {
+		t.Fatalf("NodeSSH.KeyPairRef.Name = %q, want %q", got, v1alpha1.DefaultNodeSSHKeyName)
 	}
 }
 
@@ -39,7 +39,7 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 				Defaults: v1alpha1.EnvironmentDefaultsSpec{
 					Install: v1alpha1.EnvironmentInstallDefaultsSpec{
 						PullSecretRef: v1alpha1.SecretRef{Name: "custom-pull"},
-						ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+						NodeSSH: v1alpha1.NodeSSHSpec{
 							PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-public"},
 							PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-private"},
 						},
@@ -58,11 +58,11 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	if got := install.PullSecretRef.Name; got != "custom-pull" {
 		t.Fatalf("PullSecretRef.Name = %q, want custom-pull", got)
 	}
-	if got := install.ClusterAdminSSH.PublicKeyRef.Name; got != "cluster-public" {
-		t.Fatalf("ClusterAdminSSH.PublicKeyRef.Name = %q, want cluster-public", got)
+	if got := install.NodeSSH.PublicKeyRef.Name; got != "cluster-public" {
+		t.Fatalf("NodeSSH.PublicKeyRef.Name = %q, want cluster-public", got)
 	}
-	if got := install.ClusterAdminSSH.PrivateKeyRef.Name; got != "cluster-private" {
-		t.Fatalf("ClusterAdminSSH.PrivateKeyRef.Name = %q, want cluster-private", got)
+	if got := install.NodeSSH.PrivateKeyRef.Name; got != "cluster-private" {
+		t.Fatalf("NodeSSH.PrivateKeyRef.Name = %q, want cluster-private", got)
 	}
 }
 

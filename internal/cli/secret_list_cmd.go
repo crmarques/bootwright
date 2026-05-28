@@ -178,7 +178,7 @@ func secretConsumedAsClusterSSH(name string, state v1alpha1.State) bool {
 
 func secretConsumedAsClusterSSHPublic(name string, state v1alpha1.State) bool {
 	for _, cluster := range state.ContainerClusters {
-		ssh := cluster.Spec.Install.ClusterAdminSSH
+		ssh := cluster.Spec.Install.NodeSSH
 		if ssh.KeyPairRef.Name == name || ssh.PublicKeyRef.Name == name {
 			return true
 		}
@@ -188,7 +188,7 @@ func secretConsumedAsClusterSSHPublic(name string, state v1alpha1.State) bool {
 
 func secretConsumedAsClusterSSHPrivate(name string, state v1alpha1.State) bool {
 	for _, cluster := range state.ContainerClusters {
-		ssh := cluster.Spec.Install.ClusterAdminSSH
+		ssh := cluster.Spec.Install.NodeSSH
 		if ssh.KeyPairRef.Name == name || ssh.PrivateKeyRef.Name == name {
 			return true
 		}

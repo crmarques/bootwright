@@ -158,14 +158,14 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 		}
 		ocp.Spec.Install.PullSecretRef = ref
 	}
-	if ocp.Spec.Install.ClusterAdminSSH.IsZero() {
-		defaultSSH := env.Spec.Defaults.Install.ClusterAdminSSH
+	if ocp.Spec.Install.NodeSSH.IsZero() {
+		defaultSSH := env.Spec.Defaults.Install.NodeSSH
 		if defaultSSH.IsZero() {
-			defaultSSH = v1alpha1.ClusterAdminSSHSpec{
-				KeyPairRef: v1alpha1.SecretRef{Name: v1alpha1.DefaultClusterSSHKeyName},
+			defaultSSH = v1alpha1.NodeSSHSpec{
+				KeyPairRef: v1alpha1.SecretRef{Name: v1alpha1.DefaultNodeSSHKeyName},
 			}
 		}
-		ocp.Spec.Install.ClusterAdminSSH = defaultSSH
+		ocp.Spec.Install.NodeSSH = defaultSSH
 	}
 }
 

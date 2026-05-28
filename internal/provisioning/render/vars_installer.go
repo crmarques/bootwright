@@ -5,11 +5,11 @@ import (
 	"github.com/crmarques/bootwright/internal/secret"
 )
 
-func clusterAdminSSHPrivateKeyPath(env *v1alpha1.Environment, ocp v1alpha1.ContainerCluster, secretsDir string) string {
+func nodeSSHPrivateKeyPath(env *v1alpha1.Environment, ocp v1alpha1.ContainerCluster, secretsDir string) string {
 	if env == nil {
 		return ""
 	}
-	ref := ocp.Spec.Install.ClusterAdminSSH.PrivateMaterialRef().Name
+	ref := ocp.Spec.Install.NodeSSH.PrivateMaterialRef().Name
 	if ref == "" {
 		return ""
 	}

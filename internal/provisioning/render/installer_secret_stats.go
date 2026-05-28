@@ -74,8 +74,8 @@ func installerSecretRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster, en
 	refs := []installerSecretRef{
 		{label: "pullSecretRef", name: ocp.Spec.Install.PullSecretRef.Name},
 	}
-	if publicRef := ocp.Spec.Install.ClusterAdminSSH.PublicMaterialRef(); publicRef.Name != "" {
-		refs = append(refs, installerSecretRef{label: "clusterAdminSSH.publicKeyRef", name: publicRef.Name, sshPublic: true})
+	if publicRef := ocp.Spec.Install.NodeSSH.PublicMaterialRef(); publicRef.Name != "" {
+		refs = append(refs, installerSecretRef{label: "nodeSSH.publicKeyRef", name: publicRef.Name, sshPublic: true})
 	}
 	for _, ref := range additionalTrustBundleRefs(state, ocp) {
 		refs = append(refs, installerSecretRef{label: "additionalTrustBundleRef", name: ref.Name})

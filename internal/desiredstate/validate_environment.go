@@ -70,9 +70,9 @@ func validateEnvironments(state v1alpha1.State) []string {
 }
 
 func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
-	return validateClusterAdminSSHSpec(
-		fmt.Sprintf("Environment/%s spec.defaults.install.clusterAdminSSH", env.Metadata.Name),
-		env.Spec.Defaults.Install.ClusterAdminSSH,
+	return validateNodeSSHSpec(
+		fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name),
+		env.Spec.Defaults.Install.NodeSSH,
 		false,
 	)
 }

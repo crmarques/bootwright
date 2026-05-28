@@ -157,7 +157,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
 				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
-				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
+				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname:   "master-0",
@@ -176,7 +176,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 	}
 }
 
-func TestLoadInstallerSecretsUsesClusterAdminSSHPublicKeyRef(t *testing.T) {
+func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 	secretsDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(secretsDir, "pull"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
 		t.Fatalf("write pull: %v", err)
@@ -210,7 +210,7 @@ func TestLoadInstallerSecretsUsesClusterAdminSSHPublicKeyRef(t *testing.T) {
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
 				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
-				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+				NodeSSH: v1alpha1.NodeSSHSpec{
 					PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-public"},
 					PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-private"},
 				},
@@ -346,7 +346,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 			Install: v1alpha1.OCPInstallSpec{
 				Mode:            v1alpha1.InstallModeDisconnected,
 				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
-				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
+				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",

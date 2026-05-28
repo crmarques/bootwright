@@ -64,9 +64,9 @@ operator-owned files. Generated SSH key pairs write the private key to
 references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `caBundleRefs[].name`, `proxyAuthRef.name`,
 `secretRef.name`, `defaultCertificateRef.name`, or
-`clusterAdminSSH.keyPairRef.name`.
+`nodeSSH.keyPairRef.name`.
 
-For cluster-admin SSH, use `install.clusterAdminSSH.keyPairRef` when one
+For node SSH, use `install.nodeSSH.keyPairRef` when one
 secret owns both halves. Use `publicKeyRef` plus optional `privateKeyRef` when
 the public key authorized in `install-config.yaml` and the private key used for
 local post-install probes are stored under different secret names.
@@ -120,7 +120,7 @@ When proxy credentials would be embedded in those exports, rerun it as
 | Secret kind | File contents |
 | --- | --- |
 | Pull secret | JSON as downloaded from console.redhat.com |
-| Cluster admin public key | OpenSSH public key |
+| Node SSH public key | OpenSSH public key |
 | Provider host SSH key | OpenSSH private key |
 | Generated SSH key pair | OpenSSH private key in `<name>` and public key in `<name>.pub` |
 | BMC / proxy credentials | One `username:password\n` line — sushy-emulator and Squid htpasswd files are derived from this at apply time and never committed |

@@ -189,27 +189,27 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				phases:  []string{"clusters"},
 			})
 		}
-		if install.ClusterAdminSSH.KeyPairRef.Name != "" {
+		if install.NodeSSH.KeyPairRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: install.ClusterAdminSSH.KeyPairRef.Name,
-				label:   cluster.Metadata.Name + " clusterAdminSSH keyPairRef",
+				refName: install.NodeSSH.KeyPairRef.Name,
+				label:   cluster.Metadata.Name + " nodeSSH keyPairRef",
 				phases:  []string{"clusters"},
 				role:    secret.MaterialSSHPublic,
 				sshPair: true,
 			})
 		}
-		if install.ClusterAdminSSH.PublicKeyRef.Name != "" {
+		if install.NodeSSH.PublicKeyRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: install.ClusterAdminSSH.PublicKeyRef.Name,
-				label:   cluster.Metadata.Name + " clusterAdminSSH publicKeyRef",
+				refName: install.NodeSSH.PublicKeyRef.Name,
+				label:   cluster.Metadata.Name + " nodeSSH publicKeyRef",
 				phases:  []string{"clusters"},
 				role:    secret.MaterialSSHPublic,
 			})
 		}
-		if install.ClusterAdminSSH.PrivateKeyRef.Name != "" {
+		if install.NodeSSH.PrivateKeyRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: install.ClusterAdminSSH.PrivateKeyRef.Name,
-				label:   cluster.Metadata.Name + " clusterAdminSSH privateKeyRef",
+				refName: install.NodeSSH.PrivateKeyRef.Name,
+				label:   cluster.Metadata.Name + " nodeSSH privateKeyRef",
 				phases:  []string{"clusters"},
 				role:    secret.MaterialSSHPrivate,
 			})
