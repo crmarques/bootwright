@@ -101,7 +101,8 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 
 ## Logs And Artifacts
 
-Generated state lives under `/var/lib/bootwright/contexts/<context>/state`.
-Apply task logs are written under
-`/var/lib/bootwright/contexts/<context>/workflow/`. Failed phases print the
-relevant log path.
+Authored inputs are copied to
+`/var/lib/bootwright/contexts/<context>/input/`. Reviewable generated output
+lives under `rendered/`, secret-inlined installer runtime output under
+`runtime/`, host/service-managed files under `managed/`, and apply ledgers and
+logs under `runs/`. Failed phases print the relevant log path.

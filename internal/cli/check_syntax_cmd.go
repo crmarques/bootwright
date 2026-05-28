@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 )
 
 // newCheckSyntaxCmd exposes a pure-syntax check: load + normalize +
@@ -42,7 +43,7 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 			}
 			p := outputpkg(stdout)
 			p.Command("syntax check")
-			checks := []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun bootwright check syntax")}
+			checks := syntaxDiagnosticChecks(err)
 			p.Checks(checks)
 			p.Summary(cliout.StatusFail, "syntax check", checkSummary(len(checks), failedCheckCount(checks)))
 			return failf(1, "syntax check failed: %v", err)
@@ -65,14 +66,15 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 }
 
 type syntaxCheckReport struct {
-	OK                bool   `json:"ok"`
-	Error             string `json:"error,omitempty"`
-	Environments      int    `json:"environments"`
-	Hosts             int    `json:"hosts"`
-	NetworkConfigs    int    `json:"networkConfigs"`
-	InfraProviders    int    `json:"infraProviders"`
-	ClusterInfras     int    `json:"clusterInfras"`
-	ContainerClusters int    `json:"containerClusters"`
+	OK                bool                      `json:"ok"`
+	Error             string                    `json:"error,omitempty"`
+	Diagnostics       []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	Environments      int                       `json:"environments"`
+	Hosts             int                       `json:"hosts"`
+	NetworkConfigs    int                       `json:"networkConfigs"`
+	InfraProviders    int                       `json:"infraProviders"`
+	ClusterInfras     int                       `json:"clusterInfras"`
+	ContainerClusters int                       `json:"containerClusters"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error) error {
@@ -87,8 +89,38 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
+		report.Diagnostics = desiredstate.Diagnostics(checkErr)
 	}
 	return cliout.JSON(stdout, report)
+}
+
+func syntaxDiagnosticChecks(err error) []preflightCheck {
+	diagnostics := desiredstate.Diagnostics(err)
+	if len(diagnostics) == 0 {
+		return []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun bootwright check syntax")}
+	}
+	checks := make([]preflightCheck, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		name := "context input"
+		if diagnostic.Field != "" {
+			name = diagnostic.Field
+		}
+		if diagnostic.Object != "" {
+			if diagnostic.Field == "" {
+				name = diagnostic.Object
+			} else {
+				name = diagnostic.Object + " " + diagnostic.Field
+			}
+		}
+		checks = append(checks, failCheck(
+			"Desired state",
+			name,
+			diagnostic.Message,
+			"Bootwright cannot render or apply invalid desired state",
+			diagnostic.Remediation,
+		))
+	}
+	return checks
 }
 
 func stateCountFields(state v1alpha1.State) []cliout.Field {

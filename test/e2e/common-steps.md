@@ -100,7 +100,7 @@ to the two `apply` commands.
 
 `render installer` writes `install-config.yaml`, `agent-config.yaml`, and
 optional `openshift/` manifests under
-`/var/lib/bootwright/contexts/$CASE/state/installer/<cluster>/`
+`/var/lib/bootwright/contexts/$CASE/rendered/installer/<cluster>/`
 with placeholder strings in place of pull secret, SSH key, trust bundle, and
 TLS data. These files are generated and can be regenerated.
 
@@ -113,7 +113,7 @@ bootwright apply cluster --yes
 ```
 
 `apply cluster` materializes
-`/var/lib/bootwright/contexts/$CASE/runtime/<cluster>/installer/{install,agent}-config.yaml`
+`/var/lib/bootwright/contexts/$CASE/runtime/installer/<cluster>/{install,agent}-config.yaml`
 with secret material inlined (mode `0600`) — the form `openshift-install`
 consumes. It stages those files under
 the same context runtime directory on the bastion. It then
@@ -143,7 +143,7 @@ to disk. Open a second shell on the bastion to follow it:
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-sudo tail -f "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/.openshift_install.log"
+sudo tail -f "/var/lib/bootwright/contexts/$CASE/runtime/installer/$CLUSTER/.openshift_install.log"
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
@@ -165,7 +165,7 @@ ssh -i ~/.ssh/bootwright-ssh-key core@<node-ip> \
 export CLUSTER=<ContainerCluster.metadata.name>
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
 sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" \
-  "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/auth/kubeconfig" \
+  "/var/lib/bootwright/contexts/$CASE/runtime/installer/$CLUSTER/auth/kubeconfig" \
   "$TMP_KUBECONFIG"
 export KUBECONFIG="$TMP_KUBECONFIG"
 
@@ -184,7 +184,7 @@ To keep the cluster in the user's default kube contexts, merge the generated
 kubeconfig after the install:
 
 ```bash
-export SRC_KUBECONFIG="/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER/installer/auth/kubeconfig"
+export SRC_KUBECONFIG="/var/lib/bootwright/contexts/$CASE/runtime/installer/$CLUSTER/auth/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-$CLUSTER.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 

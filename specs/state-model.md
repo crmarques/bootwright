@@ -280,6 +280,12 @@ Rules:
 - Every node binds to a `ClusterInfra` machine by
   `nodes[].machineRef.clusterInfra` and `nodes[].machineRef.name`.
 - In v1, all nodes in one cluster must reference the same `ClusterInfra`.
+- `networking` is required. `clusterNetwork[]` and `serviceNetwork[]` must
+  each contain at least one valid CIDR. Each `clusterNetwork[].hostPrefix` is
+  required and must be greater than the CIDR prefix length and no larger than
+  the address width. `networkType` is optional and, when set, must not contain
+  leading or trailing whitespace; Bootwright does not enumerate CNI names so
+  future OpenShift network types remain possible.
 
 ## NetworkConfig
 
@@ -645,6 +651,8 @@ spec:
 Rules:
 
 - `platform.type` is required: `baremetal`, `vsphere`, `none`, or `external`.
+  This is the installer platform render mode, not the substrate type; substrate
+  ownership remains with selected `InfraProvider` machines or profiles.
 - Bare-metal `provisioningNetwork`, when set, is `disabled`, `managed`, or
   `unmanaged`. `disabled` renders OpenShift bare metal in "no dedicated
   provisioning network" mode and is appropriate for agent installs using
@@ -740,6 +748,9 @@ Validation rejects:
 - `ContainerCluster` node references that do not resolve to a selected machine.
 - OpenShift clusters without a pull secret reference after normalization.
 - OKD clusters that set an OpenShift release channel.
+- Missing or invalid `ContainerCluster.spec.networking`, including malformed
+  cluster or service CIDRs, missing `clusterNetwork[].hostPrefix`, or
+  `hostPrefix` values outside the selected CIDR.
 - Missing, unknown, or incomplete endpoint keys.
 - Endpoint entries with zero or multiple ownership fields.
 - `providedBy.componentRef.name` or `providedBy.address` references that do
@@ -787,8 +798,9 @@ not structurally ready. Controller-local actions run on localhost;
 Primary commands:
 
 ```text
-bootwright context init lab -f ./examples/sno-libvirt-redfish
-bootwright context update lab -f ./examples/sno-libvirt-redfish
+bootwright example init lab --output ./lab-input
+bootwright context init lab -f ./lab-input
+bootwright context update lab -f ./lab-input
 bootwright context validate
 bootwright context use lab
 bootwright print-env [--sensitive]
@@ -797,11 +809,17 @@ bootwright secret show --name <secret-name>
 bootwright secret set openshift-pull-secret --pull-secret <path>
 bootwright secret generate
 bootwright check syntax
+bootwright check bastion
+bootwright apply bastion --yes
+bootwright check infra
 bootwright render installer --scope <cluster>
 bootwright render --output-dir ./rendered --sensitive
+bootwright apply infra --dry-run
 bootwright apply infra --yes
 bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
+bootwright check cluster
+bootwright apply cluster --dry-run
 bootwright apply cluster --yes
 bootwright apply cluster --override --yes
 bootwright status
@@ -877,7 +895,8 @@ apply reaches a terminal state or its lease is stale.
 `bootwright status --output json` includes the full current apply ledger and
 activity state when present.
 `destroy infra --scope http-server` is a reserved destroy-only scope that
-removes only the generated artifact HTTP service used for BMC agent ISO fetches.
+removes only the generated artifact publication service used for BMC agent ISO
+fetches, including HTTPS listeners when configured.
 Filtered `apply infra --scope` and `apply all --scope` fail before rendering
 when the selected clusters share provider services with unselected clusters;
 include every consumer or run without `--scope`.

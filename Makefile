@@ -196,10 +196,10 @@ ansible-syntax-check: check-e2e-deps
 
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \
-		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure' $(DEFINITION_CHECK_PATHS); \
+		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer' $(DEFINITION_CHECK_PATHS); \
 		status=$$?; \
 	else \
-		grep -RInE 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure' $(DEFINITION_CHECK_PATHS); \
+		grep -RInE 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer' $(DEFINITION_CHECK_PATHS); \
 		status=$$?; \
 	fi; \
 	if [ "$$status" -eq 0 ]; then exit 1; fi; \

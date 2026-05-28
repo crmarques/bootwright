@@ -1,7 +1,6 @@
 package desiredstate
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -28,7 +27,7 @@ func Validate(state v1alpha1.State) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	return errors.New(strings.Join(errs, "; "))
+	return newValidationError(errs)
 }
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)

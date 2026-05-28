@@ -1,7 +1,6 @@
 // Package scaffold materialises example desired-state YAML from a single set of
-// templates plus a per-substrate Substrate value. It is retained for internal
-// schema fixture generation; public scaffold CLI generation is intentionally
-// absent from the context-first workflow.
+// templates plus a per-substrate Substrate value. It backs public example
+// generation and internal schema fixture generation.
 //
 // The architectural intent: adding a new substrate is one new entry
 // in the Substrates map plus the schema/validator/render dispatch

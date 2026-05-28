@@ -21,6 +21,22 @@ Current placement:
   mode belongs in `ContainerCluster.spec.install.mode`
 - node bindings belong in `ContainerCluster.spec.nodes[]`
 
+## Validation Diagnostics
+
+`bootwright check syntax` reports desired-state validation failures by owning
+object and field. JSON output includes a `diagnostics[]` array for CI:
+
+```json
+{
+  "object": "ContainerCluster/prod-3node",
+  "field": "spec.networking.clusterNetwork[0].cidr",
+  "value": "10.128.0.0",
+  "message": "ContainerCluster/prod-3node spec.networking.clusterNetwork[0].cidr \"10.128.0.0\" is not a valid CIDR"
+}
+```
+
+Fix the named field in the authored YAML, then rerun `bootwright check syntax`.
+
 ## Reference Failures
 
 Every `ContainerCluster.spec.nodes[]` entry must resolve to one selected

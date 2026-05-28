@@ -32,11 +32,19 @@ source "${HOME}/.local/share/bash-completion/completions/bootwright"
 
 ## 1. Prepare Input Files
 
-Start from an example, copy it to a working directory, then edit the copy for
-your environment:
+Start from a generated example or an in-repo example copy, then edit the
+working directory for your environment:
 
 ```text
-ls -l <input-dir>
+bootwright example init my-sno-lab --output ./my-sno-lab
+```
+
+When working from a fresh checkout, copying the canonical example is
+equivalent:
+
+```text
+cp -a examples/sno-libvirt-redfish ./my-sno-lab
+ls -l ./my-sno-lab
 ```
 
 Canonical input examples live under
@@ -109,7 +117,7 @@ or service host.
 Create the context from the edited directory:
 
 ```text
-bootwright context init lab -f <input-dir>
+bootwright context init lab -f ./my-sno-lab
 bootwright context validate
 bootwright context current
 bootwright secret list
@@ -166,8 +174,10 @@ bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
 bootwright check infra
+bootwright apply infra --dry-run
 bootwright apply infra --yes
 bootwright check cluster
+bootwright apply cluster --dry-run
 bootwright apply cluster --yes
 bootwright status
 ```
@@ -198,6 +208,9 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
 | `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
 
+For mutating automation, run the apply or destroy command with `--yes`, then
+poll `bootwright status --output json` or `bootwright status --watch`.
+
 ## Export External CLI Inputs
 
 Render placeholder installer files into context state:
@@ -223,7 +236,9 @@ files.
 
 ## Optional Cleanup
 
-Remove only the generated artifact HTTPS service used for BMC ISO fetches:
+Remove only the generated artifact publication service used for BMC ISO
+fetches. The scope name is `http-server` even when the selected artifact
+server exposes HTTPS listeners:
 
 ```text
 bootwright destroy infra --scope http-server --yes

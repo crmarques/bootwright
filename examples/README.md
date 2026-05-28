@@ -31,10 +31,29 @@ substrate-owned files only: `hosts.yaml`, `networks.yaml`, `provider.yaml`, and
 `cluster-infra.yaml`, plus `infra-component.yaml` when service placement or
 routable service endpoints change.
 
+## Variant Deltas
+
+Provider swap invariant:
+
+| Variant | Files that change | Files that should not change |
+| --- | --- | --- |
+| `libvirt-redfish-fleet` to `baremetal-redfish-fleet` | `hosts.yaml`, `networks.yaml`, `provider.yaml`, `cluster-infra.yaml`, `infra-component.yaml` | `environment.yaml`, `container-cluster.yaml` |
+
+Single-node mode variants:
+
+| Variant | Changed files and owning fields |
+| --- | --- |
+| `sno-libvirt-redfish-external-dns` | `environment.yaml` selects name resolution; `networks.yaml` uses `dnsRefs`; `infra-component.yaml` defines the name-resolution service |
+| `sno-libvirt-redfish-external-proxy` | `environment.yaml` adds an external proxy connection and `proxyFor` audiences |
+| `sno-libvirt-redfish-managed-proxy` | `environment.yaml` selects a managed proxy; `infra-component.yaml` places the Squid service |
+| `sno-libvirt-redfish-disconnected-external-mirror` | `container-cluster.yaml` sets `install.mode: disconnected`; `environment.yaml` declares mirror registry URL, trust, and artifact cluster-install route |
+| `sno-libvirt-redfish-managed-registry` | `container-cluster.yaml` sets `install.mode: disconnected`; `environment.yaml` selects managed registry and trust; `infra-component.yaml` places the registry |
+
 Copy an example to a working directory before editing it for a real
 environment, then import that copy:
 
 ```text
+cp -a examples/sno-libvirt-redfish ./my-sno-lab
 bootwright context init lab -f <working-copy>
 bootwright secret list
 bootwright render installer --scope <cluster-name>

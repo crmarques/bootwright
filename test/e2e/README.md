@@ -58,9 +58,8 @@ KVM and permission to manage libvirt on the provider host.
    - [bastion.md](bastion.md) for a Linux VM or physical host.
 3. Export the e2e case name and initialize a context from the fixture on the
    bastion. The command copies the YAML into
-   `/var/lib/bootwright/contexts/<context>/input-files`, creates state,
-   secrets, runtime, workflow, and artifact-server directories, and selects the
-   context:
+   `/var/lib/bootwright/contexts/<context>/input/`, prepares the context
+   directories, and selects the context:
 
    ```bash
    export CASE=<case-directory>
@@ -76,7 +75,7 @@ KVM and permission to manage libvirt on the provider host.
 
    ```bash
    bootwright context validate
-   sudo vi "/var/lib/bootwright/contexts/$CASE/input-files/environment.yaml"
+   sudo vi "/var/lib/bootwright/contexts/$CASE/input/environment.yaml"
    ```
 
    If `print-env` reports that proxy credentials would be printed,
@@ -105,6 +104,8 @@ done
 If cases are copied and edited under another parent directory, pass that parent
 as `E2E_DIR=<path>` to the `make` targets.
 
-Generated state lives under `/var/lib/bootwright/contexts/<context>/state`.
-Failed apply phases print the Ansible log path under
-`/var/lib/bootwright/contexts/<context>/workflow/`.
+Reviewable generated output lives under
+`/var/lib/bootwright/contexts/<context>/rendered/`, secret-inlined runtime
+output under `runtime/`, host/service-managed files under `managed/`, and
+apply ledgers and logs under `runs/`. Failed phases print the relevant log
+path.

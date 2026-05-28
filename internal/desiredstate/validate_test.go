@@ -55,6 +55,93 @@ func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	}
 }
 
+func TestContainerClusterNetworkingValidation(t *testing.T) {
+	cases := []struct {
+		name          string
+		clusterYAML   string
+		wantSubstring string
+	}{
+		{
+			name: "networking-required",
+			clusterYAML: strings.Replace(newClusterYAML,
+				"  networking:\n    clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]\n    serviceNetwork: [172.30.0.0/16]\n", "", 1),
+			wantSubstring: "ContainerCluster/sno spec.networking is required",
+		},
+		{
+			name:          "cluster-network-cidr-invalid",
+			clusterYAML:   strings.Replace(newClusterYAML, "10.128.0.0/14", "not-a-cidr", 1),
+			wantSubstring: `spec.networking.clusterNetwork[0].cidr "not-a-cidr" is not a valid CIDR`,
+		},
+		{
+			name:          "cluster-network-host-prefix-required",
+			clusterYAML:   strings.Replace(newClusterYAML, ", hostPrefix: 23", "", 1),
+			wantSubstring: "spec.networking.clusterNetwork[0].hostPrefix is required",
+		},
+		{
+			name:          "cluster-network-host-prefix-bounds",
+			clusterYAML:   strings.Replace(newClusterYAML, "hostPrefix: 23", "hostPrefix: 14", 1),
+			wantSubstring: "spec.networking.clusterNetwork[0].hostPrefix 14 must be greater than CIDR prefix length 14",
+		},
+		{
+			name:          "service-network-required",
+			clusterYAML:   strings.Replace(newClusterYAML, "    serviceNetwork: [172.30.0.0/16]\n", "", 1),
+			wantSubstring: "ContainerCluster/sno spec.networking.serviceNetwork is required",
+		},
+		{
+			name:          "service-network-cidr-invalid",
+			clusterYAML:   strings.Replace(newClusterYAML, "172.30.0.0/16", "bad", 1),
+			wantSubstring: `spec.networking.serviceNetwork[0] "bad" is not a valid CIDR`,
+		},
+		{
+			name:          "network-type-whitespace",
+			clusterYAML:   strings.Replace(newClusterYAML, "  networking:\n", "  networking:\n    networkType: \" OVNKubernetes\"\n", 1),
+			wantSubstring: `spec.networking.networkType " OVNKubernetes" must not contain leading or trailing whitespace`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["cluster.yaml"] = tc.clusterYAML
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestValidationErrorCarriesStructuredDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(newClusterYAML, "10.128.0.0/14", "not-a-cidr", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected validation error, got nil")
+	}
+	diagnostics := Diagnostics(err)
+	if len(diagnostics) == 0 {
+		t.Fatalf("expected diagnostics for %v", err)
+	}
+	found := false
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Object == "ContainerCluster/sno" &&
+			diagnostic.Field == "spec.networking.clusterNetwork[0].cidr" &&
+			diagnostic.Value == "not-a-cidr" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics do not identify the invalid cluster CIDR: %+v", diagnostics)
+	}
+}
+
 func TestBareMetalMachineNetworkTemplateRequiresDeclaredInterfaces(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -1442,6 +1529,9 @@ spec:
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }
+  networking:
+    clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
+    serviceNetwork: [172.30.0.0/16]
   nodes:
     - hostname: master-0
       role: master

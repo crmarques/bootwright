@@ -150,8 +150,8 @@ After the case-specific cluster destroy steps in
 
 ```bash
 export CLUSTER=<ContainerCluster.metadata.name>
-sudo rm -rf "/var/lib/bootwright/contexts/$CASE/state/installer/$CLUSTER" \
-            "/var/lib/bootwright/contexts/$CASE/runtime/$CLUSTER"
+sudo rm -rf "/var/lib/bootwright/contexts/$CASE/rendered/installer/$CLUSTER" \
+            "/var/lib/bootwright/contexts/$CASE/runtime/installer/$CLUSTER"
 ```
 
 The bastion machine itself stays — Bootwright does not manage its lifecycle.

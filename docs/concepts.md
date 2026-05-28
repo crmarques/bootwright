@@ -68,6 +68,11 @@ matching NMState interfaces.
 Endpoint VIP ownership stays on `ClusterInfra.spec.endpoints`. Effective VIPs
 must land inside one selected machine-network CIDR.
 
+DNS resolver intent is intentionally outside raw NMState when it selects a
+managed or external Bootwright name-resolution entry. Put the service reference
+in `NetworkConfig.spec.dnsRefs[]`; leave `template.networkConfig.dns-resolver`
+for literal resolver IPs that are not modeled as Bootwright services.
+
 ## Distribution And Release
 
 `ContainerCluster.spec.distribution` supports:
@@ -81,7 +86,9 @@ OKD does not require a Red Hat pull secret by default.
 
 ## Platform Mode
 
-`ClusterInfra.spec.platform.type` decides installer platform rendering:
+`ClusterInfra.spec.platform.type` decides installer platform rendering. It is
+not the substrate type; `InfraProvider` owns whether the backing machines come
+from libvirt, bare metal, vSphere, or another substrate.
 
 - `baremetal`
 - `vsphere`
@@ -102,6 +109,14 @@ Host-bound shared services live in `InfraComponent` objects. `ClusterInfra`
 references load balancers from endpoints, `Environment` selects proxy,
 artifact, and registry access, and `NetworkConfig.spec.dnsRefs[]`
 selects environment name-resolution entries.
+
+| Service intent | Selector | Implementation owner |
+| --- | --- | --- |
+| Proxy for Bootwright and cluster install traffic | `Environment.spec.infraComponents.proxies[]` plus `proxyFor` | External connection in `Environment`, or managed `InfraComponent.spec.proxy` |
+| Name resolution for installer host networking | `NetworkConfig.spec.dnsRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
+| Artifact publication for Redfish media and disconnected install files | `Environment.spec.infraComponents.artifactServers[].routes` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
+| Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
+| Load balancer VIPs | `ClusterInfra.spec.endpoints.*.providedBy` | Managed `InfraComponent.spec.loadBalancer` or operator-owned external addresses |
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a

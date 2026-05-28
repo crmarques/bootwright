@@ -204,6 +204,9 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	if report.Target != "infra" || report.Action != "apply" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
+	if report.ReadinessChecked || !strings.Contains(report.ReadinessChecks, "not run") {
+		t.Fatalf("dry-run report did not make readiness status explicit: %+v", report)
+	}
 	if len(report.Command) == 0 {
 		t.Fatalf("dry-run report did not include planned command: %+v", report)
 	}
