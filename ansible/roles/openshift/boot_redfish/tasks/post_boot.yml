@@ -16,48 +16,63 @@
     bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.adminSSHPrivateKeyPath | default('') }}"
   changed_when: false
 
-- name: Resolve node SSH auth probe key execution user
+- name: Resolve node SSH auth probe key execution context
   ansible.builtin.set_fact:
-    bootwright_node_ready_ssh_key_become_user: >-
+    bootwright_node_ready_ssh_key_exec_user: >-
       {{
         ('#' ~ lookup('env', 'SUDO_UID'))
         if ((lookup('env', 'BOOTWRIGHT_INTERNAL_LOCAL_ROOT') | default('', true)) == '1'
             and ((lookup('env', 'SUDO_UID') | default('', true)) | length) > 0)
         else ''
       }}
+    bootwright_node_ready_ssh_key_command_prefix: []
   changed_when: false
 
+- name: Resolve node SSH auth probe key caller command prefix
+  ansible.builtin.set_fact:
+    bootwright_node_ready_ssh_key_command_prefix:
+      - sudo
+      - -n
+      - -u
+      - "{{ bootwright_node_ready_ssh_key_exec_user }}"
+      - --
+  changed_when: false
+  when: (bootwright_node_ready_ssh_key_exec_user | length) > 0
+
 - name: Check node SSH auth probe key
-  ansible.builtin.stat:
-    path: "{{ bootwright_node_ready_ssh_key_path }}"
-  register: bootwright_node_ready_ssh_key_stat
-  become: "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}"
-  become_user: "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}"
+  ansible.builtin.command:
+    argv: "{{ bootwright_node_ready_ssh_key_command_prefix + ['test', '-f', bootwright_node_ready_ssh_key_path] }}"
+  register: bootwright_node_ready_ssh_key_check
+  changed_when: false
+  failed_when: false
   when:
     - (bootwright_node_probe_address | length) > 0
     - (bootwright_node_ready_ssh_key_path | length) > 0
 
 - name: Wait for node SSH to accept cluster admin key
   ansible.builtin.command:
-    argv:
-      - ssh
-      - -i
-      - "{{ bootwright_node_ready_ssh_key_path }}"
-      - -o
-      - BatchMode=yes
-      - -o
-      - StrictHostKeyChecking=no
-      - -o
-      - UserKnownHostsFile=/dev/null
-      - -o
-      - "ConnectTimeout={{ bootwright_node_ready_ssh_connect_timeout_seconds | int }}"
-      - -o
-      - ConnectionAttempts=1
-      - "core@{{ bootwright_node_probe_address }}"
-      - "true"
+    argv: >-
+      {{
+        bootwright_node_ready_ssh_key_command_prefix
+        + [
+          'ssh',
+          '-i',
+          bootwright_node_ready_ssh_key_path,
+          '-o',
+          'BatchMode=yes',
+          '-o',
+          'StrictHostKeyChecking=no',
+          '-o',
+          'UserKnownHostsFile=/dev/null',
+          '-o',
+          'ConnectTimeout=' ~ (bootwright_node_ready_ssh_connect_timeout_seconds | int),
+          '-o',
+          'ConnectionAttempts=1',
+          'core@' ~ bootwright_node_probe_address,
+          'true'
+        ]
+      }}
   register: bootwright_node_ready_ssh_auth
-  become: "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}"
-  become_user: "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}"
   changed_when: false
   failed_when: false
   until: (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
@@ -65,7 +80,7 @@
   delay: "{{ bootwright_node_ready_ssh_auth_delay_seconds | int }}"
   when:
     - (bootwright_node_probe_address | length) > 0
-    - bootwright_node_ready_ssh_key_stat.stat.exists | default(false)
+    - (bootwright_node_ready_ssh_key_check.rc | default(1) | int) == 0
 
 - name: Confirm node SSH accepted cluster admin key
   ansible.builtin.assert:
@@ -81,7 +96,7 @@
       InfraProvider baremetal.interfaces for {{ bootwright_component.name }}.
   when:
     - (bootwright_node_probe_address | length) > 0
-    - bootwright_node_ready_ssh_key_stat.stat.exists | default(false)
+    - (bootwright_node_ready_ssh_key_check.rc | default(1) | int) == 0
 
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:
