@@ -99,6 +99,9 @@ spec:
             endpoint: bmc
           clusterInstall:
             endpoint: cluster
+    ntpSources:
+      - 0.pool.ntp.org
+      - 192.168.133.1
 
   proxyFor:
     bootwright: default
@@ -115,10 +118,6 @@ spec:
   clusterTrust:
     caBundleRefs:
       - name: corp-root-ca
-
-  ntpSources:
-    - 0.pool.ntp.org
-    - 192.168.133.1
 
 ```
 
@@ -140,10 +139,11 @@ Rules:
 - Bootwright and OpenShift installer actions run on the bastion host where the
   CLI is invoked. Desired state does not select that execution host.
 - `infraComponents.proxies[]`, `infraComponents.nameResolution[]`,
-  `infraComponents.artifactServers[]`, and `infraComponents.registries[]`
-  are the environment service access catalog. Entries are either `external`
-  with direct access configuration, or `managed` with `componentRef.name`
-  pointing at an `InfraComponent` arm of the matching kind.
+  `infraComponents.artifactServers[]`, `infraComponents.registries[]`, and
+  `infraComponents.ntpSources[]` are the environment service access catalog.
+  Component entries are either `external` with direct access configuration, or
+  `managed` with `componentRef.name` pointing at an `InfraComponent` arm of
+  the matching kind.
 - `proxyFor.bootwright` and `proxyFor.clusterInstall` select entries from
   `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
   reserved value that disables proxy use for that consumer.
@@ -176,8 +176,8 @@ Rules:
   images. Each `local` or `public` reference must be pinned to an explicit
   version tag or digest; omitted tags, non-version tags, and `:latest` are
   invalid.
-- `ntpSources[]` is optional. Each entry must be a parseable IP address or DNS
-  hostname, and duplicate entries are rejected.
+- `infraComponents.ntpSources[]` is optional. Each entry must be a parseable IP
+  address or DNS hostname, and duplicate entries are rejected.
 
 ## ContainerCluster
 

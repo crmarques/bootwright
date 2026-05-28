@@ -221,6 +221,20 @@ spec:
 			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
+			name: "environment-top-level-ntpsources-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  infraComponents:\n",
+				"  ntpSources:\n    - 192.168.132.1\n\n  infraComponents:\n", 1)},
+			wantSubstring: "field ntpSources not found",
+		},
+		{
+			name: "environment-infra-ntpsource-invalid-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  infraComponents:\n",
+				"  infraComponents:\n    ntpSources:\n      - \" ntp.example.test\"\n", 1)},
+			wantSubstring: `spec.infraComponents.ntpSources[0] " ntp.example.test" must not contain leading or trailing whitespace`,
+		},
+		{
 			name: "artifact-server-listener-port-out-of-range-rejected",
 			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
 				"port: 8443",

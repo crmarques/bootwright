@@ -26,6 +26,9 @@ bootwright_environment:
   proxyFor:
     bootwright: default
     clusterInstall: default
+  infraComponents:
+    ntpSources:
+      - 0.pool.ntp.org
   artifactServer:
     componentRef:
       name: artifact-server

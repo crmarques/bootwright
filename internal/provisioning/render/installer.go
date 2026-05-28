@@ -147,9 +147,9 @@ func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[strin
 	for key, value := range disconnectedBootArtifactsConfig(state, ocp) {
 		base[key] = value
 	}
-	if env := primaryEnvironment(state); env != nil && len(env.Spec.NTPSources) > 0 {
-		ntp := make([]any, 0, len(env.Spec.NTPSources))
-		for _, s := range env.Spec.NTPSources {
+	if env := primaryEnvironment(state); env != nil && len(env.Spec.InfraComponents.NTPSources) > 0 {
+		ntp := make([]any, 0, len(env.Spec.InfraComponents.NTPSources))
+		for _, s := range env.Spec.InfraComponents.NTPSources {
 			ntp = append(ntp, s)
 		}
 		base["additionalNTPSources"] = ntp
