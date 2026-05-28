@@ -84,6 +84,91 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_proxy/tasks/facts.yml")
+	resolveTask := tasks[findAnsibleTask(t, tasks, "Resolve proxy desired state")]
+	facts, ok := resolveTask["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s set_fact missing", resolveTask["name"])
+	}
+	if enabled := fmt.Sprint(facts["bootwright_proxy_enabled"]); !strings.Contains(enabled, "bootwright_proxy_no | length") {
+		t.Fatalf("bootwright_proxy_enabled must treat noProxy as configured, got %q", enabled)
+	}
+	for _, name := range []string{"bootwright_proxy_has_url", "bootwright_proxy_credentialed_url"} {
+		if _, ok := facts[name]; !ok {
+			t.Fatalf("Resolve proxy desired state missing %s", name)
+		}
+	}
+
+	loadTask := tasks[findAnsibleTask(t, tasks, "Load proxy credentials")]
+	if got := loadTask["when"]; got != "bootwright_proxy_credentialed_url" {
+		t.Fatalf("%s when got %v, want credentialed URL guard", loadTask["name"], got)
+	}
+	for _, name := range []string{
+		"Build credentialed proxy URLs",
+		"Select effective proxy URLs",
+		"Select primary proxy URL",
+	} {
+		task := tasks[findAnsibleTask(t, tasks, name)]
+		if got := task["when"]; got != "bootwright_proxy_has_url" {
+			t.Fatalf("%s when got %v, want URL guard", name, got)
+		}
+	}
+
+	envTask := tasks[findAnsibleTask(t, tasks, "Build proxy environment facts")]
+	envFacts, ok := envTask["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s set_fact missing", envTask["name"])
+	}
+	envExpr := fmt.Sprint(envFacts["bootwright_proxy_env"])
+	for _, want := range []string{"'NO_PROXY': bootwright_proxy_no", "'no_proxy': bootwright_proxy_no", "if bootwright_proxy_enabled"} {
+		if !strings.Contains(envExpr, want) {
+			t.Fatalf("%s missing %q in proxy env expression: %s", envTask["name"], want, envExpr)
+		}
+	}
+}
+
+func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_proxy/tasks/persist.yml")
+	persist := tasks[findAnsibleTask(t, tasks, "Persist proxy settings on host")]
+	if got := persist["when"]; got != "bootwright_proxy_enabled" {
+		t.Fatalf("%s when got %v, want bootwright_proxy_enabled", persist["name"], got)
+	}
+	block := nestedAnsibleTasks(t, persist, "block")
+
+	envTask := block[findAnsibleTask(t, block, "Render /etc/environment proxy lines")]
+	if got := envTask["when"]; got != "not bootwright_proxy_credentialed_url" {
+		t.Fatalf("%s when got %v, want non-credentialed guard", envTask["name"], got)
+	}
+	envBody := fmt.Sprint(envTask["ansible.builtin.blockinfile"])
+	if !strings.Contains(envBody, "NO_PROXY={{ bootwright_proxy_no }}") {
+		t.Fatalf("%s must persist NO_PROXY, got %s", envTask["name"], envBody)
+	}
+
+	for _, name := range []string{"Configure dnf proxy", "Configure yum proxy"} {
+		task := block[findAnsibleTask(t, block, name)]
+		if !stringListContains(task["when"], "bootwright_proxy_has_url") {
+			t.Fatalf("%s must require a proxy URL, got when=%v", name, task["when"])
+		}
+	}
+	for _, name := range []string{
+		"Strip stale dnf proxy line when URL proxy is disabled",
+		"Strip stale yum proxy line when URL proxy is disabled",
+		"Remove stale pip proxy config when URL proxy is disabled",
+	} {
+		task := block[findAnsibleTask(t, block, name)]
+		if !stringListContains(task["when"], "not bootwright_proxy_has_url") {
+			t.Fatalf("%s must run when URL proxy is disabled, got when=%v", name, task["when"])
+		}
+	}
+	for _, name := range []string{"Ensure pip config directory", "Render pip proxy config", "Verify proxy TCP reachability"} {
+		task := block[findAnsibleTask(t, block, name)]
+		if got := task["when"]; got != "bootwright_proxy_has_url" {
+			t.Fatalf("%s when got %v, want proxy URL guard", name, got)
+		}
+	}
+}
+
 func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 	for _, path := range []string{
 		"ansible/roles/cluster_infra/external_validate/tasks/bmc.yml",
@@ -137,6 +222,35 @@ func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 		t.Fatalf("boot playbook must not loop serially over nodes: %v", tasks[bootIdx])
 	}
 	assertIncludeRoleName(t, tasks[bootIdx], "install_agent")
+}
+
+func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution user")
+	statIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
+	authIdx := findAnsibleTask(t, tasks, "Wait for node SSH to accept cluster admin key")
+	if !(resolveIdx < statIdx && resolveIdx < authIdx) {
+		t.Fatalf("SSH auth probe execution user must resolve before key access tasks")
+	}
+
+	setFact, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("execution user task is not set_fact: %v", tasks[resolveIdx])
+	}
+	expr := fmt.Sprint(setFact["bootwright_node_ready_ssh_key_become_user"])
+	for _, want := range []string{"BOOTWRIGHT_INTERNAL_LOCAL_ROOT", "SUDO_UID", "'#'"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("execution user expression missing %q: %s", want, expr)
+		}
+	}
+	for _, task := range []map[string]any{tasks[statIdx], tasks[authIdx]} {
+		if got := task["become"]; got != "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}" {
+			t.Fatalf("%s become = %v", task["name"], got)
+		}
+		if got := task["become_user"]; got != "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}" {
+			t.Fatalf("%s become_user = %v", task["name"], got)
+		}
+	}
 }
 
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {

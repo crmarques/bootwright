@@ -16,10 +16,23 @@
     bootwright_node_ready_ssh_key_path: "{{ bootwright_current_cluster.adminSSHPrivateKeyPath | default('') }}"
   changed_when: false
 
+- name: Resolve node SSH auth probe key execution user
+  ansible.builtin.set_fact:
+    bootwright_node_ready_ssh_key_become_user: >-
+      {{
+        ('#' ~ lookup('env', 'SUDO_UID'))
+        if ((lookup('env', 'BOOTWRIGHT_INTERNAL_LOCAL_ROOT') | default('', true)) == '1'
+            and ((lookup('env', 'SUDO_UID') | default('', true)) | length) > 0)
+        else ''
+      }}
+  changed_when: false
+
 - name: Check node SSH auth probe key
   ansible.builtin.stat:
     path: "{{ bootwright_node_ready_ssh_key_path }}"
   register: bootwright_node_ready_ssh_key_stat
+  become: "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}"
+  become_user: "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}"
   when:
     - (bootwright_node_probe_address | length) > 0
     - (bootwright_node_ready_ssh_key_path | length) > 0
@@ -43,6 +56,8 @@
       - "core@{{ bootwright_node_probe_address }}"
       - "true"
   register: bootwright_node_ready_ssh_auth
+  become: "{{ (bootwright_node_ready_ssh_key_become_user | length) > 0 }}"
+  become_user: "{{ bootwright_node_ready_ssh_key_become_user | default('root', true) }}"
   changed_when: false
   failed_when: false
   until: (bootwright_node_ready_ssh_auth.rc | default(1) | int) == 0
