@@ -167,8 +167,8 @@ the ISO URL sent to Redfish.
 Bootwright serves HTTPS listeners with a self-signed certificate generated on
 the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
 
-Supported authored service slots are load balancer, proxy, name resolution,
-and registry.
+Supported authored `InfraComponent` arms are `artifactServer`,
+`loadBalancer`, `proxy`, `nameResolution`, and `registry`.
 
 When adding another managed service, keep the service path orthogonal: add a
 typed `InfraComponent`/`Environment` arm, register its role/image/defaults in

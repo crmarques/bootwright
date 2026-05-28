@@ -74,3 +74,8 @@ spec:
 Release image sources are distribution-aware. OpenShift and OKD disconnected
 renders must use the configured release image source rather than assuming the
 same upstream registry.
+
+Disconnected agent installs also need an artifact server route for cluster
+install boot artifacts. When the selected artifact server has a
+`routes.clusterInstall.endpoint`, Bootwright renders `minimalISO: true` and a
+route-derived `bootArtifactsBaseURL` into `agent-config.yaml`.

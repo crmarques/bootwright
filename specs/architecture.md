@@ -74,6 +74,9 @@ These boundaries are reflected in rendering:
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
+- `agent-config.yaml` global boot-artifact and time-source fields are rendered
+  from disconnected install mode, the environment-selected artifact server
+  route, and environment NTP sources.
 - Infra component variables are rendered from `InfraComponent` services
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.

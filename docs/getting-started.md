@@ -200,12 +200,19 @@ marks it cancelled before continuing.
 
 Stable JSON output is intentionally limited. Use these forms for automation:
 
-| Command | JSON support | Destructive behavior |
+| Command | JSON support | Behavior |
 | --- | --- | --- |
-| `bootwright apply infra --dry-run --output json` | Supported | Dry-run only |
-| `bootwright apply cluster --dry-run --output json` | Supported | Dry-run only |
-| `bootwright destroy infra --dry-run --output json` | Supported | Dry-run only |
-| `bootwright destroy cluster --dry-run --output json` | Supported | Dry-run only |
+| `bootwright check syntax --output json` | Supported | Read-only diagnostics |
+| `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright render installer --output json` | Supported | Writes context render output |
+| `bootwright secret list --output json` | Supported | Read-only secret status |
+| `bootwright status --output json` | Supported | Read-only context status |
+| `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply cluster --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |
+| `bootwright destroy cluster --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
 | `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
 
