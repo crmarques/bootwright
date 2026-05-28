@@ -56,6 +56,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		if env.Spec.BaseDomain == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
+		errs = append(errs, validateEnvironmentDefaults(env)...)
 		errs = append(errs, validateEnvironmentSecretStorage(env)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentContainerClusters(env, state)...)
@@ -66,6 +67,14 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateComponentImages(env)...)
 	}
 	return errs
+}
+
+func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
+	return validateClusterAdminSSHSpec(
+		fmt.Sprintf("Environment/%s spec.defaults.install.clusterAdminSSH", env.Metadata.Name),
+		env.Spec.Defaults.Install.ClusterAdminSSH,
+		false,
+	)
 }
 
 func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {

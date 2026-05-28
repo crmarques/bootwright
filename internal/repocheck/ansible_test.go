@@ -1735,6 +1735,26 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	}
 }
 
+func TestInstallAgentWaitPollsPromptly(t *testing.T) {
+	var defaults map[string]any
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/roles/openshift/install_agent/defaults/main.yml")), &defaults); err != nil {
+		t.Fatalf("decode install_agent defaults: %v", err)
+	}
+	if got := defaults["bootwright_install_wait_poll_seconds"]; got != 15 {
+		t.Fatalf("install wait poll default got %v, want 15", got)
+	}
+
+	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
+	wait := tasks[findAnsibleTask(t, tasks, "Wait for agent install completion")]
+	if got := wait["async"]; got != "{{ bootwright_install_timeout_seconds }}" {
+		t.Fatalf("install wait async got %v", got)
+	}
+	if got := wait["poll"]; got != "{{ bootwright_install_wait_poll_seconds }}" {
+		t.Fatalf("install wait poll got %v", got)
+	}
+}
+
 func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
 	saveIdx := findAnsibleTask(t, tasks, "Save kubeadmin password to context secrets")

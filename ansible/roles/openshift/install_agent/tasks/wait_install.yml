@@ -18,7 +18,7 @@
           - --log-level
           - info
       async: "{{ bootwright_install_timeout_seconds }}"
-      poll: 300
+      poll: "{{ bootwright_install_wait_poll_seconds }}"
       register: bootwright_install_wait
       changed_when: bootwright_install_wait.rc == 0
 

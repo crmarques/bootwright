@@ -23,6 +23,7 @@ type secretRefRequirement struct {
 	generatedKind string
 	role          secret.MaterialRole
 	tlsPair       bool
+	sshPair       bool
 }
 
 type secretRefSource string
@@ -61,6 +62,10 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 	for _, req := range inScope {
 		if req.tlsPair {
 			checks = append(checks, tlsSecretFileChecks(req, env, secretsDir, deps)...)
+			continue
+		}
+		if req.sshPair {
+			checks = append(checks, sshKeyPairFileChecks(req, env, secretsDir, deps)...)
 			continue
 		}
 		if req.source == secretRefSourceGenerated && req.generatedKind == "sshKeyPair" {
@@ -184,12 +189,29 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				phases:  []string{"clusters"},
 			})
 		}
-		if install.SSHKeyRef.Name != "" {
+		if install.ClusterAdminSSH.KeyPairRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: install.SSHKeyRef.Name,
-				label:   cluster.Metadata.Name + " sshKeyRef",
+				refName: install.ClusterAdminSSH.KeyPairRef.Name,
+				label:   cluster.Metadata.Name + " clusterAdminSSH keyPairRef",
 				phases:  []string{"clusters"},
 				role:    secret.MaterialSSHPublic,
+				sshPair: true,
+			})
+		}
+		if install.ClusterAdminSSH.PublicKeyRef.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: install.ClusterAdminSSH.PublicKeyRef.Name,
+				label:   cluster.Metadata.Name + " clusterAdminSSH publicKeyRef",
+				phases:  []string{"clusters"},
+				role:    secret.MaterialSSHPublic,
+			})
+		}
+		if install.ClusterAdminSSH.PrivateKeyRef.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: install.ClusterAdminSSH.PrivateKeyRef.Name,
+				label:   cluster.Metadata.Name + " clusterAdminSSH privateKeyRef",
+				phases:  []string{"clusters"},
+				role:    secret.MaterialSSHPrivate,
 			})
 		}
 		for i, ref := range install.AdditionalTrustBundleRefs {
@@ -285,15 +307,6 @@ func tlsSecretFileChecks(req secretRefRequirement, env *v1alpha1.Environment, se
 	return []preflightCheck{
 		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
 		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
-	}
-}
-
-func generatedSSHKeyPairChecks(req secretRefRequirement, env *v1alpha1.Environment, secretsDir string, deps preflightDeps) []preflightCheck {
-	privatePath := secret.ResolveSSHPrivateKeyPath(req.refName, env, secretsDir)
-	publicPath := secret.ResolveSSHPublicKeyPath(req.refName, env, secretsDir)
-	return []preflightCheck{
-		generatedSecretCheck(req.refName, privatePath, req.label+" private", "sshKeyPair", deps),
-		generatedSecretCheck(req.refName, publicPath, req.label+" public", "sshKeyPair", deps),
 	}
 }
 

@@ -156,8 +156,8 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
-				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
-				SSHKeyRef:     v1alpha1.SecretRef{Name: "ssh"},
+				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
+				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname:   "master-0",
@@ -172,6 +172,62 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 		t.Fatalf("LoadInstallerSecrets: %v", err)
 	}
 	if secrets.SSHKey != "ssh-ed25519 AAAA generated" {
+		t.Fatalf("SSHKey = %q", secrets.SSHKey)
+	}
+}
+
+func TestLoadInstallerSecretsUsesClusterAdminSSHPublicKeyRef(t *testing.T) {
+	secretsDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(secretsDir, "pull"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
+		t.Fatalf("write pull: %v", err)
+	}
+	sourceDir := t.TempDir()
+	for name, content := range map[string]string{
+		"admin.pub": "ssh-ed25519 AAAA public\n",
+		"admin":     "PRIVATE\n",
+	} {
+		if err := os.WriteFile(filepath.Join(sourceDir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata:   v1alpha1.Metadata{Name: "env"},
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"pull":            {},
+					"cluster-public":  {File: "admin.pub"},
+					"cluster-private": {File: "admin"},
+				},
+			},
+		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{Metadata: v1alpha1.Metadata{Name: "infra"}}},
+	}
+	ocp := v1alpha1.ContainerCluster{
+		Metadata: v1alpha1.Metadata{Name: "ocp"},
+		Spec: v1alpha1.ContainerClusterSpec{
+			Install: v1alpha1.OCPInstallSpec{
+				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
+				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+					PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-public"},
+					PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-private"},
+				},
+			},
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-0"},
+			}},
+		},
+	}
+
+	secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+	if err != nil {
+		t.Fatalf("LoadInstallerSecrets: %v", err)
+	}
+	if secrets.SSHKey != "ssh-ed25519 AAAA public" {
 		t.Fatalf("SSHKey = %q", secrets.SSHKey)
 	}
 }
@@ -288,9 +344,9 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
-				Mode:          v1alpha1.InstallModeDisconnected,
-				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
-				SSHKeyRef:     v1alpha1.SecretRef{Name: "ssh"},
+				Mode:            v1alpha1.InstallModeDisconnected,
+				PullSecretRef:   v1alpha1.SecretRef{Name: "pull"},
+				ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",

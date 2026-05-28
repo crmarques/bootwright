@@ -152,10 +152,20 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 		return
 	}
 	if v1alpha1.DistributionType(*ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
-		ocp.Spec.Install.PullSecretRef = v1alpha1.SecretRef{Name: v1alpha1.DefaultPullSecretName}
+		ref := env.Spec.Defaults.Install.PullSecretRef
+		if ref.Name == "" {
+			ref = v1alpha1.SecretRef{Name: v1alpha1.DefaultPullSecretName}
+		}
+		ocp.Spec.Install.PullSecretRef = ref
 	}
-	if ocp.Spec.Install.SSHKeyRef.Name == "" {
-		ocp.Spec.Install.SSHKeyRef = v1alpha1.SecretRef{Name: v1alpha1.DefaultClusterSSHKeyName}
+	if ocp.Spec.Install.ClusterAdminSSH.IsZero() {
+		defaultSSH := env.Spec.Defaults.Install.ClusterAdminSSH
+		if defaultSSH.IsZero() {
+			defaultSSH = v1alpha1.ClusterAdminSSHSpec{
+				KeyPairRef: v1alpha1.SecretRef{Name: v1alpha1.DefaultClusterSSHKeyName},
+			}
+		}
+		ocp.Spec.Install.ClusterAdminSSH = defaultSSH
 	}
 }
 

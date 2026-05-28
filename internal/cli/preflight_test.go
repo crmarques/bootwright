@@ -146,19 +146,19 @@ func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	for i := range checks {
 		check := &checks[i]
 		switch check.Name {
-		case "sno-libvirt sshKeyRef private":
+		case "sno-libvirt clusterAdminSSH keyPairRef private":
 			privateCheck = check
-		case "sno-libvirt sshKeyRef public":
+		case "sno-libvirt clusterAdminSSH keyPairRef public":
 			publicCheck = check
 		}
 	}
 	if privateCheck == nil || publicCheck == nil {
 		t.Fatalf("missing generated SSH key pair checks: %+v", checks)
 	}
-	if !strings.Contains(privateCheck.Evidence, "/context/secrets/cluster-admin-pub-key missing") {
+	if !strings.Contains(privateCheck.Evidence, "/context/secrets/cluster-admin-ssh-key missing") {
 		t.Fatalf("private evidence = %q", privateCheck.Evidence)
 	}
-	if !strings.Contains(publicCheck.Evidence, "/context/secrets/cluster-admin-pub-key.pub missing") {
+	if !strings.Contains(publicCheck.Evidence, "/context/secrets/cluster-admin-ssh-key.pub missing") {
 		t.Fatalf("public evidence = %q", publicCheck.Evidence)
 	}
 }

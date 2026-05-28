@@ -30,7 +30,7 @@ spec:
 
   secrets:
     openshift-pull-secret:
-    cluster-admin-pub-key:
+    cluster-admin-ssh-key:
       generated:
         sshKeyPair:
           type: ed25519
@@ -63,7 +63,13 @@ operator-owned files. Generated SSH key pairs write the private key to
 `<name>` and the public key to `<name>.pub`. Each kind
 references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `caBundleRefs[].name`, `proxyAuthRef.name`,
-`secretRef.name`, or `defaultCertificateRef.name`.
+`secretRef.name`, `defaultCertificateRef.name`, or
+`clusterAdminSSH.keyPairRef.name`.
+
+For cluster-admin SSH, use `install.clusterAdminSSH.keyPairRef` when one
+secret owns both halves. Use `publicKeyRef` plus optional `privateKeyRef` when
+the public key authorized in `install-config.yaml` and the private key used for
+local post-install probes are stored under different secret names.
 
 ## Local secrets directory
 

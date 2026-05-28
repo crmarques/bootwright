@@ -25,8 +25,44 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	if got := install.PullSecretRef.Name; got != v1alpha1.DefaultPullSecretName {
 		t.Fatalf("PullSecretRef.Name = %q, want %q", got, v1alpha1.DefaultPullSecretName)
 	}
-	if got := install.SSHKeyRef.Name; got != "cluster-admin-pub-key" {
-		t.Fatalf("SSHKeyRef.Name = %q, want cluster-admin-pub-key", got)
+	if got := install.ClusterAdminSSH.KeyPairRef.Name; got != v1alpha1.DefaultClusterSSHKeyName {
+		t.Fatalf("ClusterAdminSSH.KeyPairRef.Name = %q, want %q", got, v1alpha1.DefaultClusterSSHKeyName)
+	}
+}
+
+func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Defaults: v1alpha1.EnvironmentDefaultsSpec{
+					Install: v1alpha1.EnvironmentInstallDefaultsSpec{
+						PullSecretRef: v1alpha1.SecretRef{Name: "custom-pull"},
+						ClusterAdminSSH: v1alpha1.ClusterAdminSSHSpec{
+							PublicKeyRef:  v1alpha1.SecretRef{Name: "cluster-public"},
+							PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-private"},
+						},
+					},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
+		}},
+	}
+
+	Normalize(&state)
+
+	install := state.ContainerClusters[0].Spec.Install
+	if got := install.PullSecretRef.Name; got != "custom-pull" {
+		t.Fatalf("PullSecretRef.Name = %q, want custom-pull", got)
+	}
+	if got := install.ClusterAdminSSH.PublicKeyRef.Name; got != "cluster-public" {
+		t.Fatalf("ClusterAdminSSH.PublicKeyRef.Name = %q, want cluster-public", got)
+	}
+	if got := install.ClusterAdminSSH.PrivateKeyRef.Name; got != "cluster-private" {
+		t.Fatalf("ClusterAdminSSH.PrivateKeyRef.Name = %q, want cluster-private", got)
 	}
 }
 
@@ -37,7 +73,7 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
 				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-admin-pub-key": {
+					"cluster-admin-ssh-key": {
 						Generated: &v1alpha1.EnvironmentSecretGenerated{
 							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{},
 						},
@@ -53,7 +89,7 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	if got := env.Spec.SecretStorage.Mode; got != v1alpha1.SecretStorageModeSource {
 		t.Fatalf("SecretStorage.Mode = %q, want %q", got, v1alpha1.SecretStorageModeSource)
 	}
-	if got := env.Spec.Secrets["cluster-admin-pub-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
+	if got := env.Spec.Secrets["cluster-admin-ssh-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
 		t.Fatalf("SSHKeyPair.Type = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
 	}
 }

@@ -46,7 +46,7 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 		},
 	}
 	state.ContainerClusters[0].Spec.Install.PullSecretRef = v1alpha1.SecretRef{Name: "pull"}
-	state.ContainerClusters[0].Spec.Install.SSHKeyRef = v1alpha1.SecretRef{Name: "ssh"}
+	state.ContainerClusters[0].Spec.Install.ClusterAdminSSH = v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}}
 	state.ContainerClusters[0].Spec.Install.AdditionalTrustBundleRefs = []v1alpha1.SecretRef{{Name: "cluster-ca"}, {Name: "env-ca"}}
 	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
 		APIServer: &v1alpha1.APIServerServingCertificateSpec{
@@ -169,7 +169,7 @@ func TestResolveInstallerRejectsServingCertificateMismatch(t *testing.T) {
 	state.Environments[0].Spec.Secrets["ssh"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["ingress-tls"] = v1alpha1.EnvironmentSecretSpec{}
 	state.ContainerClusters[0].Spec.Install.PullSecretRef = v1alpha1.SecretRef{Name: "pull"}
-	state.ContainerClusters[0].Spec.Install.SSHKeyRef = v1alpha1.SecretRef{Name: "ssh"}
+	state.ContainerClusters[0].Spec.Install.ClusterAdminSSH = v1alpha1.ClusterAdminSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}}
 	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
 		Ingress: &v1alpha1.IngressServingCertificateSpec{
 			DefaultCertificateRef: v1alpha1.SecretRef{Name: "ingress-tls"},

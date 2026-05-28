@@ -25,6 +25,9 @@ Cluster install trust is rendered only from explicit references:
 
 - OpenShift pull secrets come from `ContainerCluster.spec.install.pullSecretRef`
   or the normalized environment default.
+- Cluster-admin SSH authorization comes from
+  `ContainerCluster.spec.install.clusterAdminSSH.keyPairRef` or
+  `.publicKeyRef`, or the normalized environment default.
 - OKD clusters may omit a Red Hat pull secret unless a private release or
   mirror requires credentials.
 - Mirror credentials and trust bundles come from

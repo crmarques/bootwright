@@ -231,9 +231,11 @@ func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef.name is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
 	}
-	if ocp.Spec.Install.SSHKeyRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.sshKeyRef.name is required (inheritable from Environment)", ocp.Metadata.Name))
-	}
+	errs = append(errs, validateClusterAdminSSHSpec(
+		fmt.Sprintf("ContainerCluster/%s spec.install.clusterAdminSSH", ocp.Metadata.Name),
+		ocp.Spec.Install.ClusterAdminSSH,
+		true,
+	)...)
 	errs = append(errs, validateAdditionalTrustBundleRefs(ocp)...)
 	errs = append(errs, validateServingCertificateRefs(state, ocp)...)
 	return errs

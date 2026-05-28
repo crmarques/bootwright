@@ -13,8 +13,9 @@ spec:
     mode: connected
     pullSecretRef:
       name: openshift-pull-secret
-    sshKeyRef:
-      name: cluster-admin-pub-key
+    clusterAdminSSH:
+      keyPairRef:
+        name: cluster-admin-ssh-key
 
   controlPlane:
     name: master

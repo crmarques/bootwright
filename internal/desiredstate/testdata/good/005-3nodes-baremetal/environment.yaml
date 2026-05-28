@@ -7,7 +7,7 @@ spec:
 
   secrets:
     openshift-pull-secret: null
-    cluster-admin-pub-key:
+    cluster-admin-ssh-key:
       generated:
         sshKeyPair:
           type: ed25519

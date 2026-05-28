@@ -357,7 +357,7 @@ func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
 	}
 	files := map[string]string{
 		"openshift-pull-secret":     `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		"cluster-admin-pub-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
+		"cluster-admin-ssh-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
 		"proxy-credentials":         "proxy:secret\n",
 	}
 	for name, content := range files {
