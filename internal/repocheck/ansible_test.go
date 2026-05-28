@@ -1688,8 +1688,21 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if !ok {
 		t.Fatalf("%s has no vars", tasks[cleanRedfishIdx]["name"])
 	}
+	if got := cleanVars["bootwright_component"]; got != "{{ bootwright_cleanup_redfish_component }}" {
+		t.Fatalf("Redfish cleanup component var got %v", got)
+	}
 	if got := cleanVars["bootwright_redfish_action"]; got != "cleanup_media" {
 		t.Fatalf("Redfish cleanup action got %v", got)
+	}
+	cleanLoopControl, ok := tasks[cleanRedfishIdx]["loop_control"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no loop_control", tasks[cleanRedfishIdx]["name"])
+	}
+	if got := cleanLoopControl["loop_var"]; got != "bootwright_cleanup_redfish_component" {
+		t.Fatalf("Redfish cleanup loop_var got %v", got)
+	}
+	if got := cleanLoopControl["label"]; got != "{{ bootwright_cleanup_redfish_component.name }}" {
+		t.Fatalf("Redfish cleanup label got %v", got)
 	}
 
 	remoteFind, ok := tasks[findRemoteIdx]["ansible.builtin.find"].(map[string]any)

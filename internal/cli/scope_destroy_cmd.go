@@ -43,7 +43,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	if scope.name == "infra" {
 		if f := cmd.Flags().Lookup("scope"); f != nil {
-			f.Usage = "comma-separated ContainerCluster names to destroy, or http-server to remove only the BMC ISO HTTP service"
+			f.Usage = "comma-separated ContainerCluster names to destroy, or http-server to remove only the generated artifact publication service"
 		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

@@ -81,11 +81,12 @@
       ansible.builtin.include_role:
         name: boot_redfish
       vars:
-        bootwright_component: "{{ item }}"
+        bootwright_component: "{{ bootwright_cleanup_redfish_component }}"
         bootwright_redfish_action: cleanup_media
       loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('bootApplyRole', 'defined') | selectattr('bootApplyRole', 'equalto', 'boot_redfish') | list }}"
       loop_control:
-        label: "{{ item.name }}"
+        loop_var: bootwright_cleanup_redfish_component
+        label: "{{ bootwright_cleanup_redfish_component.name }}"
       when: bootwright_install_wait.rc == 0
 
     - name: Find remote generated agent ISO files

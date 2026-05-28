@@ -16,6 +16,7 @@ type scopeDryRunReport struct {
 	Action           string            `json:"action"`
 	DryRun           bool              `json:"dryRun"`
 	PlanOnly         bool              `json:"planOnly"`
+	ReadinessChecked bool              `json:"readinessChecked"`
 	ReadinessChecks  string            `json:"readinessChecks"`
 	Phases           []string          `json:"phases"`
 	RenderedDir      string            `json:"renderedDir"`
@@ -93,6 +94,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		Action:           action,
 		DryRun:           true,
 		PlanOnly:         true,
+		ReadinessChecked: false,
 		ReadinessChecks:  "not run; run bootwright check " + scope.name,
 		Phases:           selectedPhaseNames(selected),
 		RenderedDir:      ctx.RenderedDir,

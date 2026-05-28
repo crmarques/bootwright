@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -27,6 +28,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 				ocp.Metadata.Name, ocp.Spec.Install.Mode, v1alpha1.InstallModeConnected, v1alpha1.InstallModeDisconnected))
 		}
 		errs = append(errs, validateDistribution(ocp)...)
+		errs = append(errs, validateClusterNetworking(ocp)...)
 		if ocp.Spec.Install.Method != "" && ocp.Spec.Install.Method != v1alpha1.OCPInstallMethodAgent {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.method %q must be %q",
 				ocp.Metadata.Name, ocp.Spec.Install.Method, v1alpha1.OCPInstallMethodAgent))
@@ -38,6 +40,55 @@ func validateContainerClusters(state v1alpha1.State) []string {
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
 		}
 		errs = append(errs, validateInstallRefs(state, ocp)...)
+	}
+	return errs
+}
+
+func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {
+	var errs []string
+	networking := ocp.Spec.Networking
+	prefix := fmt.Sprintf("ContainerCluster/%s spec.networking", ocp.Metadata.Name)
+	if networking == nil {
+		return []string{prefix + " is required"}
+	}
+	if networking.NetworkType != "" && strings.TrimSpace(networking.NetworkType) != networking.NetworkType {
+		errs = append(errs, fmt.Sprintf("%s.networkType %q must not contain leading or trailing whitespace", prefix, networking.NetworkType))
+	}
+	if len(networking.ClusterNetwork) == 0 {
+		errs = append(errs, prefix+".clusterNetwork is required")
+	}
+	for i, entry := range networking.ClusterNetwork {
+		field := fmt.Sprintf("%s.clusterNetwork[%d]", prefix, i)
+		if entry.CIDR == "" {
+			errs = append(errs, field+".cidr is required")
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry.CIDR)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s.cidr %q is not a valid CIDR", field, entry.CIDR))
+			continue
+		}
+		if entry.HostPrefix == 0 {
+			errs = append(errs, field+".hostPrefix is required")
+			continue
+		}
+		ones, bits := ipNet.Mask.Size()
+		if entry.HostPrefix <= ones || entry.HostPrefix > bits {
+			errs = append(errs, fmt.Sprintf("%s.hostPrefix %d must be greater than CIDR prefix length %d and no larger than %d", field, entry.HostPrefix, ones, bits))
+		}
+	}
+	if len(networking.ServiceNetwork) == 0 {
+		errs = append(errs, prefix+".serviceNetwork is required")
+	}
+	for i, cidr := range networking.ServiceNetwork {
+		field := fmt.Sprintf("%s.serviceNetwork[%d]", prefix, i)
+		if cidr == "" {
+			errs = append(errs, field+" is required")
+			continue
+		}
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			errs = append(errs, fmt.Sprintf("%s %q is not a valid CIDR", field, cidr))
+		}
 	}
 	return errs
 }

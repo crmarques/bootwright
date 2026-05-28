@@ -20,17 +20,21 @@ Standing up one cluster is a runbook. Standing up *many* clusters — across mix
 The CLI covers the provisioning pipeline:
 
 ```text
-bootwright context init lab -f examples/sno-libvirt-redfish
-bootwright secret list
+bootwright example init lab --output ./lab-input
+bootwright context init lab -f ./lab-input
+bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
 bootwright check infra
+bootwright apply infra --dry-run
 bootwright apply infra --yes
 bootwright check cluster
+bootwright apply cluster --dry-run
 bootwright apply cluster --yes
+bootwright status --watch
 ```
 
 <p align="center">
@@ -125,7 +129,8 @@ until their provider roles are converged; IPMI is not apply-supported today.
 ## CLI
 
 ```text
-bootwright context init lab -f examples/sno-libvirt-redfish
+bootwright example init lab --output ./lab-input
+bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright context current
 bootwright secret list
@@ -137,6 +142,7 @@ bootwright check syntax
 bootwright check bastion
 bootwright apply bastion --yes
 bootwright check all --dry-run
+bootwright apply infra --dry-run
 bootwright apply infra --yes
 bootwright render installer --scope demo-ocp
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
@@ -150,7 +156,7 @@ bootwright destroy infra --scope http-server --yes
 
 The CLI is verb-first; every subcommand picks a target. Provisioning
 targets are `bastion`, `infra`, `cluster`, and `all`. Verbs are
-`context`, `print-env`, `secret`, `check`, `status`, `render`, `apply`,
+`context`, `example`, `print-env`, `secret`, `check`, `status`, `render`, `apply`,
 `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 

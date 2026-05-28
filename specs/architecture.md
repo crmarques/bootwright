@@ -112,7 +112,9 @@ them isolated, minimal, tested, and documented in the knowledge base.
 
 ## Platform Rendering
 
-`ClusterInfra.spec.platform.type` drives installer platform output:
+`ClusterInfra.spec.platform.type` drives installer platform output. It is the
+installer platform render mode, not the substrate type; substrate ownership
+remains with the selected `InfraProvider` machine or profile.
 
 - `baremetal` renders bare-metal agent install platform data.
 - `vsphere` renders vSphere platform data from selected profiles and optional
