@@ -14,6 +14,8 @@
 *.p12
 auth/
 secrets/
+!internal/runtime/secrets/
+!internal/runtime/secrets/*.go
 
 # Generated output
 .cache/
