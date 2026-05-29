@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -1068,18 +1069,75 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "delete", "lab"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge"}, want: false},
 		{args: []string{"context", "validate"}, want: true},
+		{args: []string{"help", "check"}, want: false},
+		{args: []string{"completion", "bash"}, want: false},
+		{args: []string{cobra.ShellCompRequestCmd, ""}, want: false},
+		{args: []string{cobra.ShellCompNoDescRequestCmd, ""}, want: false},
 		{args: []string{"secret", "set", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
+		{args: []string{"secret"}, want: false},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
 		{args: []string{"example", "init", "lab", "--output", "./lab-input"}, want: false},
+		{args: []string{"check"}, want: false},
 		{args: []string{"check", "syntax", "-f", "./lab-input"}, want: false},
 		{args: []string{"check", "syntax", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"check", "syntax"}, want: true},
 		{args: []string{"check", "--help"}, want: false},
+		{args: []string{"apply"}, want: false},
+		{args: []string{"apply", "infra"}, want: true},
+		{args: []string{"destroy"}, want: false},
+		{args: []string{"destroy", "infra"}, want: true},
+		{args: []string{"render"}, want: false},
+		{args: []string{"render", "--scope", "managed-01"}, want: false},
+		{args: []string{"render", "installer"}, want: true},
+		{args: []string{"render", "--output-dir", "./rendered", "--sensitive"}, want: true},
+		{args: []string{"render", "--output-dir=./rendered", "--sensitive"}, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			if got := argsNeedLocalRoot(tc.args); got != tc.want {
 				t.Fatalf("argsNeedLocalRoot(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLocalRootGateSkipsRootlessHelpAndCompletion(t *testing.T) {
+	setTestHomeAndRoot(t)
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	called := false
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			called = true
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestLocalRootGateHelperProcess", "--")
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_ROOT_GATE_HELPER=1")
+			return cmd
+		},
+	}
+
+	cases := [][]string{
+		{"check"},
+		{"apply"},
+		{"destroy"},
+		{"secret"},
+		{"render"},
+		{"completion", "bash"},
+		{cobra.ShellCompRequestCmd, ""},
+		{cobra.ShellCompNoDescRequestCmd, ""},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			called = false
+			code, handled, err := ensureLocalRootForArgs(context.Background(), args, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+			if err != nil {
+				t.Fatalf("ensureLocalRootForArgs: %v", err)
+			}
+			if handled || code != 0 || called {
+				t.Fatalf("ensureLocalRootForArgs(%v) handled=%v code=%d called=%t, want no sudo", args, handled, code, called)
 			}
 		})
 	}

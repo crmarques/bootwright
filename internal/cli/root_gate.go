@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/crmarques/bootwright/internal/runtime/root/execution"
+	"github.com/spf13/cobra"
 )
 
 type localRootGateDeps struct {
@@ -145,9 +146,25 @@ func argsNeedLocalRoot(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "version", "help", "completion", "example":
+	case "version", "help", "completion", "example", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
 		return false
+	case "apply", "destroy":
+		if len(args) == 1 {
+			return false
+		}
+		return true
+	case "render":
+		if len(args) == 1 {
+			return false
+		}
+		if !renderArgsHaveExecutionTarget(args[1:]) {
+			return false
+		}
+		return true
 	case "check":
+		if len(args) == 1 {
+			return false
+		}
 		if len(args) >= 2 && args[1] == "syntax" && argsHaveInputFileFlag(args[2:]) {
 			return false
 		}
@@ -163,6 +180,9 @@ func argsNeedLocalRoot(args []string) bool {
 			return true
 		}
 	case "secret":
+		if len(args) == 1 {
+			return false
+		}
 		if len(args) >= 2 && args[1] == "set" {
 			return false
 		}
@@ -170,6 +190,21 @@ func argsNeedLocalRoot(args []string) bool {
 	default:
 		return true
 	}
+}
+
+func renderArgsHaveExecutionTarget(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "installer":
+			return true
+		case arg == "--output-dir":
+			return i+1 < len(args)
+		case strings.HasPrefix(arg, "--output-dir="):
+			return strings.TrimPrefix(arg, "--output-dir=") != ""
+		}
+	}
+	return false
 }
 
 func argsContainHelp(args []string) bool {
