@@ -80,7 +80,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err := validateScopedApplySharedServices(state, scope.name, flags.clusterScope); err != nil {
 			return failErr(1, err)
 		}
-		plan, err := prepareScopedWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
+		plan, err := prepareScopedApplyWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
 		}

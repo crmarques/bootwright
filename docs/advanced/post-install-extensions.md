@@ -114,6 +114,11 @@ spec:
 
 ```text
 bootwright apply cluster --yes
+```
+
+To converge extensions again after the cluster is already installed:
+
+```text
 bootwright check extensions
 bootwright apply extensions --dry-run
 bootwright apply extensions --yes
@@ -122,8 +127,8 @@ bootwright apply extensions --yes
 `apply extensions --dry-run` shows the selected clusters, expanded extension
 order, task plan, and generated resource summary without mutating the cluster.
 
-`apply all --yes` includes extensions after the cluster install wait task.
-`apply cluster --yes` remains provisioning-only.
+`apply cluster --yes` and `apply all --yes` include extensions after the cluster
+install wait task.
 
 ## Records And Readiness
 

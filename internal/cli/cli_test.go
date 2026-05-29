@@ -102,6 +102,14 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 		t.Fatalf("apply all help does not mention extensions:\n%s", stdout)
 	}
 
+	stdout, stderr, code = runCLI(t, "apply", "cluster", "--help")
+	if code != 0 {
+		t.Fatalf("apply cluster --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "Install OpenShift clusters and apply extensions") {
+		t.Fatalf("apply cluster help does not mention extensions:\n%s", stdout)
+	}
+
 	stdout, stderr, code = runCLI(t, "apply", "extensions", "--help")
 	if code != 0 {
 		t.Fatalf("apply extensions --help exited %d, stderr=%q", code, stderr)
@@ -2530,39 +2538,7 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 }
 
 func TestApplyExtensionsDryRunJSONPlansExtensionTasks(t *testing.T) {
-	setTestHomeAndRoot(t)
-	inputDir := copyFixtureYAML(t, "001-sno-libvirt")
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension.yaml"), []byte(cliTestClusterExtensionYAML()), 0o600); err != nil {
-		t.Fatalf("write extension: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-set.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
-metadata:
-  name: virtualization-platform
-spec:
-  extensions:
-    - name: openshift-virtualization
-`), 0o600); err != nil {
-		t.Fatalf("write extension set: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-binding.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
-metadata:
-  name: sno-libvirt-extensions
-spec:
-  clusterSelector:
-    names:
-      - sno-libvirt
-  applyAfter:
-    phase: clusterInstalled
-  extensionSets:
-    - name: virtualization-platform
-`), 0o600); err != nil {
-		t.Fatalf("write extension binding: %v", err)
-	}
-	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir); code != 0 {
-		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
-	}
+	initTestContextWithClusterExtension(t)
 
 	stdout, stderr, code := runCLI(t, "apply", "extensions", "--dry-run", "--output", "json")
 	if code != 0 {
@@ -2595,6 +2571,47 @@ spec:
 	if got := report.ApplyPlan.Extensions[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
 		t.Fatalf("extension resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
+}
+
+func TestApplyClusterDryRunJSONPlansExtensionTasks(t *testing.T) {
+	initTestContextWithClusterExtension(t)
+
+	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json")
+	if code != 0 {
+		t.Fatalf("apply cluster dry-run json exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
+	}
+	if report.Target != "cluster" {
+		t.Fatalf("target = %q, want cluster", report.Target)
+	}
+	if report.ApplyPlan == nil {
+		t.Fatalf("apply plan missing from report: %+v", report)
+	}
+	gotIDs := make([]string, 0, len(report.ApplyPlan.Tasks))
+	for _, task := range report.ApplyPlan.Tasks {
+		gotIDs = append(gotIDs, task.ID)
+	}
+	wantIDs := []string{
+		"iso.sno-libvirt",
+		"boot.sno-libvirt",
+		"wait.sno-libvirt",
+		"extension.sno-libvirt.openshift-virtualization.apply",
+		"extension.sno-libvirt.openshift-virtualization.wait",
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("apply cluster task IDs = %v, want %v", gotIDs, wantIDs)
+	}
+	if got := report.ApplyPlan.Extensions; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Extension != "openshift-virtualization" {
+		t.Fatalf("extension plan = %+v, want sno-libvirt openshift-virtualization", got)
+	}
+	if got := report.ApplyPlan.Extensions[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
+		t.Fatalf("extension resources = %+v, want generated OLM resources ending with HyperConverged", got)
+	}
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "extension.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "extension.sno-libvirt.openshift-virtualization.wait", "extension.sno-libvirt.openshift-virtualization.apply")
 }
 
 func TestApplyClusterOverrideDryRunPassesInstallOverride(t *testing.T) {
@@ -2684,6 +2701,43 @@ func fixturePath(name string) string {
 	return filepath.Join("..", "..", "test", "e2e", name)
 }
 
+func initTestContextWithClusterExtension(t *testing.T) {
+	t.Helper()
+	setTestHomeAndRoot(t)
+	inputDir := copyFixtureYAML(t, "001-sno-libvirt")
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension.yaml"), []byte(cliTestClusterExtensionYAML()), 0o600); err != nil {
+		t.Fatalf("write extension: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-set.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionSet
+metadata:
+  name: virtualization-platform
+spec:
+  extensions:
+    - name: openshift-virtualization
+`), 0o600); err != nil {
+		t.Fatalf("write extension set: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-binding.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: sno-libvirt-extensions
+spec:
+  clusterSelector:
+    names:
+      - sno-libvirt
+  applyAfter:
+    phase: clusterInstalled
+  extensionSets:
+    - name: virtualization-platform
+`), 0o600); err != nil {
+		t.Fatalf("write extension binding: %v", err)
+	}
+	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir); code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func cliTestClusterExtensionYAML() string {
 	return `apiVersion: bootwright.io/v1alpha1
 kind: ClusterExtension
@@ -2715,6 +2769,20 @@ spec:
         namespace: openshift-cnv
         subscription: hco-operatorhub
 `
+}
+
+func assertTaskDeps(t *testing.T, tasks []workflow.TaskLedgerEntry, id string, want ...string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.ID != id {
+			continue
+		}
+		if !reflect.DeepEqual(task.Dependencies, want) {
+			t.Fatalf("%s deps = %v, want %v", id, task.Dependencies, want)
+		}
+		return
+	}
+	t.Fatalf("task %s not found", id)
 }
 
 func copyFixtureYAML(t *testing.T, name string) string {

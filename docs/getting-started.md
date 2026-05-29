@@ -199,16 +199,17 @@ bootwright status
 `apply bastion` installs bastion-host prerequisites. `apply infra`
 converges provider hosts, substrate state, and managed infra components.
 `apply cluster` creates the agent ISO, boots every declared node, and waits for
-`openshift-install agent wait-for install-complete`.
+`openshift-install agent wait-for install-complete`, then applies bound
+post-install extensions.
 `apply extensions` uses the installed cluster kubeconfig and `oc apply` for
 post-install bootstrap components declared as `ClusterExtension` resources.
-`apply all` includes extensions after cluster installation, while
-`apply cluster` remains provisioning-only.
+`apply all` includes infrastructure before the same cluster and extension
+phases.
 Running `apply cluster --yes` again skips cluster install tasks when the prior
 install record, rendered desired-input fingerprint, and kubeconfig availability
-probe all match. If an interrupted apply already booted nodes, the next apply
-resumes at the install wait phase instead of recreating the ISO or rebooting
-machines.
+probe all match, then applies extensions idempotently. If an interrupted apply
+already booted nodes, the next apply resumes at the install wait phase instead
+of recreating the ISO or rebooting machines.
 
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an

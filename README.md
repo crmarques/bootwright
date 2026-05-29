@@ -42,6 +42,9 @@ bootwright apply extensions --yes
 bootwright status --watch
 ```
 
+`apply cluster` installs selected clusters and applies their bound extensions.
+`apply extensions` is the standalone path when clusters are already installed.
+
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
 </p>
@@ -182,7 +185,9 @@ Human text output is designed for operators and may evolve. Use
 intentionally prints raw shell exports. Single-cluster apply runs stream native
 Ansible output; multi-cluster apply runs keep Ansible output in per-task and
 per-cluster logs while the terminal shows cluster log paths and high-level
-progress.
+progress. `bootwright apply cluster` installs selected clusters and applies
+their bound extensions; `bootwright apply extensions` is available for
+standalone extension convergence after install.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

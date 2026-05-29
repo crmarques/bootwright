@@ -1155,9 +1155,11 @@ mutate provider hosts, nodes, or clusters; operators must run
 `apply extensions --dry-run` shows extension tasks, selected clusters,
 expanded extension order, and generated resource summaries without mutating the
 cluster.
-`apply cluster` remains provisioning-only. `apply extensions` uses the
-installed cluster kubeconfig and `oc apply` directly. `apply all` includes
-extensions after cluster installation completes.
+`apply cluster` installs each selected cluster, then applies bound extensions
+after the cluster install wait task. `apply extensions` uses the installed
+cluster kubeconfig and `oc apply` directly for standalone extension convergence.
+`apply all` includes infrastructure before the same cluster and extension
+phases.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
 to the terminal between Bootwright prerequisite output and the Bootwright
 summary. When an apply selects two or more `ContainerCluster` objects,
@@ -1178,7 +1180,9 @@ stored fingerprint differs from the current rendered inputs, apply must stop and
 require either `destroy cluster` or `apply cluster --override` after the
 operator has reset or replaced target machines. If an interrupted run already
 booted nodes, apply resumes at `openshift-install agent wait-for
-install-complete` instead of creating a new ISO or rebooting machines.
+install-complete` instead of creating a new ISO or rebooting machines. Extension
+tasks still run after skipped or completed install tasks and use their own
+per-extension desired hashes and readiness records for idempotency.
 Every apply writes `<runs-dir>/current.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task

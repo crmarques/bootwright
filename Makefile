@@ -62,7 +62,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build container-build sync-bundle test validate plan check check-go-source-visibility check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -141,7 +141,7 @@ $(BIN_DIR):
 test:
 	$(GO) test ./...
 
-check: check-gofmt
+check: check-go-source-visibility check-gofmt
 	$(GO) vet ./...
 	$(GO) test ./...
 	$(GO) test -race ./...
@@ -150,6 +150,15 @@ check: check-gofmt
 	$(MAKE) ansible-syntax-check
 	$(MAKE) stale-term-check
 	$(MAKE) cli-file-size-check
+
+check-go-source-visibility:
+	@ignored=$$(find api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
+	if [ -n "$$ignored" ]; then \
+		printf '%s\n' 'Go source files are ignored by git and will be missing from GitHub Actions:'; \
+		printf '  %s\n' $$ignored; \
+		printf '%s\n' 'Fix .gitignore or move generated files outside api/, cmd/, and internal/.'; \
+		exit 1; \
+	fi
 
 check-gofmt:
 	@test -z "$$(gofmt -l $(GOFMT_FILES))" || { gofmt -l $(GOFMT_FILES); exit 1; }

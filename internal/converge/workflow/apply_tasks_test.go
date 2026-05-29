@@ -366,6 +366,31 @@ func TestPlanApplyAllRunsExtensionsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
 }
 
+func TestPlanApplyClusterRunsExtensionsAfterInstallWait(t *testing.T) {
+	state := extensionPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	gotIDs := applyTaskIDs(tasks)
+	wantIDs := []string{
+		"iso.demo",
+		"wait.demo",
+		"extension.demo.a.apply",
+		"extension.demo.a.wait",
+		"extension.demo.b.apply",
+		"extension.demo.b.wait",
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
+	}
+	assertTaskDeps(t, tasks, "extension.demo.a.apply", "wait.demo")
+	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
+	assertTaskDeps(t, tasks, "extension.demo.b.apply", "extension.demo.a.wait")
+	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
+}
+
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
 	t.Helper()
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "state", "desired", "testdata", "good", name)})

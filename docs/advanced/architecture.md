@@ -52,7 +52,8 @@ targets run through the rendered Ansible bundle:
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.
 - `apply cluster` creates the agent ISO, boots each declared node as its own
-  task, and then waits for `openshift-install agent wait-for install-complete`.
+  task, waits for `openshift-install agent wait-for install-complete`, and then
+  applies bound extensions.
 - `apply extensions` applies declarative post-install bootstrap components to
   already installed clusters with `oc`.
 - `apply all` runs infrastructure, cluster, and extension phases in one target.
@@ -68,10 +69,10 @@ clusters are selected, Bootwright runs independent cluster DAG tasks
 concurrently where resource locks allow it, prints one install log path per
 cluster, and keeps the terminal focused on high-level apply progress.
 
-`apply cluster` remains provisioning-only. Post-install bootstrap components
-are planned as direct `oc` tasks after the cluster install wait task when
-`apply all` is selected, or without install dependencies when
-`apply extensions` is selected for an already installed cluster.
+Post-install bootstrap components are planned as direct `oc` tasks after the
+cluster install wait task when `apply cluster` or `apply all` is selected, or
+without install dependencies when `apply extensions` is selected for an already
+installed cluster.
 
 ## External CLI Inputs
 

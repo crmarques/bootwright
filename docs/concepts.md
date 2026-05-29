@@ -71,10 +71,10 @@ deterministic: referenced `extensionSets` expand in declared order, then direct
 first occurrence. Binding expansion follows the same order and produces one
 apply plan per selected cluster.
 
-`bootwright apply cluster --yes` remains provisioning-only. Use
-`bootwright check extensions` and `bootwright apply extensions --yes` for
-post-install components, or `bootwright apply all --yes` to include extensions
-after cluster installation.
+`bootwright apply cluster --yes` installs the selected clusters and then applies
+their bound post-install components. Use `bootwright apply extensions --yes`
+when the clusters are already installed and only extension convergence is
+needed, or `bootwright apply all --yes` to include infrastructure first.
 
 ## NMState Templates
 

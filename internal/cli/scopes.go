@@ -6,6 +6,7 @@ type scopeSpec struct {
 	name              string
 	short             string
 	phaseNames        []string
+	applyPhaseNames   []string
 	applyPlaybook     string
 	destroyPlaybook   string
 	artifactsBaseName string
@@ -24,6 +25,7 @@ var clusterScope = scopeSpec{
 	name:              "cluster",
 	short:             "Install and configure managed OpenShift clusters via openshift-install agent",
 	phaseNames:        []string{"clusters"},
+	applyPhaseNames:   []string{"clusters", "extensions"},
 	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
 	destroyPlaybook:   "playbooks/targets/clusters/destroy.yml",
 	artifactsBaseName: "cluster",
@@ -45,13 +47,29 @@ var allScope = scopeSpec{
 }
 
 func (s scopeSpec) phases() []Phase {
-	out := make([]Phase, 0, len(s.phaseNames))
-	for _, name := range s.phaseNames {
-		out = append(out, phases[name])
+	return scopePhases(s.phaseNames)
+}
+
+func (s scopeSpec) applyPhases() []Phase {
+	names := s.phaseNames
+	if len(s.applyPhaseNames) > 0 {
+		names = s.applyPhaseNames
 	}
-	return out
+	return scopePhases(names)
 }
 
 func (s scopeSpec) applyTarget() workflow.ApplyTarget {
-	return workflow.ApplyTarget{Name: s.name, PhaseNames: append([]string(nil), s.phaseNames...)}
+	names := s.phaseNames
+	if len(s.applyPhaseNames) > 0 {
+		names = s.applyPhaseNames
+	}
+	return workflow.ApplyTarget{Name: s.name, PhaseNames: append([]string(nil), names...)}
+}
+
+func scopePhases(names []string) []Phase {
+	out := make([]Phase, 0, len(names))
+	for _, name := range names {
+		out = append(out, phases[name])
+	}
+	return out
 }

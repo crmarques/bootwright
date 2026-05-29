@@ -39,7 +39,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 	cmd.AddCommand(
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
-		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters"),
+		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters and apply extensions"),
 		retargetCommand(newScopeApplyCmd(extensionsScope, stdin, stdout, stderr), "extensions", "Apply post-install cluster extensions"),
 		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, OpenShift clusters, and extensions"),
 	)

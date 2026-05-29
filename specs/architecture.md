@@ -40,8 +40,8 @@ cluster task on a remote bastion host: create the cluster agent ISO with
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
 Post-install extension apply is scheduled after that install wait when
-`apply all` is selected, and as standalone direct `oc` tasks when
-`apply extensions` is selected for an already installed cluster.
+`apply cluster` or `apply all` is selected, and as standalone direct `oc`
+tasks when `apply extensions` is selected for an already installed cluster.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
 for host-level work. Provider and cluster-infrastructure playbooks use
