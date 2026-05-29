@@ -13,6 +13,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusterextensions"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/stategraph"
 	"github.com/crmarques/bootwright/internal/workflow"
@@ -112,7 +113,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	if stateLoaded {
 		printSecretStatus(p, ctx.SecretsDir, state)
-		printClusterStatus(p, state, ctx.RenderedDir)
+		printClusterStatus(p, state, ctx.RenderedDir, ctx.RuntimeDir)
 		printSharedStatus(p, state)
 	}
 
@@ -166,7 +167,7 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	}
 }
 
-func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir string) {
+func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, runtimeDir string) {
 	if len(state.ContainerClusters) == 0 {
 		return
 	}
@@ -179,6 +180,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir str
 		byName[ocp.Metadata.Name] = ocp
 	}
 	sort.Strings(names)
+	extensions := buildStatusExtensions(state, runtimeDir)
 	for _, name := range names {
 		ocp := byName[name]
 		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
@@ -194,6 +196,21 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir str
 			p.Status(cliout.StatusWarn, "installer", installer+" (freshness unknown; "+result.Error+")")
 		default:
 			p.Status(cliout.StatusFail, "installer", "not rendered")
+		}
+		for _, extension := range extensions[name] {
+			status := cliout.StatusSkip
+			detail := "no extension record"
+			if extension.Status != "" {
+				status = cliout.StatusOK
+				if extension.Status != string(clusterextensions.RecordStatusReady) {
+					status = cliout.StatusWarn
+				}
+				detail = extension.Status
+				if extension.Phase != "" {
+					detail += " phase=" + extension.Phase
+				}
+			}
+			p.Status(status, "extension "+extension.Name, detail)
 		}
 	}
 }
@@ -348,5 +365,5 @@ func installerInstallConfigPath(renderedDir, clusterName string) string {
 }
 
 func hasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters) > 0
+	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.ClusterExtensions)+len(s.ClusterExtensionSets)+len(s.ClusterExtensionBindings) > 0
 }

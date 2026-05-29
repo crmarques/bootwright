@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -331,6 +332,40 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 	}
 }
 
+func TestPlanApplyExtensionsOrdersExtensionTasks(t *testing.T) {
+	state := extensionPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "extensions", PhaseNames: []string{ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	gotIDs := applyTaskIDs(tasks)
+	wantIDs := []string{
+		"extension.demo.a.apply",
+		"extension.demo.a.wait",
+		"extension.demo.b.apply",
+		"extension.demo.b.wait",
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
+	}
+	assertTaskDeps(t, tasks, "extension.demo.a.apply")
+	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
+	assertTaskDeps(t, tasks, "extension.demo.b.apply", "extension.demo.a.wait")
+	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
+}
+
+func TestPlanApplyAllRunsExtensionsAfterInstallWait(t *testing.T) {
+	state := extensionPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskDeps(t, tasks, "extension.demo.a.apply", "wait.demo")
+	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
+}
+
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
 	t.Helper()
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "desiredstate", "testdata", "good", name)})
@@ -366,4 +401,52 @@ func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
 		}
 	}
 	return secretsDir
+}
+
+func extensionPlanningState() v1alpha1.State {
+	return v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "demo"},
+		}},
+		ClusterExtensions: []v1alpha1.ClusterExtension{
+			{Metadata: v1alpha1.Metadata{Name: "a"}, Spec: v1alpha1.ClusterExtensionSpec{Type: v1alpha1.ClusterExtensionTypeManifestSet}},
+			{Metadata: v1alpha1.Metadata{Name: "b"}, Spec: v1alpha1.ClusterExtensionSpec{Type: v1alpha1.ClusterExtensionTypeManifestSet}},
+		},
+		ClusterExtensionSets: []v1alpha1.ClusterExtensionSet{{
+			Metadata: v1alpha1.Metadata{Name: "platform"},
+			Spec: v1alpha1.ClusterExtensionSetSpec{
+				Extensions: []v1alpha1.LocalObjectReference{{Name: "a"}},
+			},
+		}},
+		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+			Metadata: v1alpha1.Metadata{Name: "binding"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
+				ExtensionSets:   []v1alpha1.LocalObjectReference{{Name: "platform"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "b"}},
+			},
+		}},
+	}
+}
+
+func applyTaskIDs(tasks []ApplyTask) []string {
+	out := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		out = append(out, task.Entry.ID)
+	}
+	return out
+}
+
+func assertTaskDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.Entry.ID != id {
+			continue
+		}
+		if !reflect.DeepEqual(task.Entry.Dependencies, want) {
+			t.Fatalf("%s deps = %v, want %v", id, task.Entry.Dependencies, want)
+		}
+		return
+	}
+	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
 }

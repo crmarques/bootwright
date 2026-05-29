@@ -131,5 +131,8 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "InfraProviders", Value: fmt.Sprint(len(state.InfraProviders))},
 		{Key: "ClusterInfras", Value: fmt.Sprint(len(state.ClusterInfras))},
 		{Key: "ContainerClusters", Value: fmt.Sprint(len(state.ContainerClusters))},
+		{Key: "ClusterExtensions", Value: fmt.Sprint(len(state.ClusterExtensions))},
+		{Key: "ClusterExtensionSets", Value: fmt.Sprint(len(state.ClusterExtensionSets))},
+		{Key: "ClusterExtensionBindings", Value: fmt.Sprint(len(state.ClusterExtensionBindings))},
 	}
 }

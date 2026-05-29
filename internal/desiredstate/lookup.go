@@ -48,6 +48,30 @@ func indexInfraComponents(items []v1alpha1.InfraComponent) map[string]v1alpha1.I
 	return out
 }
 
+func indexContainerClusters(items []v1alpha1.ContainerCluster) map[string]v1alpha1.ContainerCluster {
+	out := make(map[string]v1alpha1.ContainerCluster, len(items))
+	for _, c := range items {
+		out[c.Metadata.Name] = c
+	}
+	return out
+}
+
+func indexClusterExtensions(items []v1alpha1.ClusterExtension) map[string]v1alpha1.ClusterExtension {
+	out := make(map[string]v1alpha1.ClusterExtension, len(items))
+	for _, c := range items {
+		out[c.Metadata.Name] = c
+	}
+	return out
+}
+
+func indexClusterExtensionSets(items []v1alpha1.ClusterExtensionSet) map[string]v1alpha1.ClusterExtensionSet {
+	out := make(map[string]v1alpha1.ClusterExtensionSet, len(items))
+	for _, c := range items {
+		out[c.Metadata.Name] = c
+	}
+	return out
+}
+
 func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
 	return stateview.MachineProfile(p, name)
 }

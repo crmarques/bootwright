@@ -18,13 +18,16 @@ import (
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
-		"seven kinds",
+		"ten kinds",
 		"`Host`",
 		"`NetworkConfig`",
 		"`InfraProvider`",
 		"`InfraComponent`",
 		"`ClusterInfra`",
 		"`ContainerCluster`",
+		"`ClusterExtension`",
+		"`ClusterExtensionSet`",
+		"`ClusterExtensionBinding`",
 		"`Environment`",
 	}
 	for _, phrase := range required {
@@ -35,6 +38,7 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	rejected := []string{
 		"five kinds",
 		"six kinds",
+		"seven kinds",
 		"`HostPool`",
 		"providerRefs",
 	}
@@ -56,6 +60,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"docs/concepts.md",
 		"docs/advanced/architecture.md",
 		"docs/advanced/networking.md",
+		"docs/advanced/post-install-extensions.md",
 		"docs/advanced/providers.md",
 		"docs/advanced/proxy-and-disconnected.md",
 		"specs/architecture.md",

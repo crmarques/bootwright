@@ -30,6 +30,11 @@ var phases = map[string]Phase{
 		NeedsRoot:     true,
 		Description:   "run openshift-install agent and boot nodes through the provider boot path",
 	},
+	"extensions": {
+		Name:        "extensions",
+		NeedsRoot:   true,
+		Description: "apply declarative post-install cluster extensions with oc",
+	},
 }
 
 // phasesForState used to derive NeedsRoot from substrate kind. In the

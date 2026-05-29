@@ -103,6 +103,7 @@ nav:
       - Providers: advanced/providers.md
       - Networking and Load Balancing: advanced/networking.md
       - Proxy and Disconnected Installs: advanced/proxy-and-disconnected.md
+      - Post-Install Extensions: advanced/post-install-extensions.md
       - Secrets: advanced/secrets.md
       - Architecture: advanced/architecture.md
   - Troubleshooting: troubleshooting.md

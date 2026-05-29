@@ -100,7 +100,10 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.InfraProviders) == 0 &&
 		len(state.InfraComponents) == 0 &&
 		len(state.ClusterInfras) == 0 &&
-		len(state.ContainerClusters) == 0 {
+		len(state.ContainerClusters) == 0 &&
+		len(state.ClusterExtensions) == 0 &&
+		len(state.ClusterExtensionSets) == 0 &&
+		len(state.ClusterExtensionBindings) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
 	sortState(&state)
@@ -274,6 +277,27 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ContainerClusters = append(state.ContainerClusters, item)
+		case v1alpha1.KindClusterExtension:
+			var item v1alpha1.ClusterExtension
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.ClusterExtensions = append(state.ClusterExtensions, item)
+		case v1alpha1.KindClusterExtensionSet:
+			var item v1alpha1.ClusterExtensionSet
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.ClusterExtensionSets = append(state.ClusterExtensionSets, item)
+		case v1alpha1.KindClusterExtensionBinding:
+			var item v1alpha1.ClusterExtensionBinding
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.ClusterExtensionBindings = append(state.ClusterExtensionBindings, item)
 		case "":
 			return fmt.Errorf("decode %s document %d: kind is required", path, index)
 		default:
@@ -352,6 +376,24 @@ func sortState(state *v1alpha1.State) {
 			return state.ContainerClusters[i].SourcePath < state.ContainerClusters[j].SourcePath
 		}
 		return state.ContainerClusters[i].Metadata.Name < state.ContainerClusters[j].Metadata.Name
+	}))
+	sort.SliceStable(state.ClusterExtensions, sortByName(func(i, j int) bool {
+		if state.ClusterExtensions[i].Metadata.Name == state.ClusterExtensions[j].Metadata.Name {
+			return state.ClusterExtensions[i].SourcePath < state.ClusterExtensions[j].SourcePath
+		}
+		return state.ClusterExtensions[i].Metadata.Name < state.ClusterExtensions[j].Metadata.Name
+	}))
+	sort.SliceStable(state.ClusterExtensionSets, sortByName(func(i, j int) bool {
+		if state.ClusterExtensionSets[i].Metadata.Name == state.ClusterExtensionSets[j].Metadata.Name {
+			return state.ClusterExtensionSets[i].SourcePath < state.ClusterExtensionSets[j].SourcePath
+		}
+		return state.ClusterExtensionSets[i].Metadata.Name < state.ClusterExtensionSets[j].Metadata.Name
+	}))
+	sort.SliceStable(state.ClusterExtensionBindings, sortByName(func(i, j int) bool {
+		if state.ClusterExtensionBindings[i].Metadata.Name == state.ClusterExtensionBindings[j].Metadata.Name {
+			return state.ClusterExtensionBindings[i].SourcePath < state.ClusterExtensionBindings[j].SourcePath
+		}
+		return state.ClusterExtensionBindings[i].Metadata.Name < state.ClusterExtensionBindings[j].Metadata.Name
 	}))
 }
 

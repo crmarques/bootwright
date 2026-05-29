@@ -12,7 +12,7 @@ pipeline:
 load YAML -> normalize -> validate -> render -> apply/status
 ```
 
-The render step merges the seven kinds into concrete outputs:
+The render step merges the provisioning kinds into concrete outputs:
 
 - `install-config.yaml` from `ContainerCluster`, `Environment`,
   `NetworkConfig`, and `ClusterInfra.platform`
@@ -46,14 +46,16 @@ defaults. That keeps provider swaps and release changes explicit.
 
 ## Apply Workflow
 
-`apply bastion` prepares bastion-local tools on localhost. Scoped apply
-targets then run through the rendered Ansible bundle:
+`apply bastion` prepares bastion-local tools on localhost. Provisioning apply
+targets run through the rendered Ansible bundle:
 
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.
 - `apply cluster` creates the agent ISO, boots each declared node as its own
   task, and then waits for `openshift-install agent wait-for install-complete`.
-- `apply all` runs infrastructure and cluster phases in one target.
+- `apply extensions` applies declarative post-install bootstrap components to
+  already installed clusters with `oc`.
+- `apply all` runs infrastructure, cluster, and extension phases in one target.
 
 Every apply writes a current run ledger under the context state directory.
 `bootwright status` reads that ledger without contacting provider hosts, BMCs,
@@ -65,6 +67,11 @@ terminal and keeps the same output in root-managed per-task logs. When multiple
 clusters are selected, Bootwright runs independent cluster DAG tasks
 concurrently where resource locks allow it, prints one install log path per
 cluster, and keeps the terminal focused on high-level apply progress.
+
+`apply cluster` remains provisioning-only. Post-install bootstrap components
+are planned as direct `oc` tasks after the cluster install wait task when
+`apply all` is selected, or without install dependencies when
+`apply extensions` is selected for an already installed cluster.
 
 ## External CLI Inputs
 

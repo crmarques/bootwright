@@ -78,9 +78,12 @@ var defaultPreflightDeps = preflightDeps{
 }
 
 func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, _ string, deps preflightDeps) []preflightCheck {
-	checks := []preflightCheck{
-		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
-		binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
+	var checks []preflightCheck
+	if selectedNeedsAnsible(selected) {
+		checks = append(checks,
+			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
+			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
+		)
 	}
 	if phaseInScope("cluster", selected, hasState) && stateNeedsKubeVirt(state) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
@@ -90,11 +93,26 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
 		}
 	}
+	if phaseInScope("extensions", selected, hasState) && len(state.ClusterExtensionBindings) > 0 {
+		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
+	}
 	if hasState {
 		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 	}
 	return checks
+}
+
+func selectedNeedsAnsible(selected []Phase) bool {
+	if len(selected) == 0 {
+		return true
+	}
+	for _, phase := range selected {
+		if phase.Name != "extensions" {
+			return true
+		}
+	}
+	return false
 }
 
 func phaseInScope(name string, selected []Phase, hasState bool) bool {

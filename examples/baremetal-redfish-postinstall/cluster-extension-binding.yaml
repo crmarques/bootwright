@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: demo-ocp-extensions
+spec:
+  clusterSelector:
+    names:
+      - demo-ocp
+
+  applyAfter:
+    phase: clusterInstalled
+
+  extensionSets:
+    - name: virtualization-platform
+
+  policy:
+    prune: false
+    serverSideApply: true
+    fieldManager: bootwright
+    continueOnError: false

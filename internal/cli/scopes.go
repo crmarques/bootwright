@@ -29,10 +29,17 @@ var clusterScope = scopeSpec{
 	artifactsBaseName: "cluster",
 }
 
+var extensionsScope = scopeSpec{
+	name:              "extensions",
+	short:             "Apply post-install cluster extensions",
+	phaseNames:        []string{"extensions"},
+	artifactsBaseName: "extensions",
+}
+
 var allScope = scopeSpec{
 	name:              "all",
-	short:             "Apply infrastructure and OpenShift clusters",
-	phaseNames:        []string{"provider", "cluster", "clusters"},
+	short:             "Apply infrastructure, OpenShift clusters, and extensions",
+	phaseNames:        []string{"provider", "cluster", "clusters", "extensions"},
 	applyPlaybook:     "playbooks/targets/all/apply.yml",
 	artifactsBaseName: "all",
 }

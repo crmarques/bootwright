@@ -12,4 +12,5 @@ These pages summarize advanced schema usage. The authoritative field contract is
 - [Providers](providers.md)
 - [Networking](networking.md)
 - [Proxy And Disconnected Installs](proxy-and-disconnected.md)
+- [Post-Install Extensions](post-install-extensions.md)
 - [Secrets](secrets.md)

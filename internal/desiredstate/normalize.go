@@ -21,6 +21,12 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
+	for i := range state.ClusterExtensions {
+		normalizeClusterExtension(&state.ClusterExtensions[i])
+	}
+	for i := range state.ClusterExtensionBindings {
+		normalizeClusterExtensionBinding(&state.ClusterExtensionBindings[i])
+	}
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {
@@ -126,6 +132,21 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 }
 
 func normalizeClusterInfra(ci *v1alpha1.ClusterInfra) {
+}
+
+func normalizeClusterExtension(extension *v1alpha1.ClusterExtension) {
+	if extension.Spec.Readiness.Timeout == "" {
+		extension.Spec.Readiness.Timeout = v1alpha1.DefaultClusterExtensionReadinessTimeout
+	}
+}
+
+func normalizeClusterExtensionBinding(binding *v1alpha1.ClusterExtensionBinding) {
+	if binding.Spec.Policy.FieldManager == "" {
+		binding.Spec.Policy.FieldManager = v1alpha1.DefaultClusterExtensionFieldManager
+	}
+	if binding.Spec.Policy.ServerSideApply == nil {
+		binding.Spec.Policy.ServerSideApply = v1alpha1.BoolPtr(true)
+	}
 }
 
 func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Environment) {

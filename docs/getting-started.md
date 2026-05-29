@@ -53,6 +53,8 @@ Use `sno-libvirt-redfish` for the smallest single-node lab with emulated
 Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab,
 `baremetal-redfish` for real bare-metal hosts with Redfish virtual media, or
 `baremetal-redfish-fleet` for a two-cluster bare-metal input layout.
+`baremetal-redfish-postinstall` adds declarative OpenShift Virtualization
+bootstrap resources.
 
 The copied directory contains desired-state files for the relevant kinds:
 
@@ -64,6 +66,7 @@ infra-component.yaml   InfraComponent shared infra services
 networks.yaml          NetworkConfig
 cluster-infra.yaml     ClusterInfra
 container-cluster.yaml ContainerCluster
+cluster-extension-*.yaml optional ClusterExtension resources
 ```
 
 Edit these first:
@@ -180,6 +183,9 @@ bootwright apply infra --yes
 bootwright check cluster
 bootwright apply cluster --dry-run
 bootwright apply cluster --yes
+bootwright check extensions
+bootwright apply extensions --dry-run
+bootwright apply extensions --yes
 bootwright status
 ```
 
@@ -187,6 +193,10 @@ bootwright status
 converges provider hosts, substrate state, and managed infra components.
 `apply cluster` creates the agent ISO, boots every declared node, and waits for
 `openshift-install agent wait-for install-complete`.
+`apply extensions` uses the installed cluster kubeconfig and `oc apply` for
+post-install bootstrap components declared as `ClusterExtension` resources.
+`apply all` includes extensions after cluster installation, while
+`apply cluster` remains provisioning-only.
 Running `apply cluster --yes` again skips cluster install tasks when the prior
 install record, rendered desired-input fingerprint, and kubeconfig availability
 probe all match. If an interrupted apply already booted nodes, the next apply
@@ -210,6 +220,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply cluster --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply extensions --dry-run --output json` | Supported | Dry-run extension apply plan |
 | `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright destroy cluster --dry-run --output json` | Supported | Dry-run destroy plan |

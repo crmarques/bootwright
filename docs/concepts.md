@@ -25,6 +25,9 @@ instead of compact inline maps.
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
 | `ClusterInfra` | Platform render mode, endpoints, and selected machines |
 | `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
+| `ClusterExtension` | Reusable post-install component applied inside an installed cluster |
+| `ClusterExtensionSet` | Ordered group of extensions and extension sets |
+| `ClusterExtensionBinding` | Cluster binding for extensions and extension sets |
 
 ## Reference Flow
 
@@ -40,6 +43,10 @@ ClusterInfra machines
 Environment.infraComponents.*.componentRef
   -> InfraComponent service
   -> Host
+
+ClusterExtensionBinding
+  -> ClusterExtensionSet
+  -> ClusterExtension
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
@@ -48,6 +55,26 @@ cluster must reference the same `ClusterInfra`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
+
+## Post-Install Extensions
+
+Post-install bootstrap components are separate from cluster provisioning.
+`ContainerCluster.spec.install` remains focused on producing an installed
+OpenShift or OKD cluster. Early platform components such as OpenShift
+Virtualization are declared as `ClusterExtension` resources, grouped with
+`ClusterExtensionSet`, and attached to installed clusters with
+`ClusterExtensionBinding`.
+
+MVP extension types are `olm-operator` and `manifest-set`. Set expansion is
+deterministic: referenced `extensionSets` expand in declared order, then direct
+`extensions` append in declared order, and duplicate extensions are removed by
+first occurrence. Binding expansion follows the same order and produces one
+apply plan per selected cluster.
+
+`bootwright apply cluster --yes` remains provisioning-only. Use
+`bootwright check extensions` and `bootwright apply extensions --yes` for
+post-install components, or `bootwright apply all --yes` to include extensions
+after cluster installation.
 
 ## NMState Templates
 

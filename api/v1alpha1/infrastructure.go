@@ -14,13 +14,16 @@ import (
 const (
 	APIVersion = "bootwright.io/v1alpha1"
 
-	KindEnvironment      = "Environment"
-	KindHost             = "Host"
-	KindNetworkConfig    = "NetworkConfig"
-	KindInfraProvider    = "InfraProvider"
-	KindInfraComponent   = "InfraComponent"
-	KindClusterInfra     = "ClusterInfra"
-	KindContainerCluster = "ContainerCluster"
+	KindEnvironment             = "Environment"
+	KindHost                    = "Host"
+	KindNetworkConfig           = "NetworkConfig"
+	KindInfraProvider           = "InfraProvider"
+	KindInfraComponent          = "InfraComponent"
+	KindClusterInfra            = "ClusterInfra"
+	KindContainerCluster        = "ContainerCluster"
+	KindClusterExtension        = "ClusterExtension"
+	KindClusterExtensionSet     = "ClusterExtensionSet"
+	KindClusterExtensionBinding = "ClusterExtensionBinding"
 
 	// Provisioner kinds (machine production).
 	ProvisionerLibvirt   = "libvirt"
@@ -130,17 +133,34 @@ const (
 	ComponentImageTypeSquid            = "squid"
 	ComponentImageTypeDnsmasq          = "dnsmasq"
 	ComponentImageTypeArtifactsHTTP    = "http"
+
+	ClusterExtensionTypeOLMOperator = "olm-operator"
+	ClusterExtensionTypeManifestSet = "manifest-set"
+
+	InstallPlanApprovalAutomatic = "Automatic"
+	InstallPlanApprovalManual    = "Manual"
+
+	ClusterExtensionReadinessCSVSucceeded   = "csvSucceeded"
+	ClusterExtensionReadinessCondition      = "condition"
+	ClusterExtensionReadinessResourceExists = "resourceExists"
+
+	ClusterExtensionApplyPhaseClusterInstalled = "clusterInstalled"
+	DefaultClusterExtensionReadinessTimeout    = "30m"
+	DefaultClusterExtensionFieldManager        = "bootwright"
 )
 
 // State is the loaded fleet.
 type State struct {
-	Environments      []Environment      `yaml:"environments,omitempty" json:"environments,omitempty"`
-	Hosts             []Host             `yaml:"hosts,omitempty" json:"hosts,omitempty"`
-	NetworkConfigs    []NetworkConfig    `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
-	InfraProviders    []InfraProvider    `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
-	InfraComponents   []InfraComponent   `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
-	ClusterInfras     []ClusterInfra     `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
-	ContainerClusters []ContainerCluster `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	Environments             []Environment             `yaml:"environments,omitempty" json:"environments,omitempty"`
+	Hosts                    []Host                    `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	NetworkConfigs           []NetworkConfig           `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
+	InfraProviders           []InfraProvider           `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
+	InfraComponents          []InfraComponent          `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
+	ClusterInfras            []ClusterInfra            `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
+	ContainerClusters        []ContainerCluster        `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	ClusterExtensions        []ClusterExtension        `yaml:"clusterExtensions,omitempty" json:"clusterExtensions,omitempty"`
+	ClusterExtensionSets     []ClusterExtensionSet     `yaml:"clusterExtensionSets,omitempty" json:"clusterExtensionSets,omitempty"`
+	ClusterExtensionBindings []ClusterExtensionBinding `yaml:"clusterExtensionBindings,omitempty" json:"clusterExtensionBindings,omitempty"`
 }
 
 type TypeMeta struct {

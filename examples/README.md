@@ -24,6 +24,8 @@ Current examples:
 - `baremetal-redfish`: the same `Environment` and `ContainerCluster`
   intent mapped to explicit bare-metal inventory with operator-owned external
   VIPs.
+- `baremetal-redfish-postinstall`: the bare-metal Redfish shape plus
+  declarative post-install OpenShift Virtualization resources.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common
   services and provider inventory through a subdirectory layout.
 

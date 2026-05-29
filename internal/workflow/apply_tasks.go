@@ -13,20 +13,24 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ansible"
+	"github.com/crmarques/bootwright/internal/clusterextensions"
 	"github.com/crmarques/bootwright/internal/provisioning/render"
 	"github.com/crmarques/bootwright/internal/stategraph"
 )
 
 const (
-	ApplyTaskKindProvider     = "providerServices"
-	ApplyTaskKindClusterInfra = "clusterInfra"
-	ApplyTaskKindClusterISO   = "clusterISO"
-	ApplyTaskKindNodeBoot     = "nodeBoot"
-	ApplyTaskKindInstallWait  = "installWait"
+	ApplyTaskKindProvider              = "providerServices"
+	ApplyTaskKindClusterInfra          = "clusterInfra"
+	ApplyTaskKindClusterISO            = "clusterISO"
+	ApplyTaskKindNodeBoot              = "nodeBoot"
+	ApplyTaskKindInstallWait           = "installWait"
+	ApplyTaskKindClusterExtensionApply = "clusterExtensionApply"
+	ApplyTaskKindClusterExtensionWait  = "clusterExtensionWait"
 
-	ApplyPhaseProvider = "provider"
-	ApplyPhaseCluster  = "cluster"
-	ApplyPhaseClusters = "clusters"
+	ApplyPhaseProvider   = "provider"
+	ApplyPhaseCluster    = "cluster"
+	ApplyPhaseClusters   = "clusters"
+	ApplyPhaseExtensions = "extensions"
 )
 
 const (
@@ -50,12 +54,14 @@ type ApplyTask struct {
 	RedfishSlots  int
 	ExtraVarPairs []string
 	State         v1alpha1.State
+	Extension     *clusterextensions.ExtensionPlan
 }
 
 type applyTaskResult struct {
-	id      string
-	skipped bool
-	err     error
+	id            string
+	skipped       bool
+	skippedReason string
+	err           error
 }
 
 type ApplyReporter interface {
@@ -79,6 +85,11 @@ type PreparedApplyTaskGraph struct {
 }
 
 func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
+	tasks, _ := PlanApplyTasksChecked(target, state)
+	return tasks
+}
+
+func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTask, error) {
 	phaseSet := map[string]bool{}
 	for _, phase := range target.PhaseNames {
 		phaseSet[phase] = true
@@ -221,7 +232,59 @@ func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
 			})
 		}
 	}
-	return tasks
+	if phaseSet[ApplyPhaseExtensions] {
+		extensionTasks, err := planExtensionTasks(state, phaseSet[ApplyPhaseClusters])
+		if err != nil {
+			return tasks, err
+		}
+		tasks = append(tasks, extensionTasks...)
+	}
+	return tasks, nil
+}
+
+func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]ApplyTask, error) {
+	plans, err := clusterextensions.BindingPlans(state)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []ApplyTask
+	for _, binding := range plans {
+		deps := []string{}
+		if installPhasePlanned {
+			deps = append(deps, "wait."+binding.Cluster)
+		}
+		for _, extension := range binding.Extensions {
+			extension := extension
+			applyID := "extension." + binding.Cluster + "." + extension.Name + ".apply"
+			waitID := "extension." + binding.Cluster + "." + extension.Name + ".wait"
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           applyID,
+					Kind:         ApplyTaskKindClusterExtensionApply,
+					Label:        "extension " + binding.Cluster + " " + extension.Name + " apply",
+					Cluster:      binding.Cluster,
+					Status:       TaskStatusPending,
+					Dependencies: append([]string(nil), deps...),
+				},
+				State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
+				Extension: &extension,
+			})
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           waitID,
+					Kind:         ApplyTaskKindClusterExtensionWait,
+					Label:        "extension " + binding.Cluster + " " + extension.Name + " wait",
+					Cluster:      binding.Cluster,
+					Status:       TaskStatusPending,
+					Dependencies: []string{applyID},
+				},
+				State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
+				Extension: &extension,
+			})
+			deps = []string{waitID}
+		}
+	}
+	return tasks, nil
 }
 
 func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
@@ -322,7 +385,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 			reporter.StageSnapshot(ledger)
 		}
 	} else {
-		if reporter != nil {
+		if reporter != nil && target.Name != ApplyPhaseExtensions {
 			reporter.AnsibleExecutionStart()
 		}
 	}
@@ -421,7 +484,11 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 				cancel()
 			}
 		} else if event.skipped {
-			ledger.MarkSkipped(event.id, "no remote hosts matched task limit", time.Now())
+			reason := event.skippedReason
+			if reason == "" {
+				reason = "no remote hosts matched task limit"
+			}
+			ledger.MarkSkipped(event.id, reason, time.Now())
 		} else {
 			ledger.MarkOK(event.id, time.Now())
 		}
@@ -539,6 +606,9 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 }
 
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
+	if task.Entry.Kind == ApplyTaskKindClusterExtensionApply || task.Entry.Kind == ApplyTaskKindClusterExtensionWait {
+		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
 	taskOpts := opts

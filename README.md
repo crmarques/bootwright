@@ -6,10 +6,10 @@
 
 Bootwright is a desired-state orchestrator for provisioning fleets of OpenShift
 and OKD clusters from bare hardware or virtualized substrates. You describe the
-environment, providers, shared components, infrastructure, networks, and clusters with seven
-declarative YAML kinds. Bootwright validates that intent, renders the
-deterministic input files expected by installer and provider CLIs, and
-coordinates each phase idempotently.
+environment, providers, shared components, infrastructure, networks, clusters,
+and bootstrap extensions with ten declarative YAML kinds. Bootwright validates
+that intent, renders the deterministic input files expected by installer and
+provider CLIs, and coordinates each phase idempotently.
 
 **Supported distributions:** OpenShift and OKD.
 
@@ -35,6 +35,9 @@ bootwright apply infra --yes
 bootwright check cluster
 bootwright apply cluster --dry-run
 bootwright apply cluster --yes
+bootwright check extensions
+bootwright apply extensions --dry-run
+bootwright apply extensions --yes
 bootwright status --watch
 ```
 
@@ -105,7 +108,7 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seven kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and ten kinds:
 
 | Kind | Owns |
 | --- | --- |
@@ -116,11 +119,18 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seven kinds:
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
 | `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected machines under `components.machines[]` |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
+| `ClusterExtension` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
+| `ClusterExtensionSet` | An ordered reusable group of extensions and extension sets |
+| `ClusterExtensionBinding` | A binding from extensions or extension sets to selected clusters |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with
 Redfish emulation to real bare metal edits the substrate-owned objects:
 `InfraProvider`, `InfraComponent`, `NetworkConfig`, and the cluster
 infrastructure machine bindings.
+Post-install components intentionally stay outside
+`ContainerCluster.spec.install`; they are separate desired-state resources
+selected by `Environment`, bound to clusters, and applied after cluster
+installation.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs and
 bare metal with Redfish virtual media are converged by the shipped Ansible
@@ -149,6 +159,9 @@ bootwright apply infra --yes
 bootwright render installer --scope demo-ocp
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
 bootwright apply cluster --yes
+bootwright check extensions
+bootwright apply extensions --dry-run
+bootwright apply extensions --yes
 bootwright status
 bootwright status --watch
 bootwright destroy cluster --yes

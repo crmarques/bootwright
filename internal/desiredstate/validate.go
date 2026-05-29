@@ -22,6 +22,9 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, validateInfraComponents(state)...)
 	errs = append(errs, validateClusterInfras(state)...)
 	errs = append(errs, validateContainerClusters(state)...)
+	errs = append(errs, validateClusterExtensions(state)...)
+	errs = append(errs, validateClusterExtensionSets(state)...)
+	errs = append(errs, validateClusterExtensionBindings(state)...)
 	errs = append(errs, validateCrossLayer(state)...)
 	errs = append(errs, validateSecretReferences(state)...)
 	if len(errs) == 0 {

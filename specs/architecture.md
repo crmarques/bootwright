@@ -11,7 +11,7 @@ YAML desired state
   -> normalize defaults
   -> validate ownership and references
   -> render effective installer/provider inputs
-  -> apply substrate and cluster phases
+  -> apply substrate, cluster, and extension phases
 ```
 
 Apply execution records a durable run ledger under the context state directory
@@ -39,6 +39,9 @@ cluster task on a remote bastion host: create the cluster agent ISO with
 `openshift-install`, boot each declared node through its rendered boot adapter
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
+Post-install extension apply is scheduled after that install wait when
+`apply all` is selected, and as standalone direct `oc` tasks when
+`apply extensions` is selected for an already installed cluster.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
 for host-level work. Provider and cluster-infrastructure playbooks use
@@ -64,6 +67,9 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 - `ClusterInfra` owns endpoint VIP ownership, platform render mode, and
   selected machines.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
+- `ClusterExtension` owns reusable post-install component intent.
+- `ClusterExtensionSet` owns ordered platform profiles made from extensions.
+- `ClusterExtensionBinding` owns cluster-to-extension attachment.
 - `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:
@@ -80,6 +86,9 @@ These boundaries are reflected in rendering:
 - Infra component variables are rendered from `InfraComponent` services
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.
+- Extension apply plans are rendered from `ClusterExtensionBinding` expansion,
+  `ClusterExtensionSet` order, and `ClusterExtension` generated resources or
+  manifest paths. They do not mutate installer input.
 
 Shared host services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about

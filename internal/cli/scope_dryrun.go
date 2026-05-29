@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/ansible"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusterextensions"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
@@ -53,9 +54,18 @@ type scopeDryRunInstallerArtifact struct {
 }
 
 type scopeDryRunApply struct {
-	RunStatus string                     `json:"runStatus"`
-	Limits    workflow.ConcurrencyLimits `json:"limits"`
-	Tasks     []workflow.TaskLedgerEntry `json:"tasks"`
+	RunStatus  string                     `json:"runStatus"`
+	Limits     workflow.ConcurrencyLimits `json:"limits"`
+	Tasks      []workflow.TaskLedgerEntry `json:"tasks"`
+	Extensions []scopeDryRunExtensionPlan `json:"extensions,omitempty"`
+}
+
+type scopeDryRunExtensionPlan struct {
+	Cluster   string                              `json:"cluster"`
+	Binding   string                              `json:"binding"`
+	Extension string                              `json:"extension"`
+	Type      string                              `json:"type"`
+	Resources []clusterextensions.ResourceSummary `json:"resources"`
 }
 
 func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
@@ -121,12 +131,30 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 	}
 	if action == "apply" {
 		report.ApplyPlan = &scopeDryRunApply{
-			RunStatus: string(workflow.RunStatusRunning),
-			Limits:    limits,
-			Tasks:     workflow.TaskLedgerEntries(tasks),
+			RunStatus:  string(workflow.RunStatusRunning),
+			Limits:     limits,
+			Tasks:      workflow.TaskLedgerEntries(tasks),
+			Extensions: dryRunExtensionPlans(tasks),
 		}
 	}
 	return output.JSON(stdout, report)
+}
+
+func dryRunExtensionPlans(tasks []workflow.ApplyTask) []scopeDryRunExtensionPlan {
+	var out []scopeDryRunExtensionPlan
+	for _, task := range tasks {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterExtensionApply || task.Extension == nil {
+			continue
+		}
+		out = append(out, scopeDryRunExtensionPlan{
+			Cluster:   task.Extension.Cluster,
+			Binding:   task.Extension.Binding,
+			Extension: task.Extension.Name,
+			Type:      task.Extension.Extension.Spec.Type,
+			Resources: clusterextensions.ResourceSummaries(task.Extension.Extension),
+		})
+	}
+	return out
 }
 
 func selectedPhaseNames(selected []Phase) []string {

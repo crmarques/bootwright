@@ -11,7 +11,7 @@ import (
 
 func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
 	switch target {
-	case "cluster", "infra", "all":
+	case "cluster", "infra", "all", "extensions":
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}

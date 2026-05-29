@@ -23,6 +23,7 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
 		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
 		retargetCommand(newScopeCheckCmd(clusterScope, stdout, stderr), "cluster", "Check cluster install prerequisites"),
+		retargetCommand(newExtensionsCheckCmd(stdout), "extensions", "Check post-install cluster extension prerequisites"),
 		newCheckAllCmd(stdout, stderr),
 	)
 	requireSubcommand(cmd)
@@ -39,6 +40,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
 		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters"),
+		retargetCommand(newScopeApplyCmd(extensionsScope, stdin, stdout, stderr), "extensions", "Apply post-install cluster extensions"),
 		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure and OpenShift clusters"),
 	)
 	requireSubcommand(cmd)

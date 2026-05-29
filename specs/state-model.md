@@ -1,11 +1,16 @@
 # Desired-State Model
 
-Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and seven
-user-authored kinds. The schema intentionally tracks the inputs consumed by
-`openshift-install` for agent installs:
+Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and ten
+user-authored kinds. The provisioning schema intentionally tracks the inputs
+consumed by `openshift-install` for agent installs:
 
 - `ContainerCluster` owns install intent and the fields that render mostly to
   `install-config.yaml`.
+- `ClusterExtension` owns reusable post-install bootstrap components applied
+  inside installed OpenShift or OKD clusters.
+- `ClusterExtensionSet` owns ordered reusable platform profiles made from
+  extensions and other sets.
+- `ClusterExtensionBinding` owns cluster-to-extension attachment after install.
 - `ClusterInfra` owns the selected machines, install endpoints, and platform
   render mode.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
@@ -18,6 +23,11 @@ user-authored kinds. The schema intentionally tracks the inputs consumed by
   pins.
 - `Host` owns SSH reachability and named addresses for substrate or service
   hosts.
+
+Post-install components are deliberately not embedded under
+`ContainerCluster.spec.install`. `ContainerCluster` remains focused on
+provisioning an installed cluster; extensions are selected by `Environment`,
+bound to clusters, and applied after the cluster is available.
 
 There is no compatibility layer for the pre-refactor shape. Old fields are
 decode or validation errors.
@@ -42,6 +52,9 @@ spec:
     - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
+    - cluster-extension-virtualization.yaml
+    - cluster-extension-set.yaml
+    - cluster-extension-binding.yaml
 
   secretStorage:
     mode: context
@@ -147,9 +160,15 @@ Rules:
   every discovered YAML file.
 - A listed file is loaded as a complete YAML file; every Bootwright resource
   referenced by any selected resource must also be selected.
+- When a selected `ClusterExtensionBinding` references extension sets or
+  extensions, those referenced resource files must also be selected. When a
+  selected `ClusterExtensionSet` references child sets or extensions, those
+  files must also be selected.
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
   `ContainerCluster`.
+- Cluster selection filters extension bindings to selected clusters and omits
+  extension resources that are reachable only from removed bindings.
 - `defaults.install.pullSecretRef`, when set, is copied into selected
   OpenShift `ContainerCluster` install specs that omit `pullSecretRef`.
   Omitted means the conventional `openshift-pull-secret` secret name.
@@ -336,6 +355,176 @@ Rules:
   the address width. `networkType` is optional and, when set, must not contain
   leading or trailing whitespace; Bootwright does not enumerate CNI names so
   future OpenShift network types remain possible.
+
+## Cluster Extensions
+
+Cluster extensions model initial post-install bootstrap components. They are
+for early platform setup, not for replacing long-term day-2 GitOps management.
+
+`ClusterExtension` declares one reusable component. MVP types are
+`olm-operator` and `manifest-set`.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtension
+metadata:
+  name: openshift-virtualization
+spec:
+  type: olm-operator
+
+  olm:
+    namespace:
+      name: openshift-cnv
+      create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
+
+    operatorGroup:
+      name: kubevirt-hyperconverged-group
+      targetNamespaces:
+        - openshift-cnv
+
+    subscription:
+      name: hco-operatorhub
+      package: kubevirt-hyperconverged
+      channel: stable
+      source: redhat-operators
+      sourceNamespace: openshift-marketplace
+      installPlanApproval: Automatic
+
+    customResources:
+      - apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        metadata:
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+
+  readiness:
+    timeout: 30m
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-cnv
+        subscription: hco-operatorhub
+      - type: condition
+        apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        name: kubevirt-hyperconverged
+        namespace: openshift-cnv
+        condition:
+          type: Available
+          status: "True"
+```
+
+`manifest-set` extensions apply existing YAML files in declared order. Paths
+are relative to the `ClusterExtension` file directory.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtension
+metadata:
+  name: console-customization
+spec:
+  type: manifest-set
+  manifestSet:
+    manifests:
+      - path: manifests/console-banner.yaml
+      - path: manifests/console-links.yaml
+  readiness:
+    timeout: 10m
+    checks:
+      - type: resourceExists
+        apiVersion: operator.openshift.io/v1
+        kind: Console
+        name: cluster
+```
+
+`ClusterExtensionSet` declares an ordered reusable group:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionSet
+metadata:
+  name: virtualization-platform
+spec:
+  extensionSets:
+    - name: base-platform
+  extensions:
+    - name: openshift-virtualization
+```
+
+Expansion is deterministic: expand `extensionSets` in declared order, then
+append direct `extensions` in declared order. Duplicate extension names after
+expansion are allowed and de-duplicated by first occurrence. Cycles are
+rejected.
+
+`ClusterExtensionBinding` attaches extension sets and direct extensions to
+clusters selected by name:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: demo-ocp-extensions
+spec:
+  clusterSelector:
+    names:
+      - demo-ocp
+
+  applyAfter:
+    phase: clusterInstalled
+
+  extensionSets:
+    - name: virtualization-platform
+
+  extensions:
+    - name: console-customization
+
+  policy:
+    prune: false
+    serverSideApply: true
+    fieldManager: bootwright
+    continueOnError: false
+```
+
+Binding expansion follows the same order as sets: referenced
+`extensionSets`, then direct `extensions`, with first occurrence
+de-duplication. The expanded order becomes the apply order for each selected
+cluster. `applyAfter.phase` only supports `clusterInstalled` in the MVP.
+
+Rules:
+
+- `olm-operator` requires `olm.namespace.name` and a complete subscription:
+  `name`, `package`, `channel`, `source`, `sourceNamespace`, and
+  `installPlanApproval`.
+- `installPlanApproval` is `Automatic` or `Manual`.
+- If `operatorGroup` is set, `operatorGroup.name` is required.
+- `customResources[]` may be empty. When present, each custom resource must
+  set `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` in the
+  MVP.
+- Generated OLM resources apply in this order: Namespace when
+  `namespace.create` is true, OperatorGroup when set, Subscription, then
+  `customResources[]`.
+- `manifest-set.manifests[]` must not be empty. Each path must be relative,
+  remain under the extension file directory, name an existing non-symlink
+  `.yaml` or `.yml` file, and apply in declared order.
+- Readiness timeout uses Go duration strings and defaults to `30m`.
+- Readiness checks are `csvSucceeded`, `condition`, and `resourceExists`.
+- `csvSucceeded` requires `namespace` and `subscription`; it waits for the
+  Subscription `status.installedCSV`, then for that CSV `status.phase` to be
+  `Succeeded`.
+- `condition` requires `apiVersion`, `kind`, `name`, `condition.type`, and
+  `condition.status`; namespace is optional for cluster-scoped resources.
+- `resourceExists` requires `apiVersion`, `kind`, and `name`; namespace is
+  optional.
+- `ClusterExtensionBinding.spec.clusterSelector.names[]` must name existing
+  `ContainerCluster` objects. Label selectors are not part of the MVP.
+- `policy.serverSideApply` defaults to `true`,
+  `policy.fieldManager` defaults to `bootwright`, and
+  `policy.continueOnError` defaults to `false`.
+- `policy.prune: true` is rejected in the MVP.
+- `policy.continueOnError: true` is rejected in the MVP.
+- Future extension types may include `kustomize` and `helm`; they are not
+  accepted by the MVP schema.
 
 ## NetworkConfig
 
@@ -795,6 +984,10 @@ Bootwright renders:
   desired state.
 - Generated artifact server components when a cluster needs agent ISO or
   boot-artifact publication.
+- Extension apply plans from selected `ClusterExtensionBinding` resources.
+  OLM extensions generate Namespace, OperatorGroup, Subscription, and custom
+  resources. Manifest-set extensions reference declared files and include file
+  contents in desired-input hashes.
 
 ## Validation Rules
 
@@ -829,6 +1022,18 @@ Validation rejects:
 - Shared infra component service consumers with the same rendered service identity
   but incompatible host, role, realisation, bind address, port, or selected
   capability.
+- Missing `ClusterExtension`, `ClusterExtensionSet`, or
+  `ClusterExtensionBinding` references.
+- `ClusterExtensionSet` reference cycles.
+- Unsupported cluster extension types, readiness check types, apply phases, and
+  install plan approval values.
+- Unsafe `manifest-set` paths, including absolute paths, directory escapes,
+  symlinks, missing files, and non-YAML extensions.
+- `ClusterExtensionBinding` cluster selectors that name missing clusters.
+- `ClusterExtensionBinding.policy.prune: true`, because pruning is not
+  implemented in the MVP.
+- `ClusterExtensionBinding.policy.continueOnError: true`, because task-level
+  error continuation is not implemented in the MVP.
 
 ## CLI Contract
 
@@ -895,10 +1100,14 @@ bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
 bootwright check cluster
 bootwright check cluster --dry-run --output json
+bootwright check extensions
 bootwright apply cluster --dry-run
 bootwright apply cluster --dry-run --output json
 bootwright apply cluster --yes
 bootwright apply cluster --override --yes
+bootwright apply extensions --dry-run
+bootwright apply extensions --dry-run --output json
+bootwright apply extensions --yes
 bootwright apply all --dry-run
 bootwright apply all --dry-run --output json
 bootwright apply all --yes
@@ -928,6 +1137,12 @@ concurrency; provider-host and Redfish safety locks still apply.
 `apply <target> --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not run
 Ansible; operators must run `bootwright check <target>` for readiness.
+`apply extensions --dry-run` shows extension tasks, selected clusters,
+expanded extension order, and generated resource summaries without mutating the
+cluster.
+`apply cluster` remains provisioning-only. `apply extensions` uses the
+installed cluster kubeconfig and `oc apply` directly. `apply all` includes
+extensions after cluster installation completes.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
 to the terminal between Bootwright prerequisite output and the Bootwright
 summary. When an apply selects two or more `ContainerCluster` objects,
@@ -960,6 +1175,10 @@ Per-cluster install state is stored under
 `<runtime-dir>/install-records/<cluster>.json`; it records the desired
 input fingerprint, install status, last safe phase, run ID, timestamps, and
 node boot markers, but not secret bytes.
+Per-extension state is stored under
+`<runtime-dir>/extension-records/<cluster>/<extension>.json`; it records the
+desired hash, status, phase, run ID, timestamps, observed resources, and last
+observed readiness state, but not kubeconfig or secret bytes.
 Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
 `failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes

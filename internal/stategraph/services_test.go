@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/clusterextensions"
 )
 
 func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
@@ -84,6 +85,59 @@ func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 	}
 	if got := namesOfProviders(filtered.InfraProviders); !reflect.DeepEqual(got, []string{"machines-a"}) {
 		t.Fatalf("providers = %#v", got)
+	}
+}
+
+func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
+	state := sharedManagedServiceState()
+	state.ClusterExtensions = []v1alpha1.ClusterExtension{
+		{Metadata: v1alpha1.Metadata{Name: "base"}},
+		{Metadata: v1alpha1.Metadata{Name: "console"}},
+		{Metadata: v1alpha1.Metadata{Name: "unused"}},
+	}
+	state.ClusterExtensionSets = []v1alpha1.ClusterExtensionSet{{
+		Metadata: v1alpha1.Metadata{Name: "base-platform"},
+		Spec: v1alpha1.ClusterExtensionSetSpec{
+			Extensions: []v1alpha1.LocalObjectReference{{Name: "base"}},
+		},
+	}}
+	state.ClusterExtensionBindings = []v1alpha1.ClusterExtensionBinding{
+		{
+			Metadata: v1alpha1.Metadata{Name: "cluster-a-extensions"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"cluster-a", "cluster-b"}},
+				ExtensionSets:   []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "console"}},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "cluster-b-extensions"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"cluster-b"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "unused"}},
+			},
+		},
+	}
+
+	filtered := FilterStateToClusters(state, []string{"cluster-a"})
+	if got := len(filtered.ClusterExtensionBindings); got != 1 {
+		t.Fatalf("bindings = %d, want 1", got)
+	}
+	if got := filtered.ClusterExtensionBindings[0].Spec.ClusterSelector.Names; !reflect.DeepEqual(got, []string{"cluster-a"}) {
+		t.Fatalf("binding selected clusters = %v, want [cluster-a]", got)
+	}
+	if got := namesOfExtensionSets(filtered.ClusterExtensionSets); !reflect.DeepEqual(got, []string{"base-platform"}) {
+		t.Fatalf("extension sets = %v, want [base-platform]", got)
+	}
+	if got := namesOfExtensions(filtered.ClusterExtensions); !reflect.DeepEqual(got, []string{"base", "console"}) {
+		t.Fatalf("extensions = %v, want [base console]", got)
+	}
+	plans, err := clusterextensions.BindingPlans(filtered)
+	if err != nil {
+		t.Fatalf("BindingPlans: %v", err)
+	}
+	if len(plans) != 1 || plans[0].Cluster != "cluster-a" {
+		t.Fatalf("plans = %+v, want one plan for cluster-a", plans)
 	}
 }
 
@@ -288,6 +342,22 @@ func namesOfProviders(providers []v1alpha1.InfraProvider) []string {
 	out := make([]string, 0, len(providers))
 	for _, provider := range providers {
 		out = append(out, provider.Metadata.Name)
+	}
+	return out
+}
+
+func namesOfExtensionSets(sets []v1alpha1.ClusterExtensionSet) []string {
+	out := make([]string, 0, len(sets))
+	for _, set := range sets {
+		out = append(out, set.Metadata.Name)
+	}
+	return out
+}
+
+func namesOfExtensions(extensions []v1alpha1.ClusterExtension) []string {
+	out := make([]string, 0, len(extensions))
+	for _, extension := range extensions {
+		out = append(out, extension.Metadata.Name)
 	}
 	return out
 }

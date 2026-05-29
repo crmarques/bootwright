@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/embedded"
 	"github.com/crmarques/bootwright/internal/workflow"
 )
 
@@ -88,8 +89,10 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
-		if err := workflow.EnsureApplySupported(plan.state); err != nil {
-			return failErr(1, err)
+		if scope.name != "extensions" {
+			if err := workflow.EnsureApplySupported(plan.state); err != nil {
+				return failErr(1, err)
+			}
 		}
 		if override {
 			plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_install_override=true")
@@ -100,7 +103,10 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			ParallelismRedfish: redfish,
 		}
 		applyTarget := scope.applyTarget()
-		tasks := workflow.PlanApplyTasks(applyTarget, plan.state)
+		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.state)
+		if err != nil {
+			return failErr(1, err)
+		}
 		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
 		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(ctx.RunsDir, "dry-run", tasks)
 		if flags.output == outputJSON {
@@ -142,9 +148,13 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		bundle, err := prepareWorkflowBundle(true)
-		if err != nil {
-			return failErr(1, err)
+		usesAnsible := scope.name != "extensions"
+		var bundle embedded.AnsibleBundleResult
+		if usesAnsible {
+			bundle, err = prepareWorkflowBundle(true)
+			if err != nil {
+				return failErr(1, err)
+			}
 		}
 		runOpts := workflow.RunOptions{
 			State:              plan.state,
@@ -154,7 +164,6 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			SecretsDir:         ctx.SecretsDir,
 			ManagedDir:         ctx.ManagedDir,
 			Executable:         flags.executable,
-			BundleDir:          bundle.Dir,
 			Playbook:           scope.applyPlaybook,
 			Limit:              plan.limit,
 			Forks:              workflow.AnsibleForksForLimit(plan.state, plan.limit),
@@ -172,12 +181,15 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
+			printExtensionDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
 			}
 			printRenderResult(stdout, result)
-			printBundlePath(stdout, bundle.Dir)
+			if usesAnsible {
+				printBundlePath(stdout, bundle.Dir)
+			}
 			return nil
 		}
 		if reporter != nil {
@@ -197,7 +209,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 				return failErr(1, err)
 			}
 		}
-		if !plan.noRemoteWork {
+		if !plan.noRemoteWork && usesAnsible {
 			reporter.BundleStart()
 			bundle, err = prepareWorkflowBundle(false)
 			if err != nil {
@@ -211,7 +223,9 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return failErr(1, err)
 		}
 		printRenderResult(stdout, renderResult)
-		printBundlePath(stdout, bundle.Dir)
+		if usesAnsible {
+			printBundlePath(stdout, bundle.Dir)
+		}
 		if plan.targetsClusters {
 			printClusterAccess(stdout, plan.state, renderResult, ledger)
 		}

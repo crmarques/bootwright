@@ -176,6 +176,26 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindClusterInfra, node.MachineRef.ClusterInfra)
 		}
 	}
+	for _, set := range state.ClusterExtensionSets {
+		for i, ref := range set.Spec.ExtensionSets {
+			require(fmt.Sprintf("ClusterExtensionSet/%s spec.extensionSets[%d]", set.Metadata.Name, i),
+				v1alpha1.KindClusterExtensionSet, ref.Name)
+		}
+		for i, ref := range set.Spec.Extensions {
+			require(fmt.Sprintf("ClusterExtensionSet/%s spec.extensions[%d]", set.Metadata.Name, i),
+				v1alpha1.KindClusterExtension, ref.Name)
+		}
+	}
+	for _, binding := range state.ClusterExtensionBindings {
+		for i, ref := range binding.Spec.ExtensionSets {
+			require(fmt.Sprintf("ClusterExtensionBinding/%s spec.extensionSets[%d]", binding.Metadata.Name, i),
+				v1alpha1.KindClusterExtensionSet, ref.Name)
+		}
+		for i, ref := range binding.Spec.Extensions {
+			require(fmt.Sprintf("ClusterExtensionBinding/%s spec.extensions[%d]", binding.Metadata.Name, i),
+				v1alpha1.KindClusterExtension, ref.Name)
+		}
+	}
 	for _, env := range state.Environments {
 		for _, entry := range env.Spec.InfraComponents.Proxies {
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%s].componentRef", env.Metadata.Name, entry.Name),
@@ -223,6 +243,15 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	}
 	for _, ocp := range state.ContainerClusters {
 		out[resourceKey{kind: v1alpha1.KindContainerCluster, name: ocp.Metadata.Name}] = true
+	}
+	for _, item := range state.ClusterExtensions {
+		out[resourceKey{kind: v1alpha1.KindClusterExtension, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.ClusterExtensionSets {
+		out[resourceKey{kind: v1alpha1.KindClusterExtensionSet, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.ClusterExtensionBindings {
+		out[resourceKey{kind: v1alpha1.KindClusterExtensionBinding, name: item.Metadata.Name}] = true
 	}
 	return out
 }
@@ -279,7 +308,10 @@ func knownResourceKind(kind string) bool {
 		v1alpha1.KindInfraProvider,
 		v1alpha1.KindInfraComponent,
 		v1alpha1.KindClusterInfra,
-		v1alpha1.KindContainerCluster:
+		v1alpha1.KindContainerCluster,
+		v1alpha1.KindClusterExtension,
+		v1alpha1.KindClusterExtensionSet,
+		v1alpha1.KindClusterExtensionBinding:
 		return true
 	default:
 		return false

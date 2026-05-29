@@ -221,6 +221,8 @@ func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
 		{label: "Create agent ISOs", kinds: []string{workflow.ApplyTaskKindClusterISO}},
 		{label: "Boot nodes", kinds: []string{workflow.ApplyTaskKindNodeBoot}},
 		{label: "Wait for installs", kinds: []string{workflow.ApplyTaskKindInstallWait}},
+		{label: "Apply extensions", kinds: []string{workflow.ApplyTaskKindClusterExtensionApply}},
+		{label: "Wait for extensions", kinds: []string{workflow.ApplyTaskKindClusterExtensionWait}},
 	} {
 		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
 		if ok {
@@ -304,6 +306,8 @@ func applyTaskDisplayLabel(label string) string {
 		return "Boot " + strings.TrimPrefix(label, "boot ")
 	case strings.HasPrefix(label, "wait install "):
 		return "Wait install " + strings.TrimPrefix(label, "wait install ")
+	case strings.HasPrefix(label, "extension "):
+		return "Extension " + strings.TrimPrefix(label, "extension ")
 	default:
 		return label
 	}

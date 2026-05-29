@@ -124,13 +124,20 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindInstallWait]; ok {
 		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindInstallWait)+" "+string(taskStatus))
 	}
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterExtensionApply]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterExtensionApply)+" "+string(taskStatus))
+	}
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterExtensionWait]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterExtensionWait)+" "+string(taskStatus))
+	}
 	parts = append(parts, otherParts...)
 	return status, strings.Join(parts, ", ")
 }
 
 func applyLedgerKnownClusterKind(kind string) bool {
 	switch kind {
-	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait:
+	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait,
+		workflow.ApplyTaskKindClusterExtensionApply, workflow.ApplyTaskKindClusterExtensionWait:
 		return true
 	default:
 		return false
@@ -145,6 +152,10 @@ func applyLedgerTaskKindLabel(kind string) string {
 		return "ISO"
 	case workflow.ApplyTaskKindInstallWait:
 		return "install wait"
+	case workflow.ApplyTaskKindClusterExtensionApply:
+		return "extension apply"
+	case workflow.ApplyTaskKindClusterExtensionWait:
+		return "extension wait"
 	default:
 		return kind
 	}
