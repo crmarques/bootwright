@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionSet
+metadata:
+  name: storage-virtualization-platform
+spec:
+  extensions:
+    - name: openshift-data-foundation-operator
+    - name: openshift-data-foundation-external-ceph
+    - name: openshift-virtualization

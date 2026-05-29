@@ -26,6 +26,9 @@ Current examples:
   VIPs.
 - `baremetal-redfish-postinstall`: the bare-metal Redfish shape plus
   declarative post-install OpenShift Virtualization resources.
+- `baremetal-redfish-odf-external-ceph`: a three-node bare-metal Redfish
+  cluster with Red Hat OpenShift Data Foundation external Ceph storage and
+  OpenShift Virtualization extensions.
 - `baremetal-redfish-virtualized-child`: a bare-metal SNO parent with
   OpenShift Virtualization and a KubeVirt-backed SNO child cluster.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common
