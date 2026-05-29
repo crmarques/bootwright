@@ -37,6 +37,7 @@ type ClusterExtensionOLMSubscription struct {
 	Name                string `yaml:"name" json:"name"`
 	Package             string `yaml:"package" json:"package"`
 	Channel             string `yaml:"channel" json:"channel"`
+	StartingCSV         string `yaml:"startingCSV,omitempty" json:"startingCSV,omitempty"`
 	Source              string `yaml:"source" json:"source"`
 	SourceNamespace     string `yaml:"sourceNamespace" json:"sourceNamespace"`
 	InstallPlanApproval string `yaml:"installPlanApproval" json:"installPlanApproval"`

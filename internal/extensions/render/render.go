@@ -57,6 +57,16 @@ func OLMResources(extension v1alpha1.ClusterExtension) ([]ManifestResource, erro
 		out = append(out, mustResource(object))
 	}
 	sub := olm.Subscription
+	subSpec := map[string]any{
+		"name":                sub.Package,
+		"channel":             sub.Channel,
+		"source":              sub.Source,
+		"sourceNamespace":     sub.SourceNamespace,
+		"installPlanApproval": sub.InstallPlanApproval,
+	}
+	if sub.StartingCSV != "" {
+		subSpec["startingCSV"] = sub.StartingCSV
+	}
 	out = append(out, mustResource(map[string]any{
 		"apiVersion": "operators.coreos.com/v1alpha1",
 		"kind":       "Subscription",
@@ -64,13 +74,7 @@ func OLMResources(extension v1alpha1.ClusterExtension) ([]ManifestResource, erro
 			"name":      sub.Name,
 			"namespace": namespace,
 		},
-		"spec": map[string]any{
-			"name":                sub.Package,
-			"channel":             sub.Channel,
-			"source":              sub.Source,
-			"sourceNamespace":     sub.SourceNamespace,
-			"installPlanApproval": sub.InstallPlanApproval,
-		},
+		"spec": subSpec,
 	}))
 	for _, custom := range olm.CustomResources {
 		out = append(out, mustResource(cloneAnyMap(custom)))

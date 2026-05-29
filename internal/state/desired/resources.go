@@ -73,6 +73,9 @@ func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
 				break
 			}
 			if err != nil {
+				if !mayContainEnvironmentKind(data) {
+					break
+				}
 				return nil, fmt.Errorf("decode %s document %d: %w", file, index, err)
 			}
 			if isZeroNode(node) {
@@ -94,6 +97,24 @@ func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
 		}
 	}
 	return envs, nil
+}
+
+func mayContainEnvironmentKind(data []byte) bool {
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "kind:") {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(line, "kind:"))
+		if i := strings.Index(value, "#"); i >= 0 {
+			value = strings.TrimSpace(value[:i])
+		}
+		value = strings.Trim(value, `"'`)
+		if value == v1alpha1.KindEnvironment {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveEnvironmentResourcePath(env v1alpha1.Environment, index int, value string) (string, error) {

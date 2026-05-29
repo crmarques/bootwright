@@ -395,6 +395,7 @@ spec:
       name: hco-operatorhub
       package: kubevirt-hyperconverged
       channel: stable
+      startingCSV: kubevirt-hyperconverged-operator.v4.21.8
       source: redhat-operators
       sourceNamespace: openshift-marketplace
       installPlanApproval: Automatic
@@ -503,6 +504,9 @@ Rules:
 - `olm-operator` requires `olm.namespace.name` and a complete subscription:
   `name`, `package`, `channel`, `source`, `sourceNamespace`, and
   `installPlanApproval`.
+- `subscription.startingCSV`, when set, is rendered to
+  `Subscription.spec.startingCSV` to request a specific catalog CSV while still
+  declaring the channel.
 - `installPlanApproval` is `Automatic` or `Manual`.
 - If `operatorGroup` is set, `operatorGroup.name` is required.
 - `customResources[]` may be empty. When present, each custom resource must

@@ -14,6 +14,7 @@ import (
 	extensionoc "github.com/crmarques/bootwright/internal/extensions/oc"
 	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 	extensionrender "github.com/crmarques/bootwright/internal/extensions/render"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func TestBindingPlansExpandSetsBeforeDirectExtensionsAndDeduplicate(t *testing.T) {
@@ -65,6 +66,81 @@ func TestBindingPlansExpandSetsBeforeDirectExtensionsAndDeduplicate(t *testing.T
 	want := []string{"a", "b", "c", "d"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expanded extensions = %v, want %v", got, want)
+	}
+}
+
+func TestOLMResourcesRenderStartingCSV(t *testing.T) {
+	extension := testExtension("virt")
+	extension.Spec.OLM.Subscription.StartingCSV = "kubevirt-hyperconverged-operator.v4.21.8"
+
+	resources, err := extensionrender.OLMResources(extension)
+	if err != nil {
+		t.Fatalf("OLMResources: %v", err)
+	}
+	for _, resource := range resources {
+		if resource.Kind != "Subscription" {
+			continue
+		}
+		spec, ok := resource.Object["spec"].(map[string]any)
+		if !ok {
+			t.Fatalf("Subscription spec = %#v, want map", resource.Object["spec"])
+		}
+		if got := spec["startingCSV"]; got != "kubevirt-hyperconverged-operator.v4.21.8" {
+			t.Fatalf("startingCSV = %#v, want kubevirt-hyperconverged-operator.v4.21.8", got)
+		}
+		return
+	}
+	t.Fatal("OLMResources did not render Subscription")
+}
+
+func TestBaremetalFleetPostinstallExamplePlansExtensions(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{
+		filepath.Join("..", "..", "..", "examples", "baremetal-redfish-fleet-postinstall"),
+	})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	plans, err := extensionplan.BindingPlans(state)
+	if err != nil {
+		t.Fatalf("BindingPlans: %v", err)
+	}
+	if len(plans) != 2 {
+		t.Fatalf("plans = %d, want 2", len(plans))
+	}
+	for i, plan := range plans {
+		wantCluster := []string{"demo-ocp-a", "demo-ocp-b"}[i]
+		if plan.Cluster != wantCluster {
+			t.Fatalf("plans[%d].Cluster = %q, want %q", i, plan.Cluster, wantCluster)
+		}
+		var gotExtensions []string
+		for _, extension := range plan.Extensions {
+			gotExtensions = append(gotExtensions, extension.Name)
+		}
+		wantExtensions := []string{"openshift-virtualization", "openshift-gitops"}
+		if !reflect.DeepEqual(gotExtensions, wantExtensions) {
+			t.Fatalf("plans[%d] extensions = %v, want %v", i, gotExtensions, wantExtensions)
+		}
+	}
+	extensionsByName := map[string]v1alpha1.ClusterExtension{}
+	for _, extension := range state.ClusterExtensions {
+		extensionsByName[extension.Metadata.Name] = extension
+	}
+	virt, ok := extensionsByName["openshift-virtualization"]
+	if !ok {
+		t.Fatal("missing openshift-virtualization extension")
+	}
+	if got := virt.Spec.OLM.Subscription.Channel; got != "stable" {
+		t.Fatalf("virtualization channel = %q, want stable", got)
+	}
+	if got := virt.Spec.OLM.Subscription.StartingCSV; got != "kubevirt-hyperconverged-operator.v4.21.8" {
+		t.Fatalf("virtualization startingCSV = %q, want kubevirt-hyperconverged-operator.v4.21.8", got)
+	}
+	gitops, ok := extensionsByName["openshift-gitops"]
+	if !ok {
+		t.Fatal("missing openshift-gitops extension")
+	}
+	if got := gitops.Spec.OLM.Subscription.Channel; got != "gitops-1.20" {
+		t.Fatalf("gitops channel = %q, want gitops-1.20", got)
 	}
 }
 

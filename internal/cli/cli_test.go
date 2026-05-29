@@ -588,7 +588,7 @@ func TestContextInitYesPreservesImportedInputsWhenReplacementInvalid(t *testing.
 	}
 }
 
-func TestContextInitYesPreservesImportedInputsWhenUnselectedReplacementInvalid(t *testing.T) {
+func TestContextInitYesAcceptsUnselectedInvalidFilesWithResourceSelection(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
@@ -617,21 +617,18 @@ spec:
 		t.Fatal(err)
 	}
 	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
-	if code == 0 {
-		t.Fatalf("context init --yes unexpectedly accepted invalid unselected replacement:\n%s", stdout)
-	}
-	if !strings.Contains(stderr, "field retiredField not found") {
-		t.Fatalf("stderr missing strict decode error: %q", stderr)
+	if code != 0 {
+		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	after, err := os.ReadFile(importedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(after) != string(before) {
-		t.Fatalf("invalid replacement changed existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
+	if string(after) == string(before) {
+		t.Fatalf("replacement did not change existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
 	}
-	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); !os.IsNotExist(err) {
-		t.Fatalf("invalid replacement imported unselected.yaml: %v", err)
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); err != nil {
+		t.Fatalf("unselected.yaml was not imported for future editing: %v", err)
 	}
 }
 
@@ -714,7 +711,7 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 	}
 }
 
-func TestContextUpdatePreservesImportedInputsWhenUnselectedReplacementInvalid(t *testing.T) {
+func TestContextUpdateAcceptsUnselectedInvalidFilesWithResourceSelection(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
@@ -751,21 +748,18 @@ spec:
 		t.Fatal(err)
 	}
 	stdout, stderr, code = runCLI(t, "context", "update", "test", "-f", replacement)
-	if code == 0 {
-		t.Fatalf("context update unexpectedly accepted invalid unselected replacement:\n%s", stdout)
-	}
-	if !strings.Contains(stderr, `Host/spare-host spec.ssh.keyRef "missing-secret" is not declared`) {
-		t.Fatalf("stderr missing broken reference error: %q", stderr)
+	if code != 0 {
+		t.Fatalf("context update exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	after, err := os.ReadFile(importedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(after) != string(before) {
-		t.Fatalf("invalid update changed existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
+	if string(after) == string(before) {
+		t.Fatalf("update did not change existing environment.yaml\nbefore:\n%s\nafter:\n%s", before, after)
 	}
-	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); !os.IsNotExist(err) {
-		t.Fatalf("invalid update imported unselected.yaml: %v", err)
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); err != nil {
+		t.Fatalf("unselected.yaml was not imported for future editing: %v", err)
 	}
 }
 

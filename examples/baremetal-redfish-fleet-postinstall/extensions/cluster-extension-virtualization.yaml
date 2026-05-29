@@ -21,6 +21,7 @@ spec:
       name: hco-operatorhub
       package: kubevirt-hyperconverged
       channel: stable
+      startingCSV: kubevirt-hyperconverged-operator.v4.21.8
       source: redhat-operators
       sourceNamespace: openshift-marketplace
       installPlanApproval: Automatic

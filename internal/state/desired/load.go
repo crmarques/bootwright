@@ -15,9 +15,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// LoadNormalizeValidate is the canonical entry point used by the CLI.
-// It validates every imported input file, then returns the effective
-// selected State.
+// LoadNormalizeValidate is the canonical entry point used by the CLI. It
+// validates the effective selected State. When an Environment declares
+// spec.resources, only that allow-listed input set is effective.
 func LoadNormalizeValidate(paths []string) (v1alpha1.State, error) {
 	return LoadNormalizeValidateInputFiles(paths)
 }
@@ -25,14 +25,6 @@ func LoadNormalizeValidate(paths []string) (v1alpha1.State, error) {
 func LoadNormalizeValidateInputFiles(paths []string) (v1alpha1.State, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
-		return v1alpha1.State{}, err
-	}
-	allState, err := loadFiles(files)
-	if err != nil {
-		return v1alpha1.State{}, err
-	}
-	Normalize(&allState)
-	if err := Validate(allState); err != nil {
 		return v1alpha1.State{}, err
 	}
 	state, err := loadSelectedFiles(files)

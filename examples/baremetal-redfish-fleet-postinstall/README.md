@@ -6,8 +6,7 @@ Virtualization and OpenShift GitOps extensions to both clusters.
 
 The layout keeps fleet-wide selection in `environment.yaml`, shared services
 and provider inventory in `shared/`, cluster-specific install intent in one
-directory per cluster, and reusable extension intent in top-level
-`ClusterExtension` resources:
+directory per cluster, and reusable extension intent under `extensions/`:
 
 | Path | Owns |
 | --- | --- |
@@ -24,6 +23,7 @@ Both clusters share `fleet-machine-net`, `artifact-server`, and
 VIPs, and static node addresses.
 
 The extension phase runs after each cluster install is complete. OpenShift
-Virtualization uses the documented OpenShift 4.21-compatible `stable` channel,
-which selects the supported 4.21 OpenShift Virtualization stream. OpenShift
-GitOps uses the specific `gitops-1.20` channel.
+Virtualization uses the documented OpenShift 4.21-compatible `stable` channel
+and pins `kubevirt-hyperconverged-operator.v4.21.8` as the starting CSV for the
+current 4.21 stable z-stream. OpenShift GitOps uses the specific `gitops-1.20`
+channel.

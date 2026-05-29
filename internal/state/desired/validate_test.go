@@ -1161,11 +1161,10 @@ func TestEnvironmentResourcesSupportSubdirectories(t *testing.T) {
 	}
 }
 
-func TestEnvironmentResourcesDoNotHideInvalidImportedFiles(t *testing.T) {
+func TestEnvironmentResourcesIgnoreUnselectedInvalidFiles(t *testing.T) {
 	cases := []struct {
 		name           string
 		unselectedYAML string
-		wantSubstring  string
 	}{
 		{
 			name: "unknown-field",
@@ -1176,7 +1175,6 @@ metadata:
 spec:
   retiredField: true
 `,
-			wantSubstring: "field retiredField not found",
 		},
 		{
 			name: "malformed-yaml",
@@ -1184,7 +1182,6 @@ spec:
 kind: Host
 metadata: [bad
 `,
-			wantSubstring: "unselected.yaml document 1",
 		},
 		{
 			name: "broken-reference",
@@ -1203,7 +1200,15 @@ spec:
   capabilities:
     - container-runtime
 `,
-			wantSubstring: `Host/spare-host spec.ssh.keyRef "missing-secret" is not declared`,
+		},
+		{
+			name: "unsupported-kind",
+			unselectedYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: old
+spec: {}
+`,
 		},
 	}
 	for _, tc := range cases {
@@ -1213,12 +1218,12 @@ spec:
 			files["environment.yaml"] = newEnvironmentYAMLWithResources("hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml")
 			files["unselected.yaml"] = tc.unselectedYAML
 			writeFiles(t, dir, files)
-			_, err := LoadNormalizeValidateInputFiles([]string{dir})
-			if err == nil {
-				t.Fatal("expected invalid unselected input to fail")
+			state, err := LoadNormalizeValidateInputFiles([]string{dir})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidateInputFiles: %v", err)
 			}
-			if !strings.Contains(err.Error(), tc.wantSubstring) {
-				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			if got := len(state.Hosts); got != 1 {
+				t.Fatalf("Hosts = %d, want only selected host", got)
 			}
 		})
 	}
