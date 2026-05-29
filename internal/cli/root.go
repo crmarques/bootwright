@@ -57,6 +57,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 
 	addWorkflow(root,
 		newContextCmd(stdin, stdout, stderr),
+		newClusterCmd(stdout),
 		newExampleCmd(stdout),
 		newPrintEnvCmd(stdout),
 		newSecretCmd(stdin, stdout, stderr),

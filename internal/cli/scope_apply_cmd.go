@@ -222,7 +222,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			printBundlePath(stdout, bundleResult.Dir)
 		}
 		if plan.targetsClusters {
-			printClusterAccess(stdout, plan.state, renderResult, ledger)
+			printClusterAccess(stdout, plan.state, renderResult, ctx.SecretsDir, ledger)
 		}
 		return nil
 	}

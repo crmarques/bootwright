@@ -150,6 +150,9 @@ bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright context current
+bootwright cluster list
+bootwright cluster access
+bootwright cluster access --cluster demo-ocp
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
@@ -175,15 +178,17 @@ bootwright destroy infra --yes
 bootwright destroy infra --scope artifact-server --yes
 ```
 
-The CLI is verb-first; every subcommand picks a target. Provisioning
-targets are `bastion`, `infra`, `cluster`, and `all`. Verbs are
-`context`, `example`, `print-env`, `secret`, `check`, `status`, `render`, `apply`,
-`destroy`, and `version`. The formal CLI contract lives in
+The CLI is organized around workflow command groups. Provisioning targets are
+`bastion`, `infra`, `cluster`, and `all`. Top-level groups are
+`context`, `cluster`, `example`, `print-env`, `secret`, `check`, `status`,
+`render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports. Single-cluster apply runs stream native
+intentionally prints raw shell exports. `bootwright cluster access` prints
+URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
+never prints kubeconfig or password bytes. Single-cluster apply runs stream native
 Ansible output; multi-cluster apply runs keep Ansible output in per-task and
 per-cluster logs while the terminal shows cluster log paths and high-level
 progress. `bootwright apply cluster` installs selected clusters and applies

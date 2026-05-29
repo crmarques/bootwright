@@ -231,6 +231,8 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright render installer --output json` | Supported | Writes context render output |
+| `bootwright cluster list --output json` | Supported | Read-only cluster access status |
+| `bootwright cluster access --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |

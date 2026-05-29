@@ -99,6 +99,12 @@ individual files mode `0600`.
 | Print generated SSH public key | `bootwright secret show --name <name> --part public` |
 | Delete local material | `bootwright secret delete <name> --yes` |
 
+After a successful cluster install, Bootwright stores the kubeadmin password as
+`<cluster>-kubeadmin-password` in the current context secrets directory.
+`bootwright cluster access` shows the API and console URLs, kubeconfig path,
+password secret name, and the `bootwright secret show` command to retrieve the
+password without printing secret bytes by default.
+
 `bootwright secret set` writes into the current context secrets
 directory, so context-local entries can be declared as empty keys.
 `bootwright secret generate` only materializes entries declared as `generated:`.

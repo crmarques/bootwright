@@ -1146,6 +1146,11 @@ bootwright context list
 bootwright context use lab
 bootwright context current [--short]
 bootwright context delete lab [--purge --yes]
+bootwright cluster list
+bootwright cluster list --output json
+bootwright cluster access
+bootwright cluster access --cluster managed-01
+bootwright cluster access --output json
 bootwright print-env [--sensitive]
 bootwright secret list
 bootwright secret list --output json
@@ -1203,6 +1208,12 @@ must emit only JSON on stdout. Shell-export commands such as
 `bootwright print-env` intentionally emit only `export ...` lines. `secret
 show` intentionally emits raw secret bytes on stdout and is a sensitive
 raw-output exception.
+`bootwright cluster list` and `bootwright cluster access` read only local
+context state. They print cluster API and console URLs, local kubeconfig paths,
+the shell `KUBECONFIG=...` prefix, kubeadmin password secret names, local
+password file paths, and the `bootwright secret show` command operators can run
+when they need the password. They must not print kubeconfig contents,
+kubeadmin password bytes, tokens, or other cluster credential material.
 `check syntax -f <path>` loads YAML files or directories directly and must not
 require or mutate the current context. It is the pre-import validation path for
 generated examples, copied examples, and CI jobs that review authored desired

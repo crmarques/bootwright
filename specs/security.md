@@ -131,6 +131,10 @@ Generated output boundaries are part of the safety contract:
 - The generated OpenShift kubeadmin password is copied into
   `/var/lib/bootwright/contexts/<context>/secrets/<cluster>-kubeadmin-password`
   with mode `0600` after a successful agent install.
+- Cluster access inventory commands may print cluster API and console URLs,
+  local kubeconfig paths, kubeadmin password secret names, local password file
+  paths, and retrieval commands, but must not print kubeconfigs, kubeadmin
+  passwords, tokens, or other secret bytes.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined
   `openshift-install` configs and optional `openshift/` manifests, under

@@ -11,38 +11,62 @@ import (
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/fs"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-type clusterAccessSummary struct {
-	Name                  string
-	KubeconfigPath        string
-	KubeContextCommand    string
-	APIURL                string
-	ConsoleURL            string
-	KubeadminPasswordPath string
+type clusterAccessArtifact struct {
+	Path    string `json:"path"`
+	Present bool   `json:"present"`
+	Detail  string `json:"detail,omitempty"`
 }
 
-func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger) {
-	summaries := clusterAccessSummaries(state, result, ledger)
+type clusterAccessSummary struct {
+	Name                     string                `json:"name"`
+	InstallMode              string                `json:"installMode"`
+	InstallMethod            string                `json:"installMethod"`
+	KubeconfigPath           string                `json:"kubeconfigPath"`
+	KubeContextCommand       string                `json:"kubeContextCommand"`
+	APIURL                   string                `json:"apiURL"`
+	ConsoleURL               string                `json:"consoleURL"`
+	KubeadminUsername        string                `json:"kubeadminUsername"`
+	KubeadminPasswordSecret  string                `json:"kubeadminPasswordSecret"`
+	KubeadminPasswordPath    string                `json:"kubeadminPasswordPath"`
+	KubeadminPasswordCommand string                `json:"kubeadminPasswordCommand"`
+	Kubeconfig               clusterAccessArtifact `json:"kubeconfig"`
+	KubeadminPassword        clusterAccessArtifact `json:"kubeadminPassword"`
+	Ready                    bool                  `json:"ready"`
+}
+
+func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, secretsDir string, ledger workflow.RunLedger) {
+	summaries := clusterAccessSummariesForApply(state, result, secretsDir, ledger)
 	if len(summaries) == 0 {
 		return
 	}
+	printClusterAccessContinuation(stdout, summaries)
+}
+
+func printClusterAccessContinuation(stdout io.Writer, summaries []clusterAccessSummary) {
 	p := cliout.NewContinuation(stdout)
 	p.Section("Cluster access")
 	for _, summary := range summaries {
 		p.List([]cliout.Item{{Label: "cluster " + summary.Name}})
 		p.Fields([]cliout.Field{
-			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
-			{Key: "Kube context", Value: summary.KubeContextCommand},
 			{Key: "API", Value: summary.APIURL},
 			{Key: "Console", Value: summary.ConsoleURL},
-			{Key: "Credentials", Value: "user kubeadmin; password file " + summary.KubeadminPasswordPath},
+			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
+			{Key: "Kube context", Value: summary.KubeContextCommand},
+			{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
+			{Key: "Password secret", Value: summary.KubeadminPasswordSecret},
+			{Key: "Password file", Value: summary.KubeadminPasswordPath},
+			{Key: "Show password", Value: summary.KubeadminPasswordCommand},
 		})
+		p.Status(accessArtifactStatus(summary.Kubeconfig), "kubeconfig", accessArtifactDetail(summary.Kubeconfig))
+		p.Status(accessArtifactStatus(summary.KubeadminPassword), "kubeadmin password", accessArtifactDetail(summary.KubeadminPassword))
 	}
 }
 
-func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger workflow.RunLedger) []clusterAccessSummary {
+func clusterAccessSummariesForApply(state v1alpha1.State, result render.Result, secretsDir string, ledger workflow.RunLedger) []clusterAccessSummary {
 	if ledger.Status != workflow.RunStatusOK {
 		return nil
 	}
@@ -55,38 +79,91 @@ func clusterAccessSummaries(state v1alpha1.State, result render.Result, ledger w
 	if len(successfulClusters) == 0 {
 		return nil
 	}
-	assets := map[string]render.InstallerAsset{}
-	for _, asset := range result.InstallerAssets {
-		assets[asset.ClusterName] = asset
-	}
-	names := make([]string, 0, len(successfulClusters))
-	for _, cluster := range state.ContainerClusters {
-		if successfulClusters[cluster.Metadata.Name] {
-			names = append(names, cluster.Metadata.Name)
+	summaries := clusterAccessSummariesFromAssets(state, result.InstallerAssets, secretsDir)
+	out := make([]clusterAccessSummary, 0, len(successfulClusters))
+	for _, summary := range summaries {
+		if successfulClusters[summary.Name] {
+			out = append(out, summary)
 		}
+	}
+	return out
+}
+
+func clusterAccessSummariesFromAssets(state v1alpha1.State, assets []render.InstallerAsset, secretsDir string) []clusterAccessSummary {
+	assetsByName := map[string]render.InstallerAsset{}
+	for _, asset := range assets {
+		assetsByName[asset.ClusterName] = asset
+	}
+	names := make([]string, 0, len(state.ContainerClusters))
+	clustersByName := map[string]v1alpha1.ContainerCluster{}
+	for _, cluster := range state.ContainerClusters {
+		names = append(names, cluster.Metadata.Name)
+		clustersByName[cluster.Metadata.Name] = cluster
 	}
 	sort.Strings(names)
+	baseDomain := clusterAccessBaseDomain(state)
 	out := make([]clusterAccessSummary, 0, len(names))
 	for _, name := range names {
-		asset, ok := assets[name]
+		cluster := clustersByName[name]
+		asset, ok := assetsByName[name]
 		if !ok {
-			continue
-		}
-		baseDomain := clusterAccessBaseDomain(state)
-		if baseDomain == "" {
-			continue
+			asset = render.InstallerAsset{ClusterName: name, WorkDir: filepath.Join(render.RuntimeRelativeDir, name)}
 		}
 		kubeconfigPath := filepath.Join(asset.WorkDir, "auth", "kubeconfig")
+		passwordSecret := name + "-kubeadmin-password"
+		passwordPath := filepath.Join(secretsDir, passwordSecret)
+		kubeconfig := clusterAccessFileStatus(kubeconfigPath)
+		password := clusterAccessFileStatus(passwordPath)
 		out = append(out, clusterAccessSummary{
-			Name:                  name,
-			KubeconfigPath:        kubeconfigPath,
-			KubeContextCommand:    "KUBECONFIG=" + workflow.ShellQuote([]string{kubeconfigPath}),
-			APIURL:                fmt.Sprintf("https://api.%s.%s:6443", name, baseDomain),
-			ConsoleURL:            fmt.Sprintf("https://console-openshift-console.apps.%s.%s", name, baseDomain),
-			KubeadminPasswordPath: filepath.Join(asset.WorkDir, "auth", "kubeadmin-password"),
+			Name:                     name,
+			InstallMode:              v1alpha1.InstallMode(cluster),
+			InstallMethod:            cluster.Spec.Install.Method,
+			KubeconfigPath:           kubeconfigPath,
+			KubeContextCommand:       "KUBECONFIG=" + workflow.ShellQuote([]string{kubeconfigPath}),
+			APIURL:                   clusterAPIURL(name, baseDomain),
+			ConsoleURL:               clusterConsoleURL(name, baseDomain),
+			KubeadminUsername:        "kubeadmin",
+			KubeadminPasswordSecret:  passwordSecret,
+			KubeadminPasswordPath:    passwordPath,
+			KubeadminPasswordCommand: "bootwright secret show --name " + passwordSecret,
+			Kubeconfig:               kubeconfig,
+			KubeadminPassword:        password,
+			Ready:                    kubeconfig.Present && password.Present,
 		})
 	}
 	return out
+}
+
+func clusterAccessFileStatus(path string) clusterAccessArtifact {
+	exists, err := safefs.RegularFileExists(path)
+	if err != nil {
+		return clusterAccessUnavailable(path, err)
+	}
+	if !exists {
+		return clusterAccessUnavailable(path, nil)
+	}
+	return clusterAccessArtifact{Path: path, Present: true}
+}
+
+func clusterAccessUnavailable(path string, err error) clusterAccessArtifact {
+	if err == nil {
+		return clusterAccessArtifact{Path: path, Present: false, Detail: path + " missing"}
+	}
+	return clusterAccessArtifact{Path: path, Present: false, Detail: fmt.Sprintf("%v", err)}
+}
+
+func clusterAPIURL(name, baseDomain string) string {
+	if baseDomain == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://api.%s.%s:6443", name, baseDomain)
+}
+
+func clusterConsoleURL(name, baseDomain string) string {
+	if baseDomain == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://console-openshift-console.apps.%s.%s", name, baseDomain)
 }
 
 func clusterAccessBaseDomain(state v1alpha1.State) string {
