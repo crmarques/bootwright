@@ -70,8 +70,8 @@ func TestAllOnEveryDirectoryIsTightenedTo0700(t *testing.T) {
 
 	fs := &recordingFS{}
 	renderedDir := "/synthetic/rendered"
-	runtimeDir := "/synthetic/runtime-root"
-	if _, err := render.AllOn(fs, renderedDir, runtimeDir, "/synthetic/secrets", state); err != nil {
+	clustersDir := "/synthetic/clusters"
+	if _, err := render.AllOn(fs, renderedDir, clustersDir, "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -112,7 +112,7 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	if _, err := render.AllOn(fs, "/synthetic/rendered", "/synthetic/runtime-root", "/synthetic/secrets", state); err != nil {
+	if _, err := render.AllOn(fs, "/synthetic/rendered", "/synthetic/clusters", "/synthetic/secrets", state); err != nil {
 		t.Fatalf("AllOn: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func TestAllOnEveryFileWrittenAt0600(t *testing.T) {
 	}
 }
 
-func TestResolveInstallerWritesEffectiveFilesUnderRuntimeDir(t *testing.T) {
+func TestResolveInstallerWritesEffectiveFilesUnderClusterRuntimeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	sshDir := filepath.Join(home, ".ssh")
@@ -165,9 +165,8 @@ func TestResolveInstallerWritesEffectiveFilesUnderRuntimeDir(t *testing.T) {
 	}
 
 	fs := &recordingFS{}
-	renderedDir := "/synthetic/rendered"
-	runtimeDir := "/var/lib/bootwright/contexts/lab/runtime"
-	if _, err := render.ResolveInstallerOn(fs, renderedDir, runtimeDir, secretsDir, state); err != nil {
+	clustersDir := "/var/lib/bootwright/contexts/lab/clusters"
+	if _, err := render.ResolveInstallerOn(fs, clustersDir, secretsDir, state); err != nil {
 		t.Fatalf("ResolveInstallerOn: %v", err)
 	}
 
@@ -179,16 +178,16 @@ func TestResolveInstallerWritesEffectiveFilesUnderRuntimeDir(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "install-config.yaml"),
-		filepath.Join(runtimeDir, render.RuntimeRelativeDir, "sno-libvirt", "agent-config.yaml"),
+		filepath.Join(clustersDir, "sno-libvirt", "runtime", render.RuntimeRelativeDir, "install-config.yaml"),
+		filepath.Join(clustersDir, "sno-libvirt", "runtime", render.RuntimeRelativeDir, "agent-config.yaml"),
 	} {
 		if !slices.Contains(paths, want) {
 			t.Fatalf("effective installer writes = %v, missing %s", paths, want)
 		}
 	}
 	for _, forbidden := range []string{
-		filepath.Join(renderedDir, render.RuntimeRelativeDir, "sno-libvirt", "install-config.yaml"),
-		filepath.Join(renderedDir, render.RuntimeRelativeDir, "sno-libvirt", "agent-config.yaml"),
+		filepath.Join(clustersDir, "sno-libvirt", "rendered", render.RuntimeRelativeDir, "install-config.yaml"),
+		filepath.Join(clustersDir, "sno-libvirt", "rendered", render.RuntimeRelativeDir, "agent-config.yaml"),
 	} {
 		if slices.Contains(paths, forbidden) {
 			t.Fatalf("effective installer output leaked under rendered dir: %s", forbidden)

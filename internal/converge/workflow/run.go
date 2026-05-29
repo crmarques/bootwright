@@ -28,21 +28,22 @@ import (
 // desired state. Callers pre-resolve every field (no defaults, no env
 // lookup) so the function is deterministic from its inputs alone.
 type RunOptions struct {
-	State         v1alpha1.State
-	RenderedDir   string
-	RuntimeDir    string
-	RunsDir       string
-	RenderDir     string
-	SecretsDir    string
-	ManagedDir    string
-	Executable    string
-	BundleDir     string
-	Playbook      string
-	Limit         string
-	Forks         int
-	ExtraVarPairs []string
-	ArtifactsRoot string
-	OutputLogPath string
+	State              v1alpha1.State
+	RenderedDir        string
+	ClustersDir        string
+	RunsDir            string
+	RenderDir          string
+	SecretsDir         string
+	ManagedServicesDir string
+	ProviderStateDir   string
+	Executable         string
+	BundleDir          string
+	Playbook           string
+	Limit              string
+	Forks              int
+	ExtraVarPairs      []string
+	ArtifactsRoot      string
+	OutputLogPath      string
 	// ArtifactsBaseName names the per-run subdirectory under the render
 	// artifacts root, e.g. "preflight-infra" or "infra-destroy".
 	ArtifactsBaseName  string
@@ -52,9 +53,8 @@ type RunOptions struct {
 	UseControllingTTY  bool
 	DryRun             bool
 	// ResolveInstaller, when true and the run is not a dry-run, writes
-	// per-cluster effective installer inputs with real secret material
-	// inlined under RuntimeDir/installer/<cluster>/
-	// before invoking ansible-playbook. Required for any apply path that
+	// per-cluster effective installer inputs with real secret material before
+	// invoking ansible-playbook. Required for any apply path that
 	// targets the openshift install_agent role.
 	ResolveInstaller bool
 	// Label is included in the dry-run echo line, e.g. "infra apply".
@@ -91,8 +91,8 @@ type Reporter interface {
 // already wired by the caller. Accepts the ansible.Runner interface so
 // tests can substitute a fake that records calls without exec'ing.
 func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter Reporter) (RunResult, error) {
-	if strings.TrimSpace(opts.RuntimeDir) == "" {
-		return RunResult{}, errors.New("runtime dir is required")
+	if strings.TrimSpace(opts.ClustersDir) == "" {
+		return RunResult{}, errors.New("clusters dir is required")
 	}
 	if strings.TrimSpace(opts.RenderedDir) == "" {
 		return RunResult{}, errors.New("rendered dir is required")
@@ -100,8 +100,11 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if strings.TrimSpace(opts.RunsDir) == "" {
 		return RunResult{}, errors.New("runs dir is required")
 	}
-	if strings.TrimSpace(opts.ManagedDir) == "" {
-		return RunResult{}, errors.New("managed dir is required")
+	if strings.TrimSpace(opts.ManagedServicesDir) == "" {
+		return RunResult{}, errors.New("managed services dir is required")
+	}
+	if strings.TrimSpace(opts.ProviderStateDir) == "" {
+		return RunResult{}, errors.New("provider state dir is required")
 	}
 	if reporter != nil {
 		reporter.RenderStart()
@@ -110,7 +113,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if renderDir == "" {
 		renderDir = opts.RenderedDir
 	}
-	result, err := render.All(renderDir, opts.RuntimeDir, opts.SecretsDir, opts.State)
+	result, err := render.All(renderDir, opts.ClustersDir, opts.SecretsDir, opts.State)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -118,7 +121,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		if reporter != nil {
 			reporter.ResolveInstallerStart()
 		}
-		if _, err := render.ResolveInstaller(opts.RenderedDir, opts.RuntimeDir, opts.SecretsDir, opts.State); err != nil {
+		if _, err := render.ResolveInstaller(opts.ClustersDir, opts.SecretsDir, opts.State); err != nil {
 			return RunResult{Render: result}, err
 		}
 	}
@@ -130,10 +133,11 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		Executable:         opts.Executable,
 		BundleDir:          opts.BundleDir,
 		RenderedDir:        opts.RenderedDir,
-		RuntimeDir:         opts.RuntimeDir,
+		ClustersDir:        opts.ClustersDir,
 		RunsDir:            opts.RunsDir,
 		SecretsDir:         opts.SecretsDir,
-		ManagedDir:         opts.ManagedDir,
+		ManagedServicesDir: opts.ManagedServicesDir,
+		ProviderStateDir:   opts.ProviderStateDir,
 		InventoryPath:      result.InventoryPath,
 		VarsPath:           result.VarsPath,
 		Playbook:           opts.Playbook,
@@ -223,14 +227,14 @@ func LimitMatchesNoHosts(limit string, state v1alpha1.State) bool {
 // RenderOnly executes the render half of a Run without producing a
 // RunSpec or invoking ansible. Used by `bootwright render installer` and
 // other read-only previews.
-func RenderOnly(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.All(renderedDir, runtimeDir, secretsDir, state)
+func RenderOnly(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.All(renderedDir, clustersDir, secretsDir, state)
 }
 
 // ResolveInstaller renders effective OpenShift installer inputs with secret
 // material inlined. Used by `bootwright render installer --sensitive`.
-func ResolveInstaller(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
-	return render.ResolveInstaller(renderedDir, runtimeDir, secretsDir, state)
+func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.ResolveInstaller(clustersDir, secretsDir, state)
 }
 
 func RenderToolInputs(outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {

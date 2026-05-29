@@ -105,7 +105,7 @@ If cases are copied and edited under another parent directory, pass that parent
 as `E2E_DIR=<path>` to the `make` targets.
 
 Reviewable generated output lives under
-`/var/lib/bootwright/contexts/<context>/rendered/`, secret-inlined runtime
-output under `runtime/`, host/service-managed files under `managed/`, and
-apply ledgers and logs under `runs/`. Failed phases print the relevant log
-path.
+`/var/lib/bootwright/contexts/<context>/rendered/`, cluster runtime output
+under `clusters/<cluster>/runtime/`, managed service files under
+`managed-services/`, provider state under `provider-state/`, and apply ledgers
+under `runs/`. Failed phases print the relevant log path.

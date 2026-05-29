@@ -2,9 +2,9 @@
 
 ## Symptom
 
-- Apply appears stuck at `Fetch generated agent ISO to local runtime state`.
+- Apply appears stuck at `Fetch generated agent ISO to local cluster runtime state`.
 - `Create agent ISO` completed quickly.
-- `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/.openshift_install.log`
+- `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/.openshift_install.log`
   has no new lines while the fetch task is active.
 
 ## Cause
@@ -18,4 +18,4 @@ that path is slow, memory-heavy, and silent enough to look hung.
 Do not fetch large generated artifacts with become. Copy the root-owned artifact
 to a private temporary file owned by the SSH connection user, run `fetch` with
 `become: false`, and remove the temporary file in an `always` cleanup block.
-Keep both the temporary file and the local runtime copy mode `0600`.
+Keep both the temporary file and the local cluster runtime copy mode `0600`.

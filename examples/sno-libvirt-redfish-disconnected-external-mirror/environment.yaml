@@ -6,12 +6,12 @@ spec:
   baseDomain: example.test
 
   resources:
-    - hosts.yaml
-    - networks.yaml
-    - provider.yaml
-    - infra-component.yaml
-    - cluster-infra.yaml
-    - container-cluster.yaml
+    - shared/hosts.yaml
+    - shared/networks.yaml
+    - shared/provider.yaml
+    - shared/infra-component.yaml
+    - clusters/sno-libvirt/cluster-infra.yaml
+    - clusters/sno-libvirt/container-cluster.yaml
 
   secrets:
     openshift-pull-secret: null

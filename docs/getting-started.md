@@ -60,14 +60,14 @@ child OpenShift cluster hosted on that parent virtualization layer.
 The copied directory contains desired-state files for the relevant kinds:
 
 ```text
-environment.yaml       Environment
-hosts.yaml             Host
-provider.yaml          InfraProvider
-infra-component.yaml   InfraComponent shared infra services
-networks.yaml          NetworkConfig
-cluster-infra.yaml     ClusterInfra
-container-cluster.yaml ContainerCluster
-cluster-extension-*.yaml optional ClusterExtension resources
+environment.yaml                  Environment
+shared/hosts.yaml                        Host
+shared/provider.yaml                     InfraProvider
+shared/infra-component.yaml              InfraComponent shared infra services
+shared/networks.yaml                     NetworkConfig
+clusters/<cluster>/cluster-infra.yaml    ClusterInfra
+clusters/<cluster>/container-cluster.yaml ContainerCluster
+extensions/cluster-extension-*.yaml      optional ClusterExtension resources
 ```
 
 Edit these first:
@@ -78,11 +78,11 @@ Edit these first:
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
   external or managed proxy, DNS, artifact, registry, or NTP services.
 - `Host.spec.addresses[]` and SSH key references for provider/service hosts.
-- Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`.
-- Machine CIDRs and NMState templates in `networks.yaml`.
-- Endpoint VIP ownership and per-machine IP overlays in `cluster-infra.yaml`.
+- Physical MACs, BMC addresses, or virtual machine profiles in `shared/provider.yaml`.
+- Machine CIDRs and NMState templates in `shared/networks.yaml`.
+- Endpoint VIP ownership and per-machine IP overlays in `clusters/<cluster>/cluster-infra.yaml`.
 - OpenShift or OKD release, install mode, and node bindings in
-  `container-cluster.yaml`.
+  `clusters/<cluster>/container-cluster.yaml`.
 
 Provider swaps should leave `Environment` and `ContainerCluster` unchanged
 unless the cluster intent itself changes.
@@ -287,9 +287,11 @@ This does not destroy cluster nodes or the rest of the infrastructure.
 - Authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
 - Secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/`.
+- Generated cluster access material lives under
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/`.
 - `render --output-dir <dir> --sensitive` writes secret-inlined external tool
   inputs under the requested directory; keep it local and unversioned.
 
@@ -301,7 +303,7 @@ user kubeconfig:
 ```text
 export CLUSTER=<cluster-name>
 export BOOTWRIGHT_CONTEXT="$(bootwright context current --short)"
-export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/runtime/installer/${CLUSTER}/auth/kubeconfig"
+export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/clusters/${CLUSTER}/secrets/kubeconfig"
 export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
 export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 

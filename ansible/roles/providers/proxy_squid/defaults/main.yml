@@ -1,7 +1,7 @@
 ---
 # Per-component layout. `bootwright_component` is the per-loop var set
 # by the provider apply playbook.
-bootwright_squid_root: "{{ bootwright_managed_dir }}/services/proxy/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+bootwright_squid_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
 bootwright_squid_config_dir: "{{ bootwright_squid_root }}/config"
 bootwright_squid_auth_dir: "{{ bootwright_squid_root }}/auth"
 bootwright_squid_cache_dir: "{{ bootwright_squid_root }}/cache"

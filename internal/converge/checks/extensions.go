@@ -6,7 +6,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
-	"github.com/crmarques/bootwright/internal/render"
 )
 
 type Status string
@@ -30,7 +29,7 @@ type ExtensionDeps struct {
 	StatPath func(path string) (os.FileInfo, error)
 }
 
-func ExtensionPreflight(runtimeDir string, state v1alpha1.State, deps ExtensionDeps) []Check {
+func ExtensionPreflight(clustersDir string, state v1alpha1.State, deps ExtensionDeps) []Check {
 	checks := []Check{
 		binaryCheck("Extension tools", "oc", nil, "install oc on PATH", deps),
 	}
@@ -47,7 +46,7 @@ func ExtensionPreflight(runtimeDir string, state v1alpha1.State, deps ExtensionD
 			continue
 		}
 		seenClusters[plan.Cluster] = true
-		path := filepath.Join(runtimeDir, render.RuntimeRelativeDir, plan.Cluster, "auth", "kubeconfig")
+		path := filepath.Join(clustersDir, plan.Cluster, "secrets", "kubeconfig")
 		info, err := deps.StatPath(path)
 		switch {
 		case err != nil:

@@ -1,16 +1,16 @@
 ---
-- name: Resolve cluster runtime dirs
+- name: Resolve cluster installer runtime dirs
   ansible.builtin.set_fact:
-    bootwright_cluster_runtime_dir: "{{ bootwright_runtime_dir }}/installer/{{ bootwright_current_cluster.name }}"
+    bootwright_cluster_installer_runtime_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
   changed_when: false
 
 - name: Stop stale installer processes
   ansible.builtin.include_role:
     name: process_cleanup
   vars:
-    bootwright_process_cleanup_pattern: "runtime/installer/{{ bootwright_current_cluster.name }}/"
+    bootwright_process_cleanup_pattern: "clusters/{{ bootwright_current_cluster.name }}/runtime/installer/"
 
-- name: Remove local cluster runtime dir
+- name: Remove local cluster installer runtime dir
   ansible.builtin.file:
-    path: "{{ bootwright_cluster_runtime_dir }}"
+    path: "{{ bootwright_cluster_installer_runtime_dir }}"
     state: absent

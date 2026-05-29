@@ -79,18 +79,19 @@ func TestRunDryRunDoesNotInvokeRunner(t *testing.T) {
 	runner := &fakeRunner{}
 	reporter := &fakeReporter{}
 	result, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       renderedDir,
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		Executable:        "ansible-playbook",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/checks/preflight.yml",
-		ArtifactsBaseName: "preflight-test",
-		DryRun:            true,
-		Label:             "test check",
+		State:              minimalState(),
+		RenderedDir:        renderedDir,
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		Executable:         "ansible-playbook",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/checks/preflight.yml",
+		ArtifactsBaseName:  "preflight-test",
+		DryRun:             true,
+		Label:              "test check",
 	}, runner, reporter)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -114,16 +115,17 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	runner := &fakeRunner{}
 	reporter := &fakeReporter{}
 	if _, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       renderedDir,
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/targets/infra/apply.yml",
-		ArtifactsBaseName: "infra",
-		DryRun:            false,
+		State:              minimalState(),
+		RenderedDir:        renderedDir,
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/infra/apply.yml",
+		ArtifactsBaseName:  "infra",
+		DryRun:             false,
 	}, runner, reporter); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -138,16 +140,17 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 func TestRunPassesControllingTTYToRunner(t *testing.T) {
 	runner := &fakeRunner{}
 	_, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       t.TempDir(),
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/targets/clusters/apply.yml",
-		ArtifactsBaseName: "clusters",
-		UseControllingTTY: true,
+		State:              minimalState(),
+		RenderedDir:        t.TempDir(),
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/clusters/apply.yml",
+		ArtifactsBaseName:  "clusters",
+		UseControllingTTY:  true,
 	}, runner, nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -160,16 +163,17 @@ func TestRunPassesControllingTTYToRunner(t *testing.T) {
 func TestRunPassesForksToRunner(t *testing.T) {
 	runner := &fakeRunner{}
 	_, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       t.TempDir(),
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/targets/clusters/apply.yml",
-		ArtifactsBaseName: "clusters",
-		Forks:             9,
+		State:              minimalState(),
+		RenderedDir:        t.TempDir(),
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/clusters/apply.yml",
+		ArtifactsBaseName:  "clusters",
+		Forks:              9,
 	}, runner, nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -184,10 +188,11 @@ func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
 	_, err := Run(context.Background(), RunOptions{
 		State:              minimalState(),
 		RenderedDir:        t.TempDir(),
-		RuntimeDir:         t.TempDir(),
+		ClustersDir:        t.TempDir(),
 		RunsDir:            t.TempDir(),
 		SecretsDir:         t.TempDir(),
-		ManagedDir:         "/var/lib/bootwright",
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
 		Playbook:           "playbooks/targets/clusters/apply.yml",
 		ArtifactsBaseName:  "clusters",
@@ -204,15 +209,16 @@ func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
 func TestRunPropagatesRunnerError(t *testing.T) {
 	runner := &fakeRunner{runReturns: errors.New("boom")}
 	_, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       t.TempDir(),
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/targets/infra/apply.yml",
-		ArtifactsBaseName: "infra",
+		State:              minimalState(),
+		RenderedDir:        t.TempDir(),
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/infra/apply.yml",
+		ArtifactsBaseName:  "infra",
 	}, runner, nil)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("Run must propagate runner error, got %v", err)
@@ -223,16 +229,17 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 	runner := &fakeRunner{}
 	reporter := &fakeReporter{}
 	_, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       t.TempDir(),
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/checks/preflight.yml",
-		ArtifactsBaseName: "preflight-test",
-		DryRun:            true,
+		State:              minimalState(),
+		RenderedDir:        t.TempDir(),
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/checks/preflight.yml",
+		ArtifactsBaseName:  "preflight-test",
+		DryRun:             true,
 		// Label intentionally empty.
 	}, runner, reporter)
 	if err != nil {
@@ -252,15 +259,16 @@ func TestRunRenderFailureSurfaces(t *testing.T) {
 	}
 	runner := &fakeRunner{}
 	_, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       stateFile, // file, not directory
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/checks/preflight.yml",
-		ArtifactsBaseName: "preflight-test",
+		State:              minimalState(),
+		RenderedDir:        stateFile, // file, not directory
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/checks/preflight.yml",
+		ArtifactsBaseName:  "preflight-test",
 	}, runner, nil)
 	if err == nil {
 		t.Fatal("Run should fail when RenderedDir is unwritable")
@@ -287,17 +295,18 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 	runner := &fakeRunner{}
 	reporter := &fakeReporter{}
 	result, err := Run(context.Background(), RunOptions{
-		State:             minimalState(),
-		RenderedDir:       t.TempDir(),
-		RuntimeDir:        t.TempDir(),
-		RunsDir:           t.TempDir(),
-		SecretsDir:        t.TempDir(),
-		ManagedDir:        "/var/lib/bootwright",
-		BundleDir:         t.TempDir(),
-		Playbook:          "playbooks/targets/infra/apply.yml",
-		Limit:             render.GroupProviderHosts + ":" + render.GroupInfraHosts,
-		ArtifactsBaseName: "infra",
-		Label:             "infra apply",
+		State:              minimalState(),
+		RenderedDir:        t.TempDir(),
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         t.TempDir(),
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "playbooks/targets/infra/apply.yml",
+		Limit:              render.GroupProviderHosts + ":" + render.GroupInfraHosts,
+		ArtifactsBaseName:  "infra",
+		Label:              "infra apply",
 	}, runner, reporter)
 	if err != nil {
 		t.Fatalf("Run: %v", err)

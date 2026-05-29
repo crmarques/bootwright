@@ -8,12 +8,12 @@ Authored files:
 
 ```text
 environment.yaml       fleet defaults, selected resources, and secret names
-hosts.yaml             provider host reachability
-provider.yaml          libvirt and Redfish emulator capabilities
-infra-component.yaml   shared infra services
-networks.yaml          machine network and NMState template
-cluster-infra.yaml     selected machine and endpoints
-container-cluster.yaml OpenShift install intent and node binding
+shared/hosts.yaml             provider host reachability
+shared/provider.yaml          libvirt and Redfish emulator capabilities
+shared/infra-component.yaml   shared infra services
+shared/networks.yaml          machine network and NMState template
+clusters/<cluster>/cluster-infra.yaml     selected machine and endpoints
+clusters/<cluster>/container-cluster.yaml OpenShift install intent and node binding
 ```
 
 Generated context state, installer files, runtime output, and external

@@ -60,7 +60,7 @@ bootwright_clusters:
         providedBy: { componentRef: { name: apps }, address: apps-ip }
     agentIsoPublishTargets:
       - stageHost: services-host
-        stagePath: "{{ bootwright_managed_dir }}/services/artifact-server/InfraComponent-artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"
+        stagePath: "{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"
         fetchUrl: https://192.168.133.1:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso
         requiresHTTPS: true
         requiresByteRange: true
@@ -105,7 +105,7 @@ bootwright_clusters:
         profile: {}             # inlined provider profile when present
         kubevirt:
           hostClusterRef: metal-ocp
-          kubeconfig: "{{ bootwright_runtime_dir }}/installer/metal-ocp/auth/kubeconfig"
+          kubeconfig: "{{ bootwright_clusters_dir }}/metal-ocp/secrets/kubeconfig"
           namespace: bootwright-child-ocp
           storageClassRef: lvms-vg1
         boot:

@@ -13,28 +13,29 @@ import (
 )
 
 type scopeDryRunReport struct {
-	Target           string            `json:"target"`
-	Action           string            `json:"action"`
-	DryRun           bool              `json:"dryRun"`
-	PlanOnly         bool              `json:"planOnly"`
-	ReadinessChecked bool              `json:"readinessChecked"`
-	ReadinessChecks  string            `json:"readinessChecks"`
-	Phases           []string          `json:"phases"`
-	RenderedDir      string            `json:"renderedDir"`
-	RuntimeDir       string            `json:"runtimeDir"`
-	RunsDir          string            `json:"runsDir"`
-	SecretsDir       string            `json:"secretsDir"`
-	ManagedDir       string            `json:"managedDir"`
-	ContextDir       string            `json:"contextDir"`
-	BundleDir        string            `json:"bundleDir"`
-	Playbook         string            `json:"playbook"`
-	Limit            string            `json:"limit,omitempty"`
-	Check            bool              `json:"check,omitempty"`
-	ResolveInstaller bool              `json:"resolveInstaller"`
-	Command          []string          `json:"command"`
-	Render           scopeDryRunRender `json:"render"`
-	ExtraVars        []string          `json:"extraVars,omitempty"`
-	ApplyPlan        *scopeDryRunApply `json:"applyPlan,omitempty"`
+	Target             string            `json:"target"`
+	Action             string            `json:"action"`
+	DryRun             bool              `json:"dryRun"`
+	PlanOnly           bool              `json:"planOnly"`
+	ReadinessChecked   bool              `json:"readinessChecked"`
+	ReadinessChecks    string            `json:"readinessChecks"`
+	Phases             []string          `json:"phases"`
+	RenderedDir        string            `json:"renderedDir"`
+	ClustersDir        string            `json:"clustersDir"`
+	RunsDir            string            `json:"runsDir"`
+	SecretsDir         string            `json:"secretsDir"`
+	ManagedServicesDir string            `json:"managedServicesDir"`
+	ProviderStateDir   string            `json:"providerStateDir"`
+	ContextDir         string            `json:"contextDir"`
+	BundleDir          string            `json:"bundleDir"`
+	Playbook           string            `json:"playbook"`
+	Limit              string            `json:"limit,omitempty"`
+	Check              bool              `json:"check,omitempty"`
+	ResolveInstaller   bool              `json:"resolveInstaller"`
+	Command            []string          `json:"command"`
+	Render             scopeDryRunRender `json:"render"`
+	ExtraVars          []string          `json:"extraVars,omitempty"`
+	ApplyPlan          *scopeDryRunApply `json:"applyPlan,omitempty"`
 }
 
 type scopeDryRunRender struct {
@@ -70,56 +71,58 @@ type scopeDryRunExtensionPlan struct {
 
 func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
 	ctx := cf.ctx
-	runtimeDir := controllerRuntimeDir(ctx.Name)
+	clustersDir := controllerClustersDir(ctx.Name)
 	bundleDir, err := resolveBundleDir()
 	if err != nil {
 		return failErr(1, err)
 	}
 	runner := ansible.CommandRunner{Stdout: io.Discard, Stderr: io.Discard}
 	runResult, err := workflow.Run(cmd.Context(), workflow.RunOptions{
-		State:             state,
-		RenderedDir:       ctx.RenderedDir,
-		RuntimeDir:        runtimeDir,
-		RunsDir:           ctx.RunsDir,
-		SecretsDir:        ctx.SecretsDir,
-		ManagedDir:        ctx.ManagedDir,
-		Executable:        flags.executable,
-		BundleDir:         bundleDir,
-		Playbook:          playbook,
-		Limit:             limit,
-		Forks:             forks,
-		ExtraVarPairs:     extraVarPairs,
-		ArtifactsBaseName: artifactsBaseName,
-		Check:             check,
-		AskBecomePass:     askBecomePass,
-		DryRun:            true,
-		ResolveInstaller:  resolveInstaller,
-		Label:             scope.name + " " + action,
+		State:              state,
+		RenderedDir:        ctx.RenderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            ctx.RunsDir,
+		SecretsDir:         ctx.SecretsDir,
+		ManagedServicesDir: ctx.ManagedServicesDir,
+		ProviderStateDir:   ctx.ProviderStateDir,
+		Executable:         flags.executable,
+		BundleDir:          bundleDir,
+		Playbook:           playbook,
+		Limit:              limit,
+		Forks:              forks,
+		ExtraVarPairs:      extraVarPairs,
+		ArtifactsBaseName:  artifactsBaseName,
+		Check:              check,
+		AskBecomePass:      askBecomePass,
+		DryRun:             true,
+		ResolveInstaller:   resolveInstaller,
+		Label:              scope.name + " " + action,
 	}, runner, nil)
 	if err != nil {
 		return failErr(1, err)
 	}
 	report := scopeDryRunReport{
-		Target:           scope.name,
-		Action:           action,
-		DryRun:           true,
-		PlanOnly:         true,
-		ReadinessChecked: false,
-		ReadinessChecks:  "not run; run bootwright check " + scope.name,
-		Phases:           selectedPhaseNames(selected),
-		RenderedDir:      ctx.RenderedDir,
-		RuntimeDir:       runtimeDir,
-		RunsDir:          ctx.RunsDir,
-		SecretsDir:       ctx.SecretsDir,
-		ManagedDir:       ctx.ManagedDir,
-		ContextDir:       ctx.BaseDir,
-		BundleDir:        bundleDir,
-		Playbook:         playbook,
-		Limit:            limit,
-		Check:            check,
-		ResolveInstaller: resolveInstaller,
-		Command:          runResult.Command,
-		ExtraVars:        extraVarPairs,
+		Target:             scope.name,
+		Action:             action,
+		DryRun:             true,
+		PlanOnly:           true,
+		ReadinessChecked:   false,
+		ReadinessChecks:    "not run; run bootwright check " + scope.name,
+		Phases:             selectedPhaseNames(selected),
+		RenderedDir:        ctx.RenderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            ctx.RunsDir,
+		SecretsDir:         ctx.SecretsDir,
+		ManagedServicesDir: ctx.ManagedServicesDir,
+		ProviderStateDir:   ctx.ProviderStateDir,
+		ContextDir:         ctx.BaseDir,
+		BundleDir:          bundleDir,
+		Playbook:           playbook,
+		Limit:              limit,
+		Check:              check,
+		ResolveInstaller:   resolveInstaller,
+		Command:            runResult.Command,
+		ExtraVars:          extraVarPairs,
 		Render: scopeDryRunRender{
 			EffectiveStatePath: runResult.Render.EffectiveStatePath,
 			LockPath:           runResult.Render.LockPath,

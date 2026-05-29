@@ -52,12 +52,12 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 // downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
-		"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml",
-		"cluster-infra.yaml", "container-cluster.yaml",
+		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
+		"clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/container-cluster.yaml",
 	}
 	namesWithArtifacts := []string{
-		"environment.yaml", "hosts.yaml", "networks.yaml", "provider.yaml",
-		"infra-component.yaml", "cluster-infra.yaml", "container-cluster.yaml",
+		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
+		"shared/infra-component.yaml", "clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/container-cluster.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -98,6 +98,9 @@ func TestWorkspacePassesValidator(t *testing.T) {
 			}
 			dir := t.TempDir()
 			for _, f := range files {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f.Name)), 0o700); err != nil {
+					t.Fatalf("mkdir %s: %v", f.Name, err)
+				}
 				if err := os.WriteFile(filepath.Join(dir, f.Name), []byte(f.Body), 0o600); err != nil {
 					t.Fatalf("write %s: %v", f.Name, err)
 				}
@@ -119,11 +122,11 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectations := map[string][]string{
-		"environment.yaml":       {"name: my-cluster"},
-		"networks.yaml":          {"name: my-cluster-bridge"},
-		"provider.yaml":          {"name: my-cluster-libvirt"},
-		"cluster-infra.yaml":     {"name: my-cluster", "provider: my-cluster-libvirt"},
-		"container-cluster.yaml": {"name: my-cluster"},
+		"environment.yaml":                           {"name: my-cluster"},
+		"shared/networks.yaml":                       {"name: my-cluster-bridge"},
+		"shared/provider.yaml":                       {"name: my-cluster-libvirt"},
+		"clusters/my-cluster/cluster-infra.yaml":     {"name: my-cluster", "provider: my-cluster-libvirt"},
+		"clusters/my-cluster/container-cluster.yaml": {"name: my-cluster"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]

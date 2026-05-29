@@ -16,10 +16,11 @@ type RunSpecConfig struct {
 	Executable         string
 	BundleDir          string
 	RenderedDir        string
-	RuntimeDir         string
+	ClustersDir        string
 	RunsDir            string
 	SecretsDir         string
-	ManagedDir         string
+	ManagedServicesDir string
+	ProviderStateDir   string
 	InventoryPath      string
 	VarsPath           string
 	Playbook           string
@@ -39,9 +40,9 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve rendered dir: %w", err)
 	}
-	runtimeDirAbs, err := filepath.Abs(cfg.RuntimeDir)
+	clustersDirAbs, err := filepath.Abs(cfg.ClustersDir)
 	if err != nil {
-		return ansible.RunSpec{}, fmt.Errorf("resolve runtime dir: %w", err)
+		return ansible.RunSpec{}, fmt.Errorf("resolve clusters dir: %w", err)
 	}
 	runsDirAbs, err := filepath.Abs(cfg.RunsDir)
 	if err != nil {
@@ -51,16 +52,21 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve secrets dir: %w", err)
 	}
-	managedDirAbs, err := filepath.Abs(cfg.ManagedDir)
+	managedServicesDirAbs, err := filepath.Abs(cfg.ManagedServicesDir)
 	if err != nil {
-		return ansible.RunSpec{}, fmt.Errorf("resolve managed dir: %w", err)
+		return ansible.RunSpec{}, fmt.Errorf("resolve managed services dir: %w", err)
+	}
+	providerStateDirAbs, err := filepath.Abs(cfg.ProviderStateDir)
+	if err != nil {
+		return ansible.RunSpec{}, fmt.Errorf("resolve provider state dir: %w", err)
 	}
 	pairs := []string{
 		"bootwright_rendered_dir=" + renderedDirAbs,
-		"bootwright_runtime_dir=" + runtimeDirAbs,
+		"bootwright_clusters_dir=" + clustersDirAbs,
 		"bootwright_runs_dir=" + runsDirAbs,
 		"bootwright_secrets_dir=" + secretsDirAbs,
-		"bootwright_managed_dir=" + managedDirAbs,
+		"bootwright_managed_services_dir=" + managedServicesDirAbs,
+		"bootwright_provider_state_dir=" + providerStateDirAbs,
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)
 	return ansible.RunSpec{

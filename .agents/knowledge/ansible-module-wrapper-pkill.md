@@ -4,4 +4,4 @@
 
 **Root cause:** With local connection plus task-level `environment:`, Ansible puts environment assignments in the wrapper command line. A broad `pkill -f <pattern>` can match and terminate the shell running Ansible's Python module wrapper instead of only the stale child process.
 
-**Fix:** Find candidate PIDs first, then kill those captured PIDs directly. Match the relative installer work path (`runtime/installer/<name>`) so cleanup still works when contexts use different absolute runtime paths between runs.
+**Fix:** Find candidate PIDs first, then kill those captured PIDs directly. Match the relative installer work path (`clusters/<name>/runtime/installer`) so cleanup still works when contexts use different absolute context roots between runs.

@@ -13,14 +13,14 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	if task.Extension == nil {
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("extension task %s has no extension plan", task.Entry.ID)}
 	}
-	kubeconfig := clusterKubeconfigPath(opts.RuntimeDir, opts.State, task.Entry.Cluster)
+	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
 	runner := extensionoc.CommandRunner{
 		LogPath: TaskLogPath(runsDir, runID, task.Entry.ID),
 		Stdout:  stdout,
 		Stderr:  stderr,
 	}
 	cfg := extensionoc.RunConfig{
-		RuntimeDir:   opts.RuntimeDir,
+		ClustersDir:  opts.ClustersDir,
 		Kubeconfig:   kubeconfig,
 		RunID:        runID,
 		StartedAt:    time.Now(),

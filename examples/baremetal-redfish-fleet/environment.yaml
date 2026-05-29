@@ -10,10 +10,10 @@ spec:
     - shared/networks.yaml
     - shared/provider.yaml
     - shared/infra-component.yaml
-    - demo-ocp-a/cluster-infra.yaml
-    - demo-ocp-a/container-cluster.yaml
-    - demo-ocp-b/cluster-infra.yaml
-    - demo-ocp-b/container-cluster.yaml
+    - clusters/demo-ocp-a/cluster-infra.yaml
+    - clusters/demo-ocp-a/container-cluster.yaml
+    - clusters/demo-ocp-b/cluster-infra.yaml
+    - clusters/demo-ocp-b/container-cluster.yaml
 
   containerClusters:
     - demo-ocp-a

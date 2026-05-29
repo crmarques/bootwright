@@ -7,12 +7,12 @@ Authored files:
 
 ```text
 environment.yaml       fleet defaults, selected resources, and secret names
-hosts.yaml             provider host reachability
-provider.yaml          libvirt and Redfish emulator capabilities
-infra-component.yaml   shared infra services
-networks.yaml          machine network and NMState template
-cluster-infra.yaml     selected machine and endpoints
-container-cluster.yaml OpenShift install intent and node binding
+shared/hosts.yaml             provider host reachability
+shared/provider.yaml          libvirt and Redfish emulator capabilities
+shared/infra-component.yaml   shared infra services
+shared/networks.yaml          machine network and NMState template
+clusters/<cluster>/cluster-infra.yaml     selected machine and endpoints
+clusters/<cluster>/container-cluster.yaml OpenShift install intent and node binding
 ```
 
 Before importing this example into a real lab, edit these fields:
@@ -20,12 +20,12 @@ Before importing this example into a real lab, edit these fields:
 | File | Required first edits |
 | --- | --- |
 | `environment.yaml` | `spec.baseDomain`, declared secret names and local source files, and any proxy, mirror, artifact, DNS, or NTP selections |
-| `hosts.yaml` | Provider/service host `spec.addresses[]`, SSH `addressName`, user, and key reference |
-| `provider.yaml` | Libvirt host/profile values, BMC emulator reachability, and any machine sizing changes |
-| `infra-component.yaml` | Load balancer and artifact service bind addresses, listeners, and endpoint names reachable by BMCs or cluster nodes |
-| `networks.yaml` | `spec.machineNetwork[]`, NMState routes, DNS refs, and bridge/interface names |
-| `cluster-infra.yaml` | Endpoint VIP ownership, selected machine profile, per-machine IP overlays, and root device hints |
-| `container-cluster.yaml` | Distribution release, install mode, cluster/service networks, and node-to-machine bindings |
+| `shared/hosts.yaml` | Provider/service host `spec.addresses[]`, SSH `addressName`, user, and key reference |
+| `shared/provider.yaml` | Libvirt host/profile values, BMC emulator reachability, and any machine sizing changes |
+| `shared/infra-component.yaml` | Load balancer and artifact service bind addresses, listeners, and endpoint names reachable by BMCs or cluster nodes |
+| `shared/networks.yaml` | `spec.machineNetwork[]`, NMState routes, DNS refs, and bridge/interface names |
+| `clusters/<cluster>/cluster-infra.yaml` | Endpoint VIP ownership, selected machine profile, per-machine IP overlays, and root device hints |
+| `clusters/<cluster>/container-cluster.yaml` | Distribution release, install mode, cluster/service networks, and node-to-machine bindings |
 
 Smallest runnable path:
 

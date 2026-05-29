@@ -30,8 +30,14 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 	if ctx.RunsDir != filepath.Join(wantBase, RunsDirName) {
 		t.Fatalf("RunsDir = %q", ctx.RunsDir)
 	}
-	if ctx.ManagedDir != filepath.Join(wantBase, ManagedDirName) {
-		t.Fatalf("ManagedDir = %q", ctx.ManagedDir)
+	if ctx.ClustersDir != filepath.Join(wantBase, ClustersDirName) {
+		t.Fatalf("ClustersDir = %q", ctx.ClustersDir)
+	}
+	if ctx.ManagedServicesDir != filepath.Join(wantBase, ManagedServicesName) {
+		t.Fatalf("ManagedServicesDir = %q", ctx.ManagedServicesDir)
+	}
+	if ctx.ProviderStateDir != filepath.Join(wantBase, ProviderStateName) {
+		t.Fatalf("ProviderStateDir = %q", ctx.ProviderStateDir)
 	}
 }
 
@@ -161,11 +167,10 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 		ctx.InputDir,
 		ctx.RenderedDir,
 		ctx.SecretsDir,
-		ctx.RuntimeDir,
+		ctx.ClustersDir,
 		ctx.RunsDir,
-		ctx.ManagedDir,
-		filepath.Join(ctx.ManagedDir, "services"),
-		filepath.Join(ctx.ManagedDir, "substrate"),
+		ctx.ManagedServicesDir,
+		ctx.ProviderStateDir,
 	} {
 		info, err := os.Stat(dir)
 		if err != nil {
@@ -263,10 +268,10 @@ func TestImportInputsCollisionAndReplace(t *testing.T) {
 func TestImportInputsPreservesSubdirectoryLayout(t *testing.T) {
 	source := t.TempDir()
 	files := map[string]string{
-		"environment.yaml":                  "env\n",
-		"shared/provider.yaml":              "provider\n",
-		"demo-ocp-a/container-cluster.yaml": "cluster-a\n",
-		"demo-ocp-b/container-cluster.yaml": "cluster-b\n",
+		"environment.yaml":                           "env\n",
+		"shared/provider.yaml":                       "provider\n",
+		"clusters/demo-ocp-a/container-cluster.yaml": "cluster-a\n",
+		"clusters/demo-ocp-b/container-cluster.yaml": "cluster-b\n",
 	}
 	for name, content := range files {
 		path := filepath.Join(source, name)
@@ -356,14 +361,15 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	ctx := Context{
-		Name:        "lab",
-		BaseDir:     home,
-		InputDir:    filepath.Join(home, InputDirName),
-		RenderedDir: filepath.Join(home, RenderedDirName),
-		SecretsDir:  filepath.Join(home, SecretsDirName),
-		RuntimeDir:  filepath.Join(home, RuntimeDirName),
-		RunsDir:     filepath.Join(home, RunsDirName),
-		ManagedDir:  filepath.Join(home, ManagedDirName),
+		Name:               "lab",
+		BaseDir:            home,
+		InputDir:           filepath.Join(home, InputDirName),
+		RenderedDir:        filepath.Join(home, RenderedDirName),
+		SecretsDir:         filepath.Join(home, SecretsDirName),
+		ClustersDir:        filepath.Join(home, ClustersDirName),
+		RunsDir:            filepath.Join(home, RunsDirName),
+		ManagedServicesDir: filepath.Join(home, ManagedServicesName),
+		ProviderStateDir:   filepath.Join(home, ProviderStateName),
 	}
 	if err := SafePurgeBaseDir(ctx); err == nil {
 		t.Fatal("SafePurgeBaseDir unexpectedly removed home")
@@ -373,14 +379,15 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 	baseDir := filepath.Join(t.TempDir(), "lab")
 	ctx := Context{
-		Name:        "lab",
-		BaseDir:     baseDir,
-		InputDir:    filepath.Join(baseDir, InputDirName),
-		RenderedDir: filepath.Join(baseDir, RenderedDirName),
-		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
-		RuntimeDir:  filepath.Join(baseDir, RuntimeDirName),
-		RunsDir:     filepath.Join(baseDir, RunsDirName),
-		ManagedDir:  filepath.Join(baseDir, ManagedDirName),
+		Name:               "lab",
+		BaseDir:            baseDir,
+		InputDir:           filepath.Join(baseDir, InputDirName),
+		RenderedDir:        filepath.Join(baseDir, RenderedDirName),
+		SecretsDir:         filepath.Join(baseDir, SecretsDirName),
+		ClustersDir:        filepath.Join(baseDir, ClustersDirName),
+		RunsDir:            filepath.Join(baseDir, RunsDirName),
+		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
+		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
 	}
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		t.Fatal(err)

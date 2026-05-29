@@ -297,23 +297,26 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions, tasks []ApplyTask, limits ConcurrencyLimits) (PreparedApplyTaskGraph, error) {
 	startedAt := time.Now()
 	runID := applyRunID(startedAt)
-	if strings.TrimSpace(opts.RuntimeDir) == "" {
-		return PreparedApplyTaskGraph{}, fmt.Errorf("runtime dir is required")
+	if strings.TrimSpace(opts.ClustersDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("clusters dir is required")
 	}
 	if strings.TrimSpace(opts.RenderedDir) == "" {
 		return PreparedApplyTaskGraph{}, fmt.Errorf("rendered dir is required")
 	}
-	if strings.TrimSpace(opts.ManagedDir) == "" {
-		return PreparedApplyTaskGraph{}, fmt.Errorf("managed dir is required")
+	if strings.TrimSpace(opts.ManagedServicesDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("managed services dir is required")
+	}
+	if strings.TrimSpace(opts.ProviderStateDir) == "" {
+		return PreparedApplyTaskGraph{}, fmt.Errorf("provider state dir is required")
 	}
 	if strings.TrimSpace(runsDir) == "" {
 		return PreparedApplyTaskGraph{}, fmt.Errorf("runs dir is required")
 	}
 	opts.RunsDir = runsDir
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
-	tasks = AnnotateApplyTaskClusterLogPaths(runsDir, runID, tasks)
+	tasks = AnnotateApplyTaskClusterLogPaths(opts.ClustersDir, runID, tasks)
 	var err error
-	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.RuntimeDir, opts.SecretsDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
+	tasks, err = ReconcileApplyClusterInstallState(ctx, opts.ClustersDir, opts.SecretsDir, runID, opts.State, tasks, opts.InstallOverride, opts.ClusterAvailabilityChecker, startedAt)
 	if err != nil {
 		return PreparedApplyTaskGraph{}, err
 	}
@@ -334,14 +337,17 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 }
 
 func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
-	if strings.TrimSpace(opts.RuntimeDir) == "" {
-		return RunLedger{}, fmt.Errorf("runtime dir is required")
+	if strings.TrimSpace(opts.ClustersDir) == "" {
+		return RunLedger{}, fmt.Errorf("clusters dir is required")
 	}
 	if strings.TrimSpace(opts.RenderedDir) == "" {
 		return RunLedger{}, fmt.Errorf("rendered dir is required")
 	}
-	if strings.TrimSpace(opts.ManagedDir) == "" {
-		return RunLedger{}, fmt.Errorf("managed dir is required")
+	if strings.TrimSpace(opts.ManagedServicesDir) == "" {
+		return RunLedger{}, fmt.Errorf("managed services dir is required")
+	}
+	if strings.TrimSpace(opts.ProviderStateDir) == "" {
+		return RunLedger{}, fmt.Errorf("provider state dir is required")
 	}
 	if strings.TrimSpace(runsDir) == "" {
 		return RunLedger{}, fmt.Errorf("runs dir is required")
@@ -377,7 +383,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 		return RemoveRunLease(runsDir)
 	}
 	multiClusterOutput := len(ledger.ClusterNames()) > 1
-	clusterLogs, err := openApplyClusterLogs(runsDir, ledger)
+	clusterLogs, err := openApplyClusterLogs(opts.ClustersDir, ledger)
 	if err != nil {
 		_ = finishRun(RunStatusFailed)
 		return ledger, err
@@ -637,19 +643,19 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	}
 	runner := runnerFactory(stdout, stderr)
 	now := time.Now()
-	if err := MarkClusterInstallTaskStarted(opts.RuntimeDir, opts.SecretsDir, runID, task, now); err != nil {
+	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	result, err := Run(ctx, taskOpts, runner, nil)
 	now = time.Now()
 	if err != nil {
-		if recordErr := MarkClusterInstallTaskFailed(opts.RuntimeDir, opts.SecretsDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskFailed(opts.ClustersDir, opts.SecretsDir, runID, task, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 	}
 	if !result.Skipped {
-		if recordErr := MarkClusterInstallTaskSucceeded(opts.RuntimeDir, opts.SecretsDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, opts.SecretsDir, runID, task, now); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}
@@ -677,14 +683,14 @@ type applyClusterLogSet struct {
 	writers map[string]io.Writer
 }
 
-func openApplyClusterLogs(runsDir string, ledger RunLedger) (*applyClusterLogSet, error) {
+func openApplyClusterLogs(clustersDir string, ledger RunLedger) (*applyClusterLogSet, error) {
 	names := ledger.ClusterNames()
 	logs := &applyClusterLogSet{writers: map[string]io.Writer{}}
 	if len(names) <= 1 {
 		return logs, nil
 	}
 	for _, name := range names {
-		path := ApplyClusterLogPath(runsDir, ledger.RunID, name)
+		path := ApplyClusterLogPath(clustersDir, ledger.RunID, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			logs.Close()
 			return nil, fmt.Errorf("create cluster log directory: %w", err)
@@ -834,12 +840,12 @@ func TaskLedgerEntries(tasks []ApplyTask) []TaskLedgerEntry {
 	return entries
 }
 
-func AnnotateApplyTaskClusterLogPaths(runsDir, runID string, tasks []ApplyTask) []ApplyTask {
+func AnnotateApplyTaskClusterLogPaths(clustersDir, runID string, tasks []ApplyTask) []ApplyTask {
 	out := make([]ApplyTask, len(tasks))
 	copy(out, tasks)
 	for i := range out {
 		if out[i].Entry.Cluster != "" {
-			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(runsDir, runID, out[i].Entry.Cluster)
+			out[i].Entry.ClusterLogPath = ApplyClusterLogPath(clustersDir, runID, out[i].Entry.Cluster)
 		}
 	}
 	return out
@@ -909,12 +915,12 @@ func TaskLogPath(runsDir, runID, taskID string) string {
 	return filepath.Join(runsDir, "history", runID, "tasks", taskID, ansible.OutputLogName)
 }
 
-func ApplyClusterLogPath(runsDir, runID, cluster string) string {
-	return filepath.Join(runsDir, "history", runID, "clusters", cluster, "install.log")
+func ApplyClusterLogPath(clustersDir, runID, cluster string) string {
+	return filepath.Join(clustersDir, cluster, "runs", runID, "install.log")
 }
 
-func OpenShiftInstallerLogPath(runtimeDir, cluster string) string {
-	return filepath.Join(runtimeDir, render.RuntimeRelativeDir, cluster, ".openshift_install.log")
+func OpenShiftInstallerLogPath(clustersDir, cluster string) string {
+	return filepath.Join(clustersDir, cluster, "runtime", render.RuntimeRelativeDir, ".openshift_install.log")
 }
 
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {

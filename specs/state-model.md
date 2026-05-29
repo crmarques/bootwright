@@ -1210,9 +1210,8 @@ show` intentionally emits raw secret bytes on stdout and is a sensitive
 raw-output exception.
 `bootwright cluster list` and `bootwright cluster access` read only local
 context state. They print cluster API and console URLs, local kubeconfig paths,
-the shell `KUBECONFIG=...` prefix, kubeadmin password secret names, local
-password file paths, and the `bootwright secret show` command operators can run
-when they need the password. They must not print kubeconfig contents,
+the shell `KUBECONFIG=...` prefix, local password file paths, and the command
+operators can run when they need the password. They must not print kubeconfig contents,
 kubeadmin password bytes, tokens, or other cluster credential material.
 `check syntax -f <path>` loads YAML files or directories directly and must not
 require or mutate the current context. It is the pre-import validation path for
@@ -1244,7 +1243,7 @@ Bootwright does not stream live Ansible output to the terminal; it prints a
 `Logs` section with one install log path per cluster and keeps task output in
 the task artifact log plus the owning cluster log.
 `bootwright apply cluster --override` forces OpenShift agent install tasks to
-run even when local runtime kubeconfig state reports that the target cluster is
+run even when local cluster secrets kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
 replaced the target machines; it does not wipe disks, destroy substrate
 machines, power off nodes, or remove provider services.
@@ -1266,13 +1265,13 @@ IDs, task dependencies, task statuses, timestamps, and per-task
 `ansible-output.log` paths under
 `<runs-dir>/history/<run>/tasks/<task>/`.
 Cluster-owned tasks also record
-`/var/lib/bootwright/contexts/<context>/runs/history/<run>/clusters/<cluster>/install.log`.
+`/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runs/<run>/install.log`.
 Per-cluster install state is stored under
-`<runtime-dir>/install-records/<cluster>.json`; it records the desired
+`<clusters-dir>/<cluster>/runtime/install-record.json`; it records the desired
 input fingerprint, install status, last safe phase, run ID, timestamps, and
 node boot markers, but not secret bytes.
 Per-extension state is stored under
-`<runtime-dir>/extension-records/<cluster>/<extension>.json`; it records the
+`<clusters-dir>/<cluster>/runtime/extensions/<extension>.json`; it records the
 desired hash, status, phase, run ID, timestamps, observed resources, and last
 observed readiness state, but not kubeconfig or secret bytes.
 Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
@@ -1308,32 +1307,36 @@ Fixed storage layout:
   - `cache/ansible-venv/`
   - `cache/ansible-bundles/<version-or-digest>/`
   - `contexts/<context>/`
-- Each context has `input/`, `secrets/`, `rendered/`, `runtime/`, `runs/`,
-  and `managed/`.
+- Each context has `input/`, `secrets/`, `rendered/`, `runs/`,
+  `managed-services/`, `provider-state/`, and `clusters/`.
 - Rendered reviewable output lives under `rendered/`, including
   `effective-state.yaml`, `bootwright.lock.yaml`, `ansible/{inventory,vars}.yaml`,
-  and `installer/<cluster>/`.
-- Secret-inlined installer inputs and install records live under `runtime/`.
-- Apply ledgers, leases, task logs, artifacts, and cluster install logs live
-  under `runs/`.
-- Managed host/service files live under `managed/services/`, `managed/bmc/`,
-  and `managed/substrate/`. Artifact server web roots mount only
-  `managed/services/artifact-server/<provider>-<name>/public/`; TLS keys and
-  generated config stay outside the served root.
+  while installer files live under `clusters/<cluster>/rendered/installer/`.
+- Secret-inlined installer inputs and install records live under
+  `clusters/<cluster>/runtime/`.
+- Generated cluster access material lives under `clusters/<cluster>/secrets/`.
+- Apply ledgers, leases, task logs, and artifacts live under `runs/`; per-cluster
+  install logs live under `clusters/<cluster>/runs/<run>/install.log`.
+- Managed service files live under `managed-services/<component-name>/`.
+  Artifact server web roots mount only `managed-services/<component-name>/public/`;
+  TLS keys and generated config stay outside the served root.
+- Provider, substrate, and BMC emulator state not owned by one cluster lives
+  under `provider-state/`. Cluster-owned provider state lives under
+  `clusters/<cluster>/runtime/provider-state/`.
 - `context init <name> -f <path> --yes` replaces the entire context directory
   after validating staged input.
 - `context update <name> -f <path>` requires an existing context and replaces
-  only `input/`, preserving secrets, rendered output, runtime data, run
-  history, and managed host/service files.
+  only `input/`, preserving secrets, rendered output, cluster state, run
+  history, managed service files, and provider state.
 
 Generated output boundaries:
 
 - User-authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
 - Bootwright-managed secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/`.
 - External tool input exports written by
   `bootwright render --output-dir <dir> --sensitive` live under the
   requested output directory and include

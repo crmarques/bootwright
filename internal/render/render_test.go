@@ -49,9 +49,9 @@ func TestAllSucceedsForGoodFixtures(t *testing.T) {
 			}
 
 			renderedDir := t.TempDir()
-			runtimeDir := t.TempDir()
+			clustersDir := t.TempDir()
 			secretsDir := t.TempDir() // empty — All() must not consult it
-			result, err := render.All(renderedDir, runtimeDir, secretsDir, state)
+			result, err := render.All(renderedDir, clustersDir, secretsDir, state)
 			if err != nil {
 				t.Fatalf("render.All: %v", err)
 			}
@@ -143,8 +143,8 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if got := kubevirt["namespace"]; got != "bootwright-child-ocp" {
 		t.Fatalf("namespace = %v, want bootwright-child-ocp", got)
 	}
-	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_runtime_dir }}/installer/metal-ocp/auth/kubeconfig" {
-		t.Fatalf("kubeconfig = %v, want host runtime kubeconfig template", got)
+	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_clusters_dir }}/metal-ocp/secrets/kubeconfig" {
+		t.Fatalf("kubeconfig = %v, want host cluster secret kubeconfig template", got)
 	}
 	interfaces := machine["interfaces"].([]any)
 	iface := interfaces[0].(map[string]any)

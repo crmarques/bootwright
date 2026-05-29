@@ -94,8 +94,8 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 }
 
 func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
-	runtimeDir := t.TempDir()
-	kubeconfig := filepath.Join(runtimeDir, "installer", "metal-ocp", "auth", "kubeconfig")
+	clustersDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
 	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
 		t.Fatalf("mkdir kubeconfig dir: %v", err)
 	}
@@ -126,14 +126,14 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		uid: func() int { return 1000 },
 	}
 
-	checks := collectPreflightChecks(state, []Phase{{Name: "cluster"}}, true, "/context/secrets", runtimeDir, deps)
+	checks := collectPreflightChecks(state, []Phase{{Name: "cluster"}}, true, "/context/secrets", clustersDir, deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
 
 func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
-	runtimeDir := t.TempDir()
-	kubeconfig := filepath.Join(runtimeDir, "installer", "metal-ocp", "auth", "kubeconfig")
+	clustersDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
 	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
 		t.Fatalf("mkdir kubeconfig dir: %v", err)
 	}

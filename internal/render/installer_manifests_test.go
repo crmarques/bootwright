@@ -76,9 +76,8 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 		ValidityDays: 1,
 	})
 
-	renderedDir := t.TempDir()
-	runtimeDir := t.TempDir()
-	result, err := render.ResolveInstaller(renderedDir, runtimeDir, secretsDir, state)
+	clustersDir := t.TempDir()
+	result, err := render.ResolveInstaller(clustersDir, secretsDir, state)
 	if err != nil {
 		t.Fatalf("ResolveInstaller: %v", err)
 	}
@@ -183,7 +182,7 @@ func TestResolveInstallerRejectsServingCertificateMismatch(t *testing.T) {
 		DNSNames:     []string{"wrong.example.test"},
 		ValidityDays: 1,
 	})
-	_, err = render.ResolveInstaller(t.TempDir(), t.TempDir(), secretsDir, state)
+	_, err = render.ResolveInstaller(t.TempDir(), secretsDir, state)
 	if err == nil {
 		t.Fatal("expected ingress SAN mismatch error")
 	}

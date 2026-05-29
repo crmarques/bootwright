@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	// InstallerRelativeDir is the path under <rendered-dir> for generated
-	// installer placeholder artifacts.
+	// InstallerRelativeDir is the path under each cluster rendered dir for
+	// generated installer placeholder artifacts.
 	InstallerRelativeDir = "installer"
 
-	// RuntimeRelativeDir is the path under <runtime-dir> for local-only
-	// runtime artifacts.
+	// RuntimeRelativeDir is the path under each cluster runtime dir for
+	// local-only runtime artifacts.
 	RuntimeRelativeDir = "installer"
 )
 
@@ -22,29 +22,34 @@ const (
 type InstallerAsset struct {
 	ClusterName                  string
 	Method                       string
+	ClusterDir                   string
 	Dir                          string
 	InstallConfigPath            string
 	AgentConfigPath              string
 	InstallManifestsDir          string
 	WorkDir                      string
+	ClusterSecretsDir            string
 	EffectiveInstallConfigPath   string
 	EffectiveAgentConfigPath     string
 	EffectiveInstallManifestsDir string
 }
 
-func InstallerAssets(renderedDir, runtimeDir string, state v1alpha1.State) []InstallerAsset {
+func InstallerAssets(clustersDir string, state v1alpha1.State) []InstallerAsset {
 	assets := make([]InstallerAsset, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
-		dir := filepath.Join(renderedDir, InstallerRelativeDir, ocp.Metadata.Name)
-		workDir := filepath.Join(runtimeDir, RuntimeRelativeDir, ocp.Metadata.Name)
+		clusterDir := filepath.Join(clustersDir, ocp.Metadata.Name)
+		dir := filepath.Join(clusterDir, "rendered", InstallerRelativeDir)
+		workDir := filepath.Join(clusterDir, "runtime", RuntimeRelativeDir)
 		assets = append(assets, InstallerAsset{
 			ClusterName:                  ocp.Metadata.Name,
 			Method:                       ocp.Spec.Install.Method,
+			ClusterDir:                   clusterDir,
 			Dir:                          dir,
 			InstallConfigPath:            filepath.Join(dir, "install-config.yaml"),
 			AgentConfigPath:              filepath.Join(dir, "agent-config.yaml"),
 			InstallManifestsDir:          filepath.Join(dir, "openshift"),
 			WorkDir:                      workDir,
+			ClusterSecretsDir:            filepath.Join(clusterDir, "secrets"),
 			EffectiveInstallConfigPath:   filepath.Join(workDir, "install-config.yaml"),
 			EffectiveAgentConfigPath:     filepath.Join(workDir, "agent-config.yaml"),
 			EffectiveInstallManifestsDir: filepath.Join(workDir, "openshift"),

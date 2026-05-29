@@ -35,7 +35,7 @@ func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		checks := extensionPreflightChecks(controllerRuntimeDir(cf.ctx.Name), state)
+		checks := extensionPreflightChecks(controllerClustersDir(cf.ctx.Name), state)
 		p.Checks(checks)
 		for _, check := range checks {
 			if check.Status != cliout.StatusOK {
@@ -48,8 +48,8 @@ func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func extensionPreflightChecks(runtimeDir string, state v1alpha1.State) []cliout.Check {
-	raw := checks.ExtensionPreflight(runtimeDir, state, checks.ExtensionDeps{
+func extensionPreflightChecks(clustersDir string, state v1alpha1.State) []cliout.Check {
+	raw := checks.ExtensionPreflight(clustersDir, state, checks.ExtensionDeps{
 		LookPath: defaultPreflightDeps.lookPath,
 		StatPath: defaultPreflightDeps.statPath,
 	})

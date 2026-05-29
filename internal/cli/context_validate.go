@@ -100,9 +100,10 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 		dirContextCheck("input-dir", ctx.InputDir),
 		dirContextCheck("rendered-dir", ctx.RenderedDir),
 		dirContextCheck("secrets-dir", ctx.SecretsDir),
-		dirContextCheck("runtime-dir", ctx.RuntimeDir),
+		dirContextCheck("clusters-dir", ctx.ClustersDir),
 		dirContextCheck("runs-dir", ctx.RunsDir),
-		dirContextCheck("managed-dir", ctx.ManagedDir),
+		dirContextCheck("managed-services-dir", ctx.ManagedServicesDir),
+		dirContextCheck("provider-state-dir", ctx.ProviderStateDir),
 		secretsDirModeCheck(ctx.SecretsDir),
 	)
 	return checks

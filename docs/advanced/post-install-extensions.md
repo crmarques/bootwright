@@ -140,7 +140,7 @@ install wait task.
 ## Records And Readiness
 
 Extension records are stored under
-`runtime/extension-records/<cluster>/<extension>.json`. The desired hash
+`clusters/<cluster>/runtime/extensions/<extension>.json`. The desired hash
 includes the extension spec, apply policy, generated OLM resources, and
 manifest file contents for `manifest-set`.
 

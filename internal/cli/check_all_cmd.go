@@ -37,8 +37,8 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			return err
 		}
 		ctx := cf.ctx
-		runtimeDir := controllerRuntimeDir(ctx.Name)
-		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, runtimeDir); err != nil {
+		clustersDir := controllerClustersDir(ctx.Name)
+		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -54,18 +54,19 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 		_, err = workflow.Run(c.Context(), workflow.RunOptions{
-			State:             state,
-			RenderedDir:       ctx.RenderedDir,
-			RuntimeDir:        runtimeDir,
-			RunsDir:           ctx.RunsDir,
-			SecretsDir:        ctx.SecretsDir,
-			ManagedDir:        ctx.ManagedDir,
-			Executable:        executable,
-			BundleDir:         bundle.Dir,
-			Playbook:          "playbooks/checks/preflight.yml",
-			ArtifactsBaseName: "preflight-all",
-			DryRun:            dryRun,
-			Label:             "all check",
+			State:              state,
+			RenderedDir:        ctx.RenderedDir,
+			ClustersDir:        clustersDir,
+			RunsDir:            ctx.RunsDir,
+			SecretsDir:         ctx.SecretsDir,
+			ManagedServicesDir: ctx.ManagedServicesDir,
+			ProviderStateDir:   ctx.ProviderStateDir,
+			Executable:         executable,
+			BundleDir:          bundle.Dir,
+			Playbook:           "playbooks/checks/preflight.yml",
+			ArtifactsBaseName:  "preflight-all",
+			DryRun:             dryRun,
+			Label:              "all check",
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)

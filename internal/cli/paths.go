@@ -24,12 +24,12 @@ func ansibleVenvDir() string {
 	return filepath.Join(cacheDir(), ansibleVenvDirName)
 }
 
-func controllerRuntimeDir(contextName string) string {
+func controllerClustersDir(contextName string) string {
 	ctx, err := contextstore.NewContext(contextName)
 	if err != nil {
-		return filepath.Join(contextstore.RootDir(), "contexts", contextName, contextstore.RuntimeDirName)
+		return filepath.Join(contextstore.RootDir(), "contexts", contextName, contextstore.ClustersDirName)
 	}
-	return ctx.RuntimeDir
+	return ctx.ClustersDir
 }
 
 func ansibleVenvBin(name string) string {

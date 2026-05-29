@@ -23,9 +23,10 @@ const (
 	InputDirName        = "input"
 	RenderedDirName     = "rendered"
 	SecretsDirName      = "secrets"
-	RuntimeDirName      = "runtime"
 	RunsDirName         = "runs"
-	ManagedDirName      = "managed"
+	ClustersDirName     = "clusters"
+	ManagedServicesName = "managed-services"
+	ProviderStateName   = "provider-state"
 )
 
 type Store struct {
@@ -34,15 +35,25 @@ type Store struct {
 }
 
 type Context struct {
-	Name        string   `yaml:"-" json:"name"`
-	BaseDir     string   `yaml:"-" json:"baseDir"`
-	InputDir    string   `yaml:"-" json:"inputDir"`
-	RenderedDir string   `yaml:"-" json:"renderedDir"`
-	SecretsDir  string   `yaml:"-" json:"secretsDir"`
-	RuntimeDir  string   `yaml:"-" json:"runtimeDir"`
-	RunsDir     string   `yaml:"-" json:"runsDir"`
-	ManagedDir  string   `yaml:"-" json:"managedDir"`
-	InputPaths  []string `yaml:"-" json:"inputPaths"`
+	Name               string   `yaml:"-" json:"name"`
+	BaseDir            string   `yaml:"-" json:"baseDir"`
+	InputDir           string   `yaml:"-" json:"inputDir"`
+	RenderedDir        string   `yaml:"-" json:"renderedDir"`
+	SecretsDir         string   `yaml:"-" json:"secretsDir"`
+	RunsDir            string   `yaml:"-" json:"runsDir"`
+	ClustersDir        string   `yaml:"-" json:"clustersDir"`
+	ManagedServicesDir string   `yaml:"-" json:"managedServicesDir"`
+	ProviderStateDir   string   `yaml:"-" json:"providerStateDir"`
+	InputPaths         []string `yaml:"-" json:"inputPaths"`
+}
+
+type ClusterPaths struct {
+	Name        string
+	BaseDir     string
+	RenderedDir string
+	RuntimeDir  string
+	SecretsDir  string
+	RunsDir     string
 }
 
 var contextNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
@@ -101,15 +112,28 @@ func NewStagingContext(name, baseDir string) (Context, error) {
 func newContextAt(name, baseDir string) Context {
 	inputDir := filepath.Join(baseDir, InputDirName)
 	return Context{
+		Name:               name,
+		BaseDir:            baseDir,
+		InputDir:           inputDir,
+		RenderedDir:        filepath.Join(baseDir, RenderedDirName),
+		SecretsDir:         filepath.Join(baseDir, SecretsDirName),
+		RunsDir:            filepath.Join(baseDir, RunsDirName),
+		ClustersDir:        filepath.Join(baseDir, ClustersDirName),
+		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
+		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
+		InputPaths:         []string{inputDir},
+	}
+}
+
+func (ctx Context) Cluster(name string) ClusterPaths {
+	baseDir := filepath.Join(ctx.ClustersDir, name)
+	return ClusterPaths{
 		Name:        name,
 		BaseDir:     baseDir,
-		InputDir:    inputDir,
 		RenderedDir: filepath.Join(baseDir, RenderedDirName),
+		RuntimeDir:  filepath.Join(baseDir, "runtime"),
 		SecretsDir:  filepath.Join(baseDir, SecretsDirName),
-		RuntimeDir:  filepath.Join(baseDir, RuntimeDirName),
 		RunsDir:     filepath.Join(baseDir, RunsDirName),
-		ManagedDir:  filepath.Join(baseDir, ManagedDirName),
-		InputPaths:  []string{inputDir},
 	}
 }
 
@@ -231,11 +255,10 @@ func EnsureDirs(ctx Context) error {
 		ctx.InputDir,
 		ctx.RenderedDir,
 		ctx.SecretsDir,
-		ctx.RuntimeDir,
 		ctx.RunsDir,
-		ctx.ManagedDir,
-		filepath.Join(ctx.ManagedDir, "services"),
-		filepath.Join(ctx.ManagedDir, "substrate"),
+		ctx.ClustersDir,
+		ctx.ManagedServicesDir,
+		ctx.ProviderStateDir,
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
@@ -299,20 +322,22 @@ func ValidateContext(ctx Context) error {
 		return err
 	}
 	want := map[string]string{
-		"inputDir":    filepath.Join(baseDir, InputDirName),
-		"renderedDir": filepath.Join(baseDir, RenderedDirName),
-		"secretsDir":  filepath.Join(baseDir, SecretsDirName),
-		"runtimeDir":  filepath.Join(baseDir, RuntimeDirName),
-		"runsDir":     filepath.Join(baseDir, RunsDirName),
-		"managedDir":  filepath.Join(baseDir, ManagedDirName),
+		"inputDir":           filepath.Join(baseDir, InputDirName),
+		"renderedDir":        filepath.Join(baseDir, RenderedDirName),
+		"secretsDir":         filepath.Join(baseDir, SecretsDirName),
+		"runsDir":            filepath.Join(baseDir, RunsDirName),
+		"clustersDir":        filepath.Join(baseDir, ClustersDirName),
+		"managedServicesDir": filepath.Join(baseDir, ManagedServicesName),
+		"providerStateDir":   filepath.Join(baseDir, ProviderStateName),
 	}
 	got := map[string]string{
-		"inputDir":    ctx.InputDir,
-		"renderedDir": ctx.RenderedDir,
-		"secretsDir":  ctx.SecretsDir,
-		"runtimeDir":  ctx.RuntimeDir,
-		"runsDir":     ctx.RunsDir,
-		"managedDir":  ctx.ManagedDir,
+		"inputDir":           ctx.InputDir,
+		"renderedDir":        ctx.RenderedDir,
+		"secretsDir":         ctx.SecretsDir,
+		"runsDir":            ctx.RunsDir,
+		"clustersDir":        ctx.ClustersDir,
+		"managedServicesDir": ctx.ManagedServicesDir,
+		"providerStateDir":   ctx.ProviderStateDir,
 	}
 	for field, raw := range got {
 		clean, err := cleanPath(raw)

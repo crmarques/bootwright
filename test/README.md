@@ -104,5 +104,6 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 Authored inputs are copied to
 `/var/lib/bootwright/contexts/<context>/input/`. Reviewable generated output
 lives under `rendered/`, secret-inlined installer runtime output under
-`runtime/`, host/service-managed files under `managed/`, and apply ledgers and
-logs under `runs/`. Failed phases print the relevant log path.
+`clusters/<cluster>/runtime/installer/`, managed service files under
+`managed-services/`, provider state under `provider-state/`, and apply ledgers
+under `runs/`. Failed phases print the relevant log path.

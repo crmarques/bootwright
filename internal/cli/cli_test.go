@@ -401,8 +401,8 @@ func TestRenderInstallerScopedFixtureJSON(t *testing.T) {
 	if cluster.Name != "sno-libvirt" {
 		t.Fatalf("rendered cluster name = %q, want sno-libvirt", cluster.Name)
 	}
-	if !strings.HasPrefix(cluster.InstallConfigPath, filepath.Join(ctx.RenderedDir, render.InstallerRelativeDir)) {
-		t.Fatalf("install config path %q is outside installer state dir %q", cluster.InstallConfigPath, ctx.RenderedDir)
+	if !strings.HasPrefix(cluster.InstallConfigPath, filepath.Join(ctx.ClustersDir, "sno-libvirt", "rendered", render.InstallerRelativeDir)) {
+		t.Fatalf("install config path %q is outside cluster installer state dir %q", cluster.InstallConfigPath, ctx.ClustersDir)
 	}
 }
 
@@ -413,7 +413,11 @@ func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 		t.Fatalf("scaffold kubevirt workspace: %v", err)
 	}
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(dir, file.Name), []byte(file.Body), 0o600); err != nil {
+		path := filepath.Join(dir, file.Name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", file.Name, err)
+		}
+		if err := os.WriteFile(path, []byte(file.Body), 0o600); err != nil {
 			t.Fatalf("write %s: %v", file.Name, err)
 		}
 	}
@@ -681,7 +685,7 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 	}
 	secretPath := filepath.Join(ctx.SecretsDir, "manual-secret")
 	statePath := filepath.Join(ctx.RenderedDir, "manual-state")
-	runtimePath := filepath.Join(ctx.RuntimeDir, "manual-runtime")
+	runtimePath := filepath.Join(ctx.ClustersDir, "manual-runtime")
 	for path, body := range map[string]string{
 		secretPath:  "secret\n",
 		statePath:   "state\n",
@@ -2262,7 +2266,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("unknown", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		installer := installerInstallConfigPath(cf.ctx.RenderedDir, "sno-libvirt")
+		installer := installerInstallConfigPath(cf.ctx.ClustersDir, "sno-libvirt")
 		if err := os.MkdirAll(filepath.Dir(installer), 0o755); err != nil {
 			t.Fatalf("mkdir installer dir: %v", err)
 		}
@@ -2279,7 +2283,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("installer stat error", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		installer := installerInstallConfigPath(cf.ctx.RenderedDir, "sno-libvirt")
+		installer := installerInstallConfigPath(cf.ctx.ClustersDir, "sno-libvirt")
 		if err := os.MkdirAll(installer, 0o755); err != nil {
 			t.Fatalf("mkdir installer path: %v", err)
 		}
@@ -2296,7 +2300,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("fresh", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.RenderedDir, t.TempDir(), t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.RenderedDir, cf.ctx.ClustersDir, t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		report, err := buildStatusReport(cf)
@@ -2309,7 +2313,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	t.Run("stale", func(t *testing.T) {
 		baseDir := t.TempDir()
 		cf := testCommonFlags(t, baseDir, "001-sno-libvirt")
-		if _, err := render.All(cf.ctx.RenderedDir, t.TempDir(), t.TempDir(), state); err != nil {
+		if _, err := render.All(cf.ctx.RenderedDir, cf.ctx.ClustersDir, t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		stale := state
@@ -2506,7 +2510,7 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	clusterName := "3-nodes-ocp-baremetal"
-	if err := workflow.SaveClusterInstallRecord(ctx.RuntimeDir, workflow.ClusterInstallRecord{
+	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
 		Cluster:     clusterName,
 		DesiredHash: "sha256:old",
 		Status:      workflow.ClusterInstallStatusInstalling,
@@ -2515,7 +2519,7 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 	}); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
-	installConfig := filepath.Join(ctx.RuntimeDir, render.RuntimeRelativeDir, clusterName, "install-config.yaml")
+	installConfig := filepath.Join(ctx.ClustersDir, clusterName, "runtime", render.RuntimeRelativeDir, "install-config.yaml")
 	if err := os.MkdirAll(filepath.Dir(installConfig), 0o700); err != nil {
 		t.Fatalf("mkdir runtime installer dir: %v", err)
 	}
@@ -2591,7 +2595,7 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if len(bootTask.ResourceKeys) != 3 {
 		t.Fatalf("boot resource keys = %v, want three Redfish keys", bootTask.ResourceKeys)
 	}
-	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "install.log")) {
+	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "runs", "dry-run", "install.log")) {
 		t.Fatalf("boot cluster log path = %q", bootTask.ClusterLogPath)
 	}
 	wait := tasks[len(tasks)-1]

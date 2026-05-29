@@ -383,8 +383,9 @@ func contextFields(ctx contextstore.Context) []output.Field {
 		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
-		{Key: "runtime-dir", Value: ctx.RuntimeDir},
+		{Key: "clusters-dir", Value: ctx.ClustersDir},
 		{Key: "runs-dir", Value: ctx.RunsDir},
-		{Key: "managed-dir", Value: ctx.ManagedDir},
+		{Key: "managed-services-dir", Value: ctx.ManagedServicesDir},
+		{Key: "provider-state-dir", Value: ctx.ProviderStateDir},
 	}
 }

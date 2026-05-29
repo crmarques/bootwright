@@ -225,7 +225,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 					}
 					if k.HostClusterRef != nil {
 						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
-						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_runtime_dir }}/installer/" + k.HostClusterRef.Name + "/auth/kubeconfig"
+						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name

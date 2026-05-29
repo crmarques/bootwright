@@ -35,14 +35,15 @@ type statusShared struct {
 }
 
 type statusContext struct {
-	Name        string `json:"name"`
-	ContextDir  string `json:"contextDir"`
-	InputDir    string `json:"inputDir"`
-	RenderedDir string `json:"renderedDir"`
-	RuntimeDir  string `json:"runtimeDir"`
-	RunsDir     string `json:"runsDir"`
-	ManagedDir  string `json:"managedDir"`
-	SecretsDir  string `json:"secretsDir"`
+	Name               string `json:"name"`
+	ContextDir         string `json:"contextDir"`
+	InputDir           string `json:"inputDir"`
+	RenderedDir        string `json:"renderedDir"`
+	ClustersDir        string `json:"clustersDir"`
+	RunsDir            string `json:"runsDir"`
+	ManagedServicesDir string `json:"managedServicesDir"`
+	ProviderStateDir   string `json:"providerStateDir"`
+	SecretsDir         string `json:"secretsDir"`
 }
 
 type statusApplyRunActivity struct {
@@ -101,14 +102,15 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 
 	report := statusReport{
 		Context: statusContext{
-			Name:        ctx.Name,
-			ContextDir:  ctx.BaseDir,
-			InputDir:    ctx.InputDir,
-			RenderedDir: ctx.RenderedDir,
-			RuntimeDir:  ctx.RuntimeDir,
-			RunsDir:     ctx.RunsDir,
-			ManagedDir:  ctx.ManagedDir,
-			SecretsDir:  ctx.SecretsDir,
+			Name:               ctx.Name,
+			ContextDir:         ctx.BaseDir,
+			InputDir:           ctx.InputDir,
+			RenderedDir:        ctx.RenderedDir,
+			ClustersDir:        ctx.ClustersDir,
+			RunsDir:            ctx.RunsDir,
+			ManagedServicesDir: ctx.ManagedServicesDir,
+			ProviderStateDir:   ctx.ProviderStateDir,
+			SecretsDir:         ctx.SecretsDir,
 		},
 		Desired: statusDesired{
 			Source: stateSource(cf),
@@ -116,7 +118,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		},
 		Clusters:  []statusCluster{},
 		Shared:    []statusShared{},
-		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.SecretsDir),
+		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.SecretsDir),
 	}
 	if loadErr != nil {
 		report.Desired.LoadError = loadErr.Error()
@@ -130,7 +132,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.ClusterExtensions = len(state.ClusterExtensions)
 		report.Desired.ClusterExtensionSets = len(state.ClusterExtensionSets)
 		report.Desired.ClusterExtensionBindings = len(state.ClusterExtensionBindings)
-		report.Clusters = buildStatusClusters(state, ctx.RenderedDir, ctx.RuntimeDir)
+		report.Clusters = buildStatusClusters(state, ctx.RenderedDir, ctx.ClustersDir)
 		report.Shared = buildStatusShared(state)
 		report.Secrets, _ = declaredSecretEntries(ctx.SecretsDir, state)
 	}
@@ -160,9 +162,9 @@ func buildStatusShared(state v1alpha1.State) []statusShared {
 	return out
 }
 
-func buildStatusClusters(state v1alpha1.State, renderedDir, runtimeDir string) []statusCluster {
+func buildStatusClusters(state v1alpha1.State, renderedDir, clustersDir string) []statusCluster {
 	freshness := loadEffectiveStateFreshness(state, renderedDir)
-	extensionStatus := buildStatusExtensions(state, runtimeDir)
+	extensionStatus := buildStatusExtensions(state, clustersDir)
 	names := make([]string, 0, len(state.ContainerClusters))
 	byName := map[string]v1alpha1.ContainerCluster{}
 	for _, c := range state.ContainerClusters {
@@ -173,7 +175,7 @@ func buildStatusClusters(state v1alpha1.State, renderedDir, runtimeDir string) [
 	out := make([]statusCluster, 0, len(names))
 	for _, name := range names {
 		ocp := byName[name]
-		installer := installerInstallConfigPath(renderedDir, name)
+		installer := installerInstallConfigPath(clustersDir, name)
 		result := freshnessForInstaller(freshness, installer)
 		entry := statusCluster{
 			Name:               name,
@@ -194,7 +196,7 @@ func buildStatusClusters(state v1alpha1.State, renderedDir, runtimeDir string) [
 	return out
 }
 
-func buildStatusExtensions(state v1alpha1.State, runtimeDir string) map[string][]statusExtension {
+func buildStatusExtensions(state v1alpha1.State, clustersDir string) map[string][]statusExtension {
 	out := map[string][]statusExtension{}
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
@@ -203,7 +205,7 @@ func buildStatusExtensions(state v1alpha1.State, runtimeDir string) map[string][
 	for _, plan := range plans {
 		for _, extension := range plan.Extensions {
 			entry := statusExtension{Name: extension.Name}
-			record, found, err := extensionrecords.LoadRecord(runtimeDir, plan.Cluster, extension.Name)
+			record, found, err := extensionrecords.LoadRecord(clustersDir, plan.Cluster, extension.Name)
 			if err == nil && found {
 				entry.Status = string(record.Status)
 				entry.Phase = string(record.Phase)

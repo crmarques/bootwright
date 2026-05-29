@@ -13,25 +13,23 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 )
 
-func TestClusterAccessSummariesUseRuntimeKubeconfigAndContextPasswordPaths(t *testing.T) {
+func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	renderedDir := filepath.Join(t.TempDir(), "rendered")
-	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
-	secretsDir := filepath.Join(t.TempDir(), "secrets")
-	result := render.Result{InstallerAssets: render.InstallerAssets(renderedDir, runtimeDir, state)}
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	result := render.Result{InstallerAssets: render.InstallerAssets(clustersDir, state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusOK},
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 
-	summaries := clusterAccessSummariesForApply(state, result, secretsDir, ledger)
+	summaries := clusterAccessSummariesForApply(state, result, ledger)
 	if len(summaries) != 1 {
 		t.Fatalf("summaries = %+v, want one cluster", summaries)
 	}
 	summary := summaries[0]
-	kubeconfigPath := filepath.Join(runtimeDir, "installer", "sno-libvirt", "auth", "kubeconfig")
-	passwordPath := filepath.Join(secretsDir, "sno-libvirt-kubeadmin-password")
+	kubeconfigPath := filepath.Join(clustersDir, "sno-libvirt", "secrets", "kubeconfig")
+	passwordPath := filepath.Join(clustersDir, "sno-libvirt", "secrets", "kubeadmin-password")
 	if summary.KubeconfigPath != kubeconfigPath {
 		t.Fatalf("kubeconfig path = %q, want %q", summary.KubeconfigPath, kubeconfigPath)
 	}
@@ -47,12 +45,8 @@ func TestClusterAccessSummariesUseRuntimeKubeconfigAndContextPasswordPaths(t *te
 	if summary.KubeadminPasswordPath != passwordPath {
 		t.Fatalf("password path = %q, want %q", summary.KubeadminPasswordPath, passwordPath)
 	}
-	if summary.KubeadminPasswordSecret != "sno-libvirt-kubeadmin-password" {
-		t.Fatalf("password secret = %q", summary.KubeadminPasswordSecret)
-	}
-
 	var out bytes.Buffer
-	printClusterAccess(&out, state, result, secretsDir, ledger)
+	printClusterAccess(&out, state, result, ledger)
 	got := out.String()
 	for _, want := range []string{
 		"Cluster access",
@@ -61,9 +55,8 @@ func TestClusterAccessSummariesUseRuntimeKubeconfigAndContextPasswordPaths(t *te
 		"API: https://api.sno-libvirt.bootwright.test:6443",
 		"Console: https://console-openshift-console.apps.sno-libvirt.bootwright.test",
 		"Kubeadmin user: kubeadmin",
-		"Password secret: sno-libvirt-kubeadmin-password",
 		"Password file: " + passwordPath,
-		"Show password: bootwright secret show --name sno-libvirt-kubeadmin-password",
+		"Show password: sudo cat " + passwordPath,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, got)
@@ -73,29 +66,28 @@ func TestClusterAccessSummariesUseRuntimeKubeconfigAndContextPasswordPaths(t *te
 
 func TestClusterAccessSummariesRequireSuccessfulInstallWait(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	renderedDir := filepath.Join(t.TempDir(), "rendered")
-	result := render.Result{InstallerAssets: render.InstallerAssets(renderedDir, filepath.Join(t.TempDir(), "runtime-root"), state)}
+	result := render.Result{InstallerAssets: render.InstallerAssets(filepath.Join(t.TempDir(), "clusters"), state)}
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusSkipped},
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 
-	if summaries := clusterAccessSummariesForApply(state, result, filepath.Join(t.TempDir(), "secrets"), ledger); len(summaries) != 0 {
+	if summaries := clusterAccessSummariesForApply(state, result, ledger); len(summaries) != 0 {
 		t.Fatalf("summaries = %+v, want none", summaries)
 	}
 }
 
 func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	kubeconfigPath := filepath.Join(ctx.RuntimeDir, "installer", "sno-libvirt", "auth", "kubeconfig")
+	kubeconfigPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeconfig")
 	if err := os.MkdirAll(filepath.Dir(kubeconfigPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(kubeconfigPath, []byte("apiVersion: v1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	passwordPath := filepath.Join(ctx.SecretsDir, "sno-libvirt-kubeadmin-password")
+	passwordPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeadmin-password")
 	if err := os.WriteFile(passwordPath, []byte("do-not-print-this-password\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +100,8 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 		"Bootwright: cluster access",
 		"Cluster sno-libvirt",
 		"Kubeconfig: " + kubeconfigPath,
-		"Password secret: sno-libvirt-kubeadmin-password",
 		"Password file: " + passwordPath,
-		"Show password: bootwright secret show --name sno-libvirt-kubeadmin-password",
+		"Show password: sudo cat " + passwordPath,
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, stdout)
@@ -134,7 +125,7 @@ func TestClusterAccessCommandRejectsUnknownCluster(t *testing.T) {
 
 func TestClusterListJSONReportsAccessStatus(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	kubeconfigPath := filepath.Join(ctx.RuntimeDir, "installer", "sno-libvirt", "auth", "kubeconfig")
+	kubeconfigPath := filepath.Join(ctx.ClustersDir, "sno-libvirt", "secrets", "kubeconfig")
 	if err := os.MkdirAll(filepath.Dir(kubeconfigPath), 0o700); err != nil {
 		t.Fatal(err)
 	}

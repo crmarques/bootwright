@@ -134,7 +134,7 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 }
 
 func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
-	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:      "wait.sno-libvirt",
 		Kind:    workflow.ApplyTaskKindInstallWait,
@@ -142,21 +142,20 @@ func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
 		Cluster: "sno-libvirt",
 		Status:  workflow.TaskStatusPending,
 	}}, time.Now())
-	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(runtimeDir, "ansible-output.log"), time.Now())
+	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(clustersDir, "ansible-output.log"), time.Now())
 
 	var stdout bytes.Buffer
-	printApplyTaskStart(&stdout, runtimeDir, ledger, "wait.sno-libvirt")
+	printApplyTaskStart(&stdout, clustersDir, ledger, "wait.sno-libvirt")
 
-	want := workflow.OpenShiftInstallerLogPath(runtimeDir, "sno-libvirt")
+	want := workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt")
 	if !strings.Contains(stdout.String(), want) {
 		t.Fatalf("wait task output missing installer log path %q:\n%s", want, stdout.String())
 	}
 }
 
 func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
-	runtimeDir := filepath.Join(t.TempDir(), "runtime-root")
-	runsDir := filepath.Join(t.TempDir(), "runs")
-	clusterLogPath := workflow.ApplyClusterLogPath(runsDir, "apply-test", "sno-libvirt")
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	clusterLogPath := workflow.ApplyClusterLogPath(clustersDir, "apply-test", "sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:             "wait.sno-libvirt",
 		Kind:           workflow.ApplyTaskKindInstallWait,
@@ -167,11 +166,11 @@ func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
 	}}, time.Now())
 
 	var stdout bytes.Buffer
-	printApplyClusterLogPaths(&stdout, runtimeDir, ledger)
+	printApplyClusterLogPaths(&stdout, clustersDir, ledger)
 
 	for _, want := range []string{
 		clusterLogPath,
-		workflow.OpenShiftInstallerLogPath(runtimeDir, "sno-libvirt"),
+		workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt"),
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("cluster log output missing %q:\n%s", want, stdout.String())
@@ -197,9 +196,9 @@ echo ansible-stderr-line >&2
 		}},
 	}
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime-root")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	task := workflow.ApplyTask{
 		Entry: workflow.TaskLedgerEntry{
 			ID:     "provider",
@@ -213,15 +212,16 @@ echo ansible-stderr-line >&2
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
-		State:             state,
-		RenderedDir:       renderedDir,
-		RuntimeDir:        runtimeDir,
-		RunsDir:           runsDir,
-		SecretsDir:        filepath.Join(dir, "secrets"),
-		ManagedDir:        managedDir,
-		Executable:        executable,
-		BundleDir:         filepath.Join(dir, "bundle"),
-		ArtifactsBaseName: "provider",
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		Executable:         executable,
+		BundleDir:          filepath.Join(dir, "bundle"),
+		ArtifactsBaseName:  "provider",
 	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil, nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
@@ -271,9 +271,9 @@ echo "ansible stderr ${cluster}" >&2
 		}},
 	}
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime-root")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -303,16 +303,17 @@ echo "ansible stderr ${cluster}" >&2
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
-		State:             state,
-		RenderedDir:       renderedDir,
-		RuntimeDir:        runtimeDir,
-		RunsDir:           runsDir,
-		SecretsDir:        filepath.Join(dir, "secrets"),
-		ManagedDir:        managedDir,
-		Executable:        executable,
-		BundleDir:         filepath.Join(dir, "bundle"),
-		ArtifactsBaseName: "cluster",
-	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, runtimeDir), nil)
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		Executable:         executable,
+		BundleDir:          filepath.Join(dir, "bundle"),
+		ArtifactsBaseName:  "cluster",
+	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, clustersDir), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
@@ -325,7 +326,7 @@ echo "ansible stderr ${cluster}" >&2
 		}
 	}
 	for _, cluster := range []string{"cluster-a", "cluster-b"} {
-		logPath := workflow.ApplyClusterLogPath(runsDir, ledger.RunID, cluster)
+		logPath := workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, cluster)
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("read cluster log %s: %v", logPath, err)
@@ -365,9 +366,9 @@ rmdir "$lock_dir"
 	}
 	lockDir := filepath.Join(dir, "same-host.lock")
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime-root")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
@@ -397,15 +398,16 @@ rmdir "$lock_dir"
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	if _, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
-		State:             state,
-		RenderedDir:       renderedDir,
-		RuntimeDir:        runtimeDir,
-		RunsDir:           runsDir,
-		SecretsDir:        filepath.Join(dir, "secrets"),
-		ManagedDir:        managedDir,
-		Executable:        executable,
-		BundleDir:         filepath.Join(dir, "bundle"),
-		ArtifactsBaseName: "provider",
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		Executable:         executable,
+		BundleDir:          filepath.Join(dir, "bundle"),
+		ArtifactsBaseName:  "provider",
 	}, infraScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil, nil); err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph should serialize same resource key: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}

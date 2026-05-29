@@ -1,6 +1,7 @@
 ---
-bootwright_install_local_work_dir: "{{ bootwright_runtime_dir }}/installer/{{ bootwright_current_cluster.name }}"
-bootwright_install_work_dir: "{{ bootwright_runtime_dir }}/installer/{{ bootwright_current_cluster.name }}"
+bootwright_install_local_work_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
+bootwright_install_work_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
+bootwright_cluster_secrets_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/secrets"
 bootwright_openshift_install: openshift-install
 bootwright_install_timeout_seconds: 5400
 bootwright_install_wait_poll_seconds: 15

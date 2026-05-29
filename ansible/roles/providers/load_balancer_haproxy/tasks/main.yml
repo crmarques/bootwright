@@ -24,7 +24,7 @@
 
 - name: Create managed load balancer state directory
   ansible.builtin.file:
-    path: "{{ bootwright_managed_dir }}/services/load-balancer/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
     state: directory
     owner: root
     group: root
@@ -33,7 +33,7 @@
 - name: Render HAProxy configuration
   ansible.builtin.template:
     src: haproxy.cfg.j2
-    dest: "{{ bootwright_managed_dir }}/services/load-balancer/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/haproxy.cfg"
+    dest: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/haproxy.cfg"
     owner: root
     group: root
     mode: "0644"
@@ -54,7 +54,7 @@
       bootwright.provider: "{{ bootwright_component.providerName }}"
       bootwright.name: "{{ bootwright_component.name }}"
     volumes:
-      - "{{ bootwright_managed_dir }}/services/load-balancer/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z"
+      - "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z"
     command:
       - haproxy
       - -f

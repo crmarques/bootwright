@@ -47,7 +47,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if err != nil {
 			return failErr(1, err)
 		}
-		runtimeDir := controllerRuntimeDir(ctx.Name)
+		clustersDir := controllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
@@ -106,7 +106,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.state)
 		} else {
-			printDestroyPreview(stdout, scope, runtimeDir, plan.state)
+			printDestroyPreview(stdout, scope, clustersDir, plan.state)
 		}
 		printDestroySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
 		if !dryRun && !yes && !plan.noRemoteWork {
@@ -147,10 +147,11 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		runResult, err := workflow.Run(c.Context(), workflow.RunOptions{
 			State:              plan.state,
 			RenderedDir:        ctx.RenderedDir,
-			RuntimeDir:         runtimeDir,
+			ClustersDir:        clustersDir,
 			RunsDir:            ctx.RunsDir,
 			SecretsDir:         ctx.SecretsDir,
-			ManagedDir:         ctx.ManagedDir,
+			ManagedServicesDir: ctx.ManagedServicesDir,
+			ProviderStateDir:   ctx.ProviderStateDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           playbook,

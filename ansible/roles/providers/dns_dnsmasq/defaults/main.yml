@@ -1,4 +1,4 @@
 ---
-bootwright_dnsmasq_root: "{{ bootwright_managed_dir }}/services/dns/{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+bootwright_dnsmasq_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
 bootwright_dnsmasq_dropin_dir: "{{ bootwright_dnsmasq_root }}/dnsmasq.d"
 bootwright_dnsmasq_container_name: "bootwright-dnsmasq-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"

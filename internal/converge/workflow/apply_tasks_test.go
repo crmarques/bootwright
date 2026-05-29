@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,18 +50,19 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 		State:    state,
 	}
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
-		State:             state,
-		RenderedDir:       renderedDir,
-		RuntimeDir:        runtimeDir,
-		RunsDir:           runsDir,
-		SecretsDir:        filepath.Join(dir, "secrets"),
-		ManagedDir:        managedDir,
-		BundleDir:         filepath.Join(dir, "bundle"),
-		ArtifactsBaseName: "provider",
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+		ArtifactsBaseName:  "provider",
 	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, factory)
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
@@ -81,9 +83,9 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
@@ -99,10 +101,10 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 		UpdatedAt:   now.UTC(),
 		InstalledAt: &now,
 	}
-	if err := SaveClusterInstallRecord(runtimeDir, record); err != nil {
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		t.Fatalf("SaveClusterInstallRecord: %v", err)
 	}
-	kubeconfig := clusterKubeconfigPath(runtimeDir, state, "sno-libvirt")
+	kubeconfig := clusterKubeconfigPath(clustersDir, "sno-libvirt")
 	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
 		t.Fatalf("mkdir kubeconfig dir: %v", err)
 	}
@@ -114,10 +116,11 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
 		State:                      state,
 		RenderedDir:                renderedDir,
-		RuntimeDir:                 runtimeDir,
+		ClustersDir:                clustersDir,
 		RunsDir:                    runsDir,
 		SecretsDir:                 secretsDir,
-		ManagedDir:                 managedDir,
+		ManagedServicesDir:         managedServicesDir,
+		ProviderStateDir:           filepath.Join(dir, "provider-state"),
 		BundleDir:                  filepath.Join(dir, "bundle"),
 		ClusterAvailabilityChecker: checker,
 	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
@@ -145,10 +148,10 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
-	if err := SaveClusterInstallRecord(runtimeDir, ClusterInstallRecord{
+	managedServicesDir := filepath.Join(dir, "managed-services")
+	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 		Cluster:     "sno-libvirt",
 		DesiredHash: "sha256:old",
 		Status:      ClusterInstallStatusInstalled,
@@ -159,13 +162,14 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 	}
 	calls := 0
 	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
-		State:       state,
-		RenderedDir: renderedDir,
-		RuntimeDir:  runtimeDir,
-		RunsDir:     runsDir,
-		SecretsDir:  secretsDir,
-		ManagedDir:  managedDir,
-		BundleDir:   filepath.Join(dir, "bundle"),
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         secretsDir,
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
 	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
@@ -201,10 +205,10 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 			state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 			secretsDir := writeWorkflowInstallerSecrets(t, dir)
 			renderedDir := filepath.Join(dir, "rendered")
-			runtimeDir := filepath.Join(dir, "runtime")
+			clustersDir := filepath.Join(dir, "clusters")
 			runsDir := filepath.Join(dir, "runs")
-			managedDir := filepath.Join(dir, "managed")
-			if err := SaveClusterInstallRecord(runtimeDir, ClusterInstallRecord{
+			managedServicesDir := filepath.Join(dir, "managed-services")
+			if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 				Cluster:   "sno-libvirt",
 				Status:    tc.status,
 				Phase:     tc.phase,
@@ -214,13 +218,14 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 			}
 			calls := 0
 			_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
-				State:       state,
-				RenderedDir: renderedDir,
-				RuntimeDir:  runtimeDir,
-				RunsDir:     runsDir,
-				SecretsDir:  secretsDir,
-				ManagedDir:  managedDir,
-				BundleDir:   filepath.Join(dir, "bundle"),
+				State:              state,
+				RenderedDir:        renderedDir,
+				ClustersDir:        clustersDir,
+				RunsDir:            runsDir,
+				SecretsDir:         secretsDir,
+				ManagedServicesDir: managedServicesDir,
+				ProviderStateDir:   filepath.Join(dir, "provider-state"),
+				BundleDir:          filepath.Join(dir, "bundle"),
 			}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 				calls++
 				return &fakeRunner{}
@@ -240,14 +245,14 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
 	secretsDir := writeWorkflowInstallerSecrets(t, dir)
 	renderedDir := filepath.Join(dir, "rendered")
-	runtimeDir := filepath.Join(dir, "runtime")
+	clustersDir := filepath.Join(dir, "clusters")
 	runsDir := filepath.Join(dir, "runs")
-	managedDir := filepath.Join(dir, "managed")
+	managedServicesDir := filepath.Join(dir, "managed-services")
 	hash, err := clusterInstallDesiredHash(state, "sno-libvirt", secretsDir)
 	if err != nil {
 		t.Fatalf("clusterInstallDesiredHash: %v", err)
 	}
-	if err := SaveClusterInstallRecord(runtimeDir, ClusterInstallRecord{
+	if err := SaveClusterInstallRecord(clustersDir, ClusterInstallRecord{
 		Cluster:     "sno-libvirt",
 		DesiredHash: hash,
 		Status:      ClusterInstallStatusInstalling,
@@ -260,13 +265,14 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	runner := &fakeRunner{}
 	calls := 0
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, runsDir, RunOptions{
-		State:       state,
-		RenderedDir: renderedDir,
-		RuntimeDir:  runtimeDir,
-		RunsDir:     runsDir,
-		SecretsDir:  secretsDir,
-		ManagedDir:  managedDir,
-		BundleDir:   filepath.Join(dir, "bundle"),
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         secretsDir,
+		ManagedServicesDir: managedServicesDir,
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
 	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return runner
@@ -296,12 +302,32 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	if wait.Status != TaskStatusOK {
 		t.Fatalf("wait status = %s, want ok", wait.Status)
 	}
-	record, found, err := LoadClusterInstallRecord(runtimeDir, "sno-libvirt")
+	record, found, err := LoadClusterInstallRecord(clustersDir, "sno-libvirt")
 	if err != nil || !found {
 		t.Fatalf("LoadClusterInstallRecord found=%v err=%v", found, err)
 	}
 	if record.Status != ClusterInstallStatusInstalled || record.Phase != ClusterInstallPhaseComplete {
 		t.Fatalf("record = %+v, want installed complete", record)
+	}
+	data, err := os.ReadFile(ClusterConnectionPath(clustersDir, "sno-libvirt"))
+	if err != nil {
+		t.Fatalf("read cluster connection record: %v", err)
+	}
+	var connection ClusterConnectionRecord
+	if err := json.Unmarshal(data, &connection); err != nil {
+		t.Fatalf("decode cluster connection record: %v", err)
+	}
+	if connection.KubeconfigPath != clusterKubeconfigPath(clustersDir, "sno-libvirt") {
+		t.Fatalf("connection kubeconfig path = %q", connection.KubeconfigPath)
+	}
+	if connection.APIURL != "https://api.sno-libvirt.bootwright.test:6443" {
+		t.Fatalf("connection API URL = %q", connection.APIURL)
+	}
+	if connection.ConsoleURL != "https://console-openshift-console.apps.sno-libvirt.bootwright.test" {
+		t.Fatalf("connection console URL = %q", connection.ConsoleURL)
+	}
+	if connection.IngressBaseDomain != "apps.sno-libvirt.bootwright.test" {
+		t.Fatalf("connection ingress base domain = %q", connection.IngressBaseDomain)
 	}
 }
 

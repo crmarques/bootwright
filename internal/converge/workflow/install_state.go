@@ -20,7 +20,10 @@ import (
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
-const ClusterInstallRecordRelativeDir = "install-records"
+const (
+	ClusterInstallRecordFileName = "install-record.json"
+	ClusterConnectionFileName    = "connection.json"
+)
 
 type ClusterInstallStatus string
 
@@ -53,6 +56,15 @@ type ClusterInstallRecord struct {
 	UpdatedAt   time.Time                           `json:"updatedAt"`
 	InstalledAt *time.Time                          `json:"installedAt,omitempty"`
 	Nodes       map[string]ClusterInstallNodeRecord `json:"nodes,omitempty"`
+}
+
+type ClusterConnectionRecord struct {
+	Cluster           string    `json:"cluster"`
+	APIURL            string    `json:"apiURL,omitempty"`
+	ConsoleURL        string    `json:"consoleURL,omitempty"`
+	IngressBaseDomain string    `json:"ingressBaseDomain,omitempty"`
+	KubeconfigPath    string    `json:"kubeconfigPath,omitempty"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type ClusterInstallNodeRecord struct {
@@ -91,12 +103,24 @@ func (c OCClusterAvailabilityChecker) Available(ctx context.Context, kubeconfigP
 	return strings.TrimSpace(string(out)) == "True", nil
 }
 
-func ClusterInstallRecordPath(runtimeDir, cluster string) string {
-	return filepath.Join(runtimeDir, ClusterInstallRecordRelativeDir, cluster+".json")
+func ClusterRuntimeDir(clustersDir, cluster string) string {
+	return filepath.Join(clustersDir, cluster, "runtime")
 }
 
-func LoadClusterInstallRecord(runtimeDir, cluster string) (ClusterInstallRecord, bool, error) {
-	path := ClusterInstallRecordPath(runtimeDir, cluster)
+func ClusterSecretsDir(clustersDir, cluster string) string {
+	return filepath.Join(clustersDir, cluster, "secrets")
+}
+
+func ClusterInstallRecordPath(clustersDir, cluster string) string {
+	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterInstallRecordFileName)
+}
+
+func ClusterConnectionPath(clustersDir, cluster string) string {
+	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterConnectionFileName)
+}
+
+func LoadClusterInstallRecord(clustersDir, cluster string) (ClusterInstallRecord, bool, error) {
+	path := ClusterInstallRecordPath(clustersDir, cluster)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return ClusterInstallRecord{}, false, nil
@@ -111,8 +135,8 @@ func LoadClusterInstallRecord(runtimeDir, cluster string) (ClusterInstallRecord,
 	return record, true, nil
 }
 
-func SaveClusterInstallRecord(runtimeDir string, record ClusterInstallRecord) error {
-	path := ClusterInstallRecordPath(runtimeDir, record.Cluster)
+func SaveClusterInstallRecord(clustersDir string, record ClusterInstallRecord) error {
+	path := ClusterInstallRecordPath(clustersDir, record.Cluster)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create cluster install record directory: %w", err)
 	}
@@ -130,7 +154,26 @@ func SaveClusterInstallRecord(runtimeDir string, record ClusterInstallRecord) er
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
+func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRecord) error {
+	path := ClusterConnectionPath(clustersDir, record.Cluster)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create cluster connection record directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("chmod cluster connection record directory: %w", err)
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode cluster connection record: %w", err)
+	}
+	data = append(data, '\n')
+	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write cluster connection record: %w", err)
+	}
+	return nil
+}
+
+func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -144,7 +187,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, secretsD
 		if err != nil {
 			return out, err
 		}
-		record, found, err := LoadClusterInstallRecord(runtimeDir, name)
+		record, found, err := LoadClusterInstallRecord(clustersDir, name)
 		if err != nil {
 			return out, err
 		}
@@ -155,9 +198,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, secretsD
 		if found && !hashMatches && record.Status != ClusterInstallStatusDestroyed && (record.Status == ClusterInstallStatusInstalled || clusterInstallPhaseMayHaveBooted(record.Phase)) {
 			return out, fmt.Errorf("ContainerCluster/%s already has install state for missing or different install inputs after node boot; run bootwright destroy cluster --yes or bootwright apply cluster --override --yes after resetting target machines", name)
 		}
-		kubeconfigPath := clusterKubeconfigPath(runtimeDir, state, name)
+		kubeconfigPath := clusterKubeconfigPath(clustersDir, name)
 		if !found {
-			adopted, err := adoptAvailableClusterRecord(ctx, runtimeDir, name, hash, runID, kubeconfigPath, checker, now)
+			adopted, err := adoptAvailableClusterRecord(ctx, clustersDir, name, hash, runID, kubeconfigPath, state.Environments, checker, now)
 			if err != nil {
 				return out, err
 			}
@@ -190,7 +233,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, runtimeDir, secretsD
 	return out, nil
 }
 
-func adoptAvailableClusterRecord(ctx context.Context, runtimeDir, name, hash, runID, kubeconfigPath string, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
+func adoptAvailableClusterRecord(ctx context.Context, clustersDir, name, hash, runID, kubeconfigPath string, environments []v1alpha1.Environment, checker ClusterAvailabilityChecker, now time.Time) (bool, error) {
 	if _, err := os.Stat(kubeconfigPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
@@ -215,7 +258,10 @@ func adoptAvailableClusterRecord(ctx context.Context, runtimeDir, name, hash, ru
 		UpdatedAt:   t,
 		InstalledAt: &t,
 	}
-	if err := SaveClusterInstallRecord(runtimeDir, record); err != nil {
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+		return false, err
+	}
+	if err := SaveClusterConnectionRecord(clustersDir, clusterConnectionRecord(clustersDir, name, environments, now)); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -238,7 +284,7 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	}
 }
 
-func MarkClusterInstallTaskStarted(runtimeDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskStarted(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -250,7 +296,7 @@ func MarkClusterInstallTaskStarted(runtimeDir, secretsDir, runID string, task Ap
 	if err != nil {
 		return err
 	}
-	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -263,10 +309,16 @@ func MarkClusterInstallTaskStarted(runtimeDir, secretsDir, runID string, task Ap
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
 	record.InstalledAt = nil
-	return SaveClusterInstallRecord(runtimeDir, record)
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+		return err
+	}
+	if task.Entry.Kind == ApplyTaskKindInstallWait {
+		return SaveClusterConnectionRecord(clustersDir, clusterConnectionRecord(clustersDir, task.Entry.Cluster, task.State.Environments, now))
+	}
+	return nil
 }
 
-func MarkClusterInstallTaskSucceeded(runtimeDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskSucceeded(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskSuccessPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -274,7 +326,7 @@ func MarkClusterInstallTaskSucceeded(runtimeDir, secretsDir, runID string, task 
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -299,10 +351,16 @@ func MarkClusterInstallTaskSucceeded(runtimeDir, secretsDir, runID string, task 
 	if task.Entry.Kind == ApplyTaskKindNodeBoot {
 		record.Nodes = bootedClusterNodes(task.State, task.Entry.Cluster, now)
 	}
-	return SaveClusterInstallRecord(runtimeDir, record)
+	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
+		return err
+	}
+	if task.Entry.Kind == ApplyTaskKindInstallWait {
+		return SaveClusterConnectionRecord(clustersDir, clusterConnectionRecord(clustersDir, task.Entry.Cluster, task.State.Environments, now))
+	}
+	return nil
 }
 
-func MarkClusterInstallTaskFailed(runtimeDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskFailed(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -310,7 +368,7 @@ func MarkClusterInstallTaskFailed(runtimeDir, secretsDir, runID string, task App
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	record, found, err := LoadClusterInstallRecord(runtimeDir, task.Entry.Cluster)
+	record, found, err := LoadClusterInstallRecord(clustersDir, task.Entry.Cluster)
 	if err != nil {
 		return err
 	}
@@ -326,7 +384,7 @@ func MarkClusterInstallTaskFailed(runtimeDir, secretsDir, runID string, task App
 	record.Phase = phase
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
-	return SaveClusterInstallRecord(runtimeDir, record)
+	return SaveClusterInstallRecord(clustersDir, record)
 }
 
 func clusterInstallTaskStartPhase(kind string) (ClusterInstallPhase, bool) {
@@ -407,13 +465,30 @@ func clusterInstallDesiredHash(state v1alpha1.State, clusterName, secretsDir str
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func clusterKubeconfigPath(runtimeDir string, state v1alpha1.State, clusterName string) string {
-	for _, asset := range render.InstallerAssets("", runtimeDir, state) {
-		if asset.ClusterName == clusterName {
-			return filepath.Join(asset.WorkDir, "auth", "kubeconfig")
+func clusterKubeconfigPath(clustersDir, clusterName string) string {
+	return filepath.Join(ClusterSecretsDir(clustersDir, clusterName), "kubeconfig")
+}
+
+func clusterConnectionRecord(clustersDir, clusterName string, environments []v1alpha1.Environment, now time.Time) ClusterConnectionRecord {
+	baseDomain := ""
+	for _, env := range environments {
+		if env.Spec.BaseDomain != "" {
+			baseDomain = env.Spec.BaseDomain
+			break
 		}
 	}
-	return filepath.Join(runtimeDir, render.RuntimeRelativeDir, clusterName, "auth", "kubeconfig")
+	record := ClusterConnectionRecord{
+		Cluster:        clusterName,
+		KubeconfigPath: clusterKubeconfigPath(clustersDir, clusterName),
+		UpdatedAt:      now.UTC(),
+	}
+	if baseDomain == "" {
+		return record
+	}
+	record.IngressBaseDomain = "apps." + clusterName + "." + baseDomain
+	record.APIURL = "https://api." + clusterName + "." + baseDomain + ":6443"
+	record.ConsoleURL = "https://console-openshift-console.apps." + clusterName + "." + baseDomain
+	return record
 }
 
 func installTaskClusterNames(tasks []ApplyTask) []string {

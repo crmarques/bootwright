@@ -21,7 +21,7 @@ desired state.
 
 KubeVirt child-cluster profiles follow the same boundary. `hostClusterRef`
 resolves to the host cluster kubeconfig already produced under Bootwright
-runtime state, and `kubeconfigRef` resolves through `Environment.spec.secrets`
+cluster secrets state, and `kubeconfigRef` resolves through `Environment.spec.secrets`
 for external virtualization clusters. Desired state records only the reference
 name, never kubeconfig bytes.
 
@@ -101,7 +101,7 @@ Generated output boundaries are part of the safety contract:
 - User-authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
-  `/var/lib/bootwright/contexts/<context>/rendered/installer/<cluster>/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
   Placeholder `openshift/` Secret manifests carry redacted data only.
 - Context-local secrets live under
   `/var/lib/bootwright/contexts/<context>/secrets/`; `secret show` prints a
@@ -113,27 +113,27 @@ Generated output boundaries are part of the safety contract:
   non-root Bootwright invocation internally re-execs through `sudo`, checks and
   reads of those external files run as the original caller.
 - Bootwright-managed secret-inlined runtime installer output lives under
-  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`, with
-  restrictive file modes, and must never be versioned.
-- Kubeconfigs produced for installed host clusters live under
-  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/auth/`.
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/`,
+  with restrictive file modes, and must never be versioned.
+- Kubeconfigs produced for installed host clusters live at
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/kubeconfig`.
   They may be consumed by KubeVirt child-cluster operations through
   `hostClusterRef`, but must never be copied into authored desired state.
 - Bootwright-managed apply logs that can include external tool output live under
   `/var/lib/bootwright/contexts/<context>/runs/`, with restrictive file
   modes, and must never be versioned.
-- Per-cluster install records live under
-  `/var/lib/bootwright/contexts/<context>/runtime/install-records/`.
+- Per-cluster install records live at
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/install-record.json`.
   They may contain cluster names, non-secret desired-input fingerprints,
   install phases, run IDs, timestamps, and node boot markers, but must not
   contain kubeconfigs, pull secrets, tokens, private keys, or other secret
   bytes.
-- The generated OpenShift kubeadmin password is copied into
-  `/var/lib/bootwright/contexts/<context>/secrets/<cluster>-kubeadmin-password`
+- The generated OpenShift kubeadmin password is copied to
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/kubeadmin-password`
   with mode `0600` after a successful agent install.
 - Cluster access inventory commands may print cluster API and console URLs,
-  local kubeconfig paths, kubeadmin password secret names, local password file
-  paths, and retrieval commands, but must not print kubeconfigs, kubeadmin
+  local kubeconfig paths, local password file paths, and retrieval commands,
+  but must not print kubeconfigs, kubeadmin
   passwords, tokens, or other secret bytes.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined

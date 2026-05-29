@@ -77,7 +77,7 @@ var defaultPreflightDeps = preflightDeps{
 	uid: os.Getuid,
 }
 
-func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, runtimeDir string, deps preflightDeps) []preflightCheck {
+func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, clustersDir string, deps preflightDeps) []preflightCheck {
 	var checks []preflightCheck
 	if selectedNeedsAnsible(selected) {
 		checks = append(checks,
@@ -99,7 +99,7 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	if hasState {
 		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
-		checks = append(checks, kubeVirtHostClusterChecks(state, selected, runtimeDir, deps)...)
+		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
 	}
 	return checks
 }
@@ -148,7 +148,7 @@ func stateNeedsKubeVirt(state v1alpha1.State) bool {
 	return false
 }
 
-func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, runtimeDir string, deps preflightDeps) []preflightCheck {
+func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps preflightDeps) []preflightCheck {
 	if !anyPhaseInScope([]string{"cluster", "clusters"}, selected) {
 		return nil
 	}
@@ -164,7 +164,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, runtimeDi
 				continue
 			}
 			seen[name] = true
-			path := filepath.Join(runtimeDir, "installer", name, "auth", "kubeconfig")
+			path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
 			info, err := deps.statPath(path)
 			switch {
 			case err != nil:

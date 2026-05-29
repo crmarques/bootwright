@@ -86,9 +86,10 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		{Key: "context-dir", Value: ctx.BaseDir},
 		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "rendered-dir", Value: ctx.RenderedDir},
-		{Key: "runtime-dir", Value: ctx.RuntimeDir},
+		{Key: "clusters-dir", Value: ctx.ClustersDir},
 		{Key: "runs-dir", Value: ctx.RunsDir},
-		{Key: "managed-dir", Value: ctx.ManagedDir},
+		{Key: "managed-services-dir", Value: ctx.ManagedServicesDir},
+		{Key: "provider-state-dir", Value: ctx.ProviderStateDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 	})
 
@@ -113,7 +114,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	if stateLoaded {
 		printSecretStatus(p, ctx.SecretsDir, state)
-		printClusterStatus(p, state, ctx.RenderedDir, ctx.RuntimeDir)
+		printClusterStatus(p, state, ctx.RenderedDir, ctx.ClustersDir)
 		printSharedStatus(p, state)
 	}
 
@@ -122,7 +123,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	p.Section("Next steps")
 	var items []cliout.Item
-	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.SecretsDir)
+	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
 		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
 		hints = ledgerNextSteps(ledger, activity, hints)
@@ -167,7 +168,7 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 	}
 }
 
-func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, runtimeDir string) {
+func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, clustersDir string) {
 	if len(state.ContainerClusters) == 0 {
 		return
 	}
@@ -180,12 +181,12 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, ru
 		byName[ocp.Metadata.Name] = ocp
 	}
 	sort.Strings(names)
-	extensions := buildStatusExtensions(state, runtimeDir)
+	extensions := buildStatusExtensions(state, clustersDir)
 	for _, name := range names {
 		ocp := byName[name]
 		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
 		p.Status(cliout.StatusOK, name, detail)
-		installer := installerInstallConfigPath(renderedDir, name)
+		installer := installerInstallConfigPath(clustersDir, name)
 		result := freshnessForInstaller(freshness, installer)
 		switch result.State {
 		case installerFreshnessFresh:
@@ -258,12 +259,12 @@ func printSecretStatus(p *cliout.Printer, secretsDir string, state v1alpha1.Stat
 	}
 }
 
-func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, secretsDir string) []string {
+func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, secretsDir string) []string {
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretNextStepHints(state, secretsDir)...)
 		hints = append(hints, "bootwright check bastion")
-		needsInstaller := clustersNeedingInstallerRender(state, renderedDir)
+		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints,
 				"bootwright apply infra --dry-run",
@@ -326,11 +327,11 @@ func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
 	return hints
 }
 
-func clustersNeedingInstallerRender(state v1alpha1.State, renderedDir string) []string {
+func clustersNeedingInstallerRender(state v1alpha1.State, renderedDir, clustersDir string) []string {
 	freshness := loadEffectiveStateFreshness(state, renderedDir)
 	var needs []string
 	for _, ocp := range state.ContainerClusters {
-		path := installerInstallConfigPath(renderedDir, ocp.Metadata.Name)
+		path := installerInstallConfigPath(clustersDir, ocp.Metadata.Name)
 		switch freshnessForInstaller(freshness, path).State {
 		case installerFreshnessFresh:
 			continue
@@ -360,8 +361,8 @@ func stateSource(cf *commonFlags) string {
 	return "(none)"
 }
 
-func installerInstallConfigPath(renderedDir, clusterName string) string {
-	return filepath.Join(renderedDir, render.InstallerRelativeDir, clusterName, "install-config.yaml")
+func installerInstallConfigPath(clustersDir, clusterName string) string {
+	return filepath.Join(clustersDir, clusterName, "rendered", render.InstallerRelativeDir, "install-config.yaml")
 }
 
 func hasAnyState(s v1alpha1.State) bool {

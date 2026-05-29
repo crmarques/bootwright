@@ -48,7 +48,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
-		runtimeDir := controllerRuntimeDir(ctx.Name)
+		clustersDir := controllerClustersDir(ctx.Name)
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " check"}})
 		}
@@ -64,7 +64,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			selected := phasesForState(scope.phases(), state)
 			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "check", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, runtimeDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -80,19 +80,20 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		}
 		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
 		_, err = workflow.Run(c.Context(), workflow.RunOptions{
-			State:             state,
-			RenderedDir:       ctx.RenderedDir,
-			RuntimeDir:        runtimeDir,
-			RunsDir:           ctx.RunsDir,
-			SecretsDir:        ctx.SecretsDir,
-			ManagedDir:        ctx.ManagedDir,
-			Executable:        flags.executable,
-			BundleDir:         bundle.Dir,
-			Playbook:          preflightPlaybookPath,
-			Limit:             limit,
-			ArtifactsBaseName: "preflight-" + scope.name,
-			DryRun:            dryRun,
-			Label:             scope.name + " check",
+			State:              state,
+			RenderedDir:        ctx.RenderedDir,
+			ClustersDir:        clustersDir,
+			RunsDir:            ctx.RunsDir,
+			SecretsDir:         ctx.SecretsDir,
+			ManagedServicesDir: ctx.ManagedServicesDir,
+			ProviderStateDir:   ctx.ProviderStateDir,
+			Executable:         flags.executable,
+			BundleDir:          bundle.Dir,
+			Playbook:           preflightPlaybookPath,
+			Limit:              limit,
+			ArtifactsBaseName:  "preflight-" + scope.name,
+			DryRun:             dryRun,
+			Label:              scope.name + " check",
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)

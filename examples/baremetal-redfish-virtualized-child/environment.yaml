@@ -6,20 +6,20 @@ spec:
   baseDomain: example.test
 
   resources:
-    - hosts.yaml
-    - infra-component.yaml
-    - parent/provider.yaml
-    - parent/networks.yaml
-    - parent/cluster-infra.yaml
-    - parent/container-cluster.yaml
-    - extensions/cluster-extension-virtualization.yaml
+    - shared/hosts.yaml
+    - shared/infra-component.yaml
+    - clusters/child-ocp/cluster-infra.yaml
+    - clusters/child-ocp/container-cluster.yaml
+    - clusters/child-ocp/networks.yaml
+    - clusters/child-ocp/provider.yaml
+    - clusters/metal-ocp/cluster-infra.yaml
+    - clusters/metal-ocp/container-cluster.yaml
+    - clusters/metal-ocp/networks.yaml
+    - clusters/metal-ocp/provider.yaml
+    - extensions/cluster-extension-binding.yaml
     - extensions/cluster-extension-child-network.yaml
     - extensions/cluster-extension-set.yaml
-    - extensions/cluster-extension-binding.yaml
-    - child/provider.yaml
-    - child/networks.yaml
-    - child/cluster-infra.yaml
-    - child/container-cluster.yaml
+    - extensions/cluster-extension-virtualization.yaml
 
   secrets:
     openshift-pull-secret: null

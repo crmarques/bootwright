@@ -8,5 +8,5 @@
 
 - name: Remove cluster baremetal state directory (idempotent)
   ansible.builtin.file:
-    path: "{{ bootwright_managed_dir }}/substrate/baremetal/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}.yml"
+    path: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/baremetal/{{ bootwright_component.name }}.yml"
     state: absent

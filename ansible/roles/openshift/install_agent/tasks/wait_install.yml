@@ -68,11 +68,38 @@
       become: false
       when: bootwright_install_wait.rc == 0
 
+    - name: Create local cluster secrets directory
+      ansible.builtin.file:
+        path: "{{ bootwright_cluster_secrets_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Store kubeconfig in cluster secrets
+      ansible.builtin.copy:
+        src: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig"
+        dest: "{{ bootwright_cluster_secrets_dir }}/kubeconfig"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
+    - name: Store kubeadmin password in cluster secrets
+      ansible.builtin.copy:
+        src: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
+        dest: "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      when: bootwright_install_wait.rc == 0
+
     - name: Record local kubeconfig path
       ansible.builtin.copy:
         dest: "{{ bootwright_install_local_work_dir }}/kubeconfig.path"
         mode: "0600"
-        content: "{{ bootwright_install_local_work_dir }}/auth/kubeconfig\n"
+        content: "{{ bootwright_cluster_secrets_dir }}/kubeconfig\n"
       delegate_to: localhost
       become: false
       when: bootwright_install_wait.rc == 0
@@ -184,19 +211,3 @@
       when:
         - bootwright_agent_iso_publish_cleanup_token_file is defined
         - (bootwright_agent_iso_publish_cleanup_token_file.content | default('') | length) > 0
-
-- name: Stat local kubeadmin password
-  ansible.builtin.stat:
-    path: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-  register: bootwright_local_kubeadmin_password_stat
-  delegate_to: localhost
-  become: false
-
-- name: Save kubeadmin password to context secrets
-  ansible.builtin.include_role:
-    name: context_secret
-    tasks_from: save_file
-  vars:
-    bootwright_context_secret_name: "{{ bootwright_current_cluster.name }}-kubeadmin-password"
-    bootwright_context_secret_source: "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password"
-  when: bootwright_local_kubeadmin_password_stat.stat.exists

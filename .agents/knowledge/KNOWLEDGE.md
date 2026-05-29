@@ -8,14 +8,14 @@ Error and constraint knowledge extracted from code history. Match the reported s
 | Ansible / sudo | `sudo: sorry, you must have a tty to run sudo`; `sudo: a password is required`; `Install controller OS packages` | [ansible-sudo-requiretty.md](ansible-sudo-requiretty.md) |
 | Ansible / remote tmp | `can't open file '<home-dir>/.ansible/tmp`; `[Errno 13] Permission denied`; `AnsiballZ_setup.py` | [ansible-remote-tmp-permission.md](ansible-remote-tmp-permission.md) |
 | Ansible / sudo | `bootwright apply <target>` auto-sudo cannot find ansible; `ModuleNotFoundError` under sudo | [pip-user-sudo-pythonpath.md](pip-user-sudo-pythonpath.md) |
-| Ansible / sudo | `Ensure tmp working directory exists`; permission denied under `<runtime-dir>/tmp/controller-clis`; `/var/lib/bootwright/contexts/<context>/runtime/tmp` | [ansible-controller-clis-root-temp.md](ansible-controller-clis-root-temp.md) |
+| Ansible / sudo | `Ensure tmp working directory exists`; permission denied under root-owned controller temp paths | [ansible-controller-clis-root-temp.md](ansible-controller-clis-root-temp.md) |
 | Ansible / Galaxy | `Unexpected Exception`; `'results'`; `Skipping Galaxy server`; `community.general` | [ansible-galaxy-results-build.md](ansible-galaxy-results-build.md) |
 | Ansible / embed | Extracted bundle missing `_respawn.py`, `__init__.py`, dot/underscore files | [ansible-embed-underscore-files.md](ansible-embed-underscore-files.md) |
 | Ansible / roles | `bootwright_current_cluster is undefined`; dynamic role import fails | [ansible-dynamic-role-dispatch.md](ansible-dynamic-role-dispatch.md) |
 | Ansible / runtime | `Module result deserialization failed`; `rc=-15`; cleanup killed Ansible wrapper | [ansible-module-wrapper-pkill.md](ansible-module-wrapper-pkill.md) |
 | Ansible / runtime | `Could not install packages due to an OSError`; `[Errno 2] No such file or directory`; `install ansible-core` | [ansible-managed-venv-rebuild.md](ansible-managed-venv-rebuild.md) |
 | Ansible / callback | `Callback dispatch 'v2_runner_on_skipped' failed for plugin 'default'`; `Build proxy environment facts` | [ansible-callback-skipped-pin.md](ansible-callback-skipped-pin.md) |
-| Ansible / transfer | `Fetch generated agent ISO to local runtime state`; large file fetch appears stuck; `.openshift_install.log` idle after ISO generation | [ansible-fetch-become-large-file.md](ansible-fetch-become-large-file.md) |
+| Ansible / transfer | `Fetch generated agent ISO to local cluster runtime state`; large file fetch appears stuck; `.openshift_install.log` idle after ISO generation | [ansible-fetch-become-large-file.md](ansible-fetch-become-large-file.md) |
 | Ansible / packages | `Failed to download metadata for repo`; `Cannot download repomd.xml`; `There are no enabled repositories`; `All mirrors were tried` | [ansible-dnf-unavailable-repo.md](ansible-dnf-unavailable-repo.md) |
 | Provider / BMC | Apply hangs at BMC wait tasks; port already in use after provider rename | [stale-bmc-port-wait-hang.md](stale-bmc-port-wait-hang.md) |
 | OpenShift install | Disconnected install fails TLS; agent never reaches SSH; image pull x509 error | [disconnected-trust-bundle-policy.md](disconnected-trust-bundle-policy.md) |

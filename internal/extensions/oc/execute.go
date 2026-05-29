@@ -21,7 +21,7 @@ type TaskResult struct {
 }
 
 type RunConfig struct {
-	RuntimeDir   string
+	ClustersDir  string
 	Kubeconfig   string
 	RunID        string
 	StartedAt    time.Time
@@ -37,7 +37,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		return TaskResult{}, err
 	}
 	if ready, _, err := Ready(ctx, runner, cfg.Kubeconfig, plan.Extension); err == nil && ready {
-		record, found, err := extensionrecords.LoadRecord(cfg.RuntimeDir, plan.Cluster, plan.Name)
+		record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 		if err != nil {
 			return TaskResult{}, err
 		}
@@ -56,7 +56,7 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 		StartedAt:   cfg.StartedAt.UTC(),
 		UpdatedAt:   now,
 	}
-	if err := extensionrecords.SaveRecord(cfg.RuntimeDir, record); err != nil {
+	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
 	observed, err := applyExtension(ctx, runner, cfg.Kubeconfig, plan)
@@ -66,13 +66,13 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
 		record.LastObserved = err.Error()
-		_ = extensionrecords.SaveRecord(cfg.RuntimeDir, record)
+		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
 		return TaskResult{}, err
 	}
 	record.Status = extensionrecords.RecordStatusWaiting
 	record.Phase = extensionrecords.RecordPhaseApplied
 	record.AppliedAt = &now
-	if err := extensionrecords.SaveRecord(cfg.RuntimeDir, record); err != nil {
+	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil
@@ -86,7 +86,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	if err != nil {
 		return TaskResult{}, err
 	}
-	record, found, err := extensionrecords.LoadRecord(cfg.RuntimeDir, plan.Cluster, plan.Name)
+	record, found, err := extensionrecords.LoadRecord(cfg.ClustersDir, plan.Cluster, plan.Name)
 	if err != nil {
 		return TaskResult{}, err
 	}
@@ -108,7 +108,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	record.Status = extensionrecords.RecordStatusWaiting
 	record.Phase = extensionrecords.RecordPhaseWaiting
 	record.UpdatedAt = time.Now().UTC()
-	if err := extensionrecords.SaveRecord(cfg.RuntimeDir, record); err != nil {
+	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
 	last, err := WaitReady(ctx, runner, cfg.Kubeconfig, plan.Extension, cfg.PollInterval)
@@ -116,12 +116,12 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	record.LastObserved = last
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
-		_ = extensionrecords.SaveRecord(cfg.RuntimeDir, record)
+		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
 		return TaskResult{}, err
 	}
 	record.Status = extensionrecords.RecordStatusReady
 	record.Phase = extensionrecords.RecordPhaseComplete
-	if err := extensionrecords.SaveRecord(cfg.RuntimeDir, record); err != nil {
+	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
 	return TaskResult{}, nil

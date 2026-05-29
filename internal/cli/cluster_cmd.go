@@ -61,7 +61,8 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(cf.ctx.RenderedDir, cf.ctx.RuntimeDir, state), cf.ctx.SecretsDir)
+		clustersDir := controllerClustersDir(cf.ctx.Name)
+		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterListReport{Context: cf.ctx.Name, Clusters: clusterListEntries(summaries)})
 		}
@@ -100,7 +101,8 @@ func newClusterAccessCmd(stdout io.Writer) *cobra.Command {
 				return failErr(2, err)
 			}
 		}
-		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(cf.ctx.RenderedDir, cf.ctx.RuntimeDir, state), cf.ctx.SecretsDir)
+		clustersDir := controllerClustersDir(cf.ctx.Name)
+		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
 		summaries = filterClusterAccessSummaries(summaries, clusterName)
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries})
@@ -145,7 +147,6 @@ func printClusterAccessSummaries(stdout io.Writer, command string, summaries []c
 			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
 			{Key: "Kube context", Value: summary.KubeContextCommand},
 			{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
-			{Key: "Password secret", Value: summary.KubeadminPasswordSecret},
 			{Key: "Password file", Value: summary.KubeadminPasswordPath},
 			{Key: "Show password", Value: summary.KubeadminPasswordCommand},
 		})

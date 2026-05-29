@@ -30,7 +30,6 @@ type clusterAccessSummary struct {
 	APIURL                   string                `json:"apiURL"`
 	ConsoleURL               string                `json:"consoleURL"`
 	KubeadminUsername        string                `json:"kubeadminUsername"`
-	KubeadminPasswordSecret  string                `json:"kubeadminPasswordSecret"`
 	KubeadminPasswordPath    string                `json:"kubeadminPasswordPath"`
 	KubeadminPasswordCommand string                `json:"kubeadminPasswordCommand"`
 	Kubeconfig               clusterAccessArtifact `json:"kubeconfig"`
@@ -38,8 +37,8 @@ type clusterAccessSummary struct {
 	Ready                    bool                  `json:"ready"`
 }
 
-func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, secretsDir string, ledger workflow.RunLedger) {
-	summaries := clusterAccessSummariesForApply(state, result, secretsDir, ledger)
+func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger) {
+	summaries := clusterAccessSummariesForApply(state, result, ledger)
 	if len(summaries) == 0 {
 		return
 	}
@@ -57,7 +56,6 @@ func printClusterAccessContinuation(stdout io.Writer, summaries []clusterAccessS
 			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
 			{Key: "Kube context", Value: summary.KubeContextCommand},
 			{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
-			{Key: "Password secret", Value: summary.KubeadminPasswordSecret},
 			{Key: "Password file", Value: summary.KubeadminPasswordPath},
 			{Key: "Show password", Value: summary.KubeadminPasswordCommand},
 		})
@@ -66,7 +64,7 @@ func printClusterAccessContinuation(stdout io.Writer, summaries []clusterAccessS
 	}
 }
 
-func clusterAccessSummariesForApply(state v1alpha1.State, result render.Result, secretsDir string, ledger workflow.RunLedger) []clusterAccessSummary {
+func clusterAccessSummariesForApply(state v1alpha1.State, result render.Result, ledger workflow.RunLedger) []clusterAccessSummary {
 	if ledger.Status != workflow.RunStatusOK {
 		return nil
 	}
@@ -79,7 +77,7 @@ func clusterAccessSummariesForApply(state v1alpha1.State, result render.Result, 
 	if len(successfulClusters) == 0 {
 		return nil
 	}
-	summaries := clusterAccessSummariesFromAssets(state, result.InstallerAssets, secretsDir)
+	summaries := clusterAccessSummariesFromAssets(state, result.InstallerAssets)
 	out := make([]clusterAccessSummary, 0, len(successfulClusters))
 	for _, summary := range summaries {
 		if successfulClusters[summary.Name] {
@@ -89,7 +87,7 @@ func clusterAccessSummariesForApply(state v1alpha1.State, result render.Result, 
 	return out
 }
 
-func clusterAccessSummariesFromAssets(state v1alpha1.State, assets []render.InstallerAsset, secretsDir string) []clusterAccessSummary {
+func clusterAccessSummariesFromAssets(state v1alpha1.State, assets []render.InstallerAsset) []clusterAccessSummary {
 	assetsByName := map[string]render.InstallerAsset{}
 	for _, asset := range assets {
 		assetsByName[asset.ClusterName] = asset
@@ -107,11 +105,14 @@ func clusterAccessSummariesFromAssets(state v1alpha1.State, assets []render.Inst
 		cluster := clustersByName[name]
 		asset, ok := assetsByName[name]
 		if !ok {
-			asset = render.InstallerAsset{ClusterName: name, WorkDir: filepath.Join(render.RuntimeRelativeDir, name)}
+			asset = render.InstallerAsset{ClusterName: name}
 		}
-		kubeconfigPath := filepath.Join(asset.WorkDir, "auth", "kubeconfig")
-		passwordSecret := name + "-kubeadmin-password"
-		passwordPath := filepath.Join(secretsDir, passwordSecret)
+		clusterSecretsDir := asset.ClusterSecretsDir
+		if clusterSecretsDir == "" && asset.WorkDir != "" {
+			clusterSecretsDir = filepath.Join(filepath.Dir(asset.WorkDir), "..", "secrets")
+		}
+		kubeconfigPath := filepath.Join(clusterSecretsDir, "kubeconfig")
+		passwordPath := filepath.Join(clusterSecretsDir, "kubeadmin-password")
 		kubeconfig := clusterAccessFileStatus(kubeconfigPath)
 		password := clusterAccessFileStatus(passwordPath)
 		out = append(out, clusterAccessSummary{
@@ -123,9 +124,8 @@ func clusterAccessSummariesFromAssets(state v1alpha1.State, assets []render.Inst
 			APIURL:                   clusterAPIURL(name, baseDomain),
 			ConsoleURL:               clusterConsoleURL(name, baseDomain),
 			KubeadminUsername:        "kubeadmin",
-			KubeadminPasswordSecret:  passwordSecret,
 			KubeadminPasswordPath:    passwordPath,
-			KubeadminPasswordCommand: "bootwright secret show --name " + passwordSecret,
+			KubeadminPasswordCommand: "sudo cat " + workflow.ShellQuote([]string{passwordPath}),
 			Kubeconfig:               kubeconfig,
 			KubeadminPassword:        password,
 			Ready:                    kubeconfig.Present && password.Present,

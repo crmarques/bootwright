@@ -41,7 +41,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	if scope.name == "cluster" {
-		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior runtime state reports an existing available cluster")
+		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior cluster state reports an existing available cluster")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {
@@ -57,7 +57,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
-		runtimeDir := controllerRuntimeDir(ctx.Name)
+		clustersDir := controllerClustersDir(ctx.Name)
 		if strictSecrets {
 			if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
 				return e
@@ -103,7 +103,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return failErr(1, err)
 		}
 		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
-		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(ctx.RunsDir, "dry-run", tasks)
+		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(clustersDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
@@ -114,7 +114,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, runtimeDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, clustersDir); err != nil {
 				return err
 			}
 		}
@@ -154,10 +154,11 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		runOpts := workflow.RunOptions{
 			State:              plan.state,
 			RenderedDir:        ctx.RenderedDir,
-			RuntimeDir:         runtimeDir,
+			ClustersDir:        clustersDir,
 			RunsDir:            ctx.RunsDir,
 			SecretsDir:         ctx.SecretsDir,
-			ManagedDir:         ctx.ManagedDir,
+			ManagedServicesDir: ctx.ManagedServicesDir,
+			ProviderStateDir:   ctx.ProviderStateDir,
 			Executable:         flags.executable,
 			Playbook:           scope.applyPlaybook,
 			Limit:              plan.limit,
@@ -177,7 +178,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
-			result, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state)
+			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -190,7 +191,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if reporter != nil {
 			reporter.RenderStart()
 		}
-		renderResult, err := workflow.RenderOnly(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state)
+		renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -200,7 +201,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
-			if _, err := workflow.ResolveInstaller(ctx.RenderedDir, runtimeDir, ctx.SecretsDir, plan.state); err != nil {
+			if _, err := workflow.ResolveInstaller(clustersDir, ctx.SecretsDir, plan.state); err != nil {
 				return failErr(1, err)
 			}
 		}
@@ -213,7 +214,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			reporter.BundleReady(bundleResult)
 			runOpts.BundleDir = bundleResult.Dir
 		}
-		ledger, err := workflow.RunPreparedApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, prepared, newApplyReporter(stdout, stderr, runtimeDir), nil)
+		ledger, err := workflow.RunPreparedApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, prepared, newApplyReporter(stdout, stderr, clustersDir), nil)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -222,7 +223,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			printBundlePath(stdout, bundleResult.Dir)
 		}
 		if plan.targetsClusters {
-			printClusterAccess(stdout, plan.state, renderResult, ctx.SecretsDir, ledger)
+			printClusterAccess(stdout, plan.state, renderResult, ledger)
 		}
 		return nil
 	}

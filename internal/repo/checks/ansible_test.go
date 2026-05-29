@@ -1836,74 +1836,54 @@ func TestInstallAgentWaitPollsPromptly(t *testing.T) {
 }
 
 func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
-	saveIdx := findAnsibleTask(t, tasks, "Save kubeadmin password to context secrets")
-	include, ok := tasks[saveIdx]["ansible.builtin.include_role"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s has no include_role body", tasks[saveIdx]["name"])
-	}
-	if got := include["name"]; got != "context_secret" {
-		t.Fatalf("kubeadmin password save role got %v", got)
-	}
-	if got := include["tasks_from"]; got != "save_file" {
-		t.Fatalf("kubeadmin password save tasks_from got %v", got)
-	}
-	vars, ok := tasks[saveIdx]["vars"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s has no vars", tasks[saveIdx]["name"])
-	}
-	if got := vars["bootwright_context_secret_source"]; got != "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password" {
-		t.Fatalf("kubeadmin password source got %v", got)
-	}
-	if got := vars["bootwright_context_secret_name"]; got != "{{ bootwright_current_cluster.name }}-kubeadmin-password" {
-		t.Fatalf("kubeadmin password secret name got %v", got)
-	}
-	if got := tasks[saveIdx]["when"]; got != "bootwright_local_kubeadmin_password_stat.stat.exists" {
-		t.Fatalf("kubeadmin password save when got %v", got)
-	}
+	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 
-	roleTasks := readAnsibleTasks(t, "ansible/roles/shared/context_secret/tasks/save_file.yml")
-	ensureIdx := findAnsibleTask(t, roleTasks, "Ensure context secrets directory exists")
-	ensure, ok := roleTasks[ensureIdx]["ansible.builtin.file"].(map[string]any)
+	ensureIdx := findAnsibleTask(t, tasks, "Create local cluster secrets directory")
+	ensure, ok := tasks[ensureIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no file body", roleTasks[ensureIdx]["name"])
+		t.Fatalf("%s has no file body", tasks[ensureIdx]["name"])
 	}
-	if got := ensure["path"]; got != "{{ bootwright_secrets_dir }}" {
-		t.Fatalf("context secret dir path got %v", got)
+	if got := ensure["path"]; got != "{{ bootwright_cluster_secrets_dir }}" {
+		t.Fatalf("cluster secrets dir path got %v", got)
 	}
 	if got := ensure["mode"]; got != "0700" {
-		t.Fatalf("context secret dir mode got %v", got)
+		t.Fatalf("cluster secrets dir mode got %v", got)
 	}
-	copyIdx := findAnsibleTask(t, roleTasks, "Save file to context secret")
-	copyTask, ok := roleTasks[copyIdx]["ansible.builtin.copy"].(map[string]any)
+
+	saveIdx := findAnsibleTask(t, tasks, "Store kubeadmin password in cluster secrets")
+	copyTask, ok := tasks[saveIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {
-		t.Fatalf("%s has no copy body", roleTasks[copyIdx]["name"])
+		t.Fatalf("%s has no copy body", tasks[saveIdx]["name"])
 	}
-	if got := copyTask["src"]; got != "{{ bootwright_context_secret_source }}" {
-		t.Fatalf("context secret source got %v", got)
+	if got := copyTask["src"]; got != "{{ bootwright_install_local_work_dir }}/auth/kubeadmin-password" {
+		t.Fatalf("kubeadmin password source got %v", got)
 	}
-	if got := copyTask["dest"]; got != "{{ bootwright_secrets_dir }}/{{ bootwright_context_secret_name }}" {
-		t.Fatalf("context secret dest got %v", got)
+	if got := copyTask["dest"]; got != "{{ bootwright_cluster_secrets_dir }}/kubeadmin-password" {
+		t.Fatalf("kubeadmin password dest got %v", got)
 	}
 	if got := copyTask["mode"]; got != "0600" {
-		t.Fatalf("context secret mode got %v", got)
+		t.Fatalf("kubeadmin password mode got %v", got)
 	}
-	for _, idx := range []int{ensureIdx, copyIdx} {
-		if got := roleTasks[idx]["delegate_to"]; got != "localhost" {
-			t.Fatalf("%s must run locally, got %v", roleTasks[idx]["name"], got)
+	for _, idx := range []int{ensureIdx, saveIdx} {
+		if got := tasks[idx]["delegate_to"]; got != "localhost" {
+			t.Fatalf("%s must run locally, got %v", tasks[idx]["name"], got)
 		}
-		if got := roleTasks[idx]["become"]; got != false {
-			t.Fatalf("%s must not become remotely, got %v", roleTasks[idx]["name"], got)
+		if got := tasks[idx]["become"]; got != false {
+			t.Fatalf("%s must not become remotely, got %v", tasks[idx]["name"], got)
+		}
+		if got := tasks[idx]["when"]; got != "bootwright_install_wait.rc == 0" {
+			t.Fatalf("%s must only run after successful wait, got %v", tasks[idx]["name"], got)
 		}
 	}
 }
 
-func TestDestroyClusterRemovesWholeClusterRuntimeDir(t *testing.T) {
+func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
 	for _, want := range []string{
-		"bootwright_cluster_runtime_dir: \"{{ bootwright_runtime_dir }}/installer/{{ bootwright_current_cluster.name }}\"",
-		"bootwright_process_cleanup_pattern: \"runtime/installer/{{ bootwright_current_cluster.name }}/\"",
-		"path: \"{{ bootwright_cluster_runtime_dir }}\"",
+		"bootwright_cluster_installer_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer\"",
+		"bootwright_process_cleanup_pattern: \"clusters/{{ bootwright_current_cluster.name }}/runtime/installer/\"",
+		"path: \"{{ bootwright_cluster_installer_runtime_dir }}\"",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("destroy_agent missing %q", want)

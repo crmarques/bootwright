@@ -64,6 +64,14 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 
 	files := []File{}
 	for _, t := range allTemplates {
+		nameTmpl, err := template.New(t.name + "-path").Parse(t.name)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s path template: %w", t.name, err)
+		}
+		name, err := renderTemplate(nameTmpl, data)
+		if err != nil {
+			return nil, fmt.Errorf("render %s path: %w", t.name, err)
+		}
 		body, err := renderTemplate(t.tmpl, data)
 		if err != nil {
 			return nil, fmt.Errorf("render %s: %w", t.name, err)
@@ -71,7 +79,7 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		if t.optional && strings.TrimSpace(body) == "" {
 			continue
 		}
-		files = append(files, File{Name: t.name, Body: body})
+		files = append(files, File{Name: name, Body: body})
 	}
 	return files, nil
 }
@@ -208,12 +216,12 @@ type namedTemplate struct {
 
 var allTemplates = []namedTemplate{
 	{name: "environment.yaml", tmpl: mustTmpl("env", environmentTmpl)},
-	{name: "hosts.yaml", tmpl: mustTmpl("hosts", hostsTmpl)},
-	{name: "networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
-	{name: "provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
-	{name: "infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
-	{name: "cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
-	{name: "container-cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
+	{name: "shared/hosts.yaml", tmpl: mustTmpl("hosts", hostsTmpl)},
+	{name: "shared/networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
+	{name: "shared/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
+	{name: "shared/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
+	{name: "clusters/{{.Cluster}}/cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
+	{name: "clusters/{{.Cluster}}/container-cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 }
 
 func mustTmpl(name, body string) *template.Template {

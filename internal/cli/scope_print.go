@@ -130,18 +130,18 @@ func phaseList(selected []Phase) string {
 // preview is concise on purpose: the user can read the YAML for full
 // detail. The output differs by scope because the two destroy targets
 // remove very different things: `destroy cluster` removes only the
-// root-managed per-cluster installer work dir on the controller; `destroy infra`
+// root-managed per-cluster runtime dir on the controller; `destroy infra`
 // tears down VMs, networks, and provider services on provider hosts.
-func printDestroyPreview(w io.Writer, scope scopeSpec, runtimeDir string, state v1alpha1.State) {
+func printDestroyPreview(w io.Writer, scope scopeSpec, clustersDir string, state v1alpha1.State) {
 	switch scope.name {
 	case "cluster":
-		printDestroyClustersPreview(w, runtimeDir, state)
+		printDestroyClustersPreview(w, clustersDir, state)
 	case "infra":
 		printDestroyInfraPreview(w, state)
 	}
 }
 
-func printDestroyClustersPreview(w io.Writer, runtimeDir string, state v1alpha1.State) {
+func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1.State) {
 	if len(state.ContainerClusters) == 0 {
 		return
 	}
@@ -152,10 +152,9 @@ func printDestroyClustersPreview(w io.Writer, runtimeDir string, state v1alpha1.
 		names = append(names, c.Metadata.Name)
 	}
 	sort.Strings(names)
-	runtimeRoot := filepath.Join(runtimeDir, "runtime")
 	var items []output.Item
 	for _, name := range names {
-		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(runtimeRoot, name)})
+		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime")})
 	}
 	p.List(items)
 	p.Warning("destroy cluster", "does not power off VMs, undefine networks, or remove provider services; run destroy infra for that")

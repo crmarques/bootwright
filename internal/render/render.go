@@ -74,23 +74,23 @@ type Result struct {
 
 // All writes effective-state, lock, Ansible inventory + vars, and
 // per-cluster installer placeholders. `renderedDir` is the Bootwright context
-// rendered directory, `runtimeDir` is the local execution runtime directory,
-// and `secretsDir` is the local secrets dir. Uses the
+// rendered directory, `clustersDir` is the context cluster directory, and
+// `secretsDir` is the local secrets dir. Uses the
 // default os-backed FileSystem; tests use AllOn to inject a substitute.
-func All(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return AllOn(defaultFS, renderedDir, runtimeDir, secretsDir, state)
+func All(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return AllOn(defaultFS, renderedDir, clustersDir, secretsDir, state)
 }
 
 // AllOn is All parameterised on FileSystem so tests can assert mode invariants
 // without touching disk. Production callers use All.
-func AllOn(fs FileSystem, renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
+func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{
 		EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(renderedDir, "bootwright.lock.yaml"),
 		InventoryPath:      filepath.Join(renderedDir, "ansible", "inventory.yaml"),
 		VarsPath:           filepath.Join(renderedDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(renderedDir, "ansible", "artifacts"),
-		InstallerAssets:    InstallerAssets(renderedDir, runtimeDir, state),
+		InstallerAssets:    InstallerAssets(clustersDir, state),
 	}
 	dirs := []string{renderedDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
@@ -158,22 +158,22 @@ func ensureLocalDir(fs FileSystem, dir string) error {
 // secret material inlined under each cluster's runtime work dir.
 // Placeholder copies under the rendered installer dir are left untouched.
 // Uses the default os-backed FileSystem; tests use ResolveInstallerOn.
-func ResolveInstaller(renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerOn(defaultFS, renderedDir, runtimeDir, secretsDir, state)
+func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ResolveInstallerOn(defaultFS, clustersDir, secretsDir, state)
 }
 
 // ResolveInstallerOn is ResolveInstaller parameterised on FileSystem so
 // tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk. Production callers use ResolveInstaller.
-func ResolveInstallerOn(fs FileSystem, renderedDir, runtimeDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	result := Result{InstallerAssets: InstallerAssets(renderedDir, runtimeDir, state)}
+func ResolveInstallerOn(fs FileSystem, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	result := Result{InstallerAssets: InstallerAssets(clustersDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
 		secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
-		for _, dir := range runtimeInstallerDirs(runtimeDir, asset) {
+		for _, dir := range runtimeInstallerDirs(asset) {
 			if err := ensureLocalDir(fs, dir); err != nil {
 				return result, err
 			}
@@ -199,9 +199,9 @@ func ResolveInstallerOn(fs FileSystem, renderedDir, runtimeDir, secretsDir strin
 	return result, nil
 }
 
-func runtimeInstallerDirs(runtimeDir string, asset InstallerAsset) []string {
-	clusterDir := filepath.Dir(asset.WorkDir)
-	return []string{runtimeDir, clusterDir, asset.WorkDir}
+func runtimeInstallerDirs(asset InstallerAsset) []string {
+	clusterRuntimeDir := filepath.Dir(asset.WorkDir)
+	return []string{asset.ClusterDir, clusterRuntimeDir, asset.WorkDir, asset.ClusterSecretsDir}
 }
 
 func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {

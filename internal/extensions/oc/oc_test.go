@@ -67,10 +67,10 @@ func TestApplySkipsReadyExtensionRecord(t *testing.T) {
 	runner := &recordingRunner{}
 
 	result, err := Apply(context.Background(), runner, RunConfig{
-		RuntimeDir: dir,
-		Kubeconfig: kubeconfig,
-		RunID:      "run",
-		StartedAt:  time.Now(),
+		ClustersDir: dir,
+		Kubeconfig:  kubeconfig,
+		RunID:       "run",
+		StartedAt:   time.Now(),
 	}, plan)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -97,10 +97,10 @@ func TestWaitSkipsReadyExtensionRecord(t *testing.T) {
 	runner := &recordingRunner{}
 
 	result, err := Wait(context.Background(), runner, RunConfig{
-		RuntimeDir: dir,
-		Kubeconfig: kubeconfig,
-		RunID:      "run",
-		StartedAt:  time.Now(),
+		ClustersDir: dir,
+		Kubeconfig:  kubeconfig,
+		RunID:       "run",
+		StartedAt:   time.Now(),
 	}, plan)
 	if err != nil {
 		t.Fatalf("Wait: %v", err)
@@ -176,13 +176,13 @@ func readyExtensionPlan() extensionplan.ExtensionPlan {
 	}
 }
 
-func writeReadyExtensionRecord(t *testing.T, runtimeDir string, plan extensionplan.ExtensionPlan) {
+func writeReadyExtensionRecord(t *testing.T, clustersDir string, plan extensionplan.ExtensionPlan) {
 	t.Helper()
 	hash, err := extensionrender.DesiredHash(plan.Extension, plan.Policy)
 	if err != nil {
 		t.Fatalf("DesiredHash: %v", err)
 	}
-	if err := extensionrecords.SaveRecord(runtimeDir, extensionrecords.Record{
+	if err := extensionrecords.SaveRecord(clustersDir, extensionrecords.Record{
 		Cluster:     plan.Cluster,
 		Extension:   plan.Name,
 		DesiredHash: hash,

@@ -30,4 +30,4 @@ Investigation:
   Omit `spec.ssh.user` unless the provider host really needs a forced SSH
   login name.
 - If `stageHost` is the local controller, confirm the artifact directory exists
-  under `bootwright_managed_dir` after `bootwright apply infra`.
+  under `bootwright_managed_services_dir` after `bootwright apply infra`.

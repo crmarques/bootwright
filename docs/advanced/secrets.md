@@ -99,11 +99,11 @@ individual files mode `0600`.
 | Print generated SSH public key | `bootwright secret show --name <name> --part public` |
 | Delete local material | `bootwright secret delete <name> --yes` |
 
-After a successful cluster install, Bootwright stores the kubeadmin password as
-`<cluster>-kubeadmin-password` in the current context secrets directory.
+After a successful cluster install, Bootwright stores the kubeadmin password at
+`clusters/<cluster>/secrets/kubeadmin-password`.
 `bootwright cluster access` shows the API and console URLs, kubeconfig path,
-password secret name, and the `bootwright secret show` command to retrieve the
-password without printing secret bytes by default.
+password file path, and the command to retrieve the password without printing
+secret bytes by default.
 
 `bootwright secret set` writes into the current context secrets
 directory, so context-local entries can be declared as empty keys.
@@ -139,7 +139,7 @@ When proxy credentials would be embedded in those exports, rerun it as
   tokens.
 - Effective install / agent configs and `openshift/` manifests with resolved
   secrets (these live under
-  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/` with
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/` with
   mode `0600` and are never committed).
 - Generated self-signed cert/key material outside the local secrets
   directory.

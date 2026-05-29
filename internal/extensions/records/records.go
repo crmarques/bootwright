@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 )
 
-const RecordRelativeDir = "extension-records"
+const RecordRelativeDir = "extensions"
 
 type RecordStatus string
 
@@ -45,12 +45,12 @@ type Record struct {
 	LastObserved      string       `json:"lastObserved,omitempty"`
 }
 
-func RecordPath(runtimeDir, cluster, extension string) string {
-	return filepath.Join(runtimeDir, RecordRelativeDir, cluster, extension+".json")
+func RecordPath(clustersDir, cluster, extension string) string {
+	return filepath.Join(clustersDir, cluster, "runtime", RecordRelativeDir, extension+".json")
 }
 
-func LoadRecord(runtimeDir, cluster, extension string) (Record, bool, error) {
-	path := RecordPath(runtimeDir, cluster, extension)
+func LoadRecord(clustersDir, cluster, extension string) (Record, bool, error) {
+	path := RecordPath(clustersDir, cluster, extension)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return Record{}, false, nil
@@ -65,8 +65,8 @@ func LoadRecord(runtimeDir, cluster, extension string) (Record, bool, error) {
 	return record, true, nil
 }
 
-func SaveRecord(runtimeDir string, record Record) error {
-	path := RecordPath(runtimeDir, record.Cluster, record.Extension)
+func SaveRecord(clustersDir string, record Record) error {
+	path := RecordPath(clustersDir, record.Cluster, record.Extension)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create extension record directory: %w", err)
 	}

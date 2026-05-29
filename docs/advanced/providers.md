@@ -124,7 +124,7 @@ spec:
 ```
 
 Use `hostClusterRef` when the virtualization host is another Bootwright
-`ContainerCluster`. Bootwright uses the runtime kubeconfig from that host
+`ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that host
 cluster; do not put kubeconfig bytes in desired state. Use `kubeconfigRef`
 when the host cluster is external:
 

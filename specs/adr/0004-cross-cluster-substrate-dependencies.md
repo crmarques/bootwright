@@ -36,7 +36,7 @@ The apply graph is responsible for cross-cluster ordering. `apply all` makes
 child infrastructure wait for the parent install wait task and the parent
 extension readiness task. Scoped child commands do not implicitly add the
 parent cluster to scope; they report the missing dependency or require the
-parent runtime kubeconfig and KubeVirt API to already exist.
+parent cluster secrets kubeconfig and KubeVirt API to already exist.
 
 ## Consequences
 
@@ -45,7 +45,7 @@ parent runtime kubeconfig and KubeVirt API to already exist.
 - HyperShift remains a future provisioning model rather than the first
   implementation path.
 - Desired state never stores host kubeconfig bytes. `hostClusterRef` resolves
-  to Bootwright runtime output, and `kubeconfigRef` resolves through secret
+  to Bootwright cluster secrets output, and `kubeconfigRef` resolves through secret
   material.
 - Validation can reject self-hosting and dependency cycles before rendering.
 - The scheduler can lock KubeVirt namespace operations with

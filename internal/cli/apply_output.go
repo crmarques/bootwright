@@ -10,13 +10,13 @@ import (
 )
 
 type applyReporter struct {
-	stdout     io.Writer
-	stderr     io.Writer
-	runtimeDir string
+	stdout      io.Writer
+	stderr      io.Writer
+	clustersDir string
 }
 
-func newApplyReporter(stdout, stderr io.Writer, runtimeDir string) *applyReporter {
-	return &applyReporter{stdout: stdout, stderr: stderr, runtimeDir: runtimeDir}
+func newApplyReporter(stdout, stderr io.Writer, clustersDir string) *applyReporter {
+	return &applyReporter{stdout: stdout, stderr: stderr, clustersDir: clustersDir}
 }
 
 func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
@@ -24,7 +24,7 @@ func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
 }
 
 func (r *applyReporter) ClusterLogPaths(ledger workflow.RunLedger) {
-	printApplyClusterLogPaths(r.stdout, r.runtimeDir, ledger)
+	printApplyClusterLogPaths(r.stdout, r.clustersDir, ledger)
 }
 
 func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
@@ -36,7 +36,7 @@ func (r *applyReporter) AnsibleExecutionStart() {
 }
 
 func (r *applyReporter) TaskStart(ledger workflow.RunLedger, id string) {
-	printApplyTaskStart(r.stdout, r.runtimeDir, ledger, id)
+	printApplyTaskStart(r.stdout, r.clustersDir, ledger, id)
 }
 
 func (r *applyReporter) TaskResult(ledger workflow.RunLedger, id string) {
@@ -75,9 +75,9 @@ func printApplyAnsibleExecutionStart(stdout io.Writer) {
 	output.NewContinuation(stdout).Section("Ansible execution")
 }
 
-func printApplyClusterLogPaths(stdout io.Writer, runtimeDir string, ledger workflow.RunLedger) {
+func printApplyClusterLogPaths(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
 	paths := applyClusterLogPaths(ledger)
-	installerPaths := applyClusterInstallerLogPaths(runtimeDir, ledger)
+	installerPaths := applyClusterInstallerLogPaths(clustersDir, ledger)
 	if len(paths) == 0 && len(installerPaths) == 0 {
 		return
 	}
@@ -95,7 +95,7 @@ func printApplyClusterLogPaths(stdout io.Writer, runtimeDir string, ledger workf
 	p.Fields(fields)
 }
 
-func printApplyTaskStart(stdout io.Writer, runtimeDir string, ledger workflow.RunLedger, id string) {
+func printApplyTaskStart(stdout io.Writer, clustersDir string, ledger workflow.RunLedger, id string) {
 	task, ok := ledger.Task(id)
 	if !ok {
 		return
@@ -103,7 +103,7 @@ func printApplyTaskStart(stdout io.Writer, runtimeDir string, ledger workflow.Ru
 	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
 		Status: output.StatusRunning,
 		Label:  applyTaskDisplayLabel(task.Label),
-		Detail: applyTaskRunningDetail(runtimeDir, task),
+		Detail: applyTaskRunningDetail(clustersDir, task),
 	}})
 }
 
@@ -184,22 +184,22 @@ func applyClusterLogPaths(ledger workflow.RunLedger) map[string]string {
 	return paths
 }
 
-func applyClusterInstallerLogPaths(runtimeDir string, ledger workflow.RunLedger) map[string]string {
+func applyClusterInstallerLogPaths(clustersDir string, ledger workflow.RunLedger) map[string]string {
 	paths := map[string]string{}
-	if strings.TrimSpace(runtimeDir) == "" {
+	if strings.TrimSpace(clustersDir) == "" {
 		return paths
 	}
 	for _, task := range ledger.Tasks {
 		if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" {
-			paths[task.Cluster] = workflow.OpenShiftInstallerLogPath(runtimeDir, task.Cluster)
+			paths[task.Cluster] = workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)
 		}
 	}
 	return paths
 }
 
-func applyTaskRunningDetail(runtimeDir string, task workflow.TaskLedgerEntry) string {
-	if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" && strings.TrimSpace(runtimeDir) != "" {
-		return "running; installer log " + workflow.OpenShiftInstallerLogPath(runtimeDir, task.Cluster)
+func applyTaskRunningDetail(clustersDir string, task workflow.TaskLedgerEntry) string {
+	if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" && strings.TrimSpace(clustersDir) != "" {
+		return "running; installer log " + workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)
 	}
 	return "running"
 }
