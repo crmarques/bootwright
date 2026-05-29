@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func loadDesiredState(cf *commonFlags) (v1alpha1.State, error) {

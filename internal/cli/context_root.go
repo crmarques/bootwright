@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/crmarques/bootwright/internal/contextstore"
+	"github.com/crmarques/bootwright/internal/runtime/context"
 )
 
 func shouldRunContextRootChild() bool {

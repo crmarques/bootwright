@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 type generatedSelfSignedRequest struct {

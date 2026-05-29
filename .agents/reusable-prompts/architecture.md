@@ -6,10 +6,10 @@ project is written in Go with embedded Ansible.
 
 Your task is not a checklist — it is to **rethink the architecture**
 and propose changes that make the system more coherent, more testable,
-more operationally predictable, and easier to evolve. Pressure-test
-current decisions. Where the existing layout is right, defend it
-briefly and move on. Where it is wrong, take a position and propose
-the change.
+more operationally predictable, easier to evolve, and easier for
+newcomer developers to understand. Pressure-test current decisions.
+Where the existing layout is right, defend it briefly and move on.
+Where it is wrong, take a position and propose the change.
 
 Out of scope: line-by-line code review, formatting, naming nitpicks,
 and isolated bugs.
@@ -28,8 +28,12 @@ once you have enough:
    bearing for the current layout, and which are historical.
 4. Repository tree: `go list ./...`, plus the directories under
    `internal/`, `api/`, `ansible/roles/`, `ansible/playbooks/`.
-5. `docs/` and the root `README.md` — what the project teaches users.
-6. Sample one or two roles/playbooks per layer to verify the
+5. Go package inventory: package names, import direction, package
+   comments when present, and the files that define public package
+   responsibilities. Map packages to the desired-state pipeline before
+   judging whether the layout is understandable.
+6. `docs/` and the root `README.md` — what the project teaches users.
+7. Sample one or two roles/playbooks per layer to verify the
    description matches reality. Do not bulk-read.
 
 If the layout, kind names, role taxonomy, or supported substrates have
@@ -41,6 +45,7 @@ Useful read-only commands:
 git status --short
 find . -maxdepth 4 -type d | sort
 go list ./...
+go list -f '{{.ImportPath}} {{.Dir}}' ./...
 go test ./...
 ```
 
@@ -113,12 +118,22 @@ teeth for this repo's current state.
   job, or a grab bag? `internal/cli/` files are routinely the worst
   offenders; check whether the Makefile guardrail (max file size) is
   still meaningful or has been silently tuned upward.
+- *Newcomer map.* Can a developer new to Bootwright predict where to
+  add a new kind, validator rule, renderer field, provider adapter,
+  CLI command, or runtime workflow by reading package names alone? If
+  not, identify the packages whose names or placement hide the
+  pipeline.
 - *Dependency direction.* Run `go list -deps` mentally. Are there
   upward-leaning imports (e.g. `infra` importing `cli`)? `api/v1alpha1`
   must be a leaf.
 - *Side-effect isolation.* `os.Exec`, filesystem writes, network
   reaches — are they behind contracts the tests can substitute? Where
   is the boundary, and is it actually used as one?
+- *Better package layout.* If the current layout makes ownership hard
+  to learn, propose a concrete target layout with package names,
+  responsibilities, import rules, and migration steps. If the current
+  layout is already strong, say so and recommend only package comments,
+  README updates, or naming cleanups that would help newcomers.
 
 **On Ansible layout:**
 
@@ -207,8 +222,16 @@ boundary leaks.
 
 ## 6. Go Package Layout Review
 
-Per-package responsibility, dependency direction, and side-effect
-isolation. Recommend a better layout if needed; do not rewrite code.
+Map the current packages into architectural layers: API/types, load,
+normalize, validate, render, plan/orchestrate, runtime state, CLI/output,
+provider adapters, Ansible integration, and support utilities. For each
+package family, review responsibility, dependency direction,
+side-effect isolation, and newcomer discoverability. Recommend a better
+package layout if needed; include package names, what each package
+would own, import rules, and an incremental migration path. If no layout
+change is needed, defend that position and recommend only the smallest
+documentation or package-comment improvements that would make the
+structure easier to learn. Do not rewrite code.
 
 ## 7. Ansible Layout Review
 
@@ -232,7 +255,8 @@ current specs are findings.
 
 The architecture you would build if starting from this code base today,
 inside the guardrails. Include suggested directory/package/role
-organization and the migration path from current state.
+organization, newcomer-facing package map, import boundaries, and the
+migration path from current state.
 
 ## 11. Architecture Revision Plan
 

@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/scaffold"
+	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
 
 func newExampleCmd(stdout io.Writer) *cobra.Command {

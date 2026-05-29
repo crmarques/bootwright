@@ -12,7 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 type secretListReport struct {

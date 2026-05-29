@@ -172,7 +172,7 @@ Supported authored `InfraComponent` arms are `artifactServer`,
 
 When adding another managed service, keep the service path orthogonal: add a
 typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
-`internal/support`, add its consumer discovery to the service graph, project
+`internal/infra/support`, add its consumer discovery to the service graph, project
 that resolved graph into Ansible vars, and place the converging role under
 `ansible/roles/providers/`.
 

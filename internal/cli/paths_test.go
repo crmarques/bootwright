@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/contextstore"
+	"github.com/crmarques/bootwright/internal/runtime/context"
 )
 
 func TestAnsibleVenvDirIsHostManaged(t *testing.T) {

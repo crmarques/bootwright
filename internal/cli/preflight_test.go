@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/locality"
+	"github.com/crmarques/bootwright/internal/infra/locality"
 )
 
 func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {

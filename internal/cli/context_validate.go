@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/locality"
+	"github.com/crmarques/bootwright/internal/infra/locality"
+	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func newContextValidateCmd(stdout io.Writer) *cobra.Command {

@@ -11,25 +11,25 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/ansible"
-	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/embedded"
-	"github.com/crmarques/bootwright/internal/operator"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
+	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
 	"go.yaml.in/yaml/v3"
 )
 
 // controllerBootstrapPlan builds the CLI's bootstrap plan with the
-// CLI's path helpers. Pure logic lives in internal/operator; this is a
+// CLI's path helpers. Pure logic lives in internal/converge/bastion; this is a
 // thin adapter so the CLI doesn't have to know venv layout when
 // computing or running the plan.
-func controllerBootstrapPlan(preserveProxyEnv bool) ([]operator.BootstrapStep, error) {
-	return operator.BootstrapPlanWith(controllerBootstrapProcessDeps(), ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
+func controllerBootstrapPlan(preserveProxyEnv bool) ([]bastion.BootstrapStep, error) {
+	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
 }
 
-func controllerBootstrapProcessDeps() operator.ProcessDeps {
-	return operator.ProcessDeps{
+func controllerBootstrapProcessDeps() bastion.ProcessDeps {
+	return bastion.ProcessDeps{
 		LookPath:      controllerBootstrapLookPath,
 		CommandOutput: callerCommandOutput,
 		UID:           os.Getuid,
@@ -57,7 +57,7 @@ func callerCommandOutput(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
 }
 
-func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []operator.BootstrapStep, extraEnv map[string]string, becomePassword string, askBecomePass bool) error {
+func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, plan []bastion.BootstrapStep, extraEnv map[string]string, becomePassword string, askBecomePass bool) error {
 	if len(plan) == 0 {
 		return nil
 	}
@@ -65,7 +65,7 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 	p.Status(output.StatusRunning, "Ansible runtime", bootstrapPlanUserSummary(plan))
 	for _, step := range plan {
 		cmd := bootstrapRunCommand(step.Cmd, becomePassword, askBecomePass)
-		env := operator.MergeBootstrapEnv(os.Environ(), extraEnv)
+		env := bastion.MergeBootstrapEnv(os.Environ(), extraEnv)
 		if isSudoCommand(step.Cmd) && becomePassword != "" {
 			if err := refreshBootstrapSudo(ctx, stderr, env, becomePassword); err != nil {
 				return failErr(1, fmt.Errorf("refresh sudo credentials for %q: %w", step.Label, err))
@@ -87,7 +87,7 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 	return nil
 }
 
-func isPython312InstallStep(step operator.BootstrapStep) bool {
+func isPython312InstallStep(step bastion.BootstrapStep) bool {
 	return strings.HasPrefix(step.Label, "install python3.12")
 }
 
@@ -103,7 +103,7 @@ func bootstrapPythonInstallTool(args []string) string {
 	return "package-manager"
 }
 
-func bootstrapPlanNeedsSudo(plan []operator.BootstrapStep) bool {
+func bootstrapPlanNeedsSudo(plan []bastion.BootstrapStep) bool {
 	for _, step := range plan {
 		if isSudoCommand(step.Cmd) {
 			return true
@@ -141,12 +141,12 @@ func refreshBootstrapSudo(ctx context.Context, stderr io.Writer, env []string, p
 
 // planControllerCLIInstall is the CLI-side wrapper that supplies the
 // venv-bin resolver and the sudo-safe bundle dir shown in dry-run output.
-// operator.PlanCLIInstall is the pure planner.
-func planControllerCLIInstall(state v1alpha1.State, installDir string) *operator.CLIInstallSpec {
-	return operator.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), ansibleVenvBin)
+// bastion.PlanCLIInstall is the pure planner.
+func planControllerCLIInstall(state v1alpha1.State, installDir string) *bastion.CLIInstallSpec {
+	return bastion.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), ansibleVenvBin)
 }
 
-func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {
+func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {
 	bundleDir, cleanup, err := extractControllerCLIBundle()
 	if err != nil {
 		return err
@@ -155,11 +155,11 @@ func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io
 	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, becomePasswordFile)
 }
 
-func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
+func runControllerCLIInstallWithBundle(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string) error {
 	return runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx, stdin, stdout, stderr, state, secretsDir, spec, extraEnv, askBecomePass, bundleDir, "")
 }
 
-func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec operator.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
+func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, bundleDir string, becomePasswordFile string) error {
 	spec.BundleDir = bundleDir
 	inventoryPath := filepath.Join(bundleDir, controllerCLIInventory)
 	inventoryBody, err := controllerCLIInventoryBody(state, secretsDir)
@@ -187,7 +187,7 @@ func runControllerCLIInstallWithBundleAndBecomePasswordFile(ctx context.Context,
 		becomePasswordFile = credential.PasswordFile
 	}
 	args := controllerCLIInstallCommand(spec.PlannedCommand(controllerCLIInventory), askBecomePass, becomePasswordFile)
-	env := operator.MergeBootstrapEnv(os.Environ(), ansibleEnv)
+	env := bastion.MergeBootstrapEnv(os.Environ(), ansibleEnv)
 	run := runCommandWithControllingTTY
 	if err := run(ctx, stdin, stdout, stderr, args, env); err != nil {
 		return fmt.Errorf("run controller-clis playbook: %w", err)
@@ -203,7 +203,7 @@ func extractControllerCLIBundle() (string, func(), error) {
 	}
 	cleanup := func() { _ = os.RemoveAll(parent) }
 	bundleDir := filepath.Join(parent, controllerBundleDirName)
-	if err := embedded.ExtractAnsibleBundle(bundleDir, bundleVersionMarker()); err != nil {
+	if err := bundle.ExtractAnsibleBundle(bundleDir, bundleVersionMarker()); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("extract controller Ansible bundle: %w", err)
 	}
@@ -222,10 +222,10 @@ const controllerCLIInventory = "_setup-controller.yaml"
 
 func controllerCLIAnsibleEnv(bundleDir string) map[string]string {
 	env := map[string]string{
-		"ANSIBLE_CONFIG":           filepath.Join(bundleDir, embedded.AnsibleCfgRelPath),
-		"ANSIBLE_ROLES_PATH":       embedded.RolesPath(bundleDir),
-		"ANSIBLE_COLLECTIONS_PATH": filepath.Join(bundleDir, embedded.CollectionsRelPath),
-		"ANSIBLE_FILTER_PLUGINS":   filepath.Join(bundleDir, embedded.FilterPluginsRelPath),
+		"ANSIBLE_CONFIG":           filepath.Join(bundleDir, bundle.AnsibleCfgRelPath),
+		"ANSIBLE_ROLES_PATH":       bundle.RolesPath(bundleDir),
+		"ANSIBLE_COLLECTIONS_PATH": filepath.Join(bundleDir, bundle.CollectionsRelPath),
+		"ANSIBLE_FILTER_PLUGINS":   filepath.Join(bundleDir, bundle.FilterPluginsRelPath),
 	}
 	for k, v := range ansible.SystemTempEnv() {
 		env[k] = v

@@ -1,7 +1,0 @@
-This directory is populated by `make build` (target `sync-bundle`), which
-copies the contents of /ansible into here so the embed.FS in
-internal/embedded/ansible.go captures it at compile time.
-
-The directory is committed only to keep //go:embed buildable when nothing
-has been synced yet; the real bundle is git-ignored. If bootwright errors with
-"embedded ansible bundle is empty", run `make build`.

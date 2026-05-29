@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/embedded"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
 )
 
 func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
@@ -14,7 +14,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 
 	reporter := newWorkflowReporter(&out)
 	reporter.BundleStart()
-	reporter.BundleReady(embedded.AnsibleBundleResult{
+	reporter.BundleReady(bundle.AnsibleBundleResult{
 		Dir:   "/var/lib/bootwright/cache/ansible-bundles/version=dev",
 		Files: 1425,
 	})

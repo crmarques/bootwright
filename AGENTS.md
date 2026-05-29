@@ -66,4 +66,4 @@ Use Conventional Commits (`type(scope): subject`):
 Examples:
 
 - Success: `docs(agents): shorten standard handoff`
-- Blocked: `Blocked: go test -race ./... could not complete`
+- Blocked: `Blocked: make check could not complete`

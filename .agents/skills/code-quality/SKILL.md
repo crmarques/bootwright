@@ -25,15 +25,11 @@ report any check that could not be run, including the reason:
   `go install honnef.co/go/tools/cmd/staticcheck@v0.7.0`
   and ensure `$(go env GOPATH)/bin` is on `PATH`.
 
-`go test -race ./...` (from the `implementation-validation` skill) must
-also pass; deletions in this skill can break tests that imported the
-removed symbol.
-
 If `make check` has already completed for the final edit set, it satisfies
-the `go vet ./...` and plain `go test ./...` coverage above. Do not rerun
-those commands just to satisfy this skill; run only the checks not covered by
-`make check`, such as `go build ./...`, `staticcheck ./...`, and required race
-tests.
+the `go vet ./...`, plain `go test ./...`, and `go test -race ./...`
+coverage above. Do not rerun those commands just to satisfy this skill; run
+only the checks not covered by `make check`, such as `go build ./...` and
+`staticcheck ./...`.
 
 ## Standards
 

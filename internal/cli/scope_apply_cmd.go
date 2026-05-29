@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/embedded"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -149,9 +149,9 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			reporter.WithPromptGap(stderr)
 		}
 		usesAnsible := scope.name != "extensions"
-		var bundle embedded.AnsibleBundleResult
+		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {
-			bundle, err = prepareWorkflowBundle(true)
+			bundleResult, err = prepareWorkflowBundle(true)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -188,7 +188,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			}
 			printRenderResult(stdout, result)
 			if usesAnsible {
-				printBundlePath(stdout, bundle.Dir)
+				printBundlePath(stdout, bundleResult.Dir)
 			}
 			return nil
 		}
@@ -211,12 +211,12 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		if !plan.noRemoteWork && usesAnsible {
 			reporter.BundleStart()
-			bundle, err = prepareWorkflowBundle(false)
+			bundleResult, err = prepareWorkflowBundle(false)
 			if err != nil {
 				return failErr(1, err)
 			}
-			reporter.BundleReady(bundle)
-			runOpts.BundleDir = bundle.Dir
+			reporter.BundleReady(bundleResult)
+			runOpts.BundleDir = bundleResult.Dir
 		}
 		ledger, err := workflow.RunPreparedApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, prepared, newApplyReporter(stdout, stderr, runtimeDir), nil)
 		if err != nil {
@@ -224,7 +224,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		printRenderResult(stdout, renderResult)
 		if usesAnsible {
-			printBundlePath(stdout, bundle.Dir)
+			printBundlePath(stdout, bundleResult.Dir)
 		}
 		if plan.targetsClusters {
 			printClusterAccess(stdout, plan.state, renderResult, ledger)

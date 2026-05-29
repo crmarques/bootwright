@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 func TestProxyCredentialAuthorityUsesUserinfoEscaping(t *testing.T) {

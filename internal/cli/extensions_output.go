@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/clusterextensions"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 )
 
 func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
@@ -16,7 +16,7 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 		if task.Entry.Kind != workflow.ApplyTaskKindClusterExtensionApply || task.Extension == nil {
 			continue
 		}
-		summary := clusterextensions.ResourceSummaries(task.Extension.Extension)
+		summary := extensionplan.ResourceSummaries(task.Extension.Extension)
 		lines = append(lines, cliout.TaskLine{
 			Status: cliout.StatusPending,
 			Label:  task.Extension.Cluster + "/" + task.Extension.Name,
@@ -31,7 +31,7 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	p.Tasks(lines)
 }
 
-func resourceSummaryText(resources []clusterextensions.ResourceSummary) string {
+func resourceSummaryText(resources []extensionplan.ResourceSummary) string {
 	if len(resources) == 0 {
 		return "none"
 	}

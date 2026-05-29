@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/safefs"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, fromFile, username, password string, passwordStdin, generate bool) (int, error) {

@@ -42,9 +42,8 @@ RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
 COPY Makefile Makefile
 COPY ansible/collections/requirements.yml ansible/collections/requirements.yml
 COPY ansible/collections/requirements.lock.yml ansible/collections/requirements.lock.yml
-COPY internal/embedded/bundle/.gitignore internal/embedded/bundle/.gitignore
-COPY internal/embedded/bundle/PLACEHOLDER internal/embedded/bundle/PLACEHOLDER
-COPY internal/bundlecheck internal/bundlecheck
+COPY scripts/sync-ansible-bundle.py scripts/sync-ansible-bundle.py
+COPY internal/repo/bundlecheck internal/repo/bundlecheck
 RUN --mount=type=cache,id=bootwright-ansible-galaxy,target=/root/.ansible,sharing=locked \
     make sync-bundle
 

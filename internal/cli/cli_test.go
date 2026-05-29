@@ -20,14 +20,14 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/localroot"
-	"github.com/crmarques/bootwright/internal/operator"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/scaffold"
-	"github.com/crmarques/bootwright/internal/secret"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
 
 func TestMain(m *testing.M) {
@@ -1839,7 +1839,7 @@ func TestRunBootstrapPlanExplainsPythonInstallFailure(t *testing.T) {
 		strings.NewReader("unused\n"),
 		&stdout,
 		&stderr,
-		[]operator.BootstrapStep{{Label: "install python3.12", Cmd: []string{fakeDnf, "install", "-y", "python3.12"}}},
+		[]bastion.BootstrapStep{{Label: "install python3.12", Cmd: []string{fakeDnf, "install", "-y", "python3.12"}}},
 		nil,
 		"",
 		true,
@@ -1916,7 +1916,7 @@ exec "$@"
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	plan := []operator.BootstrapStep{
+	plan := []bastion.BootstrapStep{
 		{Label: "first root step", Cmd: []string{"sudo", "sh", "-c", "printf first"}},
 		{Label: "second root step", Cmd: []string{"sudo", "sh", "-c", "printf second"}},
 	}
@@ -1977,7 +1977,7 @@ exec "$@"
 		strings.NewReader("unused\n"),
 		&stdout,
 		&stderr,
-		[]operator.BootstrapStep{{Label: "root step", Cmd: []string{"sudo", "sh", "-c", "printf ok"}}},
+		[]bastion.BootstrapStep{{Label: "root step", Cmd: []string{"sudo", "sh", "-c", "printf ok"}}},
 		nil,
 		"",
 		false,
@@ -2024,7 +2024,7 @@ test "$found" -eq 1
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	bundleDir := t.TempDir()
-	spec := operator.CLIInstallSpec{
+	spec := bastion.CLIInstallSpec{
 		OCPReleaseVersion: "4.21.12",
 		InstallDir:        "/usr/local/bin",
 		Executable:        fakeAnsible,

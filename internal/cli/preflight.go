@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/operator"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 const (
@@ -43,7 +43,7 @@ func pythonVersionCheck(deps preflightDeps) preflightCheck {
 		if err != nil {
 			continue
 		}
-		major, minor, err := operator.ParsePythonVersion(strings.TrimSpace(string(out)))
+		major, minor, err := bastion.ParsePythonVersion(strings.TrimSpace(string(out)))
 		if err != nil {
 			continue
 		}

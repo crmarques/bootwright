@@ -1,4 +1,5 @@
 GO ?= go
+PYTHON ?= python3
 DOCKER ?= docker
 COMMA := ,
 BINARY ?= bootwright
@@ -26,11 +27,12 @@ E2E_CLEAN ?= sudo rm -rf
 DEFINITION_CHECK_PATHS = README.md docs specs/state-model.md specs/architecture.md specs/domain.md specs/security.md specs/index.md specs/README.md test $(wildcard examples)
 
 ANSIBLE_SRC_DIR = ansible
-EMBED_BUNDLE_DIR = internal/embedded/bundle
+EMBED_BUNDLE_ARCHIVE = internal/converge/bundle/ansible_bundle.zip
+BUNDLE_WORK_DIR = $(STATE_DIR)/ansible-bundle
 ANSIBLE_GALAXY ?= $(shell command -v ansible-galaxy 2>/dev/null)
 COLLECTIONS_REQUIREMENTS = $(ANSIBLE_SRC_DIR)/collections/requirements.yml
 COLLECTIONS_LOCK = $(ANSIBLE_SRC_DIR)/collections/requirements.lock.yml
-EMBED_COLLECTIONS_DIR = $(EMBED_BUNDLE_DIR)/collections
+EMBED_COLLECTIONS_DIR = $(BUNDLE_WORK_DIR)/collections
 EMBED_COLLECTIONS_ABS_DIR = $(abspath $(EMBED_COLLECTIONS_DIR))
 COLLECTIONS_STAMP = $(EMBED_COLLECTIONS_DIR)/.stamp
 ANSIBLE_GALAXY_ENV = \
@@ -38,10 +40,10 @@ ANSIBLE_GALAXY_ENV = \
 	ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote \
 	ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
-GOFMT_FILES = $(shell find . -path './internal/embedded/bundle' -prune -o -name '*.go' -print)
+GOFMT_FILES = $(shell find . -name '*.go' -print)
 ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/cluster_infra:ansible/roles/openshift
 ANSIBLE_SYNTAX_FILTER_PLUGINS = $(STATE_DIR)/ansible-syntax/filter_plugins
-ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=internal/embedded/bundle/collections ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
+ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	ansible/playbooks/checks/become.yml \
 	ansible/playbooks/checks/preflight.yml \
@@ -61,7 +63,7 @@ E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 .PHONY: all build container-build sync-bundle test validate plan check check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
-# in internal/workflow/. The current observed max (init.go ~391) is the
+# in internal/converge/workflow/. The current observed max (init.go ~391) is the
 # floor; do not raise this without a deliberate refactor justification.
 # The intent is to catch new growth before files turn into god files again.
 CLI_FILE_LINE_LIMIT ?= 400
@@ -107,19 +109,15 @@ container-build:
 	rm -rf $(CONTAINER_CACHE_DIR)
 	mv $(CONTAINER_CACHE_NEXT_DIR) $(CONTAINER_CACHE_DIR)
 
-# PLACEHOLDER and .gitignore are preserved so a bare `go build` still
-# compiles when the bundle has not been synced. Collections declared in
-# $(COLLECTIONS_REQUIREMENTS) are resolved at build time into
-# $(EMBED_COLLECTIONS_DIR) so the bootwright binary ships every Ansible
-# collection it needs and disconnected hosts never reach Galaxy.
+# Collections declared in $(COLLECTIONS_REQUIREMENTS) are resolved at build
+# time into $(EMBED_COLLECTIONS_DIR), then packed with /ansible into
+# $(EMBED_BUNDLE_ARCHIVE) so disconnected hosts never reach Galaxy.
 sync-bundle: $(COLLECTIONS_STAMP)
-	@find $(EMBED_BUNDLE_DIR) -mindepth 1 -maxdepth 1 \
-		! -name PLACEHOLDER ! -name .gitignore ! -name collections -exec rm -rf {} +
-	@cp -R $(ANSIBLE_SRC_DIR)/. $(EMBED_BUNDLE_DIR)/
-	@# Strip Python test artifacts that should never ship in the binary
-	@# (e.g. ansible/filter_plugins/test_*.py + __pycache__).
-	@find $(EMBED_BUNDLE_DIR) -type f -name 'test_*.py' -delete
-	@find $(EMBED_BUNDLE_DIR) -type d -name '__pycache__' -prune -exec rm -rf {} +
+	@$(PYTHON) scripts/sync-ansible-bundle.py \
+		--source $(ANSIBLE_SRC_DIR) \
+		--collections $(EMBED_COLLECTIONS_DIR) \
+		--output $(EMBED_BUNDLE_ARCHIVE)
+	@$(GO) test ./internal/repo/bundlecheck -run TestAnsibleCollectionLockMatchesEmbeddedManifest
 
 # Galaxy download is gated on requirements.yml and its lock metadata.
 $(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS) $(COLLECTIONS_LOCK)
@@ -132,7 +130,6 @@ $(COLLECTIONS_STAMP): $(COLLECTIONS_REQUIREMENTS) $(COLLECTIONS_LOCK)
 		-name tests -o -name docs -o -name examples -o -name changelogs \
 		-o -name .github -o -name .azure-pipelines -o -name ci \
 		\) -exec rm -rf {} +
-	@$(GO) test ./internal/bundlecheck -run TestAnsibleCollectionLockMatchesEmbeddedManifest
 	@touch $@
 
 $(BIN_DIR):
@@ -144,6 +141,7 @@ test:
 check: check-gofmt
 	$(GO) vet ./...
 	$(GO) test ./...
+	$(GO) test -race ./...
 	$(MAKE) go-test-clean-checkout
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
@@ -168,11 +166,8 @@ go-test-clean-checkout:
 		--exclude='./rendered' \
 		--exclude='./tmp' \
 		--exclude='./.cache' \
-		--exclude='./$(EMBED_BUNDLE_DIR)' \
 		-cf "$$tmp/source.tar" .; \
 	tar -xf "$$tmp/source.tar" -C "$$work"; \
-	mkdir -p "$$work/$(EMBED_BUNDLE_DIR)"; \
-	cp "$(EMBED_BUNDLE_DIR)/.gitignore" "$(EMBED_BUNDLE_DIR)/PLACEHOLDER" "$$work/$(EMBED_BUNDLE_DIR)/"; \
 	mkdir -p "$$tmp/go-build-cache" "$$tmp/go-tmp"; \
 	cd "$$work"; \
 	GOCACHE="$$tmp/go-build-cache" GOTMPDIR="$$tmp/go-tmp" $(GO) test ./...
@@ -184,7 +179,7 @@ go-test-clean-checkout:
 python-test:
 	@cd ansible/filter_plugins && python3 -m unittest discover -v
 
-ansible-syntax-check: check-e2e-deps
+ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
 	@test -n "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" || { printf '%s\n' 'ANSIBLE_SYNTAX_FILTER_PLUGINS must not be empty'; exit 1; }
 	@case "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" in */ansible-syntax/filter_plugins) ;; *) printf 'refusing to refresh unsafe ANSIBLE_SYNTAX_FILTER_PLUGINS: %s\n' "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)"; exit 1;; esac
 	@rm -rf $(ANSIBLE_SYNTAX_FILTER_PLUGINS)
@@ -208,17 +203,16 @@ stale-term-check:
 
 # Reject CLI / render files that have grown past the thin-handler
 # threshold. Excludes test files so the lint targets production code
-# only. Scope is internal/cli AND internal/provisioning/render — both
-# previously accumulated god-files (vars.go reached 761 lines before
-# the split; CLI was the original case the limit was introduced for).
+# only. Scope includes CLI and the largest domain packages that previously
+# accumulated god-files.
 cli-file-size-check:
-	@over=$$(find internal/cli internal/provisioning/render internal/scaffold internal/operator internal/secret -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+	@over=$$(find internal/cli internal/render internal/state/scaffold internal/converge/bastion internal/runtime/secrets -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
 		| while read -r f; do \
 			n=$$(wc -l <"$$f"); \
 			if [ "$$n" -gt $(CLI_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
 		done); \
 	if [ -n "$$over" ]; then \
-		printf '%s\n' "files over $(CLI_FILE_LINE_LIMIT) lines (decompose by concern; CLI handlers belong in internal/workflow/, render emitters split by emission family):" "$$over"; \
+		printf '%s\n' "files over $(CLI_FILE_LINE_LIMIT) lines (decompose by concern; CLI handlers belong in internal/converge/workflow/, render emitters split by emission family):" "$$over"; \
 		exit 1; \
 	fi
 
@@ -251,13 +245,10 @@ e2e: check-e2e-case check-e2e-deps build
 clean:
 	@test -n "$(BIN_DIR)" || { printf '%s\n' 'BIN_DIR must not be empty'; exit 1; }
 	@test -n "$(STATE_DIR)" || { printf '%s\n' 'STATE_DIR must not be empty'; exit 1; }
-	@test -n "$(EMBED_BUNDLE_DIR)" || { printf '%s\n' 'EMBED_BUNDLE_DIR must not be empty'; exit 1; }
-	@for p in $(CLEAN_PATHS) $(EMBED_BUNDLE_DIR); do \
+	@for p in $(CLEAN_PATHS); do \
 		case "$$p" in /|.|..|/*|../*|*/../*|*/..) printf 'refusing to clean unsafe path: %s\n' "$$p"; exit 1;; esac; \
 	done
 	@for p in $(CLEAN_PATHS); do rm -rf "$$p"; done
-	@find $(EMBED_BUNDLE_DIR) -mindepth 1 -maxdepth 1 \
-		! -name PLACEHOLDER ! -name .gitignore -exec rm -rf {} +
 
 clean-e2e-state: check-e2e-case
 	@test -n "$(E2E_CONTEXT_DIR)" || { printf '%s\n' 'E2E_CONTEXT_DIR must not be empty'; exit 1; }
@@ -269,7 +260,7 @@ help:
 		'Targets:' \
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
-		'  sync-bundle      Refresh internal/embedded/bundle from /ansible without building' \
+		'  sync-bundle      Refresh internal/converge/bundle/ansible_bundle.zip' \
 		'  check            Run formatting, Go, Ansible, stale-term, and provider-swap checks' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/proxy"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 // returns nil when proxy is Bootwright-managed: Bootwright provisions that

@@ -3,15 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/clusterextensions"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
+	"github.com/crmarques/bootwright/internal/converge/checks"
 )
 
 func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
@@ -52,32 +49,20 @@ func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
 }
 
 func extensionPreflightChecks(runtimeDir string, state v1alpha1.State) []cliout.Check {
-	checks := []cliout.Check{
-		binaryCheck("Extension tools", "oc", nil, "install oc on PATH", defaultPreflightDeps),
+	raw := checks.ExtensionPreflight(runtimeDir, state, checks.ExtensionDeps{
+		LookPath: defaultPreflightDeps.lookPath,
+		StatPath: defaultPreflightDeps.statPath,
+	})
+	out := make([]cliout.Check, 0, len(raw))
+	for _, check := range raw {
+		out = append(out, cliout.Check{
+			Group:       check.Group,
+			Name:        check.Name,
+			Status:      cliout.Status(check.Status),
+			Evidence:    check.Evidence,
+			Impact:      check.Impact,
+			Remediation: check.Remediation,
+		})
 	}
-	plans, err := clusterextensions.BindingPlans(state)
-	if err != nil {
-		return append(checks, failCheck("Extension plan", "extension expansion", err.Error(), "Extension bindings cannot be expanded", "fix ClusterExtensionSet and ClusterExtensionBinding references"))
-	}
-	if len(plans) == 0 {
-		return append(checks, cliout.Check{Group: "Extension plan", Name: "extensions", Status: cliout.StatusOK, Evidence: "no ClusterExtensionBinding resources selected"})
-	}
-	seenClusters := map[string]bool{}
-	for _, plan := range plans {
-		if seenClusters[plan.Cluster] {
-			continue
-		}
-		seenClusters[plan.Cluster] = true
-		path := filepath.Join(runtimeDir, render.RuntimeRelativeDir, plan.Cluster, "auth", "kubeconfig")
-		info, err := os.Stat(path)
-		switch {
-		case err != nil:
-			checks = append(checks, failCheck("Cluster access", plan.Cluster+" kubeconfig", path+" missing", "Extensions need the installed cluster kubeconfig", "run bootwright apply cluster --yes before applying extensions"))
-		case info.IsDir():
-			checks = append(checks, failCheck("Cluster access", plan.Cluster+" kubeconfig", path+" is a directory", "Extensions need a kubeconfig file", "replace "+path+" with the cluster kubeconfig"))
-		default:
-			checks = append(checks, okCheck("Cluster access", plan.Cluster+" kubeconfig", path))
-		}
-	}
-	return checks
+	return out
 }

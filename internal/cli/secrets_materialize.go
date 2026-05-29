@@ -9,12 +9,12 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/safefs"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 // CLI-side orchestration for secret materialization. The pure
-// crypto/parsing/validation helpers live in internal/secret; this file
+// crypto/parsing/validation helpers live in internal/runtime/secrets; this file
 // stays as the dispatch layer that builds the list of work items from
 // loaded state and applies them to the secrets directory.
 

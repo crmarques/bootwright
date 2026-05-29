@@ -6,7 +6,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/crmarques/bootwright/internal/ptyexec"
+	"github.com/crmarques/bootwright/internal/runtime/pty"
 )
 
 func runCommandWithControllingTTY(ctx context.Context, _ io.Reader, stdout io.Writer, stderr io.Writer, args []string, env []string) error {

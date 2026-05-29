@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/ansible"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/clusterextensions"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 )
 
 type scopeDryRunReport struct {
@@ -61,11 +61,11 @@ type scopeDryRunApply struct {
 }
 
 type scopeDryRunExtensionPlan struct {
-	Cluster   string                              `json:"cluster"`
-	Binding   string                              `json:"binding"`
-	Extension string                              `json:"extension"`
-	Type      string                              `json:"type"`
-	Resources []clusterextensions.ResourceSummary `json:"resources"`
+	Cluster   string                          `json:"cluster"`
+	Binding   string                          `json:"binding"`
+	Extension string                          `json:"extension"`
+	Type      string                          `json:"type"`
+	Resources []extensionplan.ResourceSummary `json:"resources"`
 }
 
 func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, flags scopeCommonFlags, scope scopeSpec, action string, state v1alpha1.State, selected []Phase, playbook string, limit string, extraVarPairs []string, artifactsBaseName string, check bool, askBecomePass bool, resolveInstaller bool, limits workflow.ConcurrencyLimits, tasks []workflow.ApplyTask, forks int) error {
@@ -151,7 +151,7 @@ func dryRunExtensionPlans(tasks []workflow.ApplyTask) []scopeDryRunExtensionPlan
 			Binding:   task.Extension.Binding,
 			Extension: task.Extension.Name,
 			Type:      task.Extension.Extension.Spec.Type,
-			Resources: clusterextensions.ResourceSummaries(task.Extension.Extension),
+			Resources: extensionplan.ResourceSummaries(task.Extension.Extension),
 		})
 	}
 	return out

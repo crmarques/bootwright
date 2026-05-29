@@ -13,10 +13,10 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/clusterextensions"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/stategraph"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	extensionrecords "github.com/crmarques/bootwright/internal/extensions/records"
+	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 const (
@@ -202,7 +202,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, ru
 			detail := "no extension record"
 			if extension.Status != "" {
 				status = cliout.StatusOK
-				if extension.Status != string(clusterextensions.RecordStatusReady) {
+				if extension.Status != string(extensionrecords.RecordStatusReady) {
 					status = cliout.StatusWarn
 				}
 				detail = extension.Status

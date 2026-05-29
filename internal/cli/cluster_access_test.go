@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
 )
 
 func TestClusterAccessSummariesUseRuntimeAuthPaths(t *testing.T) {

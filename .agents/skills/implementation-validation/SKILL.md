@@ -18,10 +18,9 @@ changes, also run the checks from `definition-stewardship`.
 - Treat a completed `make check` as covering its member commands for the final
   edit set; do not rerun those member commands unless later edits or failure
   diagnosis require it.
-- Current `make check` runs `go vet ./...`, plain `go test ./...`, clean-copy
-  plain `go test ./...`, Python tests, Ansible syntax checks, stale-term checks,
-  and CLI file-size checks. It does not run `go test -race ./...`.
+- Current `make check` runs `go vet ./...`, plain `go test ./...`,
+  `go test -race ./...`, clean-copy plain `go test ./...`, Python tests,
+  Ansible syntax checks, stale-term checks, and CLI file-size checks.
 - If `make check` cannot run or fails, report the blocker instead of a
   successful handoff.
-- If any `.go` file changed, run `go test -race ./...` before finishing.
 - Report any validation command that could not be run, including the reason.

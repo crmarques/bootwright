@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/execution"
+	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/runtime/root/execution"
 )
 
 type localRootGateDeps struct {

@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 type scopedWorkflowPlan struct {

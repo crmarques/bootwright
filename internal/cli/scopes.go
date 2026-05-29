@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/crmarques/bootwright/internal/workflow"
+import "github.com/crmarques/bootwright/internal/converge/workflow"
 
 type scopeSpec struct {
 	name              string

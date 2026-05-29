@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/safefs"
+	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func newSecretShowCmd(stdout io.Writer) *cobra.Command {

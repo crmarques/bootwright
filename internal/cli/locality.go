@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/contextstore"
-	"github.com/crmarques/bootwright/internal/desiredstate"
-	"github.com/crmarques/bootwright/internal/locality"
+	"github.com/crmarques/bootwright/internal/infra/locality"
+	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 var controllerLocalityPolicy = locality.DefaultPolicy

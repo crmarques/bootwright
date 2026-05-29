@@ -7,9 +7,10 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/clusterextensions"
-	"github.com/crmarques/bootwright/internal/stategraph"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
+	extensionrecords "github.com/crmarques/bootwright/internal/extensions/records"
+	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 type statusReport struct {
@@ -195,14 +196,14 @@ func buildStatusClusters(state v1alpha1.State, renderedDir, runtimeDir string) [
 
 func buildStatusExtensions(state v1alpha1.State, runtimeDir string) map[string][]statusExtension {
 	out := map[string][]statusExtension{}
-	plans, err := clusterextensions.BindingPlans(state)
+	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
 		return out
 	}
 	for _, plan := range plans {
 		for _, extension := range plan.Extensions {
 			entry := statusExtension{Name: extension.Name}
-			record, found, err := clusterextensions.LoadRecord(runtimeDir, plan.Cluster, extension.Name)
+			record, found, err := extensionrecords.LoadRecord(runtimeDir, plan.Cluster, extension.Name)
 			if err == nil && found {
 				entry.Status = string(record.Status)
 				entry.Phase = string(record.Phase)

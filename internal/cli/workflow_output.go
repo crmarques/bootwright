@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/embedded"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 type workflowReporter struct {
@@ -31,7 +31,7 @@ func (r *workflowReporter) BundleStart() {
 	r.printer.List([]output.Item{{Label: "Prepare Ansible bundle", Detail: "check cache and extract embedded roles/playbooks if needed"}})
 }
 
-func (r *workflowReporter) BundleReady(result embedded.AnsibleBundleResult) {
+func (r *workflowReporter) BundleReady(result bundle.AnsibleBundleResult) {
 	r.ensure()
 	detail := "cache current at " + result.Dir
 	if !result.Reused {

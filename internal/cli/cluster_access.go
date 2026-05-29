@@ -9,9 +9,9 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/stateview"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 type clusterAccessSummary struct {

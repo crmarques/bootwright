@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/embedded"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
+	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
 )
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -66,30 +66,30 @@ func resolveBundleDir() (string, error) {
 	return filepath.Abs(filepath.Join(cacheDir(), ansibleBundlesDirName, bundleVersionMarker()))
 }
 
-func prepareWorkflowBundle(skipExtract bool) (embedded.AnsibleBundleResult, error) {
+func prepareWorkflowBundle(skipExtract bool) (bundle.AnsibleBundleResult, error) {
 	bundleDir, err := resolveBundleDir()
 	if err != nil {
-		return embedded.AnsibleBundleResult{}, err
+		return bundle.AnsibleBundleResult{}, err
 	}
 	if skipExtract {
-		return embedded.AnsibleBundleResult{Dir: bundleDir, Reused: true}, nil
+		return bundle.AnsibleBundleResult{Dir: bundleDir, Reused: true}, nil
 	}
-	return embedded.EnsureAnsibleBundle(bundleDir, bundleVersionMarker())
+	return bundle.EnsureAnsibleBundle(bundleDir, bundleVersionMarker())
 }
 
-func prepareInitialBundle() (embedded.AnsibleBundleResult, bool, error) {
+func prepareInitialBundle() (bundle.AnsibleBundleResult, bool, error) {
 	result, err := prepareWorkflowBundle(false)
 	if err == nil {
 		return result, false, nil
 	}
-	if !embedded.IsEmptyAnsibleBundle(err) {
-		return embedded.AnsibleBundleResult{}, false, err
+	if !bundle.IsEmptyAnsibleBundle(err) {
+		return bundle.AnsibleBundleResult{}, false, err
 	}
 	bundleDir, dirErr := resolveBundleDir()
 	if dirErr != nil {
-		return embedded.AnsibleBundleResult{}, false, dirErr
+		return bundle.AnsibleBundleResult{}, false, dirErr
 	}
-	return embedded.AnsibleBundleResult{Dir: bundleDir, Reused: true}, true, nil
+	return bundle.AnsibleBundleResult{Dir: bundleDir, Reused: true}, true, nil
 }
 
 func printRenderResult(stdout io.Writer, result render.Result) {

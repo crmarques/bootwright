@@ -24,6 +24,3 @@ __pycache__/
 *.key
 *.crt
 *.p12
-internal/embedded/bundle/*
-!internal/embedded/bundle/.gitignore
-!internal/embedded/bundle/PLACEHOLDER

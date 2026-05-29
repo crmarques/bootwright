@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/stategraph"
+	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {

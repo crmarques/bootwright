@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/operator"
+	"github.com/crmarques/bootwright/internal/converge/bastion"
 )
 
 func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
@@ -154,7 +154,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 	return cmd
 }
 
-func bootstrapPlanUserSummary(plan []operator.BootstrapStep) string {
+func bootstrapPlanUserSummary(plan []bastion.BootstrapStep) string {
 	needsPython := false
 	needsRuntime := false
 	for _, step := range plan {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/crmarques/bootwright/internal/contextstore"
+	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.RunLedger, found bool, loadErr error) {

@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/artifactpub"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/stategraph"
+	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 func printApplySummary(w io.Writer, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
@@ -199,7 +199,7 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 }
 
 func printDestroyHTTPServerPreview(w io.Writer, state v1alpha1.State) {
-	server, ok := artifactpub.Select(state)
+	server, ok := artifacts.Select(state)
 	if !ok || server.Config == nil {
 		return
 	}
@@ -219,7 +219,7 @@ func artifactServerClusterConsumers(state v1alpha1.State) []string {
 	var clusters []string
 	for _, ci := range state.ClusterInfras {
 		ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)
-		if !ok || !artifactpub.ClusterNeedsPublication(state, ci, ocp) {
+		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
 		clusters = append(clusters, ocp.Metadata.Name)
@@ -242,7 +242,7 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 	if clusterUsesManagedRegistry(state, ci) {
 		parts = append(parts, "registry")
 	}
-	if ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name); ok && artifactpub.ClusterNeedsPublication(state, ci, ocp) {
+	if ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name); ok && artifacts.ClusterNeedsPublication(state, ci, ocp) {
 		parts = append(parts, "artifacts")
 	}
 	return strings.Join(parts, ", ")

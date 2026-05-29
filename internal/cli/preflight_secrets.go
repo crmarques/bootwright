@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/callerio"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/locality"
-	"github.com/crmarques/bootwright/internal/safefs"
-	"github.com/crmarques/bootwright/internal/secret"
+	"github.com/crmarques/bootwright/internal/infra/locality"
+	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 type secretRefRequirement struct {

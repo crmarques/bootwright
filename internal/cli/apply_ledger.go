@@ -6,7 +6,7 @@ import (
 	"time"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 func reconcileCurrentApplyBeforeMutation(stdout io.Writer, runsDir string) error {

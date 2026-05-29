@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func TestExampleInitWritesValidWorkspace(t *testing.T) {

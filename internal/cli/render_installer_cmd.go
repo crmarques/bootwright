@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/provisioning/render"
-	"github.com/crmarques/bootwright/internal/workflow"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
 )
 
 func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Command {

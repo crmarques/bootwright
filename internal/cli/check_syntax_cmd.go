@@ -8,7 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 // newCheckSyntaxCmd exposes a pure-syntax check: load + normalize +
