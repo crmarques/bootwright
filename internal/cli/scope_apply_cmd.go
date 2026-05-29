@@ -114,7 +114,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, ctx.ManagedDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, runtimeDir); err != nil {
 				return err
 			}
 		}

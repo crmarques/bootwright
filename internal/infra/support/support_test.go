@@ -26,9 +26,10 @@ func TestLookupDispatchClassifiesApplySupport(t *testing.T) {
 			supported: true,
 		},
 		{
-			name:     "kubevirt scaffold",
-			dispatch: Dispatch{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"},
-			want:     StatusScaffold,
+			name:      "kubevirt",
+			dispatch:  Dispatch{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"},
+			want:      StatusSupported,
+			supported: true,
 		},
 		{
 			name:     "unknown dispatch",

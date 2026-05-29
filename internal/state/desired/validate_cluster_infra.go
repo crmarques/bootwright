@@ -219,6 +219,7 @@ func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1al
 		seen[m.Name] = true
 		errs = append(errs, validateClusterMachineFrom(prefix, ci, m, providers)...)
 		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs)...)
+		errs = append(errs, validateKubeVirtMachineNetworkConfig(prefix, m, providers, networkConfigs)...)
 		errs = append(errs, validateBareMetalMachineNetworkInterfaces(prefix, m, providers, networkConfigs)...)
 	}
 	return errs
@@ -315,6 +316,25 @@ func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachin
 		}
 	}
 	return errs
+}
+
+func validateKubeVirtMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+	if m.From.Provider == "" || m.From.Profile == "" || m.NetworkConfig.Ref.Name == "" {
+		return nil
+	}
+	provider, ok := providers[m.From.Provider]
+	if !ok {
+		return nil
+	}
+	profile, ok := lookupMachineProfile(provider, m.From.Profile)
+	if !ok || v1alpha1.ProfileProvisionerKind(profile) != v1alpha1.ProvisionerKubeVirt {
+		return nil
+	}
+	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	if !ok || networkConfig.Spec.KubeVirt != nil {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s.networkConfig.ref %q must reference a NetworkConfig with spec.kubevirt.nad for KubeVirt machines", prefix, m.NetworkConfig.Ref.Name)}
 }
 
 func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {

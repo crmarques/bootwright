@@ -354,6 +354,9 @@ func desiredStateYAMLPaths(t *testing.T, roots ...string) []string {
 			if err != nil {
 				return err
 			}
+			if isExtensionPayloadManifest(rel) {
+				return nil
+			}
 			paths = append(paths, rel)
 			return nil
 		})
@@ -362,6 +365,15 @@ func desiredStateYAMLPaths(t *testing.T, roots ...string) []string {
 		}
 	}
 	return paths
+}
+
+func isExtensionPayloadManifest(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == "manifests" {
+			return true
+		}
+	}
+	return false
 }
 
 func assertNoFlowStyleCollections(t *testing.T, name, body string) {

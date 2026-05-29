@@ -36,7 +36,7 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 			"baseDomain":             environmentBaseDomain(env),
 			"endpoints":              endpointsVars(state, ci),
 			"networks":               clusterNetworksVars(state, ci),
-			"components":             componentsVars(state, ci, ocp),
+			"components":             componentsVars(state, ci, ocp, secretsDir),
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}

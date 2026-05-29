@@ -84,6 +84,83 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedProviderServices(state)...)
+	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
+	return errs
+}
+
+func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
+	providers := indexProviders(state.InfraProviders)
+	infras := indexClusterInfras(state.ClusterInfras)
+	clusters := indexContainerClusters(state.ContainerClusters)
+	provided := providedClusterCapabilities(state)
+	deps := map[string][]string{}
+	var errs []string
+	for _, ocp := range state.ContainerClusters {
+		infra, ok, _ := resolveContainerClusterInfra(ocp, infras)
+		if !ok {
+			continue
+		}
+		for _, machine := range infra.Spec.Components.Machines {
+			if machine.From.Profile == "" {
+				continue
+			}
+			provider, ok := providers[machine.From.Provider]
+			if !ok {
+				continue
+			}
+			profile, ok := lookupMachineProfile(provider, machine.From.Profile)
+			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostClusterRef == nil || profile.KubeVirt.HostClusterRef.Name == "" {
+				continue
+			}
+			parent := profile.KubeVirt.HostClusterRef.Name
+			deps[ocp.Metadata.Name] = appendUnique(deps[ocp.Metadata.Name], parent)
+			if _, ok := clusters[parent]; !ok {
+				continue
+			}
+			if !provided[parent][v1alpha1.ClusterExtensionProvidesKubeVirt] {
+				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.hostClusterRef.name %q requires a ClusterExtensionBinding that applies a ClusterExtension providing %q to ContainerCluster/%s",
+					provider.Metadata.Name, profile.Name, parent, v1alpha1.ClusterExtensionProvidesKubeVirt, parent))
+			}
+		}
+	}
+	errs = append(errs, validateClusterDependencyCycles(deps)...)
+	return errs
+}
+
+func appendUnique(items []string, value string) []string {
+	for _, item := range items {
+		if item == value {
+			return items
+		}
+	}
+	return append(items, value)
+}
+
+func validateClusterDependencyCycles(deps map[string][]string) []string {
+	visiting := map[string]bool{}
+	visited := map[string]bool{}
+	var errs []string
+	var visit func(string, []string)
+	visit = func(name string, stack []string) {
+		if visited[name] {
+			return
+		}
+		if visiting[name] {
+			cycle := append(stack, name)
+			errs = append(errs, fmt.Sprintf("KubeVirt hostClusterRef creates ContainerCluster dependency cycle: %s", strings.Join(cycle, " -> ")))
+			return
+		}
+		visiting[name] = true
+		stack = append(stack, name)
+		for _, dep := range deps[name] {
+			visit(dep, stack)
+		}
+		visiting[name] = false
+		visited[name] = true
+	}
+	for name := range deps {
+		visit(name, nil)
+	}
 	return errs
 }
 
@@ -249,6 +326,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 					require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].vsphere.vcenters[%d].credentialsRef",
 						p.Metadata.Name, mp.Name, i), vc.CredentialsRef)
 				}
+			}
+			if mp.KubeVirt != nil && mp.KubeVirt.KubeconfigRef != nil {
+				require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.kubeconfigRef",
+					p.Metadata.Name, mp.Name), *mp.KubeVirt.KubeconfigRef)
 			}
 		}
 		for _, m := range p.Spec.Machines {

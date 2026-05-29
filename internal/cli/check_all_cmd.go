@@ -38,7 +38,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		ctx := cf.ctx
 		runtimeDir := controllerRuntimeDir(ctx.Name)
-		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, ctx.ManagedDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, runtimeDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)

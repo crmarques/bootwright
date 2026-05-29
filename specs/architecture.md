@@ -42,14 +42,23 @@ install-complete` after every node boot task has completed.
 Post-install extension apply is scheduled after that install wait when
 `apply cluster` or `apply all` is selected, and as standalone direct `oc`
 tasks when `apply extensions` is selected for an already installed cluster.
+For KubeVirt children that reference a Bootwright-managed host cluster,
+`apply all` adds graph edges from the child infrastructure task to both
+`wait.<host-cluster>` and the host extension wait task that provides
+`kubevirt`. Scoped child applies do not expand the scope to install the parent;
+they fail with a dependency message or require the parent kubeconfig and
+KubeVirt API to be ready before mutating child infrastructure.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
 for host-level work. Provider and cluster-infrastructure playbooks use
 Ansible-native host parallelism, while Bootwright enforces resource locks before
 launching concurrent playbooks: one mutating task per provider host until roles
 are classified more finely, and one task per Redfish system or BMC target.
-Different clusters may provision concurrently whenever they do not share locked
-hosts or BMC targets.
+KubeVirt-backed child VM infrastructure and VM boot tasks also lock
+`kubevirt:<host-cluster-or-kubeconfig>:<namespace>` so namespace-scoped
+VirtualMachine and DataVolume operations cannot collide. Different clusters may
+provision concurrently whenever they do not share locked hosts, BMC targets, or
+KubeVirt namespaces.
 
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.

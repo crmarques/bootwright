@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: metal-ocp-extensions
+spec:
+  clusterSelector:
+    names:
+      - metal-ocp
+
+  applyAfter:
+    phase: clusterInstalled
+
+  extensionSets:
+    - name: virtualization-host-platform
+
+  policy:
+    prune: false
+    serverSideApply: true
+    fieldManager: bootwright
+    continueOnError: false

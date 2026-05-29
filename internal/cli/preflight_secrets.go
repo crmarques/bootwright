@@ -160,10 +160,10 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 					})
 				}
 			}
-			if k := mp.KubeVirt; k != nil && k.ClusterRef.Name != "" {
+			if k := mp.KubeVirt; k != nil && k.KubeconfigRef != nil && k.KubeconfigRef.Name != "" {
 				out = append(out, secretRefRequirement{
-					refName: k.ClusterRef.Name,
-					label:   fmt.Sprintf("provider %s machineProfiles[%s] kubevirt clusterRef", p.Metadata.Name, mp.Name),
+					refName: k.KubeconfigRef.Name,
+					label:   fmt.Sprintf("provider %s machineProfiles[%s] kubevirt kubeconfigRef", p.Metadata.Name, mp.Name),
 					phases:  []string{"cluster", "clusters"},
 				})
 			}

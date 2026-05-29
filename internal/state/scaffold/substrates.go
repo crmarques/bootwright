@@ -345,7 +345,7 @@ spec:
       memoryMiB: 22528
       diskGiB: 120
       kubevirt:
-        clusterRef:
+        kubeconfigRef:
           name: cnv-cluster-kubeconfig
         namespace: bootwright-vms
         # storageClassRef:

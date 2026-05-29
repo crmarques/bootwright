@@ -47,6 +47,10 @@ Environment.infraComponents.*.componentRef
 ClusterExtensionBinding
   -> ClusterExtensionSet
   -> ClusterExtension
+
+KubeVirt child InfraProvider
+  -> host ContainerCluster
+  -> ClusterExtension providing kubevirt
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
@@ -55,6 +59,20 @@ cluster must reference the same `ClusterInfra`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
+
+## KubeVirt Child Clusters
+
+A virtualized child OpenShift cluster is still declared as its own
+`ContainerCluster`. The child `ClusterInfra` selects a KubeVirt
+`InfraProvider` machine profile, and that profile points either at a
+Bootwright-managed host cluster with `hostClusterRef` or at an external
+virtualization cluster kubeconfig with `kubeconfigRef`.
+
+When `hostClusterRef` is used, the host cluster must be installed and bound to
+a `ClusterExtension` with `provides: [kubevirt]`. `bootwright apply all --yes`
+orders child VM infrastructure after the host install wait and the KubeVirt
+extension readiness wait. Scoped child applies do not install the host
+implicitly; apply the host first or include it in the scope.
 
 ## Post-Install Extensions
 

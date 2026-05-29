@@ -41,6 +41,34 @@ func validateClusterExtensions(state v1alpha1.State) []string {
 				prefix, extension.Spec.Type, v1alpha1.ClusterExtensionTypeOLMOperator, v1alpha1.ClusterExtensionTypeManifestSet))
 		}
 		errs = append(errs, validateClusterExtensionReadiness(extension)...)
+		errs = append(errs, validateClusterExtensionProvides(extension)...)
+	}
+	return errs
+}
+
+func validateClusterExtensionProvides(extension v1alpha1.ClusterExtension) []string {
+	var errs []string
+	seen := map[string]bool{}
+	prefix := fmt.Sprintf("ClusterExtension/%s spec.provides", extension.Metadata.Name)
+	for i, capability := range extension.Spec.Provides {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		switch capability {
+		case v1alpha1.ClusterExtensionProvidesKubeVirt:
+		case "":
+			errs = append(errs, owner+" must not be empty")
+			continue
+		default:
+			errs = append(errs, fmt.Sprintf("%s %q must be %q", owner, capability, v1alpha1.ClusterExtensionProvidesKubeVirt))
+			continue
+		}
+		if seen[capability] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, capability))
+			continue
+		}
+		seen[capability] = true
+	}
+	if len(extension.Spec.Provides) > 0 && len(extension.Spec.Readiness.Checks) == 0 {
+		errs = append(errs, fmt.Sprintf("%s requires at least one readiness check", prefix))
 	}
 	return errs
 }
@@ -361,6 +389,69 @@ func validateClusterExtensionBindings(state v1alpha1.State) []string {
 		}
 	}
 	return errs
+}
+
+func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]bool {
+	extensions := indexClusterExtensions(state.ClusterExtensions)
+	out := map[string]map[string]bool{}
+	for _, binding := range state.ClusterExtensionBindings {
+		names := bindingProvidedExtensionNames(state, binding)
+		for _, cluster := range binding.Spec.ClusterSelector.Names {
+			if out[cluster] == nil {
+				out[cluster] = map[string]bool{}
+			}
+			for _, name := range names {
+				extension, ok := extensions[name]
+				if !ok {
+					continue
+				}
+				for _, capability := range extension.Spec.Provides {
+					out[cluster][capability] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+func bindingProvidedExtensionNames(state v1alpha1.State, binding v1alpha1.ClusterExtensionBinding) []string {
+	sets := indexClusterExtensionSets(state.ClusterExtensionSets)
+	seen := map[string]bool{}
+	var out []string
+	var visitSet func(string, map[string]bool)
+	visitSet = func(name string, stack map[string]bool) {
+		if stack[name] {
+			return
+		}
+		set, ok := sets[name]
+		if !ok {
+			return
+		}
+		nextStack := map[string]bool{}
+		for key, value := range stack {
+			nextStack[key] = value
+		}
+		nextStack[name] = true
+		for _, ref := range set.Spec.ExtensionSets {
+			visitSet(ref.Name, nextStack)
+		}
+		for _, ref := range set.Spec.Extensions {
+			if !seen[ref.Name] {
+				seen[ref.Name] = true
+				out = append(out, ref.Name)
+			}
+		}
+	}
+	for _, ref := range binding.Spec.ExtensionSets {
+		visitSet(ref.Name, map[string]bool{})
+	}
+	for _, ref := range binding.Spec.Extensions {
+		if !seen[ref.Name] {
+			seen[ref.Name] = true
+			out = append(out, ref.Name)
+		}
+	}
+	return out
 }
 
 func customResourceMap(in map[string]any, key string) (map[string]any, bool) {

@@ -8,12 +8,12 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 )
 
-func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []Phase, secretsDir, managedDir string) error {
-	return runApplyHostCheck(stdout, stderr, state, selected, secretsDir, managedDir)
+func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []Phase, secretsDir, runtimeDir string) error {
+	return runApplyHostCheck(stdout, stderr, state, selected, secretsDir, runtimeDir)
 }
 
-func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []Phase, secretsDir, managedDir string) error {
-	checks := collectPreflightChecks(state, selected, true, secretsDir, managedDir, defaultPreflightDeps)
+func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []Phase, secretsDir, runtimeDir string) error {
+	checks := collectPreflightChecks(state, selected, true, secretsDir, runtimeDir, defaultPreflightDeps)
 	return renderCheckResults(stdout, "host check", checks)
 }
 

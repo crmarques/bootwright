@@ -5,16 +5,17 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/infra/support"
+	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 // componentsVars walks every component slot on a cluster and emits the
 // per-component vars consumed by ansible/playbooks/layers/.
-func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) []any {
+func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
 	var out []any
 	clusterName := ocp.Metadata.Name
 
 	for _, m := range ci.Spec.Components.Machines {
-		out = append(out, machineComponentVars(state, ci, m, clusterName))
+		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
 	}
 	for _, component := range loadBalancerComponentsForCluster(state, ci) {
 		lb := loadBalancerComponentVars(state, component)
@@ -172,7 +173,7 @@ func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 	return out
 }
 
-func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
+func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, clusterName string, secretsDir string) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
 		"kind":          v1alpha1.ComponentSlotMachines,
@@ -220,8 +221,17 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 				}
 				if k := profile.KubeVirt; k != nil {
 					out["kubevirt"] = map[string]any{
-						"clusterRef": k.ClusterRef.Name,
-						"namespace":  k.Namespace,
+						"namespace": k.Namespace,
+					}
+					if k.HostClusterRef != nil {
+						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
+						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_runtime_dir }}/installer/" + k.HostClusterRef.Name + "/auth/kubeconfig"
+					}
+					if k.KubeconfigRef != nil {
+						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name
+						if path := secret.ResolvePath(k.KubeconfigRef.Name, primaryEnvironment(state), secretsDir); path != "" {
+							out["kubevirt"].(map[string]any)["kubeconfig"] = path
+						}
 					}
 					if k.StorageClassRef != nil {
 						out["kubevirt"].(map[string]any)["storageClassRef"] = k.StorageClassRef.Name
@@ -288,10 +298,6 @@ func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {
 	}
 }
 
-// machineHostRef returns the provider-host this machine is anchored to,
-// when the substrate has one (libvirt). vsphere/kubevirt machines have
-// no provider host. from.name baremetal machines are reached over BMC
-// directly from the controller; the provider host is also empty there.
 func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) string {
 	if m.From.Profile == "" {
 		return ""
@@ -306,6 +312,9 @@ func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) st
 	}
 	if profile.Libvirt != nil {
 		return profile.Libvirt.HostRef.Name
+	}
+	if profile.KubeVirt != nil {
+		return "localhost"
 	}
 	return ""
 }

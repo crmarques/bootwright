@@ -60,6 +60,14 @@ OpenShift Virtualization, and future providers. The current schema accepts
 provider facts for those substrates; apply coverage can land independently when
 the corresponding adapter is implemented.
 
+The first supported nested topology treats a child OpenShift cluster as a
+normal `ContainerCluster` whose machines come from a KubeVirt
+`InfraProvider`. The KubeVirt host may be another Bootwright
+`ContainerCluster` selected by `hostClusterRef`, or an external virtualization
+cluster selected by `kubeconfigRef`. When the host is Bootwright-managed, the
+host cluster must be installed and bound to a `ClusterExtension` that advertises
+`provides: [kubevirt]` before child VM infrastructure is converged.
+
 ## UX Principles
 
 - Desired state is declarative, idempotent, typed, and deterministic.

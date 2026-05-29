@@ -91,6 +91,29 @@ func TestClusterExtensionValidationRejectsInvalidResources(t *testing.T) {
 			wantSubstring: `spec.type "helm" must be one of {olm-operator, manifest-set}`,
 		},
 		{
+			name: "unsupported-provided-capability",
+			files: map[string]string{
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - storage\n", 1),
+			},
+			wantSubstring: `spec.provides[0] "storage" must be "kubevirt"`,
+		},
+		{
+			name: "duplicated-provided-capability",
+			files: map[string]string{
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n    - kubevirt\n", 1),
+			},
+			wantSubstring: `spec.provides[1] "kubevirt" is duplicated`,
+		},
+		{
+			name: "provided-capability-requires-readiness",
+			files: map[string]string{
+				"extension.yaml": strings.Replace(
+					strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n", 1),
+					"  readiness:\n    checks:\n      - type: csvSucceeded\n        namespace: openshift-cnv\n        subscription: hco-operatorhub\n", "", 1),
+			},
+			wantSubstring: `spec.provides requires at least one readiness check`,
+		},
+		{
 			name: "missing-extension-reference",
 			files: map[string]string{
 				"set.yaml": `apiVersion: bootwright.io/v1alpha1

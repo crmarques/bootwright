@@ -1540,6 +1540,103 @@ func TestVSphereFailureDomainRequiresInstallerFields(t *testing.T) {
 	}
 }
 
+func TestKubeVirtHostClusterValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		mutate        func(map[string]string)
+		wantSubstring string
+	}{
+		{
+			name: "host-cluster-ref",
+		},
+		{
+			name: "missing-parent",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "hostClusterRef:\n          name: missing", 1)
+			},
+			wantSubstring: `kubevirt.hostClusterRef.name "missing" does not match any ContainerCluster`,
+		},
+		{
+			name: "both-host-and-kubeconfig",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = addKubeVirtKubeconfigSecret(files["environment.yaml"])
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno\n        namespace:", "hostClusterRef:\n          name: sno\n        kubeconfigRef:\n          name: external-virt-cluster-kubeconfig\n        namespace:", 1)
+			},
+			wantSubstring: "kubevirt must set exactly one of {hostClusterRef, kubeconfigRef}",
+		},
+		{
+			name: "invalid-namespace",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "namespace: bootwright-child-ocp", "namespace: Bootwright_Child", 1)
+			},
+			wantSubstring: `kubevirt.namespace "Bootwright_Child" is not a DNS label`,
+		},
+		{
+			name: "kubeconfig-ref",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = addKubeVirtKubeconfigSecret(files["environment.yaml"])
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
+			},
+		},
+		{
+			name: "unknown-kubeconfig-ref-secret",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
+			},
+			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not declared in Environment/env spec.secrets`,
+		},
+		{
+			name: "missing-nad",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "\n  kubevirt:\n    nad: bootwright-child-ocp/child-ocp-net\n", "\n", 1)
+			},
+			wantSubstring: `networkConfig.ref "child-machine-net" must reference a NetworkConfig with spec.kubevirt.nad for KubeVirt machines`,
+		},
+		{
+			name: "missing-kubevirt-capability",
+			mutate: func(files map[string]string) {
+				files["extension.yaml"] = strings.Replace(files["extension.yaml"], "  provides:\n    - kubevirt\n", "", 1)
+			},
+			wantSubstring: `requires a ClusterExtensionBinding that applies a ClusterExtension providing "kubevirt"`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newKubeVirtChildFiles()
+			if tc.mutate != nil {
+				tc.mutate(files)
+			}
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if tc.wantSubstring == "" {
+				if err != nil {
+					t.Fatalf("LoadNormalizeValidate: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantSubstring)
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestKubeVirtHostClusterDependencyCycleValidation(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, newKubeVirtCycleFiles())
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected KubeVirt hostClusterRef cycle error, got nil")
+	}
+	if !strings.Contains(err.Error(), "KubeVirt hostClusterRef creates ContainerCluster dependency cycle") {
+		t.Fatalf("error %q does not mention dependency cycle", err)
+	}
+}
+
 func TestReleaseChannelDerivation(t *testing.T) {
 	cluster := v1alpha1.ContainerCluster{
 		Spec: v1alpha1.ContainerClusterSpec{
@@ -1556,6 +1653,256 @@ func TestReleaseChannelDerivation(t *testing.T) {
 	if got := v1alpha1.ReleaseChannel(cluster); got != "" {
 		t.Fatalf("OKD ReleaseChannel = %q, want empty", got)
 	}
+}
+
+func newKubeVirtChildFiles() map[string]string {
+	files := newBaselineFiles()
+	files["extension.yaml"] = strings.Replace(extensionYAML("openshift-virtualization"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n", 1)
+	files["set.yaml"] = extensionSetYAML("virtualization-platform", "openshift-virtualization")
+	files["binding.yaml"] = extensionBindingYAML("parent-extensions", "virtualization-platform")
+	files["child.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata: { name: child-machine-net }
+spec:
+  machineNetwork:
+    - { cidr: 192.168.134.0/24 }
+  template:
+    networkConfig:
+      interfaces:
+        - { name: primary, type: ethernet, state: up, ipv4: { enabled: true, dhcp: false }, ipv6: { enabled: false } }
+      routes:
+        config:
+          - { destination: 0.0.0.0/0, next-hop-address: 192.168.134.1, next-hop-interface: primary, table-id: 254 }
+  kubevirt:
+    nad: bootwright-child-ocp/child-ocp-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata: { name: child-kubevirt-provider }
+spec:
+  machineProfiles:
+    - name: child-sno
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostClusterRef:
+          name: sno
+        namespace: bootwright-child-ocp
+        storageClassRef:
+          name: lvms-vg1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata: { name: child-ocp-infra }
+spec:
+  platform:
+    type: none
+  endpoints:
+    api:
+      externalVip: 192.168.134.20
+    apiInt:
+      externalVip: 192.168.134.20
+    ingress:
+      externalVip: 192.168.134.21
+  components:
+    machines:
+      - name: master-0
+        from: { provider: child-kubevirt-provider, profile: child-sno }
+        networkConfig:
+          ref: { name: child-machine-net }
+          addresses:
+            - interface: primary
+              ipv4:
+                - { ip: 192.168.134.20, prefix-length: 24 }
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: child-ocp }
+spec:
+  distribution:
+    type: openshift
+    release: { version: 4.21.15 }
+  install:
+    method: agent
+    mode: connected
+    pullSecretRef: { name: openshift-pull-secret }
+    nodeSSH:
+      keyPairRef: { name: cluster-admin-ssh-key }
+  controlPlane: { name: master, replicas: 1 }
+  compute:
+    - { name: worker, replicas: 0 }
+  networking:
+    clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
+    serviceNetwork: [172.30.0.0/16]
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef: { clusterInfra: child-ocp-infra, name: master-0 }
+`
+	return files
+}
+
+func addKubeVirtKubeconfigSecret(environmentYAML string) string {
+	return strings.Replace(environmentYAML, "    bmc-credentials:\n", "    external-virt-cluster-kubeconfig:\n      file: ~/virt.kubeconfig\n    bmc-credentials:\n", 1)
+}
+
+func newKubeVirtCycleFiles() map[string]string {
+	return map[string]string{
+		"environment.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata: { name: env }
+spec:
+  baseDomain: bootwright.test
+  secrets:
+    openshift-pull-secret:
+    cluster-admin-ssh-key: { file: ~/ssh.pub }
+`,
+		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1", "ns-a/net-a"),
+		"network-b.yaml": kubeVirtCycleNetworkYAML("net-b", "192.168.141.0/24", "192.168.141.1", "ns-b/net-b"),
+		"provider-a.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata: { name: provider-a }
+spec:
+  machineProfiles:
+    - name: cp
+      cpu: 4
+      memoryMiB: 8192
+      diskGiB: 80
+      kubevirt:
+        hostClusterRef:
+          name: cluster-b
+        namespace: ns-a
+`,
+		"provider-b.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata: { name: provider-b }
+spec:
+  machineProfiles:
+    - name: cp
+      cpu: 4
+      memoryMiB: 8192
+      diskGiB: 80
+      kubevirt:
+        hostClusterRef:
+          name: cluster-a
+        namespace: ns-b
+`,
+		"infra-a.yaml":   kubeVirtCycleInfraYAML("infra-a", "provider-a", "net-a", "192.168.140.20", "192.168.140.21"),
+		"infra-b.yaml":   kubeVirtCycleInfraYAML("infra-b", "provider-b", "net-b", "192.168.141.20", "192.168.141.21"),
+		"cluster-a.yaml": kubeVirtCycleClusterYAML("cluster-a", "infra-a"),
+		"cluster-b.yaml": kubeVirtCycleClusterYAML("cluster-b", "infra-b"),
+		"extension.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtension
+metadata: { name: openshift-virtualization }
+spec:
+  type: manifest-set
+  provides:
+    - kubevirt
+  manifestSet:
+    manifests:
+      - path: manifests/placeholder.yaml
+  readiness:
+    checks:
+      - type: resourceExists
+        apiVersion: kubevirt.io/v1
+        kind: KubeVirt
+        name: kubevirt
+        namespace: openshift-cnv
+`,
+		"binding.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata: { name: virt }
+spec:
+  clusterSelector:
+    names:
+      - cluster-a
+      - cluster-b
+  applyAfter:
+    phase: clusterInstalled
+  extensions:
+    - name: openshift-virtualization
+`,
+		"manifests/placeholder.yaml": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: placeholder
+  namespace: openshift-cnv
+`,
+	}
+}
+
+func kubeVirtCycleNetworkYAML(name, cidr, gateway, nad string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata: { name: ` + name + ` }
+spec:
+  machineNetwork:
+    - { cidr: ` + cidr + ` }
+  template:
+    networkConfig:
+      interfaces:
+        - { name: primary, type: ethernet, state: up, ipv4: { enabled: true, dhcp: false }, ipv6: { enabled: false } }
+      routes:
+        config:
+          - { destination: 0.0.0.0/0, next-hop-address: ` + gateway + `, next-hop-interface: primary, table-id: 254 }
+  kubevirt:
+    nad: ` + nad + `
+`
+}
+
+func kubeVirtCycleInfraYAML(name, provider, network, nodeIP, ingressIP string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata: { name: ` + name + ` }
+spec:
+  platform:
+    type: none
+  endpoints:
+    api:
+      externalVip: ` + nodeIP + `
+    apiInt:
+      externalVip: ` + nodeIP + `
+    ingress:
+      externalVip: ` + ingressIP + `
+  components:
+    machines:
+      - name: master-0
+        from: { provider: ` + provider + `, profile: cp }
+        networkConfig:
+          ref: { name: ` + network + ` }
+          addresses:
+            - interface: primary
+              ipv4:
+                - { ip: ` + nodeIP + `, prefix-length: 24 }
+`
+}
+
+func kubeVirtCycleClusterYAML(name, infra string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: ` + name + ` }
+spec:
+  distribution:
+    type: openshift
+    release: { version: 4.21.15 }
+  install:
+    method: agent
+    mode: connected
+    pullSecretRef: { name: openshift-pull-secret }
+    nodeSSH:
+      keyPairRef: { name: cluster-admin-ssh-key }
+  controlPlane: { name: master, replicas: 1 }
+  compute:
+    - { name: worker, replicas: 0 }
+  networking:
+    clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
+    serviceNetwork: [172.30.0.0/16]
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef: { clusterInfra: ` + infra + `, name: master-0 }
+`
 }
 
 func newVSphereFiles(nodeNetworking string) map[string]string {
@@ -1673,6 +2020,9 @@ spec:
 func writeFiles(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	for name, content := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}

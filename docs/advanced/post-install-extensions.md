@@ -33,6 +33,11 @@ the MVP. `policy.serverSideApply` defaults to `true`,
 not supported yet. `policy.continueOnError: true` is also rejected in the MVP
 so failures cannot be silently skipped.
 
+`ClusterExtension.spec.provides[]` advertises capabilities that other desired
+state may depend on. The current accepted capability is `kubevirt`. Use it on
+the OpenShift Virtualization extension so KubeVirt child infrastructure waits
+for the host cluster to be ready.
+
 ## OpenShift Virtualization
 
 ```yaml
@@ -42,6 +47,8 @@ metadata:
   name: openshift-virtualization
 spec:
   type: olm-operator
+  provides:
+    - kubevirt
   olm:
     namespace:
       name: openshift-cnv

@@ -54,7 +54,8 @@ Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab,
 `baremetal-redfish` for real bare-metal hosts with Redfish virtual media, or
 `baremetal-redfish-fleet` for a two-cluster bare-metal input layout.
 `baremetal-redfish-postinstall` adds declarative OpenShift Virtualization
-bootstrap resources.
+bootstrap resources. `baremetal-redfish-virtualized-child` adds a KubeVirt
+child OpenShift cluster hosted on that parent virtualization layer.
 
 The copied directory contains desired-state files for the relevant kinds:
 
@@ -205,6 +206,11 @@ post-install extensions.
 post-install bootstrap components declared as `ClusterExtension` resources.
 `apply all` includes infrastructure before the same cluster and extension
 phases.
+For KubeVirt child clusters, `apply all` also waits for the parent cluster
+install and its `provides: [kubevirt]` extension before creating child VM
+infrastructure. `apply infra --scope <child>` requires that parent cluster to
+already be installed and KubeVirt-ready; scoped child applies do not install the
+parent implicitly.
 Running `apply cluster --yes` again skips cluster install tasks when the prior
 install record, rendered desired-input fingerprint, and kubeconfig availability
 probe all match, then applies extensions idempotently. If an interrupted apply

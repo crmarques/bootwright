@@ -405,7 +405,7 @@ func TestRenderInstallerScopedFixtureJSON(t *testing.T) {
 	}
 }
 
-func TestApplyRejectsSchemaOnlyDispatchBeforeAnsible(t *testing.T) {
+func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 	dir := t.TempDir()
 	files, err := scaffold.Workspace("kubevirt-lab", scaffold.ProviderKubeVirt)
 	if err != nil {
@@ -423,11 +423,25 @@ func TestApplyRejectsSchemaOnlyDispatchBeforeAnsible(t *testing.T) {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	_, stderr, code = runCLI(t, "apply", "infra", "--dry-run")
-	if code == 0 {
-		t.Fatal("apply infra unexpectedly accepted a schema-only KubeVirt dispatch")
+	if code != 0 {
+		t.Fatalf("apply infra dry-run exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stderr, "unsupported apply dispatch substrate=kubevirt bmc=none boot=kubevirt") {
-		t.Fatalf("stderr does not describe unsupported dispatch: %q", stderr)
+}
+
+func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-virtualized-child")
+	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+
+	stdout, stderr, code = runCLI(t, "apply", "all", "--scope", "child-ocp", "--dry-run", "--output", "json")
+	if code == 0 {
+		t.Fatalf("scoped child apply unexpectedly succeeded, stdout=%q stderr=%q", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, "include metal-ocp in --scope or apply it first") {
+		t.Fatalf("scoped child apply error missing host dependency remediation, stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 

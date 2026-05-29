@@ -19,6 +19,12 @@ BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
 CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
 desired state.
 
+KubeVirt child-cluster profiles follow the same boundary. `hostClusterRef`
+resolves to the host cluster kubeconfig already produced under Bootwright
+runtime state, and `kubeconfigRef` resolves through `Environment.spec.secrets`
+for external virtualization clusters. Desired state records only the reference
+name, never kubeconfig bytes.
+
 ## Installer Trust
 
 Cluster install trust is rendered only from explicit references:
@@ -109,6 +115,10 @@ Generated output boundaries are part of the safety contract:
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/`, with
   restrictive file modes, and must never be versioned.
+- Kubeconfigs produced for installed host clusters live under
+  `/var/lib/bootwright/contexts/<context>/runtime/installer/<cluster>/auth/`.
+  They may be consumed by KubeVirt child-cluster operations through
+  `hostClusterRef`, but must never be copied into authored desired state.
 - Bootwright-managed apply logs that can include external tool output live under
   `/var/lib/bootwright/contexts/<context>/runs/`, with restrictive file
   modes, and must never be versioned.

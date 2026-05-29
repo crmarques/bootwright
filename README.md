@@ -136,10 +136,11 @@ Post-install components intentionally stay outside
 selected by `Environment`, bound to clusters, and applied after cluster
 installation.
 
-Current `apply` support is explicit: libvirt with emulated Redfish BMCs and
-bare metal with Redfish virtual media are converged by the shipped Ansible
-workflows. vSphere and OpenShift Virtualization (KubeVirt) remain schema paths
-until their provider roles are converged; IPMI is not apply-supported today.
+Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
+bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift
+Virtualization are converged by the shipped Ansible workflows. vSphere remains
+a schema path until its provider role is converged; IPMI is not apply-supported
+today.
 
 ## CLI
 

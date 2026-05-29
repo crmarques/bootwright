@@ -128,6 +128,64 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 	}
 }
 
+func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-virtualized-child")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := render.VarsWithSecretsDir(state, t.TempDir())
+	child := clustersByName(t, vars)["child-ocp"]
+	machine := firstMachineComponent(t, child)
+	kubevirt := machine["kubevirt"].(map[string]any)
+	if got := kubevirt["hostClusterRef"]; got != "metal-ocp" {
+		t.Fatalf("hostClusterRef = %v, want metal-ocp", got)
+	}
+	if got := kubevirt["namespace"]; got != "bootwright-child-ocp" {
+		t.Fatalf("namespace = %v, want bootwright-child-ocp", got)
+	}
+	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_runtime_dir }}/installer/metal-ocp/auth/kubeconfig" {
+		t.Fatalf("kubeconfig = %v, want host runtime kubeconfig template", got)
+	}
+	interfaces := machine["interfaces"].([]any)
+	iface := interfaces[0].(map[string]any)
+	mac, _ := iface["macAddress"].(string)
+	if !strings.HasPrefix(mac, "52:54:00:") {
+		t.Fatalf("generated KubeVirt MAC = %q, want deterministic qemu prefix", mac)
+	}
+	agent, err := render.AgentConfig(state, containerClusterByName(t, state, "child-ocp"))
+	if err != nil {
+		t.Fatalf("AgentConfig: %v", err)
+	}
+	agentIface := agent["hosts"].([]any)[0].(map[string]any)["interfaces"].([]any)[0].(map[string]any)
+	if got := agentIface["macAddress"]; got != mac {
+		t.Fatalf("agent-config MAC = %v, want vars MAC %s", got, mac)
+	}
+	networks := child["networks"].([]any)
+	network := networks[0].(map[string]any)
+	substrate := network["substrate"].(map[string]any)
+	if got := substrate["kind"]; got != v1alpha1.ProvisionerKubeVirt {
+		t.Fatalf("network substrate kind = %v, want kubevirt", got)
+	}
+	if got := substrate["kubevirt"].(map[string]any)["nad"]; got != "bootwright-child-ocp/child-ocp-net" {
+		t.Fatalf("network NAD = %v, want bootwright-child-ocp/child-ocp-net", got)
+	}
+
+	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
+	if err != nil {
+		t.Fatalf("render.All: %v", err)
+	}
+	effective, err := os.ReadFile(result.EffectiveStatePath)
+	if err != nil {
+		t.Fatalf("read effective state: %v", err)
+	}
+	if bytes.Contains(effective, []byte("apiVersion: v1\nkind: Config")) {
+		t.Fatalf("effective state contains kubeconfig-looking bytes")
+	}
+	if !bytes.Contains(effective, []byte("hostClusterRef")) {
+		t.Fatalf("effective state should preserve the non-secret hostClusterRef")
+	}
+}
+
 func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{

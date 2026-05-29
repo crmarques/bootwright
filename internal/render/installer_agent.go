@@ -79,7 +79,8 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComp
 		return nil
 	}
 	profile, ok := findProfile(provider, machine.From.Profile)
-	if !ok || v1alpha1.ProfileProvisionerKind(profile) != v1alpha1.ProvisionerLibvirt {
+	provisioner := v1alpha1.ProfileProvisionerKind(profile)
+	if !ok || (provisioner != v1alpha1.ProvisionerLibvirt && provisioner != v1alpha1.ProvisionerKubeVirt) {
 		return nil
 	}
 	names := clusterMachineInterfaceNames(machine)

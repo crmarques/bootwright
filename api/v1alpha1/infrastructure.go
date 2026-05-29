@@ -151,6 +151,7 @@ const (
 	ClusterExtensionApplyPhaseClusterInstalled = "clusterInstalled"
 	DefaultClusterExtensionReadinessTimeout    = "30m"
 	DefaultClusterExtensionFieldManager        = "bootwright"
+	ClusterExtensionProvidesKubeVirt           = "kubevirt"
 )
 
 // State is the loaded fleet.

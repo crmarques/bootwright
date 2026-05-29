@@ -211,6 +211,9 @@ func loadFile(path string, state *v1alpha1.State) error {
 			return fmt.Errorf("decode %s document %d: apiVersion is required", path, index)
 		}
 		if typeMeta.APIVersion != v1alpha1.APIVersion {
+			if isExtensionManifestFile(path) {
+				continue
+			}
 			return fmt.Errorf("decode %s document %d: unsupported apiVersion %q", path, index, typeMeta.APIVersion)
 		}
 		if !mappingHasKey(node, "metadata") {
@@ -297,6 +300,15 @@ func loadFile(path string, state *v1alpha1.State) error {
 		}
 	}
 	return nil
+}
+
+func isExtensionManifestFile(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Clean(path)), "/") {
+		if part == "manifests" {
+			return true
+		}
+	}
+	return false
 }
 
 func mappingHasKey(node yaml.Node, key string) bool {

@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionSet
+metadata:
+  name: virtualization-host-platform
+spec:
+  extensions:
+    - name: openshift-virtualization
+    - name: child-ocp-network

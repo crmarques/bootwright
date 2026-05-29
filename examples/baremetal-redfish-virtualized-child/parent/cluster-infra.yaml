@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: metal-ocp-infra
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.133.20
+    apiInt:
+      externalVip: 192.168.133.20
+    ingress:
+      externalVip: 192.168.133.20
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: parent-baremetal-provider
+          name: metal-srv1
+        networkConfig:
+          ref:
+            name: parent-machine-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.20
+                  prefix-length: 24

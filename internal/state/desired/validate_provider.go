@@ -12,6 +12,7 @@ import (
 func validateProviders(state v1alpha1.State) []string {
 	var errs []string
 	hosts := indexHosts(state.Hosts)
+	clusters := indexContainerClusters(state.ContainerClusters)
 	seen := map[string]bool{}
 	for _, p := range state.InfraProviders {
 		if e := validateName(v1alpha1.KindInfraProvider, p.Metadata.Name); e != "" {
@@ -22,20 +23,20 @@ func validateProviders(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate InfraProvider %q", p.Metadata.Name))
 		}
 		seen[p.Metadata.Name] = true
-		errs = append(errs, validateProviderCapabilities(p, hosts)...)
+		errs = append(errs, validateProviderCapabilities(p, hosts, clusters)...)
 	}
 	errs = append(errs, validateLibvirtBMCEmulationHostPorts(state)...)
 	return errs
 }
 
-func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host) []string {
+func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host, clusters map[string]v1alpha1.ContainerCluster) []string {
 	var errs []string
 	caps := p.Spec
 	errs = append(errs, validateUniqueCapabilityNames(p, "machineProfiles", capabilityNames(caps.MachineProfiles, func(x v1alpha1.MachineProfileCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "machines", capabilityNames(caps.Machines, func(x v1alpha1.MachineCapability) string { return x.Name }))...)
 
 	for _, mp := range caps.MachineProfiles {
-		errs = append(errs, validateMachineProfile(p, mp, hosts)...)
+		errs = append(errs, validateMachineProfile(p, mp, hosts, clusters)...)
 	}
 	for _, m := range caps.Machines {
 		errs = append(errs, validateProviderMachine(p, m)...)
@@ -67,7 +68,7 @@ func validateUniqueCapabilityNames(p v1alpha1.InfraProvider, kind string, names 
 	return errs
 }
 
-func validateMachineProfile(p v1alpha1.InfraProvider, mp v1alpha1.MachineProfileCapability, hosts map[string]v1alpha1.Host) []string {
+func validateMachineProfile(p v1alpha1.InfraProvider, mp v1alpha1.MachineProfileCapability, hosts map[string]v1alpha1.Host, clusters map[string]v1alpha1.ContainerCluster) []string {
 	var errs []string
 	prefix := fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s]", p.Metadata.Name, mp.Name)
 	if mp.CPU < 0 || mp.MemoryMiB < 0 || mp.DiskGiB < 0 {
@@ -84,7 +85,7 @@ func validateMachineProfile(p v1alpha1.InfraProvider, mp v1alpha1.MachineProfile
 	}
 	if mp.KubeVirt != nil {
 		set++
-		errs = append(errs, validateMachineProfileKubeVirt(prefix, mp.KubeVirt)...)
+		errs = append(errs, validateMachineProfileKubeVirt(prefix, mp.KubeVirt, clusters)...)
 	}
 	if set != 1 {
 		errs = append(errs, fmt.Sprintf("%s must set exactly one of {libvirt, vsphere, kubevirt} (got %d)", prefix, set))
@@ -189,10 +190,22 @@ func validateMachineProfileVSphere(prefix string, v *v1alpha1.MachineProfileVSph
 	return errs
 }
 
-func validateMachineProfileKubeVirt(prefix string, k *v1alpha1.MachineProfileKubeVirtProvisioner) []string {
+func validateMachineProfileKubeVirt(prefix string, k *v1alpha1.MachineProfileKubeVirtProvisioner, clusters map[string]v1alpha1.ContainerCluster) []string {
 	var errs []string
-	if k.ClusterRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("%s.kubevirt.clusterRef.name is required", prefix))
+	hasHostClusterRef := k.HostClusterRef != nil && k.HostClusterRef.Name != ""
+	hasKubeconfigRef := k.KubeconfigRef != nil && k.KubeconfigRef.Name != ""
+	if hasHostClusterRef == hasKubeconfigRef {
+		errs = append(errs, fmt.Sprintf("%s.kubevirt must set exactly one of {hostClusterRef, kubeconfigRef}", prefix))
+	}
+	if k.HostClusterRef != nil {
+		if k.HostClusterRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostClusterRef.name is required when hostClusterRef is set", prefix))
+		} else if _, ok := clusters[k.HostClusterRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostClusterRef.name %q does not match any ContainerCluster", prefix, k.HostClusterRef.Name))
+		}
+	}
+	if k.KubeconfigRef != nil && k.KubeconfigRef.Name == "" {
+		errs = append(errs, fmt.Sprintf("%s.kubevirt.kubeconfigRef.name is required when kubeconfigRef is set", prefix))
 	}
 	if k.Namespace == "" {
 		errs = append(errs, fmt.Sprintf("%s.kubevirt.namespace is required", prefix))

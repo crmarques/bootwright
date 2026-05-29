@@ -8,10 +8,10 @@ description: InfraProvider capability shapes and cluster machine selection.
 `InfraProvider` declares what a substrate can provide. It does not decide
 which cluster consumes the capability.
 
-Current apply support covers libvirt machines with emulated Redfish BMCs and
-bare-metal machines with Redfish virtual media. vSphere and OpenShift
-Virtualization are valid schema shapes, but their apply adapters are not
-converged yet.
+Current apply support covers libvirt machines with emulated Redfish BMCs,
+bare-metal machines with Redfish virtual media, and KubeVirt VMs hosted on an
+OpenShift Virtualization cluster. vSphere is a valid schema shape, but its
+apply adapter is not converged yet.
 
 ## Bare Metal
 
@@ -98,6 +98,48 @@ spec:
 The vSphere desired-state shape is present so the schema can stabilize ahead
 of the apply adapter. The shipped apply workflows do not converge vSphere
 clusters yet.
+
+## KubeVirt
+
+KubeVirt profiles create child cluster VMs on a host OpenShift Virtualization
+cluster:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: child-kubevirt-provider
+spec:
+  machineProfiles:
+    - name: child-sno
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostClusterRef:
+          name: metal-ocp
+        namespace: bootwright-child-ocp
+        storageClassRef:
+          name: lvms-vg1
+```
+
+Use `hostClusterRef` when the virtualization host is another Bootwright
+`ContainerCluster`. Bootwright uses the runtime kubeconfig from that host
+cluster; do not put kubeconfig bytes in desired state. Use `kubeconfigRef`
+when the host cluster is external:
+
+```yaml
+kubevirt:
+  kubeconfigRef:
+    name: external-virt-cluster-kubeconfig
+  namespace: bootwright-child-ocp
+```
+
+Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace is
+required and the storage class is optional. KubeVirt machines must select a
+`NetworkConfig` with `spec.kubevirt.nad`, and `apply all` waits for the host
+cluster extension that advertises `provides: [kubevirt]` before creating child
+VMs.
 
 ## Services
 

@@ -2,12 +2,12 @@
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
-  name: {{ bootwright_current_cluster.name }}-{{ node.name }}
-  namespace: {{ node_namespace }}
+  name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
+  namespace: {{ bootwright_component.kubevirt.namespace }}
   labels:
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
-    bootwright.io/node: {{ node.name }}
-    bootwright.io/role: {{ node.role }}
+    bootwright.io/node: {{ bootwright_component.name }}
+    bootwright.io/role: {{ bootwright_kubevirt_node.value.role }}
     bootwright.io/managed-by: bootwright
 spec:
   running: false
@@ -15,22 +15,26 @@ spec:
     metadata:
       labels:
         bootwright.io/cluster: {{ bootwright_current_cluster.name }}
-        bootwright.io/node: {{ node.name }}
-        kubevirt.io/vm: {{ bootwright_current_cluster.name }}-{{ node.name }}
+        bootwright.io/node: {{ bootwright_component.name }}
+        kubevirt.io/vm: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
     spec:
       domain:
         cpu:
-          cores: {{ node.resources.cpu }}
+          cores: {{ bootwright_component.profile.cpu | default(1, true) }}
         memory:
-          guest: {{ node.resources.memoryMiB }}Mi
+          guest: {{ bootwright_component.profile.memoryMiB | default(4096, true) }}Mi
         devices:
           disks:
+            - name: agent-iso
+              cdrom:
+                bus: sata
+              bootOrder: 1
             - name: root
               disk:
                 bus: virtio
               bootOrder: 2
           interfaces:
-{% for iface in node.interfaces %}
+{% for iface in bootwright_component.interfaces | default([]) %}
             - name: {{ iface.name }}
               bridge: {}
 {% if iface.macAddress | default('') | length > 0 %}
@@ -38,12 +42,15 @@ spec:
 {% endif %}
 {% endfor %}
       networks:
-{% for iface in node.interfaces %}
+{% for iface in bootwright_component.interfaces | default([]) %}
         - name: {{ iface.name }}
           multus:
-            networkName: {{ iface.networkName }}
+            networkName: {{ bootwright_kubevirt_nad }}
 {% endfor %}
       volumes:
+        - name: agent-iso
+          dataVolume:
+            name: {{ bootwright_current_cluster.name }}-agent-iso
         - name: root
           dataVolume:
-            name: {{ bootwright_current_cluster.name }}-{{ node.name }}-root
+            name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root

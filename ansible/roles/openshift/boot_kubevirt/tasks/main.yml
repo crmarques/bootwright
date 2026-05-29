@@ -1,11 +1,114 @@
 ---
-- name: boot_kubevirt pending v1alpha1 migration
-  ansible.builtin.fail:
-    msg: |
-      boot_kubevirt needs migration to the v1alpha1 per-machine component
-      contract. Inputs available on bootwright_component:
-        clusterName, name, providerName
-        kubevirt.{clusterRef, namespace, storageClassRef}
-      Drive: upload agent ISO into a DataVolume via virtctl, attach it
-      as cdrom on the VirtualMachine and start it. Pair with
-      substrate_kubevirt when adding KubeVirt runtime support.
+- name: Resolve KubeVirt boot inputs
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_kubeconfig: "{{ bootwright_component.kubevirt.kubeconfig | default('') }}"
+    bootwright_kubevirt_namespace: "{{ bootwright_component.kubevirt.namespace | default('') }}"
+    bootwright_kubevirt_storage_class: "{{ bootwright_component.kubevirt.storageClassRef | default('') }}"
+    bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_kubevirt_iso_dv_name: "{{ bootwright_current_cluster.name }}-agent-iso"
+  changed_when: false
+
+- name: Read generated agent ISO path
+  ansible.builtin.slurp:
+    src: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+  register: bootwright_kubevirt_agent_iso_path_file
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Set generated agent ISO path
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_agent_iso_path: "{{ bootwright_kubevirt_agent_iso_path_file.content | b64decode | trim }}"
+  changed_when: false
+  no_log: true
+
+- name: Validate KubeVirt boot inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_kubevirt_kubeconfig | length > 0
+      - bootwright_kubevirt_namespace | length > 0
+      - bootwright_kubevirt_agent_iso_path | length > 0
+    fail_msg: >-
+      KubeVirt boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing kubeconfig, namespace, or generated agent ISO path.
+
+- name: Remove previous KubeVirt agent ISO DataVolume
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - delete
+      - datavolume
+      - "{{ bootwright_kubevirt_iso_dv_name }}"
+      - --ignore-not-found=true
+  register: bootwright_kubevirt_iso_delete
+  changed_when: "'deleted' in (bootwright_kubevirt_iso_delete.stdout | default(''))"
+
+- name: Build virtctl image-upload command
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_upload_argv: >-
+      {{
+        [
+          'virtctl',
+          '--kubeconfig', bootwright_kubevirt_kubeconfig,
+          'image-upload',
+          'dv', bootwright_kubevirt_iso_dv_name,
+          '--namespace', bootwright_kubevirt_namespace,
+          '--image-path', bootwright_kubevirt_agent_iso_path,
+          '--size', '4Gi',
+          '--force-bind',
+          '--wait-secs', bootwright_kubevirt_boot_iso_timeout | string
+        ]
+        + (
+          ['--storage-class', bootwright_kubevirt_storage_class]
+          if (bootwright_kubevirt_storage_class | length) > 0
+          else []
+        )
+        + (
+          ['--insecure']
+          if (bootwright_kubevirt_virtctl_insecure_upload | bool)
+          else []
+        )
+      }}
+  changed_when: false
+  no_log: true
+
+- name: Upload KubeVirt agent ISO DataVolume
+  ansible.builtin.command:
+    argv: "{{ bootwright_kubevirt_upload_argv }}"
+  register: bootwright_kubevirt_iso_upload
+  changed_when: bootwright_kubevirt_iso_upload.rc == 0
+  no_log: true
+
+- name: Start KubeVirt VirtualMachine
+  ansible.builtin.command:
+    argv:
+      - virtctl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - start
+      - "{{ bootwright_kubevirt_vm_name }}"
+      - --namespace
+      - "{{ bootwright_kubevirt_namespace }}"
+  register: bootwright_kubevirt_vm_start
+  changed_when: bootwright_kubevirt_vm_start.rc == 0
+  failed_when:
+    - bootwright_kubevirt_vm_start.rc != 0
+    - "'already' not in ((bootwright_kubevirt_vm_start.stderr | default('')) | lower)"
+
+- name: Wait for KubeVirt VirtualMachineInstance readiness
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - wait
+      - "vmi/{{ bootwright_kubevirt_vm_name }}"
+      - --for=condition=Ready
+      - "--timeout={{ bootwright_kubevirt_boot_vmi_timeout }}s"
+  changed_when: false

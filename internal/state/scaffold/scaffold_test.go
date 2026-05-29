@@ -29,6 +29,7 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 	supported := []scaffold.Provider{
 		scaffold.ProviderEmulatedBareMetal,
 		scaffold.ProviderBareMetal,
+		scaffold.ProviderKubeVirt,
 	}
 	for _, provider := range supported {
 		if got := scaffold.ApplySupport(provider); !got.ApplySupported() {
@@ -38,7 +39,6 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 
 	scaffoldOnly := []scaffold.Provider{
 		scaffold.ProviderVSphere,
-		scaffold.ProviderKubeVirt,
 	}
 	for _, provider := range scaffoldOnly {
 		if got := scaffold.ApplySupport(provider); got.ApplySupported() {

@@ -74,7 +74,8 @@ type VSphereNetworkSubnet struct {
 }
 
 type MachineProfileKubeVirtProvisioner struct {
-	ClusterRef      LocalObjectReference  `yaml:"clusterRef" json:"clusterRef"`
+	HostClusterRef  *LocalObjectReference `yaml:"hostClusterRef,omitempty" json:"hostClusterRef,omitempty"`
+	KubeconfigRef   *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
 	Namespace       string                `yaml:"namespace" json:"namespace"`
 	StorageClassRef *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
 }

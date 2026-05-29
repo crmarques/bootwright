@@ -103,6 +103,11 @@ bootwright_clusters:
         primaryIPAddress: 192.168.133.20
         fromProfile: <profile>  # profile-backed machines only
         profile: {}             # inlined provider profile when present
+        kubevirt:
+          hostClusterRef: metal-ocp
+          kubeconfig: "{{ bootwright_runtime_dir }}/installer/metal-ocp/auth/kubeconfig"
+          namespace: bootwright-child-ocp
+          storageClassRef: lvms-vg1
         boot:
           redfish: {}
           agentIso: {}

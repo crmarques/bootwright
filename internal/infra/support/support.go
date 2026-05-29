@@ -101,8 +101,8 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 			BMCDestroyRole:       "bmc_none",
 			BootApplyRole:        "boot_kubevirt",
 		},
-		Status:  StatusScaffold,
-		Summary: "OpenShift Virtualization schema and scaffold are present, but apply roles are not converged",
+		Status:  StatusSupported,
+		Summary: "OpenShift Virtualization with KubeVirt VMs",
 	},
 }
 

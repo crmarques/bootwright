@@ -12,10 +12,10 @@ import (
 )
 
 // Inventory builds the Ansible inventory tree per ADR-0002 § role
-// taxonomy. Hosts that back a profile-based machine substrate (libvirt
-// today — the only substrate with an on-host hypervisor) land in
-// `bootwright_infra_hosts`. Bare-metal machines and vsphere/kubevirt
-// guests are remote by design and have no on-host provider. Hosts
+// taxonomy. Hosts that back a profile-based machine substrate land in
+// `bootwright_infra_hosts`: libvirt uses its provider host, and KubeVirt uses
+// localhost because VM operations run through a kubeconfig. Bare-metal machines
+// are reached through BMCs, and vSphere guests remain remote by design. Hosts
 // that back managed services (LB, DNS, proxy, registry, artifacts) land
 // in `bootwright_provider_hosts`. A host that does both lives in both
 // groups. The OCP-install and agent-node layers run on localhost.
@@ -226,9 +226,9 @@ func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 
 // infraReferencedHosts returns the hosts that back a profile-based
 // machine substrate. Bare-metal `machines[]` entries are reached over
-// BMC from the controller, and vsphere / kubevirt guests live on
-// remote infrastructure — those substrates have no on-host provider
-// by design and contribute nothing here.
+// BMC from the controller. vSphere guests live on remote infrastructure and
+// contribute nothing here. KubeVirt VM operations run from the controller
+// against a kubeconfig, so they contribute localhost.
 func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ci := range state.ClusterInfras {

@@ -1,12 +1,102 @@
 ---
-- name: Fail until KubeVirt substrate is rewired to the new vars contract
-  ansible.builtin.fail:
-    msg: |
-      substrate_kubevirt apply needs migration to the v1alpha1 component
-      shape. Inputs available on `bootwright_component`:
-        from.profile  → bootwright_component.kubevirt.{clusterRef,namespace,storageClassRef}
-        networkConfig → bootwright_component.networkConfig.{ref,addresses}
-        profile       → bootwright_component.profile.{cpu,memoryMiB,diskGiB}
-        networks      → bootwright_current_cluster.networks[].substrate.kubevirt.nad
-      Rewire the existing kubeconfig + DataVolume + VirtualMachine flow
-      around these inputs when adding KubeVirt runtime support.
+- name: Resolve KubeVirt node binding
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_node: >-
+      {{
+        (
+          bootwright_current_cluster.nodes
+          | dict2items
+          | selectattr('value.machineRef.name', 'defined')
+          | selectattr('value.machineRef.name', 'equalto', bootwright_component.name)
+          | list
+          | first
+        ) | default({})
+      }}
+    bootwright_kubevirt_network: >-
+      {{
+        (
+          bootwright_current_cluster.networks
+          | selectattr('name', 'equalto', bootwright_component.networkConfig.ref)
+          | list
+          | first
+        ) | default({})
+      }}
+  changed_when: false
+
+- name: Resolve KubeVirt substrate inputs
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_kubeconfig: "{{ bootwright_component.kubevirt.kubeconfig | default('') }}"
+    bootwright_kubevirt_namespace: "{{ bootwright_component.kubevirt.namespace | default('') }}"
+    bootwright_kubevirt_storage_class: "{{ bootwright_component.kubevirt.storageClassRef | default(bootwright_kubevirt_default_storage_class) }}"
+    bootwright_kubevirt_nad: "{{ bootwright_kubevirt_network.substrate.kubevirt.nad | default('') }}"
+    bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_kubevirt_root_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root"
+  changed_when: false
+
+- name: Validate KubeVirt substrate inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_kubevirt_node is mapping
+      - bootwright_kubevirt_node.key | default('') | length > 0
+      - bootwright_kubevirt_kubeconfig | length > 0
+      - bootwright_kubevirt_namespace | length > 0
+      - bootwright_kubevirt_nad | length > 0
+      - bootwright_component.interfaces | default([]) | length > 0
+    fail_msg: >-
+      KubeVirt machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing a node binding, kubeconfig, namespace, NAD, or rendered interface.
+
+- name: Ensure KubeVirt namespace exists
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - create
+      - namespace
+      - "{{ bootwright_kubevirt_namespace }}"
+  register: bootwright_kubevirt_namespace_create
+  changed_when: bootwright_kubevirt_namespace_create.rc == 0
+  failed_when:
+    - bootwright_kubevirt_namespace_create.rc != 0
+    - "'AlreadyExists' not in (bootwright_kubevirt_namespace_create.stderr | default(''))"
+
+- name: Apply KubeVirt root disk DataVolume
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - apply
+      - -f
+      - "-"
+    stdin: "{{ lookup('ansible.builtin.template', 'datavolume-root.yaml.j2') }}"
+  register: bootwright_kubevirt_root_apply
+  changed_when: "'unchanged' not in (bootwright_kubevirt_root_apply.stdout | default(''))"
+
+- name: Apply KubeVirt VirtualMachine
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - apply
+      - -f
+      - "-"
+    stdin: "{{ lookup('ansible.builtin.template', 'virtualmachine.yaml.j2') }}"
+  register: bootwright_kubevirt_vm_apply
+  changed_when: "'unchanged' not in (bootwright_kubevirt_vm_apply.stdout | default(''))"
+
+- name: Wait for KubeVirt root disk DataVolume
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - wait
+      - "datavolume/{{ bootwright_kubevirt_root_dv_name }}"
+      - --for=condition=Ready
+      - --timeout=10m
+  changed_when: false

@@ -26,6 +26,8 @@ Current examples:
   VIPs.
 - `baremetal-redfish-postinstall`: the bare-metal Redfish shape plus
   declarative post-install OpenShift Virtualization resources.
+- `baremetal-redfish-virtualized-child`: a bare-metal SNO parent with
+  OpenShift Virtualization and a KubeVirt-backed SNO child cluster.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common
   services and provider inventory through a subdirectory layout.
 - `baremetal-redfish-fleet-postinstall`: the two-cluster bare-metal Redfish

@@ -2,11 +2,11 @@
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
 metadata:
-  name: {{ bootwright_current_cluster.name }}-{{ node.name }}-root
-  namespace: {{ node_namespace }}
+  name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root
+  namespace: {{ bootwright_component.kubevirt.namespace }}
   labels:
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
-    bootwright.io/node: {{ node.name }}
+    bootwright.io/node: {{ bootwright_component.name }}
     bootwright.io/role: root
     bootwright.io/managed-by: bootwright
 spec:
@@ -17,7 +17,7 @@ spec:
       - ReadWriteOnce
     resources:
       requests:
-        storage: {{ node.resources.diskGiB }}Gi
-{% if node_storage_class | default('') | length > 0 %}
-    storageClassName: {{ node_storage_class }}
+        storage: {{ bootwright_component.profile.diskGiB | default(120, true) }}Gi
+{% if bootwright_kubevirt_storage_class | default('') | length > 0 %}
+    storageClassName: {{ bootwright_kubevirt_storage_class }}
 {% endif %}

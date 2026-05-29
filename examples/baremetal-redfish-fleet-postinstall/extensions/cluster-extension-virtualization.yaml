@@ -5,6 +5,9 @@ metadata:
 spec:
   type: olm-operator
 
+  provides:
+    - kubevirt
+
   olm:
     namespace:
       name: openshift-cnv

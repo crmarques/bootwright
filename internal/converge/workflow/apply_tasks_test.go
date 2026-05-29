@@ -391,6 +391,31 @@ func TestPlanApplyClusterRunsExtensionsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
 }
 
+func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
+	state := kubeVirtChildPlanningState(true)
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+
+	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "extension.metal-ocp.openshift-virtualization.wait")
+	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost", "host:localhost:mutating", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
+}
+
+func TestPlanApplyAllRejectsScopedKubeVirtChildWithoutHostCluster(t *testing.T) {
+	state := kubeVirtChildPlanningState(false)
+
+	_, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err == nil {
+		t.Fatal("expected missing host cluster dependency error, got nil")
+	}
+	if !strings.Contains(err.Error(), `include metal-ocp in --scope or apply it first`) {
+		t.Fatalf("error %q does not include scoped dependency remediation", err)
+	}
+}
+
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
 	t.Helper()
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "state", "desired", "testdata", "good", name)})
@@ -454,6 +479,58 @@ func extensionPlanningState() v1alpha1.State {
 	}
 }
 
+func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
+	clusters := []v1alpha1.ContainerCluster{{
+		Metadata: v1alpha1.Metadata{Name: "child-ocp"},
+		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+			Hostname: "master-0",
+			MachineRef: v1alpha1.NodeMachineRef{
+				ClusterInfra: "child-ocp-infra",
+				Name:         "master-0",
+			},
+		}}},
+	}}
+	if includeParent {
+		clusters = append(clusters, v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: "metal-ocp"}})
+	}
+	return v1alpha1.State{
+		ContainerClusters: clusters,
+		ClusterInfras: []v1alpha1.ClusterInfra{{
+			Metadata: v1alpha1.Metadata{Name: "child-ocp-infra"},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+					Name: "master-0",
+					From: v1alpha1.From{Provider: "child-kubevirt-provider", Profile: "sno"},
+				}}},
+			},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "child-kubevirt-provider"},
+			Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
+				Name: "sno",
+				KubeVirt: &v1alpha1.MachineProfileKubeVirtProvisioner{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+					Namespace:      "bootwright-child-ocp",
+				},
+			}}},
+		}},
+		ClusterExtensions: []v1alpha1.ClusterExtension{{
+			Metadata: v1alpha1.Metadata{Name: "openshift-virtualization"},
+			Spec: v1alpha1.ClusterExtensionSpec{
+				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterExtensionProvidesKubeVirt},
+			},
+		}},
+		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+			Metadata: v1alpha1.Metadata{Name: "virt"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"metal-ocp"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "openshift-virtualization"}},
+			},
+		}},
+	}
+}
+
 func applyTaskIDs(tasks []ApplyTask) []string {
 	out := make([]string, 0, len(tasks))
 	for _, task := range tasks {
@@ -470,6 +547,20 @@ func assertTaskDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) 
 		}
 		if !reflect.DeepEqual(task.Entry.Dependencies, want) {
 			t.Fatalf("%s deps = %v, want %v", id, task.Entry.Dependencies, want)
+		}
+		return
+	}
+	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+}
+
+func assertTaskResourceKeys(t *testing.T, tasks []ApplyTask, id string, want ...string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.Entry.ID != id {
+			continue
+		}
+		if !reflect.DeepEqual(task.Entry.ResourceKeys, want) {
+			t.Fatalf("%s resource keys = %v, want %v", id, task.Entry.ResourceKeys, want)
 		}
 		return
 	}

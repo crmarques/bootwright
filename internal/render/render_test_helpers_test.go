@@ -17,6 +17,17 @@ func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any 
 	return componentByKind(t, cluster, v1alpha1.ComponentSlotMachines)
 }
 
+func containerClusterByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.ContainerCluster {
+	t.Helper()
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == name {
+			return cluster
+		}
+	}
+	t.Fatalf("ContainerCluster/%s not found", name)
+	return v1alpha1.ContainerCluster{}
+}
+
 func componentByKind(t *testing.T, cluster map[string]any, kind string) map[string]any {
 	t.Helper()
 	comps, ok := cluster["components"].([]any)

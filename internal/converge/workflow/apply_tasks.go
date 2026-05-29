@@ -96,6 +96,14 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 	var tasks []ApplyTask
 	providerTaskIDs := []string{}
+	kubeVirtDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseCluster] && phaseSet[ApplyPhaseClusters] && phaseSet[ApplyPhaseExtensions] {
+		var err error
+		kubeVirtDepsByCluster, err = kubeVirtHostClusterApplyDeps(state)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if phaseSet[ApplyPhaseProvider] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
 			taskID := "provider." + host
@@ -123,6 +131,8 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
 			deps := append([]string(nil), providerTaskIDs...)
+			deps = append(deps, kubeVirtDepsByCluster[name]...)
+			resourceKeys := kubeVirtResourceKeys(state, name)
 			if len(infraHosts) == 0 {
 				taskID := "infra." + name
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
@@ -134,6 +144,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Cluster:      name,
 						Status:       TaskStatusPending,
 						Dependencies: deps,
+						ResourceKeys: resourceKeys,
 					},
 					Playbook: applyClusterInfraPlaybook,
 					Limit:    render.GroupInfraHosts,
@@ -151,7 +162,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Label:        "infra " + name + " on " + host,
 						Cluster:      name,
 						Host:         host,
-						ResourceKeys: []string{hostMutationResource(host)},
+						ResourceKeys: append([]string{hostMutationResource(host)}, resourceKeys...),
 						Status:       TaskStatusPending,
 						Dependencies: deps,
 					},
@@ -187,17 +198,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			bootTaskID := ""
 			if len(machineNames) > 0 {
 				bootTaskID = "boot." + name
-				resourceKeys := make([]string, 0, len(machineNames))
-				for _, machineName := range machineNames {
-					resourceKeys = append(resourceKeys, applyNodeRedfishResource(state, name, machineName))
-				}
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:           bootTaskID,
 						Kind:         ApplyTaskKindNodeBoot,
 						Label:        "boot " + name + " nodes",
 						Cluster:      name,
-						ResourceKeys: resourceKeys,
+						ResourceKeys: applyNodeBootResourceKeys(state, name, machineNames),
 						Status:       TaskStatusPending,
 						Dependencies: []string{isoTaskID},
 					},

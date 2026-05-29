@@ -1,0 +1,40 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: child-ocp
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+    pullSecretRef:
+      name: openshift-pull-secret
+    nodeSSH:
+      keyPairRef:
+        name: cluster-admin-ssh-key
+
+  controlPlane:
+    name: master
+    replicas: 1
+
+  compute:
+    - name: worker
+      replicas: 0
+
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef:
+        clusterInfra: child-ocp-infra
+        name: master-0

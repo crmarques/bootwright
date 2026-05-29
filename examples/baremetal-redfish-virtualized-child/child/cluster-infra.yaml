@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: child-ocp-infra
+spec:
+  platform:
+    type: none
+
+  endpoints:
+    api:
+      externalVip: 192.168.134.20
+    apiInt:
+      externalVip: 192.168.134.20
+    ingress:
+      externalVip: 192.168.134.20
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: child-kubevirt-provider
+          profile: child-sno
+        networkConfig:
+          ref:
+            name: child-machine-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.134.20
+                  prefix-length: 24

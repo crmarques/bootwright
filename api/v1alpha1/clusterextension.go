@@ -10,6 +10,7 @@ type ClusterExtension struct {
 
 type ClusterExtensionSpec struct {
 	Type        string                       `yaml:"type" json:"type"`
+	Provides    []string                     `yaml:"provides,omitempty" json:"provides,omitempty"`
 	OLM         *ClusterExtensionOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterExtensionManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`
 	Readiness   ClusterExtensionReadiness    `yaml:"readiness,omitempty" json:"readiness,omitempty"`

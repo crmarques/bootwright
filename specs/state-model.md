@@ -378,6 +378,8 @@ metadata:
   name: openshift-virtualization
 spec:
   type: olm-operator
+  provides:
+    - kubevirt
 
   olm:
     namespace:
@@ -423,8 +425,15 @@ spec:
           status: "True"
 ```
 
+`provides[]` advertises extension-provided cluster capabilities consumed by
+cross-cluster substrates. The initial accepted value is `kubevirt`. An extension
+that provides a capability must declare readiness checks so dependent work waits
+for the actual platform capability, not just resource submission.
+
 `manifest-set` extensions apply existing YAML files in declared order. Paths
-are relative to the `ClusterExtension` file directory.
+are relative to the `ClusterExtension` file directory. Non-Bootwright YAML under
+an extension `manifests/` directory is treated as extension payload, not desired
+state to decode.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -763,6 +772,38 @@ spec:
               - 192.168.133.0/24
 ```
 
+KubeVirt profiles keep the host virtualization cluster and namespace facts:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: child-kubevirt
+spec:
+  machineProfiles:
+    - name: child-sno
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostClusterRef:
+          name: metal-ocp
+        namespace: bootwright-child-ocp
+        storageClassRef:
+          name: lvms-vg1
+```
+
+`hostClusterRef` names a Bootwright `ContainerCluster` whose generated
+kubeconfig is used at runtime. Use `kubeconfigRef` instead when the KubeVirt
+host cluster is external to Bootwright:
+
+```yaml
+kubevirt:
+  kubeconfigRef:
+    name: external-virt-cluster-kubeconfig
+  namespace: bootwright-child-ocp
+```
+
 Rules:
 
 - Provider credentials are always `SecretRef`s.
@@ -779,6 +820,20 @@ Rules:
 - vSphere failure domains must include the installer-required `region`, `zone`,
   `server`, `topology.datacenter`, `topology.computeCluster`,
   `topology.datastore`, and `topology.networks`.
+- KubeVirt profiles must set exactly one of `hostClusterRef` or
+  `kubeconfigRef`.
+- `hostClusterRef.name` references a loaded Bootwright `ContainerCluster`. The
+  host cluster must have a selected `ClusterExtensionBinding` that applies an
+  extension with `provides: [kubevirt]`.
+- `kubeconfigRef.name` references `Environment.spec.secrets`; the secret stores
+  a kubeconfig path or context-local kubeconfig material and never stores bytes
+  in desired state.
+- `kubevirt.namespace` is required. `storageClassRef.name` is optional.
+- KubeVirt-backed machines must use a `NetworkConfig` with `spec.kubevirt.nad`.
+  The referenced NAD is supplied by the operator or by a parent-cluster
+  `manifest-set` extension.
+- KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot host
+  itself directly or through another child cluster.
 - Capability names are scoped by capability kind.
 
 ## InfraComponent
@@ -1038,8 +1093,15 @@ Validation rejects:
 - `ClusterExtensionSet` reference cycles.
 - Unsupported cluster extension types, readiness check types, apply phases, and
   install plan approval values.
+- Unsupported `ClusterExtension.spec.provides[]` capabilities. The only current
+  value is `kubevirt`; duplicate values and capabilities without readiness
+  checks are invalid.
 - Unsafe `manifest-set` paths, including absolute paths, directory escapes,
   symlinks, missing files, and non-YAML extensions.
+- KubeVirt profiles missing exactly one host reference, referencing a missing
+  host cluster, referencing an undeclared kubeconfig secret, missing
+  `namespace`, using a non-KubeVirt network config, or creating a cluster
+  dependency cycle.
 - `ClusterExtensionBinding` cluster selectors that name missing clusters.
 - `ClusterExtensionBinding.policy.prune: true`, because pruning is not
   implemented in the MVP.

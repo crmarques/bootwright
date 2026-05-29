@@ -93,6 +93,66 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 	}
 }
 
+func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
+	runtimeDir := t.TempDir()
+	kubeconfig := filepath.Join(runtimeDir, "installer", "metal-ocp", "auth", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
+		Metadata: v1alpha1.Metadata{Name: "child-provider"},
+		Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
+			Name: "sno",
+			KubeVirt: &v1alpha1.MachineProfileKubeVirtProvisioner{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+			},
+		}}},
+	}}}
+	deps := preflightDeps{
+		lookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		statPath: os.Stat,
+		commandOutput: func(name string, args ...string) ([]byte, error) {
+			if name == "kubectl" {
+				return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+			}
+			return []byte("Python 3.12.4"), nil
+		},
+		uid: func() int { return 1000 },
+	}
+
+	checks := collectPreflightChecks(state, []Phase{{Name: "cluster"}}, true, "/context/secrets", runtimeDir, deps)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
+	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
+}
+
+func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
+	runtimeDir := t.TempDir()
+	kubeconfig := filepath.Join(runtimeDir, "installer", "metal-ocp", "auth", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, preflightDeps{
+		commandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"virtualmachines.kubevirt.io\" not found\n"), errors.New("not found")
+		},
+	})
+	if check.Status == "OK" {
+		t.Fatalf("missing KubeVirt API accepted: %+v", check)
+	}
+	if !strings.Contains(check.Remediation, "bootwright apply extensions --scope metal-ocp --yes") {
+		t.Fatalf("remediation = %q", check.Remediation)
+	}
+}
+
 func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	deps := preflightDeps{
@@ -326,6 +386,19 @@ func TestClusterCheckLimitIncludesBootHosts(t *testing.T) {
 			t.Fatalf("cluster limit %q missing %q", limit, want)
 		}
 	}
+}
+
+func assertPreflightCheckStatus(t *testing.T, checks []preflightCheck, name, status string) {
+	t.Helper()
+	for _, check := range checks {
+		if check.Name == name {
+			if string(check.Status) != status {
+				t.Fatalf("%s status = %s, want %s: %+v", name, check.Status, status, check)
+			}
+			return
+		}
+	}
+	t.Fatalf("preflight check %q not found: %+v", name, checks)
 }
 
 func writeExecutable(t *testing.T, path string) {
