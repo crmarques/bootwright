@@ -1,0 +1,56 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: demo-ocp-a-infra
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.133.10
+    apiInt:
+      externalVip: 192.168.133.10
+    ingress:
+      externalVip: 192.168.133.11
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: fleet-baremetal-provider
+          name: rack1-srv1
+        networkConfig:
+          ref:
+            name: fleet-machine-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.20
+                  prefix-length: 24
+      - name: master-1
+        from:
+          provider: fleet-baremetal-provider
+          name: rack1-srv2
+        networkConfig:
+          ref:
+            name: fleet-machine-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.21
+                  prefix-length: 24
+      - name: master-2
+        from:
+          provider: fleet-baremetal-provider
+          name: rack1-srv3
+        networkConfig:
+          ref:
+            name: fleet-machine-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.133.22
+                  prefix-length: 24

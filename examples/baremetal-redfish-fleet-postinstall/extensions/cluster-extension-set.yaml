@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionSet
+metadata:
+  name: platform-bootstrap
+spec:
+  extensions:
+    - name: openshift-virtualization
+    - name: openshift-gitops

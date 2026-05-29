@@ -28,6 +28,9 @@ Current examples:
   declarative post-install OpenShift Virtualization resources.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common
   services and provider inventory through a subdirectory layout.
+- `baremetal-redfish-fleet-postinstall`: the two-cluster bare-metal Redfish
+  fleet shape plus declarative OpenShift Virtualization and OpenShift GitOps
+  post-install extensions.
 
 The two examples intentionally keep `environment.yaml` and
 `container-cluster.yaml` byte-identical. Provider swaps should normally change

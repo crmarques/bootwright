@@ -10,10 +10,15 @@ The extension phase runs after the cluster install is complete:
 
 ```text
 bootwright apply cluster --yes
+```
+
+To converge extensions again after the cluster is already installed:
+
+```text
 bootwright check extensions
 bootwright apply extensions --dry-run
 bootwright apply extensions --yes
 ```
 
-`bootwright apply all --yes` includes the extension phase after cluster
-installation. `bootwright apply cluster --yes` remains provisioning-only.
+`bootwright apply cluster --yes` and `bootwright apply all --yes` include the
+extension phase after cluster installation.

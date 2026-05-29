@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: demo-baremetal-fleet-extensions
+spec:
+  clusterSelector:
+    names:
+      - demo-ocp-a
+      - demo-ocp-b
+
+  applyAfter:
+    phase: clusterInstalled
+
+  extensionSets:
+    - name: platform-bootstrap
+
+  policy:
+    prune: false
+    serverSideApply: true
+    fieldManager: bootwright
+    continueOnError: false
