@@ -38,7 +38,7 @@ Cluster install trust is rendered only from explicit references:
   mirror requires credentials.
 - Mirror credentials and trust bundles come from
   `Environment.spec.registries.mirror`.
-- Fleet-wide installer trust comes from `Environment.spec.clusterTrust`.
+- Fleet-wide installer trust comes from `Environment.spec.installTrust`.
 - Cluster-scoped installer trust comes from
   `ContainerCluster.spec.install.additionalTrustBundleRefs`.
 - API and ingress serving certificate material comes from

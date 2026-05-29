@@ -297,9 +297,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d].connection.auth.proxyAuthRef", env.Metadata.Name, i), entry.Connection.Auth.ProxyAuthRef)
 		}
 	}
-	if env.Spec.ClusterTrust != nil {
-		for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
-			require(fmt.Sprintf("Environment/%s spec.clusterTrust.caBundleRefs[%d]", env.Metadata.Name, i), ref)
+	if env.Spec.InstallTrust != nil {
+		for i, ref := range env.Spec.InstallTrust.CABundleRefs {
+			require(fmt.Sprintf("Environment/%s spec.installTrust.caBundleRefs[%d]", env.Metadata.Name, i), ref)
 		}
 	}
 	require(fmt.Sprintf("Environment/%s spec.defaults.install.pullSecretRef", env.Metadata.Name), env.Spec.Defaults.Install.PullSecretRef)

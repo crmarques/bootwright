@@ -336,6 +336,13 @@ spec:
 			wantSubstring: "field ntpSources not found",
 		},
 		{
+			name: "environment-clustertrust-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  secrets:\n",
+				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  secrets:\n", 1)},
+			wantSubstring: "field clusterTrust not found",
+		},
+		{
 			name: "environment-infra-ntpsource-invalid-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  infraComponents:\n",
@@ -455,18 +462,18 @@ spec:
 			wantSubstring: "spec.install.nodeSSH publicKeyRef.name is required when keyPairRef.name is empty",
 		},
 		{
-			name: "clustertrust-duplicate-ref-rejected",
+			name: "installtrust-duplicate-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  secrets:\n",
-				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n      - name: corp-ca\n\n  secrets:\n", 1)},
-			wantSubstring: `spec.clusterTrust.caBundleRefs[1].name "corp-ca" is duplicated`,
+				"  installTrust:\n    caBundleRefs:\n      - name: corp-ca\n      - name: corp-ca\n\n  secrets:\n", 1)},
+			wantSubstring: `spec.installTrust.caBundleRefs[1].name "corp-ca" is duplicated`,
 		},
 		{
-			name: "clustertrust-unknown-ref-rejected",
+			name: "installtrust-unknown-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  secrets:\n",
-				"  clusterTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  secrets:\n", 1)},
-			wantSubstring: `spec.clusterTrust.caBundleRefs[0] "corp-ca" is not declared`,
+				"  installTrust:\n    caBundleRefs:\n      - name: corp-ca\n\n  secrets:\n", 1)},
+			wantSubstring: `spec.installTrust.caBundleRefs[0] "corp-ca" is not declared`,
 		},
 		{
 			name: "additionaltrust-duplicate-ref-rejected",

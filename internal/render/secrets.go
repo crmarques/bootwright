@@ -216,8 +216,8 @@ func additionalTrustBundleRefs(state v1alpha1.State, ocp v1alpha1.ContainerClust
 	env := primaryEnvironment(state)
 	var refs []v1alpha1.SecretRef
 	if env != nil {
-		if env.Spec.ClusterTrust != nil {
-			refs = append(refs, env.Spec.ClusterTrust.CABundleRefs...)
+		if env.Spec.InstallTrust != nil {
+			refs = append(refs, env.Spec.InstallTrust.CABundleRefs...)
 		}
 		if reg := env.Spec.Registries; reg != nil && reg.Mirror != nil && reg.Mirror.TrustBundleRef.Name != "" {
 			refs = append(refs, reg.Mirror.TrustBundleRef)

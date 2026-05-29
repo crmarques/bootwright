@@ -37,7 +37,7 @@ func TestResolveInstallerRendersTrustBundleAndServingCertificateManifests(t *tes
 	state.Environments[0].Spec.Secrets["cluster-ca"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["ingress-tls"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Environments[0].Spec.ClusterTrust = &v1alpha1.EnvironmentClusterTrustSpec{
+	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
 		CABundleRefs: []v1alpha1.SecretRef{{Name: "env-ca"}},
 	}
 	state.Environments[0].Spec.Registries = &v1alpha1.EnvironmentRegistriesSpec{

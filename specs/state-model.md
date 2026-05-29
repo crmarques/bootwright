@@ -142,7 +142,7 @@ spec:
       trustBundleRef:
         name: mirror-registry-ca
 
-  clusterTrust:
+  installTrust:
     caBundleRefs:
       - name: corp-root-ca
 
@@ -230,7 +230,7 @@ Rules:
 - TLS-pair consumers use the certificate at `file:` plus the private key at
   `keyFile:` for file-sourced secrets. Context-local and generated TLS pairs
   resolve as `<context>/secrets/<name>` and `<context>/secrets/<name>.key`.
-- `clusterTrust.caBundleRefs[]` is optional fleet-wide CA trust rendered into
+- `installTrust.caBundleRefs[]` is optional fleet-wide CA trust rendered into
   every selected cluster install. Entries reference PEM CA bundle secrets.
 - External proxy `connection` entries use installer field names:
   `httpProxy`, `httpsProxy`, and `noProxy`.
@@ -345,7 +345,7 @@ Rules:
 - OKD does not derive an OpenShift channel and does not require a Red Hat pull
   secret by default. Prefer explicit OKD release images for exact installs.
 - `additionalTrustBundleRefs[]` is cluster-scoped CA trust. Effective
-  `additionalTrustBundle` order is environment `clusterTrust`, mirror registry
+  `additionalTrustBundle` order is environment `installTrust`, mirror registry
   trust, then cluster refs, de-duplicated by secret name.
 - `servingCertificates.apiServer.namedCertificates[]` renders OpenShift API
   serving certificate Secrets plus `APIServer/cluster`. `names[]` is required

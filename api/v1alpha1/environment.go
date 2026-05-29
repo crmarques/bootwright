@@ -19,7 +19,7 @@ type EnvironmentSpec struct {
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
 	InfraComponents   EnvironmentInfraComponentsSpec           `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
-	ClusterTrust      *EnvironmentClusterTrustSpec             `yaml:"clusterTrust,omitempty" json:"clusterTrust,omitempty"`
+	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	Secrets           map[string]EnvironmentSecretSpec         `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
 }
@@ -107,7 +107,7 @@ type EnvironmentSecretSpec struct {
 	Generated *EnvironmentSecretGenerated `yaml:"generated,omitempty" json:"generated,omitempty"`
 }
 
-type EnvironmentClusterTrustSpec struct {
+type EnvironmentInstallTrustSpec struct {
 	CABundleRefs []SecretRef `yaml:"caBundleRefs,omitempty" json:"caBundleRefs,omitempty"`
 }
 

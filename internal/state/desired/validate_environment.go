@@ -63,7 +63,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
-		errs = append(errs, validateEnvironmentClusterTrust(env)...)
+		errs = append(errs, validateEnvironmentInstallTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)
 	}
 	return errs
@@ -217,14 +217,14 @@ func validateEnvironmentSecrets(env v1alpha1.Environment) []string {
 	return errs
 }
 
-func validateEnvironmentClusterTrust(env v1alpha1.Environment) []string {
-	if env.Spec.ClusterTrust == nil {
+func validateEnvironmentInstallTrust(env v1alpha1.Environment) []string {
+	if env.Spec.InstallTrust == nil {
 		return nil
 	}
 	var errs []string
 	seen := map[string]bool{}
-	owner := fmt.Sprintf("Environment/%s spec.clusterTrust.caBundleRefs", env.Metadata.Name)
-	for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
+	owner := fmt.Sprintf("Environment/%s spec.installTrust.caBundleRefs", env.Metadata.Name)
+	for i, ref := range env.Spec.InstallTrust.CABundleRefs {
 		if ref.Name == "" {
 			errs = append(errs, fmt.Sprintf("%s[%d].name is required", owner, i))
 			continue

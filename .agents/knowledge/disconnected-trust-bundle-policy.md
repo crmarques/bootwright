@@ -7,4 +7,4 @@
 **Fix:** Always set `additionalTrustBundlePolicy: Always` when `additionalTrustBundle` is present. See `InstallerConfig` in `internal/render/installer.go`.
 
 **Invariant:** Bootwright unconditionally sets `Always` whenever any environment,
-mirror, or cluster trust reference renders `additionalTrustBundle`.
+mirror, or install trust reference renders `additionalTrustBundle`.

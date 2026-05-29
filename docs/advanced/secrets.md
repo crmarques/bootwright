@@ -62,8 +62,8 @@ read that file and `<name>.key`, unless `file:` and `keyFile:` point at
 operator-owned files. Generated SSH key pairs write the private key to
 `<name>` and the public key to `<name>.pub`. Each kind
 references the secret by name: `keyRef.name`, `credentialRef.name`,
-`trustBundleRef.name`, `caBundleRefs[].name`, `proxyAuthRef.name`,
-`secretRef.name`, `defaultCertificateRef.name`, or
+`trustBundleRef.name`, `installTrust.caBundleRefs[].name`,
+`proxyAuthRef.name`, `secretRef.name`, `defaultCertificateRef.name`, or
 `nodeSSH.keyPairRef.name`.
 
 For node SSH, use `install.nodeSSH.keyPairRef` when one

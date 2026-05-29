@@ -189,6 +189,34 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	}
 }
 
+func TestSecretRefChecksRequireInstallTrustCABundle(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments[0].Spec.Secrets["corp-ca"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
+		CABundleRefs: []v1alpha1.SecretRef{{Name: "corp-ca"}},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "clusters"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var caCheck *preflightCheck
+	for i := range checks {
+		check := &checks[i]
+		if check.Name == "environment installTrust caBundleRefs[0]" {
+			caCheck = check
+			break
+		}
+	}
+	if caCheck == nil {
+		t.Fatalf("missing install trust CA check: %+v", checks)
+	}
+	if !strings.Contains(caCheck.Evidence, "/context/secrets/corp-ca missing") {
+		t.Fatalf("install trust CA evidence = %q", caCheck.Evidence)
+	}
+}
+
 func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{

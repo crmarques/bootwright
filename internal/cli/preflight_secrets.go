@@ -87,14 +87,14 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 	var out []secretRefRequirement
 
 	if env := environmentForChecks(state); env != nil {
-		if env.Spec.ClusterTrust != nil {
-			for i, ref := range env.Spec.ClusterTrust.CABundleRefs {
+		if env.Spec.InstallTrust != nil {
+			for i, ref := range env.Spec.InstallTrust.CABundleRefs {
 				if ref.Name == "" {
 					continue
 				}
 				out = append(out, secretRefRequirement{
 					refName: ref.Name,
-					label:   fmt.Sprintf("environment clusterTrust caBundleRefs[%d]", i),
+					label:   fmt.Sprintf("environment installTrust caBundleRefs[%d]", i),
 					phases:  []string{"clusters"},
 				})
 			}
