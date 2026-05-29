@@ -1,0 +1,47 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: demo-baremetal-fusion-external-ceph
+spec:
+  baseDomain: example.test
+
+  resources:
+    - hosts.yaml
+    - networks.yaml
+    - provider.yaml
+    - infra-component.yaml
+    - cluster-infra.yaml
+    - container-cluster.yaml
+    - extensions/cluster-extension-fusion-data-foundation-catalog.yaml
+    - extensions/cluster-extension-fusion-data-foundation-operator.yaml
+    - extensions/cluster-extension-fusion-data-foundation-external-ceph.yaml
+    - extensions/cluster-extension-virtualization.yaml
+    - extensions/cluster-extension-set.yaml
+    - cluster-extension-binding.yaml
+
+  secrets:
+    openshift-pull-secret: null
+    cluster-admin-ssh-key:
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
+    provider-host-ssh:
+      file: ~/.ssh/bootwright-ssh-key
+    bmc-credentials:
+      generated:
+        credentials:
+          username: admin
+
+  infraComponents:
+    artifactServers:
+      - name: default
+        type: managed
+        default: true
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          clusterInstall:
+            endpoint: cluster
