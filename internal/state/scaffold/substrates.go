@@ -14,10 +14,6 @@ var Substrates = map[Provider]Substrate{
       generated:
         credentials:
           username: admin
-    proxy-credentials:
-      generated:
-        credentials:
-          username: proxy
 `,
 		EnvArtifactServer: `  infraComponents:
     nameResolution:
@@ -89,18 +85,6 @@ spec:
         ip: 192.168.130.10
       - name: apps
         ip: 192.168.130.11
----
-apiVersion: bootwright.io/v1alpha1
-kind: InfraComponent
-metadata:
-  name: proxy
-spec:
-  proxy:
-    type: squid
-    hostRef:
-      name: lab-host
-    bindAddress: 0.0.0.0
-    port: 3128
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
@@ -200,7 +184,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
 `,
 		InfraComponentYAML: `apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent

@@ -58,7 +58,8 @@ environment, then import that copy:
 
 ```text
 cp -a examples/sno-libvirt-redfish ./my-sno-lab
-bootwright context init lab -f <working-copy>
+bootwright check syntax -f ./my-sno-lab
+bootwright context init lab -f ./my-sno-lab
 bootwright secret list
 bootwright render installer --scope <cluster-name>
 bootwright render --output-dir ./rendered --scope <cluster-name> --sensitive

@@ -93,6 +93,44 @@ func TestClusterTargetIsSingular(t *testing.T) {
 	}
 }
 
+func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "apply", "all", "--help")
+	if code != 0 {
+		t.Fatalf("apply all --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "Apply infrastructure, OpenShift clusters, and extensions") {
+		t.Fatalf("apply all help does not mention extensions:\n%s", stdout)
+	}
+
+	stdout, stderr, code = runCLI(t, "apply", "extensions", "--help")
+	if code != 0 {
+		t.Fatalf("apply extensions --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"--dry-run", "--yes", "--output"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("apply extensions help missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, reject := range []string{"--ansible-playbook", "--ask-become-pass", "--check", "--parallelism-per-host", "--parallelism-redfish"} {
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("apply extensions help exposes provider-host flag %q:\n%s", reject, stdout)
+		}
+	}
+}
+
+func TestDestroyInfraHelpUsesArtifactServerScope(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "destroy", "infra", "--help")
+	if code != 0 {
+		t.Fatalf("destroy infra --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "artifact-server") {
+		t.Fatalf("destroy infra help missing artifact-server scope:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "http-server") {
+		t.Fatalf("destroy infra help still exposes http-server scope:\n%s", stdout)
+	}
+}
+
 func TestCheckSyntaxJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "check", "syntax", "--output", "json")
@@ -113,6 +151,52 @@ func TestCheckSyntaxJSON(t *testing.T) {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("json output contains human decoration %q:\n%s", reject, stdout)
 		}
+	}
+}
+
+func TestCheckSyntaxValidatesInputFilesWithoutContext(t *testing.T) {
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "check", "syntax", "-f", fixturePath("001-sno-libvirt"), "--output", "json")
+	if code != 0 {
+		t.Fatalf("check syntax -f exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	var report syntaxCheckReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !report.OK || report.ContainerClusters != 1 {
+		t.Fatalf("unexpected syntax report: %+v", report)
+	}
+}
+
+func TestJSONErrorEnvelopeBeforeRootReexec(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".bootwright"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(home, ".bootwright", "contexts.yaml")
+	if err := os.WriteFile(registry, []byte("current: lab\ncontexts:\n  lab:\n    baseDir: /tmp/lab\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := localRootGate
+	localRootGate.enabled = true
+	localRootGate.geteuid = func() int { return 1000 }
+	t.Cleanup(func() { localRootGate = previous })
+
+	stdout, stderr, code := runCLI(t, "check", "syntax", "--output", "json")
+	if code == 0 {
+		t.Fatalf("check syntax unexpectedly succeeded: %s", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("json error path wrote stderr: %q", stderr)
+	}
+	var report commandErrorReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.OK || report.Error == "" || !strings.Contains(report.Error, "legacy context registry map") {
+		t.Fatalf("unexpected error report: %+v", report)
 	}
 }
 
@@ -215,17 +299,17 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	}
 }
 
-func TestDestroyInfraHTTPServerScopeDryRunJSON(t *testing.T) {
+func TestDestroyInfraArtifactServerScopeDryRunJSON(t *testing.T) {
 	initTestContext(t, "002-sno-emul-baremetal")
 	stdout, stderr, code := runCLI(t,
 		"destroy", "infra",
-		"--scope", "http-server",
+		"--scope", "artifact-server",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy infra http-server dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy infra artifact-server dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -234,17 +318,17 @@ func TestDestroyInfraHTTPServerScopeDryRunJSON(t *testing.T) {
 	if report.Target != "infra" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"http-server"}) {
-		t.Fatalf("phases = %#v, want http-server", report.Phases)
+	if !reflect.DeepEqual(report.Phases, []string{"artifact-server"}) {
+		t.Fatalf("phases = %#v, want artifact-server", report.Phases)
 	}
-	if report.Playbook != infraDestroyHTTPServerPlaybook {
-		t.Fatalf("playbook = %q, want %q", report.Playbook, infraDestroyHTTPServerPlaybook)
+	if report.Playbook != infraDestroyArtifactServerPlaybook {
+		t.Fatalf("playbook = %q, want %q", report.Playbook, infraDestroyArtifactServerPlaybook)
 	}
 	if report.Limit != render.GroupProviderHosts {
 		t.Fatalf("limit = %q, want %q", report.Limit, render.GroupProviderHosts)
 	}
-	if !slices.Contains(report.ExtraVars, providerServiceScopeExtraVarName+"=http-server") {
-		t.Fatalf("extra vars missing http-server scope: %#v", report.ExtraVars)
+	if !slices.Contains(report.ExtraVars, providerServiceScopeExtraVarName+"=artifact-server") {
+		t.Fatalf("extra vars missing artifact-server scope: %#v", report.ExtraVars)
 	}
 }
 
@@ -922,12 +1006,22 @@ func TestContextValidateReportsReadyAndMissingChecks(t *testing.T) {
 	if err := os.RemoveAll(ctx.InputDir); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, code = runCLI(t, "context", "validade")
+	stdout, _, code = runCLI(t, "context", "validate")
 	if code == 0 {
-		t.Fatal("context validade unexpectedly passed with missing input dir")
+		t.Fatal("context validate unexpectedly passed with missing input dir")
 	}
 	if !strings.Contains(stdout, "[MISSING] input-dir") {
 		t.Fatalf("stdout missing input-dir MISSING:\n%s", stdout)
+	}
+}
+
+func TestContextValidateRejectsAccidentalAlias(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "context", "validade")
+	if code == 0 {
+		t.Fatalf("context validade unexpectedly succeeded:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, `invalid argument "validade"`) {
+		t.Fatalf("stderr does not reject validade alias: %q", stderr)
 	}
 }
 
@@ -960,6 +1054,9 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "validate"}, want: true},
 		{args: []string{"secret", "set", "openshift-pull-secret", "--pull-secret", "/home/user/pull-secret.json"}, want: false},
 		{args: []string{"secret", "show", "--name", "pull-secret"}, want: true},
+		{args: []string{"example", "init", "lab", "--output", "./lab-input"}, want: false},
+		{args: []string{"check", "syntax", "-f", "./lab-input"}, want: false},
+		{args: []string{"check", "syntax", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"check", "syntax"}, want: true},
 		{args: []string{"check", "--help"}, want: false},
 	}

@@ -16,7 +16,6 @@ import (
 func newContextValidateCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "validate",
-		Aliases: []string{"validade"},
 		Short:   "Validate the current context setup",
 		Args:    cobra.NoArgs,
 		Example: `  bootwright context validate`,

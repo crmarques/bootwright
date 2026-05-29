@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/crmarques/bootwright/internal/runtime/root/execution"
@@ -144,8 +145,13 @@ func argsNeedLocalRoot(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "version", "help", "completion":
+	case "version", "help", "completion", "example":
 		return false
+	case "check":
+		if len(args) >= 2 && args[1] == "syntax" && argsHaveInputFileFlag(args[2:]) {
+			return false
+		}
+		return true
 	case "context":
 		if len(args) < 2 {
 			return false
@@ -169,6 +175,20 @@ func argsNeedLocalRoot(args []string) bool {
 func argsContainHelp(args []string) bool {
 	for _, arg := range args {
 		if arg == "-h" || arg == "--help" || arg == "help" {
+			return true
+		}
+	}
+	return false
+}
+
+func argsHaveInputFileFlag(args []string) bool {
+	for i, arg := range args {
+		switch {
+		case arg == "-f" || arg == "--file":
+			return i+1 < len(args)
+		case strings.HasPrefix(arg, "--file="):
+			return true
+		case strings.HasPrefix(arg, "-f") && len(arg) > 2:
 			return true
 		}
 	}

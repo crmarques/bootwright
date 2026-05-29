@@ -21,7 +21,7 @@
           | selectattr('kind', 'equalto', 'artifacts')
           | selectattr('realisation', 'equalto', 'http')
           | list)
-        if bootwright_provider_service_destroy_scope == 'http-server'
+        if bootwright_provider_service_destroy_scope == 'artifact-server'
         else bootwright_host_provider_services_all
       }}
 
@@ -29,7 +29,7 @@
     - name: Validate provider service destroy scope
       ansible.builtin.assert:
         that:
-          - bootwright_provider_service_destroy_scope in ['', 'http-server']
+          - bootwright_provider_service_destroy_scope in ['', 'artifact-server']
         fail_msg: "unsupported provider service destroy scope {{ bootwright_provider_service_destroy_scope }}"
 
     - name: Destroy provider service roles

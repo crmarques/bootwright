@@ -49,7 +49,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 	ansible/playbooks/checks/preflight.yml \
 	ansible/playbooks/targets/all/apply.yml \
 	ansible/playbooks/targets/infra/apply.yml \
-	ansible/playbooks/targets/infra/destroy-http-server.yml \
+	ansible/playbooks/targets/infra/destroy-artifact-server.yml \
 	ansible/playbooks/targets/infra/destroy.yml \
 	ansible/playbooks/layers/openshift/create-agent-iso.yml \
 	ansible/playbooks/layers/openshift/boot-agent-machine.yml \

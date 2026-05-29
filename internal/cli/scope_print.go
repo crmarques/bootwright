@@ -198,7 +198,7 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 	p.List(items)
 }
 
-func printDestroyHTTPServerPreview(w io.Writer, state v1alpha1.State) {
+func printDestroyArtifactServerPreview(w io.Writer, state v1alpha1.State) {
 	server, ok := artifacts.Select(state)
 	if !ok || server.Config == nil {
 		return
@@ -210,7 +210,7 @@ func printDestroyHTTPServerPreview(w io.Writer, state v1alpha1.State) {
 	p := output.NewContinuation(w)
 	p.Section("Will destroy")
 	p.List([]output.Item{{
-		Label:  "http-server " + server.Component.Metadata.Name,
+		Label:  "artifact-server " + server.Component.Metadata.Name,
 		Detail: "host " + server.Config.HostRef.Name + "; BMC ISO fetches for " + strings.Join(clusters, ", "),
 	}})
 }

@@ -42,6 +42,11 @@ Omitted values and the reserved value `none` disable proxy use.
 
 Managed proxy entries use `type: managed` and reference an `InfraComponent`
 with `spec.proxy`; the URL is derived from its selected service host and port.
+External proxies are available to every Bootwright phase. Managed proxies are
+created by infrastructure convergence, so `apply bastion` cannot depend on a
+managed `proxyFor.bootwright` selection. Use an external proxy for bootstrap,
+or expect Bootwright to skip managed-proxy use until after the proxy component
+has been converged.
 
 ## Disconnected Install
 

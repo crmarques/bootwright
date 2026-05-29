@@ -37,8 +37,14 @@ type scopeCommonFlags struct {
 // (i.e. infra / cluster / all-for-check-apply; destroy never accepts
 // "all" because allScope.destroyPlaybook is empty).
 func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
+	registerScopeCommonFlagsWithAnsible(cmd, f, allowClusterScope, scopeAction, true)
+}
+
+func registerScopeCommonFlagsWithAnsible(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool) {
 	f.output = outputText
-	cmd.Flags().StringVar(&f.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+	if includeAnsible {
+		cmd.Flags().StringVar(&f.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+	}
 	cmd.Flags().StringVar(&f.output, "output", f.output, "output format: text|json (json is supported for --dry-run)")
 	if allowClusterScope {
 		cmd.Flags().StringVar(&f.clusterScope, "scope", "", "comma-separated ContainerCluster names to "+scopeAction+" (restricts the matching ClusterInfra/Provider sets)")

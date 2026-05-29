@@ -2,6 +2,9 @@
 
 This is a complete seven-kind single-node OpenShift example that uses a
 Bootwright-managed Squid proxy selected by `Environment.spec.infraComponents.proxies[]`.
+The managed proxy is created during infrastructure convergence, so it is not
+available to bootstrap `apply bastion`; use an external proxy instead when the
+bastion phase itself needs proxy access.
 
 Authored files:
 

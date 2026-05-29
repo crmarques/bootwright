@@ -163,12 +163,6 @@ func parseGalaxyTarballURL(url string) (string, string, string, bool) {
 	return match[1], match[2], match[3], true
 }
 
-func repoFileExists(t *testing.T, rel string) bool {
-	t.Helper()
-	_, err := os.Stat(filepath.Join(repoRoot(t), rel))
-	return err == nil
-}
-
 func readRepoFile(t *testing.T, rel string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), rel))

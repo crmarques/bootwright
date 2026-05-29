@@ -13,6 +13,7 @@ import (
 )
 
 func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	usesAnsible := scope.name != "extensions"
 	var (
 		flags         scopeCommonFlags
 		dryRun        bool
@@ -26,34 +27,28 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		redfish       int
 	)
 	cmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply " + scope.name + " desired state",
-		Args:  cobra.NoArgs,
-		Example: fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
-  bootwright apply %[1]s --dry-run
-
-  # Apply non-interactively (skip the confirmation prompt)
-  bootwright apply %[1]s --yes
-
-  # Apply only specific clusters
-  bootwright apply %[1]s --scope managed-01 --yes
-
-  # Apply when passwordless sudo is available on provider hosts
-  bootwright apply %[1]s --ask-become-pass=false --yes`, scope.name),
+		Use:     "apply",
+		Short:   "Apply " + scope.name + " desired state",
+		Args:    cobra.NoArgs,
+		Example: scopeApplyExample(scope.name, usesAnsible),
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print a plan only; does not run readiness checks or Ansible")
-	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
-	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print a plan only; does not run readiness checks or mutate remote systems")
+	if usesAnsible {
+		cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
+		cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
+	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	if scope.name == "cluster" {
 		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior runtime state reports an existing available cluster")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
-	cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
-	cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
-	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply")
+	if usesAnsible {
+		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
+		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
+	}
+	registerScopeCommonFlagsWithAnsible(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
@@ -232,4 +227,28 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		return nil
 	}
 	return cmd
+}
+
+func scopeApplyExample(scopeName string, usesAnsible bool) string {
+	if !usesAnsible {
+		return fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
+  bootwright apply %[1]s --dry-run
+
+  # Apply non-interactively (skip the confirmation prompt)
+  bootwright apply %[1]s --yes
+
+  # Apply only specific clusters
+  bootwright apply %[1]s --scope managed-01 --yes`, scopeName)
+	}
+	return fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
+  bootwright apply %[1]s --dry-run
+
+  # Apply non-interactively (skip the confirmation prompt)
+  bootwright apply %[1]s --yes
+
+  # Apply only specific clusters
+  bootwright apply %[1]s --scope managed-01 --yes
+
+  # Apply when passwordless sudo is available on provider hosts
+  bootwright apply %[1]s --ask-become-pass=false --yes`, scopeName)
 }

@@ -41,7 +41,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
 		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters"),
 		retargetCommand(newScopeApplyCmd(extensionsScope, stdin, stdout, stderr), "extensions", "Apply post-install cluster extensions"),
-		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure and OpenShift clusters"),
+		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, OpenShift clusters, and extensions"),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)

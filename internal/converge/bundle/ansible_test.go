@@ -24,7 +24,7 @@ func TestExtractAnsibleBundleEitherSucceedsOrReportsEmpty(t *testing.T) {
 		filepath.Join("playbooks", "checks", "preflight.yml"),
 		filepath.Join("playbooks", "targets", "all", "apply.yml"),
 		filepath.Join("playbooks", "targets", "infra", "apply.yml"),
-		filepath.Join("playbooks", "targets", "infra", "destroy-http-server.yml"),
+		filepath.Join("playbooks", "targets", "infra", "destroy-artifact-server.yml"),
 		filepath.Join("playbooks", "targets", "infra", "destroy.yml"),
 		filepath.Join("playbooks", "targets", "clusters", "apply.yml"),
 		filepath.Join("playbooks", "targets", "clusters", "destroy.yml"),

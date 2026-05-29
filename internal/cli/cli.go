@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
+	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -21,6 +22,10 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	if code, handled, err := ensureLocalRootForArgs(ctx, args, stdin, stdout, stderr); handled {
 		return code
 	} else if err != nil {
+		if argsRequestJSON(args) {
+			_ = writeCommandErrorJSON(stdout, args, 1, err)
+			return 1
+		}
 		output.New(stderr).Error(err)
 		return 1
 	}
@@ -33,12 +38,50 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	var ee *exitError
 	if errors.As(err, &ee) {
 		if !ee.silent && ee.err != nil {
+			if argsRequestJSON(args) {
+				_ = writeCommandErrorJSON(stdout, args, ee.code, ee.err)
+				return ee.code
+			}
 			output.New(stderr).Error(ee.err)
 		}
 		return ee.code
 	}
+	if argsRequestJSON(args) {
+		_ = writeCommandErrorJSON(stdout, args, 1, err)
+		return 1
+	}
 	output.New(stderr).Error(err)
 	return 1
+}
+
+type commandErrorReport struct {
+	OK          bool                      `json:"ok"`
+	ExitCode    int                       `json:"exitCode"`
+	Command     []string                  `json:"command,omitempty"`
+	Error       string                    `json:"error"`
+	Diagnostics []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+}
+
+func writeCommandErrorJSON(stdout io.Writer, args []string, code int, err error) error {
+	return output.JSON(stdout, commandErrorReport{
+		OK:          false,
+		ExitCode:    code,
+		Command:     append([]string(nil), args...),
+		Error:       err.Error(),
+		Diagnostics: desiredstate.Diagnostics(err),
+	})
+}
+
+func argsRequestJSON(args []string) bool {
+	for i, arg := range args {
+		if arg == "--output" && i+1 < len(args) && args[i+1] == outputJSON {
+			return true
+		}
+		if arg == "--output="+outputJSON {
+			return true
+		}
+	}
+	return false
 }
 
 type exitError struct {

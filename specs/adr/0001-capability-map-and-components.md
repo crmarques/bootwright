@@ -11,7 +11,7 @@ future substrates. The model must stay close to `install-config.yaml` and
 
 ## Decision
 
-Keep seven user-authored kinds:
+Keep seven provisioning user-authored kinds:
 
 - `Environment`
 - `Host`
@@ -32,6 +32,11 @@ Reusable host-bound infra services that are not substrate inventory live under
 Reusable machine-network and NMState inputs live in `NetworkConfig`. Cluster
 nodes live in `ContainerCluster.spec.nodes[]` and each node references the
 selected cluster infrastructure machine.
+
+Post-install extension kinds were added later as separate desired-state
+resources: `ClusterExtension`, `ClusterExtensionSet`, and
+`ClusterExtensionBinding`. They do not change the provisioning ownership split
+defined here, but the full current user-authored API surface is ten kinds.
 
 ## Consequences
 

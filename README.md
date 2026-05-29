@@ -21,6 +21,7 @@ The CLI covers the provisioning pipeline:
 
 ```text
 bootwright example init lab --output ./lab-input
+bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
@@ -141,6 +142,7 @@ until their provider roles are converged; IPMI is not apply-supported today.
 
 ```text
 bootwright example init lab --output ./lab-input
+bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright context current
@@ -166,7 +168,7 @@ bootwright status
 bootwright status --watch
 bootwright destroy cluster --yes
 bootwright destroy infra --yes
-bootwright destroy infra --scope http-server --yes
+bootwright destroy infra --scope artifact-server --yes
 ```
 
 The CLI is verb-first; every subcommand picks a target. Provisioning

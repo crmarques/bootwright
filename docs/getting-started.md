@@ -103,6 +103,12 @@ Before importing a context, confirm the out-of-band inputs exist:
 - Real BMC TLS posture is understood before using
   `disableCertificateVerification: true`.
 
+Validate the edited YAML before it is imported into `/var/lib/bootwright`:
+
+```text
+bootwright check syntax -f ./my-sno-lab
+```
+
 ## 2. Verify SSH Access
 
 Bootwright uses SSH to reach provider and service hosts. Test the same key,
@@ -120,6 +126,7 @@ or service host.
 Create the context from the edited directory:
 
 ```text
+bootwright check syntax -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
 bootwright context validate
 bootwright context current
@@ -212,6 +219,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 
 | Command | JSON support | Behavior |
 | --- | --- | --- |
+| `bootwright check syntax -f <input-dir> --output json` | Supported | Pre-import diagnostics |
 | `bootwright check syntax --output json` | Supported | Read-only diagnostics |
 | `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
@@ -256,11 +264,11 @@ files.
 ## Optional Cleanup
 
 Remove only the generated artifact publication service used for BMC ISO
-fetches. The scope name is `http-server` even when the selected artifact
-server exposes HTTPS listeners:
+fetches, including HTTPS listeners when the selected artifact server exposes
+them:
 
 ```text
-bootwright destroy infra --scope http-server --yes
+bootwright destroy infra --scope artifact-server --yes
 ```
 
 This does not destroy cluster nodes or the rest of the infrastructure.

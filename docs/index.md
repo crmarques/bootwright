@@ -16,7 +16,7 @@ Bootwright orchestrates provisioning for fleets of OpenShift and OKD clusters
 from declarative desired state. You describe the environment, provider hosts,
 substrate inventory, network templates, cluster infrastructure, and cluster
 install intent; Bootwright validates that input, renders the deterministic
-files expected by installer and provider CLIs, and coordinates the provisioning
+files expected by provider's installer and CLIs, and coordinates the provisioning
 phases idempotently.
 
 [Get Started](getting-started.md){ .md-button .md-button--primary }

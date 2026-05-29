@@ -36,6 +36,31 @@ func TestExampleInitWritesValidWorkspace(t *testing.T) {
 	}
 }
 
+func TestExampleInitDoesNotRequireContextRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".bootwright"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(home, ".bootwright", "contexts.yaml")
+	if err := os.WriteFile(registry, []byte("current: lab\ncontexts:\n  lab:\n    baseDir: /tmp/lab\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := localRootGate
+	localRootGate.enabled = true
+	localRootGate.geteuid = func() int { return 1000 }
+	t.Cleanup(func() { localRootGate = previous })
+
+	outputDir := filepath.Join(t.TempDir(), "my-sno-lab")
+	stdout, stderr, code := runCLI(t, "example", "init", "my-sno-lab", "--output", outputDir)
+	if code != 0 {
+		t.Fatalf("example init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if _, err := desiredstate.LoadNormalizeValidate([]string{outputDir}); err != nil {
+		t.Fatalf("generated workspace is not valid: %v", err)
+	}
+}
+
 func TestExampleInitRejectsNonEmptyOutputWithoutYes(t *testing.T) {
 	outputDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outputDir, "note.txt"), []byte("keep me"), 0o644); err != nil {
@@ -57,6 +82,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 	}
 	for _, want := range []string{
 		"bootwright example init lab",
+		"bootwright check syntax -f ./lab-input",
 		"bootwright context init lab",
 		"bootwright context validate",
 		"bootwright check bastion",

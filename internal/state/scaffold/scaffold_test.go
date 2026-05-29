@@ -138,6 +138,20 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 	}
 }
 
+func TestEmulatedBareMetalScaffoldOmitsUnselectedProxy(t *testing.T) {
+	files, err := scaffold.Workspace("my-cluster", scaffold.ProviderEmulatedBareMetal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.Contains(f.Body, "proxy-credentials") ||
+			strings.Contains(f.Body, "name: proxy") ||
+			strings.Contains(f.Body, "proxyFor:") {
+			t.Fatalf("%s contains unselected proxy material:\n%s", f.Name, f.Body)
+		}
+	}
+}
+
 func TestWorkspaceDoesNotRenderFlowStyleCollections(t *testing.T) {
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {

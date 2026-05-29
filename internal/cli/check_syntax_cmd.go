@@ -17,6 +17,7 @@ import (
 // every edit.
 func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 	output := outputText
+	var files []string
 	cmd := &cobra.Command{
 		Use:   "syntax",
 		Short: "Validate context input YAML offline (no Ansible, no host probes)",
@@ -24,16 +25,20 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 		Example: `  # Validate the current context
   bootwright check syntax
 
+  # Validate an input directory before importing a context
+  bootwright check syntax -f ./lab-input
+
   # Machine-readable output for CI
   bootwright check syntax --output json`,
 	}
 	cf := addCommonFlags()
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to validate before context import; may be repeated")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
 		}
-		state, err := loadDesiredState(cf)
+		state, err := loadSyntaxCheckState(cf, files)
 		if err != nil {
 			if output == outputJSON {
 				if encodeErr := writeSyntaxCheckJSON(stdout, state, err); encodeErr != nil {
@@ -65,6 +70,13 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
+func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, error) {
+	if len(files) > 0 {
+		return desiredstate.LoadNormalizeValidateInputFiles(files)
+	}
+	return loadDesiredState(cf)
+}
+
 type syntaxCheckReport struct {
 	OK                bool                      `json:"ok"`
 	Error             string                    `json:"error,omitempty"`
@@ -75,6 +87,9 @@ type syntaxCheckReport struct {
 	InfraProviders    int                       `json:"infraProviders"`
 	ClusterInfras     int                       `json:"clusterInfras"`
 	ContainerClusters int                       `json:"containerClusters"`
+	ClusterExtensions int                       `json:"clusterExtensions"`
+	ExtensionSets     int                       `json:"clusterExtensionSets"`
+	ExtensionBindings int                       `json:"clusterExtensionBindings"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error) error {
@@ -86,6 +101,9 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error
 		InfraProviders:    len(state.InfraProviders),
 		ClusterInfras:     len(state.ClusterInfras),
 		ContainerClusters: len(state.ContainerClusters),
+		ClusterExtensions: len(state.ClusterExtensions),
+		ExtensionSets:     len(state.ClusterExtensionSets),
+		ExtensionBindings: len(state.ClusterExtensionBindings),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()

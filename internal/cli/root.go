@@ -24,6 +24,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
 			"to drive OpenShift cluster lifecycle.",
 		Example: `  bootwright example init lab --output ./lab-input
+  bootwright check syntax -f ./lab-input
   bootwright context init lab -f ./lab-input
   bootwright context validate
   bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json

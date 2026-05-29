@@ -23,17 +23,10 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		yes           bool
 	)
 	cmd := &cobra.Command{
-		Use:   "destroy",
-		Short: "Destroy " + scope.name + " runtime state",
-		Args:  cobra.NoArgs,
-		Example: fmt.Sprintf(`  # Preview what would be destroyed
-  bootwright destroy %[1]s --dry-run
-
-  # Destroy non-interactively
-  bootwright destroy %[1]s --yes
-
-  # Destroy only specific clusters
-  bootwright destroy %[1]s --scope managed-01 --yes`, scope.name),
+		Use:     "destroy",
+		Short:   "Destroy " + scope.name + " runtime state",
+		Args:    cobra.NoArgs,
+		Example: scopeDestroyExample(scope.name),
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible commands without executing them")
@@ -43,7 +36,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	if scope.name == "infra" {
 		if f := cmd.Flags().Lookup("scope"); f != nil {
-			f.Usage = "comma-separated ContainerCluster names to destroy, or http-server to remove only the generated artifact publication service"
+			f.Usage = "comma-separated ContainerCluster names to destroy, or artifact-server to remove only the generated artifact publication service"
 		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
@@ -66,13 +59,13 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if err != nil {
 			return failErr(1, err)
 		}
-		httpServerOnly := isInfraHTTPServerDestroyScope(scope, flags.clusterScope)
+		artifactServerOnly := isInfraArtifactServerDestroyScope(scope, flags.clusterScope)
 		// For `destroy infra --scope`, refuse to proceed when scoped
 		// clusters share a provider service component with unscoped
 		// clusters: the renderer keys container names and state dirs
 		// per (provider, name), so destroying a shared instance breaks
 		// the unscoped consumers silently.
-		if scope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !httpServerOnly {
+		if scope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
 			selectedNames, err := clusterNamesForTarget(state, flags.clusterScope)
 			if err != nil {
 				return failErr(1, err)
@@ -88,11 +81,11 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		artifactsBaseName := scope.artifactsBaseName + "-destroy"
 		workflowLabel := scope.name + " destroy"
 		var plan scopedWorkflowPlan
-		if httpServerOnly {
-			plan = prepareInfraHTTPServerDestroyWorkflow(state, askBecomePass, dryRun)
-			playbook = infraDestroyHTTPServerPlaybook
-			artifactsBaseName = infraDestroyHTTPServerArtifactsBaseName
-			workflowLabel = "infra destroy http-server"
+		if artifactServerOnly {
+			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun)
+			playbook = infraDestroyArtifactServerPlaybook
+			artifactsBaseName = infraDestroyArtifactServerArtifactsBaseName
+			workflowLabel = "infra destroy artifact-server"
 		} else {
 			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
 			if err != nil {
@@ -110,8 +103,8 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 				return failErr(1, err)
 			}
 		}
-		if httpServerOnly {
-			printDestroyHTTPServerPreview(stdout, plan.state)
+		if artifactServerOnly {
+			printDestroyArtifactServerPreview(stdout, plan.state)
 		} else {
 			printDestroyPreview(stdout, scope, runtimeDir, plan.state)
 		}
@@ -182,4 +175,22 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		return nil
 	}
 	return cmd
+}
+
+func scopeDestroyExample(scopeName string) string {
+	example := fmt.Sprintf(`  # Preview what would be destroyed
+  bootwright destroy %[1]s --dry-run
+
+  # Destroy non-interactively
+  bootwright destroy %[1]s --yes
+
+  # Destroy only specific clusters
+  bootwright destroy %[1]s --scope managed-01 --yes`, scopeName)
+	if scopeName == "infra" {
+		example += `
+
+  # Remove only the generated artifact publication service
+  bootwright destroy infra --scope artifact-server --yes`
+	}
+	return example
 }

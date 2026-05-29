@@ -193,6 +193,13 @@ Rules:
 - `proxyFor.bootwright` and `proxyFor.clusterInstall` select entries from
   `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
   reserved value that disables proxy use for that consumer.
+- A `proxyFor.bootwright` selection may point at an external proxy for every
+  command phase. If it points at a managed proxy, Bootwright must not depend on
+  that proxy during `apply bastion` because the proxy component does not exist
+  until infrastructure convergence. Later checks, renders, applies, and status
+  views may use the managed proxy after its selected `InfraComponent` has been
+  converged; pre-infra commands should report that bootstrap limitation rather
+  than silently pretending the proxy is active.
 - At most one entry per environment service list may set `default: true`.
 - `infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`
   selects the artifact server endpoint used in BMC ISO fetch URLs.
@@ -679,7 +686,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-rack1-srv1.example.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
 ```
 
 Libvirt profiles require emulated Redfish BMC settings for current apply
@@ -1083,6 +1090,7 @@ bootwright secret generate
 bootwright secret materialize
 bootwright secret delete <secret-name> --yes
 bootwright check syntax
+bootwright check syntax -f ./lab-input
 bootwright check syntax --output json
 bootwright check bastion
 bootwright check all [--dry-run]
@@ -1118,7 +1126,7 @@ bootwright destroy cluster --yes
 bootwright destroy cluster --dry-run --output json
 bootwright destroy infra --yes
 bootwright destroy infra --dry-run --output json
-bootwright destroy infra --scope http-server --yes
+bootwright destroy infra --scope artifact-server --yes
 ```
 
 Human text output is for operators and is not a parse-stable interface. It is
@@ -1129,14 +1137,21 @@ must emit only JSON on stdout. Shell-export commands such as
 `bootwright print-env` intentionally emit only `export ...` lines. `secret
 show` intentionally emits raw secret bytes on stdout and is a sensitive
 raw-output exception.
-Apply commands may execute independent tasks concurrently. Operators can tune
-task scheduling with `--parallelism`, `--parallelism-per-host`, and
-`--parallelism-redfish`; `0` for any of those flags means Bootwright uses the
-maximum safe automatic value. Explicit limits only reduce automatic
-concurrency; provider-host and Redfish safety locks still apply.
+`check syntax -f <path>` loads YAML files or directories directly and must not
+require or mutate the current context. It is the pre-import validation path for
+generated examples, copied examples, and CI jobs that review authored desired
+state before `context init`.
+Ansible-backed apply commands may execute independent tasks concurrently.
+Operators can tune task scheduling with `--parallelism`,
+`--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
+flags means Bootwright uses the maximum safe automatic value. Explicit limits
+only reduce automatic concurrency; provider-host and Redfish safety locks still
+apply. `apply extensions` uses direct cluster API tasks and must not expose
+Ansible executable, become-password, provider-host, or Redfish flags.
 `apply <target> --dry-run` is a plan-only action preview. It does
-not run host, tool, secret, BMC, or cluster readiness checks and does not run
-Ansible; operators must run `bootwright check <target>` for readiness.
+not run host, tool, secret, BMC, or cluster readiness checks and does not
+mutate provider hosts, nodes, or clusters; operators must run
+`bootwright check <target>` for readiness.
 `apply extensions --dry-run` shows extension tasks, selected clusters,
 expanded extension order, and generated resource summaries without mutating the
 cluster.
@@ -1196,7 +1211,7 @@ next steps. It reports whether a running apply lease is fresh or stale.
 apply reaches a terminal state or its lease is stale.
 `bootwright status --output json` includes the full current apply ledger and
 activity state when present.
-`destroy infra --scope http-server` is a reserved destroy-only scope that
+`destroy infra --scope artifact-server` is a reserved destroy-only scope that
 removes only the generated artifact publication service used for BMC agent ISO
 fetches, including HTTPS listeners when configured.
 Filtered `apply infra --scope` and `apply all --scope` fail before rendering

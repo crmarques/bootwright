@@ -17,7 +17,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: rack1-srv2
       baremetal:
         bootMACAddress: '52:54:00:33:11:11'
@@ -31,7 +31,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: rack1-srv3
       baremetal:
         bootMACAddress: '52:54:00:33:11:12'
@@ -45,7 +45,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: rack1-srv4
       baremetal:
         bootMACAddress: '52:54:00:33:11:20'
@@ -59,7 +59,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: rack1-srv5
       baremetal:
         bootMACAddress: '52:54:00:33:11:21'
@@ -73,7 +73,7 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: rack1-srv6
       baremetal:
         bootMACAddress: '52:54:00:33:11:22'
@@ -87,4 +87,4 @@ spec:
           protocol: redfish
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
