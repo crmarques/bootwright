@@ -3,6 +3,7 @@ package render_test
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -34,6 +35,20 @@ var conditionalInstallConfigKeys = map[string]string{
 	"additionalTrustBundlePolicy": "set only when additionalTrustBundle is set",
 	"imageDigestSources":          "set only when Environment.spec.registries.mirror is declared (disconnected mode)",
 	"proxy":                       "set only when Environment.spec.proxyFor.clusterInstall selects an external or managed proxy",
+}
+
+var conditionalInstallConfigPaths = map[string]string{
+	"networking.networkType":                 "set only when ContainerCluster.spec.networking.networkType is declared",
+	"platform.baremetal.apiVIPs":             "set only when ClusterInfra.spec.platform.type renders baremetal",
+	"platform.baremetal.ingressVIPs":         "set only when ClusterInfra.spec.platform.type renders baremetal",
+	"platform.baremetal.loadBalancer":        "set only when ClusterInfra.spec.platform.type renders baremetal",
+	"platform.baremetal.provisioningNetwork": "set only when ClusterInfra.spec.platform.type renders baremetal",
+	"platform.external":                      "set only when ClusterInfra.spec.platform.type renders external",
+	"platform.vsphere.apiVIPs":               "set only when ClusterInfra.spec.platform.type renders vsphere",
+	"platform.vsphere.ingressVIPs":           "set only when ClusterInfra.spec.platform.type renders vsphere",
+	"platform.vsphere.vcenters":              "set only when ClusterInfra.spec.platform.type renders vsphere",
+	"platform.vsphere.failureDomains":        "set only when ClusterInfra.spec.platform.type renders vsphere",
+	"platform.vsphere.nodeNetworking":        "set only when ClusterInfra.spec.platform.type renders vsphere with node networking",
 }
 
 // alwaysOwnedAgentConfigKeys are the agent-config keys Bootwright
@@ -107,6 +122,52 @@ func TestOwnedInstallConfigKeysAllHaveWriters(t *testing.T) {
 	}
 }
 
+func TestOwnedInstallConfigPathsAllHaveWriters(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "state", "desired", "testdata", "good", "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	ocp := state.ContainerClusters[0]
+	cfg, err := render.InstallerConfig(state, ocp)
+	if err != nil {
+		t.Fatalf("InstallerConfig: %v", err)
+	}
+
+	rendered := dottedPaths(cfg)
+	owned := v1alpha1.OwnedFields().InstallConfigPaths
+	for _, path := range owned {
+		if slices.Contains(rendered, path) {
+			continue
+		}
+		if _, ok := conditionalInstallConfigPaths[path]; ok {
+			continue
+		}
+		t.Errorf("OwnedFields() declares install-config path %q but the canonical fixture does not render it and conditionalInstallConfigPaths does not classify it", path)
+	}
+	for _, path := range []string{
+		"networking.machineNetwork",
+		"networking.clusterNetwork",
+		"networking.serviceNetwork",
+		"platform.none",
+	} {
+		if !slices.Contains(rendered, path) {
+			t.Errorf("canonical fixture missing owned install-config path %q (rendered: %v)", path, rendered)
+		}
+		if !slices.Contains(owned, path) {
+			t.Errorf("canonical fixture renders install-config path %q but OwnedFields() does not list it", path)
+		}
+	}
+	for _, path := range rendered {
+		if !strings.HasPrefix(path, "networking.") && !strings.HasPrefix(path, "platform.") {
+			continue
+		}
+		if slices.Contains(owned, path) || ownedPathParentContains(owned, path) {
+			continue
+		}
+		t.Errorf("renderer writes install-config path %q that is not covered by OwnedFields().InstallConfigPaths", path)
+	}
+}
+
 // TestOwnedAgentConfigKeysAllHaveWriters does the same bridge for the
 // agent-config keys, against the same fixture.
 func TestOwnedAgentConfigKeysAllHaveWriters(t *testing.T) {
@@ -159,4 +220,43 @@ func keys(m map[string]any) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func dottedPaths(m map[string]any) []string {
+	seen := map[string]bool{}
+	var walk func(prefix string, value any)
+	walk = func(prefix string, value any) {
+		if prefix != "" {
+			seen[prefix] = true
+		}
+		child, ok := value.(map[string]any)
+		if !ok {
+			return
+		}
+		for k, v := range child {
+			next := k
+			if prefix != "" {
+				next = prefix + "." + k
+			}
+			walk(next, v)
+		}
+	}
+	for k, v := range m {
+		walk(k, v)
+	}
+	out := make([]string, 0, len(seen))
+	for path := range seen {
+		out = append(out, path)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func ownedPathParentContains(owned []string, path string) bool {
+	for _, candidate := range owned {
+		if strings.HasPrefix(path, candidate+".") {
+			return true
+		}
+	}
+	return false
 }

@@ -67,6 +67,7 @@ E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 # floor; do not raise this without a deliberate refactor justification.
 # The intent is to catch new growth before files turn into god files again.
 CLI_FILE_LINE_LIMIT ?= 400
+WORKFLOW_FILE_LINE_LIMIT ?= 1000
 
 all: build
 
@@ -213,6 +214,15 @@ cli-file-size-check:
 		done); \
 	if [ -n "$$over" ]; then \
 		printf '%s\n' "files over $(CLI_FILE_LINE_LIMIT) lines (decompose by concern; CLI handlers belong in internal/converge/workflow/, render emitters split by emission family):" "$$over"; \
+		exit 1; \
+	fi
+	@over=$$(find internal/converge/workflow -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+		| while read -r f; do \
+			n=$$(wc -l <"$$f"); \
+			if [ "$$n" -gt $(WORKFLOW_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
+		done); \
+	if [ -n "$$over" ]; then \
+		printf '%s\n' "workflow files over $(WORKFLOW_FILE_LINE_LIMIT) lines (split planning, scheduling, resources, logs, and ledger responsibilities):" "$$over"; \
 		exit 1; \
 	fi
 

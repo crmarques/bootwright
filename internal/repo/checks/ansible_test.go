@@ -85,6 +85,28 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
+	root := filepath.Join(repoRoot(t), "ansible", "roles")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".yml" || !strings.Contains(path, string(filepath.Separator)+"tasks"+string(filepath.Separator)) {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			return err
+		}
+		tasks := readAnsibleTasks(t, rel)
+		checkShellTaskGuards(t, rel, tasks)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk ansible roles: %v", err)
+	}
+}
+
 func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_proxy/tasks/facts.yml")
 	resolveTask := tasks[findAnsibleTask(t, tasks, "Resolve proxy desired state")]
@@ -2026,6 +2048,35 @@ func nestedAnsibleTasks(t *testing.T, task map[string]any, key string) []map[str
 		tasks = append(tasks, child)
 	}
 	return tasks
+}
+
+func checkShellTaskGuards(t *testing.T, rel string, tasks []map[string]any) {
+	t.Helper()
+	for _, task := range tasks {
+		if _, ok := task["ansible.builtin.shell"]; ok {
+			if _, ok := task["changed_when"]; !ok {
+				t.Errorf("%s task %q uses ansible.builtin.shell without changed_when", rel, task["name"])
+			}
+			if _, ok := task["failed_when"]; !ok {
+				t.Errorf("%s task %q uses ansible.builtin.shell without failed_when", rel, task["name"])
+			}
+		}
+		for _, key := range []string{"block", "rescue", "always"} {
+			raw, ok := task[key].([]any)
+			if !ok {
+				continue
+			}
+			children := make([]map[string]any, 0, len(raw))
+			for i, item := range raw {
+				child, ok := item.(map[string]any)
+				if !ok {
+					t.Fatalf("%s task %q %s[%d] is not a task map", rel, task["name"], key, i)
+				}
+				children = append(children, child)
+			}
+			checkShellTaskGuards(t, rel, children)
+		}
+	}
 }
 
 func collectAnsibleMessages(tasks []map[string]any, out *[]string) {

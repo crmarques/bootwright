@@ -49,6 +49,8 @@
     fi
   args:
     executable: /bin/bash
+  register: bootwright_process_cleanup_stop
+  failed_when: bootwright_process_cleanup_stop.rc != 0
   changed_when: >-
     (bootwright_process_cleanup_mark_changed | default(true) | bool)
     and bootwright_process_cleanup_pgrep.rc == 0

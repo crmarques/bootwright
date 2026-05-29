@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 // Inventory builds the Ansible inventory tree per ADR-0002 § role
@@ -245,31 +246,9 @@ func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 // One host can back several services; the set is unique.
 func serviceReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, ci := range state.ClusterInfras {
-		for _, component := range loadBalancerComponentsForCluster(state, ci) {
-			if component.Spec.LoadBalancer != nil {
-				out[component.Spec.LoadBalancer.HostRef.Name] = true
-			}
-		}
-		for _, selected := range nameResolutionComponentsForCluster(state, ci) {
-			out[selected.component.Spec.NameResolution.HostRef.Name] = true
-		}
-	}
-	for _, selected := range proxyComponentsForCluster(state) {
-		out[selected.component.Spec.Proxy.HostRef.Name] = true
-	}
-	for _, ocp := range state.ContainerClusters {
-		if selected, ok := registryComponentForCluster(state, ocp); ok {
-			out[selected.component.Spec.Registry.HostRef.Name] = true
-		}
-	}
-	if server, ok := artifacts.Select(state); ok && server.Config != nil && anyClusterNeedsArtifactPublication(state) {
-		out[server.Config.HostRef.Name] = true
-	}
-	for _, raw := range bmcProviderServiceVars(state) {
-		service := raw.(map[string]any)
-		if hostRef, _ := service["hostRef"].(string); hostRef != "" {
-			out[hostRef] = true
+	for _, service := range stategraph.ResolveProviderServices(state).Services {
+		if service.HostRef != "" {
+			out[service.HostRef] = true
 		}
 	}
 	return out
@@ -296,19 +275,6 @@ func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 		}
 	}
 	return out
-}
-
-func anyClusterNeedsArtifactPublication(state v1alpha1.State) bool {
-	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
-		if err != nil {
-			continue
-		}
-		if artifacts.ClusterNeedsPublication(state, ci, ocp) {
-			return true
-		}
-	}
-	return false
 }
 
 func mergeHostSets(a, b map[string]bool) map[string]bool {

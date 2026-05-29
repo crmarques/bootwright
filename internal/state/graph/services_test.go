@@ -39,6 +39,76 @@ func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
 	}
 }
 
+func TestProviderServiceGraphIncludesSharedBMCServices(t *testing.T) {
+	state := sharedBMCServiceState()
+	graph := ResolveProviderServices(state)
+
+	var bmc *ProviderService
+	for i := range graph.Services {
+		if graph.Services[i].Identity.Kind == v1alpha1.ProviderServiceKindBMC {
+			bmc = &graph.Services[i]
+			break
+		}
+	}
+	if bmc == nil {
+		t.Fatalf("missing BMC provider service in %#v", graph.Services)
+	}
+	if bmc.Identity.ProviderName != "libvirt-provider" || bmc.Identity.Name != "emulated" {
+		t.Fatalf("BMC identity = %#v", bmc.Identity)
+	}
+	if bmc.HostRef != "libvirt-host" {
+		t.Fatalf("BMC hostRef = %q, want libvirt-host", bmc.HostRef)
+	}
+	if got := bmc.ConsumerClusters(); !reflect.DeepEqual(got, []string{"cluster-a", "cluster-b"}) {
+		t.Fatalf("BMC consumers = %v", got)
+	}
+
+	conflicts := SharedDestroyConflicts(state, []string{"cluster-a"})
+	found := false
+	for _, conflict := range conflicts {
+		if conflict.Slot == v1alpha1.ProviderServiceKindBMC {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing BMC scope conflict in %#v", conflicts)
+	}
+}
+
+func TestProviderServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
+	state := sharedBMCServiceState()
+	state.Hosts = append(state.Hosts, v1alpha1.Host{
+		Metadata: v1alpha1.Metadata{Name: "libvirt-host-b"},
+		Spec: v1alpha1.HostSpec{
+			Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.7"}},
+			SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			Capabilities: []string{v1alpha1.HostCapabilityLibvirt},
+		},
+	})
+	state.InfraProviders[0].Spec.MachineProfiles = append(state.InfraProviders[0].Spec.MachineProfiles, v1alpha1.MachineProfileCapability{
+		Name: "libvirt-profile-b",
+		Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
+			HostRef: v1alpha1.LocalObjectReference{Name: "libvirt-host-b"},
+			URI:     "qemu:///system",
+			BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
+				Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
+			},
+		},
+	})
+	state.ClusterInfras[1].Spec.Components.Machines[0].From.Profile = "libvirt-profile-b"
+
+	var hostRefs []string
+	for _, service := range ResolveProviderServices(state).Services {
+		if service.Identity.Kind == v1alpha1.ProviderServiceKindBMC {
+			hostRefs = append(hostRefs, service.HostRef)
+		}
+	}
+	want := []string{"libvirt-host", "libvirt-host-b"}
+	if !reflect.DeepEqual(hostRefs, want) {
+		t.Fatalf("BMC hostRefs = %v, want %v", hostRefs, want)
+	}
+}
+
 func TestProviderServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 	state := sharedManagedServiceState()
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"env.example.test"}
@@ -205,6 +275,52 @@ func sharedManagedServiceState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{
 			containerCluster("cluster-a", "infra-a"),
 			containerCluster("cluster-b", "infra-b"),
+		},
+	}
+}
+
+func sharedBMCServiceState() v1alpha1.State {
+	return v1alpha1.State{
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "libvirt-host"},
+			Spec: v1alpha1.HostSpec{
+				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.6"}},
+				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+				Capabilities: []string{v1alpha1.HostCapabilityLibvirt},
+			},
+		}},
+		InfraProviders: []v1alpha1.InfraProvider{{
+			Metadata: v1alpha1.Metadata{Name: "libvirt-provider"},
+			Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
+				Name: "libvirt-profile",
+				Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
+					HostRef: v1alpha1.LocalObjectReference{Name: "libvirt-host"},
+					URI:     "qemu:///system",
+					BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
+						Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
+					},
+				},
+			}}},
+		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{
+			bmcClusterInfra("infra-a"),
+			bmcClusterInfra("infra-b"),
+		},
+		ContainerClusters: []v1alpha1.ContainerCluster{
+			containerCluster("cluster-a", "infra-a"),
+			containerCluster("cluster-b", "infra-b"),
+		},
+	}
+}
+
+func bmcClusterInfra(name string) v1alpha1.ClusterInfra {
+	return v1alpha1.ClusterInfra{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.ClusterInfraSpec{
+			Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+				Name: "master-0",
+				From: v1alpha1.From{Provider: "libvirt-provider", Profile: "libvirt-profile"},
+			}}},
 		},
 	}
 }

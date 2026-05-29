@@ -73,6 +73,10 @@ const (
 	ComponentSlotNameResolution = "nameResolution"
 	ComponentSlotRegistry       = "registry"
 
+	// Provider service kinds that are rendered for Ansible but are not
+	// authored InfraComponent slots.
+	ProviderServiceKindBMC = "bmc"
+
 	EnvironmentComponentNone     = "none"
 	EnvironmentComponentExternal = "external"
 	EnvironmentComponentManaged  = "managed"

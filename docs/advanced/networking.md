@@ -114,6 +114,13 @@ If a load balancer has exactly one bind address, the endpoint may omit
 `providedBy.address`. Listener ports are derived from endpoint names. Effective
 VIPs are validated against the machine networks selected by cluster machines.
 
+Bootwright renders and converges the HAProxy provider service for
+`providedBy` endpoints. Today, automatic VIP attachment is implemented only
+for libvirt-backed cluster infrastructure when the load-balancer host is also
+the infra host that can attach the address to the libvirt network. Other
+placements require the external network fabric to route the VIP to the
+load-balancer host.
+
 ## Name Resolution
 
 `NetworkConfig.spec.dnsRefs[]` selects entries from

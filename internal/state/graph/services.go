@@ -59,8 +59,8 @@ type DestroyScopeConflict struct {
 
 func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 	entries := providerServiceConsumers(state)
-	grouped := map[ProviderServiceIdentity]*ProviderService{}
-	var order []ProviderServiceIdentity
+	grouped := map[providerServiceGroupKey]*ProviderService{}
+	var order []providerServiceGroupKey
 	for _, entry := range entries {
 		id := ProviderServiceIdentity{
 			Kind:         entry.Fields["kind"],
@@ -70,7 +70,8 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 		if id.Kind == "" || id.ProviderName == "" || id.Name == "" {
 			continue
 		}
-		service, ok := grouped[id]
+		key := providerServiceGroupingKey(id, entry.Fields["hostRef"])
+		service, ok := grouped[key]
 		if !ok {
 			service = &ProviderService{
 				Identity:           id,
@@ -78,25 +79,28 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 				Fields:             cloneStringMap(entry.Fields),
 				MergedStringFields: map[string][]string{},
 			}
-			grouped[id] = service
-			order = append(order, id)
+			grouped[key] = service
+			order = append(order, key)
 		}
 		service.Consumers = append(service.Consumers, entry)
 		mergeServiceStringFields(service.MergedStringFields, entry.MergeStringFields)
 	}
 	sort.SliceStable(order, func(i, j int) bool {
-		a, b := order[i], order[j]
+		a, b := order[i].Identity, order[j].Identity
 		if a.Kind != b.Kind {
 			return a.Kind < b.Kind
 		}
 		if a.ProviderName != b.ProviderName {
 			return a.ProviderName < b.ProviderName
 		}
-		return a.Name < b.Name
+		if a.Name != b.Name {
+			return a.Name < b.Name
+		}
+		return order[i].HostRef < order[j].HostRef
 	})
 	out := make([]ProviderService, 0, len(order))
-	for _, id := range order {
-		service := grouped[id]
+	for _, key := range order {
+		service := grouped[key]
 		sort.SliceStable(service.Consumers, func(i, j int) bool {
 			if service.Consumers[i].Cluster != service.Consumers[j].Cluster {
 				return service.Consumers[i].Cluster < service.Consumers[j].Cluster
@@ -106,6 +110,19 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 		out = append(out, *service)
 	}
 	return ProviderServiceGraph{Services: out}
+}
+
+type providerServiceGroupKey struct {
+	Identity ProviderServiceIdentity
+	HostRef  string
+}
+
+func providerServiceGroupingKey(id ProviderServiceIdentity, hostRef string) providerServiceGroupKey {
+	key := providerServiceGroupKey{Identity: id}
+	if id.Kind == v1alpha1.ProviderServiceKindBMC {
+		key.HostRef = hostRef
+	}
+	return key
 }
 
 func (g ProviderServiceGraph) ValidateSharedServices() []string {
@@ -224,6 +241,7 @@ func providerServiceConsumers(state v1alpha1.State) []ProviderServiceConsumer {
 func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
 	var out []ProviderServiceConsumer
 	out = append(out, loadBalancerConsumers(state, infra, cluster)...)
+	out = append(out, bmcConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedProxyConsumers(state, infra, cluster)...)
 	out = append(out, networkNameResolutionConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedRegistryConsumers(state, infra, cluster)...)
@@ -246,6 +264,41 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 				nil,
 			))
 		}
+	}
+	return out
+}
+
+func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	var out []ProviderServiceConsumer
+	for _, machine := range infra.Spec.Components.Machines {
+		driver := machineDriver(state, machine)
+		if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
+			continue
+		}
+		hostRef := machineHostRef(state, machine)
+		if hostRef == "" {
+			continue
+		}
+		configKey := machineBMCConfigKey(state, machine)
+		if configKey == "" {
+			continue
+		}
+		out = append(out, newServiceConsumer(
+			cluster.Metadata.Name,
+			infra.Metadata.Name,
+			fmt.Sprintf("ClusterInfra/%s machines[%s] provider %s", infra.Metadata.Name, machine.Name, machine.From.Provider),
+			v1alpha1.ProviderServiceKindBMC,
+			machine.From.Provider,
+			driver.Dispatch.BMCRole,
+			driver.Dispatch.BMCRole,
+			map[string]string{
+				"hostRef":     hostRef,
+				"bmcRole":     driver.Dispatch.BMCRole,
+				"configKey":   configKey,
+				"machineName": machine.Name,
+			},
+			nil,
+		))
 	}
 	return out
 }
@@ -471,6 +524,83 @@ func clustersByInfra(state v1alpha1.State) map[string][]v1alpha1.ContainerCluste
 		}
 	}
 	return out
+}
+
+func machineDriver(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) support.DispatchSupport {
+	provider, ok := stateview.Provider(state, machine.From.Provider)
+	if !ok {
+		return support.LookupDispatch("none", "none", "none")
+	}
+	if machine.From.Profile != "" {
+		profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+		if !ok {
+			return support.LookupDispatch("none", "none", "none")
+		}
+		return support.LookupProfileProvisioner(v1alpha1.ProfileProvisionerKind(profile))
+	}
+	if machine.From.Name != "" {
+		server, ok := stateview.Machine(provider, machine.From.Name)
+		if !ok {
+			return support.LookupDispatch("none", "none", "none")
+		}
+		return support.LookupMachineProvisioner(v1alpha1.MachineProvisionerKind(server))
+	}
+	return support.LookupDispatch("none", "none", "none")
+}
+
+func machineHostRef(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) string {
+	if machine.From.Profile == "" {
+		return ""
+	}
+	provider, ok := stateview.Provider(state, machine.From.Provider)
+	if !ok {
+		return ""
+	}
+	profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+	if !ok || profile.Libvirt == nil {
+		return ""
+	}
+	return profile.Libvirt.HostRef.Name
+}
+
+func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) string {
+	if machine.From.Profile == "" {
+		return ""
+	}
+	provider, ok := stateview.Provider(state, machine.From.Provider)
+	if !ok {
+		return ""
+	}
+	profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+	if !ok || profile.Libvirt == nil {
+		return ""
+	}
+	libvirt := profile.Libvirt
+	protocol := v1alpha1.DefaultBMCProtocol
+	bindAddress := v1alpha1.DefaultBMCBindAddress
+	port := v1alpha1.DefaultBMCEmulationStartPort
+	vmediaPort := port + 1
+	credentialRef := ""
+	if d := libvirt.BMCEmulationDefaults; d != nil {
+		if d.Protocol != "" {
+			protocol = d.Protocol
+		}
+		if d.BindAddress != "" {
+			bindAddress = d.BindAddress
+		}
+		if d.Port != 0 {
+			port = d.Port
+		}
+		if d.VMediaPort != 0 {
+			vmediaPort = d.VMediaPort
+		} else {
+			vmediaPort = port + 1
+		}
+		if d.Auth != nil {
+			credentialRef = d.Auth.CredentialRef.Name
+		}
+	}
+	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialRef)
 }
 
 func serviceConsumerClusters(consumers []ProviderServiceConsumer) []string {

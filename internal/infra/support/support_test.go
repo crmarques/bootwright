@@ -69,6 +69,10 @@ func TestLookupServiceUsesRegistry(t *testing.T) {
 	if got.DefaultPort != v1alpha1.DefaultDNSPort {
 		t.Fatalf("dnsmasq default port = %d, want %d", got.DefaultPort, v1alpha1.DefaultDNSPort)
 	}
+	bmc := LookupService(v1alpha1.ProviderServiceKindBMC, "emulated")
+	if bmc.ApplyRole != "bmc_emulated" || bmc.DestroyRole != "bmc_emulated" {
+		t.Fatalf("bmc roles = %#v", bmc)
+	}
 }
 
 func TestEntriesAreSorted(t *testing.T) {

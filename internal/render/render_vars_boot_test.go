@@ -570,7 +570,7 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 	var bmc map[string]any
 	for _, raw := range services {
 		entry := raw.(map[string]any)
-		if entry["kind"] == "bmc" {
+		if entry["kind"] == v1alpha1.ProviderServiceKindBMC {
 			bmc = entry
 			break
 		}
@@ -614,7 +614,7 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 		v1alpha1.ComponentSlotProxy:          1,
 		v1alpha1.ComponentSlotNameResolution: 1,
 		v1alpha1.ComponentSlotRegistry:       1,
-		"bmc":                                1,
+		v1alpha1.ProviderServiceKindBMC:      1,
 	}
 	for kind, want := range wants {
 		if got := counts[kind]; got != want {
@@ -641,6 +641,10 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 	registry := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotRegistry)
 	if got := registry["consumingClusters"].([]string); strings.Join(got, ",") != "sno-libvirt,sno-libvirt-b" {
 		t.Fatalf("registry consumingClusters got %v", got)
+	}
+	bmc := firstProviderServiceByKind(t, services, v1alpha1.ProviderServiceKindBMC)
+	if got := bmc["consumingClusters"].([]string); strings.Join(got, ",") != "sno-libvirt,sno-libvirt-b" {
+		t.Fatalf("bmc consumingClusters got %v", got)
 	}
 }
 

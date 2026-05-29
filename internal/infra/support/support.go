@@ -134,6 +134,15 @@ type ServiceImage struct {
 }
 
 var serviceSupport = map[ServiceKey]ServiceSupport{
+	{Kind: v1alpha1.ProviderServiceKindBMC, Realisation: "emulated"}: {
+		Key:              ServiceKey{Kind: v1alpha1.ProviderServiceKindBMC, Realisation: "emulated"},
+		ApplyRole:        "bmc_emulated",
+		DestroyRole:      "bmc_emulated",
+		HostCapabilities: []string{v1alpha1.HostCapabilityLibvirt},
+		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "configKey"},
+		Status:           StatusSupported,
+		Summary:          "libvirt-hosted emulated Redfish BMC",
+	},
 	{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy},
 		ApplyRole:        "load_balancer_haproxy",

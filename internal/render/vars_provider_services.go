@@ -10,8 +10,6 @@ import (
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
-const providerServiceKindBMC = "bmc"
-
 func providerServicesVars(state v1alpha1.State) []any {
 	builder := newProviderServiceBuilder()
 	graph := stategraph.ResolveProviderServices(state)
@@ -29,11 +27,6 @@ func providerServicesVars(state v1alpha1.State) []any {
 			builder.Add(component, cluster)
 		}
 	}
-	for _, raw := range bmcProviderServiceVars(state) {
-		if component, ok := raw.(map[string]any); ok {
-			builder.Add(component, "")
-		}
-	}
 	return builder.Services()
 }
 
@@ -49,6 +42,8 @@ func providerServiceVarsFromGraph(state v1alpha1.State, service stategraph.Provi
 		return nameResolutionProviderServiceVars(state, service)
 	case v1alpha1.ComponentSlotRegistry:
 		return registryProviderServiceVars(state, service)
+	case v1alpha1.ProviderServiceKindBMC:
+		return bmcProviderServiceVarsFromGraph(state, service)
 	default:
 		return nil, false
 	}
@@ -134,6 +129,53 @@ func registryProviderServiceVars(state v1alpha1.State, service stategraph.Provid
 	}
 	entry := v1alpha1.EnvironmentRegistryComponent{Name: serviceEntryName(service)}
 	return registryComponentVars(state, entry, component), true
+}
+
+func bmcProviderServiceVarsFromGraph(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	out := map[string]any{
+		"kind":             v1alpha1.ProviderServiceKindBMC,
+		"providerName":     service.Identity.ProviderName,
+		"name":             service.Identity.Name,
+		"hostRef":          service.HostRef,
+		"hostAddress":      lookupHostAddress(state, service.HostRef),
+		"realisation":      service.Fields["realisation"],
+		"bmcRole":          service.Fields["bmcRole"],
+		"applyRole":        service.Fields["applyRole"],
+		"destroyRole":      service.Fields["destroyRole"],
+		"machines":         []any{},
+		"configConsistent": true,
+	}
+	configKey := ""
+	for _, consumer := range service.Consumers {
+		ci, ok := clusterInfraByName(state, consumer.ClusterInfra)
+		if !ok {
+			continue
+		}
+		machine, ok := findClusterMachine(ci, consumer.Fields["machineName"])
+		if !ok {
+			continue
+		}
+		bmc := machineBMCServiceConfig(state, machine)
+		if bmc == nil {
+			continue
+		}
+		if configKey == "" {
+			configKey = bmcConfigKey(bmc)
+			out["bmcEmulated"] = bmc
+		} else if configKey != bmcConfigKey(bmc) {
+			out["configConsistent"] = false
+		}
+		out["machines"] = append(out["machines"].([]any), map[string]any{
+			"clusterName":  consumer.Cluster,
+			"name":         machine.Name,
+			"bmcEmulated":  bmc,
+			"providerName": machine.From.Provider,
+		})
+	}
+	if len(out["machines"].([]any)) == 0 {
+		return nil, false
+	}
+	return out, true
 }
 
 func clusterInfraByName(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, bool) {
@@ -263,97 +305,6 @@ func providerHostSetupsVars(state v1alpha1.State) []any {
 			"hostAddress": lookupHostAddress(state, k.host),
 			"applyRole":   k.role,
 		})
-	}
-	return out
-}
-
-type bmcProviderServiceGroup struct {
-	key              bmcProviderServiceKey
-	component        map[string]any
-	configKey        string
-	configConsistent bool
-}
-
-type bmcProviderServiceKey struct {
-	providerName string
-	hostRef      string
-	applyRole    string
-}
-
-func bmcProviderServiceVars(state v1alpha1.State) []any {
-	groups := map[bmcProviderServiceKey]*bmcProviderServiceGroup{}
-	var order []bmcProviderServiceKey
-	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
-		if err != nil {
-			continue
-		}
-		for _, machine := range ci.Spec.Components.Machines {
-			driver := ProviderDriver(state, machine)
-			if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
-				continue
-			}
-			hostRef := machineHostRef(state, machine)
-			if hostRef == "" {
-				continue
-			}
-			bmc := machineBMCServiceConfig(state, machine)
-			if bmc == nil {
-				continue
-			}
-			k := bmcProviderServiceKey{
-				providerName: machine.From.Provider,
-				hostRef:      hostRef,
-				applyRole:    driver.Roles.BMCApplyRole,
-			}
-			g, ok := groups[k]
-			if !ok {
-				g = &bmcProviderServiceGroup{
-					key:       k,
-					configKey: bmcConfigKey(bmc),
-					component: map[string]any{
-						"kind":             providerServiceKindBMC,
-						"providerName":     machine.From.Provider,
-						"name":             driver.Dispatch.BMCRole,
-						"hostRef":          hostRef,
-						"hostAddress":      lookupHostAddress(state, hostRef),
-						"realisation":      driver.Dispatch.BMCRole,
-						"bmcRole":          driver.Dispatch.BMCRole,
-						"applyRole":        driver.Roles.BMCApplyRole,
-						"destroyRole":      driver.Roles.BMCDestroyRole,
-						"bmcEmulated":      bmc,
-						"machines":         []any{},
-						"configConsistent": true,
-					},
-					configConsistent: true,
-				}
-				groups[k] = g
-				order = append(order, k)
-			}
-			if g.configKey != bmcConfigKey(bmc) {
-				g.configConsistent = false
-				g.component["configConsistent"] = false
-			}
-			g.component["machines"] = append(g.component["machines"].([]any), map[string]any{
-				"clusterName":  ocp.Metadata.Name,
-				"name":         machine.Name,
-				"bmcEmulated":  bmc,
-				"providerName": machine.From.Provider,
-			})
-		}
-	}
-	sort.SliceStable(order, func(i, j int) bool {
-		if order[i].hostRef != order[j].hostRef {
-			return order[i].hostRef < order[j].hostRef
-		}
-		if order[i].providerName != order[j].providerName {
-			return order[i].providerName < order[j].providerName
-		}
-		return order[i].applyRole < order[j].applyRole
-	})
-	out := make([]any, 0, len(order))
-	for _, k := range order {
-		out = append(out, groups[k].component)
 	}
 	return out
 }
