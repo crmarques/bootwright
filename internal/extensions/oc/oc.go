@@ -41,11 +41,18 @@ func (r CommandRunner) Run(ctx context.Context, kubeconfig string, args []string
 	cmd.Stderr = io.MultiWriter(&stderr, r.Stderr)
 	err := cmd.Run()
 	out := append(stdout.Bytes(), stderr.Bytes()...)
+	var logErr error
 	if r.LogPath != "" {
-		_ = appendLog(r.LogPath, name, command, input, out)
+		logErr = appendLog(r.LogPath, name, command, input, out)
 	}
 	if err != nil {
+		if logErr != nil {
+			return out, fmt.Errorf("run %s %s: %w: %s (also failed to append oc log %s: %v)", name, shellJoin(command), err, strings.TrimSpace(string(out)), r.LogPath, logErr)
+		}
 		return out, fmt.Errorf("run %s %s: %w: %s", name, shellJoin(command), err, strings.TrimSpace(string(out)))
+	}
+	if logErr != nil {
+		return out, fmt.Errorf("append oc log %s: %w", r.LogPath, logErr)
 	}
 	return out, nil
 }
@@ -58,21 +65,35 @@ func appendLog(path, name string, args []string, input []byte, output []byte) er
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	_, _ = fmt.Fprintf(file, "$ %s %s\n", name, shellJoin(args))
+	if _, err := fmt.Fprintf(file, "$ %s %s\n", name, shellJoin(args)); err != nil {
+		_ = file.Close()
+		return err
+	}
 	if len(input) > 0 {
-		_, _ = file.Write(input)
+		if _, err := file.Write(input); err != nil {
+			_ = file.Close()
+			return err
+		}
 		if len(input) == 0 || input[len(input)-1] != '\n' {
-			_, _ = file.Write([]byte("\n"))
+			if _, err := file.Write([]byte("\n")); err != nil {
+				_ = file.Close()
+				return err
+			}
 		}
 	}
 	if len(output) > 0 {
-		_, _ = file.Write(output)
+		if _, err := file.Write(output); err != nil {
+			_ = file.Close()
+			return err
+		}
 		if output[len(output)-1] != '\n' {
-			_, _ = file.Write([]byte("\n"))
+			if _, err := file.Write([]byte("\n")); err != nil {
+				_ = file.Close()
+				return err
+			}
 		}
 	}
-	return nil
+	return file.Close()
 }
 
 func shellJoin(args []string) string {

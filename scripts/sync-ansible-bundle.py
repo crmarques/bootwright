@@ -13,6 +13,10 @@ import zipfile
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 
+class BundleError(Exception):
+    """Raised when source content is unsafe to embed."""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, type=Path)
@@ -39,6 +43,10 @@ def main() -> int:
 def add_tree(files: dict[str, Path], root: Path, prefix: Path) -> None:
     for path in sorted(root.rglob("*")):
         rel = path.relative_to(root)
+        if path.is_symlink():
+            if prefix.parts[:1] == ("collections",):
+                continue
+            raise BundleError(f"refusing to bundle symlink {path}")
         if should_skip(rel, path):
             continue
         if path.is_dir():
@@ -61,7 +69,10 @@ def should_skip(rel: Path, path: Path) -> bool:
 
 
 def write_file(archive: zipfile.ZipFile, archive_name: str, source: Path) -> None:
-    mode = stat.S_IMODE(source.stat().st_mode)
+    source_stat = source.lstat()
+    if stat.S_ISLNK(source_stat.st_mode):
+        raise BundleError(f"refusing to bundle symlink {source}")
+    mode = stat.S_IMODE(source_stat.st_mode)
     perms = 0o755 if mode & 0o111 else 0o644
     info = zipfile.ZipInfo(archive_name, ZIP_EPOCH)
     info.compress_type = zipfile.ZIP_DEFLATED

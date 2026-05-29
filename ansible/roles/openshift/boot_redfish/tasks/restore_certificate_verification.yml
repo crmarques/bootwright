@@ -1,0 +1,117 @@
+---
+- name: Refresh virtual media metadata before restoring fetch certificate verification
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_restore_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
+    - bootwright_redfish_vmedia_verify_certificate_supported | default(false) | bool
+    - bootwright_redfish_vmedia_verify_certificate_original | default(false) | bool
+    - bootwright_redfish_vmedia_verify_certificate_patch is defined
+    - (bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]
+
+- name: Resolve virtual media restore PATCH precondition
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_restore_if_match: >-
+      {{
+        (bootwright_redfish_vmedia_restore_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_vmedia_restore_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_vmedia_restore_probe.headers | default({})).etag | default('', true), true)
+        | default('*', true)
+      }}
+  changed_when: false
+  when:
+    - bootwright_redfish_vmedia_restore_probe is defined
+    - (bootwright_redfish_vmedia_restore_probe.status | default(0) | int) == 200
+
+- name: Restore virtual media fetch certificate verification
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_vmedia_restore_if_match }}"
+    body_format: json
+    body:
+      VerifyCertificate: true
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_vmedia_verify_certificate_restore
+  failed_when: false
+  changed_when: (bootwright_redfish_vmedia_verify_certificate_restore.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_vmedia_restore_if_match is defined
+
+- name: Refresh Redfish manager SecurityService before restoring HTTPS transfer certificate verification
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_security_service_restore_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - (bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'
+    - (bootwright_redfish_security_service_member | default('') | length) > 0
+    - bootwright_redfish_security_service_https_transfer_supported | default(false) | bool
+    - bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool
+    - bootwright_redfish_security_service_https_transfer_patch is defined
+    - (bootwright_redfish_security_service_https_transfer_patch.status | default(0) | int) in [200, 202, 204]
+
+- name: Resolve Redfish manager SecurityService restore PATCH precondition
+  ansible.builtin.set_fact:
+    bootwright_redfish_security_service_restore_if_match: >-
+      {{
+        (bootwright_redfish_security_service_restore_probe.json | default({})).get('@odata.etag', '')
+        | default((bootwright_redfish_security_service_restore_probe.headers | default({})).ETag | default('', true), true)
+        | default((bootwright_redfish_security_service_restore_probe.headers | default({})).etag | default('', true), true)
+        | default('*', true)
+      }}
+  changed_when: false
+  when:
+    - bootwright_redfish_security_service_restore_probe is defined
+    - (bootwright_redfish_security_service_restore_probe.status | default(0) | int) == 200
+
+- name: Restore Redfish HTTPS transfer certificate verification
+  ansible.builtin.uri:
+    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    method: PATCH
+    headers:
+      If-Match: "{{ bootwright_redfish_security_service_restore_if_match }}"
+    body_format: json
+    body:
+      HttpsTransferCertVerification: true
+    status_code: [200, 202, 204, 400, 405, 501]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_security_service_https_transfer_restore
+  failed_when: false
+  changed_when: (bootwright_redfish_security_service_https_transfer_restore.status | default(0) | int) in [200, 202, 204]
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  when:
+    - bootwright_redfish_security_service_restore_if_match is defined

@@ -311,10 +311,17 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/main.yml")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
 	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
-	powerIdx := findAnsibleTask(t, mainTasks, "Power node from virtual media")
-	postIdx := findAnsibleTask(t, mainTasks, "Set post-boot Redfish boot device")
-	if !(prepareIdx < validateMACsIdx && validateMACsIdx < powerIdx && powerIdx < postIdx) {
-		t.Fatalf("boot_redfish imports must run media_prepare, MAC validation, power, then post_boot")
+	bootSequenceIdx := findAnsibleTask(t, mainTasks, "Boot node from Redfish virtual media")
+	bootSequenceTasks := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "block")
+	bootSequenceAlways := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "always")
+	powerIdx := findAnsibleTask(t, bootSequenceTasks, "Power node from virtual media")
+	postIdx := findAnsibleTask(t, bootSequenceTasks, "Set post-boot Redfish boot device")
+	restoreIdx := findAnsibleTask(t, bootSequenceAlways, "Restore Redfish certificate verification settings")
+	if !(prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx) {
+		t.Fatalf("boot_redfish imports must run media_prepare and MAC validation before boot sequence")
+	}
+	if !(powerIdx < postIdx) {
+		t.Fatalf("boot_redfish boot sequence must run power before post_boot")
 	}
 	for _, want := range []string{
 		"bootwright_redfish_action_effective == 'boot'",
@@ -325,11 +332,14 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 			t.Fatalf("boot_redfish MAC validation when missing %q: %v", want, mainTasks[validateMACsIdx]["when"])
 		}
 	}
-	if got := mainTasks[powerIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
-		t.Fatalf("boot_redfish power tasks must only run for boot action, got when=%v", got)
+	if got := mainTasks[bootSequenceIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
+		t.Fatalf("boot_redfish boot sequence must only run for boot action, got when=%v", got)
 	}
-	if got := mainTasks[postIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
-		t.Fatalf("boot_redfish post-boot tasks must only run for boot action, got when=%v", got)
+	assertIncludeTasksFile(t, bootSequenceTasks[powerIdx], "power.yml")
+	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "post_boot.yml")
+	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "restore_certificate_verification.yml")
+	if len(bootSequenceAlways) != 1 {
+		t.Fatalf("boot_redfish boot sequence always block should only restore Redfish certificate settings, got %d tasks", len(bootSequenceAlways))
 	}
 
 	prepareTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml")
@@ -338,6 +348,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	insertAttemptTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/insert_media_attempt.yml")
 	ejectTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/eject_media.yml")
 	postTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
+	restoreTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/restore_certificate_verification.yml")
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
 	probeMediaIdx := findAnsibleTask(t, prepareTasks, "Probe Redfish VirtualMedia members")
@@ -399,6 +410,12 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	diskBootPreconditionIdx := findAnsibleTask(t, postTasks, "Resolve Redfish system PATCH precondition")
 	diskBootIdx := findAnsibleTask(t, postTasks, "Set subsequent boots to disk after live ISO boot")
 	diskBootConfirmIdx := findAnsibleTask(t, postTasks, "Confirm subsequent disk boot override was accepted")
+	restoreVMediaRefreshIdx := findAnsibleTask(t, restoreTasks, "Refresh virtual media metadata before restoring fetch certificate verification")
+	restoreVMediaPreconditionIdx := findAnsibleTask(t, restoreTasks, "Resolve virtual media restore PATCH precondition")
+	restoreVMediaIdx := findAnsibleTask(t, restoreTasks, "Restore virtual media fetch certificate verification")
+	restoreSecurityRefreshIdx := findAnsibleTask(t, restoreTasks, "Refresh Redfish manager SecurityService before restoring HTTPS transfer certificate verification")
+	restoreSecurityPreconditionIdx := findAnsibleTask(t, restoreTasks, "Resolve Redfish manager SecurityService restore PATCH precondition")
+	restoreSecurityIdx := findAnsibleTask(t, restoreTasks, "Restore Redfish HTTPS transfer certificate verification")
 
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
@@ -420,6 +437,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if !(waitSSHIdx < sshAuthIdx && sshAuthIdx < sshAuthConfirmIdx && sshAuthConfirmIdx < diskBootRefreshIdx && diskBootRefreshIdx < diskBootPreconditionIdx && diskBootPreconditionIdx < diskBootIdx && diskBootIdx < diskBootConfirmIdx) {
 		t.Fatalf("boot_redfish must verify SSH auth before switching subsequent boots back to disk")
+	}
+	if !(restoreVMediaRefreshIdx < restoreVMediaPreconditionIdx && restoreVMediaPreconditionIdx < restoreVMediaIdx && restoreVMediaIdx < restoreSecurityRefreshIdx && restoreSecurityRefreshIdx < restoreSecurityPreconditionIdx && restoreSecurityPreconditionIdx < restoreSecurityIdx) {
+		t.Fatalf("boot_redfish restore tasks must restore virtual media then SecurityService certificate verification")
 	}
 
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
@@ -563,6 +583,30 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertURIHeader(t, powerTasks[securityPatchIdx], "If-Match", "{{ bootwright_redfish_security_service_if_match }}")
 	if got := powerTasks[securityPatchIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "bootwright_redfish_security_service_https_transfer_supported | default(false) | bool") || !stringListContains(got, "bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool") {
 		t.Fatalf("SecurityService PATCH must only run when supported and enabled, got when=%v", got)
+	}
+	restoreVMediaURI, ok := restoreTasks[restoreVMediaIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri body", restoreTasks[restoreVMediaIdx]["name"])
+	}
+	restoreVMediaBody, ok := restoreVMediaURI["body"].(map[string]any)
+	if !ok || restoreVMediaBody["VerifyCertificate"] != true {
+		t.Fatalf("virtual media restore PATCH must re-enable VerifyCertificate, got %v", restoreVMediaURI["body"])
+	}
+	assertURIHeader(t, restoreTasks[restoreVMediaIdx], "If-Match", "{{ bootwright_redfish_vmedia_restore_if_match }}")
+	if got := restoreTasks[restoreVMediaRefreshIdx]["when"]; !stringListContains(got, "(bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'") || !stringListContains(got, "bootwright_redfish_vmedia_verify_certificate_patch is defined") || !stringListContains(got, "(bootwright_redfish_vmedia_verify_certificate_patch.status | default(0) | int) in [200, 202, 204]") {
+		t.Fatalf("virtual media restore probe must only run after a successful disable PATCH, got when=%v", got)
+	}
+	restoreSecurityURI, ok := restoreTasks[restoreSecurityIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri body", restoreTasks[restoreSecurityIdx]["name"])
+	}
+	restoreSecurityBody, ok := restoreSecurityURI["body"].(map[string]any)
+	if !ok || restoreSecurityBody["HttpsTransferCertVerification"] != true {
+		t.Fatalf("SecurityService restore PATCH must re-enable HttpsTransferCertVerification, got %v", restoreSecurityURI["body"])
+	}
+	assertURIHeader(t, restoreTasks[restoreSecurityIdx], "If-Match", "{{ bootwright_redfish_security_service_restore_if_match }}")
+	if got := restoreTasks[restoreSecurityRefreshIdx]["when"]; !stringListContains(got, "(bootwright_redfish_vmedia_transfer_protocol | default('')) == 'HTTPS'") || !stringListContains(got, "bootwright_redfish_security_service_https_transfer_patch is defined") || !stringListContains(got, "(bootwright_redfish_security_service_https_transfer_patch.status | default(0) | int) in [200, 202, 204]") {
+		t.Fatalf("SecurityService restore probe must only run after a successful disable PATCH, got when=%v", got)
 	}
 	securityCaptureFact, ok := powerTasks[securityCaptureIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -835,9 +879,10 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	ejectIdx := findAnsibleTask(t, ejectTasks, "Eject virtual media")
 	waitEjectIdx := findAnsibleTask(t, ejectTasks, "Wait for virtual media to report ejected")
+	captureEjectIdx := findAnsibleTask(t, ejectTasks, "Capture virtual media eject status")
 	confirmEjectIdx := findAnsibleTask(t, ejectTasks, "Confirm virtual media is ejected")
-	if !(ejectIdx < waitEjectIdx && waitEjectIdx < confirmEjectIdx) {
-		t.Fatalf("virtual media cleanup must eject, wait, then assert detached state")
+	if !(ejectIdx < waitEjectIdx && waitEjectIdx < captureEjectIdx && captureEjectIdx < confirmEjectIdx) {
+		t.Fatalf("virtual media cleanup must eject, wait, redact status, then assert detached state")
 	}
 	ejectURI, ok := ejectTasks[ejectIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
@@ -874,6 +919,20 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if !stringListContains(ejectAssert["that"], "not (bootwright_redfish_vmedia_eject_probe.json.Inserted | default(false) | bool)") {
 		t.Fatalf("virtual media eject assertion must require detached media, got %v", ejectAssert["that"])
+	}
+	captureEjectFact, ok := ejectTasks[captureEjectIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact task", ejectTasks[captureEjectIdx]["name"])
+	}
+	if got := fmt.Sprint(captureEjectFact["bootwright_redfish_vmedia_eject_image_redacted"]); !strings.Contains(got, "replace(bootwright_agent_iso_publish_token, '<redacted>')") {
+		t.Fatalf("virtual media eject status must redact the agent ISO token, got %v", got)
+	}
+	if got := ejectTasks[captureEjectIdx]["no_log"]; got != true {
+		t.Fatalf("virtual media eject redaction fact must stay no_log, got %v", got)
+	}
+	failMsg := fmt.Sprint(ejectAssert["fail_msg"])
+	if !strings.Contains(failMsg, "bootwright_redfish_vmedia_eject_image_redacted") || strings.Contains(failMsg, "Image={{ bootwright_redfish_vmedia_eject_probe.json.Image") {
+		t.Fatalf("virtual media eject assertion must use redacted image status, got %v", failMsg)
 	}
 	defaults := readRepoFile(t, "ansible/roles/openshift/boot_redfish/defaults/main.yml")
 	for _, want := range []string{"bootwright_redfish_vmedia_eject_retries", "bootwright_redfish_vmedia_eject_delay_seconds"} {
@@ -2151,21 +2210,24 @@ func findAnsibleTaskIndex(tasks []map[string]any, name string) int {
 func assertIncludeTasksFile(t *testing.T, task map[string]any, want string) {
 	t.Helper()
 	include := task["ansible.builtin.include_tasks"]
+	if include == nil {
+		include = task["ansible.builtin.import_tasks"]
+	}
 	switch got := include.(type) {
 	case string:
 		if strings.TrimSpace(got) != want {
-			t.Fatalf("%s include_tasks got %q, want %q", task["name"], got, want)
+			t.Fatalf("%s tasks file got %q, want %q", task["name"], got, want)
 		}
 	case map[string]any:
 		file, ok := got["file"].(string)
 		if !ok {
-			t.Fatalf("%s include_tasks has no file", task["name"])
+			t.Fatalf("%s tasks include/import has no file", task["name"])
 		}
 		if strings.TrimSpace(file) != want {
-			t.Fatalf("%s include_tasks file got %q, want %q", task["name"], file, want)
+			t.Fatalf("%s tasks file got %q, want %q", task["name"], file, want)
 		}
 	default:
-		t.Fatalf("%s is not an include_tasks task", task["name"])
+		t.Fatalf("%s is not an include_tasks or import_tasks task", task["name"])
 	}
 }
 

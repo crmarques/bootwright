@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -211,12 +212,60 @@ func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	for _, want := range []string{
 		"CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp",
 		"refusing to clean unsafe path",
-		"refusing to clean E2E_CONTEXT_DIR outside /var/lib/bootwright/contexts",
+		"refusing unsafe CASE",
+		"refusing to clean E2E_CONTEXT_DIR outside expected case context",
 		"$(E2E_CLEAN) \"$(E2E_CONTEXT_DIR)\"",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Makefile missing cleanup guard fragment %q", want)
 		}
+	}
+}
+
+func TestMakefileRejectsUnsafeE2ECleanupInputs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "traversal case",
+			args: []string{"-s", "check-e2e-case", "CASE=../.."},
+			want: "refusing unsafe CASE",
+		},
+		{
+			name: "absolute case",
+			args: []string{"-s", "check-e2e-case", "CASE=/tmp/example"},
+			want: "refusing unsafe CASE",
+		},
+		{
+			name: "slash case",
+			args: []string{"-s", "check-e2e-case", "CASE=001-sno-libvirt/extra"},
+			want: "refusing unsafe CASE",
+		},
+		{
+			name: "unexpected context dir",
+			args: []string{"-s", "clean-e2e-state", "CASE=001-sno-libvirt", "E2E_CONTEXT_DIR=/var/lib/bootwright/contexts/../..", "E2E_CLEAN=:"},
+			want: "refusing to clean E2E_CONTEXT_DIR outside expected case context",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command("make", tc.args...)
+			cmd.Dir = repoRoot(t)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("make unexpectedly succeeded with output:\n%s", out)
+			}
+			if !strings.Contains(string(out), tc.want) {
+				t.Fatalf("make output missing %q:\n%s", tc.want, out)
+			}
+		})
+	}
+
+	cmd := exec.Command("make", "-s", "clean-e2e-state", "CASE=001-sno-libvirt", "E2E_CLEAN=:")
+	cmd.Dir = repoRoot(t)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("safe clean-e2e-state failed: %v\n%s", err, out)
 	}
 }
 

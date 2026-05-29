@@ -15,7 +15,9 @@ TEST_HOME ?= $(abspath $(STATE_DIR)/home)
 E2E_DIR ?= test/e2e
 CASE ?=
 E2E_FIXTURE = $(E2E_DIR)/$(CASE)
-E2E_CONTEXT_DIR ?= /var/lib/bootwright/contexts/$(CASE)
+E2E_CONTEXT_ROOT ?= /var/lib/bootwright/contexts
+E2E_CONTEXT_DIR ?= $(E2E_CONTEXT_ROOT)/$(CASE)
+E2E_CONTEXT_EXPECTED = $(E2E_CONTEXT_ROOT)/$(CASE)
 E2E_HOME ?= $(abspath $(STATE_DIR)/e2e-home/$(CASE))
 ANSIBLE_PLAYBOOK ?= $(shell command -v ansible-playbook 2>/dev/null)
 E2E_ANSIBLE_FLAGS = $(if $(ANSIBLE_PLAYBOOK),--ansible-playbook $(ANSIBLE_PLAYBOOK),)
@@ -179,6 +181,7 @@ go-test-clean-checkout:
 # same TestCase classes.
 python-test:
 	@cd ansible/filter_plugins && python3 -m unittest discover -v
+	@$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 
 ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
 	@test -n "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" || { printf '%s\n' 'ANSIBLE_SYNTAX_FILTER_PLUGINS must not be empty'; exit 1; }
@@ -238,7 +241,15 @@ check-e2e-deps:
 	@test -n "$(ANSIBLE_PLAYBOOK)" || { printf '%s\n' 'ansible-playbook not found in PATH; install Ansible or set ANSIBLE_PLAYBOOK=/path/to/ansible-playbook'; exit 1; }
 
 check-e2e-case:
+ifeq ($(strip $(CASE)),)
 	@test -n "$(CASE)" || { printf '%s\n' 'CASE is required; pass CASE=<name>, e.g. make e2e CASE=001-sno-libvirt' 'Available cases:' $(addprefix '  ',$(E2E_CASES)); exit 1; }
+endif
+ifneq ($(strip $(filter /% . ..,$(CASE))$(findstring /,$(CASE))$(findstring ..,$(CASE))),)
+	@printf '%s\n' 'refusing unsafe CASE; pass one of:' $(addprefix '  ',$(E2E_CASES)); exit 1
+endif
+ifeq ($(strip $(filter $(CASE),$(E2E_CASES))),)
+	@printf '%s\n' 'CASE "$(CASE)" is not a known e2e case' 'Available cases:' $(addprefix '  ',$(E2E_CASES)); exit 1
+endif
 	@test -d "$(E2E_FIXTURE)" || { printf '%s\n' 'CASE "$(CASE)" not found at $(E2E_FIXTURE)' 'Available cases:' $(addprefix '  ',$(E2E_CASES)); exit 1; }
 
 list-e2e-cases:
@@ -262,7 +273,7 @@ clean:
 
 clean-e2e-state: check-e2e-case
 	@test -n "$(E2E_CONTEXT_DIR)" || { printf '%s\n' 'E2E_CONTEXT_DIR must not be empty'; exit 1; }
-	@case "$(E2E_CONTEXT_DIR)" in /var/lib/bootwright/contexts/*) ;; *) printf 'refusing to clean E2E_CONTEXT_DIR outside /var/lib/bootwright/contexts: %s\n' "$(E2E_CONTEXT_DIR)"; exit 1;; esac
+	@test "$(E2E_CONTEXT_DIR)" = "$(E2E_CONTEXT_EXPECTED)" || { printf 'refusing to clean E2E_CONTEXT_DIR outside expected case context: got %s; want %s\n' "$(E2E_CONTEXT_DIR)" "$(E2E_CONTEXT_EXPECTED)"; exit 1; }
 	$(E2E_CLEAN) "$(E2E_CONTEXT_DIR)"
 
 help:

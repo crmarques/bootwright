@@ -37,6 +37,18 @@
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
+- name: Capture virtual media eject status
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_eject_image_redacted: >-
+      {{
+        ((bootwright_redfish_vmedia_eject_probe.json.Image | default('<not reported>', true))
+        | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+        if (bootwright_agent_iso_publish_token | default('') | length) > 0
+        else (bootwright_redfish_vmedia_eject_probe.json.Image | default('<not reported>', true))
+      }}
+  changed_when: false
+  no_log: true
+
 - name: Confirm virtual media is ejected
   ansible.builtin.assert:
     that:
@@ -48,7 +60,7 @@
       Eject HTTP status={{ bootwright_redfish_vmedia_eject.status | default('unknown') }};
       observed HTTP status={{ bootwright_redfish_vmedia_eject_probe.status | default('unknown') }},
       Inserted={{ bootwright_redfish_vmedia_eject_probe.json.Inserted | default('<not reported>', true) }},
-      Image={{ bootwright_redfish_vmedia_eject_probe.json.Image | default('<not reported>', true) }},
+      Image={{ bootwright_redfish_vmedia_eject_image_redacted | default('<not reported>', true) }},
       ImageName={{ bootwright_redfish_vmedia_eject_probe.json.ImageName | default('<not reported>', true) }},
       ConnectedVia={{ bootwright_redfish_vmedia_eject_probe.json.ConnectedVia | default('<not reported>', true) }},
       TransferProtocolType={{ bootwright_redfish_vmedia_eject_probe.json.TransferProtocolType | default('<not reported>', true) }}.

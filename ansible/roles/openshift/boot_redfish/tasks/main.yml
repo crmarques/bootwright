@@ -26,10 +26,14 @@
     - bootwright_component.boot.redfish.setBootSource | default(true) | bool
     - (bootwright_component.interfaces | default([]) | length) > 0
 
-- name: Power node from virtual media
-  ansible.builtin.import_tasks: power.yml
+- name: Boot node from Redfish virtual media
   when: bootwright_redfish_action_effective == 'boot'
+  block:
+    - name: Power node from virtual media
+      ansible.builtin.import_tasks: power.yml
 
-- name: Set post-boot Redfish boot device
-  ansible.builtin.import_tasks: post_boot.yml
-  when: bootwright_redfish_action_effective == 'boot'
+    - name: Set post-boot Redfish boot device
+      ansible.builtin.import_tasks: post_boot.yml
+  always:
+    - name: Restore Redfish certificate verification settings
+      ansible.builtin.import_tasks: restore_certificate_verification.yml
