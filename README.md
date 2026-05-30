@@ -112,7 +112,7 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and ten kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds:
 
 | Kind | Owns |
 | --- | --- |
@@ -123,6 +123,13 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and ten kinds:
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
 | `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected machines under `components.machines[]` |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
+| `StorageCluster` | External storage cluster provisioning intent; the first implementation drives Ceph through cephadm |
+| `StoragePlacementPolicy` | Storage placement policy such as the CRUSH rule and replicated pool defaults used by Ceph pools |
+| `StoragePool` | Ceph pool desired state, role, placement policy, and replication settings |
+| `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
+| `StorageObjectGateway` | RGW desired state, client endpoint, and cephadm ingress VIP placement |
+| `StorageExport` | Exported storage surface prepared for downstream consumers such as Data Foundation external mode |
+| `StorageClusterBinding` | Binding from a storage export to selected container clusters through Data Foundation external mode |
 | `ClusterExtension` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
 | `ClusterExtensionSet` | An ordered reusable group of extensions and extension sets |
 | `ClusterExtensionBinding` | A binding from extensions or extension sets to selected clusters |
@@ -135,6 +142,10 @@ Post-install components intentionally stay outside
 `ContainerCluster.spec.install`; they are separate desired-state resources
 selected by `Environment`, bound to clusters, and applied after cluster
 installation.
+External storage provisioning is also separate from `ContainerCluster`.
+`StorageCluster` uses the same lower-layer `ClusterInfra` and `InfraProvider`
+objects for machine facts, while storage bindings wait for both the storage
+cluster and a `ClusterExtension` that provides `data-foundation`.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
 bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift
@@ -166,7 +177,9 @@ bootwright check all --dry-run
 bootwright apply infra --dry-run
 bootwright apply infra --yes
 bootwright render installer --scope demo-ocp
+bootwright render storage --scope ceph-stretch
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
+bootwright apply storage --scope ceph-stretch --yes
 bootwright apply cluster --yes
 bootwright check extensions
 bootwright apply extensions --dry-run
@@ -179,7 +192,7 @@ bootwright destroy infra --scope artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. Provisioning targets are
-`bastion`, `infra`, `cluster`, and `all`. Top-level groups are
+`bastion`, `infra`, `storage`, `cluster`, `extensions`, and `all`. Top-level groups are
 `context`, `cluster`, `example`, `print-env`, `secret`, `check`, `status`,
 `render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).

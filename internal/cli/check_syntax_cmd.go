@@ -78,32 +78,46 @@ func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, erro
 }
 
 type syntaxCheckReport struct {
-	OK                bool                      `json:"ok"`
-	Error             string                    `json:"error,omitempty"`
-	Diagnostics       []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
-	Environments      int                       `json:"environments"`
-	Hosts             int                       `json:"hosts"`
-	NetworkConfigs    int                       `json:"networkConfigs"`
-	InfraProviders    int                       `json:"infraProviders"`
-	ClusterInfras     int                       `json:"clusterInfras"`
-	ContainerClusters int                       `json:"containerClusters"`
-	ClusterExtensions int                       `json:"clusterExtensions"`
-	ExtensionSets     int                       `json:"clusterExtensionSets"`
-	ExtensionBindings int                       `json:"clusterExtensionBindings"`
+	OK                       bool                      `json:"ok"`
+	Error                    string                    `json:"error,omitempty"`
+	Diagnostics              []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	Environments             int                       `json:"environments"`
+	Hosts                    int                       `json:"hosts"`
+	NetworkConfigs           int                       `json:"networkConfigs"`
+	InfraProviders           int                       `json:"infraProviders"`
+	ClusterInfras            int                       `json:"clusterInfras"`
+	ContainerClusters        int                       `json:"containerClusters"`
+	StorageClusters          int                       `json:"storageClusters"`
+	StoragePlacementPolicies int                       `json:"storagePlacementPolicies"`
+	StoragePools             int                       `json:"storagePools"`
+	StorageFilesystems       int                       `json:"storageFilesystems"`
+	StorageObjectGateways    int                       `json:"storageObjectGateways"`
+	StorageExports           int                       `json:"storageExports"`
+	StorageBindings          int                       `json:"storageClusterBindings"`
+	ClusterExtensions        int                       `json:"clusterExtensions"`
+	ExtensionSets            int                       `json:"clusterExtensionSets"`
+	ExtensionBindings        int                       `json:"clusterExtensionBindings"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error) error {
 	report := syntaxCheckReport{
-		OK:                checkErr == nil,
-		Environments:      len(state.Environments),
-		Hosts:             len(state.Hosts),
-		NetworkConfigs:    len(state.NetworkConfigs),
-		InfraProviders:    len(state.InfraProviders),
-		ClusterInfras:     len(state.ClusterInfras),
-		ContainerClusters: len(state.ContainerClusters),
-		ClusterExtensions: len(state.ClusterExtensions),
-		ExtensionSets:     len(state.ClusterExtensionSets),
-		ExtensionBindings: len(state.ClusterExtensionBindings),
+		OK:                       checkErr == nil,
+		Environments:             len(state.Environments),
+		Hosts:                    len(state.Hosts),
+		NetworkConfigs:           len(state.NetworkConfigs),
+		InfraProviders:           len(state.InfraProviders),
+		ClusterInfras:            len(state.ClusterInfras),
+		ContainerClusters:        len(state.ContainerClusters),
+		StorageClusters:          len(state.StorageClusters),
+		StoragePlacementPolicies: len(state.StoragePlacementPolicies),
+		StoragePools:             len(state.StoragePools),
+		StorageFilesystems:       len(state.StorageFilesystems),
+		StorageObjectGateways:    len(state.StorageObjectGateways),
+		StorageExports:           len(state.StorageExports),
+		StorageBindings:          len(state.StorageClusterBindings),
+		ClusterExtensions:        len(state.ClusterExtensions),
+		ExtensionSets:            len(state.ClusterExtensionSets),
+		ExtensionBindings:        len(state.ClusterExtensionBindings),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
@@ -149,6 +163,13 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "InfraProviders", Value: fmt.Sprint(len(state.InfraProviders))},
 		{Key: "ClusterInfras", Value: fmt.Sprint(len(state.ClusterInfras))},
 		{Key: "ContainerClusters", Value: fmt.Sprint(len(state.ContainerClusters))},
+		{Key: "StorageClusters", Value: fmt.Sprint(len(state.StorageClusters))},
+		{Key: "StoragePlacementPolicies", Value: fmt.Sprint(len(state.StoragePlacementPolicies))},
+		{Key: "StoragePools", Value: fmt.Sprint(len(state.StoragePools))},
+		{Key: "StorageFilesystems", Value: fmt.Sprint(len(state.StorageFilesystems))},
+		{Key: "StorageObjectGateways", Value: fmt.Sprint(len(state.StorageObjectGateways))},
+		{Key: "StorageExports", Value: fmt.Sprint(len(state.StorageExports))},
+		{Key: "StorageClusterBindings", Value: fmt.Sprint(len(state.StorageClusterBindings))},
 		{Key: "ClusterExtensions", Value: fmt.Sprint(len(state.ClusterExtensions))},
 		{Key: "ClusterExtensionSets", Value: fmt.Sprint(len(state.ClusterExtensionSets))},
 		{Key: "ClusterExtensionBindings", Value: fmt.Sprint(len(state.ClusterExtensionBindings))},

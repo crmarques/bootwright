@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -88,11 +89,13 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	}
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-	names, err := clusterNamesForTarget(state, clusterScope)
-	if err != nil {
-		return failErr(1, err)
+	if strings.TrimSpace(clusterScope) != "" {
+		names, err := clusterNamesForTarget(state, clusterScope)
+		if err != nil {
+			return failErr(1, err)
+		}
+		state = filterStateToClusters(state, names)
 	}
-	state = filterStateToClusters(state, names)
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
 		return failErr(1, fmt.Errorf("resolve --output-dir %s: %w", outputDir, err))
@@ -174,6 +177,13 @@ func printToolInputFiles(stdout io.Writer, result render.Result) {
 	for _, asset := range result.InstallerAssets {
 		installerPaths = append(installerPaths, asset.InstallConfigPath, asset.AgentConfigPath, asset.InstallManifestsDir)
 	}
+	var storagePaths []string
+	for _, asset := range result.StorageAssets {
+		storagePaths = append(storagePaths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
+		for _, binding := range asset.Bindings {
+			storagePaths = append(storagePaths, binding.ExternalClusterDetailsPath, binding.StorageClusterPath, binding.StorageSystemPath)
+		}
+	}
 	groups := []cliout.ArtifactGroup{
 		{Name: "Bootwright", Paths: []string{result.EffectiveStatePath, result.LockPath}},
 		{Name: "Ansible", Paths: []string{result.InventoryPath, result.VarsPath}},
@@ -181,17 +191,30 @@ func printToolInputFiles(stdout io.Writer, result render.Result) {
 	if len(installerPaths) > 0 {
 		groups = append(groups, cliout.ArtifactGroup{Name: "openshift-install (secrets inlined)", Paths: installerPaths})
 	}
+	if len(storagePaths) > 0 {
+		groups = append(groups, cliout.ArtifactGroup{Name: "storage", Paths: storagePaths})
+	}
 	outputpkg(stdout).Artifacts(groups)
 }
 
 func printToolInputCommands(stdout io.Writer, result render.Result) {
-	if len(result.InstallerAssets) == 0 {
+	if len(result.InstallerAssets) == 0 && len(result.StorageAssets) == 0 {
 		return
 	}
 	p := cliout.NewContinuation(stdout)
-	p.Section("OpenShift install commands")
+	if len(result.InstallerAssets) > 0 {
+		p.Section("OpenShift install commands")
+	}
 	for _, asset := range result.InstallerAssets {
 		p.CommandLine("create agent image ["+asset.ClusterName+"]", []string{"openshift-install", "agent", "create", "image", "--dir", asset.Dir})
 		p.CommandLine("wait for install complete ["+asset.ClusterName+"]", []string{"openshift-install", "agent", "wait-for", "install-complete", "--dir", asset.Dir, "--log-level", "info"})
+	}
+	if len(result.StorageAssets) > 0 {
+		p.Section("Storage commands")
+	}
+	for _, asset := range result.StorageAssets {
+		p.CommandLine("bootstrap ceph ["+asset.StorageClusterName+"]", []string{"cephadm", "bootstrap", "--apply-spec", asset.BootstrapSpecPath, "--mon-ip", "<derived-bootstrap-mon-ip>"})
+		p.CommandLine("apply ceph services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.ServicesSpecPath})
+		p.CommandLine("apply ceph operations ["+asset.StorageClusterName+"]", []string{"bootwright", "apply", "storage", "--scope", asset.StorageClusterName, "--yes"})
 	}
 }

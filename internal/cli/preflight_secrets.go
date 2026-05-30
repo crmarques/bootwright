@@ -248,6 +248,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			}
 		}
 	}
+	out = append(out, collectStorageSecretRefRequirements(state)...)
 	return resolveSecretRequirementSources(state, out)
 }
 

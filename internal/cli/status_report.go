@@ -60,6 +60,9 @@ type statusDesired struct {
 	Hosts                    int    `json:"hosts"`
 	ClusterInfras            int    `json:"clusterInfras"`
 	ContainerClusters        int    `json:"containerClusters"`
+	StorageClusters          int    `json:"storageClusters"`
+	StoragePools             int    `json:"storagePools"`
+	StorageClusterBindings   int    `json:"storageClusterBindings"`
 	ClusterExtensions        int    `json:"clusterExtensions"`
 	ClusterExtensionSets     int    `json:"clusterExtensionSets"`
 	ClusterExtensionBindings int    `json:"clusterExtensionBindings"`
@@ -129,6 +132,9 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.Hosts = len(state.Hosts)
 		report.Desired.ClusterInfras = len(state.ClusterInfras)
 		report.Desired.ContainerClusters = len(state.ContainerClusters)
+		report.Desired.StorageClusters = len(state.StorageClusters)
+		report.Desired.StoragePools = len(state.StoragePools)
+		report.Desired.StorageClusterBindings = len(state.StorageClusterBindings)
 		report.Desired.ClusterExtensions = len(state.ClusterExtensions)
 		report.Desired.ClusterExtensionSets = len(state.ClusterExtensionSets)
 		report.Desired.ClusterExtensionBindings = len(state.ClusterExtensionBindings)

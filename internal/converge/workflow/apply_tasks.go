@@ -19,16 +19,19 @@ import (
 )
 
 const (
-	ApplyTaskKindProvider              = "providerServices"
-	ApplyTaskKindClusterInfra          = "clusterInfra"
-	ApplyTaskKindClusterISO            = "clusterISO"
-	ApplyTaskKindNodeBoot              = "nodeBoot"
-	ApplyTaskKindInstallWait           = "installWait"
-	ApplyTaskKindClusterExtensionApply = "clusterExtensionApply"
-	ApplyTaskKindClusterExtensionWait  = "clusterExtensionWait"
+	ApplyTaskKindProvider                   = "providerServices"
+	ApplyTaskKindClusterInfra               = "clusterInfra"
+	ApplyTaskKindClusterISO                 = "clusterISO"
+	ApplyTaskKindNodeBoot                   = "nodeBoot"
+	ApplyTaskKindInstallWait                = "installWait"
+	ApplyTaskKindStorageCluster             = "storageCluster"
+	ApplyTaskKindStorageClusterBindingApply = "storageClusterBindingApply"
+	ApplyTaskKindClusterExtensionApply      = "clusterExtensionApply"
+	ApplyTaskKindClusterExtensionWait       = "clusterExtensionWait"
 
 	ApplyPhaseProvider   = "provider"
 	ApplyPhaseCluster    = "cluster"
+	ApplyPhaseStorage    = "storage"
 	ApplyPhaseClusters   = "clusters"
 	ApplyPhaseExtensions = "extensions"
 )
@@ -47,14 +50,15 @@ type ApplyTarget struct {
 }
 
 type ApplyTask struct {
-	Entry         TaskLedgerEntry
-	Playbook      string
-	Limit         string
-	Forks         int
-	RedfishSlots  int
-	ExtraVarPairs []string
-	State         v1alpha1.State
-	Extension     *extensionplan.ExtensionPlan
+	Entry          TaskLedgerEntry
+	Playbook       string
+	Limit          string
+	Forks          int
+	RedfishSlots   int
+	ExtraVarPairs  []string
+	State          v1alpha1.State
+	Extension      *extensionplan.ExtensionPlan
+	StorageBinding *StorageBindingPlan
 }
 
 type applyTaskResult struct {
@@ -121,6 +125,24 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				Limit:    host,
 				Forks:    1,
 				State:    state,
+			})
+		}
+	}
+	storageDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseStorage] {
+		for _, cluster := range state.StorageClusters {
+			taskID := "storage." + cluster.Metadata.Name
+			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindStorageCluster,
+					Label:        "storage " + cluster.Metadata.Name,
+					Status:       TaskStatusPending,
+					Dependencies: append([]string(nil), providerTaskIDs...),
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+				},
+				State: stategraph.FilterStateToStorageClusters(state, []string{cluster.Metadata.Name}),
 			})
 		}
 	}
@@ -245,6 +267,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return tasks, err
 		}
 		tasks = append(tasks, extensionTasks...)
+		tasks = append(tasks, planStorageBindingTasks(state, phaseSet[ApplyPhaseClusters], storageDepsByCluster)...)
 	}
 	return tasks, nil
 }
@@ -621,6 +644,12 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	if task.Entry.Kind == ApplyTaskKindClusterExtensionApply || task.Entry.Kind == ApplyTaskKindClusterExtensionWait {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+	}
+	if task.Entry.Kind == ApplyTaskKindStorageCluster {
+		return runOneStorageTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+	}
+	if task.Entry.Kind == ApplyTaskKindStorageClusterBindingApply {
+		return runOneStorageBindingTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")

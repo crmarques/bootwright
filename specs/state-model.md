@@ -1,8 +1,9 @@
 # Desired-State Model
 
-Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and ten
+Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and seventeen
 user-authored kinds. The provisioning schema intentionally tracks the inputs
-consumed by `openshift-install` for agent installs:
+consumed by `openshift-install` for agent installs and `cephadm` for external
+Ceph storage:
 
 - `ContainerCluster` owns install intent and the fields that render mostly to
   `install-config.yaml`.
@@ -11,6 +12,14 @@ consumed by `openshift-install` for agent installs:
 - `ClusterExtensionSet` owns ordered reusable platform profiles made from
   extensions and other sets.
 - `ClusterExtensionBinding` owns cluster-to-extension attachment after install.
+- `StorageCluster` owns external storage cluster provisioning intent.
+- `StoragePlacementPolicy` owns storage placement and CRUSH policy intent.
+- `StoragePool` owns Ceph pool desired state.
+- `StorageFilesystem` owns CephFS metadata/data pool wiring and MDS placement.
+- `StorageObjectGateway` owns RGW service and cephadm ingress VIP placement.
+- `StorageExport` owns the exported storage surface.
+- `StorageClusterBinding` owns cluster-to-storage attachment through Data
+  Foundation external mode.
 - `ClusterInfra` owns the selected machines, install endpoints, and platform
   render mode.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
@@ -28,6 +37,10 @@ Post-install components are deliberately not embedded under
 `ContainerCluster.spec.install`. `ContainerCluster` remains focused on
 provisioning an installed cluster; extensions are selected by `Environment`,
 bound to clusters, and applied after the cluster is available.
+External storage is also a peer object family, not a child of
+`ContainerCluster`. Storage clusters reuse `ClusterInfra`, `InfraProvider`, and
+`NetworkConfig` for machine facts while keeping Ceph pools, filesystems,
+gateways, exports, and bindings in storage-specific resources.
 
 There is no compatibility layer for the pre-refactor shape. Old fields are
 decode or validation errors.
@@ -164,6 +177,10 @@ Rules:
   extensions, those referenced resource files must also be selected. When a
   selected `ClusterExtensionSet` references child sets or extensions, those
   files must also be selected.
+- When a selected storage object references a `StorageCluster`,
+  `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
+  `StorageObjectGateway`, `StorageExport`, `StorageClusterBinding`, or storage
+  `ClusterInfra`, those referenced resource files must also be selected.
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
   `ContainerCluster`.
@@ -363,6 +380,113 @@ Rules:
   leading or trailing whitespace; Bootwright does not enumerate CNI names so
   future OpenShift network types remain possible.
 
+## Storage
+
+The first storage implementation provisions external Ceph with `cephadm`.
+Storage nodes are modeled as machines in a storage-only `ClusterInfra`, not as
+`Host` objects. They are assumed to already run RHEL and be reachable from the
+bastion over SSH.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-stretch
+spec:
+  type: ceph
+  clusterInfraRef:
+    name: ceph-stretch-infra
+
+  ceph:
+    cephadm:
+      bootstrap:
+        seedNode: ceph-dc1-0
+        monIP:
+          machineRef:
+            clusterInfra: ceph-stretch-infra
+            name: ceph-dc1-0
+          interface: primary
+          family: ipv4
+      nodeSSH:
+        user: root
+        keyPairRef:
+          name: ceph-node-ssh
+      clusterSSH:
+        user: root
+        keyPairRef:
+          name: cephadm-cluster-ssh
+
+    topology:
+      stretch:
+        enabled: true
+        failureDomain: datacenter
+        dataSites:
+          - dc1
+          - dc2
+        tiebreaker:
+          site: dc3
+          node: ceph-arbiter
+        replicatedPoolDefaults:
+          size: 4
+          minSize: 2
+        ruleName: stretch-replicated
+      nodes:
+        - name: ceph-dc1-0
+          site: dc1
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+```
+
+Rules:
+
+- `StorageCluster.spec.ceph.cephadm.bootstrap.monIP` is singular because
+  `cephadm bootstrap` creates the first monitor on one seed host. HA monitor
+  placement is declared through the rendered cephadm service specs.
+- `nodeSSH` is the bastion-to-node SSH identity Bootwright uses to reach
+  preinstalled RHEL nodes. `clusterSSH` is the SSH identity passed to cephadm
+  for ongoing cluster orchestration.
+- A storage-only `ClusterInfra` can omit OpenShift API, API-int, and ingress
+  endpoints. Explicit bare-metal BMC fields are required only for
+  `ContainerCluster` boot targets, not for storage-only preinstalled nodes.
+- In stretch mode, exactly two data sites and one distinct tiebreaker site are
+  accepted. The tiebreaker node must be monitor-only. Monitor placement must be
+  two monitors in each data site plus one tiebreaker monitor.
+- Stretch-mode replicated pools must use `size: 4` and `minSize: 2`.
+  Erasure-coded pools are rejected for stretch clusters.
+- `StorageFilesystem` makes CephFS metadata and data pools distinct:
+  `metadataPoolRef` and the default `dataPoolRefs[]` entry render to
+  `ceph fs new <fs> <metadataPool> <dataPool>`.
+- `StorageObjectGateway` uses cephadm `ingress` services for RGW HA. Cephadm
+  deploys HAProxy and keepalived; Bootwright does not install a separate load
+  balancer. Each site-local ingress can place a VIP on nodes in that site, and
+  the aggregate ingress placement must cover at least two ingress-capable
+  nodes per data site.
+- `StorageClusterBinding` connects a `StorageExport` to selected
+  `ContainerCluster` objects. Each selected cluster must have a bound
+  `ClusterExtension` that provides `data-foundation`; binding manifests are
+  applied after that extension reports readiness.
+- Data Foundation exports render per-consuming-cluster Ceph auth operations
+  in `ceph/operations.yaml` and per-cluster external connection manifests.
+  Rendered manifests carry generated-at-apply placeholders for secret keys;
+  authored examples must not contain generated external-cluster secret bytes.
+
+Rendered storage files are deterministic and are the same files used during
+apply:
+
+```text
+storage/<storageCluster>/cephadm/bootstrap-spec.yaml
+storage/<storageCluster>/cephadm/services.yaml
+storage/<storageCluster>/ceph/operations.yaml
+storage/<storageCluster>/data-foundation/<binding>/<cluster>/rook-ceph-external-cluster-details.yaml
+storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagecluster.yaml
+storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagesystem.yaml
+```
+
 ## Cluster Extensions
 
 Cluster extensions model initial post-install bootstrap components. They are
@@ -426,9 +550,10 @@ spec:
 ```
 
 `provides[]` advertises extension-provided cluster capabilities consumed by
-cross-cluster substrates. The initial accepted value is `kubevirt`. An extension
-that provides a capability must declare readiness checks so dependent work waits
-for the actual platform capability, not just resource submission.
+cross-cluster substrates and storage bindings. Accepted values are `kubevirt`
+and `data-foundation`. An extension that provides a capability must declare
+readiness checks so dependent work waits for the actual platform capability,
+not just resource submission.
 
 `manifest-set` extensions apply existing YAML files in declared order. Paths
 are relative to the `ClusterExtension` file directory. Non-Bootwright YAML under
@@ -1050,6 +1175,9 @@ Bootwright renders:
   desired state.
 - Generated artifact server components when a cluster needs agent ISO or
   boot-artifact publication.
+- Storage tool inputs from selected storage resources: cephadm host and
+  service specs, Ceph operations for stretch mode, pools, CephFS, RGW users,
+  and Data Foundation external-mode manifests for each selected binding.
 - Extension apply plans from selected `ClusterExtensionBinding` resources.
   OLM extensions generate Namespace, OperatorGroup, Subscription, and custom
   resources. Manifest-set extensions reference declared files and include file
@@ -1093,9 +1221,13 @@ Validation rejects:
 - `ClusterExtensionSet` reference cycles.
 - Unsupported cluster extension types, readiness check types, apply phases, and
   install plan approval values.
-- Unsupported `ClusterExtension.spec.provides[]` capabilities. The only current
-  value is `kubevirt`; duplicate values and capabilities without readiness
-  checks are invalid.
+- Unsupported `ClusterExtension.spec.provides[]` capabilities. Current values
+  are `kubevirt` and `data-foundation`; duplicate values and capabilities
+  without readiness checks are invalid.
+- Invalid storage references, stretch-mode topology, monitor placement,
+  tiebreaker roles, replicated pool defaults, erasure-coded stretch pools,
+  CephFS metadata/data pool wiring, RGW/MDS placement, or Data Foundation
+  binding selectors.
 - Unsafe `manifest-set` paths, including absolute paths, directory escapes,
   symlinks, missing files, and non-YAML extensions.
 - KubeVirt profiles missing exactly one host reference, referencing a missing
@@ -1171,6 +1303,7 @@ bootwright check infra --dry-run --output json
 bootwright render installer --scope <cluster>
 bootwright render installer --sensitive
 bootwright render installer --output json
+bootwright render storage --scope <storage-cluster>
 bootwright render --output-dir ./rendered --sensitive
 bootwright apply infra --dry-run
 bootwright apply infra --dry-run --output json
@@ -1180,6 +1313,9 @@ bootwright apply infra --scope managed-01 --yes
 bootwright check cluster
 bootwright check cluster --dry-run --output json
 bootwright check extensions
+bootwright apply storage --dry-run
+bootwright apply storage --yes
+bootwright apply storage --scope <storage-cluster> --yes
 bootwright apply cluster --dry-run
 bootwright apply cluster --dry-run --output json
 bootwright apply cluster --yes
@@ -1222,8 +1358,9 @@ Operators can tune task scheduling with `--parallelism`,
 `--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
 flags means Bootwright uses the maximum safe automatic value. Explicit limits
 only reduce automatic concurrency; provider-host and Redfish safety locks still
-apply. `apply extensions` uses direct cluster API tasks and must not expose
-Ansible executable, become-password, provider-host, or Redfish flags.
+apply. `apply extensions` and `apply storage` use direct local executors and
+must not expose Ansible executable, become-password, provider-host, or Redfish
+flags.
 `apply <target> --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not
 mutate provider hosts, nodes, or clusters; operators must run
@@ -1231,11 +1368,16 @@ mutate provider hosts, nodes, or clusters; operators must run
 `apply extensions --dry-run` shows extension tasks, selected clusters,
 expanded extension order, and generated resource summaries without mutating the
 cluster.
-`apply cluster` installs each selected cluster, then applies bound extensions
-after the cluster install wait task. `apply extensions` uses the installed
-cluster kubeconfig and `oc apply` directly for standalone extension convergence.
-`apply all` includes infrastructure before the same cluster and extension
-phases.
+`apply storage` renders the storage input set, SSHes from the bastion to the
+Ceph seed node, runs cephadm bootstrap on that node, applies cephadm services,
+and executes the rendered Ceph operations. `apply cluster` installs each
+selected cluster, then applies bound extensions after the cluster install wait
+task. `apply extensions` uses the installed cluster kubeconfig and `oc apply`
+directly for standalone extension convergence. Storage binding tasks run in
+the extensions phase after the target cluster install wait, the matching
+storage provisioning task when selected, and the extension wait task that
+provides `data-foundation`. `apply all` includes infrastructure and storage
+before the same cluster and extension phases.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
 to the terminal between Bootwright prerequisite output and the Bootwright
 summary. When an apply selects two or more `ContainerCluster` objects,
@@ -1274,6 +1416,9 @@ Per-extension state is stored under
 `<clusters-dir>/<cluster>/runtime/extensions/<extension>.json`; it records the
 desired hash, status, phase, run ID, timestamps, observed resources, and last
 observed readiness state, but not kubeconfig or secret bytes.
+Storage task inputs are rendered under each task artifact directory and the
+context rendered storage tree; they may include non-secret Ceph endpoints and
+placeholder external-cluster details, but not generated Ceph client keys.
 Task statuses are `pending`, `ready`, `running`, `blocked`, `skipped`, `ok`,
 `failed`, and `cancelled`.
 While an apply process is active, Bootwright also refreshes
@@ -1310,8 +1455,10 @@ Fixed storage layout:
 - Each context has `input/`, `secrets/`, `rendered/`, `runs/`,
   `managed-services/`, `provider-state/`, and `clusters/`.
 - Rendered reviewable output lives under `rendered/`, including
-  `effective-state.yaml`, `bootwright.lock.yaml`, `ansible/{inventory,vars}.yaml`,
-  while installer files live under `clusters/<cluster>/rendered/installer/`.
+  `effective-state.yaml`, `bootwright.lock.yaml`,
+  `ansible/{inventory,vars}.yaml`, and
+  `storage/<storageCluster>/` tool inputs, while installer files live under
+  `clusters/<cluster>/rendered/installer/`.
 - Secret-inlined installer inputs and install records live under
   `clusters/<cluster>/runtime/`.
 - Generated cluster access material lives under `clusters/<cluster>/secrets/`.

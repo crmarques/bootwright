@@ -217,6 +217,50 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindClusterExtension, ref.Name)
 		}
 	}
+	for _, cluster := range state.StorageClusters {
+		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),
+			v1alpha1.KindClusterInfra, cluster.Spec.ClusterInfraRef.Name)
+	}
+	for _, policy := range state.StoragePlacementPolicies {
+		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),
+			v1alpha1.KindStorageCluster, policy.Spec.StorageClusterRef.Name)
+	}
+	for _, pool := range state.StoragePools {
+		require(fmt.Sprintf("StoragePool/%s spec.storageClusterRef", pool.Metadata.Name),
+			v1alpha1.KindStorageCluster, pool.Spec.StorageClusterRef.Name)
+		require(fmt.Sprintf("StoragePool/%s spec.placementPolicyRef", pool.Metadata.Name),
+			v1alpha1.KindStoragePlacementPolicy, pool.Spec.PlacementPolicyRef.Name)
+	}
+	for _, fs := range state.StorageFilesystems {
+		require(fmt.Sprintf("StorageFilesystem/%s spec.storageClusterRef", fs.Metadata.Name),
+			v1alpha1.KindStorageCluster, fs.Spec.StorageClusterRef.Name)
+		require(fmt.Sprintf("StorageFilesystem/%s spec.cephfs.metadataPoolRef", fs.Metadata.Name),
+			v1alpha1.KindStoragePool, fs.Spec.CephFS.MetadataPoolRef.Name)
+		for i, ref := range fs.Spec.CephFS.DataPoolRefs {
+			require(fmt.Sprintf("StorageFilesystem/%s spec.cephfs.dataPoolRefs[%d]", fs.Metadata.Name, i),
+				v1alpha1.KindStoragePool, ref.Name)
+		}
+	}
+	for _, gateway := range state.StorageObjectGateways {
+		require(fmt.Sprintf("StorageObjectGateway/%s spec.storageClusterRef", gateway.Metadata.Name),
+			v1alpha1.KindStorageCluster, gateway.Spec.StorageClusterRef.Name)
+	}
+	for _, export := range state.StorageExports {
+		require(fmt.Sprintf("StorageExport/%s spec.storageClusterRef", export.Metadata.Name),
+			v1alpha1.KindStorageCluster, export.Spec.StorageClusterRef.Name)
+		if df := export.Spec.DataFoundation; df != nil {
+			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.rbdPoolRef", export.Metadata.Name),
+				v1alpha1.KindStoragePool, df.RBDPoolRef.Name)
+			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.cephFSRef", export.Metadata.Name),
+				v1alpha1.KindStorageFilesystem, df.CephFSRef.Name)
+			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.objectGatewayRef", export.Metadata.Name),
+				v1alpha1.KindStorageObjectGateway, df.ObjectGatewayRef.Name)
+		}
+	}
+	for _, binding := range state.StorageClusterBindings {
+		require(fmt.Sprintf("StorageClusterBinding/%s spec.storageExportRef", binding.Metadata.Name),
+			v1alpha1.KindStorageExport, binding.Spec.StorageExportRef.Name)
+	}
 	for _, env := range state.Environments {
 		for _, entry := range env.Spec.InfraComponents.Proxies {
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%s].componentRef", env.Metadata.Name, entry.Name),
@@ -264,6 +308,27 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	}
 	for _, ocp := range state.ContainerClusters {
 		out[resourceKey{kind: v1alpha1.KindContainerCluster, name: ocp.Metadata.Name}] = true
+	}
+	for _, item := range state.StorageClusters {
+		out[resourceKey{kind: v1alpha1.KindStorageCluster, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StoragePlacementPolicies {
+		out[resourceKey{kind: v1alpha1.KindStoragePlacementPolicy, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StoragePools {
+		out[resourceKey{kind: v1alpha1.KindStoragePool, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StorageFilesystems {
+		out[resourceKey{kind: v1alpha1.KindStorageFilesystem, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StorageObjectGateways {
+		out[resourceKey{kind: v1alpha1.KindStorageObjectGateway, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StorageExports {
+		out[resourceKey{kind: v1alpha1.KindStorageExport, name: item.Metadata.Name}] = true
+	}
+	for _, item := range state.StorageClusterBindings {
+		out[resourceKey{kind: v1alpha1.KindStorageClusterBinding, name: item.Metadata.Name}] = true
 	}
 	for _, item := range state.ClusterExtensions {
 		out[resourceKey{kind: v1alpha1.KindClusterExtension, name: item.Metadata.Name}] = true
@@ -330,6 +395,13 @@ func knownResourceKind(kind string) bool {
 		v1alpha1.KindInfraComponent,
 		v1alpha1.KindClusterInfra,
 		v1alpha1.KindContainerCluster,
+		v1alpha1.KindStorageCluster,
+		v1alpha1.KindStoragePlacementPolicy,
+		v1alpha1.KindStoragePool,
+		v1alpha1.KindStorageFilesystem,
+		v1alpha1.KindStorageObjectGateway,
+		v1alpha1.KindStorageExport,
+		v1alpha1.KindStorageClusterBinding,
 		v1alpha1.KindClusterExtension,
 		v1alpha1.KindClusterExtensionSet,
 		v1alpha1.KindClusterExtensionBinding:

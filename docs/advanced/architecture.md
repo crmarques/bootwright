@@ -21,6 +21,8 @@ The render step merges the provisioning kinds into concrete outputs:
   MAC inventory
 - provider variables from `InfraProvider`, `InfraComponent`, `Host`, and
   `ClusterInfra.components`
+- storage inputs from `StorageCluster`, storage pools, CephFS, RGW, exports,
+  and Data Foundation bindings
 
 Shared provider services are resolved once as a service graph. Validation,
 rendering, status, and scoped apply checks use the same service identities and
@@ -51,12 +53,15 @@ targets run through the rendered Ansible bundle:
 
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.
+- `apply storage` provisions external storage clusters from rendered cephadm
+  and Ceph operation files.
 - `apply cluster` creates the agent ISO, boots each declared node as its own
   task, waits for `openshift-install agent wait-for install-complete`, and then
   applies bound extensions.
 - `apply extensions` applies declarative post-install bootstrap components to
   already installed clusters with `oc`.
-- `apply all` runs infrastructure, cluster, and extension phases in one target.
+- `apply all` runs infrastructure, storage, cluster, and extension phases in
+  one target.
 
 Every apply writes a current run ledger under the context state directory.
 `bootwright status` reads that ledger without contacting provider hosts, BMCs,
@@ -73,6 +78,9 @@ Post-install bootstrap components are planned as direct `oc` tasks after the
 cluster install wait task when `apply cluster` or `apply all` is selected, or
 without install dependencies when `apply extensions` is selected for an already
 installed cluster.
+Storage binding tasks are planned in the same extensions phase and wait for the
+selected Data Foundation extension readiness before applying generated
+external-mode manifests.
 
 ## External CLI Inputs
 
@@ -81,8 +89,8 @@ same concrete tool inputs Bootwright would hand to supplier or community CLIs.
 OpenShift installer files land under
 `<dir>/openshift-install/<cluster>/{install,agent}-config.yaml`; Ansible
 inventory and vars files are written beside the effective state and lock.
-Because the installer files contain secret material, the command requires
-`--sensitive`.
+Storage files land under `<dir>/storage/<storageCluster>/`. Because installer
+files contain secret material, the command requires `--sensitive`.
 
 See [`specs/architecture.md`](https://github.com/crmarques/bootwright/blob/main/specs/architecture.md)
 for the contributor contract.

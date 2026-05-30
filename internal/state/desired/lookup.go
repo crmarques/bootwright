@@ -72,6 +72,54 @@ func indexClusterExtensionSets(items []v1alpha1.ClusterExtensionSet) map[string]
 	return out
 }
 
+func indexStorageClusters(items []v1alpha1.StorageCluster) map[string]v1alpha1.StorageCluster {
+	out := make(map[string]v1alpha1.StorageCluster, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy) map[string]v1alpha1.StoragePlacementPolicy {
+	out := make(map[string]v1alpha1.StoragePlacementPolicy, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexStoragePools(items []v1alpha1.StoragePool) map[string]v1alpha1.StoragePool {
+	out := make(map[string]v1alpha1.StoragePool, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexStorageFilesystems(items []v1alpha1.StorageFilesystem) map[string]v1alpha1.StorageFilesystem {
+	out := make(map[string]v1alpha1.StorageFilesystem, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexStorageObjectGateways(items []v1alpha1.StorageObjectGateway) map[string]v1alpha1.StorageObjectGateway {
+	out := make(map[string]v1alpha1.StorageObjectGateway, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexStorageExports(items []v1alpha1.StorageExport) map[string]v1alpha1.StorageExport {
+	out := make(map[string]v1alpha1.StorageExport, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
 func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
 	return stateview.MachineProfile(p, name)
 }

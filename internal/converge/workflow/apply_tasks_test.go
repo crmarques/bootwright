@@ -417,6 +417,17 @@ func TestPlanApplyClusterRunsExtensionsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
 }
 
+func TestPlanApplyAllOrdersStorageBindingsAfterStorageInstallAndDataFoundation(t *testing.T) {
+	state := storageBindingPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+
+	assertTaskDeps(t, tasks, "storagebinding.demo.ceph-binding.apply", "wait.demo", "storage.ceph", "extension.demo.odf.wait")
+}
+
 func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	state := kubeVirtChildPlanningState(true)
 
@@ -500,6 +511,48 @@ func extensionPlanningState() v1alpha1.State {
 				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
 				ExtensionSets:   []v1alpha1.LocalObjectReference{{Name: "platform"}},
 				Extensions:      []v1alpha1.LocalObjectReference{{Name: "b"}},
+			},
+		}},
+	}
+}
+
+func storageBindingPlanningState() v1alpha1.State {
+	return v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "demo"},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{},
+			},
+		}},
+		StorageExports: []v1alpha1.StorageExport{{
+			Metadata: v1alpha1.Metadata{Name: "export"},
+			Spec: v1alpha1.StorageExportSpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+			},
+		}},
+		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
+			Spec: v1alpha1.StorageClusterBindingSpec{
+				StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
+				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+			},
+		}},
+		ClusterExtensions: []v1alpha1.ClusterExtension{{
+			Metadata: v1alpha1.Metadata{Name: "odf"},
+			Spec: v1alpha1.ClusterExtensionSpec{
+				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterExtensionProvidesDataFoundation},
+			},
+		}},
+		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "odf"}},
 			},
 		}},
 	}

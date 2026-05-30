@@ -25,6 +25,13 @@ cluster secrets state, and `kubeconfigRef` resolves through `Environment.spec.se
 for external virtualization clusters. Desired state records only the reference
 name, never kubeconfig bytes.
 
+Storage provisioning follows the same boundary. `StorageCluster` SSH
+identities reference `Environment.spec.secrets`; `nodeSSH` is the
+bastion-to-RHEL-node identity and `clusterSSH` is the identity passed to
+cephadm for ongoing orchestration. Data Foundation external-cluster details
+render with placeholders for Ceph client secrets; generated Ceph keys are
+created or read during apply and must not be committed.
+
 ## Installer Trust
 
 Cluster install trust is rendered only from explicit references:
@@ -115,6 +122,11 @@ Generated output boundaries are part of the safety contract:
 - Bootwright-managed secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/`,
   with restrictive file modes, and must never be versioned.
+- Rendered storage tool inputs live under
+  `/var/lib/bootwright/contexts/<context>/rendered/storage/<storageCluster>/`.
+  They may contain non-secret Ceph monitor endpoints, RGW endpoints, pool
+  names, and placeholder external-cluster details, but must not contain Ceph
+  client keys, SSH private keys, kubeconfigs, or tokens.
 - Kubeconfigs produced for installed host clusters live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/kubeconfig`.
   They may be consumed by KubeVirt child-cluster operations through
@@ -137,8 +149,9 @@ Generated output boundaries are part of the safety contract:
   passwords, tokens, or other secret bytes.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested external tool inputs, including secret-inlined
-  `openshift-install` configs and optional `openshift/` manifests, under
-  `<dir>` with restrictive file modes. The command must fail without
+  `openshift-install` configs, optional `openshift/` manifests, and rendered
+  storage tool inputs, under `<dir>` with restrictive file modes. The command
+  must fail without
   `--sensitive`. Operators must keep that directory local and unversioned.
 
 ## Supply Chain

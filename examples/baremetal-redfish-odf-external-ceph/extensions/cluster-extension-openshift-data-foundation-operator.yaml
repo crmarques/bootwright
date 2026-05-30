@@ -5,6 +5,9 @@ metadata:
 spec:
   type: olm-operator
 
+  provides:
+    - data-foundation
+
   olm:
     namespace:
       name: openshift-storage

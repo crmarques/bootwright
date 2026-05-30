@@ -99,7 +99,7 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply all --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Apply infrastructure, OpenShift clusters, and extensions") {
+	if !strings.Contains(stdout, "Apply infrastructure, storage, OpenShift clusters, and extensions") {
 		t.Fatalf("apply all help does not mention extensions:\n%s", stdout)
 	}
 

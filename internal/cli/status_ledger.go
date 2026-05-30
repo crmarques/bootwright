@@ -124,11 +124,17 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindInstallWait]; ok {
 		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindInstallWait)+" "+string(taskStatus))
 	}
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageCluster]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageCluster)+" "+string(taskStatus))
+	}
 	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterExtensionApply]; ok {
 		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterExtensionApply)+" "+string(taskStatus))
 	}
 	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterExtensionWait]; ok {
 		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterExtensionWait)+" "+string(taskStatus))
+	}
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageClusterBindingApply]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageClusterBindingApply)+" "+string(taskStatus))
 	}
 	parts = append(parts, otherParts...)
 	return status, strings.Join(parts, ", ")
@@ -137,7 +143,8 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 func applyLedgerKnownClusterKind(kind string) bool {
 	switch kind {
 	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait,
-		workflow.ApplyTaskKindClusterExtensionApply, workflow.ApplyTaskKindClusterExtensionWait:
+		workflow.ApplyTaskKindClusterExtensionApply, workflow.ApplyTaskKindClusterExtensionWait,
+		workflow.ApplyTaskKindStorageClusterBindingApply:
 		return true
 	default:
 		return false
@@ -152,10 +159,14 @@ func applyLedgerTaskKindLabel(kind string) string {
 		return "ISO"
 	case workflow.ApplyTaskKindInstallWait:
 		return "install wait"
+	case workflow.ApplyTaskKindStorageCluster:
+		return "storage"
 	case workflow.ApplyTaskKindClusterExtensionApply:
 		return "extension apply"
 	case workflow.ApplyTaskKindClusterExtensionWait:
 		return "extension wait"
+	case workflow.ApplyTaskKindStorageClusterBindingApply:
+		return "storage binding"
 	default:
 		return kind
 	}

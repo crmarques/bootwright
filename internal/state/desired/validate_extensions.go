@@ -53,12 +53,12 @@ func validateClusterExtensionProvides(extension v1alpha1.ClusterExtension) []str
 	for i, capability := range extension.Spec.Provides {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		switch capability {
-		case v1alpha1.ClusterExtensionProvidesKubeVirt:
+		case v1alpha1.ClusterExtensionProvidesKubeVirt, v1alpha1.ClusterExtensionProvidesDataFoundation:
 		case "":
 			errs = append(errs, owner+" must not be empty")
 			continue
 		default:
-			errs = append(errs, fmt.Sprintf("%s %q must be %q", owner, capability, v1alpha1.ClusterExtensionProvidesKubeVirt))
+			errs = append(errs, fmt.Sprintf("%s %q must be one of {%s, %s}", owner, capability, v1alpha1.ClusterExtensionProvidesKubeVirt, v1alpha1.ClusterExtensionProvidesDataFoundation))
 			continue
 		}
 		if seen[capability] {

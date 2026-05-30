@@ -93,6 +93,13 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.InfraComponents) == 0 &&
 		len(state.ClusterInfras) == 0 &&
 		len(state.ContainerClusters) == 0 &&
+		len(state.StorageClusters) == 0 &&
+		len(state.StoragePlacementPolicies) == 0 &&
+		len(state.StoragePools) == 0 &&
+		len(state.StorageFilesystems) == 0 &&
+		len(state.StorageObjectGateways) == 0 &&
+		len(state.StorageExports) == 0 &&
+		len(state.StorageClusterBindings) == 0 &&
 		len(state.ClusterExtensions) == 0 &&
 		len(state.ClusterExtensionSets) == 0 &&
 		len(state.ClusterExtensionBindings) == 0 {
@@ -272,6 +279,55 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.ContainerClusters = append(state.ContainerClusters, item)
+		case v1alpha1.KindStorageCluster:
+			var item v1alpha1.StorageCluster
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageClusters = append(state.StorageClusters, item)
+		case v1alpha1.KindStoragePlacementPolicy:
+			var item v1alpha1.StoragePlacementPolicy
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StoragePlacementPolicies = append(state.StoragePlacementPolicies, item)
+		case v1alpha1.KindStoragePool:
+			var item v1alpha1.StoragePool
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StoragePools = append(state.StoragePools, item)
+		case v1alpha1.KindStorageFilesystem:
+			var item v1alpha1.StorageFilesystem
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageFilesystems = append(state.StorageFilesystems, item)
+		case v1alpha1.KindStorageObjectGateway:
+			var item v1alpha1.StorageObjectGateway
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageObjectGateways = append(state.StorageObjectGateways, item)
+		case v1alpha1.KindStorageExport:
+			var item v1alpha1.StorageExport
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageExports = append(state.StorageExports, item)
+		case v1alpha1.KindStorageClusterBinding:
+			var item v1alpha1.StorageClusterBinding
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.StorageClusterBindings = append(state.StorageClusterBindings, item)
 		case v1alpha1.KindClusterExtension:
 			var item v1alpha1.ClusterExtension
 			if err := decodeKnown(node, &item); err != nil {
@@ -380,6 +436,48 @@ func sortState(state *v1alpha1.State) {
 			return state.ContainerClusters[i].SourcePath < state.ContainerClusters[j].SourcePath
 		}
 		return state.ContainerClusters[i].Metadata.Name < state.ContainerClusters[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageClusters, sortByName(func(i, j int) bool {
+		if state.StorageClusters[i].Metadata.Name == state.StorageClusters[j].Metadata.Name {
+			return state.StorageClusters[i].SourcePath < state.StorageClusters[j].SourcePath
+		}
+		return state.StorageClusters[i].Metadata.Name < state.StorageClusters[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StoragePlacementPolicies, sortByName(func(i, j int) bool {
+		if state.StoragePlacementPolicies[i].Metadata.Name == state.StoragePlacementPolicies[j].Metadata.Name {
+			return state.StoragePlacementPolicies[i].SourcePath < state.StoragePlacementPolicies[j].SourcePath
+		}
+		return state.StoragePlacementPolicies[i].Metadata.Name < state.StoragePlacementPolicies[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StoragePools, sortByName(func(i, j int) bool {
+		if state.StoragePools[i].Metadata.Name == state.StoragePools[j].Metadata.Name {
+			return state.StoragePools[i].SourcePath < state.StoragePools[j].SourcePath
+		}
+		return state.StoragePools[i].Metadata.Name < state.StoragePools[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageFilesystems, sortByName(func(i, j int) bool {
+		if state.StorageFilesystems[i].Metadata.Name == state.StorageFilesystems[j].Metadata.Name {
+			return state.StorageFilesystems[i].SourcePath < state.StorageFilesystems[j].SourcePath
+		}
+		return state.StorageFilesystems[i].Metadata.Name < state.StorageFilesystems[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageObjectGateways, sortByName(func(i, j int) bool {
+		if state.StorageObjectGateways[i].Metadata.Name == state.StorageObjectGateways[j].Metadata.Name {
+			return state.StorageObjectGateways[i].SourcePath < state.StorageObjectGateways[j].SourcePath
+		}
+		return state.StorageObjectGateways[i].Metadata.Name < state.StorageObjectGateways[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageExports, sortByName(func(i, j int) bool {
+		if state.StorageExports[i].Metadata.Name == state.StorageExports[j].Metadata.Name {
+			return state.StorageExports[i].SourcePath < state.StorageExports[j].SourcePath
+		}
+		return state.StorageExports[i].Metadata.Name < state.StorageExports[j].Metadata.Name
+	}))
+	sort.SliceStable(state.StorageClusterBindings, sortByName(func(i, j int) bool {
+		if state.StorageClusterBindings[i].Metadata.Name == state.StorageClusterBindings[j].Metadata.Name {
+			return state.StorageClusterBindings[i].SourcePath < state.StorageClusterBindings[j].SourcePath
+		}
+		return state.StorageClusterBindings[i].Metadata.Name < state.StorageClusterBindings[j].Metadata.Name
 	}))
 	sort.SliceStable(state.ClusterExtensions, sortByName(func(i, j int) bool {
 		if state.ClusterExtensions[i].Metadata.Name == state.ClusterExtensions[j].Metadata.Name {

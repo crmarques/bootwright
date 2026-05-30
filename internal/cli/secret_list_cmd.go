@@ -139,12 +139,12 @@ func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1al
 	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
 		return []string{path, secret.ResolveTLSKeyPath(name, env, secretsDir)}
 	}
-	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secretConsumedAsClusterSSH(name, state) || secretConsumedAsHostSSH(name, state)) {
+	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secretConsumedAsClusterSSH(name, state) || secretConsumedAsStorageSSH(name, state) || secretConsumedAsHostSSH(name, state)) {
 		var paths []string
-		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
+		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsStorageSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
 			paths = append(paths, secret.ResolveSSHPrivateKeyPath(name, env, secretsDir))
 		}
-		if secretConsumedAsClusterSSHPublic(name, state) {
+		if secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsStorageSSHPublic(name, state) {
 			paths = append(paths, secret.ResolveSSHPublicKeyPath(name, env, secretsDir))
 		}
 		return paths
@@ -190,6 +190,37 @@ func secretConsumedAsClusterSSHPrivate(name string, state v1alpha1.State) bool {
 	for _, cluster := range state.ContainerClusters {
 		ssh := cluster.Spec.Install.NodeSSH
 		if ssh.KeyPairRef.Name == name || ssh.PrivateKeyRef.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func secretConsumedAsStorageSSH(name string, state v1alpha1.State) bool {
+	return secretConsumedAsStorageSSHPublic(name, state) || secretConsumedAsStorageSSHPrivate(name, state)
+}
+
+func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		adm := cluster.Spec.Ceph.Cephadm
+		if adm.NodeSSH.KeyPairRef.Name == name || adm.ClusterSSH.KeyPairRef.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func secretConsumedAsStorageSSHPrivate(name string, state v1alpha1.State) bool {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		adm := cluster.Spec.Ceph.Cephadm
+		if adm.NodeSSH.KeyPairRef.Name == name || adm.NodeSSH.PrivateKeyRef.Name == name ||
+			adm.ClusterSSH.KeyPairRef.Name == name || adm.ClusterSSH.PrivateKeyRef.Name == name {
 			return true
 		}
 	}

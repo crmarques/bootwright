@@ -96,6 +96,15 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	if phaseInScope("extensions", selected, hasState) && len(state.ClusterExtensionBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
+	if phaseInScope("extensions", selected, hasState) && len(state.StorageClusterBindings) > 0 {
+		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
+	}
+	if phaseInScope("storage", selected, hasState) && len(state.StorageClusters) > 0 {
+		checks = append(checks,
+			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),
+			binaryCheck(checkGroupControllerTools, "scp", nil, "install scp on PATH", deps),
+		)
+	}
 	if hasState {
 		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
@@ -109,7 +118,7 @@ func selectedNeedsAnsible(selected []Phase) bool {
 		return true
 	}
 	for _, phase := range selected {
-		if phase.Name != "extensions" {
+		if phase.Name != "extensions" && phase.Name != "storage" {
 			return true
 		}
 	}

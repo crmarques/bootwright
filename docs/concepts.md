@@ -8,7 +8,8 @@ description: How Bootwright distributes installer input across desired-state obj
 Bootwright keeps installer-compatible fields close to the object that owns the
 operational fact. The renderer then merges those objects into the input files
 that installer and provider CLIs consume, including `install-config.yaml`,
-`agent-config.yaml`, and provider variables.
+`agent-config.yaml`, provider variables, cephadm specs, and storage binding
+manifests.
 
 Authored desired-state YAML uses block-style mappings in examples, e2e inputs,
 fixtures, and scaffold output. Keep each object field on its own indented line
@@ -25,6 +26,13 @@ instead of compact inline maps.
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
 | `ClusterInfra` | Platform render mode, endpoints, and selected machines |
 | `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
+| `StorageCluster` | External storage provisioning intent, initially Ceph through cephadm |
+| `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
+| `StoragePool` | Ceph pool role, placement, and replication settings |
+| `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
+| `StorageObjectGateway` | RGW service, client endpoint, and cephadm ingress VIPs |
+| `StorageExport` | Storage services prepared for downstream consumers |
+| `StorageClusterBinding` | Data Foundation external-mode binding to selected clusters |
 | `ClusterExtension` | Reusable post-install component applied inside an installed cluster |
 | `ClusterExtensionSet` | Ordered group of extensions and extension sets |
 | `ClusterExtensionBinding` | Cluster binding for extensions and extension sets |
@@ -51,6 +59,12 @@ ClusterExtensionBinding
 KubeVirt child InfraProvider
   -> host ContainerCluster
   -> ClusterExtension providing kubevirt
+
+StorageClusterBinding
+  -> StorageExport
+  -> StorageCluster
+  -> ClusterInfra.components.machines[*]
+  -> ClusterExtension providing data-foundation
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
@@ -59,6 +73,10 @@ cluster must reference the same `ClusterInfra`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
+
+Storage actions also run from the bastion. Bootwright SSHes to preinstalled
+RHEL Ceph nodes, runs cephadm on the seed node, and applies generated Ceph and
+Data Foundation files from the rendered storage tree.
 
 ## KubeVirt Child Clusters
 

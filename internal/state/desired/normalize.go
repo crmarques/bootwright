@@ -27,6 +27,18 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ClusterExtensionBindings {
 		normalizeClusterExtensionBinding(&state.ClusterExtensionBindings[i])
 	}
+	for i := range state.StorageClusters {
+		normalizeStorageCluster(&state.StorageClusters[i])
+	}
+	for i := range state.StoragePools {
+		normalizeStoragePool(&state.StoragePools[i])
+	}
+	for i := range state.StorageObjectGateways {
+		normalizeStorageObjectGateway(&state.StorageObjectGateways[i])
+	}
+	for i := range state.StorageClusterBindings {
+		normalizeStorageClusterBinding(&state.StorageClusterBindings[i])
+	}
 }
 
 func normalizeEnvironment(env *v1alpha1.Environment) {
@@ -126,7 +138,7 @@ func normalizeBMCEmulationDefaults(b *v1alpha1.BMCEmulationDefaults) {
 }
 
 func normalizeBMC(b *v1alpha1.BMCSpec) {
-	if b.Protocol == "" {
+	if b.Address != "" && b.Protocol == "" {
 		b.Protocol = v1alpha1.DefaultBMCProtocol
 	}
 }
@@ -146,6 +158,52 @@ func normalizeClusterExtensionBinding(binding *v1alpha1.ClusterExtensionBinding)
 	}
 	if binding.Spec.Policy.ServerSideApply == nil {
 		binding.Spec.Policy.ServerSideApply = v1alpha1.BoolPtr(true)
+	}
+}
+
+func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
+	if cluster.Spec.Ceph == nil {
+		return
+	}
+	adm := &cluster.Spec.Ceph.Cephadm
+	if adm.ClusterSSH.KeyPairRef.Name == "" && adm.ClusterSSH.PrivateKeyRef.Name == "" {
+		adm.ClusterSSH = adm.NodeSSH
+	}
+	if adm.Bootstrap.MonIP.Family == "" {
+		adm.Bootstrap.MonIP.Family = "ipv4"
+	}
+}
+
+func normalizeStoragePool(pool *v1alpha1.StoragePool) {
+	if pool.Spec.Ceph.Type == "" {
+		pool.Spec.Ceph.Type = v1alpha1.StoragePoolTypeReplicated
+	}
+}
+
+func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
+	if gateway.Spec.Ceph.FrontendPort == 0 {
+		gateway.Spec.Ceph.FrontendPort = 8080
+	}
+	if gateway.Spec.Ceph.ClientEndpoint.Port == 0 {
+		gateway.Spec.Ceph.ClientEndpoint.Port = 443
+	}
+	if gateway.Spec.Ceph.ClientEndpoint.Scheme == "" {
+		gateway.Spec.Ceph.ClientEndpoint.Scheme = "https"
+	}
+}
+
+func normalizeStorageClusterBinding(binding *v1alpha1.StorageClusterBinding) {
+	if binding.Spec.DataFoundation.Product == "" {
+		binding.Spec.DataFoundation.Product = v1alpha1.DataFoundationProductOpenShiftDataFoundation
+	}
+	if binding.Spec.DataFoundation.Namespace == "" {
+		binding.Spec.DataFoundation.Namespace = "openshift-storage"
+	}
+	if binding.Spec.DataFoundation.StorageClusterName == "" {
+		binding.Spec.DataFoundation.StorageClusterName = "ocs-external-storagecluster"
+	}
+	if binding.Spec.DataFoundation.StorageSystemName == "" {
+		binding.Spec.DataFoundation.StorageSystemName = binding.Spec.DataFoundation.StorageClusterName + "-storagesystem"
 	}
 }
 

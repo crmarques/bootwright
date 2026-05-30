@@ -25,6 +25,7 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, validateClusterExtensions(state)...)
 	errs = append(errs, validateClusterExtensionSets(state)...)
 	errs = append(errs, validateClusterExtensionBindings(state)...)
+	errs = append(errs, validateStorage(state)...)
 	errs = append(errs, validateCrossLayer(state)...)
 	errs = append(errs, validateSecretReferences(state)...)
 	if len(errs) == 0 {
@@ -356,6 +357,19 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			}
 		}
 	}
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.nodeSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.NodeSSH, requireSSHKey)
+		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.ClusterSSH, requireSSHKey)
+	}
+	for _, export := range state.StorageExports {
+		if export.Spec.DataFoundation == nil {
+			continue
+		}
+		require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.externalDetailsRef", export.Metadata.Name), export.Spec.DataFoundation.ExternalDetailsRef)
+	}
 	return errs
 }
 
@@ -365,6 +379,15 @@ func requireNodeSSH(owner string, spec v1alpha1.NodeSSHSpec, requireSSHKey func(
 	}
 	if spec.PublicKeyRef.Name != "" {
 		requireSSHKey(owner+".publicKeyRef", spec.PublicKeyRef)
+	}
+	if spec.PrivateKeyRef.Name != "" {
+		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef)
+	}
+}
+
+func requireStorageSSH(owner string, spec v1alpha1.StorageSSHSpec, requireSSHKey func(string, v1alpha1.SecretRef)) {
+	if spec.KeyPairRef.Name != "" {
+		requireSSHKey(owner+".keyPairRef", spec.KeyPairRef)
 	}
 	if spec.PrivateKeyRef.Name != "" {
 		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef)

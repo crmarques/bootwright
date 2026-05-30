@@ -1,0 +1,119 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-stretch
+spec:
+  type: ceph
+
+  clusterInfraRef:
+    name: ceph-stretch-infra
+
+  ceph:
+    cephadm:
+      bootstrap:
+        seedNode: ceph-dc1-0
+        monIP:
+          machineRef:
+            clusterInfra: ceph-stretch-infra
+            name: ceph-dc1-0
+          interface: primary
+          family: ipv4
+      nodeSSH:
+        user: root
+        keyPairRef:
+          name: ceph-node-ssh
+      clusterSSH:
+        user: root
+        keyPairRef:
+          name: cephadm-cluster-ssh
+
+    networks:
+      publicCIDRs:
+        - 192.168.141.0/24
+        - 192.168.142.0/24
+        - 192.168.143.0/24
+      clusterCIDRs:
+        - 172.21.141.0/24
+        - 172.21.142.0/24
+
+    topology:
+      stretch:
+        enabled: true
+        failureDomain: datacenter
+        dataSites:
+          - dc1
+          - dc2
+        tiebreaker:
+          site: dc3
+          node: ceph-arbiter
+        replicatedPoolDefaults:
+          size: 4
+          minSize: 2
+        ruleName: stretch-replicated
+      nodes:
+        - name: ceph-dc1-0
+          site: dc1
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-dc1-1
+          site: dc1
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-dc1-2
+          site: dc1
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-dc2-0
+          site: dc2
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-dc2-1
+          site: dc2
+          roles:
+            - mon
+            - mgr
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-dc2-2
+          site: dc2
+          roles:
+            - osd
+            - mds
+            - rgw
+            - ingress
+          devices:
+            - /dev/sdb
+        - name: ceph-arbiter
+          site: dc3
+          roles:
+            - mon

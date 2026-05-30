@@ -95,7 +95,7 @@ func TestClusterExtensionValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - storage\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "storage" must be "kubevirt"`,
+			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, data-foundation}`,
 		},
 		{
 			name: "duplicated-provided-capability",

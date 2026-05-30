@@ -13,7 +13,7 @@ import (
 )
 
 func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	usesAnsible := scope.name != "extensions"
+	usesAnsible := scope.name != "extensions" && scope.name != "storage"
 	var (
 		flags         scopeCommonFlags
 		dryRun        bool
@@ -48,7 +48,11 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
-	registerScopeCommonFlagsWithAnsible(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible)
+	scopeTargetKind := "ContainerCluster"
+	if scope.name == "storage" {
+		scopeTargetKind = "StorageCluster"
+	}
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible, scopeTargetKind)
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
@@ -84,7 +88,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
-		if scope.name != "extensions" {
+		if scope.name != "extensions" && scope.name != "storage" {
 			if err := workflow.EnsureApplySupported(plan.state); err != nil {
 				return failErr(1, err)
 			}
@@ -143,7 +147,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		usesAnsible := scope.name != "extensions"
+		usesAnsible := scope.name != "extensions" && scope.name != "storage"
 		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {
 			bundleResult, err = prepareWorkflowBundle(true)

@@ -24,6 +24,11 @@ var phases = map[string]Phase{
 		NeedsRoot:     true,
 		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",
 	},
+	"storage": {
+		Name:        "storage",
+		NeedsRoot:   false,
+		Description: "provision external storage clusters with provider-native tooling",
+	},
 	"clusters": {
 		Name:          "clusters",
 		ApplyPlaybook: "playbooks/layers/openshift/install-agent.yml",

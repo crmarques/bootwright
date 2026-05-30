@@ -218,11 +218,13 @@ func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
 	}{
 		{label: "Provider services", kinds: []string{workflow.ApplyTaskKindProvider}},
 		{label: "Cluster infrastructure", kinds: []string{workflow.ApplyTaskKindClusterInfra}},
+		{label: "Provision storage", kinds: []string{workflow.ApplyTaskKindStorageCluster}},
 		{label: "Create agent ISOs", kinds: []string{workflow.ApplyTaskKindClusterISO}},
 		{label: "Boot nodes", kinds: []string{workflow.ApplyTaskKindNodeBoot}},
 		{label: "Wait for installs", kinds: []string{workflow.ApplyTaskKindInstallWait}},
 		{label: "Apply extensions", kinds: []string{workflow.ApplyTaskKindClusterExtensionApply}},
 		{label: "Wait for extensions", kinds: []string{workflow.ApplyTaskKindClusterExtensionWait}},
+		{label: "Apply storage bindings", kinds: []string{workflow.ApplyTaskKindStorageClusterBindingApply}},
 	} {
 		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
 		if ok {

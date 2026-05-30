@@ -39,9 +39,10 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 	cmd.AddCommand(
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
+		retargetCommand(newScopeApplyCmd(storageScope, stdin, stdout, stderr), "storage", "Provision external storage clusters"),
 		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters and apply extensions"),
 		retargetCommand(newScopeApplyCmd(extensionsScope, stdin, stdout, stderr), "extensions", "Apply post-install cluster extensions"),
-		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, OpenShift clusters, and extensions"),
+		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, storage, OpenShift clusters, and extensions"),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)
@@ -78,6 +79,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
 	cmd.AddCommand(
 		newRenderClusterInstallFilesCmd(stdout, stderr),
+		newRenderStorageCmd(stdout, stderr),
 	)
 	for _, sub := range cmd.Commands() {
 		cmd.ValidArgs = append(cmd.ValidArgs, sub.Name())

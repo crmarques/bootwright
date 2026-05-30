@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterExtensionBinding
+metadata:
+  name: data-foundation-clusters
+spec:
+  clusterSelector:
+    names:
+      - dc1-ocp
+      - dc2-ocp
+
+  applyAfter:
+    phase: clusterInstalled
+
+  extensionSets:
+    - name: data-foundation-platform
+
+  policy:
+    prune: false
+    serverSideApply: true
+    fieldManager: bootwright
+    continueOnError: false

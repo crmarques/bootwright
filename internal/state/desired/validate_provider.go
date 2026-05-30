@@ -13,6 +13,7 @@ func validateProviders(state v1alpha1.State) []string {
 	var errs []string
 	hosts := indexHosts(state.Hosts)
 	clusters := indexContainerClusters(state.ContainerClusters)
+	containerMachines := providerMachinesUsedByContainerClusters(state)
 	seen := map[string]bool{}
 	for _, p := range state.InfraProviders {
 		if e := validateName(v1alpha1.KindInfraProvider, p.Metadata.Name); e != "" {
@@ -23,13 +24,13 @@ func validateProviders(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate InfraProvider %q", p.Metadata.Name))
 		}
 		seen[p.Metadata.Name] = true
-		errs = append(errs, validateProviderCapabilities(p, hosts, clusters)...)
+		errs = append(errs, validateProviderCapabilities(p, hosts, clusters, containerMachines[p.Metadata.Name])...)
 	}
 	errs = append(errs, validateLibvirtBMCEmulationHostPorts(state)...)
 	return errs
 }
 
-func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host, clusters map[string]v1alpha1.ContainerCluster) []string {
+func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host, clusters map[string]v1alpha1.ContainerCluster, containerMachines map[string]bool) []string {
 	var errs []string
 	caps := p.Spec
 	errs = append(errs, validateUniqueCapabilityNames(p, "machineProfiles", capabilityNames(caps.MachineProfiles, func(x v1alpha1.MachineProfileCapability) string { return x.Name }))...)
@@ -39,7 +40,7 @@ func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1a
 		errs = append(errs, validateMachineProfile(p, mp, hosts, clusters)...)
 	}
 	for _, m := range caps.Machines {
-		errs = append(errs, validateProviderMachine(p, m)...)
+		errs = append(errs, validateProviderMachine(p, m, containerMachines[m.Name])...)
 	}
 	return errs
 }
@@ -218,13 +219,13 @@ func validateMachineProfileKubeVirt(prefix string, k *v1alpha1.MachineProfileKub
 	return errs
 }
 
-func validateProviderMachine(p v1alpha1.InfraProvider, m v1alpha1.MachineCapability) []string {
+func validateProviderMachine(p v1alpha1.InfraProvider, m v1alpha1.MachineCapability, requireBoot bool) []string {
 	var errs []string
 	prefix := fmt.Sprintf("InfraProvider/%s spec.machines[%s]", p.Metadata.Name, m.Name)
 	set := 0
 	if m.BareMetal != nil {
 		set++
-		errs = append(errs, validateProviderMachineBareMetal(prefix, m.BareMetal)...)
+		errs = append(errs, validateProviderMachineBareMetal(prefix, m.BareMetal, requireBoot)...)
 	}
 	if set != 1 {
 		errs = append(errs, fmt.Sprintf("%s must set exactly one of {baremetal} (got %d)", prefix, set))
@@ -232,15 +233,16 @@ func validateProviderMachine(p v1alpha1.InfraProvider, m v1alpha1.MachineCapabil
 	return errs
 }
 
-func validateProviderMachineBareMetal(prefix string, b *v1alpha1.MachineBareMetalCapability) []string {
+func validateProviderMachineBareMetal(prefix string, b *v1alpha1.MachineBareMetalCapability, requireBoot bool) []string {
 	var errs []string
-	if b.BMC.Address == "" {
+	validateBMC := requireBoot || b.BMC.Address != "" || b.BMC.Protocol != "" || b.BMC.CredentialsRef.Name != "" || b.BMC.DisableCertificateVerification
+	if validateBMC && b.BMC.Address == "" {
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bmc.address is required", prefix))
 	}
 	if b.BMC.Protocol != "" && b.BMC.Protocol != v1alpha1.DefaultBMCProtocol {
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bmc.protocol %q is not supported yet; only %q is implemented", prefix, b.BMC.Protocol, v1alpha1.DefaultBMCProtocol))
 	}
-	if b.BMC.CredentialsRef.Name == "" {
+	if validateBMC && b.BMC.CredentialsRef.Name == "" {
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bmc.credentialsRef.name is required", prefix))
 	}
 	if len(b.Interfaces) == 0 {
@@ -266,14 +268,39 @@ func validateProviderMachineBareMetal(prefix string, b *v1alpha1.MachineBareMeta
 			bootMACKnown = true
 		}
 	}
-	if b.BootMACAddress == "" {
+	if requireBoot && b.BootMACAddress == "" {
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bootMACAddress is required", prefix))
 	} else if !looksLikeMAC(b.BootMACAddress) {
-		errs = append(errs, fmt.Sprintf("%s.baremetal.bootMACAddress %q is not a valid MAC address", prefix, b.BootMACAddress))
+		if b.BootMACAddress != "" {
+			errs = append(errs, fmt.Sprintf("%s.baremetal.bootMACAddress %q is not a valid MAC address", prefix, b.BootMACAddress))
+		}
 	} else if !bootMACKnown {
 		errs = append(errs, fmt.Sprintf("%s.baremetal.bootMACAddress %q does not match any baremetal.interfaces[].macAddress", prefix, b.BootMACAddress))
 	}
 	return errs
+}
+
+func providerMachinesUsedByContainerClusters(state v1alpha1.State) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	infras := indexClusterInfras(state.ClusterInfras)
+	for _, cluster := range state.ContainerClusters {
+		for _, node := range cluster.Spec.Nodes {
+			infra, ok := infras[node.MachineRef.ClusterInfra]
+			if !ok {
+				continue
+			}
+			for _, machine := range infra.Spec.Components.Machines {
+				if machine.Name != node.MachineRef.Name || machine.From.Name == "" || machine.From.Provider == "" {
+					continue
+				}
+				if out[machine.From.Provider] == nil {
+					out[machine.From.Provider] = map[string]bool{}
+				}
+				out[machine.From.Provider][machine.From.Name] = true
+			}
+		}
+	}
+	return out
 }
 
 func validateServiceHostRef(owner string, ref v1alpha1.LocalObjectReference, hosts map[string]v1alpha1.Host, kind, realisation string) []string {

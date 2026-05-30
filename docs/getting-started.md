@@ -188,6 +188,8 @@ bootwright apply bastion --yes
 bootwright check infra
 bootwright apply infra --dry-run
 bootwright apply infra --yes
+bootwright apply storage --dry-run
+bootwright apply storage --yes
 bootwright check cluster
 bootwright apply cluster --dry-run
 bootwright apply cluster --yes
@@ -199,13 +201,16 @@ bootwright status
 
 `apply bastion` installs bastion-host prerequisites. `apply infra`
 converges provider hosts, substrate state, and managed infra components.
+`apply storage` provisions external storage clusters such as Ceph from
+preinstalled storage nodes.
 `apply cluster` creates the agent ISO, boots every declared node, and waits for
 `openshift-install agent wait-for install-complete`, then applies bound
 post-install extensions.
 `apply extensions` uses the installed cluster kubeconfig and `oc apply` for
 post-install bootstrap components declared as `ClusterExtension` resources.
-`apply all` includes infrastructure before the same cluster and extension
-phases.
+`apply all` includes infrastructure and storage before the same cluster and
+extension phases. Storage bindings wait for both the storage task and a bound
+extension with `provides: [data-foundation]`.
 For KubeVirt child clusters, `apply all` also waits for the parent cluster
 install and its `provides: [kubevirt]` extension before creating child VM
 infrastructure. `apply infra --scope <child>` requires that parent cluster to
@@ -236,6 +241,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply storage --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply cluster --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply extensions --dry-run --output json` | Supported | Dry-run extension apply plan |
 | `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
@@ -255,6 +261,12 @@ Render placeholder installer files into context state:
 bootwright render installer --scope <cluster-name>
 ```
 
+Render storage tool inputs into context state:
+
+```text
+bootwright render storage --scope <storage-cluster-name>
+```
+
 To run `openshift-install` or Ansible-facing CLIs yourself, export concrete
 tool inputs to a local, unversioned directory:
 
@@ -269,6 +281,8 @@ The OpenShift installer inputs are written under
 `agent-config.yaml`, plus optional `openshift/` manifests, with secret material
 inlined. Keep that directory local and remove it when you no longer need the
 files.
+Storage inputs are written under `./rendered/storage/<storage-cluster-name>/`
+and include cephadm specs, Ceph operations, and Data Foundation manifests.
 
 ## Optional Cleanup
 
@@ -288,6 +302,8 @@ This does not destroy cluster nodes or the rest of the infrastructure.
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Placeholder installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
+- Rendered storage tool inputs live under
+  `/var/lib/bootwright/contexts/<context>/rendered/storage/<storageCluster>/`.
 - Secret-inlined runtime installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/`.
 - Generated cluster access material lives under

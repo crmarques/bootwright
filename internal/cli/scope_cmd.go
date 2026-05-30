@@ -37,17 +37,25 @@ type scopeCommonFlags struct {
 // (i.e. infra / cluster / all-for-check-apply; destroy never accepts
 // "all" because allScope.destroyPlaybook is empty).
 func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
-	registerScopeCommonFlagsWithAnsible(cmd, f, allowClusterScope, scopeAction, true)
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, f, allowClusterScope, scopeAction, true, "ContainerCluster")
 }
 
 func registerScopeCommonFlagsWithAnsible(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool) {
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, f, allowClusterScope, scopeAction, includeAnsible, "ContainerCluster")
+}
+
+func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool, targetKind string) {
 	f.output = outputText
 	if includeAnsible {
 		cmd.Flags().StringVar(&f.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 	}
 	cmd.Flags().StringVar(&f.output, "output", f.output, "output format: text|json (json is supported for --dry-run)")
 	if allowClusterScope {
-		cmd.Flags().StringVar(&f.clusterScope, "scope", "", "comma-separated ContainerCluster names to "+scopeAction+" (restricts the matching ClusterInfra/Provider sets)")
+		scopeUsage := "comma-separated " + targetKind + " names to " + scopeAction
+		if targetKind == "ContainerCluster" {
+			scopeUsage += " (restricts the matching ClusterInfra/Provider sets)"
+		}
+		cmd.Flags().StringVar(&f.clusterScope, "scope", "", scopeUsage)
 	}
 }
 
@@ -62,7 +70,7 @@ func printBundlePath(stdout io.Writer, bundleDir string) {
 // commands exclude it via destroyOnly=true; check/apply include it.
 func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {
 	switch scope.name {
-	case "cluster", "infra", "extensions":
+	case "cluster", "infra", "extensions", "storage":
 		return true
 	case "all":
 		return !destroyOnly

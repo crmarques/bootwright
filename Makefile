@@ -62,7 +62,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-go-source-visibility check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -141,15 +141,15 @@ $(BIN_DIR):
 test:
 	$(GO) test ./...
 
-check: check-go-source-visibility check-gofmt
+check: check-fast
 	$(GO) vet ./...
 	$(GO) test ./...
 	$(GO) test -race ./...
 	$(MAKE) go-test-clean-checkout
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
-	$(MAKE) stale-term-check
-	$(MAKE) cli-file-size-check
+
+check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check check-e2e-deps
 
 check-go-source-visibility:
 	@ignored=$$(find api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
@@ -291,7 +291,7 @@ help:
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Refresh internal/converge/bundle/ansible_bundle.zip' \
-		'  check            Run formatting, Go, Ansible, stale-term, and provider-swap checks' \
+		'  check            Run fast guardrails first, then Go, Python, and Ansible checks' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
 		'  plan             Render installer assets for test/e2e/001-sno-libvirt into .state' \

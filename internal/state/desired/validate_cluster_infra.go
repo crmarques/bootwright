@@ -13,6 +13,7 @@ func validateClusterInfras(state v1alpha1.State) []string {
 	providers := indexProviders(state.InfraProviders)
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
 	components := indexInfraComponents(state.InfraComponents)
+	containerInfraNames := referencedContainerClusterInfraNames(state)
 	seen := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
 		if e := validateName(v1alpha1.KindClusterInfra, ci.Metadata.Name); e != "" {
@@ -24,7 +25,9 @@ func validateClusterInfras(state v1alpha1.State) []string {
 		}
 		seen[ci.Metadata.Name] = true
 		errs = append(errs, validateClusterPlatform(ci)...)
-		errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs)...)
+		if containerInfraNames[ci.Metadata.Name] || len(ci.Spec.Endpoints) > 0 {
+			errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs, containerInfraNames[ci.Metadata.Name])...)
+		}
 		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
 	}
@@ -70,10 +73,12 @@ func validateClusterPlatform(ci v1alpha1.ClusterInfra) []string {
 	return errs
 }
 
-func validateClusterEndpoints(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterEndpoints(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, networkConfigs map[string]v1alpha1.NetworkConfig, requireOpenShiftEndpoints bool) []string {
 	var errs []string
 	if len(ci.Spec.Endpoints) == 0 {
-		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints is required", ci.Metadata.Name))
+		if requireOpenShiftEndpoints {
+			errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints is required", ci.Metadata.Name))
+		}
 		return errs
 	}
 	allowed := map[string]bool{
@@ -90,12 +95,26 @@ func validateClusterEndpoints(ci v1alpha1.ClusterInfra, components map[string]v1
 	for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
 		endpoint, ok := ci.Spec.Endpoints[name]
 		if !ok {
-			errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s is required", ci.Metadata.Name, name))
+			if requireOpenShiftEndpoints {
+				errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s is required", ci.Metadata.Name, name))
+			}
 			continue
 		}
 		errs = append(errs, validateClusterEndpoint(ci, components, name, endpoint, networkConfigs)...)
 	}
 	return errs
+}
+
+func referencedContainerClusterInfraNames(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, cluster := range state.ContainerClusters {
+		for _, node := range cluster.Spec.Nodes {
+			if node.MachineRef.ClusterInfra != "" {
+				out[node.MachineRef.ClusterInfra] = true
+			}
+		}
+	}
+	return out
 }
 
 func validateClusterEndpoint(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, name string, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {

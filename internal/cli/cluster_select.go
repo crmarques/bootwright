@@ -20,6 +20,15 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToClusters(state, names), nil
+	case "storage":
+		if strings.TrimSpace(scope) == "" {
+			return state, nil
+		}
+		names, err := storageClusterNamesForTarget(state, scope)
+		if err != nil {
+			return state, err
+		}
+		return stategraph.FilterStateToStorageClusters(state, names), nil
 	default:
 		if strings.TrimSpace(scope) != "" {
 			return state, fmt.Errorf("--scope is not supported for %s", target)

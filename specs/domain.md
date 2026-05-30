@@ -11,7 +11,7 @@ is deliberately out of scope for this repository.
 
 ## Operating Model
 
-Operators author desired state as ten YAML kinds:
+Operators author desired state as seventeen YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
@@ -22,6 +22,13 @@ Operators author desired state as ten YAML kinds:
 | `NetworkConfig` | What machine CIDRs and NMState templates can nodes consume? |
 | `ClusterInfra` | Which machines, endpoints, platform mode, and infra components back this cluster? |
 | `ContainerCluster` | What OpenShift or OKD cluster should be installed on those machines? |
+| `StorageCluster` | What external storage cluster should be provisioned from preinstalled storage nodes? |
+| `StoragePlacementPolicy` | Which storage placement and replicated-pool defaults should pools use? |
+| `StoragePool` | Which Ceph pools should exist and what role should each serve? |
+| `StorageFilesystem` | Which CephFS filesystems should exist, and which pools hold metadata and data? |
+| `StorageObjectGateway` | Which RGW service and cephadm ingress VIPs should serve object traffic? |
+| `StorageExport` | Which storage services should be exported for a downstream platform? |
+| `StorageClusterBinding` | Which installed clusters should consume an exported storage surface? |
 | `ClusterExtension` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterExtensionSet` | Which ordered group of extensions defines a platform profile? |
 | `ClusterExtensionBinding` | Which clusters should receive those extensions after install? |
@@ -34,6 +41,11 @@ service networks live in `ContainerCluster`.
 Post-install components do not live under `ContainerCluster.spec.install`;
 they are separate desired-state resources selected by `Environment` and bound
 to clusters after provisioning completes.
+External storage also stays outside `ContainerCluster`. `StorageCluster` is a
+peer of `ContainerCluster` and reuses `ClusterInfra`, `InfraProvider`, and
+`NetworkConfig` for machine facts. Storage bindings connect exported storage to
+installed clusters after both storage provisioning and the selected
+Data Foundation extension are ready.
 
 ## Compatibility Goal
 
@@ -42,6 +54,8 @@ The schemas should be as close as practical to `install-config.yaml` and
 operational fact:
 
 - `ContainerCluster` renders cluster-level installer intent.
+- `StorageCluster` renders Ceph cephadm input files and storage operations.
+- `StorageClusterBinding` renders Data Foundation external-mode manifests.
 - `NetworkConfig` renders machine networks and reusable NMState templates.
 - `ClusterInfra` renders platform and host bindings.
 - `InfraProvider` renders substrate inventory and platform facts.
@@ -65,8 +79,13 @@ normal `ContainerCluster` whose machines come from a KubeVirt
 `InfraProvider`. The KubeVirt host may be another Bootwright
 `ContainerCluster` selected by `hostClusterRef`, or an external virtualization
 cluster selected by `kubeconfigRef`. When the host is Bootwright-managed, the
-host cluster must be installed and bound to a `ClusterExtension` that advertises
+  host cluster must be installed and bound to a `ClusterExtension` that advertises
 `provides: [kubevirt]` before child VM infrastructure is converged.
+
+The first supported external storage topology is Ceph stretch mode with two
+data sites and one monitor-only tiebreaker site. Ceph nodes are preinstalled
+RHEL machines reached from the bastion over SSH; Bootwright does not install
+RHEL in this feature.
 
 ## UX Principles
 

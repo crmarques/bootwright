@@ -21,6 +21,13 @@ const (
 	KindInfraComponent          = "InfraComponent"
 	KindClusterInfra            = "ClusterInfra"
 	KindContainerCluster        = "ContainerCluster"
+	KindStorageCluster          = "StorageCluster"
+	KindStoragePlacementPolicy  = "StoragePlacementPolicy"
+	KindStoragePool             = "StoragePool"
+	KindStorageFilesystem       = "StorageFilesystem"
+	KindStorageObjectGateway    = "StorageObjectGateway"
+	KindStorageExport           = "StorageExport"
+	KindStorageClusterBinding   = "StorageClusterBinding"
 	KindClusterExtension        = "ClusterExtension"
 	KindClusterExtensionSet     = "ClusterExtensionSet"
 	KindClusterExtensionBinding = "ClusterExtensionBinding"
@@ -152,6 +159,28 @@ const (
 	DefaultClusterExtensionReadinessTimeout    = "30m"
 	DefaultClusterExtensionFieldManager        = "bootwright"
 	ClusterExtensionProvidesKubeVirt           = "kubevirt"
+	ClusterExtensionProvidesDataFoundation     = "data-foundation"
+
+	StorageClusterTypeCeph = "ceph"
+
+	StorageCephRoleMON     = "mon"
+	StorageCephRoleMGR     = "mgr"
+	StorageCephRoleOSD     = "osd"
+	StorageCephRoleMDS     = "mds"
+	StorageCephRoleRGW     = "rgw"
+	StorageCephRoleIngress = "ingress"
+
+	StoragePoolTypeReplicated  = "replicated"
+	StoragePoolTypeErasureCode = "erasure-coded"
+
+	StoragePoolRoleRBD            = "rbd"
+	StoragePoolRoleCephFSMetadata = "cephfs-metadata"
+	StoragePoolRoleCephFSData     = "cephfs-data"
+	StoragePoolRoleRGW            = "rgw"
+
+	StorageExportTypeDataFoundation              = "data-foundation"
+	DataFoundationProductOpenShiftDataFoundation = "openshift-data-foundation"
+	DataFoundationProductIBMFusion               = "ibm-fusion-data-foundation"
 )
 
 // State is the loaded fleet.
@@ -163,6 +192,13 @@ type State struct {
 	InfraComponents          []InfraComponent          `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
 	ClusterInfras            []ClusterInfra            `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
 	ContainerClusters        []ContainerCluster        `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	StorageClusters          []StorageCluster          `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
+	StoragePlacementPolicies []StoragePlacementPolicy  `yaml:"storagePlacementPolicies,omitempty" json:"storagePlacementPolicies,omitempty"`
+	StoragePools             []StoragePool             `yaml:"storagePools,omitempty" json:"storagePools,omitempty"`
+	StorageFilesystems       []StorageFilesystem       `yaml:"storageFilesystems,omitempty" json:"storageFilesystems,omitempty"`
+	StorageObjectGateways    []StorageObjectGateway    `yaml:"storageObjectGateways,omitempty" json:"storageObjectGateways,omitempty"`
+	StorageExports           []StorageExport           `yaml:"storageExports,omitempty" json:"storageExports,omitempty"`
+	StorageClusterBindings   []StorageClusterBinding   `yaml:"storageClusterBindings,omitempty" json:"storageClusterBindings,omitempty"`
 	ClusterExtensions        []ClusterExtension        `yaml:"clusterExtensions,omitempty" json:"clusterExtensions,omitempty"`
 	ClusterExtensionSets     []ClusterExtensionSet     `yaml:"clusterExtensionSets,omitempty" json:"clusterExtensionSets,omitempty"`
 	ClusterExtensionBindings []ClusterExtensionBinding `yaml:"clusterExtensionBindings,omitempty" json:"clusterExtensionBindings,omitempty"`

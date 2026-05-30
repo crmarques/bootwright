@@ -34,9 +34,10 @@ nodes live in `ContainerCluster.spec.nodes[]` and each node references the
 selected cluster infrastructure machine.
 
 Post-install extension kinds were added later as separate desired-state
-resources: `ClusterExtension`, `ClusterExtensionSet`, and
-`ClusterExtensionBinding`. They do not change the provisioning ownership split
-defined here, but the full current user-authored API surface is ten kinds.
+resources: `ClusterExtension`, `ClusterExtensionSet`,
+`ClusterExtensionBinding`, and the storage resource family. They do not change
+the provisioning ownership split defined here, but the full current
+user-authored API surface is seventeen kinds.
 
 ## Consequences
 

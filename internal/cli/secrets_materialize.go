@@ -316,11 +316,11 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 			add(name, secret.MaterialTLSKey)
 			added = true
 		}
-		if secretConsumedAsClusterSSHPublic(name, state) {
+		if secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsStorageSSHPublic(name, state) {
 			add(name, secret.MaterialSSHPublic)
 			added = true
 		}
-		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
+		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsStorageSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
 			add(name, secret.MaterialSSHPrivate)
 			added = true
 		}

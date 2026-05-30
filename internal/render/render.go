@@ -70,6 +70,7 @@ type Result struct {
 	VarsPath           string
 	ArtifactsDir       string
 	InstallerAssets    []InstallerAsset
+	StorageAssets      []StorageAsset
 }
 
 // All writes effective-state, lock, Ansible inventory + vars, and
@@ -91,10 +92,14 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 		VarsPath:           filepath.Join(renderedDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(renderedDir, "ansible", "artifacts"),
 		InstallerAssets:    InstallerAssets(clustersDir, state),
+		StorageAssets:      StorageAssets(renderedDir, state),
 	}
 	dirs := []string{renderedDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
 		dirs = append(dirs, asset.Dir)
+	}
+	for _, asset := range result.StorageAssets {
+		dirs = append(dirs, asset.Directories()...)
 	}
 	for _, dir := range dirs {
 		if err := ensureLocalDir(fs, dir); err != nil {
@@ -134,6 +139,9 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 		if err := writeInstallerManifests(fs, asset.InstallManifestsDir, InstallerManifests(ocp, PlaceholderInstallerSecrets(state, ocp))); err != nil {
 			return result, err
 		}
+	}
+	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+		return result, err
 	}
 	return result, nil
 }
@@ -220,10 +228,14 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 		VarsPath:           filepath.Join(outputDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(outputDir, "ansible", "artifacts"),
 		InstallerAssets:    InstallerToolInputAssets(outputDir, state),
+		StorageAssets:      StorageAssets(outputDir, state),
 	}
 	dirs := []string{outputDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
 		dirs = append(dirs, asset.Dir)
+	}
+	for _, asset := range result.StorageAssets {
+		dirs = append(dirs, asset.Directories()...)
 	}
 	for _, dir := range dirs {
 		if err := ensureLocalDir(fs, dir); err != nil {
@@ -268,6 +280,9 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 			return result, err
 		}
 	}
+	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -284,6 +299,24 @@ func writeYAML(fs FileSystem, path string, value any) error {
 	data, err := yaml.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
+	}
+	if err := fs.WriteAtomic(path, data, localFileMode); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+func writeYAMLDocuments(fs FileSystem, path string, values []any) error {
+	var data []byte
+	for i, value := range values {
+		chunk, err := yaml.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("marshal %s: %w", path, err)
+		}
+		if i > 0 {
+			data = append(data, []byte("---\n")...)
+		}
+		data = append(data, chunk...)
 	}
 	if err := fs.WriteAtomic(path, data, localFileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)

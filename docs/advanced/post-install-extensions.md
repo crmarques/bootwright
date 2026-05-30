@@ -34,9 +34,11 @@ not supported yet. `policy.continueOnError: true` is also rejected in the MVP
 so failures cannot be silently skipped.
 
 `ClusterExtension.spec.provides[]` advertises capabilities that other desired
-state may depend on. The current accepted capability is `kubevirt`. Use it on
-the OpenShift Virtualization extension so KubeVirt child infrastructure waits
-for the host cluster to be ready.
+state may depend on. Current accepted capabilities are `kubevirt` and
+`data-foundation`. Use `kubevirt` on the OpenShift Virtualization extension so
+KubeVirt child infrastructure waits for the host cluster to be ready. Use
+`data-foundation` on the Red Hat ODF or IBM Fusion Data Foundation operator
+extension so storage bindings wait for external-mode components to be ready.
 
 ## OpenShift Virtualization
 
