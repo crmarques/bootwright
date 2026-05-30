@@ -42,12 +42,13 @@ install-complete` after every node boot task has completed.
 Post-install extension apply is scheduled after that install wait when
 `apply cluster` or `apply all` is selected, and as standalone direct `oc`
 tasks when `apply extensions` is selected for an already installed cluster.
-Storage apply is a peer phase. Bootwright renders Ceph tool inputs under
-`storage/<storageCluster>/`, reaches preinstalled RHEL Ceph nodes over SSH
-from the bastion, launches `cephadm bootstrap` on the seed node, applies
-cephadm service specs, then runs rendered Ceph operations. Storage binding
-tasks run in the extensions phase after both the storage task and the
-Data Foundation-providing extension readiness task.
+Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
+tool inputs under `storage/<storageCluster>/`, reaches preinstalled RHEL Ceph
+nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed node,
+applies cephadm service specs, then runs rendered Ceph operations. Imported
+storage clusters skip this storage task. Storage binding tasks run in the
+extensions phase after the storage task when one exists and the Data
+Foundation-providing extension readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
 `apply all` adds graph edges from the child infrastructure task to both
 `wait.<host-cluster>` and the host extension wait task that provides
@@ -82,7 +83,8 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 - `ClusterInfra` owns endpoint VIP ownership, platform render mode, and
   selected machines.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
-- `StorageCluster` owns external storage provisioning intent.
+- `StorageCluster` owns external storage intent. Managed clusters provision
+  Ceph; imported clusters reference previously provisioned Ceph.
 - `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, and
   `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and ingress
   desired state.
@@ -108,9 +110,10 @@ These boundaries are reflected in rendering:
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.
 - Storage tool inputs render to cephadm host/service specs,
-  `ceph/operations.yaml`, and generated Data Foundation manifests. CephFS
-  metadata and data pool roles are expressed by `StorageFilesystem` because
-  the renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
+  `ceph/operations.yaml`, and generated Data Foundation manifests for managed
+  storage. Imported storage renders only Data Foundation binding manifests.
+  CephFS metadata and data pool roles are expressed by `StorageFilesystem`
+  because the renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
 - Extension apply plans are rendered from `ClusterExtensionBinding` expansion,
   `ClusterExtensionSet` order, and `ClusterExtension` generated resources or
   manifest paths. They do not mutate installer input.

@@ -50,12 +50,21 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 func printStorageFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.StorageAssets {
-		paths = append(paths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
+		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
 		for _, binding := range asset.Bindings {
-			paths = append(paths, binding.ExternalClusterDetailsPath, binding.StorageClusterPath, binding.StorageSystemPath)
+			paths = appendNonEmpty(paths, binding.ExternalClusterDetailsPath, binding.StorageClusterPath, binding.StorageSystemPath)
 		}
 	}
 	p := cliout.NewContinuation(stdout)
 	p.Section("Rendered artifacts")
 	p.Artifacts([]cliout.ArtifactGroup{{Name: "Storage", Paths: paths}})
+}
+
+func appendNonEmpty(paths []string, values ...string) []string {
+	for _, value := range values {
+		if value != "" {
+			paths = append(paths, value)
+		}
+	}
+	return paths
 }

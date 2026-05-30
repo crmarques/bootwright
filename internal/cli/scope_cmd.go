@@ -40,10 +40,6 @@ func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClus
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, f, allowClusterScope, scopeAction, true, "ContainerCluster")
 }
 
-func registerScopeCommonFlagsWithAnsible(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool) {
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, f, allowClusterScope, scopeAction, includeAnsible, "ContainerCluster")
-}
-
 func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string, includeAnsible bool, targetKind string) {
 	f.output = outputText
 	if includeAnsible {

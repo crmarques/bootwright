@@ -131,6 +131,9 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	storageDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseStorage] {
 		for _, cluster := range state.StorageClusters {
+			if !storageClusterManaged(cluster) {
+				continue
+			}
 			taskID := "storage." + cluster.Metadata.Name
 			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 			tasks = append(tasks, ApplyTask{

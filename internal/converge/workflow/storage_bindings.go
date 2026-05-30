@@ -30,7 +30,7 @@ func runOneStorageBindingTask(ctx context.Context, stdout io.Writer, stderr io.W
 	if asset.BindingName == "" {
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("storage binding asset for %s/%s not rendered", task.StorageBinding.Cluster, task.StorageBinding.Binding.Metadata.Name)}
 	}
-	if err := writeStorageBindingExternalDetails(asset.ExternalClusterDetailsPath, task.State, *task.StorageBinding, opts.ClustersDir); err != nil {
+	if err := writeStorageBindingExternalDetails(asset.ExternalClusterDetailsPath, task.State, *task.StorageBinding, opts.ClustersDir, opts.SecretsDir); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
@@ -47,7 +47,7 @@ func runOneStorageBindingTask(ctx context.Context, stdout io.Writer, stderr io.W
 	return applyTaskResult{id: task.Entry.ID}
 }
 
-func writeStorageBindingExternalDetails(path string, state v1alpha1.State, plan StorageBindingPlan, clustersDir string) error {
+func writeStorageBindingExternalDetails(path string, state v1alpha1.State, plan StorageBindingPlan, clustersDir string, secretsDir string) error {
 	binding := plan.Binding
 	export, ok := workflowStorageExportByName(state, binding.Spec.StorageExportRef.Name)
 	if !ok || export.Spec.DataFoundation == nil {
@@ -57,20 +57,32 @@ func writeStorageBindingExternalDetails(path string, state v1alpha1.State, plan 
 	if !ok {
 		return fmt.Errorf("StorageCluster/%s not found for storage binding %s", export.Spec.StorageClusterRef.Name, binding.Metadata.Name)
 	}
+	if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" {
+		detailsJSON, err := render.LoadDataFoundationExternalDetailsJSON(state, secretsDir, export.Spec.DataFoundation.ExternalDetailsRef)
+		if err != nil {
+			return err
+		}
+		manifest := render.DataFoundationExternalDetailsRawJSONManifest(binding, detailsJSON, export.Spec.DataFoundation.ExternalDetailsRef.Name)
+		return writeStorageBindingExternalDetailsManifest(path, manifest)
+	}
 	record, found, err := storageapply.LoadDataFoundationBindingRecord(clustersDir, plan.Cluster, binding.Metadata.Name)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("Data Foundation credentials for storage binding %s/%s not found; run apply storage for StorageCluster/%s first", plan.Cluster, binding.Metadata.Name, cluster.Metadata.Name)
+		return fmt.Errorf("data foundation credentials for storage binding %s/%s not found; run apply storage for StorageCluster/%s first", plan.Cluster, binding.Metadata.Name, cluster.Metadata.Name)
 	}
 	if record.StorageCluster != "" && record.StorageCluster != cluster.Metadata.Name {
-		return fmt.Errorf("Data Foundation credentials for storage binding %s/%s belong to StorageCluster/%s, want StorageCluster/%s", plan.Cluster, binding.Metadata.Name, record.StorageCluster, cluster.Metadata.Name)
+		return fmt.Errorf("data foundation credentials for storage binding %s/%s belong to StorageCluster/%s, want StorageCluster/%s", plan.Cluster, binding.Metadata.Name, record.StorageCluster, cluster.Metadata.Name)
 	}
 	if missing := storageapply.MissingDataFoundationSecrets(export, record.Secrets); len(missing) > 0 {
-		return fmt.Errorf("Data Foundation credentials for storage binding %s/%s are incomplete: %s", plan.Cluster, binding.Metadata.Name, strings.Join(missing, ", "))
+		return fmt.Errorf("data foundation credentials for storage binding %s/%s are incomplete: %s", plan.Cluster, binding.Metadata.Name, strings.Join(missing, ", "))
 	}
 	manifest := render.DataFoundationExternalDetailsManifest(state, cluster, export, binding, plan.Cluster, record.Secrets)
+	return writeStorageBindingExternalDetailsManifest(path, manifest)
+}
+
+func writeStorageBindingExternalDetailsManifest(path string, manifest map[string]any) error {
 	data, err := yaml.Marshal(manifest)
 	if err != nil {
 		return fmt.Errorf("marshal Data Foundation external cluster details: %w", err)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 	"go.yaml.in/yaml/v3"
@@ -106,6 +107,46 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	}
 	if !strings.Contains(detailsJSON, "ceph-dc1-0=192.168.141.30:6789") {
 		t.Fatalf("external_cluster_details missing mon endpoint: %s", detailsJSON)
+	}
+}
+
+func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecret(t *testing.T) {
+	sourceDir := t.TempDir()
+	secretPath := filepath.Join(sourceDir, "shared-ceph-external-cluster-details.json")
+	secretJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"secret-fsid"}}]`
+	if err := os.WriteFile(secretPath, []byte(secretJSON), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	state := importedDataFoundationRenderState(filepath.Base(secretPath), filepath.Join(sourceDir, "environment.yaml"))
+
+	normal, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
+	if err != nil {
+		t.Fatalf("render.All: %v", err)
+	}
+	if len(normal.StorageAssets) != 1 {
+		t.Fatalf("storage assets got %d, want 1", len(normal.StorageAssets))
+	}
+	asset := normal.StorageAssets[0]
+	if asset.BootstrapSpecPath != "" || asset.ServicesSpecPath != "" || asset.OperationsPath != "" {
+		t.Fatalf("external storage rendered managed Ceph paths: %#v", asset)
+	}
+	binding := bindingAsset(t, asset, "dc1-ocp")
+	placeholder := externalDetailsJSON(t, binding.ExternalClusterDetailsPath)
+	if strings.Contains(placeholder, "secret-fsid") {
+		t.Fatalf("normal render leaked imported external details: %s", placeholder)
+	}
+	if !strings.Contains(placeholder, "BOOTWRIGHT_GENERATED_AT_APPLY_TIME") {
+		t.Fatalf("normal render missing placeholder: %s", placeholder)
+	}
+
+	sensitive, err := render.ToolInputs(filepath.Join(t.TempDir(), "sensitive"), t.TempDir(), state)
+	if err != nil {
+		t.Fatalf("render.ToolInputs: %v", err)
+	}
+	binding = bindingAsset(t, sensitive.StorageAssets[0], "dc1-ocp")
+	details := externalDetailsJSON(t, binding.ExternalClusterDetailsPath)
+	if details != secretJSON {
+		t.Fatalf("sensitive external details = %s, want %s", details, secretJSON)
 	}
 }
 
@@ -213,4 +254,53 @@ func externalDetailContains(details []map[string]any, name, key, value string) b
 		return ok && data[key] == value
 	}
 	return false
+}
+
+func externalDetailsJSON(t *testing.T, path string) string {
+	t.Helper()
+	manifest := readYAMLDoc(t, path)
+	stringData := manifest["stringData"].(map[string]any)
+	return stringData["external_cluster_details"].(string)
+}
+
+func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.State {
+	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			SourcePath: envPath,
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"shared-ceph-external-details": {File: secretFile},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementExternal,
+			},
+		}},
+		StorageExports: []v1alpha1.StorageExport{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
+			Spec: v1alpha1.StorageExportSpec{
+				Type:              v1alpha1.StorageExportTypeDataFoundation,
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
+					ExternalDetailsRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
+				},
+			},
+		}},
+		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
+			Spec: v1alpha1.StorageClusterBindingSpec{
+				StorageExportRef: v1alpha1.LocalObjectReference{Name: "shared-ceph-data-foundation"},
+				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"dc1-ocp", "dc2-ocp"}},
+				DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
+					Namespace:          "openshift-storage",
+					StorageClusterName: "ocs-external-storagecluster",
+					StorageSystemName:  "ocs-external-storagecluster-storagesystem",
+				},
+			},
+		}},
+	}
 }

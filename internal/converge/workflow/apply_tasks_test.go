@@ -431,6 +431,21 @@ func TestPlanApplyAllOrdersStorageBindingsAfterStorageInstallAndDataFoundation(t
 	assertTaskDeps(t, tasks, "storagebinding.demo.ceph-binding.apply", "wait.demo", "storage.ceph", "extension.demo.odf.wait")
 }
 
+func TestPlanApplyAllExternalStorageBindingSkipsStorageTask(t *testing.T) {
+	state := externalStorageBindingPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	for _, id := range applyTaskIDs(tasks) {
+		if id == "storage.shared-ceph" {
+			t.Fatalf("external storage planned storage task: %v", applyTaskIDs(tasks))
+		}
+	}
+	assertTaskDeps(t, tasks, "storagebinding.demo.shared-ceph-binding.apply", "wait.demo", "extension.demo.odf.wait")
+}
+
 func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-fleet-stretched-ceph-data-foundation")})
 	if err != nil {
@@ -488,7 +503,7 @@ func TestWriteStorageBindingExternalDetailsUsesRuntimeCredentials(t *testing.T) 
 	err := writeStorageBindingExternalDetails(path, state, StorageBindingPlan{
 		Cluster: "demo",
 		Binding: state.StorageClusterBindings[0],
-	}, clustersDir)
+	}, clustersDir, t.TempDir())
 	if err != nil {
 		t.Fatalf("writeStorageBindingExternalDetails: %v", err)
 	}
@@ -506,6 +521,41 @@ func TestWriteStorageBindingExternalDetailsUsesRuntimeCredentials(t *testing.T) 
 	}
 	if !strings.Contains(detailsJSON, "rbd-node-key") {
 		t.Fatalf("external_cluster_details missing runtime key: %s", detailsJSON)
+	}
+}
+
+func TestWriteStorageBindingExternalDetailsUsesImportedSecret(t *testing.T) {
+	state := externalStorageBindingPlanningState()
+	secretPath := filepath.Join(t.TempDir(), "external-details.json")
+	secretJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"external-fsid"}}]`
+	if err := os.WriteFile(secretPath, []byte(secretJSON), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	state.Environments = []v1alpha1.Environment{{
+		SourcePath: filepath.Join(t.TempDir(), "environment.yaml"),
+		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+			"shared-ceph-external-details": {File: secretPath},
+		}},
+	}}
+	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
+	err := writeStorageBindingExternalDetails(path, state, StorageBindingPlan{
+		Cluster: "demo",
+		Binding: state.StorageClusterBindings[0],
+	}, t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("writeStorageBindingExternalDetails: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest map[string]any
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
+	if detailsJSON != secretJSON {
+		t.Fatalf("external_cluster_details = %s, want %s", detailsJSON, secretJSON)
 	}
 }
 
@@ -637,6 +687,40 @@ func storageBindingPlanningState() v1alpha1.State {
 			},
 		}},
 	}
+}
+
+func externalStorageBindingPlanningState() v1alpha1.State {
+	state := storageBindingPlanningState()
+	state.StorageClusters = []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Type:       v1alpha1.StorageClusterTypeCeph,
+			Management: v1alpha1.StorageClusterManagementExternal,
+		},
+	}}
+	state.StorageExports = []v1alpha1.StorageExport{{
+		Metadata: v1alpha1.Metadata{Name: "shared-ceph-export"},
+		Spec: v1alpha1.StorageExportSpec{
+			Type:              v1alpha1.StorageExportTypeDataFoundation,
+			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+			DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
+				ExternalDetailsRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
+			},
+		},
+	}}
+	state.StorageClusterBindings = []v1alpha1.StorageClusterBinding{{
+		Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
+		Spec: v1alpha1.StorageClusterBindingSpec{
+			StorageExportRef: v1alpha1.LocalObjectReference{Name: "shared-ceph-export"},
+			ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+			DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
+				Namespace:          "openshift-storage",
+				StorageClusterName: "ocs-external-storagecluster",
+				StorageSystemName:  "ocs-external-storagecluster-storagesystem",
+			},
+		},
+	}}
+	return state
 }
 
 func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {

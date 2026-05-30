@@ -1,0 +1,98 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: stretched-lab-dc1-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.141.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.141.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.141.1
+            next-hop-interface: primary
+            table-id: 254
+
+  physical:
+    vlan: 0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: stretched-lab-dc2-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.142.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.142.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.142.1
+            next-hop-interface: primary
+            table-id: 254
+
+  physical:
+    vlan: 0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: stretched-lab-dc3-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.143.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.143.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.143.1
+            next-hop-interface: primary
+            table-id: 254
+
+  physical:
+    vlan: 0

@@ -387,6 +387,12 @@ Storage nodes are modeled as machines in a storage-only `ClusterInfra`, not as
 `Host` objects. They are assumed to already run RHEL and be reachable from the
 bastion over SSH.
 
+`StorageCluster.spec.management` defaults to `managed`. `external` declares a
+previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
+Bootwright renders and applies only Data Foundation binding manifests for that
+cluster. The external connection file is declared on the `StorageExport` with
+`spec.dataFoundation.externalDetailsRef`.
+
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
@@ -447,6 +453,9 @@ Rules:
 - `StorageCluster.spec.ceph.cephadm.bootstrap.monIP` is singular because
   `cephadm bootstrap` creates the first monitor on one seed host. HA monitor
   placement is declared through the rendered cephadm service specs.
+- `StorageCluster.spec.management: external` disables Bootwright-managed Ceph
+  provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
+  and `StorageObjectGateway` are not declared for imported Ceph.
 - `nodeSSH` is the bastion-to-node SSH identity Bootwright uses to reach
   preinstalled RHEL nodes. `clusterSSH` is the SSH identity passed to cephadm
   for ongoing cluster orchestration.
@@ -474,6 +483,9 @@ Rules:
   in `ceph/operations.yaml` and per-cluster external connection manifests.
   Rendered manifests carry generated-at-apply placeholders for secret keys;
   authored examples must not contain generated external-cluster secret bytes.
+- Imported Data Foundation exports render a placeholder in normal output and
+  inline `externalDetailsRef` secret JSON only for sensitive render output and
+  apply-time task artifacts.
 
 Rendered storage files are deterministic and are the same files used during
 apply:
@@ -486,6 +498,8 @@ storage/<storageCluster>/data-foundation/<binding>/<cluster>/rook-ceph-external-
 storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagecluster.yaml
 storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagesystem.yaml
 ```
+
+The `cephadm/` and `ceph/` files are omitted for imported storage clusters.
 
 ## Cluster Extensions
 

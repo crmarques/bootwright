@@ -10,6 +10,7 @@ type StorageCluster struct {
 
 type StorageClusterSpec struct {
 	Type            string                  `yaml:"type" json:"type"`
+	Management      string                  `yaml:"management,omitempty" json:"management,omitempty"`
 	ClusterInfraRef LocalObjectReference    `yaml:"clusterInfraRef" json:"clusterInfraRef"`
 	Ceph            *StorageClusterCephSpec `yaml:"ceph,omitempty" json:"ceph,omitempty"`
 }

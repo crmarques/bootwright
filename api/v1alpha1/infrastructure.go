@@ -163,6 +163,9 @@ const (
 
 	StorageClusterTypeCeph = "ceph"
 
+	StorageClusterManagementManaged  = "managed"
+	StorageClusterManagementExternal = "external"
+
 	StorageCephRoleMON     = "mon"
 	StorageCephRoleMGR     = "mgr"
 	StorageCephRoleOSD     = "osd"

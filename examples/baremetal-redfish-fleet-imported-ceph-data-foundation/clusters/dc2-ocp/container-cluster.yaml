@@ -1,0 +1,50 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: dc2-ocp
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+    pullSecretRef:
+      name: openshift-pull-secret
+    nodeSSH:
+      keyPairRef:
+        name: cluster-admin-ssh-key
+
+  controlPlane:
+    name: master
+    replicas: 3
+
+  compute:
+    - name: worker
+      replicas: 0
+
+  networking:
+    clusterNetwork:
+      - cidr: 10.132.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.31.0.0/16
+
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef:
+        clusterInfra: dc2-ocp-infra
+        name: master-0
+    - hostname: master-1
+      role: master
+      machineRef:
+        clusterInfra: dc2-ocp-infra
+        name: master-1
+    - hostname: master-2
+      role: master
+      machineRef:
+        clusterInfra: dc2-ocp-infra
+        name: master-2

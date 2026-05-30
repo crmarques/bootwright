@@ -26,7 +26,7 @@ instead of compact inline maps.
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
 | `ClusterInfra` | Platform render mode, endpoints, and selected machines |
 | `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
-| `StorageCluster` | External storage provisioning intent, initially Ceph through cephadm |
+| `StorageCluster` | External storage intent, either Bootwright-managed Ceph through cephadm or imported Ceph |
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
 | `StoragePool` | Ceph pool role, placement, and replication settings |
 | `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
@@ -63,7 +63,7 @@ KubeVirt child InfraProvider
 StorageClusterBinding
   -> StorageExport
   -> StorageCluster
-  -> ClusterInfra.components.machines[*]
+  -> ClusterInfra.components.machines[*] (managed storage only)
   -> ClusterExtension providing data-foundation
 ```
 
@@ -74,11 +74,13 @@ cluster must reference the same `ClusterInfra`.
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
 
-Storage actions also run from the bastion. Bootwright SSHes to preinstalled
-RHEL Ceph nodes, runs cephadm on the seed node, and applies generated Ceph
-operations from the rendered storage tree. Data Foundation bindings are applied
-later in the extensions phase after the target cluster and Data Foundation
-extension are ready.
+Storage actions also run from the bastion. For managed storage, Bootwright
+SSHes to preinstalled RHEL Ceph nodes, runs cephadm on the seed node, and
+applies generated Ceph operations from the rendered storage tree. For imported
+storage, `StorageCluster.spec.management: external` skips storage
+provisioning; Data Foundation bindings read the declared external-cluster
+details secret and apply later in the extensions phase after the target
+cluster and Data Foundation extension are ready.
 
 ## KubeVirt Child Clusters
 

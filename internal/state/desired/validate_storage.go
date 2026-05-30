@@ -45,15 +45,29 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]
 		prefix := fmt.Sprintf("StorageCluster/%s spec", cluster.Metadata.Name)
 		switch cluster.Spec.Type {
 		case v1alpha1.StorageClusterTypeCeph:
-			if cluster.Spec.Ceph == nil {
-				errs = append(errs, prefix+".ceph is required when spec.type=ceph")
-				continue
-			}
 		case "":
 			errs = append(errs, prefix+".type is required")
 			continue
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, cluster.Spec.Type, v1alpha1.StorageClusterTypeCeph))
+			continue
+		}
+		switch storageClusterManagement(cluster) {
+		case v1alpha1.StorageClusterManagementManaged:
+			if cluster.Spec.Ceph == nil {
+				errs = append(errs, prefix+".ceph is required when spec.type=ceph")
+				continue
+			}
+		case v1alpha1.StorageClusterManagementExternal:
+			if cluster.Spec.ClusterInfraRef.Name != "" {
+				errs = append(errs, prefix+".clusterInfraRef.name must be empty when spec.management=external")
+			}
+			if cluster.Spec.Ceph != nil {
+				errs = append(errs, prefix+".ceph must be empty when spec.management=external")
+			}
+			continue
+		default:
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", prefix, cluster.Spec.Management, v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementExternal))
 			continue
 		}
 		infra, ok := infras[cluster.Spec.ClusterInfraRef.Name]
@@ -253,8 +267,10 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 		prefix := fmt.Sprintf("StoragePlacementPolicy/%s spec", policy.Metadata.Name)
 		if policy.Spec.StorageClusterRef.Name == "" {
 			errs = append(errs, prefix+".storageClusterRef.name is required")
-		} else if _, ok := clusters[policy.Spec.StorageClusterRef.Name]; !ok {
+		} else if cluster, ok := clusters[policy.Spec.StorageClusterRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, policy.Spec.StorageClusterRef.Name))
+		} else if storageClusterExternal(cluster) {
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed placement policies are not declared for imported Ceph", prefix, policy.Spec.StorageClusterRef.Name))
 		}
 		if policy.Spec.Ceph.RuleName == "" {
 			errs = append(errs, prefix+".ceph.ruleName is required")
@@ -281,6 +297,8 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 			errs = append(errs, prefix+".storageClusterRef.name is required")
 		} else if !ok {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, pool.Spec.StorageClusterRef.Name))
+		} else if storageClusterExternal(cluster) {
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed pools are not declared for imported Ceph", prefix, pool.Spec.StorageClusterRef.Name))
 		}
 		if pool.Spec.PlacementPolicyRef.Name != "" {
 			policy, policyOK := policies[pool.Spec.PlacementPolicyRef.Name]
@@ -337,6 +355,8 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 			errs = append(errs, prefix+".storageClusterRef.name is required")
 		} else if !ok {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, fs.Spec.StorageClusterRef.Name))
+		} else if storageClusterExternal(cluster) {
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed filesystems are not declared for imported Ceph", prefix, fs.Spec.StorageClusterRef.Name))
 		}
 		metadataPool, metadataOK := pools[fs.Spec.CephFS.MetadataPoolRef.Name]
 		if fs.Spec.CephFS.MetadataPoolRef.Name == "" {
@@ -395,6 +415,8 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 			errs = append(errs, prefix+".storageClusterRef.name is required")
 		} else if !ok {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, gw.Spec.StorageClusterRef.Name))
+		} else if storageClusterExternal(cluster) {
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed object gateways are not declared for imported Ceph", prefix, gw.Spec.StorageClusterRef.Name))
 		}
 		if gw.Spec.Ceph.ServiceID == "" {
 			errs = append(errs, prefix+".ceph.serviceID is required")
@@ -453,9 +475,10 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 		}
 		seen[export.Metadata.Name] = true
 		prefix := fmt.Sprintf("StorageExport/%s spec", export.Metadata.Name)
+		cluster, clusterOK := clusters[export.Spec.StorageClusterRef.Name]
 		if export.Spec.StorageClusterRef.Name == "" {
 			errs = append(errs, prefix+".storageClusterRef.name is required")
-		} else if _, ok := clusters[export.Spec.StorageClusterRef.Name]; !ok {
+		} else if !clusterOK {
 			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, export.Spec.StorageClusterRef.Name))
 		}
 		switch export.Spec.Type {
@@ -473,6 +496,20 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 		}
 		df := export.Spec.DataFoundation
 		if df == nil {
+			continue
+		}
+		usesImportedDetails := df.ExternalDetailsRef.Name != ""
+		if usesImportedDetails {
+			if clusterOK && !storageClusterExternal(cluster) {
+				errs = append(errs, fmt.Sprintf("%s.dataFoundation.externalDetailsRef.name requires StorageCluster/%s spec.management=external", prefix, cluster.Metadata.Name))
+			}
+			if df.RBDPoolRef.Name != "" || df.CephFSRef.Name != "" || df.ObjectGatewayRef.Name != "" {
+				errs = append(errs, prefix+".dataFoundation.externalDetailsRef is mutually exclusive with rbdPoolRef, cephFSRef, and objectGatewayRef")
+			}
+			continue
+		}
+		if clusterOK && storageClusterExternal(cluster) {
+			errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name is required when storageClusterRef points to a StorageCluster with spec.management=external")
 			continue
 		}
 		if df.RBDPoolRef.Name == "" {
@@ -642,6 +679,17 @@ func clusterInfraMachineExists(infra v1alpha1.ClusterInfra, name string) bool {
 
 func storageClusterStretchEnabled(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil && cluster.Spec.Ceph.Topology.Stretch.Enabled
+}
+
+func storageClusterManagement(cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Management == "" {
+		return v1alpha1.StorageClusterManagementManaged
+	}
+	return cluster.Spec.Management
+}
+
+func storageClusterExternal(cluster v1alpha1.StorageCluster) bool {
+	return storageClusterManagement(cluster) == v1alpha1.StorageClusterManagementExternal
 }
 
 func storageCephNodeExists(cluster v1alpha1.StorageCluster, name string) bool {

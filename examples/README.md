@@ -35,6 +35,9 @@ Current examples:
 - `baremetal-redfish-fleet-stretched-ceph-data-foundation`: two compact
   bare-metal Redfish clusters bound through IBM Fusion Data Foundation to a
   Bootwright-provisioned seven-node Ceph stretch cluster.
+- `baremetal-redfish-fleet-imported-ceph-data-foundation`: two compact
+  bare-metal Redfish clusters bound through OpenShift Data Foundation to a
+  previously provisioned external Ceph cluster.
 - `baremetal-redfish-virtualized-child`: a bare-metal SNO parent with
   OpenShift Virtualization and a KubeVirt-backed SNO child cluster.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common

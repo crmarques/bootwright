@@ -99,7 +99,7 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	if phaseInScope("extensions", selected, hasState) && len(state.StorageClusterBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if phaseInScope("storage", selected, hasState) && len(state.StorageClusters) > 0 {
+	if phaseInScope("storage", selected, hasState) && stateHasManagedStorageClusters(state) {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),
 			binaryCheck(checkGroupControllerTools, "scp", nil, "install scp on PATH", deps),
@@ -152,6 +152,15 @@ func stateNeedsKubeVirt(state v1alpha1.State) bool {
 			if mp.KubeVirt != nil {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func stateHasManagedStorageClusters(state v1alpha1.State) bool {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged {
+			return true
 		}
 	}
 	return false

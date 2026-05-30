@@ -140,7 +140,7 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 			return result, err
 		}
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{}); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -280,7 +280,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 			return result, err
 		}
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state); err != nil {
+	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{ExternalDetailsSecretsDir: secretsDir}); err != nil {
 		return result, err
 	}
 	return result, nil

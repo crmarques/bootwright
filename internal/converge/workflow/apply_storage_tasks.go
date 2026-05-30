@@ -112,3 +112,7 @@ func storageAssetFor(assets []render.StorageAsset, name string) render.StorageAs
 	}
 	return render.StorageAsset{}
 }
+
+func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {
+	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
+}

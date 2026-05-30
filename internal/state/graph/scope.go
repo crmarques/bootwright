@@ -118,7 +118,9 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	}
 	selectedInfra := map[string]bool{}
 	for _, cluster := range clusters {
-		selectedInfra[cluster.Spec.ClusterInfraRef.Name] = true
+		if cluster.Spec.ClusterInfraRef.Name != "" {
+			selectedInfra[cluster.Spec.ClusterInfraRef.Name] = true
+		}
 	}
 	var infras []v1alpha1.ClusterInfra
 	selectedProviders := map[string]bool{}
@@ -311,7 +313,9 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 			continue
 		}
 		filteredClusters = append(filteredClusters, cluster)
-		storageInfra[cluster.Spec.ClusterInfraRef.Name] = true
+		if cluster.Spec.ClusterInfraRef.Name != "" {
+			storageInfra[cluster.Spec.ClusterInfraRef.Name] = true
+		}
 	}
 
 	state.StorageClusters = filteredClusters

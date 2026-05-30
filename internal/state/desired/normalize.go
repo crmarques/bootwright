@@ -162,6 +162,9 @@ func normalizeClusterExtensionBinding(binding *v1alpha1.ClusterExtensionBinding)
 }
 
 func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
+	if cluster.Spec.Management == "" {
+		cluster.Spec.Management = v1alpha1.StorageClusterManagementManaged
+	}
 	if cluster.Spec.Ceph == nil {
 		return
 	}

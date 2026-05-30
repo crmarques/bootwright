@@ -14,6 +14,17 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "nodeSSH", cluster.Spec.Ceph.Cephadm.NodeSSH)...)
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "clusterSSH", cluster.Spec.Ceph.Cephadm.ClusterSSH)...)
 	}
+	for _, export := range state.StorageExports {
+		if export.Spec.DataFoundation == nil || export.Spec.DataFoundation.ExternalDetailsRef.Name == "" {
+			continue
+		}
+		out = append(out, secretRefRequirement{
+			refName: export.Spec.DataFoundation.ExternalDetailsRef.Name,
+			label:   export.Metadata.Name + " dataFoundation externalDetailsRef",
+			phases:  []string{"extensions"},
+			role:    secret.MaterialPrimary,
+		})
+	}
 	return out
 }
 

@@ -27,8 +27,17 @@ type StorageBindingAsset struct {
 	StorageSystemPath          string
 }
 
+type storageAssetWriteOptions struct {
+	ExternalDetailsSecretsDir string
+}
+
 func (a StorageAsset) Directories() []string {
-	dirs := []string{a.Dir, a.CephadmDir, a.CephDir, a.DataFoundationDir}
+	var dirs []string
+	for _, dir := range []string{a.Dir, a.CephadmDir, a.CephDir, a.DataFoundationDir} {
+		if dir != "" {
+			dirs = append(dirs, dir)
+		}
+	}
 	for _, binding := range a.Bindings {
 		dirs = append(dirs, binding.Dir)
 	}
@@ -43,12 +52,14 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 		asset := StorageAsset{
 			StorageClusterName: cluster.Metadata.Name,
 			Dir:                dir,
-			CephadmDir:         filepath.Join(dir, "cephadm"),
-			CephDir:            filepath.Join(dir, "ceph"),
 			DataFoundationDir:  filepath.Join(dir, "data-foundation"),
-			BootstrapSpecPath:  filepath.Join(dir, "cephadm", "bootstrap-spec.yaml"),
-			ServicesSpecPath:   filepath.Join(dir, "cephadm", "services.yaml"),
-			OperationsPath:     filepath.Join(dir, "ceph", "operations.yaml"),
+		}
+		if storageClusterManaged(cluster) {
+			asset.CephadmDir = filepath.Join(dir, "cephadm")
+			asset.CephDir = filepath.Join(dir, "ceph")
+			asset.BootstrapSpecPath = filepath.Join(dir, "cephadm", "bootstrap-spec.yaml")
+			asset.ServicesSpecPath = filepath.Join(dir, "cephadm", "services.yaml")
+			asset.OperationsPath = filepath.Join(dir, "ceph", "operations.yaml")
 		}
 		for _, binding := range bindingsByCluster[cluster.Metadata.Name] {
 			for _, containerCluster := range binding.Spec.ClusterSelector.Names {
@@ -68,20 +79,22 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 	return assets
 }
 
-func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.State) error {
+func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.State, opts storageAssetWriteOptions) error {
 	for _, asset := range assets {
 		cluster, ok := storageClusterByName(state, asset.StorageClusterName)
-		if !ok || cluster.Spec.Ceph == nil {
+		if !ok {
 			continue
 		}
-		if err := writeYAMLDocuments(fs, asset.BootstrapSpecPath, cephadmBootstrapSpec(state, cluster)); err != nil {
-			return err
-		}
-		if err := writeYAMLDocuments(fs, asset.ServicesSpecPath, cephadmServicesSpec(state, cluster)); err != nil {
-			return err
-		}
-		if err := writeYAML(fs, asset.OperationsPath, cephOperations(state, cluster)); err != nil {
-			return err
+		if storageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
+			if err := writeYAMLDocuments(fs, asset.BootstrapSpecPath, cephadmBootstrapSpec(state, cluster)); err != nil {
+				return err
+			}
+			if err := writeYAMLDocuments(fs, asset.ServicesSpecPath, cephadmServicesSpec(state, cluster)); err != nil {
+				return err
+			}
+			if err := writeYAML(fs, asset.OperationsPath, cephOperations(state, cluster)); err != nil {
+				return err
+			}
 		}
 		for _, bindingAsset := range asset.Bindings {
 			binding, ok := storageBindingByName(state, bindingAsset.BindingName)
@@ -92,7 +105,15 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			if !ok || export.Spec.DataFoundation == nil {
 				continue
 			}
-			if err := writeYAML(fs, bindingAsset.ExternalClusterDetailsPath, dataFoundationExternalDetailsManifest(state, cluster, export, binding, bindingAsset.ContainerClusterName)); err != nil {
+			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, binding, bindingAsset.ContainerClusterName)
+			if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
+				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, export.Spec.DataFoundation.ExternalDetailsRef)
+				if err != nil {
+					return err
+				}
+				externalDetails = DataFoundationExternalDetailsRawJSONManifest(binding, detailsJSON, export.Spec.DataFoundation.ExternalDetailsRef.Name)
+			}
+			if err := writeYAML(fs, bindingAsset.ExternalClusterDetailsPath, externalDetails); err != nil {
 				return err
 			}
 			if err := writeYAML(fs, bindingAsset.StorageClusterPath, dataFoundationStorageClusterManifest(binding)); err != nil {
@@ -104,4 +125,8 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 		}
 	}
 	return nil
+}
+
+func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {
+	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
 }

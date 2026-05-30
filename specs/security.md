@@ -30,7 +30,11 @@ identities reference `Environment.spec.secrets`; `nodeSSH` is the
 bastion-to-RHEL-node identity and `clusterSSH` is the identity passed to
 cephadm for ongoing orchestration. Data Foundation external-cluster details
 render with placeholders for Ceph client secrets; generated Ceph keys are
-created or read during apply and must not be committed.
+created or read during apply and must not be committed. Imported Ceph
+connection JSON is declared through
+`StorageExport.spec.dataFoundation.externalDetailsRef`; normal render output
+uses a placeholder, while sensitive render and apply-time artifacts inline the
+secret JSON only in local restrictive-mode output.
 
 ## Installer Trust
 

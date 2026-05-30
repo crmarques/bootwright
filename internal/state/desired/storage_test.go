@@ -84,6 +84,75 @@ func TestStorageClusterBindingRequiresDataFoundationProvider(t *testing.T) {
 	}
 }
 
+func TestExternalStorageValidationAcceptsImportedDataFoundation(t *testing.T) {
+	if errs := validateStorage(externalStorageValidationState()); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
+	}
+}
+
+func TestExternalStorageValidationRequiresExternalDetailsRef(t *testing.T) {
+	state := externalStorageValidationState()
+	state.StorageExports[0].Spec.DataFoundation.ExternalDetailsRef = v1alpha1.SecretRef{}
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, "externalDetailsRef.name is required when storageClusterRef points to a StorageCluster with spec.management=external") {
+		t.Fatalf("validateStorage errors = %q, want externalDetailsRef requirement", got)
+	}
+}
+
+func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+		want string
+	}{
+		{
+			name: "external-cluster-infra",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.ClusterInfraRef = v1alpha1.LocalObjectReference{Name: "ceph-infra"}
+			},
+			want: "clusterInfraRef.name must be empty when spec.management=external",
+		},
+		{
+			name: "external-ceph-spec",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph = &v1alpha1.StorageClusterCephSpec{}
+			},
+			want: "ceph must be empty when spec.management=external",
+		},
+		{
+			name: "managed-external-details",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged
+			},
+			want: "externalDetailsRef.name requires StorageCluster/shared-ceph spec.management=external",
+		},
+		{
+			name: "imported-and-managed-refs",
+			edit: func(state *v1alpha1.State) {
+				state.StorageExports[0].Spec.DataFoundation.RBDPoolRef = v1alpha1.LocalObjectReference{Name: "rbd"}
+			},
+			want: "externalDetailsRef is mutually exclusive with rbdPoolRef, cephFSRef, and objectGatewayRef",
+		},
+		{
+			name: "pool-on-external-cluster",
+			edit: func(state *v1alpha1.State) {
+				state.StoragePools = []v1alpha1.StoragePool{{Metadata: v1alpha1.Metadata{Name: "rbd"}, Spec: storagePoolSpec("shared-ceph", v1alpha1.StoragePoolRoleRBD)}}
+			},
+			want: "Bootwright-managed pools are not declared for imported Ceph",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := externalStorageValidationState()
+			tc.edit(&state)
+			got := strings.Join(validateStorage(state), "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func storageValidationState() v1alpha1.State {
 	return v1alpha1.State{
 		ClusterInfras: []v1alpha1.ClusterInfra{{
@@ -165,6 +234,60 @@ func storageValidationState() v1alpha1.State {
 				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
 					RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
 					CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+				},
+			},
+		}},
+		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
+			Metadata: v1alpha1.Metadata{Name: "binding"},
+			Spec: v1alpha1.StorageClusterBindingSpec{
+				StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
+				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+				DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
+					Namespace:          "openshift-storage",
+					StorageClusterName: "ocs-external-storagecluster",
+					StorageSystemName:  "ocs-external-storagecluster-storagesystem",
+				},
+			},
+		}},
+		ClusterExtensions: []v1alpha1.ClusterExtension{{
+			Metadata: v1alpha1.Metadata{Name: "odf"},
+			Spec: v1alpha1.ClusterExtensionSpec{
+				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterExtensionProvidesDataFoundation},
+				Readiness: v1alpha1.ClusterExtensionReadiness{
+					Checks: []v1alpha1.ClusterExtensionReadinessCheck{{Type: v1alpha1.ClusterExtensionReadinessResourceExists}},
+				},
+			},
+		}},
+		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
+			Spec: v1alpha1.ClusterExtensionBindingSpec{
+				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
+				Extensions:      []v1alpha1.LocalObjectReference{{Name: "odf"}},
+			},
+		}},
+	}
+}
+
+func externalStorageValidationState() v1alpha1.State {
+	return v1alpha1.State{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "demo"},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementExternal,
+			},
+		}},
+		StorageExports: []v1alpha1.StorageExport{{
+			Metadata: v1alpha1.Metadata{Name: "export"},
+			Spec: v1alpha1.StorageExportSpec{
+				Type:              v1alpha1.StorageExportTypeDataFoundation,
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
+					ExternalDetailsRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
 				},
 			},
 		}},

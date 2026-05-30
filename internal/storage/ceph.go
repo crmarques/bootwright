@@ -120,7 +120,7 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 	}
 	for _, binding := range bindings {
 		if missing := MissingDataFoundationSecrets(binding.Export, binding.Record.Secrets); len(missing) > 0 {
-			return fmt.Errorf("Data Foundation storage binding %s/%s missing generated credentials: %s", binding.Record.Cluster, binding.Record.Binding, strings.Join(missing, ", "))
+			return fmt.Errorf("data foundation storage binding %s/%s missing generated credentials: %s", binding.Record.Cluster, binding.Record.Binding, strings.Join(missing, ", "))
 		}
 		if err := SaveDataFoundationBindingRecord(opts.ClustersDir, binding.Record); err != nil {
 			return err
@@ -366,6 +366,9 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 		if !ok {
 			continue
 		}
+		if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" {
+			continue
+		}
 		for _, cluster := range binding.Spec.ClusterSelector.Names {
 			out = append(out, dataFoundationBindingContext{
 				Record: DataFoundationBindingRecord{
@@ -477,9 +480,9 @@ func parseCephAuthKey(output string) (string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("read Ceph auth output: %w", err)
+		return "", fmt.Errorf("read ceph auth output: %w", err)
 	}
-	return "", fmt.Errorf("Ceph auth output did not include a key")
+	return "", fmt.Errorf("ceph auth output did not include a key")
 }
 
 func parseRGWCredentials(output string) (string, string, error) {
