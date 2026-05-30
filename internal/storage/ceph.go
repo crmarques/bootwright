@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -29,12 +32,13 @@ func (ExecRunner) Run(ctx context.Context, name string, args []string, stdout io
 }
 
 type ApplyOptions struct {
-	State      v1alpha1.State
-	SecretsDir string
-	Asset      render.StorageAsset
+	State       v1alpha1.State
+	ClustersDir string
+	SecretsDir  string
+	Asset       render.StorageAsset
 }
 
-func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner CommandRunner, opts ApplyOptions) error {
+func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner CommandRunner, opts ApplyOptions) (err error) {
 	if runner == nil {
 		runner = ExecRunner{}
 	}
@@ -49,9 +53,15 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 	remote := storageRemote(cluster, seedIP)
 	keyPath := storageSSHPrivateKeyPath(opts.State, opts.SecretsDir, cluster.Spec.Ceph.Cephadm.NodeSSH)
 	remoteDir := "/tmp/bootwright-" + cluster.Metadata.Name
-	if err := runner.Run(ctx, "ssh", append(sshArgs(keyPath, remote), "mkdir", "-p", remoteDir), stdout, stderr); err != nil {
+	if err := runRemote(ctx, runner, keyPath, remote, []string{"mkdir", "-p", remoteDir}, stdout, stderr); err != nil {
 		return fmt.Errorf("prepare remote storage workdir: %w", err)
 	}
+	defer func() {
+		cleanupErr := cleanupRemoteWorkdir(ctx, runner, keyPath, remote, remoteDir)
+		if cleanupErr != nil && err == nil {
+			err = cleanupErr
+		}
+	}()
 	bootstrap := filepath.Join(remoteDir, "bootstrap-spec.yaml")
 	services := filepath.Join(remoteDir, "services.yaml")
 	operations := filepath.Join(remoteDir, "operations.yaml")
@@ -68,11 +78,26 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 	if err != nil {
 		return err
 	}
-	if err := runner.Run(ctx, "ssh", append(sshArgs(keyPath, remote), bootstrapArgs...), stdout, stderr); err != nil {
-		return fmt.Errorf("cephadm bootstrap: %w", err)
+	if err := ensureCephadmBootstrapped(ctx, runner, stdout, stderr, keyPath, remote, bootstrapArgs); err != nil {
+		return err
 	}
-	if err := runner.Run(ctx, "ssh", append(sshArgs(keyPath, remote), "ceph", "orch", "apply", "-i", services), stdout, stderr); err != nil {
+	if err := runRemote(ctx, runner, keyPath, remote, []string{"ceph", "orch", "apply", "-i", services}, stdout, stderr); err != nil {
 		return fmt.Errorf("ceph orch apply: %w", err)
+	}
+	bindings := dataFoundationBindingContexts(opts.State, cluster.Metadata.Name)
+	if len(bindings) > 0 {
+		if strings.TrimSpace(opts.ClustersDir) == "" {
+			return fmt.Errorf("clusters dir is required to persist Data Foundation storage binding credentials")
+		}
+		secrets, err := collectDataFoundationClusterSecrets(ctx, runner, keyPath, remote)
+		if err != nil {
+			return err
+		}
+		for i := range bindings {
+			bindings[i].Record.Secrets.AdminSecret = secrets.AdminSecret
+			bindings[i].Record.Secrets.FSID = secrets.FSID
+			bindings[i].Record.Secrets.MonSecret = secrets.MonSecret
+		}
 	}
 	ops, err := readOperations(opts.Asset.OperationsPath)
 	if err != nil {
@@ -82,11 +107,125 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 		if len(op.Command) == 0 {
 			continue
 		}
-		if err := runner.Run(ctx, "ssh", append(sshArgs(keyPath, remote), op.Command...), stdout, stderr); err != nil {
+		capture, captureDF := dataFoundationCaptureForOperation(op.Name, bindings)
+		output, err := runStorageOperation(ctx, runner, stdout, stderr, keyPath, remote, op, captureDF)
+		if err != nil {
 			return fmt.Errorf("%s: %w", op.Name, err)
+		}
+		if captureDF {
+			if err := applyDataFoundationCapture(bindings, capture, output); err != nil {
+				return fmt.Errorf("%s: %w", op.Name, err)
+			}
+		}
+	}
+	for _, binding := range bindings {
+		if missing := MissingDataFoundationSecrets(binding.Export, binding.Record.Secrets); len(missing) > 0 {
+			return fmt.Errorf("Data Foundation storage binding %s/%s missing generated credentials: %s", binding.Record.Cluster, binding.Record.Binding, strings.Join(missing, ", "))
+		}
+		if err := SaveDataFoundationBindingRecord(opts.ClustersDir, binding.Record); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func ensureCephadmBootstrapped(ctx context.Context, runner CommandRunner, stdout io.Writer, stderr io.Writer, keyPath, remote string, bootstrapArgs []string) error {
+	if cephadmAlreadyBootstrapped(ctx, runner, keyPath, remote) {
+		return nil
+	}
+	if err := runRemote(ctx, runner, keyPath, remote, bootstrapArgs, stdout, stderr); err != nil {
+		return fmt.Errorf("cephadm bootstrap: %w", err)
+	}
+	return nil
+}
+
+func cephadmAlreadyBootstrapped(ctx context.Context, runner CommandRunner, keyPath, remote string) bool {
+	if err := runRemote(ctx, runner, keyPath, remote, []string{"test", "-f", "/etc/ceph/ceph.conf"}, io.Discard, io.Discard); err != nil {
+		return false
+	}
+	if err := runRemote(ctx, runner, keyPath, remote, []string{"ceph", "status"}, io.Discard, io.Discard); err != nil {
+		return false
+	}
+	return true
+}
+
+func cleanupRemoteWorkdir(ctx context.Context, runner CommandRunner, keyPath, remote, remoteDir string) error {
+	if err := runRemote(ctx, runner, keyPath, remote, []string{"rm", "-rf", remoteDir}, io.Discard, io.Discard); err != nil {
+		return fmt.Errorf("cleanup remote storage workdir: %w", err)
+	}
+	return nil
+}
+
+func runStorageOperation(ctx context.Context, runner CommandRunner, stdout io.Writer, stderr io.Writer, keyPath, remote string, op storageOperation, captureOutput bool) (string, error) {
+	if len(op.Command) == 0 {
+		return "", nil
+	}
+	switch {
+	case strings.HasPrefix(op.Name, "create-pool-") && len(op.Command) >= 5:
+		if remoteCommandOK(ctx, runner, keyPath, remote, []string{"ceph", "osd", "pool", "get", op.Command[4], "size"}) {
+			return "", nil
+		}
+	case strings.HasPrefix(op.Name, "create-cephfs-") && len(op.Command) >= 4:
+		if remoteCommandOK(ctx, runner, keyPath, remote, []string{"ceph", "fs", "get", op.Command[3]}) {
+			return "", nil
+		}
+	case strings.HasPrefix(op.Name, "create-crush-rule-") && len(op.Command) >= 6:
+		if remoteCommandOK(ctx, runner, keyPath, remote, []string{"ceph", "osd", "crush", "rule", "dump", op.Command[5]}) {
+			return "", nil
+		}
+	case op.Name == "enable-stretch-mode":
+		if output, err := runRemoteCapture(ctx, runner, keyPath, remote, []string{"ceph", "mon", "dump"}); err == nil && strings.Contains(strings.ToLower(output), "stretch") {
+			return "", nil
+		}
+	case strings.HasPrefix(op.Name, "create-rgw-admin-user-") || strings.HasPrefix(op.Name, "create-data-foundation-rgw-admin-user-"):
+		if uid := commandOptionValue(op.Command, "--uid"); uid != "" {
+			return runRGWUserOperation(ctx, runner, stdout, stderr, keyPath, remote, op.Command, uid, captureOutput)
+		}
+	}
+	if captureOutput {
+		return runRemoteCapture(ctx, runner, keyPath, remote, op.Command)
+	}
+	return "", runRemote(ctx, runner, keyPath, remote, op.Command, stdout, stderr)
+}
+
+func runRGWUserOperation(ctx context.Context, runner CommandRunner, stdout io.Writer, stderr io.Writer, keyPath, remote string, command []string, uid string, captureOutput bool) (string, error) {
+	infoCommand := []string{"radosgw-admin", "user", "info", "--uid", uid, "--format", "json"}
+	if output, err := runRemoteCapture(ctx, runner, keyPath, remote, infoCommand); err == nil {
+		return output, nil
+	}
+	if captureOutput {
+		return runRemoteCapture(ctx, runner, keyPath, remote, command)
+	}
+	return "", runRemote(ctx, runner, keyPath, remote, command, stdout, stderr)
+}
+
+func commandOptionValue(command []string, option string) string {
+	for i := 0; i < len(command)-1; i++ {
+		if command[i] == option {
+			return command[i+1]
+		}
+	}
+	return ""
+}
+
+func remoteCommandOK(ctx context.Context, runner CommandRunner, keyPath, remote string, command []string) bool {
+	return runRemote(ctx, runner, keyPath, remote, command, io.Discard, io.Discard) == nil
+}
+
+func runRemote(ctx context.Context, runner CommandRunner, keyPath, remote string, command []string, stdout io.Writer, stderr io.Writer) error {
+	return runner.Run(ctx, "ssh", append(sshArgs(keyPath, remote), command...), stdout, stderr)
+}
+
+func runRemoteCapture(ctx context.Context, runner CommandRunner, keyPath, remote string, command []string) (string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runRemote(ctx, runner, keyPath, remote, command, &stdout, &stderr); err != nil {
+		if strings.TrimSpace(stderr.String()) != "" {
+			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return "", err
+	}
+	return stdout.String(), nil
 }
 
 func cephadmBootstrapArgs(ctx context.Context, runner CommandRunner, stdout io.Writer, stderr io.Writer, nodeKeyPath, remote, remoteDir string, state v1alpha1.State, secretsDir string, cluster v1alpha1.StorageCluster, bootstrap, seedIP string) ([]string, error) {
@@ -201,6 +340,164 @@ func readOperations(path string) (operationsFile, error) {
 		return operationsFile{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 	return out, nil
+}
+
+type dataFoundationBindingContext struct {
+	Record DataFoundationBindingRecord
+	Export v1alpha1.StorageExport
+}
+
+type dataFoundationCapture struct {
+	Cluster string
+	Field   string
+	RGW     bool
+}
+
+func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) []dataFoundationBindingContext {
+	exports := map[string]v1alpha1.StorageExport{}
+	for _, export := range state.StorageExports {
+		if export.Spec.StorageClusterRef.Name == storageCluster && export.Spec.DataFoundation != nil {
+			exports[export.Metadata.Name] = export
+		}
+	}
+	var out []dataFoundationBindingContext
+	for _, binding := range state.StorageClusterBindings {
+		export, ok := exports[binding.Spec.StorageExportRef.Name]
+		if !ok {
+			continue
+		}
+		for _, cluster := range binding.Spec.ClusterSelector.Names {
+			out = append(out, dataFoundationBindingContext{
+				Record: DataFoundationBindingRecord{
+					StorageCluster: storageCluster,
+					Binding:        binding.Metadata.Name,
+					Cluster:        cluster,
+				},
+				Export: export,
+			})
+		}
+	}
+	return out
+}
+
+func collectDataFoundationClusterSecrets(ctx context.Context, runner CommandRunner, keyPath, remote string) (render.DataFoundationExternalSecrets, error) {
+	fsid, err := runRemoteCapture(ctx, runner, keyPath, remote, []string{"ceph", "fsid"})
+	if err != nil {
+		return render.DataFoundationExternalSecrets{}, fmt.Errorf("read Ceph fsid: %w", err)
+	}
+	adminSecret, err := runRemoteCapture(ctx, runner, keyPath, remote, []string{"ceph", "auth", "get-key", "client.admin"})
+	if err != nil {
+		return render.DataFoundationExternalSecrets{}, fmt.Errorf("read Ceph admin key: %w", err)
+	}
+	monSecret, err := runRemoteCapture(ctx, runner, keyPath, remote, []string{"ceph", "auth", "get-key", "mon."})
+	if err != nil {
+		return render.DataFoundationExternalSecrets{}, fmt.Errorf("read Ceph monitor key: %w", err)
+	}
+	return render.DataFoundationExternalSecrets{
+		AdminSecret: strings.TrimSpace(adminSecret),
+		FSID:        strings.TrimSpace(fsid),
+		MonSecret:   strings.TrimSpace(monSecret),
+	}, nil
+}
+
+func dataFoundationCaptureForOperation(name string, bindings []dataFoundationBindingContext) (dataFoundationCapture, bool) {
+	fields := []struct {
+		Prefix string
+		Field  string
+	}{
+		{"create-data-foundation-healthchecker-", "healthchecker"},
+		{"create-data-foundation-rbd-node-", "rbd-node"},
+		{"create-data-foundation-rbd-provisioner-", "rbd-provisioner"},
+		{"create-data-foundation-cephfs-node-", "cephfs-node"},
+		{"create-data-foundation-cephfs-provisioner-", "cephfs-provisioner"},
+	}
+	for _, binding := range bindings {
+		for _, field := range fields {
+			if name == field.Prefix+binding.Record.Cluster {
+				return dataFoundationCapture{Cluster: binding.Record.Cluster, Field: field.Field}, true
+			}
+		}
+		if name == "create-data-foundation-rgw-admin-user-"+binding.Record.Cluster {
+			return dataFoundationCapture{Cluster: binding.Record.Cluster, RGW: true}, true
+		}
+	}
+	return dataFoundationCapture{}, false
+}
+
+func applyDataFoundationCapture(bindings []dataFoundationBindingContext, capture dataFoundationCapture, output string) error {
+	if capture.RGW {
+		accessKey, secretKey, err := parseRGWCredentials(output)
+		if err != nil {
+			return err
+		}
+		for i := range bindings {
+			if bindings[i].Record.Cluster != capture.Cluster {
+				continue
+			}
+			bindings[i].Record.Secrets.RGWAccessKey = accessKey
+			bindings[i].Record.Secrets.RGWSecretKey = secretKey
+		}
+		return nil
+	}
+	key, err := parseCephAuthKey(output)
+	if err != nil {
+		return err
+	}
+	for i := range bindings {
+		if bindings[i].Record.Cluster != capture.Cluster {
+			continue
+		}
+		switch capture.Field {
+		case "healthchecker":
+			bindings[i].Record.Secrets.HealthcheckerKey = key
+		case "rbd-node":
+			bindings[i].Record.Secrets.RBDNodeKey = key
+		case "rbd-provisioner":
+			bindings[i].Record.Secrets.RBDProvisionerKey = key
+		case "cephfs-node":
+			bindings[i].Record.Secrets.CephFSNodeKey = key
+		case "cephfs-provisioner":
+			bindings[i].Record.Secrets.CephFSProvisionerKey = key
+		}
+	}
+	return nil
+}
+
+func parseCephAuthKey(output string) (string, error) {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		value, ok := strings.CutPrefix(line, "key =")
+		if !ok {
+			continue
+		}
+		key := strings.TrimSpace(value)
+		if key != "" {
+			return key, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read Ceph auth output: %w", err)
+	}
+	return "", fmt.Errorf("Ceph auth output did not include a key")
+}
+
+func parseRGWCredentials(output string) (string, string, error) {
+	var payload struct {
+		Keys []struct {
+			AccessKey string `json:"access_key"`
+			SecretKey string `json:"secret_key"`
+		} `json:"keys"`
+	}
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		return "", "", fmt.Errorf("decode RGW user JSON: %w", err)
+	}
+	for _, key := range payload.Keys {
+		if strings.TrimSpace(key.AccessKey) != "" && strings.TrimSpace(key.SecretKey) != "" {
+			return key.AccessKey, key.SecretKey, nil
+		}
+	}
+	return "", "", fmt.Errorf("RGW user JSON did not include access and secret keys")
 }
 
 func storageMachineIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref v1alpha1.StorageMachineIPRef) (string, error) {

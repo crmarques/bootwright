@@ -61,7 +61,7 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		ops = append(ops, operation("create-rgw-admin-user-"+gw.Metadata.Name, "radosgw-admin", "user", "create", "--uid", "bootwright-"+gw.Metadata.Name+"-admin", "--display-name", "Bootwright "+gw.Metadata.Name+" admin"))
+		ops = append(ops, operation("create-rgw-admin-user-"+gw.Metadata.Name, "radosgw-admin", "user", "create", "--uid", "bootwright-"+gw.Metadata.Name+"-admin", "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json"))
 	}
 	return map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",

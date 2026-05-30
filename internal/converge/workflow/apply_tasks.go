@@ -142,7 +142,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Dependencies: append([]string(nil), providerTaskIDs...),
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
-				State: stategraph.FilterStateToStorageClusters(state, []string{cluster.Metadata.Name}),
+				State: storageTaskState(state, cluster.Metadata.Name),
 			})
 		}
 	}

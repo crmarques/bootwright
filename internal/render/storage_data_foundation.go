@@ -8,6 +8,21 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+const DataFoundationGeneratedAtApplyPlaceholder = "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"
+
+type DataFoundationExternalSecrets struct {
+	AdminSecret          string `json:"adminSecret,omitempty"`
+	FSID                 string `json:"fsid,omitempty"`
+	MonSecret            string `json:"monSecret,omitempty"`
+	HealthcheckerKey     string `json:"healthcheckerKey,omitempty"`
+	RBDNodeKey           string `json:"rbdNodeKey,omitempty"`
+	RBDProvisionerKey    string `json:"rbdProvisionerKey,omitempty"`
+	CephFSNodeKey        string `json:"cephFSNodeKey,omitempty"`
+	CephFSProvisionerKey string `json:"cephFSProvisionerKey,omitempty"`
+	RGWAccessKey         string `json:"rgwAccessKey,omitempty"`
+	RGWSecretKey         string `json:"rgwSecretKey,omitempty"`
+}
+
 func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) []map[string]any {
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
@@ -36,7 +51,7 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 				operation("create-data-foundation-cephfs-provisioner-"+containerCluster, "ceph", "auth", "get-or-create", "client."+cephFSProvisioner, "mon", "allow r", "mgr", "allow rw", "mds", "allow rw", "osd", "allow rw tag cephfs data="+df.CephFSRef.Name),
 			)
 			if df.ObjectGatewayRef.Name != "" {
-				ops = append(ops, operation("create-data-foundation-rgw-admin-user-"+containerCluster, "radosgw-admin", "user", "create", "--uid", dataFoundationRGWUserID(containerCluster), "--display-name", "Bootwright "+containerCluster+" Data Foundation RGW admin"))
+				ops = append(ops, operation("create-data-foundation-rgw-admin-user-"+containerCluster, "radosgw-admin", "user", "create", "--uid", dataFoundationRGWUserID(containerCluster), "--display-name", "Bootwright "+containerCluster+" Data Foundation RGW admin", "--format", "json"))
 			}
 		}
 	}
@@ -44,7 +59,11 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 }
 
 func dataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, binding v1alpha1.StorageClusterBinding, containerCluster string) map[string]any {
-	details, _ := json.MarshalIndent(dataFoundationExternalDetails(state, cluster, export, containerCluster), "", "  ")
+	return DataFoundationExternalDetailsManifest(state, cluster, export, binding, containerCluster, DataFoundationExternalSecrets{})
+}
+
+func DataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, binding v1alpha1.StorageClusterBinding, containerCluster string, secrets DataFoundationExternalSecrets) map[string]any {
+	details, _ := json.MarshalIndent(dataFoundationExternalDetails(state, cluster, export, containerCluster, secrets), "", "  ")
 	return map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Secret",
@@ -62,7 +81,7 @@ func dataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha
 	}
 }
 
-func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, containerCluster string) []map[string]any {
+func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, containerCluster string, secrets DataFoundationExternalSecrets) []map[string]any {
 	df := export.Spec.DataFoundation
 	monEndpoints := storageMonitorEndpoints(state, cluster)
 	cephFSName := ""
@@ -83,7 +102,7 @@ func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.Storag
 			rgwEndpoint = fmt.Sprintf("%s:%d", gw.Spec.Ceph.ClientEndpoint.Host, gw.Spec.Ceph.ClientEndpoint.Port)
 		}
 	}
-	return []map[string]any{
+	details := []map[string]any{
 		{
 			"name": "rook-ceph-mon-endpoints",
 			"kind": "ConfigMap",
@@ -93,17 +112,29 @@ func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.Storag
 				"mapping":  "{}",
 			},
 		},
-		{"name": "rook-ceph-mon", "kind": "Secret", "data": map[string]any{"admin-secret": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME", "fsid": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME", "mon-secret": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
-		{"name": "rook-ceph-operator-creds", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "healthchecker"), "userKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
-		{"name": "rook-csi-rbd-node", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "csi-rbd-node"), "userKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
+		{"name": "rook-ceph-mon", "kind": "Secret", "data": map[string]any{"admin-secret": secretOrPlaceholder(secrets.AdminSecret), "fsid": secretOrPlaceholder(secrets.FSID), "mon-secret": secretOrPlaceholder(secrets.MonSecret)}},
+		{"name": "rook-ceph-operator-creds", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "healthchecker"), "userKey": secretOrPlaceholder(secrets.HealthcheckerKey)}},
+		{"name": "rook-csi-rbd-node", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "csi-rbd-node"), "userKey": secretOrPlaceholder(secrets.RBDNodeKey)}},
 		{"name": "ceph-rbd", "kind": "StorageClass", "data": map[string]any{"pool": rbdPool}},
-		{"name": "rook-csi-rbd-provisioner", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "csi-rbd-provisioner"), "userKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
-		{"name": "rook-csi-cephfs-provisioner", "kind": "Secret", "data": map[string]any{"adminID": dataFoundationClientID(containerCluster, "csi-cephfs-provisioner"), "adminKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
-		{"name": "rook-csi-cephfs-node", "kind": "Secret", "data": map[string]any{"adminID": dataFoundationClientID(containerCluster, "csi-cephfs-node"), "adminKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
+		{"name": "rook-csi-rbd-provisioner", "kind": "Secret", "data": map[string]any{"userID": dataFoundationClientID(containerCluster, "csi-rbd-provisioner"), "userKey": secretOrPlaceholder(secrets.RBDProvisionerKey)}},
+		{"name": "rook-csi-cephfs-provisioner", "kind": "Secret", "data": map[string]any{"adminID": dataFoundationClientID(containerCluster, "csi-cephfs-provisioner"), "adminKey": secretOrPlaceholder(secrets.CephFSProvisionerKey)}},
+		{"name": "rook-csi-cephfs-node", "kind": "Secret", "data": map[string]any{"adminID": dataFoundationClientID(containerCluster, "csi-cephfs-node"), "adminKey": secretOrPlaceholder(secrets.CephFSNodeKey)}},
 		{"name": "cephfs", "kind": "StorageClass", "data": map[string]any{"fsName": cephFSName, "pool": cephFSPool}},
-		{"name": "ceph-rgw", "kind": "StorageClass", "data": map[string]any{"endpoint": rgwEndpoint, "poolPrefix": rgwPoolPrefix}},
-		{"name": "rgw-admin-ops-user", "kind": "Secret", "data": map[string]any{"userID": dataFoundationRGWUserID(containerCluster), "accessKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME", "secretKey": "BOOTWRIGHT_GENERATED_AT_APPLY_TIME"}},
 	}
+	if df != nil && df.ObjectGatewayRef.Name != "" {
+		details = append(details,
+			map[string]any{"name": "ceph-rgw", "kind": "StorageClass", "data": map[string]any{"endpoint": rgwEndpoint, "poolPrefix": rgwPoolPrefix}},
+			map[string]any{"name": "rgw-admin-ops-user", "kind": "Secret", "data": map[string]any{"userID": dataFoundationRGWUserID(containerCluster), "accessKey": secretOrPlaceholder(secrets.RGWAccessKey), "secretKey": secretOrPlaceholder(secrets.RGWSecretKey)}},
+		)
+	}
+	return details
+}
+
+func secretOrPlaceholder(value string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return DataFoundationGeneratedAtApplyPlaceholder
 }
 
 func dataFoundationClientID(containerCluster, role string) string {

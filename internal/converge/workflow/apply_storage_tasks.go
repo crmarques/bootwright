@@ -87,11 +87,21 @@ func runOneStorageTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("storage asset for %s not rendered", task.Entry.ID)}
 	}
 	err = storageapply.ApplyCeph(ctx, stdout, stderr, nil, storageapply.ApplyOptions{
-		State:      task.State,
-		SecretsDir: opts.SecretsDir,
-		Asset:      asset,
+		State:       task.State,
+		ClustersDir: opts.ClustersDir,
+		SecretsDir:  opts.SecretsDir,
+		Asset:       asset,
 	})
 	return applyTaskResult{id: task.Entry.ID, err: err}
+}
+
+func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
+	filtered := stategraph.FilterStateToStorageClusters(state, []string{name})
+	filtered.ContainerClusters = nil
+	filtered.ClusterExtensions = nil
+	filtered.ClusterExtensionSets = nil
+	filtered.ClusterExtensionBindings = nil
+	return filtered
 }
 
 func storageAssetFor(assets []render.StorageAsset, name string) render.StorageAsset {

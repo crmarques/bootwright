@@ -75,8 +75,10 @@ Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
 
 Storage actions also run from the bastion. Bootwright SSHes to preinstalled
-RHEL Ceph nodes, runs cephadm on the seed node, and applies generated Ceph and
-Data Foundation files from the rendered storage tree.
+RHEL Ceph nodes, runs cephadm on the seed node, and applies generated Ceph
+operations from the rendered storage tree. Data Foundation bindings are applied
+later in the extensions phase after the target cluster and Data Foundation
+extension are ready.
 
 ## KubeVirt Child Clusters
 

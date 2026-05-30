@@ -42,7 +42,10 @@ ANSIBLE_GALAXY_ENV = \
 	ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote \
 	ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
-GOFMT_FILES = $(shell find . -name '*.go' -print)
+GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
+GO_TEST_PACKAGES ?= ./...
+GO_TEST_CHECK_FLAGS ?= -vet=off
+GO_TEST_RACE_FLAGS ?= -vet=off -race
 ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/cluster_infra:ansible/roles/openshift
 ANSIBLE_SYNTAX_FILTER_PLUGINS = $(STATE_DIR)/ansible-syntax/filter_plugins
 ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
@@ -139,15 +142,17 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 test:
-	$(GO) test ./...
+	$(GO) test $(GO_TEST_PACKAGES)
 
+# Order checks from cheapest to slowest so local runs fail before starting
+# race tests or clean-copy tests when lightweight guardrails already caught it.
 check: check-fast
-	$(GO) vet ./...
-	$(GO) test ./...
-	$(GO) test -race ./...
-	$(MAKE) go-test-clean-checkout
+	$(GO) vet $(GO_TEST_PACKAGES)
+	$(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
+	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
+	$(MAKE) go-test-clean-checkout
 
 check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check check-e2e-deps
 
@@ -182,7 +187,7 @@ go-test-clean-checkout:
 	tar -xf "$$tmp/source.tar" -C "$$work"; \
 	mkdir -p "$$tmp/go-build-cache" "$$tmp/go-tmp"; \
 	cd "$$work"; \
-	GOCACHE="$$tmp/go-build-cache" GOTMPDIR="$$tmp/go-tmp" $(GO) test ./...
+	GOCACHE="$$tmp/go-build-cache" GOTMPDIR="$$tmp/go-tmp" $(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 
 # Filter-plugin unit tests use only stdlib unittest so the check works
 # on any Python 3 install without a venv. If pytest is installed
@@ -292,6 +297,7 @@ help:
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Refresh internal/converge/bundle/ansible_bundle.zip' \
 		'  check            Run fast guardrails first, then Go, Python, and Ansible checks' \
+		'  check-fast       Run cheap local guardrails without Go, Python, or Ansible tests' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
 		'  plan             Render installer assets for test/e2e/001-sno-libvirt into .state' \

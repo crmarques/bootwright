@@ -13,7 +13,10 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/desired"
+	storageapply "github.com/crmarques/bootwright/internal/storage"
+	"go.yaml.in/yaml/v3"
 )
 
 type fakeClusterAvailabilityChecker struct {
@@ -426,6 +429,84 @@ func TestPlanApplyAllOrdersStorageBindingsAfterStorageInstallAndDataFoundation(t
 	}
 
 	assertTaskDeps(t, tasks, "storagebinding.demo.ceph-binding.apply", "wait.demo", "storage.ceph", "extension.demo.odf.wait")
+}
+
+func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-fleet-stretched-ceph-data-foundation")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorage}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	var storageTask ApplyTask
+	for _, task := range tasks {
+		if task.Entry.ID == "storage.ceph-stretch" {
+			storageTask = task
+			break
+		}
+	}
+	if storageTask.Entry.ID == "" {
+		t.Fatalf("storage task not found in %v", applyTaskIDs(tasks))
+	}
+	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), storageTask.State)
+	if err != nil {
+		t.Fatalf("render storage task state: %v", err)
+	}
+	if len(result.InstallerAssets) != 0 {
+		t.Fatalf("storage task rendered installer assets: %#v", result.InstallerAssets)
+	}
+}
+
+func TestWriteStorageBindingExternalDetailsUsesRuntimeCredentials(t *testing.T) {
+	state := storageBindingPlanningState()
+	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
+		RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
+		CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+	}
+	clustersDir := t.TempDir()
+	record := storageapply.DataFoundationBindingRecord{
+		StorageCluster: "ceph",
+		Binding:        "ceph-binding",
+		Cluster:        "demo",
+		Secrets: render.DataFoundationExternalSecrets{
+			AdminSecret:          "admin-key",
+			FSID:                 "fsid-123",
+			MonSecret:            "mon-key",
+			HealthcheckerKey:     "healthchecker-key",
+			RBDNodeKey:           "rbd-node-key",
+			RBDProvisionerKey:    "rbd-provisioner-key",
+			CephFSNodeKey:        "cephfs-node-key",
+			CephFSProvisionerKey: "cephfs-provisioner-key",
+		},
+	}
+	if err := storageapply.SaveDataFoundationBindingRecord(clustersDir, record); err != nil {
+		t.Fatalf("SaveDataFoundationBindingRecord: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
+	err := writeStorageBindingExternalDetails(path, state, StorageBindingPlan{
+		Cluster: "demo",
+		Binding: state.StorageClusterBindings[0],
+	}, clustersDir)
+	if err != nil {
+		t.Fatalf("writeStorageBindingExternalDetails: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest map[string]any
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
+	if strings.Contains(detailsJSON, render.DataFoundationGeneratedAtApplyPlaceholder) {
+		t.Fatalf("external_cluster_details still contains placeholder: %s", detailsJSON)
+	}
+	if !strings.Contains(detailsJSON, "rbd-node-key") {
+		t.Fatalf("external_cluster_details missing runtime key: %s", detailsJSON)
+	}
 }
 
 func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {

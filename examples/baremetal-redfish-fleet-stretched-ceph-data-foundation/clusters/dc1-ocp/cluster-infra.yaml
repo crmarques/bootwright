@@ -24,7 +24,7 @@ spec:
           name: dc1-ocp-master-0
         networkConfig:
           ref:
-            name: stretched-lab-net
+            name: stretched-lab-dc1-net
           addresses:
             - interface: primary
               ipv4:
@@ -36,7 +36,7 @@ spec:
           name: dc1-ocp-master-1
         networkConfig:
           ref:
-            name: stretched-lab-net
+            name: stretched-lab-dc1-net
           addresses:
             - interface: primary
               ipv4:
@@ -48,7 +48,7 @@ spec:
           name: dc1-ocp-master-2
         networkConfig:
           ref:
-            name: stretched-lab-net
+            name: stretched-lab-dc1-net
           addresses:
             - interface: primary
               ipv4:
