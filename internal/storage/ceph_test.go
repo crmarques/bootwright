@@ -322,8 +322,8 @@ func dataFoundationStorageState() v1alpha1.State {
 	state.StorageClusterBindings = []v1alpha1.StorageClusterBinding{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 		Spec: v1alpha1.StorageClusterBindingSpec{
-			StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-			ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+			StorageExportRef:         v1alpha1.LocalObjectReference{Name: "export"},
+			ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
 		},
 	}}
 	return state

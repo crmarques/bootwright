@@ -104,13 +104,13 @@ func useControllingTTYForWorkflow(selected []Phase, askBecomePass bool) bool {
 }
 
 // selectedTargetsClusters reports whether the selected phases include the
-// `clusters` phase. Used to gate ResolveInstaller: the install_agent role
+// `container-cluster` phase. Used to gate ResolveInstaller: the install_agent role
 // consumes secret-inlined installer inputs under the per-cluster runtime work
 // dir, so apply paths that drive that role must inline secrets before handing
 // off to Ansible.
 func selectedTargetsClusters(selected []Phase) bool {
 	for _, p := range selected {
-		if p.Name == "clusters" {
+		if p.Name == "container-cluster" {
 			return true
 		}
 	}
@@ -129,12 +129,12 @@ func phaseList(selected []Phase) string {
 // remove for the current scope, before the confirmation prompt. The
 // preview is concise on purpose: the user can read the YAML for full
 // detail. The output differs by scope because the two destroy targets
-// remove very different things: `destroy cluster` removes only the
+// remove very different things: `destroy container-cluster` removes only the
 // root-managed per-cluster runtime dir on the controller; `destroy infra`
 // tears down VMs, networks, and provider services on provider hosts.
 func printDestroyPreview(w io.Writer, scope scopeSpec, clustersDir string, state v1alpha1.State) {
 	switch scope.name {
-	case "cluster":
+	case "container-cluster":
 		printDestroyClustersPreview(w, clustersDir, state)
 	case "infra":
 		printDestroyInfraPreview(w, state)
@@ -157,7 +157,7 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime")})
 	}
 	p.List(items)
-	p.Warning("destroy cluster", "does not power off VMs, undefine networks, or remove provider services; run destroy infra for that")
+	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove provider services; run destroy infra for that")
 }
 
 func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
@@ -310,8 +310,8 @@ func environmentUsesManagedProxy(state v1alpha1.State) bool {
 		return false
 	}
 	selected := map[string]bool{
-		env.Spec.ProxyFor.Bootwright:     true,
-		env.Spec.ProxyFor.ClusterInstall: true,
+		env.Spec.ProxyFor.Bootwright:              true,
+		env.Spec.ProxyFor.ContainerClusterInstall: true,
 	}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
 		if selected[entry.Name] && entry.Type == v1alpha1.EnvironmentComponentManaged {

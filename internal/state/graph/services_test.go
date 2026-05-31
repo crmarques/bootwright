@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
 func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
@@ -160,47 +160,47 @@ func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 
 func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
 	state := sharedManagedServiceState()
-	state.ClusterExtensions = []v1alpha1.ClusterExtension{
+	state.ClusterAddons = []v1alpha1.ClusterAddon{
 		{Metadata: v1alpha1.Metadata{Name: "base"}},
 		{Metadata: v1alpha1.Metadata{Name: "console"}},
 		{Metadata: v1alpha1.Metadata{Name: "unused"}},
 	}
-	state.ClusterExtensionSets = []v1alpha1.ClusterExtensionSet{{
+	state.ClusterAddonProfiles = []v1alpha1.ClusterAddonProfile{{
 		Metadata: v1alpha1.Metadata{Name: "base-platform"},
-		Spec: v1alpha1.ClusterExtensionSetSpec{
-			Extensions: []v1alpha1.LocalObjectReference{{Name: "base"}},
+		Spec: v1alpha1.ClusterAddonProfileSpec{
+			Addons: []v1alpha1.LocalObjectReference{{Name: "base"}},
 		},
 	}}
-	state.ClusterExtensionBindings = []v1alpha1.ClusterExtensionBinding{
+	state.ClusterAddonBindings = []v1alpha1.ClusterAddonBinding{
 		{
-			Metadata: v1alpha1.Metadata{Name: "cluster-a-extensions"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"cluster-a", "cluster-b"}},
-				ExtensionSets:   []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "console"}},
+			Metadata: v1alpha1.Metadata{Name: "cluster-a-addons"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"cluster-a", "cluster-b"}},
+				Profiles:                 []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "console"}},
 			},
 		},
 		{
-			Metadata: v1alpha1.Metadata{Name: "cluster-b-extensions"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"cluster-b"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "unused"}},
+			Metadata: v1alpha1.Metadata{Name: "cluster-b-addons"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"cluster-b"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "unused"}},
 			},
 		},
 	}
 
 	filtered := FilterStateToClusters(state, []string{"cluster-a"})
-	if got := len(filtered.ClusterExtensionBindings); got != 1 {
+	if got := len(filtered.ClusterAddonBindings); got != 1 {
 		t.Fatalf("bindings = %d, want 1", got)
 	}
-	if got := filtered.ClusterExtensionBindings[0].Spec.ClusterSelector.Names; !reflect.DeepEqual(got, []string{"cluster-a"}) {
+	if got := filtered.ClusterAddonBindings[0].Spec.ContainerClusterSelector.Names; !reflect.DeepEqual(got, []string{"cluster-a"}) {
 		t.Fatalf("binding selected clusters = %v, want [cluster-a]", got)
 	}
-	if got := namesOfExtensionSets(filtered.ClusterExtensionSets); !reflect.DeepEqual(got, []string{"base-platform"}) {
+	if got := namesOfProfiles(filtered.ClusterAddonProfiles); !reflect.DeepEqual(got, []string{"base-platform"}) {
 		t.Fatalf("extension sets = %v, want [base-platform]", got)
 	}
-	if got := namesOfExtensions(filtered.ClusterExtensions); !reflect.DeepEqual(got, []string{"base", "console"}) {
-		t.Fatalf("extensions = %v, want [base console]", got)
+	if got := namesOfAddons(filtered.ClusterAddons); !reflect.DeepEqual(got, []string{"base", "console"}) {
+		t.Fatalf("addons = %v, want [base console]", got)
 	}
 	plans, err := extensionplan.BindingPlans(filtered)
 	if err != nil {
@@ -218,8 +218,8 @@ func sharedManagedServiceState() v1alpha1.State {
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
 				ProxyFor: v1alpha1.EnvironmentProxyForSpec{
-					Bootwright:     "default",
-					ClusterInstall: "default",
+					Bootwright:              "default",
+					ContainerClusterInstall: "default",
 				},
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					Proxies: []v1alpha1.EnvironmentProxyComponent{{
@@ -237,7 +237,7 @@ func sharedManagedServiceState() v1alpha1.State {
 						Type:         v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 						Routes: v1alpha1.EnvironmentArtifactRoutes{
-							ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+							ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
 						},
 					}},
 					Registries: []v1alpha1.EnvironmentRegistryComponent{{
@@ -462,7 +462,7 @@ func namesOfProviders(providers []v1alpha1.InfraProvider) []string {
 	return out
 }
 
-func namesOfExtensionSets(sets []v1alpha1.ClusterExtensionSet) []string {
+func namesOfProfiles(sets []v1alpha1.ClusterAddonProfile) []string {
 	out := make([]string, 0, len(sets))
 	for _, set := range sets {
 		out = append(out, set.Metadata.Name)
@@ -470,9 +470,9 @@ func namesOfExtensionSets(sets []v1alpha1.ClusterExtensionSet) []string {
 	return out
 }
 
-func namesOfExtensions(extensions []v1alpha1.ClusterExtension) []string {
-	out := make([]string, 0, len(extensions))
-	for _, extension := range extensions {
+func namesOfAddons(addons []v1alpha1.ClusterAddon) []string {
+	out := make([]string, 0, len(addons))
+	for _, extension := range addons {
 		out = append(out, extension.Metadata.Name)
 	}
 	return out

@@ -66,7 +66,7 @@ func printBundlePath(stdout io.Writer, bundleDir string) {
 // commands exclude it via destroyOnly=true; check/apply include it.
 func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {
 	switch scope.name {
-	case "cluster", "infra", "extensions", "storage":
+	case "cluster", "container-cluster", "storage-cluster", "infra", "addons":
 		return true
 	case "all":
 		return !destroyOnly
@@ -79,7 +79,7 @@ func ansibleLimitForScope(name string) string {
 	switch name {
 	case "infra":
 		return infraAnsibleLimit
-	case "cluster":
+	case "cluster", "container-cluster":
 		return clusterAnsibleLimit
 	default:
 		return ""

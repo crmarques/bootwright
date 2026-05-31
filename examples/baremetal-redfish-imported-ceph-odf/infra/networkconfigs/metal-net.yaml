@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: metal-net
+spec:
+  machineNetwork:
+    - cidr: 192.168.160.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.160.1
+            next-hop-interface: primary
+            table-id: 254
+

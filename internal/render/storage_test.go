@@ -17,7 +17,7 @@ import (
 )
 
 func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-fleet-stretched-ceph-data-foundation")})
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
@@ -29,11 +29,11 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 		t.Fatalf("storage assets got %d, want 1", len(result.StorageAssets))
 	}
 	asset := result.StorageAssets[0]
-	if asset.StorageClusterName != "ceph-stretch" {
-		t.Fatalf("storage cluster asset = %q, want ceph-stretch", asset.StorageClusterName)
+	if asset.StorageClusterName != "ceph-storage" {
+		t.Fatalf("storage cluster asset = %q, want ceph-storage", asset.StorageClusterName)
 	}
-	if len(asset.Bindings) != 2 {
-		t.Fatalf("binding assets got %d, want 2", len(asset.Bindings))
+	if len(asset.Bindings) != 4 {
+		t.Fatalf("binding assets got %d, want 4", len(asset.Bindings))
 	}
 
 	bootstrapDocs := readYAMLDocs(t, asset.BootstrapSpecPath)
@@ -80,9 +80,9 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-replicated", "datacenter"})
 	assertOperationCommand(t, ops, "create-cephfs-odf-cephfs", []string{"ceph", "fs", "new", "odf-cephfs", "odf-cephfs-metadata", "odf-cephfs-data"})
 	assertOperationCommand(t, ops, "set-cephfs-max-mds-odf-cephfs", []string{"ceph", "fs", "set", "odf-cephfs", "max_mds", "2"})
-	assertOperationCommand(t, ops, "create-data-foundation-rbd-node-dc1-ocp", []string{"ceph", "auth", "get-or-create", "client.bootwright.dc1-ocp.csi-rbd-node", "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool=odf-rbd"})
+	assertOperationCommand(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", []string{"ceph", "auth", "get-or-create", "client.bootwright.dc1-metal-ocp.csi-rbd-node", "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool=odf-rbd"})
 
-	binding := bindingAsset(t, asset, "dc1-ocp")
+	binding := bindingAsset(t, asset, "dc1-metal-ocp")
 	external := readYAMLDoc(t, binding.ExternalClusterDetailsPath)
 	if external["kind"] != "Secret" {
 		t.Fatalf("external details kind = %v, want Secret", external["kind"])
@@ -102,7 +102,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	if !externalDetailContains(details, "ceph-rbd", "pool", "odf-rbd") {
 		t.Fatalf("external_cluster_details missing ceph-rbd pool odf-rbd: %#v", details)
 	}
-	if !externalDetailContains(details, "rook-csi-rbd-node", "userID", "bootwright.dc1-ocp.csi-rbd-node") {
+	if !externalDetailContains(details, "rook-csi-rbd-node", "userID", "bootwright.dc1-metal-ocp.csi-rbd-node") {
 		t.Fatalf("external_cluster_details missing per-cluster rbd userID: %#v", details)
 	}
 	if !strings.Contains(detailsJSON, "ceph-dc1-0=192.168.141.30:6789") {
@@ -293,8 +293,8 @@ func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.Stat
 		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
 			Spec: v1alpha1.StorageClusterBindingSpec{
-				StorageExportRef: v1alpha1.LocalObjectReference{Name: "shared-ceph-data-foundation"},
-				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"dc1-ocp", "dc2-ocp"}},
+				StorageExportRef:         v1alpha1.LocalObjectReference{Name: "shared-ceph-data-foundation"},
+				ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"dc1-ocp", "dc2-ocp"}},
 				DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
 					Namespace:          "openshift-storage",
 					StorageClusterName: "ocs-external-storagecluster",

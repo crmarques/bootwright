@@ -116,8 +116,8 @@ func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactSe
 	if endpoint := entry.Routes.RedfishVirtualMedia.Endpoint; endpoint != "" {
 		routes["redfishVirtualMedia"] = map[string]any{"endpoint": endpoint}
 	}
-	if endpoint := entry.Routes.ClusterInstall.Endpoint; endpoint != "" {
-		routes["clusterInstall"] = map[string]any{"endpoint": endpoint}
+	if endpoint := entry.Routes.ContainerClusterInstall.Endpoint; endpoint != "" {
+		routes["containerClusterInstall"] = map[string]any{"endpoint": endpoint}
 	}
 	if len(routes) > 0 {
 		out["routes"] = routes

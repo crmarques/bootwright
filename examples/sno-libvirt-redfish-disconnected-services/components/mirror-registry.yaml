@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: mirror-registry
+spec:
+  registry:
+    type: mirrorRegistry
+    hostRef:
+      name: lab-host
+    bindAddress: 0.0.0.0
+    port: 5000
+

@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-rgw
+spec:
+  storageClusterRef:
+    name: ceph-storage
+
+  placementPolicyRef:
+    name: stretch-replicated
+
+  ceph:
+    type: replicated # default
+    role: rgw
+    replicated:
+      size: 4
+      minSize: 2

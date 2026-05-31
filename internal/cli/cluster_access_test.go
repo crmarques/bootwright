@@ -92,12 +92,12 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runCLI(t, "cluster", "access")
+	stdout, stderr, code := runCLI(t, "container-cluster", "access")
 	if code != 0 {
-		t.Fatalf("cluster access exited %d, stderr=%q", code, stderr)
+		t.Fatalf("container-cluster access exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{
-		"Bootwright: cluster access",
+		"Bootwright: container-cluster access",
 		"Cluster sno-libvirt",
 		"Kubeconfig: " + kubeconfigPath,
 		"Password file: " + passwordPath,
@@ -114,9 +114,9 @@ func TestClusterAccessCommandPrintsAllClustersAndDoesNotRevealPassword(t *testin
 
 func TestClusterAccessCommandRejectsUnknownCluster(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "cluster", "access", "--cluster", "missing")
+	_, stderr, code := runCLI(t, "container-cluster", "access", "--cluster", "missing")
 	if code == 0 {
-		t.Fatal("cluster access accepted unknown cluster")
+		t.Fatal("container-cluster access accepted unknown cluster")
 	}
 	if !strings.Contains(stderr, "unknown cluster(s): missing") {
 		t.Fatalf("stderr missing unknown cluster message: %q", stderr)

@@ -241,12 +241,12 @@ func argsMayUseBecome(args []string) bool {
 	switch args[0] {
 	case "apply":
 		switch args[1] {
-		case "bastion", "infra", "cluster", "all":
+		case "bastion", "infra", "cluster", "container-cluster", "all":
 			return true
 		}
 	case "destroy":
 		switch args[1] {
-		case "infra", "cluster":
+		case "infra", "container-cluster":
 			return true
 		}
 	}

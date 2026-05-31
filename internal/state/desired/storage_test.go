@@ -77,10 +77,86 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 
 func TestStorageClusterBindingRequiresDataFoundationProvider(t *testing.T) {
 	state := storageValidationState()
-	state.ClusterExtensionBindings = nil
+	state.ClusterAddonBindings = nil
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, `requires a ClusterExtensionBinding that applies a ClusterExtension providing "data-foundation"`) {
+	if !strings.Contains(got, `requires a ClusterAddonBinding that applies a ClusterAddon providing "data-foundation"`) {
 		t.Fatalf("validateStorage errors = %q, want data-foundation provider error", got)
+	}
+}
+
+func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
+	state := storageValidationState()
+	cluster := &state.StorageClusters[0]
+	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.MachineRef = v1alpha1.StorageMachineRef{}
+	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.Family = ""
+	state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default = false
+	state.StorageObjectGateways[0].Spec.PublicEndpoint = v1alpha1.StoragePublicEndpoint{
+		DNSName: "rgw-ceph.example.test",
+	}
+	state.StorageExports[0].Spec.Type = ""
+	state.StorageClusterBindings[0].Spec.DataFoundation = v1alpha1.StorageClusterBindingDataFoundation{}
+
+	Normalize(&state)
+
+	mon := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.MonIP
+	if mon.MachineRef.ClusterInfra != state.StorageClusters[0].Spec.ClusterInfraRef.Name {
+		t.Fatalf("mon clusterInfra = %q, want cluster infra ref", mon.MachineRef.ClusterInfra)
+	}
+	if mon.MachineRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.SeedNode {
+		t.Fatalf("mon machine name = %q, want seed node", mon.MachineRef.Name)
+	}
+	if mon.Family != "ipv4" {
+		t.Fatalf("mon family = %q, want ipv4", mon.Family)
+	}
+	if !state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default {
+		t.Fatal("single CephFS data pool did not default to default=true")
+	}
+	endpoint := state.StorageObjectGateways[0].Spec.PublicEndpoint
+	if endpoint.Port != 443 || endpoint.Scheme != "https" {
+		t.Fatalf("publicEndpoint = %+v, want port 443 scheme https", endpoint)
+	}
+	if state.StorageExports[0].Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
+		t.Fatalf("storage export type = %q, want data-foundation", state.StorageExports[0].Spec.Type)
+	}
+	df := state.StorageClusterBindings[0].Spec.DataFoundation
+	if df.Product != v1alpha1.DataFoundationProductOpenShiftDataFoundation || df.Namespace != "openshift-storage" || df.StorageClusterName == "" || df.StorageSystemName == "" {
+		t.Fatalf("dataFoundation defaults = %+v", df)
+	}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors after defaults: %v", errs)
+	}
+}
+
+func TestStorageObjectGatewayRejectsOldClientEndpoint(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"environment.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: env
+spec:
+  baseDomain: bootwright.test
+`,
+		"gateway.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: odf-rgw
+spec:
+  storageClusterRef:
+    name: ceph
+  ceph:
+    serviceID: odf
+    clientEndpoint:
+      host: rgw-ceph.example.test
+`,
+	}
+	writeFiles(t, dir, files)
+	_, err := Load([]string{dir})
+	if err == nil {
+		t.Fatal("expected old clientEndpoint field to be rejected")
+	}
+	if !strings.Contains(err.Error(), "field clientEndpoint not found") {
+		t.Fatalf("error %q does not reject clientEndpoint", err)
 	}
 }
 
@@ -226,22 +302,40 @@ func storageValidationState() v1alpha1.State {
 				},
 			},
 		}},
+		StorageObjectGateways: []v1alpha1.StorageObjectGateway{{
+			Metadata: v1alpha1.Metadata{Name: "rgw"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				PublicEndpoint: v1alpha1.StoragePublicEndpoint{
+					DNSName: "rgw-ceph.example.test",
+					Port:    443,
+					Scheme:  "https",
+				},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					ServiceID: "odf",
+					Placement: v1alpha1.StoragePlacement{
+						Hosts: []string{"ceph-dc1-0", "ceph-dc1-1", "ceph-dc2-0", "ceph-dc2-1"},
+					},
+				},
+			},
+		}},
 		StorageExports: []v1alpha1.StorageExport{{
 			Metadata: v1alpha1.Metadata{Name: "export"},
 			Spec: v1alpha1.StorageExportSpec{
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
 				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
-					RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
-					CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+					RBDPoolRef:       v1alpha1.LocalObjectReference{Name: "rbd"},
+					CephFSRef:        v1alpha1.LocalObjectReference{Name: "cephfs"},
+					ObjectGatewayRef: v1alpha1.LocalObjectReference{Name: "rgw"},
 				},
 			},
 		}},
 		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.StorageClusterBindingSpec{
-				StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+				StorageExportRef:         v1alpha1.LocalObjectReference{Name: "export"},
+				ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
 				DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
 					Namespace:          "openshift-storage",
 					StorageClusterName: "ocs-external-storagecluster",
@@ -249,21 +343,21 @@ func storageValidationState() v1alpha1.State {
 				},
 			},
 		}},
-		ClusterExtensions: []v1alpha1.ClusterExtension{{
+		ClusterAddons: []v1alpha1.ClusterAddon{{
 			Metadata: v1alpha1.Metadata{Name: "odf"},
-			Spec: v1alpha1.ClusterExtensionSpec{
-				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
-				Provides: []string{v1alpha1.ClusterExtensionProvidesDataFoundation},
-				Readiness: v1alpha1.ClusterExtensionReadiness{
-					Checks: []v1alpha1.ClusterExtensionReadinessCheck{{Type: v1alpha1.ClusterExtensionReadinessResourceExists}},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type:     v1alpha1.ClusterAddonTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
+				Readiness: v1alpha1.ClusterAddonReadiness{
+					Checks: []v1alpha1.ClusterAddonReadinessCheck{{Type: v1alpha1.ClusterAddonReadinessResourceExists}},
 				},
 			},
 		}},
-		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "odf"}},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"demo"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "odf"}},
 			},
 		}},
 	}
@@ -294,8 +388,8 @@ func externalStorageValidationState() v1alpha1.State {
 		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.StorageClusterBindingSpec{
-				StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+				StorageExportRef:         v1alpha1.LocalObjectReference{Name: "export"},
+				ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
 				DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
 					Namespace:          "openshift-storage",
 					StorageClusterName: "ocs-external-storagecluster",
@@ -303,21 +397,21 @@ func externalStorageValidationState() v1alpha1.State {
 				},
 			},
 		}},
-		ClusterExtensions: []v1alpha1.ClusterExtension{{
+		ClusterAddons: []v1alpha1.ClusterAddon{{
 			Metadata: v1alpha1.Metadata{Name: "odf"},
-			Spec: v1alpha1.ClusterExtensionSpec{
-				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
-				Provides: []string{v1alpha1.ClusterExtensionProvidesDataFoundation},
-				Readiness: v1alpha1.ClusterExtensionReadiness{
-					Checks: []v1alpha1.ClusterExtensionReadinessCheck{{Type: v1alpha1.ClusterExtensionReadinessResourceExists}},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type:     v1alpha1.ClusterAddonTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
+				Readiness: v1alpha1.ClusterAddonReadiness{
+					Checks: []v1alpha1.ClusterAddonReadinessCheck{{Type: v1alpha1.ClusterAddonReadinessResourceExists}},
 				},
 			},
 		}},
-		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "odf"}},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"demo"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "odf"}},
 			},
 		}},
 	}

@@ -83,13 +83,13 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInfra) (string, er
 	if env == nil {
 		return "", nil
 	}
-	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.ClusterInstall)
+	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.ContainerClusterInstall)
 	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged {
 		return "", nil
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
 	if !ok || component.Spec.Proxy == nil {
-		return "", fmt.Errorf("environment/%s proxyFor.clusterInstall %q does not resolve to an InfraComponent proxy", env.Metadata.Name, entry.Name)
+		return "", fmt.Errorf("environment/%s proxyFor.containerClusterInstall %q does not resolve to an InfraComponent proxy", env.Metadata.Name, entry.Name)
 	}
 	hostAddr := ClusterFacingHostAddress(state, component.Spec.Proxy.HostRef.Name, ci)
 	if hostAddr == "" {

@@ -1,0 +1,36 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-virtualization
+spec:
+  type: olm-operator
+
+  provides:
+    - kubevirt
+
+  olm:
+    namespace:
+      name: openshift-cnv
+      create: true
+    operatorGroup:
+      name: openshift-cnv
+      targetNamespaces:
+        - openshift-cnv
+    subscription:
+      name: kubevirt-hyperconverged
+      package: kubevirt-hyperconverged
+      channel: stable
+      source: redhat-operators
+    customResources:
+      - apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        metadata:
+          name: kubevirt-hyperconverged
+          namespace: openshift-cnv
+
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-cnv
+        subscription: kubevirt-hyperconverged
+

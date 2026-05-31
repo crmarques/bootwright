@@ -116,14 +116,14 @@ spec:
       memoryMiB: 16384
       diskGiB: 120
       kubevirt:
-        hostClusterRef:
+        hostContainerClusterRef:
           name: metal-ocp
         namespace: bootwright-child-ocp
         storageClassRef:
           name: lvms-vg1
 ```
 
-Use `hostClusterRef` when the virtualization host is another Bootwright
+Use `hostContainerClusterRef` when the virtualization host is another Bootwright
 `ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that host
 cluster; do not put kubeconfig bytes in desired state. Use `kubeconfigRef`
 when the host cluster is external:
@@ -135,10 +135,10 @@ kubevirt:
   namespace: bootwright-child-ocp
 ```
 
-Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace is
+Exactly one of `hostContainerClusterRef` or `kubeconfigRef` is required. The namespace is
 required and the storage class is optional. KubeVirt machines must select a
 `NetworkConfig` with `spec.kubevirt.nad`, and `apply all` waits for the host
-cluster extension that advertises `provides: [kubevirt]` before creating child
+cluster add-on that advertises `provides: [kubevirt]` before creating child
 VMs.
 
 ## Services
@@ -197,7 +197,7 @@ spec:
         routes:
           redfishVirtualMedia:
             endpoint: bmc
-          clusterInstall:
+          containerClusterInstall:
             endpoint: cluster
 ```
 

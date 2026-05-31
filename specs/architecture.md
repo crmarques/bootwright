@@ -11,7 +11,7 @@ YAML desired state
   -> normalize defaults
   -> validate ownership and references
   -> render effective installer/provider/storage inputs
-  -> apply substrate, storage, cluster, and extension phases
+  -> apply substrate, storage, cluster, and add-on phases
 ```
 
 Apply execution records a durable run ledger under the context state directory
@@ -39,19 +39,19 @@ cluster task on a remote bastion host: create the cluster agent ISO with
 `openshift-install`, boot each declared node through its rendered boot adapter
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
-Post-install extension apply is scheduled after that install wait when
+Post-install add-on apply is scheduled after that install wait when
 `apply cluster` or `apply all` is selected, and as standalone direct `oc`
-tasks when `apply extensions` is selected for an already installed cluster.
+tasks when `apply addons` is selected for an already installed cluster.
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
 tool inputs under `storage/<storageCluster>/`, reaches preinstalled RHEL Ceph
 nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed node,
 applies cephadm service specs, then runs rendered Ceph operations. Imported
 storage clusters skip this storage task. Storage binding tasks run in the
-extensions phase after the storage task when one exists and the Data
-Foundation-providing extension readiness task.
+add-ons phase after the storage task when one exists and the Data
+Foundation-providing add-on readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
 `apply all` adds graph edges from the child infrastructure task to both
-`wait.<host-cluster>` and the host extension wait task that provides
+`wait.<host-cluster>` and the host add-on wait task that provides
 `kubevirt`. Scoped child applies do not expand the scope to install the parent;
 they fail with a dependency message or require the parent kubeconfig and
 KubeVirt API to be ready before mutating child infrastructure.
@@ -90,9 +90,9 @@ The desired-state API is defined in `api/v1alpha1` and specified in
   desired state.
 - `StorageExport` and `StorageClusterBinding` own the Data Foundation
   external-mode connection from storage to installed clusters.
-- `ClusterExtension` owns reusable post-install component intent.
-- `ClusterExtensionSet` owns ordered platform profiles made from extensions.
-- `ClusterExtensionBinding` owns cluster-to-extension attachment.
+- `ClusterAddon` owns reusable post-install component intent.
+- `ClusterAddonProfile` owns ordered platform profiles made from add-ons.
+- `ClusterAddonBinding` owns cluster-to-add-on attachment.
 - `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:
@@ -114,8 +114,8 @@ These boundaries are reflected in rendering:
   storage. Imported storage renders only Data Foundation binding manifests.
   CephFS metadata and data pool roles are expressed by `StorageFilesystem`
   because the renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
-- Extension apply plans are rendered from `ClusterExtensionBinding` expansion,
-  `ClusterExtensionSet` order, and `ClusterExtension` generated resources or
+- Extension apply plans are rendered from `ClusterAddonBinding` expansion,
+  `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.
 
 Shared host services are resolved through one service graph before

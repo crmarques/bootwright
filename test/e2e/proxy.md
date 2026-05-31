@@ -15,7 +15,7 @@ infraComponents:
           - 192.168.133.0/24
 proxyFor:
   bootwright: default
-  clusterInstall: default
+  containerClusterInstall: default
 ```
 
 Omitted `proxyFor` values and the reserved value `none` disable proxy use.

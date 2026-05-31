@@ -15,7 +15,7 @@ type scopeSpec struct {
 var infraScope = scopeSpec{
 	name:              "infra",
 	short:             "Install and configure InfraProvider and ClusterInfra",
-	phaseNames:        []string{"provider", "cluster"},
+	phaseNames:        []string{"provider", "cluster-infra"},
 	applyPlaybook:     "playbooks/targets/infra/apply.yml",
 	destroyPlaybook:   "playbooks/targets/infra/destroy.yml",
 	artifactsBaseName: "infra",
@@ -23,32 +23,40 @@ var infraScope = scopeSpec{
 
 var clusterScope = scopeSpec{
 	name:              "cluster",
-	short:             "Install and configure managed OpenShift clusters via openshift-install agent",
-	phaseNames:        []string{"clusters"},
-	applyPhaseNames:   []string{"clusters", "extensions"},
+	short:             "Provision selected container and storage clusters",
+	phaseNames:        []string{"storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
-	destroyPlaybook:   "playbooks/targets/clusters/destroy.yml",
 	artifactsBaseName: "cluster",
 }
 
-var storageScope = scopeSpec{
-	name:              "storage",
-	short:             "Provision external storage clusters",
-	phaseNames:        []string{"storage"},
-	artifactsBaseName: "storage",
+var containerClusterScope = scopeSpec{
+	name:              "container-cluster",
+	short:             "Install and configure managed OpenShift clusters via openshift-install agent",
+	phaseNames:        []string{"container-cluster"},
+	applyPhaseNames:   []string{"container-cluster", "addons"},
+	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
+	destroyPlaybook:   "playbooks/targets/clusters/destroy.yml",
+	artifactsBaseName: "container-cluster",
 }
 
-var extensionsScope = scopeSpec{
-	name:              "extensions",
-	short:             "Apply post-install cluster extensions",
-	phaseNames:        []string{"extensions"},
-	artifactsBaseName: "extensions",
+var storageClusterScope = scopeSpec{
+	name:              "storage-cluster",
+	short:             "Provision external storage clusters",
+	phaseNames:        []string{"storage-cluster"},
+	artifactsBaseName: "storage-cluster",
+}
+
+var addonsScope = scopeSpec{
+	name:              "addons",
+	short:             "Apply post-install cluster addons",
+	phaseNames:        []string{"addons"},
+	artifactsBaseName: "addons",
 }
 
 var allScope = scopeSpec{
 	name:              "all",
-	short:             "Apply infrastructure, storage, OpenShift clusters, and extensions",
-	phaseNames:        []string{"provider", "cluster", "storage", "clusters", "extensions"},
+	short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
+	phaseNames:        []string{"provider", "cluster-infra", "storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "playbooks/targets/all/apply.yml",
 	artifactsBaseName: "all",
 }

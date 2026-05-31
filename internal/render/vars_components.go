@@ -82,7 +82,7 @@ func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
 	}
 	seen := map[string]bool{}
 	out := []selectedProxyComponent{}
-	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ClusterInstall} {
+	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
 		entry, ok := proxy.SelectedProxy(*env, name)
 		if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 			continue
@@ -223,9 +223,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 					out["kubevirt"] = map[string]any{
 						"namespace": k.Namespace,
 					}
-					if k.HostClusterRef != nil {
-						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
-						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
+					if k.HostContainerClusterRef != nil {
+						out["kubevirt"].(map[string]any)["hostContainerClusterRef"] = k.HostContainerClusterRef.Name
+						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostContainerClusterRef.Name + "/secrets/kubeconfig"
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name

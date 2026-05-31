@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
+metadata:
+  name: platform-bootstrap
+spec:
+  profiles:
+    - name: base-profile
+
+  addons:
+    - name: openshift-gitops
+

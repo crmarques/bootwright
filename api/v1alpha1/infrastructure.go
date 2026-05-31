@@ -14,23 +14,23 @@ import (
 const (
 	APIVersion = "bootwright.io/v1alpha1"
 
-	KindEnvironment             = "Environment"
-	KindHost                    = "Host"
-	KindNetworkConfig           = "NetworkConfig"
-	KindInfraProvider           = "InfraProvider"
-	KindInfraComponent          = "InfraComponent"
-	KindClusterInfra            = "ClusterInfra"
-	KindContainerCluster        = "ContainerCluster"
-	KindStorageCluster          = "StorageCluster"
-	KindStoragePlacementPolicy  = "StoragePlacementPolicy"
-	KindStoragePool             = "StoragePool"
-	KindStorageFilesystem       = "StorageFilesystem"
-	KindStorageObjectGateway    = "StorageObjectGateway"
-	KindStorageExport           = "StorageExport"
-	KindStorageClusterBinding   = "StorageClusterBinding"
-	KindClusterExtension        = "ClusterExtension"
-	KindClusterExtensionSet     = "ClusterExtensionSet"
-	KindClusterExtensionBinding = "ClusterExtensionBinding"
+	KindEnvironment            = "Environment"
+	KindHost                   = "Host"
+	KindNetworkConfig          = "NetworkConfig"
+	KindInfraProvider          = "InfraProvider"
+	KindInfraComponent         = "InfraComponent"
+	KindClusterInfra           = "ClusterInfra"
+	KindContainerCluster       = "ContainerCluster"
+	KindStorageCluster         = "StorageCluster"
+	KindStoragePlacementPolicy = "StoragePlacementPolicy"
+	KindStoragePool            = "StoragePool"
+	KindStorageFilesystem      = "StorageFilesystem"
+	KindStorageObjectGateway   = "StorageObjectGateway"
+	KindStorageExport          = "StorageExport"
+	KindStorageClusterBinding  = "StorageClusterBinding"
+	KindClusterAddon           = "ClusterAddon"
+	KindClusterAddonProfile    = "ClusterAddonProfile"
+	KindClusterAddonBinding    = "ClusterAddonBinding"
 
 	// Provisioner kinds (machine production).
 	ProvisionerLibvirt   = "libvirt"
@@ -145,21 +145,21 @@ const (
 	ComponentImageTypeDnsmasq          = "dnsmasq"
 	ComponentImageTypeArtifactsHTTP    = "http"
 
-	ClusterExtensionTypeOLMOperator = "olm-operator"
-	ClusterExtensionTypeManifestSet = "manifest-set"
+	ClusterAddonTypeOLMOperator = "olm-operator"
+	ClusterAddonTypeManifestSet = "manifest-set"
 
 	InstallPlanApprovalAutomatic = "Automatic"
 	InstallPlanApprovalManual    = "Manual"
 
-	ClusterExtensionReadinessCSVSucceeded   = "csvSucceeded"
-	ClusterExtensionReadinessCondition      = "condition"
-	ClusterExtensionReadinessResourceExists = "resourceExists"
+	ClusterAddonReadinessCSVSucceeded   = "csvSucceeded"
+	ClusterAddonReadinessCondition      = "condition"
+	ClusterAddonReadinessResourceExists = "resourceExists"
 
-	ClusterExtensionApplyPhaseClusterInstalled = "clusterInstalled"
-	DefaultClusterExtensionReadinessTimeout    = "30m"
-	DefaultClusterExtensionFieldManager        = "bootwright"
-	ClusterExtensionProvidesKubeVirt           = "kubevirt"
-	ClusterExtensionProvidesDataFoundation     = "data-foundation"
+	ClusterAddonApplyPhaseContainerClusterInstalled = "containerClusterInstalled"
+	DefaultClusterAddonReadinessTimeout             = "30m"
+	DefaultClusterAddonFieldManager                 = "bootwright"
+	ClusterAddonProvidesKubeVirt                    = "kubevirt"
+	ClusterAddonProvidesDataFoundation              = "data-foundation"
 
 	StorageClusterTypeCeph = "ceph"
 
@@ -188,23 +188,23 @@ const (
 
 // State is the loaded fleet.
 type State struct {
-	Environments             []Environment             `yaml:"environments,omitempty" json:"environments,omitempty"`
-	Hosts                    []Host                    `yaml:"hosts,omitempty" json:"hosts,omitempty"`
-	NetworkConfigs           []NetworkConfig           `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
-	InfraProviders           []InfraProvider           `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
-	InfraComponents          []InfraComponent          `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
-	ClusterInfras            []ClusterInfra            `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
-	ContainerClusters        []ContainerCluster        `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
-	StorageClusters          []StorageCluster          `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
-	StoragePlacementPolicies []StoragePlacementPolicy  `yaml:"storagePlacementPolicies,omitempty" json:"storagePlacementPolicies,omitempty"`
-	StoragePools             []StoragePool             `yaml:"storagePools,omitempty" json:"storagePools,omitempty"`
-	StorageFilesystems       []StorageFilesystem       `yaml:"storageFilesystems,omitempty" json:"storageFilesystems,omitempty"`
-	StorageObjectGateways    []StorageObjectGateway    `yaml:"storageObjectGateways,omitempty" json:"storageObjectGateways,omitempty"`
-	StorageExports           []StorageExport           `yaml:"storageExports,omitempty" json:"storageExports,omitempty"`
-	StorageClusterBindings   []StorageClusterBinding   `yaml:"storageClusterBindings,omitempty" json:"storageClusterBindings,omitempty"`
-	ClusterExtensions        []ClusterExtension        `yaml:"clusterExtensions,omitempty" json:"clusterExtensions,omitempty"`
-	ClusterExtensionSets     []ClusterExtensionSet     `yaml:"clusterExtensionSets,omitempty" json:"clusterExtensionSets,omitempty"`
-	ClusterExtensionBindings []ClusterExtensionBinding `yaml:"clusterExtensionBindings,omitempty" json:"clusterExtensionBindings,omitempty"`
+	Environments             []Environment            `yaml:"environments,omitempty" json:"environments,omitempty"`
+	Hosts                    []Host                   `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	NetworkConfigs           []NetworkConfig          `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
+	InfraProviders           []InfraProvider          `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
+	InfraComponents          []InfraComponent         `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
+	ClusterInfras            []ClusterInfra           `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
+	ContainerClusters        []ContainerCluster       `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	StorageClusters          []StorageCluster         `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
+	StoragePlacementPolicies []StoragePlacementPolicy `yaml:"storagePlacementPolicies,omitempty" json:"storagePlacementPolicies,omitempty"`
+	StoragePools             []StoragePool            `yaml:"storagePools,omitempty" json:"storagePools,omitempty"`
+	StorageFilesystems       []StorageFilesystem      `yaml:"storageFilesystems,omitempty" json:"storageFilesystems,omitempty"`
+	StorageObjectGateways    []StorageObjectGateway   `yaml:"storageObjectGateways,omitempty" json:"storageObjectGateways,omitempty"`
+	StorageExports           []StorageExport          `yaml:"storageExports,omitempty" json:"storageExports,omitempty"`
+	StorageClusterBindings   []StorageClusterBinding  `yaml:"storageClusterBindings,omitempty" json:"storageClusterBindings,omitempty"`
+	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
+	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
+	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`
 }
 
 type TypeMeta struct {

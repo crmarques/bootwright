@@ -13,7 +13,7 @@ import (
 )
 
 func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	usesAnsible := scope.name != "extensions" && scope.name != "storage"
+	usesAnsible := scopeUsesAnsible(scope)
 	var (
 		flags         scopeCommonFlags
 		dryRun        bool
@@ -40,7 +40,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
-	if scope.name == "cluster" {
+	if scopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior cluster state reports an existing available cluster")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
@@ -49,7 +49,10 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
 	scopeTargetKind := "ContainerCluster"
-	if scope.name == "storage" {
+	if scope.name == "cluster" {
+		scopeTargetKind = "cluster"
+	}
+	if scope.name == "storage-cluster" {
 		scopeTargetKind = "StorageCluster"
 	}
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible, scopeTargetKind)
@@ -88,7 +91,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if err != nil {
 			return failErr(1, err)
 		}
-		if scope.name != "extensions" && scope.name != "storage" {
+		if scopeUsesAnsible(scope) {
 			if err := workflow.EnsureApplySupported(plan.state); err != nil {
 				return failErr(1, err)
 			}
@@ -147,7 +150,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		usesAnsible := scope.name != "extensions" && scope.name != "storage"
+		usesAnsible := scopeUsesAnsible(scope)
 		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {
 			bundleResult, err = prepareWorkflowBundle(true)
@@ -256,4 +259,17 @@ func scopeApplyExample(scopeName string, usesAnsible bool) string {
 
   # Apply when passwordless sudo is available on provider hosts
   bootwright apply %[1]s --ask-become-pass=false --yes`, scopeName)
+}
+
+func scopeUsesAnsible(scope scopeSpec) bool {
+	return scope.name != "addons" && scope.name != "storage-cluster"
+}
+
+func scopeTargetsContainerInstall(scope scopeSpec) bool {
+	switch scope.name {
+	case "cluster", "container-cluster", "all":
+		return true
+	default:
+		return false
+	}
 }

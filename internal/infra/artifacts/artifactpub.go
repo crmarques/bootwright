@@ -77,7 +77,7 @@ func RouteAvailable(server Server, endpointName string) bool {
 		switch endpointName {
 		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
 			return server.Entry.Spec != nil && server.Entry.Spec.RedfishVirtualMediaURL != ""
-		case server.Entry.Routes.ClusterInstall.Endpoint:
+		case server.Entry.Routes.ContainerClusterInstall.Endpoint:
 			return server.Entry.Spec != nil && server.Entry.Spec.ClusterInstallURL != ""
 		}
 	}

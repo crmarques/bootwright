@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: cluster-observability
+spec:
+  type: manifest-set
+
+  manifestSet:
+    manifests:
+      - path: manifests/observability-namespace.yaml
+
+  readiness:
+    checks:
+      - type: resourceExists
+        apiVersion: v1
+        kind: Namespace
+        name: observability
+

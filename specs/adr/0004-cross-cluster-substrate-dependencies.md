@@ -23,18 +23,18 @@ clusters select libvirt, bare-metal, or vSphere substrate facts.
 
 KubeVirt profiles use exactly one host reference:
 
-- `hostClusterRef` for a Bootwright-managed `ContainerCluster`
+- `hostContainerClusterRef` for a Bootwright-managed `ContainerCluster`
 - `kubeconfigRef` for an external virtualization cluster kubeconfig declared in
   `Environment.spec.secrets`
 
-Host-cluster capabilities are advertised by `ClusterExtension.spec.provides`.
+Host-cluster capabilities are advertised by `ClusterAddon.spec.provides`.
 The initial accepted value is `kubevirt`. A child KubeVirt profile with
-`hostClusterRef` is valid only when the referenced parent cluster has a bound
-extension that provides `kubevirt`.
+`hostContainerClusterRef` is valid only when the referenced parent cluster has a bound
+add-on that provides `kubevirt`.
 
 The apply graph is responsible for cross-cluster ordering. `apply all` makes
 child infrastructure wait for the parent install wait task and the parent
-extension readiness task. Scoped child commands do not implicitly add the
+add-on readiness task. Scoped child commands do not implicitly add the
 parent cluster to scope; they report the missing dependency or require the
 parent cluster secrets kubeconfig and KubeVirt API to already exist.
 
@@ -44,7 +44,7 @@ parent cluster secrets kubeconfig and KubeVirt API to already exist.
   a special child-cluster kind.
 - HyperShift remains a future provisioning model rather than the first
   implementation path.
-- Desired state never stores host kubeconfig bytes. `hostClusterRef` resolves
+- Desired state never stores host kubeconfig bytes. `hostContainerClusterRef` resolves
   to Bootwright cluster secrets output, and `kubeconfigRef` resolves through secret
   material.
 - Validation can reject self-hosting and dependency cycles before rendering.

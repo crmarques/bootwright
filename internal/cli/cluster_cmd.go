@@ -2,9 +2,11 @@ package cli
 
 import (
 	"io"
+	"sort"
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/render"
 )
@@ -20,23 +22,38 @@ type clusterListReport struct {
 }
 
 type clusterListEntry struct {
+	Kind              string                `json:"kind"`
 	Name              string                `json:"name"`
-	InstallMode       string                `json:"installMode"`
-	InstallMethod     string                `json:"installMethod"`
-	APIURL            string                `json:"apiURL"`
-	ConsoleURL        string                `json:"consoleURL"`
-	Kubeconfig        clusterAccessArtifact `json:"kubeconfig"`
-	KubeadminPassword clusterAccessArtifact `json:"kubeadminPassword"`
-	Ready             bool                  `json:"ready"`
+	Type              string                `json:"type,omitempty"`
+	Management        string                `json:"management,omitempty"`
+	InstallMode       string                `json:"installMode,omitempty"`
+	InstallMethod     string                `json:"installMethod,omitempty"`
+	APIURL            string                `json:"apiURL,omitempty"`
+	ConsoleURL        string                `json:"consoleURL,omitempty"`
+	Kubeconfig        clusterAccessArtifact `json:"kubeconfig,omitempty"`
+	KubeadminPassword clusterAccessArtifact `json:"kubeadminPassword,omitempty"`
+	Ready             bool                  `json:"ready,omitempty"`
 }
 
 func newClusterCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster <command>",
-		Short: "Inspect cluster access inventory",
+		Short: "Inspect container and storage cluster inventory",
 	}
 	cmd.AddCommand(
 		newClusterListCmd(stdout),
+	)
+	requireSubcommand(cmd)
+	showSubcommandFlagsInHelp(cmd)
+	return cmd
+}
+
+func newContainerClusterCmd(stdout io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "container-cluster <command>",
+		Short: "Inspect container cluster access inventory",
+	}
+	cmd.AddCommand(
 		newClusterAccessCmd(stdout),
 	)
 	requireSubcommand(cmd)
@@ -63,10 +80,11 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 		}
 		clustersDir := controllerClustersDir(cf.ctx.Name)
 		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
+		storage := storageClusterListEntries(state)
 		if outputFormat == outputJSON {
-			return cliout.JSON(stdout, clusterListReport{Context: cf.ctx.Name, Clusters: clusterListEntries(summaries)})
+			return cliout.JSON(stdout, clusterListReport{Context: cf.ctx.Name, Clusters: append(clusterListEntries(summaries), storage...)})
 		}
-		printClusterList(stdout, summaries)
+		printClusterList(stdout, summaries, storage)
 		return nil
 	}
 	return cmd
@@ -79,11 +97,11 @@ func newClusterAccessCmd(stdout io.Writer) *cobra.Command {
 		Use:   "access",
 		Short: "Print local access details for installed clusters",
 		Args:  cobra.NoArgs,
-		Example: `  # Print access details for every cluster in the current context
-  bootwright cluster access
+		Example: `  # Print access details for every container cluster in the current context
+  bootwright container-cluster access
 
-  # Print access details for one cluster
-  bootwright cluster access --cluster managed-01`,
+  # Print access details for one container cluster
+  bootwright container-cluster access --cluster managed-01`,
 	}
 	cmd.Flags().StringVar(&clusterName, "cluster", "", "ContainerCluster name to inspect")
 	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
@@ -107,20 +125,22 @@ func newClusterAccessCmd(stdout io.Writer) *cobra.Command {
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries})
 		}
-		printClusterAccessSummaries(stdout, "cluster access", summaries)
+		printClusterAccessSummaries(stdout, "container-cluster access", summaries)
 		return nil
 	}
 	return cmd
 }
 
-func printClusterList(stdout io.Writer, summaries []clusterAccessSummary) {
+func printClusterList(stdout io.Writer, summaries []clusterAccessSummary, storage []clusterListEntry) {
 	p := cliout.New(stdout)
 	p.Command("cluster list")
-	if len(summaries) == 0 {
+	if len(summaries) == 0 && len(storage) == 0 {
 		p.Summary(cliout.StatusSkip, "clusters", "none declared")
 		return
 	}
-	p.Section("Clusters")
+	if len(summaries) > 0 {
+		p.Section("Container clusters")
+	}
 	for _, summary := range summaries {
 		p.Status(clusterAccessStatus(summary), summary.Name, summary.InstallMode+" "+summary.InstallMethod)
 		p.Fields([]cliout.Field{
@@ -129,6 +149,16 @@ func printClusterList(stdout io.Writer, summaries []clusterAccessSummary) {
 			{Key: "Kubeconfig", Value: accessArtifactDetail(summary.Kubeconfig)},
 			{Key: "Kubeadmin password", Value: accessArtifactDetail(summary.KubeadminPassword)},
 		})
+	}
+	if len(storage) > 0 {
+		p.Section("Storage clusters")
+	}
+	for _, cluster := range storage {
+		detail := cluster.Type
+		if cluster.Management != "" {
+			detail += " " + cluster.Management
+		}
+		p.Status(cliout.StatusOK, cluster.Name, detail)
 	}
 }
 
@@ -159,6 +189,7 @@ func clusterListEntries(summaries []clusterAccessSummary) []clusterListEntry {
 	entries := make([]clusterListEntry, 0, len(summaries))
 	for _, summary := range summaries {
 		entries = append(entries, clusterListEntry{
+			Kind:              "container",
 			Name:              summary.Name,
 			InstallMode:       summary.InstallMode,
 			InstallMethod:     summary.InstallMethod,
@@ -169,6 +200,24 @@ func clusterListEntries(summaries []clusterAccessSummary) []clusterListEntry {
 			Ready:             summary.Ready,
 		})
 	}
+	return entries
+}
+
+func storageClusterListEntries(state v1alpha1.State) []clusterListEntry {
+	entries := make([]clusterListEntry, 0, len(state.StorageClusters))
+	for _, cluster := range state.StorageClusters {
+		management := cluster.Spec.Management
+		if management == "" {
+			management = v1alpha1.StorageClusterManagementManaged
+		}
+		entries = append(entries, clusterListEntry{
+			Kind:       "storage",
+			Name:       cluster.Metadata.Name,
+			Type:       cluster.Spec.Type,
+			Management: management,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 	return entries
 }
 

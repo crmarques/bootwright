@@ -45,11 +45,11 @@ func prepareScopedWorkflowWithPhases(state v1alpha1.State, scope scopeSpec, phas
 }
 
 func selectedHasExtensionWork(selected []Phase, state v1alpha1.State) bool {
-	if len(state.ClusterExtensionBindings) == 0 {
+	if len(state.ClusterAddonBindings) == 0 {
 		return false
 	}
 	for _, phase := range selected {
-		if phase.Name == "extensions" {
+		if phase.Name == "addons" {
 			return true
 		}
 	}

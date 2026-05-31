@@ -5,15 +5,15 @@ import (
 	"io"
 	"strings"
 
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 )
 
 func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 	var lines []cliout.TaskLine
 	for _, task := range tasks {
-		if task.Entry.Kind != workflow.ApplyTaskKindClusterExtensionApply || task.Extension == nil {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddonApply || task.Extension == nil {
 			continue
 		}
 		summary := extensionplan.ResourceSummaries(task.Extension.Extension)
@@ -27,7 +27,7 @@ func printExtensionDryRun(stdout io.Writer, tasks []workflow.ApplyTask) {
 		return
 	}
 	p := cliout.NewContinuation(stdout)
-	p.Section("Extensions")
+	p.Section("Addons")
 	p.Tasks(lines)
 }
 

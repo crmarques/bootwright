@@ -5,7 +5,7 @@ import (
 )
 
 func TestUseControllingTTYForNonInteractiveRootWorkflow(t *testing.T) {
-	rootPhase := []Phase{{Name: "clusters", NeedsRoot: true}}
+	rootPhase := []Phase{{Name: "container-cluster", NeedsRoot: true}}
 	if !useControllingTTYForWorkflow(rootPhase, false) {
 		t.Fatal("noninteractive root workflow should use a controlling tty")
 	}

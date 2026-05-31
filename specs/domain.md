@@ -6,7 +6,7 @@ The initial scope is direct `openshift-install agent` execution against cluster
 nodes for single-node and multi-node installs.
 
 Initial post-install bootstrap of early platform components is in scope when
-declared as cluster-bound extensions. Day-2 GitOps publication of fleet content
+declared as cluster-bound add-ons. Day-2 GitOps publication of fleet content
 is deliberately out of scope for this repository.
 
 ## Operating Model
@@ -29,9 +29,9 @@ Operators author desired state as seventeen YAML kinds:
 | `StorageObjectGateway` | Which RGW service and cephadm ingress VIPs should serve object traffic? |
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
 | `StorageClusterBinding` | Which installed clusters should consume an exported storage surface? |
-| `ClusterExtension` | Which bootstrap component can be applied inside an installed cluster? |
-| `ClusterExtensionSet` | Which ordered group of extensions defines a platform profile? |
-| `ClusterExtensionBinding` | Which clusters should receive those extensions after install? |
+| `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
+| `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
+| `ClusterAddonBinding` | Which clusters should receive those add-ons after install? |
 
 Every fact has one owner. References flow from cluster intent to cluster
 infrastructure, then to providers, infra components, and hosts. Machine MACs
@@ -45,7 +45,7 @@ External storage also stays outside `ContainerCluster`. `StorageCluster` is a
 peer of `ContainerCluster` and reuses `ClusterInfra`, `InfraProvider`, and
 `NetworkConfig` for machine facts. Storage bindings connect exported storage to
 installed clusters after both storage provisioning and the selected
-Data Foundation extension are ready.
+Data Foundation add-on are ready.
 
 ## Compatibility Goal
 
@@ -60,7 +60,7 @@ operational fact:
 - `ClusterInfra` renders platform and host bindings.
 - `InfraProvider` renders substrate inventory and platform facts.
 - `InfraComponent` renders shared service placement and routeable endpoints.
-- `ClusterExtension` renders generated OLM resources or manifest-set apply
+- `ClusterAddon` renders generated OLM resources or manifest-set apply
   plans after the target cluster is installed.
 
 No backward-compatibility shim is kept for abandoned fields. This keeps
@@ -77,9 +77,9 @@ the corresponding adapter is implemented.
 The first supported nested topology treats a child OpenShift cluster as a
 normal `ContainerCluster` whose machines come from a KubeVirt
 `InfraProvider`. The KubeVirt host may be another Bootwright
-`ContainerCluster` selected by `hostClusterRef`, or an external virtualization
+`ContainerCluster` selected by `hostContainerClusterRef`, or an external virtualization
 cluster selected by `kubeconfigRef`. When the host is Bootwright-managed, the
-  host cluster must be installed and bound to a `ClusterExtension` that advertises
+  host cluster must be installed and bound to a `ClusterAddon` that advertises
 `provides: [kubevirt]` before child VM infrastructure is converged.
 
 The first supported external storage topology is Ceph stretch mode with two

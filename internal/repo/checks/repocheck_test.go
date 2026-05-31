@@ -33,9 +33,9 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`StorageObjectGateway`",
 		"`StorageExport`",
 		"`StorageClusterBinding`",
-		"`ClusterExtension`",
-		"`ClusterExtensionSet`",
-		"`ClusterExtensionBinding`",
+		"`ClusterAddon`",
+		"`ClusterAddonProfile`",
+		"`ClusterAddonBinding`",
 		"`Environment`",
 	}
 	for _, phrase := range required {
@@ -69,7 +69,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"docs/concepts.md",
 		"docs/advanced/architecture.md",
 		"docs/advanced/networking.md",
-		"docs/advanced/post-install-extensions.md",
+		"docs/advanced/post-install-addons.md",
 		"docs/advanced/providers.md",
 		"docs/advanced/proxy-and-disconnected.md",
 		"specs/architecture.md",

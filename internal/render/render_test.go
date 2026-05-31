@@ -129,21 +129,21 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 }
 
 func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-virtualized-child")})
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
-	child := clustersByName(t, vars)["child-ocp"]
+	child := clustersByName(t, vars)["dc1-child-ocp"]
 	machine := firstMachineComponent(t, child)
 	kubevirt := machine["kubevirt"].(map[string]any)
-	if got := kubevirt["hostClusterRef"]; got != "metal-ocp" {
-		t.Fatalf("hostClusterRef = %v, want metal-ocp", got)
+	if got := kubevirt["hostContainerClusterRef"]; got != "dc1-metal-ocp" {
+		t.Fatalf("hostContainerClusterRef = %v, want dc1-metal-ocp", got)
 	}
-	if got := kubevirt["namespace"]; got != "bootwright-child-ocp" {
-		t.Fatalf("namespace = %v, want bootwright-child-ocp", got)
+	if got := kubevirt["namespace"]; got != "bootwright-dc1-child-ocp" {
+		t.Fatalf("namespace = %v, want bootwright-dc1-child-ocp", got)
 	}
-	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_clusters_dir }}/metal-ocp/secrets/kubeconfig" {
+	if got := kubevirt["kubeconfig"]; got != "{{ bootwright_clusters_dir }}/dc1-metal-ocp/secrets/kubeconfig" {
 		t.Fatalf("kubeconfig = %v, want host cluster secret kubeconfig template", got)
 	}
 	interfaces := machine["interfaces"].([]any)
@@ -152,7 +152,7 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if !strings.HasPrefix(mac, "52:54:00:") {
 		t.Fatalf("generated KubeVirt MAC = %q, want deterministic qemu prefix", mac)
 	}
-	agent, err := render.AgentConfig(state, containerClusterByName(t, state, "child-ocp"))
+	agent, err := render.AgentConfig(state, containerClusterByName(t, state, "dc1-child-ocp"))
 	if err != nil {
 		t.Fatalf("AgentConfig: %v", err)
 	}
@@ -166,8 +166,8 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if got := substrate["kind"]; got != v1alpha1.ProvisionerKubeVirt {
 		t.Fatalf("network substrate kind = %v, want kubevirt", got)
 	}
-	if got := substrate["kubevirt"].(map[string]any)["nad"]; got != "bootwright-child-ocp/child-ocp-net" {
-		t.Fatalf("network NAD = %v, want bootwright-child-ocp/child-ocp-net", got)
+	if got := substrate["kubevirt"].(map[string]any)["nad"]; got != "bootwright-dc1-child-ocp/dc1-child-net" {
+		t.Fatalf("network NAD = %v, want bootwright-dc1-child-ocp/dc1-child-net", got)
 	}
 
 	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
@@ -181,8 +181,8 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if bytes.Contains(effective, []byte("apiVersion: v1\nkind: Config")) {
 		t.Fatalf("effective state contains kubeconfig-looking bytes")
 	}
-	if !bytes.Contains(effective, []byte("hostClusterRef")) {
-		t.Fatalf("effective state should preserve the non-secret hostClusterRef")
+	if !bytes.Contains(effective, []byte("hostContainerClusterRef")) {
+		t.Fatalf("effective state should preserve the non-secret hostContainerClusterRef")
 	}
 }
 
@@ -193,7 +193,7 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
 				ProxyFor: v1alpha1.EnvironmentProxyForSpec{
-					ClusterInstall: "managed",
+					ContainerClusterInstall: "managed",
 				},
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					Proxies: []v1alpha1.EnvironmentProxyComponent{{
@@ -330,7 +330,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 		Routes: v1alpha1.EnvironmentArtifactRoutes{
-			ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+			ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
 		},
 	}}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{

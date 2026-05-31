@@ -94,9 +94,9 @@ type syntaxCheckReport struct {
 	StorageObjectGateways    int                       `json:"storageObjectGateways"`
 	StorageExports           int                       `json:"storageExports"`
 	StorageBindings          int                       `json:"storageClusterBindings"`
-	ClusterExtensions        int                       `json:"clusterExtensions"`
-	ExtensionSets            int                       `json:"clusterExtensionSets"`
-	ExtensionBindings        int                       `json:"clusterExtensionBindings"`
+	ClusterAddons            int                       `json:"clusterAddons"`
+	Profiles                 int                       `json:"clusterAddonProfiles"`
+	ExtensionBindings        int                       `json:"clusterAddonBindings"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error) error {
@@ -115,9 +115,9 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error
 		StorageObjectGateways:    len(state.StorageObjectGateways),
 		StorageExports:           len(state.StorageExports),
 		StorageBindings:          len(state.StorageClusterBindings),
-		ClusterExtensions:        len(state.ClusterExtensions),
-		ExtensionSets:            len(state.ClusterExtensionSets),
-		ExtensionBindings:        len(state.ClusterExtensionBindings),
+		ClusterAddons:            len(state.ClusterAddons),
+		Profiles:                 len(state.ClusterAddonProfiles),
+		ExtensionBindings:        len(state.ClusterAddonBindings),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
@@ -170,8 +170,8 @@ func stateCountFields(state v1alpha1.State) []cliout.Field {
 		{Key: "StorageObjectGateways", Value: fmt.Sprint(len(state.StorageObjectGateways))},
 		{Key: "StorageExports", Value: fmt.Sprint(len(state.StorageExports))},
 		{Key: "StorageClusterBindings", Value: fmt.Sprint(len(state.StorageClusterBindings))},
-		{Key: "ClusterExtensions", Value: fmt.Sprint(len(state.ClusterExtensions))},
-		{Key: "ClusterExtensionSets", Value: fmt.Sprint(len(state.ClusterExtensionSets))},
-		{Key: "ClusterExtensionBindings", Value: fmt.Sprint(len(state.ClusterExtensionBindings))},
+		{Key: "ClusterAddons", Value: fmt.Sprint(len(state.ClusterAddons))},
+		{Key: "ClusterAddonProfiles", Value: fmt.Sprint(len(state.ClusterAddonProfiles))},
+		{Key: "ClusterAddonBindings", Value: fmt.Sprint(len(state.ClusterAddonBindings))},
 	}
 }

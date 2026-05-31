@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageClusterBinding
+metadata:
+  name: ceph-storage-odf
+spec:
+  storageExportRef:
+    name: odf-external-ceph
+
+  containerClusterSelector:
+    names:
+      - dc1-metal-ocp
+      - dc2-metal-ocp
+      - dc1-child-ocp
+      - dc2-child-ocp
+
+  dataFoundation:
+    product: openshift-data-foundation # default
+    namespace: openshift-storage # default
+    storageClusterName: ocs-external-storagecluster # default
+    storageSystemName: ocs-external-storagecluster-storagesystem # default

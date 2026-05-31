@@ -62,7 +62,7 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 			asset.OperationsPath = filepath.Join(dir, "ceph", "operations.yaml")
 		}
 		for _, binding := range bindingsByCluster[cluster.Metadata.Name] {
-			for _, containerCluster := range binding.Spec.ClusterSelector.Names {
+			for _, containerCluster := range binding.Spec.ContainerClusterSelector.Names {
 				bindingDir := filepath.Join(asset.DataFoundationDir, binding.Metadata.Name, containerCluster)
 				asset.Bindings = append(asset.Bindings, StorageBindingAsset{
 					BindingName:                binding.Metadata.Name,

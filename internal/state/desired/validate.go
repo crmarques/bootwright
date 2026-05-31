@@ -22,9 +22,9 @@ func Validate(state v1alpha1.State) error {
 	errs = append(errs, validateInfraComponents(state)...)
 	errs = append(errs, validateClusterInfras(state)...)
 	errs = append(errs, validateContainerClusters(state)...)
-	errs = append(errs, validateClusterExtensions(state)...)
-	errs = append(errs, validateClusterExtensionSets(state)...)
-	errs = append(errs, validateClusterExtensionBindings(state)...)
+	errs = append(errs, validateClusterAddons(state)...)
+	errs = append(errs, validateClusterAddonProfiles(state)...)
+	errs = append(errs, validateClusterAddonBindings(state)...)
 	errs = append(errs, validateStorage(state)...)
 	errs = append(errs, validateCrossLayer(state)...)
 	errs = append(errs, validateSecretReferences(state)...)
@@ -110,17 +110,17 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 				continue
 			}
 			profile, ok := lookupMachineProfile(provider, machine.From.Profile)
-			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostClusterRef == nil || profile.KubeVirt.HostClusterRef.Name == "" {
+			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil || profile.KubeVirt.HostContainerClusterRef.Name == "" {
 				continue
 			}
-			parent := profile.KubeVirt.HostClusterRef.Name
+			parent := profile.KubeVirt.HostContainerClusterRef.Name
 			deps[ocp.Metadata.Name] = appendUnique(deps[ocp.Metadata.Name], parent)
 			if _, ok := clusters[parent]; !ok {
 				continue
 			}
-			if !provided[parent][v1alpha1.ClusterExtensionProvidesKubeVirt] {
-				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.hostClusterRef.name %q requires a ClusterExtensionBinding that applies a ClusterExtension providing %q to ContainerCluster/%s",
-					provider.Metadata.Name, profile.Name, parent, v1alpha1.ClusterExtensionProvidesKubeVirt, parent))
+			if !provided[parent][v1alpha1.ClusterAddonProvidesKubeVirt] {
+				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.hostContainerClusterRef.name %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q to ContainerCluster/%s",
+					provider.Metadata.Name, profile.Name, parent, v1alpha1.ClusterAddonProvidesKubeVirt, parent))
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func validateClusterDependencyCycles(deps map[string][]string) []string {
 		}
 		if visiting[name] {
 			cycle := append(stack, name)
-			errs = append(errs, fmt.Sprintf("KubeVirt hostClusterRef creates ContainerCluster dependency cycle: %s", strings.Join(cycle, " -> ")))
+			errs = append(errs, fmt.Sprintf("KubeVirt hostContainerClusterRef creates ContainerCluster dependency cycle: %s", strings.Join(cycle, " -> ")))
 			return
 		}
 		visiting[name] = true
@@ -235,8 +235,8 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; Environment/%s has no default artifact server", prefix, env.Metadata.Name))
 			continue
 		}
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifacts.RouteAvailable(server, server.Entry.Routes.ClusterInstall.Endpoint) {
-			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s selected artifact server routes.clusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
+		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifacts.RouteAvailable(server, server.Entry.Routes.ContainerClusterInstall.Endpoint) {
+			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s selected artifact server routes.containerClusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
 				prefix, env.Metadata.Name, server.Component.Metadata.Name))
 		}
 		if artifacts.ClusterUsesBareMetalMachine(state, ci) && !artifacts.RouteAvailable(server, server.Entry.Routes.RedfishVirtualMedia.Endpoint) {

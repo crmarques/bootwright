@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
@@ -30,7 +30,7 @@ func planStorageBindingTasks(state v1alpha1.State, installPhasePlanned bool, sto
 		if !ok {
 			continue
 		}
-		for _, cluster := range binding.Spec.ClusterSelector.Names {
+		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
 			deps := []string{}
 			if installPhasePlanned {
 				deps = append(deps, "wait."+cluster)
@@ -45,6 +45,7 @@ func planStorageBindingTasks(state v1alpha1.State, installPhasePlanned bool, sto
 					Kind:         ApplyTaskKindStorageClusterBindingApply,
 					Label:        "storage binding " + cluster + " " + binding.Metadata.Name + " apply",
 					Cluster:      cluster,
+					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: deps,
 				},
@@ -66,9 +67,9 @@ func dataFoundationExtensionWaitDeps(state v1alpha1.State, cluster string) []str
 		if binding.Cluster != cluster {
 			continue
 		}
-		for _, extension := range binding.Extensions {
-			if extensionProvides(extension.Extension, v1alpha1.ClusterExtensionProvidesDataFoundation) {
-				deps = append(deps, "extension."+cluster+"."+extension.Name+".wait")
+		for _, extension := range binding.Addons {
+			if extensionProvides(extension.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
+				deps = append(deps, "addon."+cluster+"."+extension.Name+".wait")
 			}
 		}
 	}
@@ -98,9 +99,9 @@ func runOneStorageTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	filtered := stategraph.FilterStateToStorageClusters(state, []string{name})
 	filtered.ContainerClusters = nil
-	filtered.ClusterExtensions = nil
-	filtered.ClusterExtensionSets = nil
-	filtered.ClusterExtensionBindings = nil
+	filtered.ClusterAddons = nil
+	filtered.ClusterAddonProfiles = nil
+	filtered.ClusterAddonBindings = nil
 	return filtered
 }
 

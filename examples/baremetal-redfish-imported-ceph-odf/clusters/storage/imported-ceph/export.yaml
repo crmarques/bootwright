@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: imported-ceph-odf
+spec:
+  storageClusterRef:
+    name: imported-ceph
+
+  dataFoundation:
+    externalDetailsRef:
+      name: imported-ceph-odf-details
+

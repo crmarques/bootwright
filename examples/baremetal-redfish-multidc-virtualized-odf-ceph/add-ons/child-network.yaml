@@ -1,0 +1,27 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: child-network
+spec:
+  type: manifest-set
+
+  manifestSet:
+    manifests:
+      - path: manifests/dc1-child-namespace.yaml
+      - path: manifests/dc1-child-nad.yaml
+      - path: manifests/dc2-child-namespace.yaml
+      - path: manifests/dc2-child-nad.yaml
+
+  readiness:
+    timeout: 5m
+    checks:
+      - type: resourceExists
+        apiVersion: k8s.cni.cncf.io/v1
+        kind: NetworkAttachmentDefinition
+        name: dc1-child-net
+        namespace: bootwright-dc1-child-ocp
+      - type: resourceExists
+        apiVersion: k8s.cni.cncf.io/v1
+        kind: NetworkAttachmentDefinition
+        name: dc2-child-net
+        namespace: bootwright-dc2-child-ocp

@@ -41,7 +41,7 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 		if df.ExternalDetailsRef.Name != "" {
 			continue
 		}
-		for _, containerCluster := range binding.Spec.ClusterSelector.Names {
+		for _, containerCluster := range binding.Spec.ContainerClusterSelector.Names {
 			healthchecker := dataFoundationClientID(containerCluster, "healthchecker")
 			rbdNode := dataFoundationClientID(containerCluster, "csi-rbd-node")
 			rbdProvisioner := dataFoundationClientID(containerCluster, "csi-rbd-provisioner")
@@ -153,7 +153,7 @@ func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.Storag
 		rbdPool = df.RBDPoolRef.Name
 		rgwPoolPrefix = df.ObjectGatewayRef.Name
 		if gw, ok := storageGatewayByName(state, df.ObjectGatewayRef.Name); ok {
-			rgwEndpoint = fmt.Sprintf("%s:%d", gw.Spec.Ceph.ClientEndpoint.Host, gw.Spec.Ceph.ClientEndpoint.Port)
+			rgwEndpoint = fmt.Sprintf("%s:%d", gw.Spec.PublicEndpoint.DNSName, gw.Spec.PublicEndpoint.Port)
 		}
 	}
 	details := []map[string]any{

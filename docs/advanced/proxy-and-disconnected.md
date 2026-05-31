@@ -33,11 +33,11 @@ spec:
 
   proxyFor:
     bootwright: default
-    clusterInstall: default
+    containerClusterInstall: default
 ```
 
 `proxyFor.bootwright` applies to Bootwright runtime actions.
-`proxyFor.clusterInstall` renders the selected proxy into installer input.
+`proxyFor.containerClusterInstall` renders the selected proxy into installer input.
 Omitted values and the reserved value `none` disable proxy use.
 
 Managed proxy entries use `type: managed` and reference an `InfraComponent`
@@ -82,5 +82,5 @@ same upstream registry.
 
 Disconnected agent installs also need an artifact server route for cluster
 install boot artifacts. When the selected artifact server has a
-`routes.clusterInstall.endpoint`, Bootwright renders `minimalISO: true` and a
+`routes.containerClusterInstall.endpoint`, Bootwright renders `minimalISO: true` and a
 route-derived `bootArtifactsBaseURL` into `agent-config.yaml`.

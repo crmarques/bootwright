@@ -10,7 +10,7 @@ Bootwright's desired-state pipeline flows through these internal packages:
 - `converge/workflow`: plan and run cross-cluster DAG tasks, leases, ledgers, resource locks, and install records.
 - `converge/ansible`: execute rendered Ansible playbooks.
 - `converge/bundle`: materialize the embedded Ansible bundle and role search paths.
-- `extensions`: plan, render, apply, and record cluster-bound post-install extensions.
+- `addons`: plan, render, apply, and record cluster-bound post-install addons.
 - `runtime`: context state, root-managed filesystem access, secret resolution, local privilege boundaries, and PTY handling.
 - `cli`: Cobra commands and user-facing output adapters.
 

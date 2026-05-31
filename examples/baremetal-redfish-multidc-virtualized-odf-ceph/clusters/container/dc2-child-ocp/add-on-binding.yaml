@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: dc2-child-ocp-addons
+spec:
+  containerClusterSelector:
+    names:
+      - dc2-child-ocp
+
+  applyAfter:
+    phase: containerClusterInstalled
+
+  addons:
+    - name: openshift-data-foundation
+
+  policy:
+    prune: false # default
+    serverSideApply: true # default
+    fieldManager: bootwright # default
+    continueOnError: false # default

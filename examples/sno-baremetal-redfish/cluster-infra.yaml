@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: sno-baremetal
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.140.10
+    apiInt:
+      externalVip: 192.168.140.10
+    ingress:
+      externalVip: 192.168.140.11
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: rack1-baremetal-provider
+          name: rack1-srv1
+        networkConfig:
+          ref:
+            name: rack1-vlan140-machine
+          addresses:
+            - interface: eno1
+              ipv4:
+                - ip: 192.168.140.20
+                  prefix-length: 24

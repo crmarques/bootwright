@@ -43,11 +43,11 @@ func applyEnvironmentClusterSelection(state v1alpha1.State) v1alpha1.State {
 	if len(state.Environments) != 1 {
 		return state
 	}
-	names := state.Environments[0].Spec.ContainerClusters
-	if len(names) == 0 {
+	env := state.Environments[0]
+	if len(env.Spec.ContainerClusters) == 0 && len(env.Spec.StorageClusters) == 0 {
 		return state
 	}
-	return stategraph.FilterStateToClusters(state, names)
+	return stategraph.FilterStateToClusterRoots(state, env.Spec.ContainerClusters, env.Spec.StorageClusters)
 }
 
 // Load reads `-f` arguments (files or directories) and decodes either every
@@ -100,9 +100,9 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.StorageObjectGateways) == 0 &&
 		len(state.StorageExports) == 0 &&
 		len(state.StorageClusterBindings) == 0 &&
-		len(state.ClusterExtensions) == 0 &&
-		len(state.ClusterExtensionSets) == 0 &&
-		len(state.ClusterExtensionBindings) == 0 {
+		len(state.ClusterAddons) == 0 &&
+		len(state.ClusterAddonProfiles) == 0 &&
+		len(state.ClusterAddonBindings) == 0 {
 		return v1alpha1.State{}, errors.New("no Bootwright YAML documents found")
 	}
 	sortState(&state)
@@ -328,27 +328,27 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.StorageClusterBindings = append(state.StorageClusterBindings, item)
-		case v1alpha1.KindClusterExtension:
-			var item v1alpha1.ClusterExtension
+		case v1alpha1.KindClusterAddon:
+			var item v1alpha1.ClusterAddon
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.ClusterExtensions = append(state.ClusterExtensions, item)
-		case v1alpha1.KindClusterExtensionSet:
-			var item v1alpha1.ClusterExtensionSet
+			state.ClusterAddons = append(state.ClusterAddons, item)
+		case v1alpha1.KindClusterAddonProfile:
+			var item v1alpha1.ClusterAddonProfile
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.ClusterExtensionSets = append(state.ClusterExtensionSets, item)
-		case v1alpha1.KindClusterExtensionBinding:
-			var item v1alpha1.ClusterExtensionBinding
+			state.ClusterAddonProfiles = append(state.ClusterAddonProfiles, item)
+		case v1alpha1.KindClusterAddonBinding:
+			var item v1alpha1.ClusterAddonBinding
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.ClusterExtensionBindings = append(state.ClusterExtensionBindings, item)
+			state.ClusterAddonBindings = append(state.ClusterAddonBindings, item)
 		case "":
 			return fmt.Errorf("decode %s document %d: kind is required", path, index)
 		default:
@@ -479,23 +479,23 @@ func sortState(state *v1alpha1.State) {
 		}
 		return state.StorageClusterBindings[i].Metadata.Name < state.StorageClusterBindings[j].Metadata.Name
 	}))
-	sort.SliceStable(state.ClusterExtensions, sortByName(func(i, j int) bool {
-		if state.ClusterExtensions[i].Metadata.Name == state.ClusterExtensions[j].Metadata.Name {
-			return state.ClusterExtensions[i].SourcePath < state.ClusterExtensions[j].SourcePath
+	sort.SliceStable(state.ClusterAddons, sortByName(func(i, j int) bool {
+		if state.ClusterAddons[i].Metadata.Name == state.ClusterAddons[j].Metadata.Name {
+			return state.ClusterAddons[i].SourcePath < state.ClusterAddons[j].SourcePath
 		}
-		return state.ClusterExtensions[i].Metadata.Name < state.ClusterExtensions[j].Metadata.Name
+		return state.ClusterAddons[i].Metadata.Name < state.ClusterAddons[j].Metadata.Name
 	}))
-	sort.SliceStable(state.ClusterExtensionSets, sortByName(func(i, j int) bool {
-		if state.ClusterExtensionSets[i].Metadata.Name == state.ClusterExtensionSets[j].Metadata.Name {
-			return state.ClusterExtensionSets[i].SourcePath < state.ClusterExtensionSets[j].SourcePath
+	sort.SliceStable(state.ClusterAddonProfiles, sortByName(func(i, j int) bool {
+		if state.ClusterAddonProfiles[i].Metadata.Name == state.ClusterAddonProfiles[j].Metadata.Name {
+			return state.ClusterAddonProfiles[i].SourcePath < state.ClusterAddonProfiles[j].SourcePath
 		}
-		return state.ClusterExtensionSets[i].Metadata.Name < state.ClusterExtensionSets[j].Metadata.Name
+		return state.ClusterAddonProfiles[i].Metadata.Name < state.ClusterAddonProfiles[j].Metadata.Name
 	}))
-	sort.SliceStable(state.ClusterExtensionBindings, sortByName(func(i, j int) bool {
-		if state.ClusterExtensionBindings[i].Metadata.Name == state.ClusterExtensionBindings[j].Metadata.Name {
-			return state.ClusterExtensionBindings[i].SourcePath < state.ClusterExtensionBindings[j].SourcePath
+	sort.SliceStable(state.ClusterAddonBindings, sortByName(func(i, j int) bool {
+		if state.ClusterAddonBindings[i].Metadata.Name == state.ClusterAddonBindings[j].Metadata.Name {
+			return state.ClusterAddonBindings[i].SourcePath < state.ClusterAddonBindings[j].SourcePath
 		}
-		return state.ClusterExtensionBindings[i].Metadata.Name < state.ClusterExtensionBindings[j].Metadata.Name
+		return state.ClusterAddonBindings[i].Metadata.Name < state.ClusterAddonBindings[j].Metadata.Name
 	}))
 }
 

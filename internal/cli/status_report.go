@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
-	extensionrecords "github.com/crmarques/bootwright/internal/extensions/records"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
@@ -52,20 +52,20 @@ type statusApplyRunActivity struct {
 }
 
 type statusDesired struct {
-	Source                   string `json:"source"`
-	Loaded                   bool   `json:"loaded"`
-	LoadError                string `json:"loadError,omitempty"`
-	Environments             int    `json:"environments"`
-	InfraProviders           int    `json:"infraProviders"`
-	Hosts                    int    `json:"hosts"`
-	ClusterInfras            int    `json:"clusterInfras"`
-	ContainerClusters        int    `json:"containerClusters"`
-	StorageClusters          int    `json:"storageClusters"`
-	StoragePools             int    `json:"storagePools"`
-	StorageClusterBindings   int    `json:"storageClusterBindings"`
-	ClusterExtensions        int    `json:"clusterExtensions"`
-	ClusterExtensionSets     int    `json:"clusterExtensionSets"`
-	ClusterExtensionBindings int    `json:"clusterExtensionBindings"`
+	Source                 string `json:"source"`
+	Loaded                 bool   `json:"loaded"`
+	LoadError              string `json:"loadError,omitempty"`
+	Environments           int    `json:"environments"`
+	InfraProviders         int    `json:"infraProviders"`
+	Hosts                  int    `json:"hosts"`
+	ClusterInfras          int    `json:"clusterInfras"`
+	ContainerClusters      int    `json:"containerClusters"`
+	StorageClusters        int    `json:"storageClusters"`
+	StoragePools           int    `json:"storagePools"`
+	StorageClusterBindings int    `json:"storageClusterBindings"`
+	ClusterAddons          int    `json:"clusterAddons"`
+	ClusterAddonProfiles   int    `json:"clusterAddonProfiles"`
+	ClusterAddonBindings   int    `json:"clusterAddonBindings"`
 }
 
 type statusCluster struct {
@@ -76,7 +76,7 @@ type statusCluster struct {
 	InstallerPath      string            `json:"installerPath,omitempty"`
 	EffectiveStatePath string            `json:"effectiveStatePath,omitempty"`
 	FreshnessDetail    string            `json:"freshnessDetail,omitempty"`
-	Extensions         []statusExtension `json:"extensions,omitempty"`
+	Addons             []statusExtension `json:"addons,omitempty"`
 }
 
 type statusExtension struct {
@@ -135,9 +135,9 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.StorageClusters = len(state.StorageClusters)
 		report.Desired.StoragePools = len(state.StoragePools)
 		report.Desired.StorageClusterBindings = len(state.StorageClusterBindings)
-		report.Desired.ClusterExtensions = len(state.ClusterExtensions)
-		report.Desired.ClusterExtensionSets = len(state.ClusterExtensionSets)
-		report.Desired.ClusterExtensionBindings = len(state.ClusterExtensionBindings)
+		report.Desired.ClusterAddons = len(state.ClusterAddons)
+		report.Desired.ClusterAddonProfiles = len(state.ClusterAddonProfiles)
+		report.Desired.ClusterAddonBindings = len(state.ClusterAddonBindings)
 		report.Clusters = buildStatusClusters(state, ctx.RenderedDir, ctx.ClustersDir)
 		report.Shared = buildStatusShared(state)
 		report.Secrets, _ = declaredSecretEntries(ctx.SecretsDir, state)
@@ -170,7 +170,7 @@ func buildStatusShared(state v1alpha1.State) []statusShared {
 
 func buildStatusClusters(state v1alpha1.State, renderedDir, clustersDir string) []statusCluster {
 	freshness := loadEffectiveStateFreshness(state, renderedDir)
-	extensionStatus := buildStatusExtensions(state, clustersDir)
+	extensionStatus := buildStatusAddons(state, clustersDir)
 	names := make([]string, 0, len(state.ContainerClusters))
 	byName := map[string]v1alpha1.ContainerCluster{}
 	for _, c := range state.ContainerClusters {
@@ -188,7 +188,7 @@ func buildStatusClusters(state v1alpha1.State, renderedDir, clustersDir string) 
 			InstallMode:        v1alpha1.InstallMode(ocp),
 			InstallMethod:      ocp.Spec.Install.Method,
 			InstallerFreshness: result.State,
-			Extensions:         extensionStatus[name],
+			Addons:             extensionStatus[name],
 		}
 		if result.State != installerFreshnessMissing {
 			entry.InstallerPath = installer
@@ -202,14 +202,14 @@ func buildStatusClusters(state v1alpha1.State, renderedDir, clustersDir string) 
 	return out
 }
 
-func buildStatusExtensions(state v1alpha1.State, clustersDir string) map[string][]statusExtension {
+func buildStatusAddons(state v1alpha1.State, clustersDir string) map[string][]statusExtension {
 	out := map[string][]statusExtension{}
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
 		return out
 	}
 	for _, plan := range plans {
-		for _, extension := range plan.Extensions {
+		for _, extension := range plan.Addons {
 			entry := statusExtension{Name: extension.Name}
 			record, found, err := extensionrecords.LoadRecord(clustersDir, plan.Cluster, extension.Name)
 			if err == nil && found {

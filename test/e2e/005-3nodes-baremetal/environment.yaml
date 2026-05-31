@@ -33,7 +33,7 @@ spec:
         routes:
           redfishVirtualMedia:
             endpoint: bmc
-          clusterInstall:
+          containerClusterInstall:
             endpoint: cluster
     proxies:
       - name: default
@@ -51,4 +51,4 @@ spec:
 
   proxyFor:
     bootwright: default
-    clusterInstall: default
+    containerClusterInstall: default

@@ -43,7 +43,18 @@ func selectResourceFiles(files []string) ([]string, v1alpha1.Environment, bool, 
 			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q must not be a symlink", env.Metadata.Name, i, ref)
 		}
 		if info.IsDir() {
-			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q must name a YAML file, got directory %s", env.Metadata.Name, i, ref, path)
+			files, err := environmentResourceDirectoryFiles(env, i, ref, path)
+			if err != nil {
+				return nil, env, true, err
+			}
+			for _, file := range files {
+				if selected[file] {
+					continue
+				}
+				selected[file] = true
+				out = append(out, file)
+			}
+			continue
 		}
 		if !isYAMLFile(path) {
 			return nil, env, true, fmt.Errorf("environment Environment/%s spec.resources[%d] %q is not a .yaml or .yml file", env.Metadata.Name, i, ref)
@@ -56,6 +67,47 @@ func selectResourceFiles(files []string) ([]string, v1alpha1.Environment, bool, 
 	}
 	sort.Strings(out)
 	return out, env, true, nil
+}
+
+func environmentResourceDirectoryFiles(env v1alpha1.Environment, index int, ref, path string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(path, func(file string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			base := filepath.Base(file)
+			atRoot := filepath.Clean(file) == filepath.Clean(path)
+			if !atRoot {
+				if strings.HasPrefix(base, ".") {
+					return filepath.SkipDir
+				}
+				if _, skip := nonWorkspaceDirs[base]; skip {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if isYAMLFile(file) {
+				return fmt.Errorf("file %s must not be a symlink", file)
+			}
+			return nil
+		}
+		if !isYAMLFile(file) {
+			return nil
+		}
+		files = append(files, filepath.Clean(file))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("environment Environment/%s spec.resources[%d] %q: walk %s: %w", env.Metadata.Name, index, ref, path, err)
+	}
+	sort.Strings(files)
+	if len(files) == 0 {
+		return nil, fmt.Errorf("environment Environment/%s spec.resources[%d] %q directory contains no .yaml or .yml files", env.Metadata.Name, index, ref)
+	}
+	return files, nil
 }
 
 func scanEnvironments(files []string) ([]v1alpha1.Environment, error) {
@@ -197,24 +249,24 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 				v1alpha1.KindClusterInfra, node.MachineRef.ClusterInfra)
 		}
 	}
-	for _, set := range state.ClusterExtensionSets {
-		for i, ref := range set.Spec.ExtensionSets {
-			require(fmt.Sprintf("ClusterExtensionSet/%s spec.extensionSets[%d]", set.Metadata.Name, i),
-				v1alpha1.KindClusterExtensionSet, ref.Name)
+	for _, set := range state.ClusterAddonProfiles {
+		for i, ref := range set.Spec.Profiles {
+			require(fmt.Sprintf("ClusterAddonProfile/%s spec.profiles[%d]", set.Metadata.Name, i),
+				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
-		for i, ref := range set.Spec.Extensions {
-			require(fmt.Sprintf("ClusterExtensionSet/%s spec.extensions[%d]", set.Metadata.Name, i),
-				v1alpha1.KindClusterExtension, ref.Name)
+		for i, ref := range set.Spec.Addons {
+			require(fmt.Sprintf("ClusterAddonProfile/%s spec.addons[%d]", set.Metadata.Name, i),
+				v1alpha1.KindClusterAddon, ref.Name)
 		}
 	}
-	for _, binding := range state.ClusterExtensionBindings {
-		for i, ref := range binding.Spec.ExtensionSets {
-			require(fmt.Sprintf("ClusterExtensionBinding/%s spec.extensionSets[%d]", binding.Metadata.Name, i),
-				v1alpha1.KindClusterExtensionSet, ref.Name)
+	for _, binding := range state.ClusterAddonBindings {
+		for i, ref := range binding.Spec.Profiles {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.profiles[%d]", binding.Metadata.Name, i),
+				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
-		for i, ref := range binding.Spec.Extensions {
-			require(fmt.Sprintf("ClusterExtensionBinding/%s spec.extensions[%d]", binding.Metadata.Name, i),
-				v1alpha1.KindClusterExtension, ref.Name)
+		for i, ref := range binding.Spec.Addons {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d]", binding.Metadata.Name, i),
+				v1alpha1.KindClusterAddon, ref.Name)
 		}
 	}
 	for _, cluster := range state.StorageClusters {
@@ -330,14 +382,14 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	for _, item := range state.StorageClusterBindings {
 		out[resourceKey{kind: v1alpha1.KindStorageClusterBinding, name: item.Metadata.Name}] = true
 	}
-	for _, item := range state.ClusterExtensions {
-		out[resourceKey{kind: v1alpha1.KindClusterExtension, name: item.Metadata.Name}] = true
+	for _, item := range state.ClusterAddons {
+		out[resourceKey{kind: v1alpha1.KindClusterAddon, name: item.Metadata.Name}] = true
 	}
-	for _, item := range state.ClusterExtensionSets {
-		out[resourceKey{kind: v1alpha1.KindClusterExtensionSet, name: item.Metadata.Name}] = true
+	for _, item := range state.ClusterAddonProfiles {
+		out[resourceKey{kind: v1alpha1.KindClusterAddonProfile, name: item.Metadata.Name}] = true
 	}
-	for _, item := range state.ClusterExtensionBindings {
-		out[resourceKey{kind: v1alpha1.KindClusterExtensionBinding, name: item.Metadata.Name}] = true
+	for _, item := range state.ClusterAddonBindings {
+		out[resourceKey{kind: v1alpha1.KindClusterAddonBinding, name: item.Metadata.Name}] = true
 	}
 	return out
 }
@@ -402,9 +454,9 @@ func knownResourceKind(kind string) bool {
 		v1alpha1.KindStorageObjectGateway,
 		v1alpha1.KindStorageExport,
 		v1alpha1.KindStorageClusterBinding,
-		v1alpha1.KindClusterExtension,
-		v1alpha1.KindClusterExtensionSet,
-		v1alpha1.KindClusterExtensionBinding:
+		v1alpha1.KindClusterAddon,
+		v1alpha1.KindClusterAddonProfile,
+		v1alpha1.KindClusterAddonBinding:
 		return true
 	default:
 		return false

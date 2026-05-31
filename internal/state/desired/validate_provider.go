@@ -193,16 +193,16 @@ func validateMachineProfileVSphere(prefix string, v *v1alpha1.MachineProfileVSph
 
 func validateMachineProfileKubeVirt(prefix string, k *v1alpha1.MachineProfileKubeVirtProvisioner, clusters map[string]v1alpha1.ContainerCluster) []string {
 	var errs []string
-	hasHostClusterRef := k.HostClusterRef != nil && k.HostClusterRef.Name != ""
+	hasHostContainerClusterRef := k.HostContainerClusterRef != nil && k.HostContainerClusterRef.Name != ""
 	hasKubeconfigRef := k.KubeconfigRef != nil && k.KubeconfigRef.Name != ""
-	if hasHostClusterRef == hasKubeconfigRef {
-		errs = append(errs, fmt.Sprintf("%s.kubevirt must set exactly one of {hostClusterRef, kubeconfigRef}", prefix))
+	if hasHostContainerClusterRef == hasKubeconfigRef {
+		errs = append(errs, fmt.Sprintf("%s.kubevirt must set exactly one of {hostContainerClusterRef, kubeconfigRef}", prefix))
 	}
-	if k.HostClusterRef != nil {
-		if k.HostClusterRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostClusterRef.name is required when hostClusterRef is set", prefix))
-		} else if _, ok := clusters[k.HostClusterRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostClusterRef.name %q does not match any ContainerCluster", prefix, k.HostClusterRef.Name))
+	if k.HostContainerClusterRef != nil {
+		if k.HostContainerClusterRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostContainerClusterRef.name is required when hostContainerClusterRef is set", prefix))
+		} else if _, ok := clusters[k.HostContainerClusterRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.hostContainerClusterRef.name %q does not match any ContainerCluster", prefix, k.HostContainerClusterRef.Name))
 		}
 	}
 	if k.KubeconfigRef != nil && k.KubeconfigRef.Name == "" {

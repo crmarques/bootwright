@@ -1,17 +1,9 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: sno-libvirt
+  name: sno-libvirt-redfish
 spec:
-  baseDomain: example.test
-
-  resources:
-    - shared/hosts.yaml
-    - shared/networks.yaml
-    - shared/provider.yaml
-    - shared/infra-component.yaml
-    - clusters/sno-libvirt/cluster-infra.yaml
-    - clusters/sno-libvirt/container-cluster.yaml
+  baseDomain: bootwright.test
 
   secrets:
     openshift-pull-secret: null

@@ -11,7 +11,7 @@ import (
 
 func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
 	switch target {
-	case "cluster", "infra", "all", "extensions":
+	case "container-cluster", "addons":
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -20,7 +20,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToClusters(state, names), nil
-	case "storage":
+	case "storage-cluster":
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -29,12 +29,57 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToStorageClusters(state, names), nil
+	case "cluster", "infra", "all":
+		if strings.TrimSpace(scope) == "" {
+			return state, nil
+		}
+		containerNames, storageNames, err := clusterRootNamesForTarget(state, scope)
+		if err != nil {
+			return state, err
+		}
+		return stategraph.FilterStateToClusterRoots(state, containerNames, storageNames), nil
 	default:
 		if strings.TrimSpace(scope) != "" {
 			return state, fmt.Errorf("--scope is not supported for %s", target)
 		}
 		return state, nil
 	}
+}
+
+func clusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []string, error) {
+	names, err := parseClusterScope(scope)
+	if err != nil {
+		return nil, nil, err
+	}
+	containerKnown := map[string]bool{}
+	for _, ocp := range state.ContainerClusters {
+		containerKnown[ocp.Metadata.Name] = true
+	}
+	storageKnown := map[string]bool{}
+	for _, cluster := range state.StorageClusters {
+		storageKnown[cluster.Metadata.Name] = true
+	}
+	var containerNames []string
+	var storageNames []string
+	var missing []string
+	for _, name := range names {
+		containerOK := containerKnown[name]
+		storageOK := storageKnown[name]
+		if containerOK {
+			containerNames = append(containerNames, name)
+		}
+		if storageOK {
+			storageNames = append(storageNames, name)
+		}
+		if !containerOK && !storageOK {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, nil, fmt.Errorf("unknown cluster(s): %s", strings.Join(missing, ", "))
+	}
+	return containerNames, storageNames, nil
 }
 
 func clusterNamesForTarget(state v1alpha1.State, scope string) ([]string, error) {
@@ -117,9 +162,12 @@ func validateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 	if strings.TrimSpace(scope) == "" || (target != "infra" && target != "all") {
 		return nil
 	}
-	selectedNames, err := clusterNamesForTarget(state, scope)
+	selectedNames, _, err := clusterRootNamesForTarget(state, scope)
 	if err != nil {
 		return err
+	}
+	if len(selectedNames) == 0 {
+		return nil
 	}
 	conflicts := stategraph.SharedDestroyConflicts(state, selectedNames)
 	if len(conflicts) == 0 {

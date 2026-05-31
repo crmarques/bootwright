@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: baremetal-provider
+spec:
+  machines:
+    - name: metal-master-0
+      baremetal:
+        bootMACAddress: 52:54:00:60:10:10
+        interfaces:
+          - name: primary
+            macAddress: 52:54:00:60:10:10
+        rootDeviceHints:
+          deviceName: /dev/sda
+        bmc:
+          address: redfish-virtualmedia+https://bmc-metal-master-0.bootwright.test/redfish/v1/Systems/1
+          protocol: redfish
+          credentialsRef:
+            name: bmc-credentials
+          disableCertificateVerification: true
+

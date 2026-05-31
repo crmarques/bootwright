@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: rack1-vlan140-machine
+spec:
+  machineNetwork:
+    - cidr: 192.168.140.0/24
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: eno1
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.140.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.140.1
+            next-hop-interface: eno1
+            table-id: 254
+

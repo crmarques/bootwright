@@ -56,16 +56,16 @@ func indexContainerClusters(items []v1alpha1.ContainerCluster) map[string]v1alph
 	return out
 }
 
-func indexClusterExtensions(items []v1alpha1.ClusterExtension) map[string]v1alpha1.ClusterExtension {
-	out := make(map[string]v1alpha1.ClusterExtension, len(items))
+func indexClusterAddons(items []v1alpha1.ClusterAddon) map[string]v1alpha1.ClusterAddon {
+	out := make(map[string]v1alpha1.ClusterAddon, len(items))
 	for _, c := range items {
 		out[c.Metadata.Name] = c
 	}
 	return out
 }
 
-func indexClusterExtensionSets(items []v1alpha1.ClusterExtensionSet) map[string]v1alpha1.ClusterExtensionSet {
-	out := make(map[string]v1alpha1.ClusterExtensionSet, len(items))
+func indexClusterAddonProfiles(items []v1alpha1.ClusterAddonProfile) map[string]v1alpha1.ClusterAddonProfile {
+	out := make(map[string]v1alpha1.ClusterAddonProfile, len(items))
 	for _, c := range items {
 		out[c.Metadata.Name] = c
 	}

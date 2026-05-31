@@ -175,21 +175,21 @@ type StorageObjectGateway struct {
 
 type StorageObjectGatewaySpec struct {
 	StorageClusterRef LocalObjectReference         `yaml:"storageClusterRef" json:"storageClusterRef"`
+	PublicEndpoint    StoragePublicEndpoint        `yaml:"publicEndpoint" json:"publicEndpoint"`
 	Ceph              StorageObjectGatewayCephSpec `yaml:"ceph" json:"ceph"`
 }
 
 type StorageObjectGatewayCephSpec struct {
-	ServiceID      string                        `yaml:"serviceID" json:"serviceID"`
-	Placement      StoragePlacement              `yaml:"placement" json:"placement"`
-	FrontendPort   int                           `yaml:"frontendPort,omitempty" json:"frontendPort,omitempty"`
-	ClientEndpoint StorageClientEndpoint         `yaml:"clientEndpoint" json:"clientEndpoint"`
-	Ingresses      []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
+	ServiceID    string                        `yaml:"serviceID" json:"serviceID"`
+	Placement    StoragePlacement              `yaml:"placement" json:"placement"`
+	FrontendPort int                           `yaml:"frontendPort,omitempty" json:"frontendPort,omitempty"`
+	Ingresses    []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
 }
 
-type StorageClientEndpoint struct {
-	Host   string `yaml:"host" json:"host"`
-	Port   int    `yaml:"port,omitempty" json:"port,omitempty"`
-	Scheme string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
+type StoragePublicEndpoint struct {
+	DNSName string `yaml:"dnsName" json:"dnsName"`
+	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
+	Scheme  string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
 }
 
 type StorageObjectGatewayIngress struct {
@@ -229,12 +229,12 @@ type StorageClusterBinding struct {
 }
 
 type StorageClusterBindingSpec struct {
-	StorageExportRef LocalObjectReference                 `yaml:"storageExportRef" json:"storageExportRef"`
-	ClusterSelector  StorageClusterBindingClusterSelector `yaml:"clusterSelector" json:"clusterSelector"`
-	DataFoundation   StorageClusterBindingDataFoundation  `yaml:"dataFoundation" json:"dataFoundation"`
+	StorageExportRef         LocalObjectReference                          `yaml:"storageExportRef" json:"storageExportRef"`
+	ContainerClusterSelector StorageClusterBindingContainerClusterSelector `yaml:"containerClusterSelector" json:"containerClusterSelector"`
+	DataFoundation           StorageClusterBindingDataFoundation           `yaml:"dataFoundation,omitempty" json:"dataFoundation,omitempty"`
 }
 
-type StorageClusterBindingClusterSelector struct {
+type StorageClusterBindingContainerClusterSelector struct {
 	Names []string `yaml:"names,omitempty" json:"names,omitempty"`
 }
 

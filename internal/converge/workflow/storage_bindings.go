@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	extensionoc "github.com/crmarques/bootwright/internal/extensions/oc"
+	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 	storageapply "github.com/crmarques/bootwright/internal/storage"

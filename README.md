@@ -7,7 +7,7 @@
 Bootwright is a desired-state orchestrator for provisioning fleets of OpenShift
 and OKD clusters from bare hardware or virtualized substrates. You describe the
 environment, providers, shared components, infrastructure, networks, clusters,
-and bootstrap extensions with ten declarative YAML kinds. Bootwright validates
+storage clusters, and bootstrap add-ons with declarative YAML kinds. Bootwright validates
 that intent, renders the deterministic input files expected by installer and
 provider CLIs, and coordinates each phase idempotently.
 
@@ -36,14 +36,15 @@ bootwright apply infra --yes
 bootwright check cluster
 bootwright apply cluster --dry-run
 bootwright apply cluster --yes
-bootwright check extensions
-bootwright apply extensions --dry-run
-bootwright apply extensions --yes
+bootwright check addons
+bootwright apply addons --dry-run
+bootwright apply addons --yes
 bootwright status --watch
 ```
 
-`apply cluster` installs selected clusters and applies their bound extensions.
-`apply extensions` is the standalone path when clusters are already installed.
+`cluster` means both container and storage clusters. `apply cluster` provisions
+selected container and storage clusters and applies bound add-ons. Use
+`container-cluster` or `storage-cluster` commands when you need one family.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -116,7 +117,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds
 
 | Kind | Owns |
 | --- | --- |
-| `Environment` | Shared environment defaults: selected resource files, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
+| `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
 | `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
 | `InfraProvider` | Named provider capability lists — `machineProfiles` and explicit `machines` — with names scoped per kind |
 | `InfraComponent` | Host-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
@@ -127,12 +128,12 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds
 | `StoragePlacementPolicy` | Storage placement policy such as the CRUSH rule and replicated pool defaults used by Ceph pools |
 | `StoragePool` | Ceph pool desired state, role, placement policy, and replication settings |
 | `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
-| `StorageObjectGateway` | RGW desired state, client endpoint, and cephadm ingress VIP placement |
+| `StorageObjectGateway` | RGW desired state, public endpoint, and cephadm ingress VIP placement |
 | `StorageExport` | Exported storage surface prepared for downstream consumers such as Data Foundation external mode |
 | `StorageClusterBinding` | Binding from a storage export to selected container clusters through Data Foundation external mode |
-| `ClusterExtension` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
-| `ClusterExtensionSet` | An ordered reusable group of extensions and extension sets |
-| `ClusterExtensionBinding` | A binding from extensions or extension sets to selected clusters |
+| `ClusterAddon` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
+| `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
+| `ClusterAddonBinding` | A binding from add-ons or profiles to selected container clusters |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with
 Redfish emulation to real bare metal edits the substrate-owned objects:
@@ -145,7 +146,7 @@ installation.
 External storage provisioning is also separate from `ContainerCluster`.
 `StorageCluster` uses the same lower-layer `ClusterInfra` and `InfraProvider`
 objects for machine facts, while storage bindings wait for both the storage
-cluster and a `ClusterExtension` that provides `data-foundation`.
+cluster and a `ClusterAddon` that provides `data-foundation`.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
 bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift
@@ -162,8 +163,8 @@ bootwright context init lab -f ./lab-input
 bootwright context validate
 bootwright context current
 bootwright cluster list
-bootwright cluster access
-bootwright cluster access --cluster demo-ocp
+bootwright container-cluster access
+bootwright container-cluster access --cluster demo-ocp
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
@@ -179,34 +180,35 @@ bootwright apply infra --yes
 bootwright render installer --scope demo-ocp
 bootwright render storage --scope ceph-stretch
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
-bootwright apply storage --scope ceph-stretch --yes
+bootwright apply storage-cluster --scope ceph-stretch --yes
 bootwright apply cluster --yes
-bootwright check extensions
-bootwright apply extensions --dry-run
-bootwright apply extensions --yes
+bootwright check addons
+bootwright apply addons --dry-run
+bootwright apply addons --yes
 bootwright status
 bootwright status --watch
-bootwright destroy cluster --yes
+bootwright destroy container-cluster --yes
 bootwright destroy infra --yes
 bootwright destroy infra --scope artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. Provisioning targets are
-`bastion`, `infra`, `storage`, `cluster`, `extensions`, and `all`. Top-level groups are
-`context`, `cluster`, `example`, `print-env`, `secret`, `check`, `status`,
+`bastion`, `infra`, `cluster`, `container-cluster`, `storage-cluster`,
+`addons`, and `all`. Top-level groups are `context`, `cluster`,
+`container-cluster`, `example`, `print-env`, `secret`, `check`, `status`,
 `render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports. `bootwright cluster access` prints
+intentionally prints raw shell exports. `bootwright container-cluster access` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Single-cluster apply runs stream native
 Ansible output; multi-cluster apply runs keep Ansible output in per-task and
 per-cluster logs while the terminal shows cluster log paths and high-level
-progress. `bootwright apply cluster` installs selected clusters and applies
-their bound extensions; `bootwright apply extensions` is available for
-standalone extension convergence after install.
+progress. `bootwright apply cluster` provisions selected container and storage
+clusters and applies their bound add-ons; `bootwright apply addons` is
+available for standalone add-on convergence after install.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

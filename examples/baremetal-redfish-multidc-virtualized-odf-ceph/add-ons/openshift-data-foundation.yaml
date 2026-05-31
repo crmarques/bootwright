@@ -1,0 +1,34 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-data-foundation
+spec:
+  type: olm-operator
+
+  provides:
+    - data-foundation
+
+  olm:
+    namespace:
+      name: openshift-storage
+      create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces:
+        - openshift-storage
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.21
+      source: redhat-operators
+      sourceNamespace: openshift-marketplace # default
+      installPlanApproval: Automatic # default
+
+  readiness:
+    timeout: 30m # default
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-storage
+        subscription: odf-operator

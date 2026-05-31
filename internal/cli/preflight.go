@@ -85,21 +85,21 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
 		)
 	}
-	if phaseInScope("cluster", selected, hasState) && stateNeedsKubeVirt(state) {
+	if phaseInScope("cluster-infra", selected, hasState) && stateNeedsKubeVirt(state) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
-	if phaseInScope("clusters", selected, hasState) {
+	if phaseInScope("container-cluster", selected, hasState) {
 		if stateNeedsKubeVirt(state) {
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
 		}
 	}
-	if phaseInScope("extensions", selected, hasState) && len(state.ClusterExtensionBindings) > 0 {
+	if phaseInScope("addons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if phaseInScope("extensions", selected, hasState) && len(state.StorageClusterBindings) > 0 {
+	if phaseInScope("addons", selected, hasState) && len(state.StorageClusterBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if phaseInScope("storage", selected, hasState) && stateHasManagedStorageClusters(state) {
+	if phaseInScope("storage-cluster", selected, hasState) && stateHasManagedStorageClusters(state) {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),
 			binaryCheck(checkGroupControllerTools, "scp", nil, "install scp on PATH", deps),
@@ -118,7 +118,7 @@ func selectedNeedsAnsible(selected []Phase) bool {
 		return true
 	}
 	for _, phase := range selected {
-		if phase.Name != "extensions" && phase.Name != "storage" {
+		if phase.Name != "addons" && phase.Name != "storage-cluster" {
 			return true
 		}
 	}
@@ -167,17 +167,17 @@ func stateHasManagedStorageClusters(state v1alpha1.State) bool {
 }
 
 func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps preflightDeps) []preflightCheck {
-	if !anyPhaseInScope([]string{"cluster", "clusters"}, selected) {
+	if !anyPhaseInScope([]string{"cluster-infra", "container-cluster"}, selected) {
 		return nil
 	}
 	seen := map[string]bool{}
 	var checks []preflightCheck
 	for _, p := range state.InfraProviders {
 		for _, mp := range p.Spec.MachineProfiles {
-			if mp.KubeVirt == nil || mp.KubeVirt.HostClusterRef == nil || mp.KubeVirt.HostClusterRef.Name == "" {
+			if mp.KubeVirt == nil || mp.KubeVirt.HostContainerClusterRef == nil || mp.KubeVirt.HostContainerClusterRef.Name == "" {
 				continue
 			}
-			name := mp.KubeVirt.HostClusterRef.Name
+			name := mp.KubeVirt.HostContainerClusterRef.Name
 			if seen[name] {
 				continue
 			}
@@ -205,10 +205,10 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps preflightDeps) pref
 		if evidence == "" {
 			evidence = err.Error()
 		}
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply extensions --scope "+name+" --yes first")
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply addons --scope "+name+" --yes first")
 	}
 	if !strings.Contains(string(out), "virtualmachines.kubevirt.io") {
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply extensions --scope "+name+" --yes first")
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply addons --scope "+name+" --yes first")
 	}
 	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
 }

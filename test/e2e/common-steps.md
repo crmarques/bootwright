@@ -203,7 +203,7 @@ oc config use-context "$CLUSTER-admin"
 ## 6. Tear Down The Cluster
 
 ```bash
-bootwright destroy cluster --yes
+bootwright destroy container-cluster --yes
 bootwright destroy infra --yes
 ```
 

@@ -18,27 +18,27 @@ var phases = map[string]Phase{
 		NeedsRoot:     true,
 		Description:   "converge provider services: proxy, registry, BMC, boot artifacts, and load balancers",
 	},
-	"cluster": {
-		Name:          "cluster",
+	"cluster-infra": {
+		Name:          "cluster-infra",
 		ApplyPlaybook: "playbooks/layers/cluster_infra/apply.yml",
 		NeedsRoot:     true,
 		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",
 	},
-	"storage": {
-		Name:        "storage",
+	"storage-cluster": {
+		Name:        "storage-cluster",
 		NeedsRoot:   false,
 		Description: "provision external storage clusters with provider-native tooling",
 	},
-	"clusters": {
-		Name:          "clusters",
+	"container-cluster": {
+		Name:          "container-cluster",
 		ApplyPlaybook: "playbooks/layers/openshift/install-agent.yml",
 		NeedsRoot:     true,
 		Description:   "run openshift-install agent and boot nodes through the provider boot path",
 	},
-	"extensions": {
-		Name:        "extensions",
+	"addons": {
+		Name:        "addons",
 		NeedsRoot:   true,
-		Description: "apply declarative post-install cluster extensions with oc",
+		Description: "apply declarative post-install cluster addons with oc",
 	},
 }
 

@@ -162,7 +162,7 @@ func artifactServerComponentVars(state v1alpha1.State, server artifacts.Server) 
 		out["realisation"] = v1alpha1.ArtifactServerProtocolHTTP
 		out["tls"] = artifactServerTLSVars(state, server)
 		out["image"] = managedArtifactsHTTPImage(state)
-		if endpoint := server.Entry.Routes.ClusterInstall.Endpoint; endpoint != "" {
+		if endpoint := server.Entry.Routes.ContainerClusterInstall.Endpoint; endpoint != "" {
 			if url := artifactServerEndpointURL(state, server, endpoint); url != "" {
 				out["url"] = url
 			}
@@ -208,7 +208,7 @@ func artifactServerEndpointURL(state v1alpha1.State, server artifacts.Server, en
 		switch endpointName {
 		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
 			return trailingSlash(server.Entry.Spec.RedfishVirtualMediaURL)
-		case server.Entry.Routes.ClusterInstall.Endpoint:
+		case server.Entry.Routes.ContainerClusterInstall.Endpoint:
 			return trailingSlash(server.Entry.Spec.ClusterInstallURL)
 		}
 	}

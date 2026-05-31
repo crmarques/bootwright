@@ -66,7 +66,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		// per (provider, name), so destroying a shared instance breaks
 		// the unscoped consumers silently.
 		if scope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
-			selectedNames, err := clusterNamesForTarget(state, flags.clusterScope)
+			selectedNames, _, err := clusterRootNamesForTarget(state, flags.clusterScope)
 			if err != nil {
 				return failErr(1, err)
 			}

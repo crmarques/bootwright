@@ -126,7 +126,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 		ProviderStateDir:           filepath.Join(dir, "provider-state"),
 		BundleDir:                  filepath.Join(dir, "bundle"),
 		ClusterAvailabilityChecker: checker,
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -173,7 +173,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -229,7 +229,7 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 				ManagedServicesDir: managedServicesDir,
 				ProviderStateDir:   filepath.Join(dir, "provider-state"),
 				BundleDir:          filepath.Join(dir, "bundle"),
-			}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+			}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 				calls++
 				return &fakeRunner{}
 			})
@@ -276,7 +276,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return runner
 	})
@@ -361,44 +361,44 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 	}
 }
 
-func TestPlanApplyExtensionsOrdersExtensionTasks(t *testing.T) {
+func TestPlanApplyAddonsOrdersAddonTasks(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "extensions", PhaseNames: []string{ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "addons", PhaseNames: []string{ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	gotIDs := applyTaskIDs(tasks)
 	wantIDs := []string{
-		"extension.demo.a.apply",
-		"extension.demo.a.wait",
-		"extension.demo.b.apply",
-		"extension.demo.b.wait",
+		"addon.demo.a.apply",
+		"addon.demo.a.wait",
+		"addon.demo.b.apply",
+		"addon.demo.b.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	assertTaskDeps(t, tasks, "extension.demo.a.apply")
-	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
-	assertTaskDeps(t, tasks, "extension.demo.b.apply", "extension.demo.a.wait")
-	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
+	assertTaskDeps(t, tasks, "addon.demo.b.apply", "addon.demo.a.wait")
+	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
 }
 
-func TestPlanApplyAllRunsExtensionsAfterInstallWait(t *testing.T) {
+func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	assertTaskDeps(t, tasks, "extension.demo.a.apply", "wait.demo")
-	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a.apply", "wait.demo")
+	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
 }
 
-func TestPlanApplyClusterRunsExtensionsAfterInstallWait(t *testing.T) {
+func TestPlanApplyClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -406,35 +406,35 @@ func TestPlanApplyClusterRunsExtensionsAfterInstallWait(t *testing.T) {
 	wantIDs := []string{
 		"iso.demo",
 		"wait.demo",
-		"extension.demo.a.apply",
-		"extension.demo.a.wait",
-		"extension.demo.b.apply",
-		"extension.demo.b.wait",
+		"addon.demo.a.apply",
+		"addon.demo.a.wait",
+		"addon.demo.b.apply",
+		"addon.demo.b.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	assertTaskDeps(t, tasks, "extension.demo.a.apply", "wait.demo")
-	assertTaskDeps(t, tasks, "extension.demo.a.wait", "extension.demo.a.apply")
-	assertTaskDeps(t, tasks, "extension.demo.b.apply", "extension.demo.a.wait")
-	assertTaskDeps(t, tasks, "extension.demo.b.wait", "extension.demo.b.apply")
+	assertTaskDeps(t, tasks, "addon.demo.a.apply", "wait.demo")
+	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
+	assertTaskDeps(t, tasks, "addon.demo.b.apply", "addon.demo.a.wait")
+	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
 }
 
 func TestPlanApplyAllOrdersStorageBindingsAfterStorageInstallAndDataFoundation(t *testing.T) {
 	state := storageBindingPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "storagebinding.demo.ceph-binding.apply", "wait.demo", "storage.ceph", "extension.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storagebinding.demo.ceph-binding.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
 }
 
 func TestPlanApplyAllExternalStorageBindingSkipsStorageTask(t *testing.T) {
 	state := externalStorageBindingPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestPlanApplyAllExternalStorageBindingSkipsStorageTask(t *testing.T) {
 			t.Fatalf("external storage planned storage task: %v", applyTaskIDs(tasks))
 		}
 	}
-	assertTaskDeps(t, tasks, "storagebinding.demo.shared-ceph-binding.apply", "wait.demo", "extension.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storagebinding.demo.shared-ceph-binding.apply", "wait.demo", "addon.demo.odf.wait")
 }
 
 func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
@@ -477,37 +477,23 @@ func TestExternalStorageExamplesPlanDataFoundationBindingsWithoutCephTask(t *tes
 		example        string
 		clusters       []string
 		binding        string
-		extension      string
+		addon          string
 		storageTask    string
 		wantStorageJob bool
 	}{
 		{
-			example:     "baremetal-redfish-odf-external-ceph",
-			clusters:    []string{"demo-ocp"},
-			binding:     "shared-ceph-data-foundation",
-			extension:   "openshift-data-foundation-operator",
-			storageTask: "storage.shared-ceph",
+			example:     "baremetal-redfish-imported-ceph-odf",
+			clusters:    []string{"metal-ocp"},
+			binding:     "imported-ceph-odf",
+			addon:       "openshift-data-foundation",
+			storageTask: "storage.imported-ceph",
 		},
 		{
-			example:     "baremetal-redfish-fusion-external-ceph",
-			clusters:    []string{"demo-ocp"},
-			binding:     "shared-ceph-data-foundation",
-			extension:   "ibm-fusion-data-foundation-operator",
-			storageTask: "storage.shared-ceph",
-		},
-		{
-			example:     "baremetal-redfish-fleet-imported-ceph-data-foundation",
-			clusters:    []string{"dc1-ocp", "dc2-ocp"},
-			binding:     "shared-ceph-data-foundation",
-			extension:   "openshift-data-foundation-operator",
-			storageTask: "storage.shared-ceph",
-		},
-		{
-			example:        "baremetal-redfish-fleet-stretched-ceph-data-foundation",
-			clusters:       []string{"dc1-ocp", "dc2-ocp"},
-			binding:        "ceph-stretch-data-foundation",
-			extension:      "ibm-fusion-data-foundation-operator",
-			storageTask:    "storage.ceph-stretch",
+			example:        "baremetal-redfish-multidc-virtualized-odf-ceph",
+			clusters:       []string{"dc1-metal-ocp", "dc2-metal-ocp", "dc1-child-ocp", "dc2-child-ocp"},
+			binding:        "ceph-storage-odf",
+			addon:          "openshift-data-foundation",
+			storageTask:    "storage.ceph-storage",
 			wantStorageJob: true,
 		},
 	}
@@ -527,9 +513,9 @@ func TestExternalStorageExamplesPlanDataFoundationBindingsWithoutCephTask(t *tes
 				assertTaskMissing(t, tasks, tc.storageTask)
 			}
 			for _, cluster := range tc.clusters {
-				deps := []string{"wait." + cluster, "extension." + cluster + "." + tc.extension + ".wait"}
+				deps := []string{"wait." + cluster, "addon." + cluster + "." + tc.addon + ".wait"}
 				if tc.wantStorageJob {
-					deps = []string{"wait." + cluster, tc.storageTask, "extension." + cluster + "." + tc.extension + ".wait"}
+					deps = []string{"wait." + cluster, tc.storageTask, "addon." + cluster + "." + tc.addon + ".wait"}
 				}
 				assertTaskDeps(t, tasks, "storagebinding."+cluster+"."+tc.binding+".apply", deps...)
 			}
@@ -538,17 +524,17 @@ func TestExternalStorageExamplesPlanDataFoundationBindingsWithoutCephTask(t *tes
 }
 
 func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-fleet-stretched-ceph-data-foundation")})
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorage}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 	var storageTask ApplyTask
 	for _, task := range tasks {
-		if task.Entry.ID == "storage.ceph-stretch" {
+		if task.Entry.ID == "storage.ceph-storage" {
 			storageTask = task
 			break
 		}
@@ -653,12 +639,12 @@ func TestWriteStorageBindingExternalDetailsUsesImportedSecret(t *testing.T) {
 func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	state := kubeVirtChildPlanningState(true)
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "extension.metal-ocp.openshift-virtualization.wait")
+	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
 	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost", "host:localhost:mutating", "kubevirt:metal-ocp:bootwright-child-ocp")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
@@ -666,7 +652,7 @@ func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 func TestPlanApplyAllRejectsScopedKubeVirtChildWithoutHostCluster(t *testing.T) {
 	state := kubeVirtChildPlanningState(false)
 
-	_, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseClusters, ApplyPhaseExtensions}}, state)
+	_, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err == nil {
 		t.Fatal("expected missing host cluster dependency error, got nil")
 	}
@@ -717,22 +703,22 @@ func extensionPlanningState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},
-		ClusterExtensions: []v1alpha1.ClusterExtension{
-			{Metadata: v1alpha1.Metadata{Name: "a"}, Spec: v1alpha1.ClusterExtensionSpec{Type: v1alpha1.ClusterExtensionTypeManifestSet}},
-			{Metadata: v1alpha1.Metadata{Name: "b"}, Spec: v1alpha1.ClusterExtensionSpec{Type: v1alpha1.ClusterExtensionTypeManifestSet}},
+		ClusterAddons: []v1alpha1.ClusterAddon{
+			{Metadata: v1alpha1.Metadata{Name: "a"}, Spec: v1alpha1.ClusterAddonSpec{Type: v1alpha1.ClusterAddonTypeManifestSet}},
+			{Metadata: v1alpha1.Metadata{Name: "b"}, Spec: v1alpha1.ClusterAddonSpec{Type: v1alpha1.ClusterAddonTypeManifestSet}},
 		},
-		ClusterExtensionSets: []v1alpha1.ClusterExtensionSet{{
+		ClusterAddonProfiles: []v1alpha1.ClusterAddonProfile{{
 			Metadata: v1alpha1.Metadata{Name: "platform"},
-			Spec: v1alpha1.ClusterExtensionSetSpec{
-				Extensions: []v1alpha1.LocalObjectReference{{Name: "a"}},
+			Spec: v1alpha1.ClusterAddonProfileSpec{
+				Addons: []v1alpha1.LocalObjectReference{{Name: "a"}},
 			},
 		}},
-		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
-				ExtensionSets:   []v1alpha1.LocalObjectReference{{Name: "platform"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "b"}},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"demo"}},
+				Profiles:                 []v1alpha1.LocalObjectReference{{Name: "platform"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "b"}},
 			},
 		}},
 	}
@@ -759,22 +745,22 @@ func storageBindingPlanningState() v1alpha1.State {
 		StorageClusterBindings: []v1alpha1.StorageClusterBinding{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 			Spec: v1alpha1.StorageClusterBindingSpec{
-				StorageExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-				ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+				StorageExportRef:         v1alpha1.LocalObjectReference{Name: "export"},
+				ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
 			},
 		}},
-		ClusterExtensions: []v1alpha1.ClusterExtension{{
+		ClusterAddons: []v1alpha1.ClusterAddon{{
 			Metadata: v1alpha1.Metadata{Name: "odf"},
-			Spec: v1alpha1.ClusterExtensionSpec{
-				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
-				Provides: []string{v1alpha1.ClusterExtensionProvidesDataFoundation},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type:     v1alpha1.ClusterAddonTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
 			},
 		}},
-		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"demo"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "odf"}},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"demo"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "odf"}},
 			},
 		}},
 	}
@@ -802,8 +788,8 @@ func externalStorageBindingPlanningState() v1alpha1.State {
 	state.StorageClusterBindings = []v1alpha1.StorageClusterBinding{{
 		Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
 		Spec: v1alpha1.StorageClusterBindingSpec{
-			StorageExportRef: v1alpha1.LocalObjectReference{Name: "shared-ceph-export"},
-			ClusterSelector:  v1alpha1.StorageClusterBindingClusterSelector{Names: []string{"demo"}},
+			StorageExportRef:         v1alpha1.LocalObjectReference{Name: "shared-ceph-export"},
+			ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
 			DataFoundation: v1alpha1.StorageClusterBindingDataFoundation{
 				Namespace:          "openshift-storage",
 				StorageClusterName: "ocs-external-storagecluster",
@@ -844,23 +830,23 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
 				Name: "sno",
 				KubeVirt: &v1alpha1.MachineProfileKubeVirtProvisioner{
-					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-					Namespace:      "bootwright-child-ocp",
+					HostContainerClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+					Namespace:               "bootwright-child-ocp",
 				},
 			}}},
 		}},
-		ClusterExtensions: []v1alpha1.ClusterExtension{{
+		ClusterAddons: []v1alpha1.ClusterAddon{{
 			Metadata: v1alpha1.Metadata{Name: "openshift-virtualization"},
-			Spec: v1alpha1.ClusterExtensionSpec{
-				Type:     v1alpha1.ClusterExtensionTypeManifestSet,
-				Provides: []string{v1alpha1.ClusterExtensionProvidesKubeVirt},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type:     v1alpha1.ClusterAddonTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterAddonProvidesKubeVirt},
 			},
 		}},
-		ClusterExtensionBindings: []v1alpha1.ClusterExtensionBinding{{
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "virt"},
-			Spec: v1alpha1.ClusterExtensionBindingSpec{
-				ClusterSelector: v1alpha1.ClusterExtensionClusterSelector{Names: []string{"metal-ocp"}},
-				Extensions:      []v1alpha1.LocalObjectReference{{Name: "openshift-virtualization"}},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"metal-ocp"}},
+				Addons:                   []v1alpha1.LocalObjectReference{{Name: "openshift-virtualization"}},
 			},
 		}},
 	}
@@ -875,7 +861,7 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 }
 
 func applyAllTarget() ApplyTarget {
-	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
 }
 
 func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) {

@@ -58,6 +58,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	addWorkflow(root,
 		newContextCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
+		newContainerClusterCmd(stdout),
 		newExampleCmd(stdout),
 		newPrintEnvCmd(stdout),
 		newSecretCmd(stdin, stdout, stderr),
@@ -119,7 +120,7 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (contextstore.Con
 //
 //   - FParseErrWhitelist.UnknownFlags lets the args validator run even when
 //     the user typed a subcommand-shaped typo followed by a child's flag
-//     (e.g. `destroy cluster -f X --yes`). Without it, pflag bails on the
+//     (e.g. `destroy container-cluster -f X --yes`). Without it, pflag bails on the
 //     unknown `-f` before Cobra ever sees `cluster`.
 //   - ValidArgs is derived from the subcommands so OnlyValidArgs can emit
 //     Cobra's built-in "Did you mean ...?" suggestion.

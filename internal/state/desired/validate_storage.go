@@ -424,11 +424,16 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		if gw.Spec.Ceph.FrontendPort < 0 || gw.Spec.Ceph.FrontendPort > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.ceph.frontendPort %d out of range", prefix, gw.Spec.Ceph.FrontendPort))
 		}
-		if gw.Spec.Ceph.ClientEndpoint.Host == "" {
-			errs = append(errs, prefix+".ceph.clientEndpoint.host is required")
+		if gw.Spec.PublicEndpoint.DNSName == "" {
+			errs = append(errs, prefix+".publicEndpoint.dnsName is required")
 		}
-		if gw.Spec.Ceph.ClientEndpoint.Port < 0 || gw.Spec.Ceph.ClientEndpoint.Port > 65535 {
-			errs = append(errs, fmt.Sprintf("%s.ceph.clientEndpoint.port %d out of range", prefix, gw.Spec.Ceph.ClientEndpoint.Port))
+		if gw.Spec.PublicEndpoint.Port < 0 || gw.Spec.PublicEndpoint.Port > 65535 {
+			errs = append(errs, fmt.Sprintf("%s.publicEndpoint.port %d out of range", prefix, gw.Spec.PublicEndpoint.Port))
+		}
+		switch gw.Spec.PublicEndpoint.Scheme {
+		case "", "http", "https":
+		default:
+			errs = append(errs, fmt.Sprintf("%s.publicEndpoint.scheme %q must be http or https", prefix, gw.Spec.PublicEndpoint.Scheme))
 		}
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
@@ -555,12 +560,12 @@ func validateStorageClusterBindings(items []v1alpha1.StorageClusterBinding, expo
 		} else if _, ok := exports[binding.Spec.StorageExportRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.storageExportRef.name %q does not match any StorageExport", prefix, binding.Spec.StorageExportRef.Name))
 		}
-		if len(binding.Spec.ClusterSelector.Names) == 0 {
-			errs = append(errs, prefix+".clusterSelector.names must include at least one ContainerCluster")
+		if len(binding.Spec.ContainerClusterSelector.Names) == 0 {
+			errs = append(errs, prefix+".containerClusterSelector.names must include at least one ContainerCluster")
 		}
 		selected := map[string]bool{}
-		for i, name := range binding.Spec.ClusterSelector.Names {
-			owner := fmt.Sprintf("%s.clusterSelector.names[%d]", prefix, i)
+		for i, name := range binding.Spec.ContainerClusterSelector.Names {
+			owner := fmt.Sprintf("%s.containerClusterSelector.names[%d]", prefix, i)
 			if name == "" {
 				errs = append(errs, owner+" must not be empty")
 				continue
@@ -574,8 +579,8 @@ func validateStorageClusterBindings(items []v1alpha1.StorageClusterBinding, expo
 				errs = append(errs, fmt.Sprintf("%s %q does not match any ContainerCluster", owner, name))
 				continue
 			}
-			if !provided[name][v1alpha1.ClusterExtensionProvidesDataFoundation] {
-				errs = append(errs, fmt.Sprintf("%s %q requires a ClusterExtensionBinding that applies a ClusterExtension providing %q", owner, name, v1alpha1.ClusterExtensionProvidesDataFoundation))
+			if !provided[name][v1alpha1.ClusterAddonProvidesDataFoundation] {
+				errs = append(errs, fmt.Sprintf("%s %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q", owner, name, v1alpha1.ClusterAddonProvidesDataFoundation))
 			}
 		}
 		switch binding.Spec.DataFoundation.Product {

@@ -11,27 +11,27 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/checks"
 )
 
-func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
+func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 	var clusterScope string
 	cmd := &cobra.Command{
 		Use:   "check",
-		Short: "Check extensions prerequisites",
+		Short: "Check addons prerequisites",
 		Args:  cobra.NoArgs,
-		Example: `  # Check oc and local kubeconfig material for selected extensions
-  bootwright check extensions`,
+		Example: `  # Check oc and local kubeconfig material for selected addons
+  bootwright check addons`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to check")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		p := cliout.New(stdout)
-		p.Command("extensions check")
+		p.Command("addons check")
 		p.Section("Prepare")
 		p.List([]cliout.Item{{Label: "Load desired state"}})
 		state, err := loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state, err = scopeState(state, extensionsScope.name, clusterScope)
+		state, err = scopeState(state, addonsScope.name, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -39,10 +39,10 @@ func newExtensionsCheckCmd(stdout io.Writer) *cobra.Command {
 		p.Checks(checks)
 		for _, check := range checks {
 			if check.Status != cliout.StatusOK {
-				return failf(1, "extensions check failed")
+				return failf(1, "addons check failed")
 			}
 		}
-		p.Summary(cliout.StatusOK, "extensions check", fmt.Sprintf("all %d check(s) passed", len(checks)))
+		p.Summary(cliout.StatusOK, "addons check", fmt.Sprintf("all %d check(s) passed", len(checks)))
 		return nil
 	}
 	return cmd

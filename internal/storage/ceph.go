@@ -369,7 +369,7 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 		if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" {
 			continue
 		}
-		for _, cluster := range binding.Spec.ClusterSelector.Names {
+		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
 			out = append(out, dataFoundationBindingContext{
 				Record: DataFoundationBindingRecord{
 					StorageCluster: storageCluster,

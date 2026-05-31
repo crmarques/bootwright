@@ -30,12 +30,12 @@ instead of compact inline maps.
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
 | `StoragePool` | Ceph pool role, placement, and replication settings |
 | `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
-| `StorageObjectGateway` | RGW service, client endpoint, and cephadm ingress VIPs |
+| `StorageObjectGateway` | RGW service, public endpoint, and cephadm ingress VIPs |
 | `StorageExport` | Storage services prepared for downstream consumers |
 | `StorageClusterBinding` | Data Foundation external-mode binding to selected clusters |
-| `ClusterExtension` | Reusable post-install component applied inside an installed cluster |
-| `ClusterExtensionSet` | Ordered group of extensions and extension sets |
-| `ClusterExtensionBinding` | Cluster binding for extensions and extension sets |
+| `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
+| `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
+| `ClusterAddonBinding` | Cluster binding for add-ons and profiles |
 
 ## Reference Flow
 
@@ -52,19 +52,19 @@ Environment.infraComponents.*.componentRef
   -> InfraComponent service
   -> Host
 
-ClusterExtensionBinding
-  -> ClusterExtensionSet
-  -> ClusterExtension
+ClusterAddonBinding
+  -> ClusterAddonProfile
+  -> ClusterAddon
 
 KubeVirt child InfraProvider
   -> host ContainerCluster
-  -> ClusterExtension providing kubevirt
+  -> ClusterAddon providing kubevirt
 
 StorageClusterBinding
   -> StorageExport
   -> StorageCluster
   -> ClusterInfra.components.machines[*] (managed storage only)
-  -> ClusterExtension providing data-foundation
+  -> ClusterAddon providing data-foundation
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
@@ -79,41 +79,41 @@ SSHes to preinstalled RHEL Ceph nodes, runs cephadm on the seed node, and
 applies generated Ceph operations from the rendered storage tree. For imported
 storage, `StorageCluster.spec.management: external` skips storage
 provisioning; Data Foundation bindings read the declared external-cluster
-details secret and apply later in the extensions phase after the target
-cluster and Data Foundation extension are ready.
+details secret and apply later in the add-ons phase after the target
+cluster and Data Foundation add-on are ready.
 
 ## KubeVirt Child Clusters
 
 A virtualized child OpenShift cluster is still declared as its own
 `ContainerCluster`. The child `ClusterInfra` selects a KubeVirt
 `InfraProvider` machine profile, and that profile points either at a
-Bootwright-managed host cluster with `hostClusterRef` or at an external
+Bootwright-managed host cluster with `hostContainerClusterRef` or at an external
 virtualization cluster kubeconfig with `kubeconfigRef`.
 
-When `hostClusterRef` is used, the host cluster must be installed and bound to
-a `ClusterExtension` with `provides: [kubevirt]`. `bootwright apply all --yes`
+When `hostContainerClusterRef` is used, the host cluster must be installed and bound to
+a `ClusterAddon` with `provides: [kubevirt]`. `bootwright apply all --yes`
 orders child VM infrastructure after the host install wait and the KubeVirt
-extension readiness wait. Scoped child applies do not install the host
+add-on readiness wait. Scoped child applies do not install the host
 implicitly; apply the host first or include it in the scope.
 
-## Post-Install Extensions
+## Post-Install Add-Ons
 
 Post-install bootstrap components are separate from cluster provisioning.
 `ContainerCluster.spec.install` remains focused on producing an installed
 OpenShift or OKD cluster. Early platform components such as OpenShift
-Virtualization are declared as `ClusterExtension` resources, grouped with
-`ClusterExtensionSet`, and attached to installed clusters with
-`ClusterExtensionBinding`.
+Virtualization are declared as `ClusterAddon` resources, grouped with
+`ClusterAddonProfile`, and attached to installed clusters with
+`ClusterAddonBinding`.
 
-MVP extension types are `olm-operator` and `manifest-set`. Set expansion is
-deterministic: referenced `extensionSets` expand in declared order, then direct
-`extensions` append in declared order, and duplicate extensions are removed by
+MVP add-on types are `olm-operator` and `manifest-set`. Profile expansion is
+deterministic: referenced `profiles` expand in declared order, then direct
+`addons` append in declared order, and duplicate add-ons are removed by
 first occurrence. Binding expansion follows the same order and produces one
 apply plan per selected cluster.
 
 `bootwright apply cluster --yes` installs the selected clusters and then applies
-their bound post-install components. Use `bootwright apply extensions --yes`
-when the clusters are already installed and only extension convergence is
+their bound post-install components. Use `bootwright apply addons --yes`
+when the clusters are already installed and only add-on convergence is
 needed, or `bootwright apply all --yes` to include infrastructure first.
 
 ## NMState Templates

@@ -58,7 +58,7 @@ func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, 
 	if err != nil {
 		return nil, "", err
 	}
-	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.ClusterInstall)
+	eff := proxy.ResolveFor(state, env, env.Spec.ProxyFor.ContainerClusterInstall)
 	if eff == nil && managedURL != "" {
 		eff = &proxy.Effective{NoProxy: proxy.ResolveNoProxy(state, env, nil)}
 	}
@@ -154,7 +154,7 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 	if !ok {
 		return nil
 	}
-	url := artifactServerEndpointURL(state, server, server.Entry.Routes.ClusterInstall.Endpoint)
+	url := artifactServerEndpointURL(state, server, server.Entry.Routes.ContainerClusterInstall.Endpoint)
 	if url == "" {
 		return nil
 	}

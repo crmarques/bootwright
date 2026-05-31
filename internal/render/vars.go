@@ -101,8 +101,8 @@ func environmentVars(env *v1alpha1.Environment) map[string]any {
 	if env.Spec.ProxyFor.Bootwright != "" {
 		proxyFor["bootwright"] = env.Spec.ProxyFor.Bootwright
 	}
-	if env.Spec.ProxyFor.ClusterInstall != "" {
-		proxyFor["clusterInstall"] = env.Spec.ProxyFor.ClusterInstall
+	if env.Spec.ProxyFor.ContainerClusterInstall != "" {
+		proxyFor["containerClusterInstall"] = env.Spec.ProxyFor.ContainerClusterInstall
 	}
 	if len(proxyFor) > 0 {
 		out["proxyFor"] = proxyFor

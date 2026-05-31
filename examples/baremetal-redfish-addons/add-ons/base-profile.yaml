@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
+metadata:
+  name: base-profile
+spec:
+  addons:
+    - name: openshift-virtualization
+    - name: cluster-observability
+

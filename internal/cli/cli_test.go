@@ -71,7 +71,9 @@ func TestClusterTargetIsSingular(t *testing.T) {
 	for _, args := range [][]string{
 		{"check", "cluster", "--help"},
 		{"apply", "cluster", "--help"},
-		{"destroy", "cluster", "--help"},
+		{"check", "container-cluster", "--help"},
+		{"apply", "container-cluster", "--help"},
+		{"destroy", "container-cluster", "--help"},
 	} {
 		_, stderr, code := runCLI(t, args...)
 		if code != 0 {
@@ -92,6 +94,14 @@ func TestClusterTargetIsSingular(t *testing.T) {
 			t.Fatalf("%s stderr %q does not reject plural target", strings.Join(args, " "), stderr)
 		}
 	}
+
+	_, stderr, code := runCLI(t, "destroy", "cluster")
+	if code == 0 {
+		t.Fatal("bootwright destroy cluster unexpectedly succeeded")
+	}
+	if !strings.Contains(stderr, `invalid argument "cluster"`) {
+		t.Fatalf("destroy cluster stderr %q does not reject generic destroy target", stderr)
+	}
 }
 
 func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
@@ -99,30 +109,30 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply all --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Apply infrastructure, storage, OpenShift clusters, and extensions") {
-		t.Fatalf("apply all help does not mention extensions:\n%s", stdout)
+	if !strings.Contains(stdout, "Apply infrastructure, storage, OpenShift clusters, and addons") {
+		t.Fatalf("apply all help does not mention addons:\n%s", stdout)
 	}
 
 	stdout, stderr, code = runCLI(t, "apply", "cluster", "--help")
 	if code != 0 {
 		t.Fatalf("apply cluster --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Install OpenShift clusters and apply extensions") {
-		t.Fatalf("apply cluster help does not mention extensions:\n%s", stdout)
+	if !strings.Contains(stdout, "Provision container and storage clusters and apply addons") {
+		t.Fatalf("apply cluster help does not mention addons:\n%s", stdout)
 	}
 
-	stdout, stderr, code = runCLI(t, "apply", "extensions", "--help")
+	stdout, stderr, code = runCLI(t, "apply", "addons", "--help")
 	if code != 0 {
-		t.Fatalf("apply extensions --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply addons --help exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{"--dry-run", "--yes", "--output"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("apply extensions help missing %q:\n%s", want, stdout)
+			t.Fatalf("apply addons help missing %q:\n%s", want, stdout)
 		}
 	}
 	for _, reject := range []string{"--ansible-playbook", "--ask-become-pass", "--check", "--parallelism-per-host", "--parallelism-redfish"} {
 		if strings.Contains(stdout, reject) {
-			t.Fatalf("apply extensions help exposes provider-host flag %q:\n%s", reject, stdout)
+			t.Fatalf("apply addons help exposes provider-host flag %q:\n%s", reject, stdout)
 		}
 	}
 }
@@ -435,17 +445,17 @@ func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 
 func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
 	setTestHomeAndRoot(t)
-	example := filepath.Join("..", "..", "examples", "baremetal-redfish-virtualized-child")
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
 	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 
-	stdout, stderr, code = runCLI(t, "apply", "all", "--scope", "child-ocp", "--dry-run", "--output", "json")
+	stdout, stderr, code = runCLI(t, "apply", "all", "--scope", "dc1-child-ocp", "--dry-run", "--output", "json")
 	if code == 0 {
 		t.Fatalf("scoped child apply unexpectedly succeeded, stdout=%q stderr=%q", stdout, stderr)
 	}
-	if !strings.Contains(stdout+stderr, "include metal-ocp in --scope or apply it first") {
+	if !strings.Contains(stdout+stderr, "include dc1-metal-ocp in --scope or apply it first") {
 		t.Fatalf("scoped child apply error missing host dependency remediation, stdout=%q stderr=%q", stdout, stderr)
 	}
 }
@@ -1157,7 +1167,7 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		{args: []string{"apply", "cluster"}, want: true},
 		{args: []string{"apply", "all"}, want: true},
 		{args: []string{"destroy", "infra"}, want: true},
-		{args: []string{"destroy", "cluster"}, want: true},
+		{args: []string{"destroy", "container-cluster"}, want: true},
 		{args: []string{"check", "infra"}, want: false},
 		{args: []string{"secret", "set", "pull-secret"}, want: false},
 	}
@@ -2685,19 +2695,19 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 }
 
-func TestApplyExtensionsDryRunJSONPlansExtensionTasks(t *testing.T) {
-	initTestContextWithClusterExtension(t)
+func TestApplyAddonsDryRunJSONPlansAddonTasks(t *testing.T) {
+	initTestContextWithClusterAddon(t)
 
-	stdout, stderr, code := runCLI(t, "apply", "extensions", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "apply", "addons", "--dry-run", "--output", "json")
 	if code != 0 {
-		t.Fatalf("apply extensions dry-run json exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply addons dry-run json exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
 	}
-	if report.Target != "extensions" {
-		t.Fatalf("target = %q, want extensions", report.Target)
+	if report.Target != "addons" {
+		t.Fatalf("target = %q, want addons", report.Target)
 	}
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
@@ -2707,22 +2717,22 @@ func TestApplyExtensionsDryRunJSONPlansExtensionTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
-		"extension.sno-libvirt.openshift-virtualization.apply",
-		"extension.sno-libvirt.openshift-virtualization.wait",
+		"addon.sno-libvirt.openshift-virtualization.apply",
+		"addon.sno-libvirt.openshift-virtualization.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
-		t.Fatalf("extension task IDs = %v, want %v", gotIDs, wantIDs)
+		t.Fatalf("addon task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	if got := report.ApplyPlan.Extensions; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Extension != "openshift-virtualization" {
-		t.Fatalf("extension plan = %+v, want sno-libvirt openshift-virtualization", got)
+	if got := report.ApplyPlan.Addons; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Addon != "openshift-virtualization" {
+		t.Fatalf("addon plan = %+v, want sno-libvirt openshift-virtualization", got)
 	}
-	if got := report.ApplyPlan.Extensions[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
-		t.Fatalf("extension resources = %+v, want generated OLM resources ending with HyperConverged", got)
+	if got := report.ApplyPlan.Addons[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
+		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
 }
 
-func TestApplyClusterDryRunJSONPlansExtensionTasks(t *testing.T) {
-	initTestContextWithClusterExtension(t)
+func TestApplyClusterDryRunJSONPlansAddonTasks(t *testing.T) {
+	initTestContextWithClusterAddon(t)
 
 	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json")
 	if code != 0 {
@@ -2746,20 +2756,20 @@ func TestApplyClusterDryRunJSONPlansExtensionTasks(t *testing.T) {
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",
-		"extension.sno-libvirt.openshift-virtualization.apply",
-		"extension.sno-libvirt.openshift-virtualization.wait",
+		"addon.sno-libvirt.openshift-virtualization.apply",
+		"addon.sno-libvirt.openshift-virtualization.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("apply cluster task IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	if got := report.ApplyPlan.Extensions; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Extension != "openshift-virtualization" {
-		t.Fatalf("extension plan = %+v, want sno-libvirt openshift-virtualization", got)
+	if got := report.ApplyPlan.Addons; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Addon != "openshift-virtualization" {
+		t.Fatalf("addon plan = %+v, want sno-libvirt openshift-virtualization", got)
 	}
-	if got := report.ApplyPlan.Extensions[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
-		t.Fatalf("extension resources = %+v, want generated OLM resources ending with HyperConverged", got)
+	if got := report.ApplyPlan.Addons[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
+		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "extension.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "extension.sno-libvirt.openshift-virtualization.wait", "extension.sno-libvirt.openshift-virtualization.apply")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.wait", "addon.sno-libvirt.openshift-virtualization.apply")
 }
 
 func TestApplyClusterOverrideDryRunPassesInstallOverride(t *testing.T) {
@@ -2849,46 +2859,46 @@ func fixturePath(name string) string {
 	return filepath.Join("..", "..", "test", "e2e", name)
 }
 
-func initTestContextWithClusterExtension(t *testing.T) {
+func initTestContextWithClusterAddon(t *testing.T) {
 	t.Helper()
 	setTestHomeAndRoot(t)
 	inputDir := copyFixtureYAML(t, "001-sno-libvirt")
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension.yaml"), []byte(cliTestClusterExtensionYAML()), 0o600); err != nil {
-		t.Fatalf("write extension: %v", err)
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-addon.yaml"), []byte(cliTestClusterAddonYAML()), 0o600); err != nil {
+		t.Fatalf("write addon: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-set.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-addon-profile.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
 metadata:
   name: virtualization-platform
 spec:
-  extensions:
+  addons:
     - name: openshift-virtualization
 `), 0o600); err != nil {
-		t.Fatalf("write extension set: %v", err)
+		t.Fatalf("write addon profile: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(inputDir, "cluster-extension-binding.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
+	if err := os.WriteFile(filepath.Join(inputDir, "cluster-addon-binding.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
 metadata:
-  name: sno-libvirt-extensions
+  name: sno-libvirt-addons
 spec:
-  clusterSelector:
+  containerClusterSelector:
     names:
       - sno-libvirt
   applyAfter:
-    phase: clusterInstalled
-  extensionSets:
+    phase: containerClusterInstalled
+  profiles:
     - name: virtualization-platform
 `), 0o600); err != nil {
-		t.Fatalf("write extension binding: %v", err)
+		t.Fatalf("write addon binding: %v", err)
 	}
 	if stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir); code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 
-func cliTestClusterExtensionYAML() string {
+func cliTestClusterAddonYAML() string {
 	return `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata:
   name: openshift-virtualization
 spec:

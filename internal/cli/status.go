@@ -12,9 +12,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	extensionrecords "github.com/crmarques/bootwright/internal/extensions/records"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
@@ -181,7 +181,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		byName[ocp.Metadata.Name] = ocp
 	}
 	sort.Strings(names)
-	extensions := buildStatusExtensions(state, clustersDir)
+	addons := buildStatusAddons(state, clustersDir)
 	for _, name := range names {
 		ocp := byName[name]
 		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
@@ -198,9 +198,9 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		default:
 			p.Status(cliout.StatusFail, "installer", "not rendered")
 		}
-		for _, extension := range extensions[name] {
+		for _, extension := range addons[name] {
 			status := cliout.StatusSkip
-			detail := "no extension record"
+			detail := "no addon record"
 			if extension.Status != "" {
 				status = cliout.StatusOK
 				if extension.Status != string(extensionrecords.RecordStatusReady) {
@@ -211,7 +211,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 					detail += " phase=" + extension.Phase
 				}
 			}
-			p.Status(status, "extension "+extension.Name, detail)
+			p.Status(status, "addon "+extension.Name, detail)
 		}
 	}
 }
@@ -366,5 +366,5 @@ func installerInstallConfigPath(clustersDir, clusterName string) string {
 }
 
 func hasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.StorageClusterBindings)+len(s.ClusterExtensions)+len(s.ClusterExtensionSets)+len(s.ClusterExtensionBindings) > 0
+	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.StorageClusterBindings)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
 }

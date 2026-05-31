@@ -1,0 +1,90 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: dc1-child-ocp-infra
+spec:
+  platform:
+    type: none
+
+  endpoints:
+    api:
+      externalVip: 192.168.151.20
+    apiInt:
+      externalVip: 192.168.151.20
+    ingress:
+      externalVip: 192.168.151.21
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-master
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.30
+                  prefix-length: 24
+      - name: master-1
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-master
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.31
+                  prefix-length: 24
+      - name: master-2
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-master
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.32
+                  prefix-length: 24
+      - name: worker-0
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-worker
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.40
+                  prefix-length: 24
+      - name: worker-1
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-worker
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.41
+                  prefix-length: 24
+      - name: worker-2
+        from:
+          provider: kubevirt-provider
+          profile: dc1-child-worker
+        networkConfig:
+          ref:
+            name: dc1-child-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.151.42
+                  prefix-length: 24

@@ -48,4 +48,4 @@ spec:
 
   proxyFor:
     bootwright: default
-    clusterInstall: default
+    containerClusterInstall: default

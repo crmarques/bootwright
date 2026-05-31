@@ -8,42 +8,42 @@ import (
 	"testing"
 )
 
-func TestLoadClusterExtensionResources(t *testing.T) {
+func TestLoadClusterAddonResources(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["extension.yaml"] = extensionYAML("openshift-virtualization")
 	files["set.yaml"] = extensionSetYAML("virtualization-platform", "openshift-virtualization")
-	files["binding.yaml"] = extensionBindingYAML("demo-ocp-extensions", "virtualization-platform")
+	files["binding.yaml"] = extensionBindingYAML("demo-ocp-addons", "virtualization-platform")
 	writeFiles(t, dir, files)
 
 	state, err := LoadNormalizeValidate([]string{dir})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	if got := len(state.ClusterExtensions); got != 1 {
-		t.Fatalf("ClusterExtensions = %d, want 1", got)
+	if got := len(state.ClusterAddons); got != 1 {
+		t.Fatalf("ClusterAddons = %d, want 1", got)
 	}
-	if got := state.ClusterExtensions[0].Spec.OLM.CustomResources[0]["kind"]; got != "HyperConverged" {
+	if got := state.ClusterAddons[0].Spec.OLM.CustomResources[0]["kind"]; got != "HyperConverged" {
 		t.Fatalf("custom resource kind = %#v, want HyperConverged", got)
 	}
-	if got := state.ClusterExtensions[0].Spec.Readiness.Timeout; got != "30m" {
+	if got := state.ClusterAddons[0].Spec.Readiness.Timeout; got != "30m" {
 		t.Fatalf("readiness timeout = %q, want default 30m", got)
 	}
-	if got := len(state.ClusterExtensionSets); got != 1 {
-		t.Fatalf("ClusterExtensionSets = %d, want 1", got)
+	if got := len(state.ClusterAddonProfiles); got != 1 {
+		t.Fatalf("ClusterAddonProfiles = %d, want 1", got)
 	}
-	if got := len(state.ClusterExtensionBindings); got != 1 {
-		t.Fatalf("ClusterExtensionBindings = %d, want 1", got)
+	if got := len(state.ClusterAddonBindings); got != 1 {
+		t.Fatalf("ClusterAddonBindings = %d, want 1", got)
 	}
-	if !state.ClusterExtensionBindings[0].Spec.Policy.UseServerSideApply() {
+	if !state.ClusterAddonBindings[0].Spec.Policy.UseServerSideApply() {
 		t.Fatal("binding policy did not default serverSideApply to true")
 	}
-	if got := state.ClusterExtensionBindings[0].Spec.Policy.FieldManager; got != "bootwright" {
+	if got := state.ClusterAddonBindings[0].Spec.Policy.FieldManager; got != "bootwright" {
 		t.Fatalf("fieldManager = %q, want bootwright", got)
 	}
 }
 
-func TestClusterExtensionLoaderRejectsOperandsField(t *testing.T) {
+func TestClusterAddonLoaderRejectsOperandsField(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "extension.yaml")
 	if err := os.WriteFile(path, []byte(strings.Replace(extensionYAML("virt"), "customResources:", "operands:", 1)), 0o600); err != nil {
@@ -59,7 +59,54 @@ func TestClusterExtensionLoaderRejectsOperandsField(t *testing.T) {
 	}
 }
 
-func TestClusterExtensionResourcesSortDeterministically(t *testing.T) {
+func TestClusterAddonLoaderRejectsOldSchemaNames(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "old-kind",
+			body: strings.Replace(extensionYAML("virt"), "kind: ClusterAddon", "kind: ClusterExtension", 1),
+			want: `unsupported kind "ClusterExtension"`,
+		},
+		{
+			name: "old-profile-field",
+			body: strings.Replace(extensionSetYAML("set", "virt"), "addons:", "extensions:", 1),
+			want: "field extensions not found",
+		},
+		{
+			name: "old-binding-selector",
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "containerClusterSelector:", "clusterSelector:", 1),
+			want: "field clusterSelector not found",
+		},
+		{
+			name: "old-binding-phase",
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "containerClusterInstalled", "clusterInstalled", 1),
+			want: `spec.applyAfter.phase "clusterInstalled" must be "containerClusterInstalled"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["addon.yaml"] = extensionYAML("virt")
+			files["profile.yaml"] = extensionSetYAML("set", "virt")
+			files["binding.yaml"] = extensionBindingYAML("binding", "set")
+			files["bad.yaml"] = tc.body
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected old schema shape to be rejected")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestClusterAddonResourcesSortDeterministically(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
 		"z.yaml": extensionYAML("z-extension"),
@@ -70,14 +117,14 @@ func TestClusterExtensionResourcesSortDeterministically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	got := []string{state.ClusterExtensions[0].Metadata.Name, state.ClusterExtensions[1].Metadata.Name}
+	got := []string{state.ClusterAddons[0].Metadata.Name, state.ClusterAddons[1].Metadata.Name}
 	want := []string{"a-extension", "z-extension"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("extension order = %v, want %v", got, want)
 	}
 }
 
-func TestClusterExtensionValidationRejectsInvalidResources(t *testing.T) {
+func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 	cases := []struct {
 		name          string
 		files         map[string]string
@@ -117,14 +164,14 @@ func TestClusterExtensionValidationRejectsInvalidResources(t *testing.T) {
 			name: "missing-extension-reference",
 			files: map[string]string{
 				"set.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata: { name: set }
 spec:
-  extensions:
+  addons:
     - name: missing
 `,
 			},
-			wantSubstring: `ClusterExtensionSet/set spec.extensions[0].name "missing" does not match any ClusterExtension`,
+			wantSubstring: `ClusterAddonProfile/set spec.addons[0].name "missing" does not match any ClusterAddon`,
 		},
 		{
 			name: "missing-set-reference",
@@ -133,31 +180,31 @@ spec:
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "missing"), "demo-ocp", "sno", 1),
 				"cluster.yaml":   newClusterYAML,
 			},
-			wantSubstring: `ClusterExtensionBinding/binding spec.extensionSets[0].name "missing" does not match any ClusterExtensionSet`,
+			wantSubstring: `ClusterAddonBinding/binding spec.profiles[0].name "missing" does not match any ClusterAddonProfile`,
 		},
 		{
 			name: "set-cycle",
 			files: map[string]string{
 				"extension.yaml": extensionYAML("virt"),
 				"a.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata: { name: a }
 spec:
-  extensionSets:
+  profiles:
     - name: b
 `,
 				"b.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata: { name: b }
 spec:
-  extensionSets:
+  profiles:
     - name: c
 `,
 				"c.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata: { name: c }
 spec:
-  extensionSets:
+  profiles:
     - name: a
 `,
 			},
@@ -184,17 +231,17 @@ spec:
 				"set.yaml":       extensionSetYAML("set", "virt"),
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "sno", "missing-cluster", 1),
 			},
-			wantSubstring: `spec.clusterSelector.names[0] "missing-cluster" does not match any ContainerCluster`,
+			wantSubstring: `spec.containerClusterSelector.names[0] "missing-cluster" does not match any ContainerCluster`,
 		},
 		{
 			name: "invalid-apply-phase",
 			files: map[string]string{
 				"extension.yaml": extensionYAML("virt"),
 				"set.yaml":       extensionSetYAML("set", "virt"),
-				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "phase: clusterInstalled", "phase: clusterReady", 1),
+				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "phase: containerClusterInstalled", "phase: clusterReady", 1),
 				"cluster.yaml":   strings.Replace(newClusterYAML, "name: sno", "name: demo-ocp", 2),
 			},
-			wantSubstring: `spec.applyAfter.phase "clusterReady" must be "clusterInstalled"`,
+			wantSubstring: `spec.applyAfter.phase "clusterReady" must be "containerClusterInstalled"`,
 		},
 		{
 			name: "prune-rejected",
@@ -222,7 +269,7 @@ spec:
 	}
 }
 
-func TestClusterExtensionManifestSetPathValidation(t *testing.T) {
+func TestClusterAddonManifestSetPathValidation(t *testing.T) {
 	cases := []struct {
 		name          string
 		path          string
@@ -232,12 +279,12 @@ func TestClusterExtensionManifestSetPathValidation(t *testing.T) {
 		{
 			name:          "absolute",
 			path:          "/tmp/banner.yaml",
-			wantSubstring: "must be relative to the ClusterExtension file",
+			wantSubstring: "must be relative to the ClusterAddon file",
 		},
 		{
 			name:          "escapes-directory",
 			path:          "../banner.yaml",
-			wantSubstring: "must stay within the ClusterExtension file directory",
+			wantSubstring: "must stay within the ClusterAddon file directory",
 		},
 		{
 			name: "symlink",
@@ -276,7 +323,7 @@ func TestClusterExtensionManifestSetPathValidation(t *testing.T) {
 	}
 }
 
-func TestEnvironmentResourcesRequireSelectedClusterExtensionReferences(t *testing.T) {
+func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T) {
 	cases := []struct {
 		name          string
 		resources     []string
@@ -287,21 +334,21 @@ func TestEnvironmentResourcesRequireSelectedClusterExtensionReferences(t *testin
 			resources: []string{
 				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterExtension/openshift-virtualization required by ClusterExtensionBinding/demo-ocp-extensions spec.extensions[0]; add "extension.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addons[0]; add "extension.yaml"`,
 		},
 		{
 			name: "binding-requires-set",
 			resources: []string{
 				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterExtensionSet/virtualization-platform required by ClusterExtensionBinding/demo-ocp-set spec.extensionSets[0]; add "set.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.profiles[0]; add "set.yaml"`,
 		},
 		{
 			name: "set-requires-extension",
 			resources: []string{
 				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterExtension/openshift-virtualization required by ClusterExtensionSet/virtualization-platform spec.extensions[0]; add "extension.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonProfile/virtualization-platform spec.addons[0]; add "extension.yaml"`,
 		},
 	}
 	for _, tc := range cases {
@@ -312,12 +359,12 @@ func TestEnvironmentResourcesRequireSelectedClusterExtensionReferences(t *testin
 			files["extension.yaml"] = extensionYAML("openshift-virtualization")
 			files["set.yaml"] = extensionSetYAML("virtualization-platform", "openshift-virtualization")
 			files["binding.yaml"] = `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
-metadata: { name: demo-ocp-extensions }
+kind: ClusterAddonBinding
+metadata: { name: demo-ocp-addons }
 spec:
-  clusterSelector:
+  containerClusterSelector:
     names: [sno]
-  extensions:
+  addons:
     - name: openshift-virtualization
 `
 			files["binding-set.yaml"] = extensionBindingYAML("demo-ocp-set", "virtualization-platform")
@@ -335,7 +382,7 @@ spec:
 
 func extensionYAML(name string) string {
 	return `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata:
   name: ` + name + `
 spec:
@@ -374,27 +421,27 @@ spec:
 
 func extensionSetYAML(name, extension string) string {
 	return `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata:
   name: ` + name + `
 spec:
-  extensions:
+  addons:
     - name: ` + extension + `
 `
 }
 
 func extensionBindingYAML(name, set string) string {
 	return `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
+kind: ClusterAddonBinding
 metadata:
   name: ` + name + `
 spec:
-  clusterSelector:
+  containerClusterSelector:
     names:
       - sno
   applyAfter:
-    phase: clusterInstalled
-  extensionSets:
+    phase: containerClusterInstalled
+  profiles:
     - name: ` + set + `
   policy:
     prune: false
@@ -406,7 +453,7 @@ spec:
 
 func manifestSetYAML(name, manifestPath string) string {
 	return `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata:
   name: ` + name + `
 spec:

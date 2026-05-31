@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
@@ -26,17 +26,18 @@ const (
 	ApplyTaskKindInstallWait                = "installWait"
 	ApplyTaskKindStorageCluster             = "storageCluster"
 	ApplyTaskKindStorageClusterBindingApply = "storageClusterBindingApply"
-	ApplyTaskKindClusterExtensionApply      = "clusterExtensionApply"
-	ApplyTaskKindClusterExtensionWait       = "clusterExtensionWait"
+	ApplyTaskKindClusterAddonApply          = "clusterAddonApply"
+	ApplyTaskKindClusterAddonWait           = "clusterAddonWait"
 
-	ApplyPhaseProvider   = "provider"
-	ApplyPhaseCluster    = "cluster"
-	ApplyPhaseStorage    = "storage"
-	ApplyPhaseClusters   = "clusters"
-	ApplyPhaseExtensions = "extensions"
-)
+	ApplyClusterKindContainer = "container"
+	ApplyClusterKindStorage   = "storage"
 
-const (
+	ApplyPhaseProvider         = "provider"
+	ApplyPhaseClusterInfra     = "cluster-infra"
+	ApplyPhaseStorageCluster   = "storage-cluster"
+	ApplyPhaseContainerCluster = "container-cluster"
+	ApplyPhaseAddons           = "addons"
+
 	applyProviderPlaybook     = "playbooks/layers/providers/apply.yml"
 	applyClusterInfraPlaybook = "playbooks/layers/cluster_infra/apply.yml"
 	applyCreateISOPlaybook    = "playbooks/layers/openshift/create-agent-iso.yml"
@@ -101,7 +102,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	var tasks []ApplyTask
 	providerTaskIDs := []string{}
 	kubeVirtDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseCluster] && phaseSet[ApplyPhaseClusters] && phaseSet[ApplyPhaseExtensions] {
+	if phaseSet[ApplyPhaseClusterInfra] && phaseSet[ApplyPhaseContainerCluster] && phaseSet[ApplyPhaseAddons] {
 		var err error
 		kubeVirtDepsByCluster, err = kubeVirtHostClusterApplyDeps(state)
 		if err != nil {
@@ -129,7 +130,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	storageDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseStorage] {
+	if phaseSet[ApplyPhaseStorageCluster] {
 		for _, cluster := range state.StorageClusters {
 			if !storageClusterManaged(cluster) {
 				continue
@@ -141,6 +142,8 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					ID:           taskID,
 					Kind:         ApplyTaskKindStorageCluster,
 					Label:        "storage " + cluster.Metadata.Name,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
 					Status:       TaskStatusPending,
 					Dependencies: append([]string(nil), providerTaskIDs...),
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
@@ -152,7 +155,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	infraDepsByCluster := map[string][]string{}
 	clusterNames := applyClusterNames(state)
 	for _, name := range clusterNames {
-		if phaseSet[ApplyPhaseCluster] {
+		if phaseSet[ApplyPhaseClusterInfra] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
 			deps := append([]string(nil), providerTaskIDs...)
@@ -167,6 +170,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Kind:         ApplyTaskKindClusterInfra,
 						Label:        "infra " + name,
 						Cluster:      name,
+						ClusterKind:  ApplyClusterKindContainer,
 						Status:       TaskStatusPending,
 						Dependencies: deps,
 						ResourceKeys: resourceKeys,
@@ -186,6 +190,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Kind:         ApplyTaskKindClusterInfra,
 						Label:        "infra " + name + " on " + host,
 						Cluster:      name,
+						ClusterKind:  ApplyClusterKindContainer,
 						Host:         host,
 						ResourceKeys: append([]string{hostMutationResource(host)}, resourceKeys...),
 						Status:       TaskStatusPending,
@@ -201,7 +206,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 	for _, name := range clusterNames {
 		deps := append([]string(nil), infraDepsByCluster[name]...)
-		if phaseSet[ApplyPhaseClusters] {
+		if phaseSet[ApplyPhaseContainerCluster] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			isoTaskID := "iso." + name
 			tasks = append(tasks, ApplyTask{
@@ -210,6 +215,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Kind:         ApplyTaskKindClusterISO,
 					Label:        "iso " + name,
 					Cluster:      name,
+					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: deps,
 				},
@@ -229,6 +235,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Kind:         ApplyTaskKindNodeBoot,
 						Label:        "boot " + name + " nodes",
 						Cluster:      name,
+						ClusterKind:  ApplyClusterKindContainer,
 						ResourceKeys: applyNodeBootResourceKeys(state, name, machineNames),
 						Status:       TaskStatusPending,
 						Dependencies: []string{isoTaskID},
@@ -253,6 +260,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Kind:         ApplyTaskKindInstallWait,
 					Label:        "wait install " + name,
 					Cluster:      name,
+					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: waitDeps,
 				},
@@ -264,13 +272,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			})
 		}
 	}
-	if phaseSet[ApplyPhaseExtensions] {
-		extensionTasks, err := planExtensionTasks(state, phaseSet[ApplyPhaseClusters])
+	if phaseSet[ApplyPhaseAddons] {
+		addonTasks, err := planExtensionTasks(state, phaseSet[ApplyPhaseContainerCluster])
 		if err != nil {
 			return tasks, err
 		}
-		tasks = append(tasks, extensionTasks...)
-		tasks = append(tasks, planStorageBindingTasks(state, phaseSet[ApplyPhaseClusters], storageDepsByCluster)...)
+		tasks = append(tasks, addonTasks...)
+		tasks = append(tasks, planStorageBindingTasks(state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster)...)
 	}
 	return tasks, nil
 }
@@ -286,16 +294,17 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 		if installPhasePlanned {
 			deps = append(deps, "wait."+binding.Cluster)
 		}
-		for _, extension := range binding.Extensions {
+		for _, extension := range binding.Addons {
 			extension := extension
-			applyID := "extension." + binding.Cluster + "." + extension.Name + ".apply"
-			waitID := "extension." + binding.Cluster + "." + extension.Name + ".wait"
+			applyID := "addon." + binding.Cluster + "." + extension.Name + ".apply"
+			waitID := "addon." + binding.Cluster + "." + extension.Name + ".wait"
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           applyID,
-					Kind:         ApplyTaskKindClusterExtensionApply,
-					Label:        "extension " + binding.Cluster + " " + extension.Name + " apply",
+					Kind:         ApplyTaskKindClusterAddonApply,
+					Label:        "addon " + binding.Cluster + " " + extension.Name + " apply",
 					Cluster:      binding.Cluster,
+					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: append([]string(nil), deps...),
 				},
@@ -305,9 +314,10 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           waitID,
-					Kind:         ApplyTaskKindClusterExtensionWait,
-					Label:        "extension " + binding.Cluster + " " + extension.Name + " wait",
+					Kind:         ApplyTaskKindClusterAddonWait,
+					Label:        "addon " + binding.Cluster + " " + extension.Name + " wait",
 					Cluster:      binding.Cluster,
+					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: []string{applyID},
 				},
@@ -424,7 +434,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 			reporter.StageSnapshot(ledger)
 		}
 	} else {
-		if reporter != nil && target.Name != ApplyPhaseExtensions {
+		if reporter != nil && target.Name != ApplyPhaseAddons {
 			reporter.AnsibleExecutionStart()
 		}
 	}
@@ -645,7 +655,7 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 }
 
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
-	if task.Entry.Kind == ApplyTaskKindClusterExtensionApply || task.Entry.Kind == ApplyTaskKindClusterExtensionWait {
+	if task.Entry.Kind == ApplyTaskKindClusterAddonApply || task.Entry.Kind == ApplyTaskKindClusterAddonWait {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster {

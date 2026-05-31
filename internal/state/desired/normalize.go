@@ -21,11 +21,11 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
-	for i := range state.ClusterExtensions {
-		normalizeClusterExtension(&state.ClusterExtensions[i])
+	for i := range state.ClusterAddons {
+		normalizeClusterAddon(&state.ClusterAddons[i])
 	}
-	for i := range state.ClusterExtensionBindings {
-		normalizeClusterExtensionBinding(&state.ClusterExtensionBindings[i])
+	for i := range state.ClusterAddonBindings {
+		normalizeClusterAddonBinding(&state.ClusterAddonBindings[i])
 	}
 	for i := range state.StorageClusters {
 		normalizeStorageCluster(&state.StorageClusters[i])
@@ -33,8 +33,14 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StoragePools {
 		normalizeStoragePool(&state.StoragePools[i])
 	}
+	for i := range state.StorageFilesystems {
+		normalizeStorageFilesystem(&state.StorageFilesystems[i])
+	}
 	for i := range state.StorageObjectGateways {
 		normalizeStorageObjectGateway(&state.StorageObjectGateways[i])
+	}
+	for i := range state.StorageExports {
+		normalizeStorageExport(&state.StorageExports[i])
 	}
 	for i := range state.StorageClusterBindings {
 		normalizeStorageClusterBinding(&state.StorageClusterBindings[i])
@@ -146,15 +152,24 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 func normalizeClusterInfra(ci *v1alpha1.ClusterInfra) {
 }
 
-func normalizeClusterExtension(extension *v1alpha1.ClusterExtension) {
+func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {
 	if extension.Spec.Readiness.Timeout == "" {
-		extension.Spec.Readiness.Timeout = v1alpha1.DefaultClusterExtensionReadinessTimeout
+		extension.Spec.Readiness.Timeout = v1alpha1.DefaultClusterAddonReadinessTimeout
+	}
+	if extension.Spec.OLM == nil {
+		return
+	}
+	if extension.Spec.OLM.Subscription.SourceNamespace == "" {
+		extension.Spec.OLM.Subscription.SourceNamespace = "openshift-marketplace"
+	}
+	if extension.Spec.OLM.Subscription.InstallPlanApproval == "" {
+		extension.Spec.OLM.Subscription.InstallPlanApproval = v1alpha1.InstallPlanApprovalAutomatic
 	}
 }
 
-func normalizeClusterExtensionBinding(binding *v1alpha1.ClusterExtensionBinding) {
+func normalizeClusterAddonBinding(binding *v1alpha1.ClusterAddonBinding) {
 	if binding.Spec.Policy.FieldManager == "" {
-		binding.Spec.Policy.FieldManager = v1alpha1.DefaultClusterExtensionFieldManager
+		binding.Spec.Policy.FieldManager = v1alpha1.DefaultClusterAddonFieldManager
 	}
 	if binding.Spec.Policy.ServerSideApply == nil {
 		binding.Spec.Policy.ServerSideApply = v1alpha1.BoolPtr(true)
@@ -175,6 +190,12 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.Bootstrap.MonIP.Family == "" {
 		adm.Bootstrap.MonIP.Family = "ipv4"
 	}
+	if adm.Bootstrap.MonIP.MachineRef.ClusterInfra == "" {
+		adm.Bootstrap.MonIP.MachineRef.ClusterInfra = cluster.Spec.ClusterInfraRef.Name
+	}
+	if adm.Bootstrap.MonIP.MachineRef.Name == "" {
+		adm.Bootstrap.MonIP.MachineRef.Name = adm.Bootstrap.SeedNode
+	}
 }
 
 func normalizeStoragePool(pool *v1alpha1.StoragePool) {
@@ -183,15 +204,27 @@ func normalizeStoragePool(pool *v1alpha1.StoragePool) {
 	}
 }
 
+func normalizeStorageFilesystem(fs *v1alpha1.StorageFilesystem) {
+	if len(fs.Spec.CephFS.DataPoolRefs) == 1 && !fs.Spec.CephFS.DataPoolRefs[0].Default {
+		fs.Spec.CephFS.DataPoolRefs[0].Default = true
+	}
+}
+
 func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 	if gateway.Spec.Ceph.FrontendPort == 0 {
 		gateway.Spec.Ceph.FrontendPort = 8080
 	}
-	if gateway.Spec.Ceph.ClientEndpoint.Port == 0 {
-		gateway.Spec.Ceph.ClientEndpoint.Port = 443
+	if gateway.Spec.PublicEndpoint.Port == 0 {
+		gateway.Spec.PublicEndpoint.Port = 443
 	}
-	if gateway.Spec.Ceph.ClientEndpoint.Scheme == "" {
-		gateway.Spec.Ceph.ClientEndpoint.Scheme = "https"
+	if gateway.Spec.PublicEndpoint.Scheme == "" {
+		gateway.Spec.PublicEndpoint.Scheme = "https"
+	}
+}
+
+func normalizeStorageExport(export *v1alpha1.StorageExport) {
+	if export.Spec.Type == "" && export.Spec.DataFoundation != nil {
+		export.Spec.Type = v1alpha1.StorageExportTypeDataFoundation
 	}
 }
 

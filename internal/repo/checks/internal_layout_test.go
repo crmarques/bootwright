@@ -18,7 +18,7 @@ func TestInternalOldImportsAreGone(t *testing.T) {
 		"internal/artifactpub",
 		"internal/bundlecheck",
 		"internal/callerio",
-		"internal/clusterextensions",
+		"internal/clusteraddons",
 		"internal/contextstore",
 		"internal/desiredstate",
 		"internal/embedded",

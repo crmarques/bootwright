@@ -21,7 +21,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		out = append(out, secretRefRequirement{
 			refName: export.Spec.DataFoundation.ExternalDetailsRef.Name,
 			label:   export.Metadata.Name + " dataFoundation externalDetailsRef",
-			phases:  []string{"extensions"},
+			phases:  []string{"addons"},
 			role:    secret.MaterialPrimary,
 		})
 	}
@@ -34,7 +34,7 @@ func storageSSHRequirements(clusterName, field string, ssh v1alpha1.StorageSSHSp
 		out = append(out, secretRefRequirement{
 			refName: ssh.KeyPairRef.Name,
 			label:   clusterName + " " + field + " keyPairRef",
-			phases:  []string{"storage"},
+			phases:  []string{"storage-cluster"},
 			role:    secret.MaterialSSHPublic,
 			sshPair: true,
 		})
@@ -43,7 +43,7 @@ func storageSSHRequirements(clusterName, field string, ssh v1alpha1.StorageSSHSp
 		out = append(out, secretRefRequirement{
 			refName: ssh.PrivateKeyRef.Name,
 			label:   clusterName + " " + field + " privateKeyRef",
-			phases:  []string{"storage"},
+			phases:  []string{"storage-cluster"},
 			role:    secret.MaterialSSHPrivate,
 		})
 	}

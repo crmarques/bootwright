@@ -74,10 +74,10 @@ type VSphereNetworkSubnet struct {
 }
 
 type MachineProfileKubeVirtProvisioner struct {
-	HostClusterRef  *LocalObjectReference `yaml:"hostClusterRef,omitempty" json:"hostClusterRef,omitempty"`
-	KubeconfigRef   *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
-	Namespace       string                `yaml:"namespace" json:"namespace"`
-	StorageClassRef *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
+	HostContainerClusterRef *LocalObjectReference `yaml:"hostContainerClusterRef,omitempty" json:"hostContainerClusterRef,omitempty"`
+	KubeconfigRef           *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
+	Namespace               string                `yaml:"namespace" json:"namespace"`
+	StorageClassRef         *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
 }
 
 type BMCEmulationDefaults struct {

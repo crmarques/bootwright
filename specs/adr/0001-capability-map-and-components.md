@@ -33,9 +33,9 @@ Reusable machine-network and NMState inputs live in `NetworkConfig`. Cluster
 nodes live in `ContainerCluster.spec.nodes[]` and each node references the
 selected cluster infrastructure machine.
 
-Post-install extension kinds were added later as separate desired-state
-resources: `ClusterExtension`, `ClusterExtensionSet`,
-`ClusterExtensionBinding`, and the storage resource family. They do not change
+Post-install add-on kinds were added later as separate desired-state
+resources: `ClusterAddon`, `ClusterAddonProfile`,
+`ClusterAddonBinding`, and the storage resource family. They do not change
 the provisioning ownership split defined here, but the full current
 user-authored API surface is seventeen kinds.
 

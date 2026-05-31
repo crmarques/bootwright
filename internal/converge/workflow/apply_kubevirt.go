@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 )
 
 func kubeVirtHostClusterApplyDeps(state v1alpha1.State) (map[string][]string, error) {
@@ -26,19 +26,19 @@ func kubeVirtHostClusterApplyDeps(state v1alpha1.State) (map[string][]string, er
 		}
 		for _, machine := range infra.Spec.Components.Machines {
 			profile, ok := machineProfileForComponent(providers, machine)
-			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostClusterRef == nil || profile.KubeVirt.HostClusterRef.Name == "" {
+			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil || profile.KubeVirt.HostContainerClusterRef.Name == "" {
 				continue
 			}
-			parent := profile.KubeVirt.HostClusterRef.Name
+			parent := profile.KubeVirt.HostContainerClusterRef.Name
 			if !selected[parent] {
-				return nil, fmt.Errorf("ContainerCluster/%s uses KubeVirt hostClusterRef %q but the selected apply scope does not include that host cluster; include %s in --scope or apply it first",
+				return nil, fmt.Errorf("ContainerCluster/%s uses KubeVirt hostContainerClusterRef %q but the selected apply scope does not include that host cluster; include %s in --scope or apply it first",
 					cluster.Metadata.Name, parent, parent)
 			}
 			out[cluster.Metadata.Name] = appendUniqueString(out[cluster.Metadata.Name], "wait."+parent)
 			waitTasks := provides[parent]
 			if len(waitTasks) == 0 {
-				return nil, fmt.Errorf("ContainerCluster/%s uses KubeVirt hostClusterRef %q but no selected ClusterExtension providing %q is bound to that host cluster",
-					cluster.Metadata.Name, parent, v1alpha1.ClusterExtensionProvidesKubeVirt)
+				return nil, fmt.Errorf("ContainerCluster/%s uses KubeVirt hostContainerClusterRef %q but no selected ClusterAddon providing %q is bound to that host cluster",
+					cluster.Metadata.Name, parent, v1alpha1.ClusterAddonProvidesKubeVirt)
 			}
 			for _, taskID := range waitTasks {
 				out[cluster.Metadata.Name] = appendUniqueString(out[cluster.Metadata.Name], taskID)
@@ -55,18 +55,18 @@ func kubeVirtProviderExtensionWaitTasks(state v1alpha1.State) (map[string][]stri
 	}
 	out := map[string][]string{}
 	for _, binding := range plans {
-		for _, extension := range binding.Extensions {
-			if !extensionProvides(extension.Extension, v1alpha1.ClusterExtensionProvidesKubeVirt) {
+		for _, extension := range binding.Addons {
+			if !extensionProvides(extension.Extension, v1alpha1.ClusterAddonProvidesKubeVirt) {
 				continue
 			}
-			taskID := "extension." + binding.Cluster + "." + extension.Name + ".wait"
+			taskID := "addon." + binding.Cluster + "." + extension.Name + ".wait"
 			out[binding.Cluster] = appendUniqueString(out[binding.Cluster], taskID)
 		}
 	}
 	return out, nil
 }
 
-func extensionProvides(extension v1alpha1.ClusterExtension, capability string) bool {
+func extensionProvides(extension v1alpha1.ClusterAddon, capability string) bool {
 	for _, item := range extension.Spec.Provides {
 		if item == capability {
 			return true
@@ -107,8 +107,8 @@ func kubeVirtResourceKeys(state v1alpha1.State, clusterName string) []string {
 
 func kubeVirtResourceKey(profile *v1alpha1.MachineProfileKubeVirtProvisioner) string {
 	owner := "external"
-	if profile.HostClusterRef != nil && profile.HostClusterRef.Name != "" {
-		owner = profile.HostClusterRef.Name
+	if profile.HostContainerClusterRef != nil && profile.HostContainerClusterRef.Name != "" {
+		owner = profile.HostContainerClusterRef.Name
 	} else if profile.KubeconfigRef != nil && profile.KubeconfigRef.Name != "" {
 		owner = "kubeconfig:" + profile.KubeconfigRef.Name
 	}

@@ -1,9 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
-metadata:
-  name: storage-virtualization-platform
-spec:
-  extensions:
-    - name: ibm-fusion-data-foundation-catalog
-    - name: ibm-fusion-data-foundation-operator
-    - name: openshift-virtualization

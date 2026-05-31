@@ -719,16 +719,16 @@ func TestBareMetalCorporateFixtureDoesNotRenderManagedProxyOrDNS(t *testing.T) {
 
 func TestProxyForControlsRuntimeAndInstallerRendering(t *testing.T) {
 	cases := []struct {
-		name               string
-		bootwright         bool
-		clusterInstall     bool
-		wantRuntimeProxy   bool
-		wantInstallerProxy bool
+		name                    string
+		bootwright              bool
+		containerClusterInstall bool
+		wantRuntimeProxy        bool
+		wantInstallerProxy      bool
 	}{
-		{name: "both", bootwright: true, clusterInstall: true, wantRuntimeProxy: true, wantInstallerProxy: true},
-		{name: "bootwright-only", bootwright: true, clusterInstall: false, wantRuntimeProxy: true},
-		{name: "installer-only", bootwright: false, clusterInstall: true, wantInstallerProxy: true},
-		{name: "neither", bootwright: false, clusterInstall: false},
+		{name: "both", bootwright: true, containerClusterInstall: true, wantRuntimeProxy: true, wantInstallerProxy: true},
+		{name: "bootwright-only", bootwright: true, containerClusterInstall: false, wantRuntimeProxy: true},
+		{name: "installer-only", bootwright: false, containerClusterInstall: true, wantInstallerProxy: true},
+		{name: "neither", bootwright: false, containerClusterInstall: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -741,10 +741,10 @@ func TestProxyForControlsRuntimeAndInstallerRendering(t *testing.T) {
 			} else {
 				state.Environments[0].Spec.ProxyFor.Bootwright = v1alpha1.EnvironmentComponentNone
 			}
-			if tc.clusterInstall {
-				state.Environments[0].Spec.ProxyFor.ClusterInstall = "default"
+			if tc.containerClusterInstall {
+				state.Environments[0].Spec.ProxyFor.ContainerClusterInstall = "default"
 			} else {
-				state.Environments[0].Spec.ProxyFor.ClusterInstall = v1alpha1.EnvironmentComponentNone
+				state.Environments[0].Spec.ProxyFor.ContainerClusterInstall = v1alpha1.EnvironmentComponentNone
 			}
 
 			vars := render.Vars(state)

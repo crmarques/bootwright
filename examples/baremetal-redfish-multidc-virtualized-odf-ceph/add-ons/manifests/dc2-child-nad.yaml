@@ -1,0 +1,13 @@
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: dc2-child-net
+  namespace: bootwright-dc2-child-ocp
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "bridge",
+      "bridge": "br-dc2-child",
+      "ipam": {}
+    }

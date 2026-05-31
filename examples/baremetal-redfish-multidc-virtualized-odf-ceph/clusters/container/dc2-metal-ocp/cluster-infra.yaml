@@ -1,0 +1,56 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: dc2-metal-ocp-infra
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.142.20
+    apiInt:
+      externalVip: 192.168.142.20
+    ingress:
+      externalVip: 192.168.142.21
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: baremetal-provider
+          name: dc2-metal-master-0
+        networkConfig:
+          ref:
+            name: dc2-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.142.10
+                  prefix-length: 24
+      - name: master-1
+        from:
+          provider: baremetal-provider
+          name: dc2-metal-master-1
+        networkConfig:
+          ref:
+            name: dc2-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.142.11
+                  prefix-length: 24
+      - name: master-2
+        from:
+          provider: baremetal-provider
+          name: dc2-metal-master-2
+        networkConfig:
+          ref:
+            name: dc2-net
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.142.12
+                  prefix-length: 24

@@ -60,6 +60,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentSecretStorage(env)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
 		errs = append(errs, validateEnvironmentContainerClusters(env, state)...)
+		errs = append(errs, validateEnvironmentStorageClusters(env, state)...)
 		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
@@ -112,6 +113,31 @@ func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alph
 	return errs
 }
 
+func validateEnvironmentStorageClusters(env v1alpha1.Environment, state v1alpha1.State) []string {
+	var errs []string
+	known := map[string]bool{}
+	for _, cluster := range state.StorageClusters {
+		known[cluster.Metadata.Name] = true
+	}
+	seen := map[string]bool{}
+	for i, name := range env.Spec.StorageClusters {
+		owner := fmt.Sprintf("Environment/%s spec.storageClusters[%d]", env.Metadata.Name, i)
+		if name == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if seen[name] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
+			continue
+		}
+		seen[name] = true
+		if !known[name] {
+			errs = append(errs, fmt.Sprintf("%s %q does not match any StorageCluster", owner, name))
+		}
+	}
+	return errs
+}
+
 func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1.State) []string {
 	components := indexInfraComponents(state.InfraComponents)
 	var errs []string
@@ -129,7 +155,7 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 		return nil
 	}
 	if len(env.Spec.Resources) == 0 {
-		return []string{fmt.Sprintf("Environment/%s spec.resources must include at least one YAML file when set", env.Metadata.Name)}
+		return []string{fmt.Sprintf("Environment/%s spec.resources must include at least one file or directory when set", env.Metadata.Name)}
 	}
 	var errs []string
 	seen := map[string]bool{}
@@ -150,10 +176,6 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 		clean := filepath.Clean(value)
 		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			errs = append(errs, fmt.Sprintf("%s %q must stay within the Environment file directory", owner, value))
-			continue
-		}
-		if !isYAMLFile(clean) {
-			errs = append(errs, fmt.Sprintf("%s %q is not a .yaml or .yml file", owner, value))
 			continue
 		}
 		if seen[clean] {
@@ -325,7 +347,7 @@ func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 		value string
 	}{
 		{"bootwright", env.Spec.ProxyFor.Bootwright},
-		{"clusterInstall", env.Spec.ProxyFor.ClusterInstall},
+		{"containerClusterInstall", env.Spec.ProxyFor.ContainerClusterInstall},
 	} {
 		if field.value == "" || field.value == v1alpha1.EnvironmentComponentNone {
 			continue
@@ -430,7 +452,7 @@ func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, compo
 					endpoints[endpoint.Name] = true
 				}
 				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.redfishVirtualMedia", entry.Routes.RedfishVirtualMedia, endpoints)...)
-				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.clusterInstall", entry.Routes.ClusterInstall, endpoints)...)
+				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.containerClusterInstall", entry.Routes.ContainerClusterInstall, endpoints)...)
 			}
 			if entry.Spec != nil {
 				errs = append(errs, owner+".spec is only valid for external artifactServers entries")

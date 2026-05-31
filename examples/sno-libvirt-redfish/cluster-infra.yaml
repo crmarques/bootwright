@@ -1,0 +1,35 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+metadata:
+  name: sno-libvirt
+spec:
+  platform:
+    type: baremetal
+    baremetal:
+      provisioningNetwork: disabled
+
+  endpoints:
+    api:
+      externalVip: 192.168.132.10
+    apiInt:
+      externalVip: 192.168.132.10
+    ingress:
+      externalVip: 192.168.132.11
+
+  components:
+    machines:
+      - name: master-0
+        from:
+          provider: lab-libvirt-provider
+          profile: sno
+        networkConfig:
+          ref:
+            name: sno-bridge
+          addresses:
+            - interface: primary
+              ipv4:
+                - ip: 192.168.132.20
+                  prefix-length: 24
+        rootDeviceHints:
+          deviceName: /dev/vda
+

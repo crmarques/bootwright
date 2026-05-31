@@ -59,7 +59,7 @@ func cephadmServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 			ingressSpec := map[string]any{
 				"backend_service": "rgw." + gw.Spec.Ceph.ServiceID,
 				"virtual_ip":      ingress.VirtualIP,
-				"frontend_port":   gw.Spec.Ceph.ClientEndpoint.Port,
+				"frontend_port":   gw.Spec.PublicEndpoint.Port,
 				"monitor_port":    1967,
 			}
 			if len(ingress.VirtualInterfaceNetworks) > 0 {

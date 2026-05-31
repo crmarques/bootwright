@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metal-ocp-platform
+spec:
+  containerClusterSelector:
+    names:
+      - metal-ocp
+
+  applyAfter:
+    phase: containerClusterInstalled
+
+  profiles:
+    - name: platform-bootstrap
+

@@ -19,7 +19,7 @@ BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
 CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
 desired state.
 
-KubeVirt child-cluster profiles follow the same boundary. `hostClusterRef`
+KubeVirt child-cluster profiles follow the same boundary. `hostContainerClusterRef`
 resolves to the host cluster kubeconfig already produced under Bootwright
 cluster secrets state, and `kubeconfigRef` resolves through `Environment.spec.secrets`
 for external virtualization clusters. Desired state records only the reference
@@ -65,7 +65,7 @@ managed registry component.
 
 `Environment.spec.infraComponents.proxies[]` declares proxy access entries.
 `Environment.spec.proxyFor.bootwright` and
-`Environment.spec.proxyFor.clusterInstall` select which proxy each consumer
+`Environment.spec.proxyFor.containerClusterInstall` select which proxy each consumer
 uses; omitted values and the reserved value `none` disable proxy use.
 
 External proxy `connection` entries carry direct URLs and optional auth refs.
@@ -134,7 +134,7 @@ Generated output boundaries are part of the safety contract:
 - Kubeconfigs produced for installed host clusters live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/secrets/kubeconfig`.
   They may be consumed by KubeVirt child-cluster operations through
-  `hostClusterRef`, but must never be copied into authored desired state.
+  `hostContainerClusterRef`, but must never be copied into authored desired state.
 - Bootwright-managed apply logs that can include external tool output live under
   `/var/lib/bootwright/contexts/<context>/runs/`, with restrictive file
   modes, and must never be versioned.

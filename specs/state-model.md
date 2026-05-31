@@ -7,11 +7,11 @@ Ceph storage:
 
 - `ContainerCluster` owns install intent and the fields that render mostly to
   `install-config.yaml`.
-- `ClusterExtension` owns reusable post-install bootstrap components applied
+- `ClusterAddon` owns reusable post-install bootstrap components applied
   inside installed OpenShift or OKD clusters.
-- `ClusterExtensionSet` owns ordered reusable platform profiles made from
-  extensions and other sets.
-- `ClusterExtensionBinding` owns cluster-to-extension attachment after install.
+- `ClusterAddonProfile` owns ordered reusable platform profiles made from
+  add-ons and nested profiles.
+- `ClusterAddonBinding` owns cluster-to-add-on attachment after install.
 - `StorageCluster` owns external storage cluster provisioning intent.
 - `StoragePlacementPolicy` owns storage placement and CRUSH policy intent.
 - `StoragePool` owns Ceph pool desired state.
@@ -35,7 +35,7 @@ Ceph storage:
 
 Post-install components are deliberately not embedded under
 `ContainerCluster.spec.install`. `ContainerCluster` remains focused on
-provisioning an installed cluster; extensions are selected by `Environment`,
+provisioning an installed cluster; add-ons are selected by `Environment`,
 bound to clusters, and applied after the cluster is available.
 External storage is also a peer object family, not a child of
 `ContainerCluster`. Storage clusters reuse `ClusterInfra`, `InfraProvider`, and
@@ -65,9 +65,9 @@ spec:
     - infra-component.yaml
     - cluster-infra.yaml
     - container-cluster.yaml
-    - cluster-extension-virtualization.yaml
-    - cluster-extension-set.yaml
-    - cluster-extension-binding.yaml
+    - add-ons/openshift-virtualization.yaml
+    - add-ons/platform-profile.yaml
+    - clusters/container/demo/add-on-binding.yaml
 
   secretStorage:
     mode: context
@@ -137,7 +137,7 @@ spec:
         routes:
           redfishVirtualMedia:
             endpoint: bmc
-          clusterInstall:
+          containerClusterInstall:
             endpoint: cluster
     ntpSources:
       - 0.pool.ntp.org
@@ -145,7 +145,7 @@ spec:
 
   proxyFor:
     bootwright: default
-    clusterInstall: default
+    containerClusterInstall: default
 
   registries:
     mirror:
@@ -166,16 +166,17 @@ Rules:
 - Authored desired-state YAML uses block-style collections. Do not use
   flow-style mapping braces, inline lists, or empty inline maps in examples,
   e2e inputs, fixtures, or scaffold output.
-- `resources[]`, when set, is a YAML file allow-list relative to the
+- `resources[]`, when set, is a YAML file or directory allow-list relative to the
   `Environment` file directory. The `Environment` file itself is always
   loaded.
 - When `resources[]` is omitted, the current context input directory loads
   every discovered YAML file.
-- A listed file is loaded as a complete YAML file; every Bootwright resource
-  referenced by any selected resource must also be selected.
-- When a selected `ClusterExtensionBinding` references extension sets or
-  extensions, those referenced resource files must also be selected. When a
-  selected `ClusterExtensionSet` references child sets or extensions, those
+- A listed file is loaded as a complete YAML file. A listed directory is walked
+  deterministically for YAML files. Every Bootwright resource referenced by any
+  selected resource must also be selected.
+- When a selected `ClusterAddonBinding` references profiles or
+  add-ons, those referenced resource files must also be selected. When a
+  selected `ClusterAddonProfile` references child profiles or add-ons, those
   files must also be selected.
 - When a selected storage object references a `StorageCluster`,
   `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
@@ -184,8 +185,8 @@ Rules:
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
   `ContainerCluster`.
-- Cluster selection filters extension bindings to selected clusters and omits
-  extension resources that are reachable only from removed bindings.
+- Cluster selection filters add-on bindings to selected clusters and omits
+  add-on resources that are reachable only from removed bindings.
 - `defaults.install.pullSecretRef`, when set, is copied into selected
   OpenShift `ContainerCluster` install specs that omit `pullSecretRef`.
   Omitted means the conventional `openshift-pull-secret` secret name.
@@ -207,7 +208,7 @@ Rules:
   Values from environment entries and managed
   `InfraComponent.spec.nameResolution.additionalIngressHosts[]` merge into DNS
   host records that point at each consuming cluster's ingress VIP.
-- `proxyFor.bootwright` and `proxyFor.clusterInstall` select entries from
+- `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select entries from
   `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
   reserved value that disables proxy use for that consumer.
 - A `proxyFor.bootwright` selection may point at an external proxy for every
@@ -220,7 +221,7 @@ Rules:
 - At most one entry per environment service list may set `default: true`.
 - `infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`
   selects the artifact server endpoint used in BMC ISO fetch URLs.
-- `infraComponents.artifactServers[].routes.clusterInstall.endpoint` selects
+- `infraComponents.artifactServers[].routes.containerClusterInstall.endpoint` selects
   the artifact server endpoint used for disconnected agent-install boot
   artifacts.
 - `secretStorage.mode` defaults to `source`. `source` preserves each declared
@@ -477,8 +478,8 @@ Rules:
   nodes per data site.
 - `StorageClusterBinding` connects a `StorageExport` to selected
   `ContainerCluster` objects. Each selected cluster must have a bound
-  `ClusterExtension` that provides `data-foundation`; binding manifests are
-  applied after that extension reports readiness.
+  `ClusterAddon` that provides `data-foundation`; binding manifests are
+  applied after that add-on reports readiness.
 - Data Foundation exports render per-consuming-cluster Ceph auth operations
   in `ceph/operations.yaml` and per-cluster external connection manifests.
   Rendered manifests carry generated-at-apply placeholders for secret keys;
@@ -501,17 +502,17 @@ storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storag
 
 The `cephadm/` and `ceph/` files are omitted for imported storage clusters.
 
-## Cluster Extensions
+## Cluster Add-Ons
 
-Cluster extensions model initial post-install bootstrap components. They are
+Cluster add-ons model initial post-install bootstrap components. They are
 for early platform setup, not for replacing long-term day-2 GitOps management.
 
-`ClusterExtension` declares one reusable component. MVP types are
+`ClusterAddon` declares one reusable component. MVP types are
 `olm-operator` and `manifest-set`.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata:
   name: openshift-virtualization
 spec:
@@ -563,20 +564,20 @@ spec:
           status: "True"
 ```
 
-`provides[]` advertises extension-provided cluster capabilities consumed by
+`provides[]` advertises add-on-provided cluster capabilities consumed by
 cross-cluster substrates and storage bindings. Accepted values are `kubevirt`
-and `data-foundation`. An extension that provides a capability must declare
+and `data-foundation`. An add-on that provides a capability must declare
 readiness checks so dependent work waits for the actual platform capability,
 not just resource submission.
 
-`manifest-set` extensions apply existing YAML files in declared order. Paths
-are relative to the `ClusterExtension` file directory. Non-Bootwright YAML under
-an extension `manifests/` directory is treated as extension payload, not desired
+`manifest-set` add-ons apply existing YAML files in declared order. Paths
+are relative to the `ClusterAddon` file directory. Non-Bootwright YAML under
+an add-on `manifests/` directory is treated as add-on payload, not desired
 state to decode.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata:
   name: console-customization
 spec:
@@ -594,45 +595,45 @@ spec:
         name: cluster
 ```
 
-`ClusterExtensionSet` declares an ordered reusable group:
+`ClusterAddonProfile` declares an ordered reusable group:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
+kind: ClusterAddonProfile
 metadata:
   name: virtualization-platform
 spec:
-  extensionSets:
+  profiles:
     - name: base-platform
-  extensions:
+  addons:
     - name: openshift-virtualization
 ```
 
-Expansion is deterministic: expand `extensionSets` in declared order, then
-append direct `extensions` in declared order. Duplicate extension names after
+Expansion is deterministic: expand `profiles` in declared order, then
+append direct `addons` in declared order. Duplicate add-on names after
 expansion are allowed and de-duplicated by first occurrence. Cycles are
 rejected.
 
-`ClusterExtensionBinding` attaches extension sets and direct extensions to
+`ClusterAddonBinding` attaches profiles and direct add-ons to container
 clusters selected by name:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
+kind: ClusterAddonBinding
 metadata:
-  name: demo-ocp-extensions
+  name: demo-ocp-addons
 spec:
-  clusterSelector:
+  containerClusterSelector:
     names:
       - demo-ocp
 
   applyAfter:
-    phase: clusterInstalled
+    phase: containerClusterInstalled
 
-  extensionSets:
+  profiles:
     - name: virtualization-platform
 
-  extensions:
+  addons:
     - name: console-customization
 
   policy:
@@ -642,10 +643,10 @@ spec:
     continueOnError: false
 ```
 
-Binding expansion follows the same order as sets: referenced
-`extensionSets`, then direct `extensions`, with first occurrence
+Binding expansion follows the same order as profiles: referenced
+`profiles`, then direct `addons`, with first occurrence
 de-duplication. The expanded order becomes the apply order for each selected
-cluster. `applyAfter.phase` only supports `clusterInstalled` in the MVP.
+cluster. `applyAfter.phase` only supports `containerClusterInstalled` in the MVP.
 
 Rules:
 
@@ -664,7 +665,7 @@ Rules:
   `namespace.create` is true, OperatorGroup when set, Subscription, then
   `customResources[]`.
 - `manifest-set.manifests[]` must not be empty. Each path must be relative,
-  remain under the extension file directory, name an existing non-symlink
+  remain under the add-on file directory, name an existing non-symlink
   `.yaml` or `.yml` file, and apply in declared order.
 - Readiness timeout uses Go duration strings and defaults to `30m`.
 - Readiness checks are `csvSucceeded`, `condition`, and `resourceExists`.
@@ -675,14 +676,14 @@ Rules:
   `condition.status`; namespace is optional for cluster-scoped resources.
 - `resourceExists` requires `apiVersion`, `kind`, and `name`; namespace is
   optional.
-- `ClusterExtensionBinding.spec.clusterSelector.names[]` must name existing
+- `ClusterAddonBinding.spec.containerClusterSelector.names[]` must name existing
   `ContainerCluster` objects. Label selectors are not part of the MVP.
 - `policy.serverSideApply` defaults to `true`,
   `policy.fieldManager` defaults to `bootwright`, and
   `policy.continueOnError` defaults to `false`.
 - `policy.prune: true` is rejected in the MVP.
 - `policy.continueOnError: true` is rejected in the MVP.
-- Future extension types may include `kustomize` and `helm`; they are not
+- Future add-on types may include `kustomize` and `helm`; they are not
   accepted by the MVP schema.
 
 ## NetworkConfig
@@ -925,14 +926,14 @@ spec:
       memoryMiB: 16384
       diskGiB: 120
       kubevirt:
-        hostClusterRef:
+        hostContainerClusterRef:
           name: metal-ocp
         namespace: bootwright-child-ocp
         storageClassRef:
           name: lvms-vg1
 ```
 
-`hostClusterRef` names a Bootwright `ContainerCluster` whose generated
+`hostContainerClusterRef` names a Bootwright `ContainerCluster` whose generated
 kubeconfig is used at runtime. Use `kubeconfigRef` instead when the KubeVirt
 host cluster is external to Bootwright:
 
@@ -959,19 +960,19 @@ Rules:
 - vSphere failure domains must include the installer-required `region`, `zone`,
   `server`, `topology.datacenter`, `topology.computeCluster`,
   `topology.datastore`, and `topology.networks`.
-- KubeVirt profiles must set exactly one of `hostClusterRef` or
+- KubeVirt profiles must set exactly one of `hostContainerClusterRef` or
   `kubeconfigRef`.
-- `hostClusterRef.name` references a loaded Bootwright `ContainerCluster`. The
-  host cluster must have a selected `ClusterExtensionBinding` that applies an
-  extension with `provides: [kubevirt]`.
+- `hostContainerClusterRef.name` references a loaded Bootwright `ContainerCluster`. The
+  host cluster must have a selected `ClusterAddonBinding` that applies an
+  add-on with `provides: [kubevirt]`.
 - `kubeconfigRef.name` references `Environment.spec.secrets`; the secret stores
   a kubeconfig path or context-local kubeconfig material and never stores bytes
   in desired state.
 - `kubevirt.namespace` is required. `storageClassRef.name` is optional.
 - KubeVirt-backed machines must use a `NetworkConfig` with `spec.kubevirt.nad`.
   The referenced NAD is supplied by the operator or by a parent-cluster
-  `manifest-set` extension.
-- KubeVirt `hostClusterRef` dependencies must be acyclic. A cluster cannot host
+  `manifest-set` add-on.
+- KubeVirt `hostContainerClusterRef` dependencies must be acyclic. A cluster cannot host
   itself directly or through another child cluster.
 - Capability names are scoped by capability kind.
 
@@ -1175,7 +1176,7 @@ Bootwright renders:
 - Provider or generated machine MACs into matching NMState interfaces when
   present.
 - `agent-config.yaml minimalISO` and `bootArtifactsBaseURL` for disconnected
-  installs that select an artifact server `clusterInstall` route.
+  installs that select an artifact server `containerClusterInstall` route.
 - `agent-config.yaml additionalNTPSources` from
   `Environment.spec.infraComponents.ntpSources[]`.
 - Install-time OpenShift extra manifests under `openshift/` for declared API
@@ -1192,9 +1193,9 @@ Bootwright renders:
 - Storage tool inputs from selected storage resources: cephadm host and
   service specs, Ceph operations for stretch mode, pools, CephFS, RGW users,
   and Data Foundation external-mode manifests for each selected binding.
-- Extension apply plans from selected `ClusterExtensionBinding` resources.
-  OLM extensions generate Namespace, OperatorGroup, Subscription, and custom
-  resources. Manifest-set extensions reference declared files and include file
+- Add-on apply plans from selected `ClusterAddonBinding` resources.
+  OLM add-ons generate Namespace, OperatorGroup, Subscription, and custom
+  resources. Manifest-set add-ons reference declared files and include file
   contents in desired-input hashes.
 
 ## Validation Rules
@@ -1230,12 +1231,12 @@ Validation rejects:
 - Shared infra component service consumers with the same rendered service identity
   but incompatible host, role, realisation, bind address, port, or selected
   capability.
-- Missing `ClusterExtension`, `ClusterExtensionSet`, or
-  `ClusterExtensionBinding` references.
-- `ClusterExtensionSet` reference cycles.
-- Unsupported cluster extension types, readiness check types, apply phases, and
+- Missing `ClusterAddon`, `ClusterAddonProfile`, or
+  `ClusterAddonBinding` references.
+- `ClusterAddonProfile` reference cycles.
+- Unsupported cluster add-on types, readiness check types, apply phases, and
   install plan approval values.
-- Unsupported `ClusterExtension.spec.provides[]` capabilities. Current values
+- Unsupported `ClusterAddon.spec.provides[]` capabilities. Current values
   are `kubevirt` and `data-foundation`; duplicate values and capabilities
   without readiness checks are invalid.
 - Invalid storage references, stretch-mode topology, monitor placement,
@@ -1243,15 +1244,15 @@ Validation rejects:
   CephFS metadata/data pool wiring, RGW/MDS placement, or Data Foundation
   binding selectors.
 - Unsafe `manifest-set` paths, including absolute paths, directory escapes,
-  symlinks, missing files, and non-YAML extensions.
+  symlinks, missing files, and non-YAML add-on manifests.
 - KubeVirt profiles missing exactly one host reference, referencing a missing
   host cluster, referencing an undeclared kubeconfig secret, missing
   `namespace`, using a non-KubeVirt network config, or creating a cluster
   dependency cycle.
-- `ClusterExtensionBinding` cluster selectors that name missing clusters.
-- `ClusterExtensionBinding.policy.prune: true`, because pruning is not
+- `ClusterAddonBinding` cluster selectors that name missing clusters.
+- `ClusterAddonBinding.policy.prune: true`, because pruning is not
   implemented in the MVP.
-- `ClusterExtensionBinding.policy.continueOnError: true`, because task-level
+- `ClusterAddonBinding.policy.continueOnError: true`, because task-level
   error continuation is not implemented in the MVP.
 
 ## CLI Contract
@@ -1294,9 +1295,9 @@ bootwright context current [--short]
 bootwright context delete lab [--purge --yes]
 bootwright cluster list
 bootwright cluster list --output json
-bootwright cluster access
-bootwright cluster access --cluster managed-01
-bootwright cluster access --output json
+bootwright container-cluster access
+bootwright container-cluster access --cluster managed-01
+bootwright container-cluster access --output json
 bootwright print-env [--sensitive]
 bootwright secret list
 bootwright secret list --output json
@@ -1326,25 +1327,25 @@ bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
 bootwright check cluster
 bootwright check cluster --dry-run --output json
-bootwright check extensions
-bootwright apply storage --dry-run
-bootwright apply storage --yes
-bootwright apply storage --scope <storage-cluster> --yes
+bootwright check addons
+bootwright apply storage-cluster --dry-run
+bootwright apply storage-cluster --yes
+bootwright apply storage-cluster --scope <storage-cluster> --yes
 bootwright apply cluster --dry-run
 bootwright apply cluster --dry-run --output json
 bootwright apply cluster --yes
 bootwright apply cluster --override --yes
-bootwright apply extensions --dry-run
-bootwright apply extensions --dry-run --output json
-bootwright apply extensions --yes
+bootwright apply addons --dry-run
+bootwright apply addons --dry-run --output json
+bootwright apply addons --yes
 bootwright apply all --dry-run
 bootwright apply all --dry-run --output json
 bootwright apply all --yes
 bootwright status
 bootwright status --watch
 bootwright status --output json
-bootwright destroy cluster --yes
-bootwright destroy cluster --dry-run --output json
+bootwright destroy container-cluster --yes
+bootwright destroy container-cluster --dry-run --output json
 bootwright destroy infra --yes
 bootwright destroy infra --dry-run --output json
 bootwright destroy infra --scope artifact-server --yes
@@ -1358,7 +1359,7 @@ must emit only JSON on stdout. Shell-export commands such as
 `bootwright print-env` intentionally emit only `export ...` lines. `secret
 show` intentionally emits raw secret bytes on stdout and is a sensitive
 raw-output exception.
-`bootwright cluster list` and `bootwright cluster access` read only local
+`bootwright cluster list` and `bootwright container-cluster access` read only local
 context state. They print cluster API and console URLs, local kubeconfig paths,
 the shell `KUBECONFIG=...` prefix, local password file paths, and the command
 operators can run when they need the password. They must not print kubeconfig contents,
@@ -1372,26 +1373,26 @@ Operators can tune task scheduling with `--parallelism`,
 `--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
 flags means Bootwright uses the maximum safe automatic value. Explicit limits
 only reduce automatic concurrency; provider-host and Redfish safety locks still
-apply. `apply extensions` and `apply storage` use direct local executors and
+apply. `apply addons` and `apply storage-cluster` use direct local executors and
 must not expose Ansible executable, become-password, provider-host, or Redfish
 flags.
 `apply <target> --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not
 mutate provider hosts, nodes, or clusters; operators must run
 `bootwright check <target>` for readiness.
-`apply extensions --dry-run` shows extension tasks, selected clusters,
-expanded extension order, and generated resource summaries without mutating the
+`apply addons --dry-run` shows add-on tasks, selected clusters,
+expanded add-on order, and generated resource summaries without mutating the
 cluster.
-`apply storage` renders the storage input set, SSHes from the bastion to the
+`apply storage-cluster` renders the storage input set, SSHes from the bastion to the
 Ceph seed node, runs cephadm bootstrap on that node, applies cephadm services,
 and executes the rendered Ceph operations. `apply cluster` installs each
-selected cluster, then applies bound extensions after the cluster install wait
-task. `apply extensions` uses the installed cluster kubeconfig and `oc apply`
-directly for standalone extension convergence. Storage binding tasks run in
-the extensions phase after the target cluster install wait, the matching
-storage provisioning task when selected, and the extension wait task that
+selected cluster, then applies bound add-ons after the cluster install wait
+task. `apply addons` uses the installed cluster kubeconfig and `oc apply`
+directly for standalone add-on convergence. Storage binding tasks run in
+the add-ons phase after the target cluster install wait, the matching
+storage provisioning task when selected, and the add-on wait task that
 provides `data-foundation`. `apply all` includes infrastructure and storage
-before the same cluster and extension phases.
+before the same cluster and add-on phases.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
 to the terminal between Bootwright prerequisite output and the Bootwright
 summary. When an apply selects two or more `ContainerCluster` objects,
@@ -1409,12 +1410,12 @@ installed for the same rendered desired inputs. Completed installs are proven by
 the per-cluster install record, the non-secret desired-input fingerprint, and a
 local kubeconfig probe that reports `ClusterVersion Available=True`. If the
 stored fingerprint differs from the current rendered inputs, apply must stop and
-require either `destroy cluster` or `apply cluster --override` after the
+require either `destroy container-cluster` or `apply cluster --override` after the
 operator has reset or replaced target machines. If an interrupted run already
 booted nodes, apply resumes at `openshift-install agent wait-for
-install-complete` instead of creating a new ISO or rebooting machines. Extension
+install-complete` instead of creating a new ISO or rebooting machines. Add-on
 tasks still run after skipped or completed install tasks and use their own
-per-extension desired hashes and readiness records for idempotency.
+per-add-on desired hashes and readiness records for idempotency.
 Every apply writes `<runs-dir>/current.json` atomically. The
 ledger records the run ID, target, scope, selected concurrency limits, task
 IDs, task dependencies, task statuses, timestamps, and per-task
@@ -1426,8 +1427,8 @@ Per-cluster install state is stored under
 `<clusters-dir>/<cluster>/runtime/install-record.json`; it records the desired
 input fingerprint, install status, last safe phase, run ID, timestamps, and
 node boot markers, but not secret bytes.
-Per-extension state is stored under
-`<clusters-dir>/<cluster>/runtime/extensions/<extension>.json`; it records the
+Per-add-on state is stored under
+`<clusters-dir>/<cluster>/runtime/addons/<addon>.json`; it records the
 desired hash, status, phase, run ID, timestamps, observed resources, and last
 observed readiness state, but not kubeconfig or secret bytes.
 Storage task inputs are rendered under each task artifact directory and the

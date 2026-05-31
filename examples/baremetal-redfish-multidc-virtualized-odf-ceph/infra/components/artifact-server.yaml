@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: artifact-server
+spec:
+  artifactServer:
+    bindAddress: 0.0.0.0 # default
+    hostRef:
+      name: bastion
+    listeners:
+      - name: https
+        protocol: https
+        port: 8443 # default
+    endpoints:
+      - name: bmc
+        listener: https
+        hostAddress: lab-lan
+      - name: cluster
+        listener: https
+        hostAddress: lab-lan
+

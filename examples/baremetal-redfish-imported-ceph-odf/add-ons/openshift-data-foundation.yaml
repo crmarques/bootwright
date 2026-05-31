@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: openshift-data-foundation
+spec:
+  type: olm-operator
+
+  provides:
+    - data-foundation
+
+  olm:
+    namespace:
+      name: openshift-storage
+      create: true
+    operatorGroup:
+      name: openshift-storage
+      targetNamespaces:
+        - openshift-storage
+    subscription:
+      name: odf-operator
+      package: odf-operator
+      channel: stable-4.21
+      source: redhat-operators
+
+  readiness:
+    checks:
+      - type: csvSucceeded
+        namespace: openshift-storage
+        subscription: odf-operator
+

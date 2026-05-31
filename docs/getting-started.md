@@ -50,24 +50,26 @@ ls -l ./my-sno-lab
 Canonical input examples live under
 [`examples/`](https://github.com/crmarques/bootwright/tree/main/examples).
 Use `sno-libvirt-redfish` for the smallest single-node lab with emulated
-Redfish BMCs. Use `libvirt-redfish-fleet` for a compact three-node lab,
-`baremetal-redfish` for real bare-metal hosts with Redfish virtual media, or
-`baremetal-redfish-fleet` for a two-cluster bare-metal input layout.
-`baremetal-redfish-postinstall` adds declarative OpenShift Virtualization
-bootstrap resources. `baremetal-redfish-virtualized-child` adds a KubeVirt
-child OpenShift cluster hosted on that parent virtualization layer.
+Redfish BMCs. Use `sno-baremetal-redfish` for real bare-metal hosts with
+Redfish virtual media, or `baremetal-redfish-fleet` for a two-cluster
+bare-metal input layout. `baremetal-redfish-addons` adds declarative
+OpenShift Virtualization bootstrap resources.
+`baremetal-redfish-multidc-virtualized-odf-ceph` is the full reference layout
+with two parent clusters, two KubeVirt child clusters, and stretched Ceph with
+Data Foundation.
 
 The copied directory contains desired-state files for the relevant kinds:
 
 ```text
-environment.yaml                  Environment
-shared/hosts.yaml                        Host
-shared/provider.yaml                     InfraProvider
-shared/infra-component.yaml              InfraComponent shared infra services
-shared/networks.yaml                     NetworkConfig
-clusters/<cluster>/cluster-infra.yaml    ClusterInfra
-clusters/<cluster>/container-cluster.yaml ContainerCluster
-extensions/cluster-extension-*.yaml      optional ClusterExtension resources
+environment.yaml                         Environment
+host.yaml or infra/hosts/*.yaml          Host
+provider.yaml or infra/providers/*.yaml  InfraProvider
+infra-component.yaml or infra/components/*.yaml
+networkconfig.yaml or infra/networkconfigs/*.yaml
+cluster-infra.yaml or clusters/container/<cluster>/cluster-infra.yaml
+cluster.yaml or clusters/container/<cluster>/cluster.yaml
+add-ons/*.yaml                           optional ClusterAddon resources
+clusters/storage/<cluster>/*.yaml        optional storage resources
 ```
 
 Edit these first:
@@ -188,37 +190,36 @@ bootwright apply bastion --yes
 bootwright check infra
 bootwright apply infra --dry-run
 bootwright apply infra --yes
-bootwright apply storage --dry-run
-bootwright apply storage --yes
+bootwright apply storage-cluster --dry-run
+bootwright apply storage-cluster --yes
 bootwright check cluster
 bootwright apply cluster --dry-run
 bootwright apply cluster --yes
-bootwright check extensions
-bootwright apply extensions --dry-run
-bootwright apply extensions --yes
+bootwright check addons
+bootwright apply addons --dry-run
+bootwright apply addons --yes
 bootwright status
 ```
 
 `apply bastion` installs bastion-host prerequisites. `apply infra`
 converges provider hosts, substrate state, and managed infra components.
-`apply storage` provisions external storage clusters such as Ceph from
+`apply storage-cluster` provisions external storage clusters such as Ceph from
 preinstalled storage nodes.
-`apply cluster` creates the agent ISO, boots every declared node, and waits for
-`openshift-install agent wait-for install-complete`, then applies bound
-post-install extensions.
-`apply extensions` uses the installed cluster kubeconfig and `oc apply` for
-post-install bootstrap components declared as `ClusterExtension` resources.
+`apply cluster` provisions selected container and storage clusters, then applies
+bound post-install add-ons.
+`apply addons` uses the installed cluster kubeconfig and `oc apply` for
+post-install bootstrap components declared as `ClusterAddon` resources.
 `apply all` includes infrastructure and storage before the same cluster and
-extension phases. Storage bindings wait for both the storage task and a bound
-extension with `provides: [data-foundation]`.
+add-on phases. Storage bindings wait for both the storage task and a bound
+add-on with `provides: [data-foundation]`.
 For KubeVirt child clusters, `apply all` also waits for the parent cluster
-install and its `provides: [kubevirt]` extension before creating child VM
+install and its `provides: [kubevirt]` add-on before creating child VM
 infrastructure. `apply infra --scope <child>` requires that parent cluster to
 already be installed and KubeVirt-ready; scoped child applies do not install the
 parent implicitly.
 Running `apply cluster --yes` again skips cluster install tasks when the prior
 install record, rendered desired-input fingerprint, and kubeconfig availability
-probe all match, then applies extensions idempotently. If an interrupted apply
+probe all match, then applies add-ons idempotently. If an interrupted apply
 already booted nodes, the next apply resumes at the install wait phase instead
 of recreating the ISO or rebooting machines.
 
@@ -237,16 +238,16 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
-| `bootwright cluster access --output json` | Supported | Read-only cluster access inventory |
+| `bootwright container-cluster access --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply storage --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply storage-cluster --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply cluster --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply extensions --dry-run --output json` | Supported | Dry-run extension apply plan |
+| `bootwright apply addons --dry-run --output json` | Supported | Dry-run add-on apply plan |
 | `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |
-| `bootwright destroy cluster --dry-run --output json` | Supported | Dry-run destroy plan |
+| `bootwright destroy container-cluster --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
 | `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
 
@@ -294,7 +295,7 @@ them:
 bootwright destroy infra --scope artifact-server --yes
 ```
 
-This does not destroy cluster nodes or the rest of the infrastructure.
+This does not destroy container-cluster nodes or the rest of the infrastructure.
 
 ## Output Boundaries
 

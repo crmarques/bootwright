@@ -6,12 +6,12 @@ import (
 	"io"
 	"time"
 
-	extensionoc "github.com/crmarques/bootwright/internal/extensions/oc"
+	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
 )
 
 func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
 	if task.Extension == nil {
-		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("extension task %s has no extension plan", task.Entry.ID)}
+		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("addon task %s has no addon plan", task.Entry.ID)}
 	}
 	kubeconfig := clusterKubeconfigPath(opts.ClustersDir, task.Entry.Cluster)
 	runner := extensionoc.CommandRunner{
@@ -29,12 +29,12 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	var result extensionoc.TaskResult
 	var err error
 	switch task.Entry.Kind {
-	case ApplyTaskKindClusterExtensionApply:
+	case ApplyTaskKindClusterAddonApply:
 		result, err = extensionoc.Apply(ctx, runner, cfg, *task.Extension)
-	case ApplyTaskKindClusterExtensionWait:
+	case ApplyTaskKindClusterAddonWait:
 		result, err = extensionoc.Wait(ctx, runner, cfg, *task.Extension)
 	default:
-		err = fmt.Errorf("unsupported extension task kind %s", task.Entry.Kind)
+		err = fmt.Errorf("unsupported addon task kind %s", task.Entry.Kind)
 	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, skippedReason: result.Reason, err: err}
 }

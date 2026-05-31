@@ -1,0 +1,91 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: sno-libvirt-redfish-disconnected-services
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    openshift-pull-secret: null
+    cluster-admin-ssh-key:
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
+    provider-host-ssh:
+      file: ~/.ssh/bootwright-ssh-key
+    bmc-credentials:
+      generated:
+        credentials:
+          username: admin
+    proxy-credentials:
+      generated:
+        credentials:
+          username: proxy
+    mirror-registry-credentials:
+      generated:
+        credentials:
+          username: mirror
+    mirror-registry-ca:
+      generated:
+        selfSignedCertificate:
+          commonName: mirror.bootwright.test
+          dnsNames:
+            - mirror.bootwright.test
+
+  installTrust:
+    caBundleRefs:
+      - name: mirror-registry-ca
+
+  registries:
+    mirror:
+      credentialsRef:
+        name: mirror-registry-credentials
+      trustBundleRef:
+        name: mirror-registry-ca
+
+  infraComponents:
+    ntpSources:
+      - 192.168.132.1
+      - time.bootwright.test
+    artifactServers:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: artifact-server
+        routes:
+          containerClusterInstall:
+            endpoint: cluster
+    proxies:
+      - name: default
+        default: true
+        type: external
+        connection:
+          httpProxy: http://proxy.bootwright.test:3128
+          httpsProxy: http://proxy.bootwright.test:3128
+          noProxy:
+            - .bootwright.test
+            - 192.168.132.0/24
+          auth:
+            proxyAuthRef:
+              name: proxy-credentials
+    nameResolution:
+      - name: default
+        default: true
+        type: external
+        ip: 192.168.132.1
+        additionalIngressHosts:
+          - console-openshift-console.apps.sno-disconnected.bootwright.test
+          - oauth-openshift.apps.sno-disconnected.bootwright.test
+    registries:
+      - name: default
+        default: true
+        type: managed
+        componentRef:
+          name: mirror-registry
+
+  proxyFor:
+    bootwright: default
+    containerClusterInstall: default
+

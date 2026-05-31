@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Host
+metadata:
+  name: bastion
+spec:
+  addresses:
+    - name: ssh
+      address: bastion.bootwright.test
+    - name: lab-lan
+      address: 192.168.141.5
+
+  ssh:
+    addressName: ssh
+    keyRef:
+      name: provider-host-ssh
+
+  capabilities:
+    - container-runtime
+

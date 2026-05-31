@@ -22,8 +22,10 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		newCheckSyntaxCmd(stdout),
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
 		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
-		retargetCommand(newScopeCheckCmd(clusterScope, stdout, stderr), "cluster", "Check cluster install prerequisites"),
-		retargetCommand(newExtensionsCheckCmd(stdout), "extensions", "Check post-install cluster extension prerequisites"),
+		retargetCommand(newScopeCheckCmd(clusterScope, stdout, stderr), "cluster", "Check container and storage cluster prerequisites"),
+		retargetCommand(newScopeCheckCmd(containerClusterScope, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
+		retargetCommand(newScopeCheckCmd(storageClusterScope, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
+		retargetCommand(newAddonsCheckCmd(stdout), "addons", "Check post-install cluster addon prerequisites"),
 		newCheckAllCmd(stdout, stderr),
 	)
 	requireSubcommand(cmd)
@@ -39,10 +41,11 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 	cmd.AddCommand(
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
-		retargetCommand(newScopeApplyCmd(storageScope, stdin, stdout, stderr), "storage", "Provision external storage clusters"),
-		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Install OpenShift clusters and apply extensions"),
-		retargetCommand(newScopeApplyCmd(extensionsScope, stdin, stdout, stderr), "extensions", "Apply post-install cluster extensions"),
-		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, storage, OpenShift clusters, and extensions"),
+		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Provision container and storage clusters and apply addons"),
+		retargetCommand(newScopeApplyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Install OpenShift clusters and apply addons"),
+		retargetCommand(newScopeApplyCmd(storageClusterScope, stdin, stdout, stderr), "storage-cluster", "Provision external storage clusters"),
+		retargetCommand(newScopeApplyCmd(addonsScope, stdin, stdout, stderr), "addons", "Apply post-install cluster addons"),
+		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, storage, OpenShift clusters, and addons"),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)
@@ -104,7 +107,7 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 	}
 	cmd.AddCommand(
 		retargetCommand(newScopeDestroyCmd(infraScope, stdin, stdout, stderr), "infra", "Tear down infrastructure hosts and substrate"),
-		retargetCommand(newScopeDestroyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Tear down OpenShift cluster install state"),
+		retargetCommand(newScopeDestroyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Tear down OpenShift cluster install state"),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)

@@ -86,6 +86,7 @@ type TaskLedgerEntry struct {
 	Kind           string     `json:"kind"`
 	Label          string     `json:"label"`
 	Cluster        string     `json:"cluster,omitempty"`
+	ClusterKind    string     `json:"clusterKind,omitempty"`
 	Node           string     `json:"node,omitempty"`
 	Host           string     `json:"host,omitempty"`
 	ResourceKeys   []string   `json:"resourceKeys,omitempty"`

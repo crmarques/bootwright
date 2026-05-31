@@ -14,6 +14,7 @@ type EnvironmentSpec struct {
 	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
+	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	SecretStorage     EnvironmentSecretStorageSpec             `yaml:"secretStorage,omitempty" json:"secretStorage,omitempty"`
 	ProxyFor          EnvironmentProxyForSpec                  `yaml:"proxyFor,omitempty" json:"proxyFor,omitempty"`
@@ -34,8 +35,8 @@ type EnvironmentInstallDefaultsSpec struct {
 }
 
 type EnvironmentProxyForSpec struct {
-	Bootwright     string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
-	ClusterInstall string `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
+	Bootwright              string `yaml:"bootwright,omitempty" json:"bootwright,omitempty"`
+	ContainerClusterInstall string `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
 }
 
 type EnvironmentSecretStorageSpec struct {
@@ -51,8 +52,8 @@ type EnvironmentInfraComponentsSpec struct {
 }
 
 type EnvironmentArtifactRoutes struct {
-	RedfishVirtualMedia EnvironmentArtifactRoute `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
-	ClusterInstall      EnvironmentArtifactRoute `yaml:"clusterInstall,omitempty" json:"clusterInstall,omitempty"`
+	RedfishVirtualMedia     EnvironmentArtifactRoute `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	ContainerClusterInstall EnvironmentArtifactRoute `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
 }
 
 type EnvironmentArtifactRoute struct {

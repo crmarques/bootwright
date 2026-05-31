@@ -1,0 +1,51 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: dc2-metal-ocp
+spec:
+  distribution:
+    type: openshift # default
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent # default
+    mode: connected # default
+    pullSecretRef:
+      name: openshift-pull-secret # inherited from Environment.defaults.install
+    nodeSSH:
+      keyPairRef:
+        name: cluster-admin-ssh-key # inherited from Environment.defaults.install
+
+  controlPlane:
+    name: master
+    replicas: 3
+
+  compute:
+    - name: worker
+      replicas: 0
+
+  networking:
+    networkType: OVNKubernetes
+    clusterNetwork:
+      - cidr: 10.132.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.31.0.0/16
+
+  nodes:
+    - hostname: master-0
+      role: master
+      machineRef:
+        clusterInfra: dc2-metal-ocp-infra
+        name: master-0
+    - hostname: master-1
+      role: master
+      machineRef:
+        clusterInfra: dc2-metal-ocp-infra
+        name: master-1
+    - hostname: master-2
+      role: master
+      machineRef:
+        clusterInfra: dc2-metal-ocp-infra
+        name: master-2

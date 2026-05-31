@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: dc1-metal-ocp-addons
+spec:
+  containerClusterSelector:
+    names:
+      - dc1-metal-ocp
+
+  applyAfter:
+    phase: containerClusterInstalled
+
+  addons:
+    - name: openshift-virtualization
+    - name: openshift-data-foundation
+    - name: child-network
+
+  policy:
+    prune: false # default
+    serverSideApply: true # default
+    fieldManager: bootwright # default
+    continueOnError: false # default

@@ -104,8 +104,8 @@ func cliStateWithSharedDNS() v1alpha1.State {
 func cliStateWithAllSharedProviderServices() v1alpha1.State {
 	state := cliStateWithSharedDNS()
 	state.Environments[0].Spec.ProxyFor = v1alpha1.EnvironmentProxyForSpec{
-		Bootwright:     "default",
-		ClusterInstall: "default",
+		Bootwright:              "default",
+		ContainerClusterInstall: "default",
 	}
 	state.Environments[0].Spec.InfraComponents.Proxies = []v1alpha1.EnvironmentProxyComponent{{
 		Name:         "default",
@@ -117,7 +117,7 @@ func cliStateWithAllSharedProviderServices() v1alpha1.State {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 		Routes: v1alpha1.EnvironmentArtifactRoutes{
-			ClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
+			ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
 		},
 	}}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{

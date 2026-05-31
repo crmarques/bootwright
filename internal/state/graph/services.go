@@ -341,7 +341,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 		return nil
 	}
 	entries := map[string]v1alpha1.EnvironmentProxyComponent{}
-	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ClusterInstall} {
+	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
 		for _, entry := range env.Spec.InfraComponents.Proxies {
 			if entry.Name == name && entry.Type == v1alpha1.EnvironmentComponentManaged {
 				entries[entry.ComponentRef.Name] = entry

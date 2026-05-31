@@ -1,0 +1,44 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: odf-rgw
+spec:
+  storageClusterRef:
+    name: ceph-storage
+
+  publicEndpoint:
+    dnsName: rgw-ceph.bootwright.test
+    port: 443 # default
+    scheme: https # default
+
+  ceph:
+    serviceID: odf
+    placement:
+      hosts:
+        - ceph-dc1-0
+        - ceph-dc1-1
+        - ceph-dc1-2
+        - ceph-dc2-0
+        - ceph-dc2-1
+        - ceph-dc2-2
+      countPerHost: 1
+    frontendPort: 8080 # default
+    ingresses:
+      - name: dc1
+        virtualIP: 192.168.141.80/24
+        virtualInterfaceNetworks:
+          - 192.168.141.0/24
+        placement:
+          hosts:
+            - ceph-dc1-0
+            - ceph-dc1-1
+            - ceph-dc1-2
+      - name: dc2
+        virtualIP: 192.168.142.80/24
+        virtualInterfaceNetworks:
+          - 192.168.142.0/24
+        placement:
+          hosts:
+            - ceph-dc2-0
+            - ceph-dc2-1
+            - ceph-dc2-2

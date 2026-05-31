@@ -1,7 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionSet
-metadata:
-  name: virtualization-platform
-spec:
-  extensions:
-    - name: openshift-virtualization

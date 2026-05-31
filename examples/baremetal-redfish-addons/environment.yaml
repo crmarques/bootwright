@@ -1,0 +1,39 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: baremetal-redfish-addons
+spec:
+  baseDomain: bootwright.test
+
+  resources:
+    - infra
+    - clusters
+    - add-ons
+
+  secrets:
+    openshift-pull-secret: null
+    cluster-admin-ssh-key:
+      generated:
+        sshKeyPair:
+          type: ed25519
+          comment: bootwright-cluster-admin
+    provider-host-ssh:
+      file: ~/.ssh/bootwright-ssh-key
+    bmc-credentials:
+      generated:
+        credentials:
+          username: admin
+
+  infraComponents:
+    artifactServers:
+      - name: default
+        type: managed
+        default: true
+        componentRef:
+          name: artifact-server
+        routes:
+          redfishVirtualMedia:
+            endpoint: bmc
+          containerClusterInstall:
+            endpoint: cluster
+

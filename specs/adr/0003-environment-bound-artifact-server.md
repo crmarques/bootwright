@@ -35,7 +35,7 @@ Bind consumer audiences in
 
 - `redfishVirtualMedia.endpoint` selects the endpoint rendered into BMC ISO
   fetch URLs.
-- `clusterInstall.endpoint` selects the endpoint rendered into disconnected
+- `containerClusterInstall.endpoint` selects the endpoint rendered into disconnected
   `bootArtifactsBaseURL`.
 
 The renderer derives concrete publication consumers from install

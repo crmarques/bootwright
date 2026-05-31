@@ -1,0 +1,46 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: kubevirt-provider
+spec:
+  machineProfiles:
+    - name: dc1-child-master
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostContainerClusterRef:
+          name: dc1-metal-ocp
+        namespace: bootwright-dc1-child-ocp
+        storageClassRef:
+          name: ocs-storagecluster-ceph-rbd
+    - name: dc1-child-worker
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostContainerClusterRef:
+          name: dc1-metal-ocp
+        namespace: bootwright-dc1-child-ocp
+        storageClassRef:
+          name: ocs-storagecluster-ceph-rbd
+    - name: dc2-child-master
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostContainerClusterRef:
+          name: dc2-metal-ocp
+        namespace: bootwright-dc2-child-ocp
+        storageClassRef:
+          name: ocs-storagecluster-ceph-rbd
+    - name: dc2-child-worker
+      cpu: 8
+      memoryMiB: 16384
+      diskGiB: 120
+      kubevirt:
+        hostContainerClusterRef:
+          name: dc2-metal-ocp
+        namespace: bootwright-dc2-child-ocp
+        storageClassRef:
+          name: ocs-storagecluster-ceph-rbd

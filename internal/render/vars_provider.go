@@ -74,8 +74,8 @@ func machineProfileProvisionerVars(p v1alpha1.MachineProfileCapability) map[stri
 			"kind":      v1alpha1.ProvisionerKubeVirt,
 			"namespace": p.KubeVirt.Namespace,
 		}
-		if p.KubeVirt.HostClusterRef != nil {
-			out["hostClusterRef"] = p.KubeVirt.HostClusterRef.Name
+		if p.KubeVirt.HostContainerClusterRef != nil {
+			out["hostContainerClusterRef"] = p.KubeVirt.HostContainerClusterRef.Name
 		}
 		if p.KubeVirt.KubeconfigRef != nil {
 			out["kubeconfigRef"] = p.KubeVirt.KubeconfigRef.Name

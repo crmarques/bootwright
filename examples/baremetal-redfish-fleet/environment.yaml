@@ -1,23 +1,13 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: demo-baremetal-fleet
+  name: baremetal-redfish-fleet
 spec:
-  baseDomain: example.test
+  baseDomain: bootwright.test
 
   resources:
-    - shared/hosts.yaml
-    - shared/networks.yaml
-    - shared/provider.yaml
-    - shared/infra-component.yaml
-    - clusters/demo-ocp-a/cluster-infra.yaml
-    - clusters/demo-ocp-a/container-cluster.yaml
-    - clusters/demo-ocp-b/cluster-infra.yaml
-    - clusters/demo-ocp-b/container-cluster.yaml
-
-  containerClusters:
-    - demo-ocp-a
-    - demo-ocp-b
+    - infra
+    - clusters
 
   secrets:
     openshift-pull-secret: null
@@ -43,5 +33,5 @@ spec:
         routes:
           redfishVirtualMedia:
             endpoint: bmc
-          clusterInstall:
+          containerClusterInstall:
             endpoint: cluster

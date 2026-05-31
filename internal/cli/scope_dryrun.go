@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	extensionplan "github.com/crmarques/bootwright/internal/extensions/plan"
 )
 
 type scopeDryRunReport struct {
@@ -55,16 +55,16 @@ type scopeDryRunInstallerArtifact struct {
 }
 
 type scopeDryRunApply struct {
-	RunStatus  string                     `json:"runStatus"`
-	Limits     workflow.ConcurrencyLimits `json:"limits"`
-	Tasks      []workflow.TaskLedgerEntry `json:"tasks"`
-	Extensions []scopeDryRunExtensionPlan `json:"extensions,omitempty"`
+	RunStatus string                     `json:"runStatus"`
+	Limits    workflow.ConcurrencyLimits `json:"limits"`
+	Tasks     []workflow.TaskLedgerEntry `json:"tasks"`
+	Addons    []scopeDryRunAddonPlan     `json:"addons,omitempty"`
 }
 
-type scopeDryRunExtensionPlan struct {
+type scopeDryRunAddonPlan struct {
 	Cluster   string                          `json:"cluster"`
 	Binding   string                          `json:"binding"`
-	Extension string                          `json:"extension"`
+	Addon     string                          `json:"addon"`
 	Type      string                          `json:"type"`
 	Resources []extensionplan.ResourceSummary `json:"resources"`
 }
@@ -134,25 +134,25 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 	}
 	if action == "apply" {
 		report.ApplyPlan = &scopeDryRunApply{
-			RunStatus:  string(workflow.RunStatusRunning),
-			Limits:     limits,
-			Tasks:      workflow.TaskLedgerEntries(tasks),
-			Extensions: dryRunExtensionPlans(tasks),
+			RunStatus: string(workflow.RunStatusRunning),
+			Limits:    limits,
+			Tasks:     workflow.TaskLedgerEntries(tasks),
+			Addons:    dryRunExtensionPlans(tasks),
 		}
 	}
 	return output.JSON(stdout, report)
 }
 
-func dryRunExtensionPlans(tasks []workflow.ApplyTask) []scopeDryRunExtensionPlan {
-	var out []scopeDryRunExtensionPlan
+func dryRunExtensionPlans(tasks []workflow.ApplyTask) []scopeDryRunAddonPlan {
+	var out []scopeDryRunAddonPlan
 	for _, task := range tasks {
-		if task.Entry.Kind != workflow.ApplyTaskKindClusterExtensionApply || task.Extension == nil {
+		if task.Entry.Kind != workflow.ApplyTaskKindClusterAddonApply || task.Extension == nil {
 			continue
 		}
-		out = append(out, scopeDryRunExtensionPlan{
+		out = append(out, scopeDryRunAddonPlan{
 			Cluster:   task.Extension.Cluster,
 			Binding:   task.Extension.Binding,
-			Extension: task.Extension.Name,
+			Addon:     task.Extension.Name,
 			Type:      task.Extension.Extension.Spec.Type,
 			Resources: extensionplan.ResourceSummaries(task.Extension.Extension),
 		})

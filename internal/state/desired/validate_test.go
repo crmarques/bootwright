@@ -660,7 +660,7 @@ func TestEnvironmentProxyForNoneIsReservedDisableValue(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  proxyFor:
     bootwright: none
-    clusterInstall: none
+    containerClusterInstall: none
 
   infraComponents:
 `, 1)
@@ -1168,6 +1168,59 @@ func TestEnvironmentResourcesSupportSubdirectories(t *testing.T) {
 	}
 }
 
+func TestEnvironmentResourcesSupportDirectories(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"environment.yaml":            newEnvironmentYAMLWithResources("shared", "clusters/sno"),
+		"shared/hosts.yaml":           newHostsYAML,
+		"shared/network.yaml":         newNetworkConfigYAML,
+		"shared/provider.yaml":        newProviderYAML,
+		"shared/infra-component.yaml": newInfraComponentYAML,
+		"clusters/sno/cluster.yaml":   newClusterYAML,
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := len(state.ContainerClusters); got != 1 {
+		t.Fatalf("ContainerClusters = %d, want 1", got)
+	}
+}
+
+func TestEnvironmentStorageClusterSelectionOmitsContainerRoots(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  secrets:\n", "  storageClusters:\n    - imported-ceph\n\n  secrets:\n", 1)
+	files["storage.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: imported-ceph
+spec:
+  type: ceph
+  management: external
+`
+	writeFiles(t, dir, files)
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := len(state.StorageClusters); got != 1 {
+		t.Fatalf("StorageClusters = %d, want 1", got)
+	}
+	if got := len(state.ContainerClusters); got != 0 {
+		t.Fatalf("ContainerClusters = %d, want 0", got)
+	}
+}
+
 func TestEnvironmentResourcesIgnoreUnselectedInvalidFiles(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -1559,17 +1612,17 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 		{
 			name: "missing-parent",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "hostClusterRef:\n          name: missing", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostContainerClusterRef:\n          name: sno", "hostContainerClusterRef:\n          name: missing", 1)
 			},
-			wantSubstring: `kubevirt.hostClusterRef.name "missing" does not match any ContainerCluster`,
+			wantSubstring: `kubevirt.hostContainerClusterRef.name "missing" does not match any ContainerCluster`,
 		},
 		{
 			name: "both-host-and-kubeconfig",
 			mutate: func(files map[string]string) {
 				files["environment.yaml"] = addKubeVirtKubeconfigSecret(files["environment.yaml"])
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno\n        namespace:", "hostClusterRef:\n          name: sno\n        kubeconfigRef:\n          name: external-virt-cluster-kubeconfig\n        namespace:", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostContainerClusterRef:\n          name: sno\n        namespace:", "hostContainerClusterRef:\n          name: sno\n        kubeconfigRef:\n          name: external-virt-cluster-kubeconfig\n        namespace:", 1)
 			},
-			wantSubstring: "kubevirt must set exactly one of {hostClusterRef, kubeconfigRef}",
+			wantSubstring: "kubevirt must set exactly one of {hostContainerClusterRef, kubeconfigRef}",
 		},
 		{
 			name: "invalid-namespace",
@@ -1582,13 +1635,13 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			name: "kubeconfig-ref",
 			mutate: func(files map[string]string) {
 				files["environment.yaml"] = addKubeVirtKubeconfigSecret(files["environment.yaml"])
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostContainerClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
 			},
 		},
 		{
 			name: "unknown-kubeconfig-ref-secret",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "hostContainerClusterRef:\n          name: sno", "kubeconfigRef:\n          name: external-virt-cluster-kubeconfig", 1)
 			},
 			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not declared in Environment/env spec.secrets`,
 		},
@@ -1604,7 +1657,7 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["extension.yaml"] = strings.Replace(files["extension.yaml"], "  provides:\n    - kubevirt\n", "", 1)
 			},
-			wantSubstring: `requires a ClusterExtensionBinding that applies a ClusterExtension providing "kubevirt"`,
+			wantSubstring: `requires a ClusterAddonBinding that applies a ClusterAddon providing "kubevirt"`,
 		},
 	}
 	for _, tc := range tests {
@@ -1637,9 +1690,9 @@ func TestKubeVirtHostClusterDependencyCycleValidation(t *testing.T) {
 	writeFiles(t, dir, newKubeVirtCycleFiles())
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected KubeVirt hostClusterRef cycle error, got nil")
+		t.Fatal("expected KubeVirt hostContainerClusterRef cycle error, got nil")
 	}
-	if !strings.Contains(err.Error(), "KubeVirt hostClusterRef creates ContainerCluster dependency cycle") {
+	if !strings.Contains(err.Error(), "KubeVirt hostContainerClusterRef creates ContainerCluster dependency cycle") {
 		t.Fatalf("error %q does not mention dependency cycle", err)
 	}
 }
@@ -1666,7 +1719,7 @@ func newKubeVirtChildFiles() map[string]string {
 	files := newBaselineFiles()
 	files["extension.yaml"] = strings.Replace(extensionYAML("openshift-virtualization"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n", 1)
 	files["set.yaml"] = extensionSetYAML("virtualization-platform", "openshift-virtualization")
-	files["binding.yaml"] = extensionBindingYAML("parent-extensions", "virtualization-platform")
+	files["binding.yaml"] = extensionBindingYAML("parent-addons", "virtualization-platform")
 	files["child.yaml"] = `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata: { name: child-machine-net }
@@ -1693,7 +1746,7 @@ spec:
       memoryMiB: 16384
       diskGiB: 120
       kubevirt:
-        hostClusterRef:
+        hostContainerClusterRef:
           name: sno
         namespace: bootwright-child-ocp
         storageClassRef:
@@ -1777,7 +1830,7 @@ spec:
       memoryMiB: 8192
       diskGiB: 80
       kubevirt:
-        hostClusterRef:
+        hostContainerClusterRef:
           name: cluster-b
         namespace: ns-a
 `,
@@ -1791,7 +1844,7 @@ spec:
       memoryMiB: 8192
       diskGiB: 80
       kubevirt:
-        hostClusterRef:
+        hostContainerClusterRef:
           name: cluster-a
         namespace: ns-b
 `,
@@ -1800,7 +1853,7 @@ spec:
 		"cluster-a.yaml": kubeVirtCycleClusterYAML("cluster-a", "infra-a"),
 		"cluster-b.yaml": kubeVirtCycleClusterYAML("cluster-b", "infra-b"),
 		"extension.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtension
+kind: ClusterAddon
 metadata: { name: openshift-virtualization }
 spec:
   type: manifest-set
@@ -1818,16 +1871,16 @@ spec:
         namespace: openshift-cnv
 `,
 		"binding.yaml": `apiVersion: bootwright.io/v1alpha1
-kind: ClusterExtensionBinding
+kind: ClusterAddonBinding
 metadata: { name: virt }
 spec:
-  clusterSelector:
+  containerClusterSelector:
     names:
       - cluster-a
       - cluster-b
   applyAfter:
-    phase: clusterInstalled
-  extensions:
+    phase: containerClusterInstalled
+  addons:
     - name: openshift-virtualization
 `,
 		"manifests/placeholder.yaml": `apiVersion: v1
