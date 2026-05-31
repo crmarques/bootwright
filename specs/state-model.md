@@ -354,8 +354,8 @@ Rules:
 
 The first storage implementation provisions external Ceph with `cephadm`.
 Storage nodes are modeled as machines in a storage-only `ClusterInfra`, not as
-`Host` objects. They are assumed to already run RHEL and be reachable from the
-bastion over SSH.
+`Host` objects. They are assumed to already run RHEL and be reachable by the
+Ansible storage layer from the bastion over SSH.
 
 `StorageCluster.spec.management` defaults to `managed`. `external` declares a
 previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
@@ -429,9 +429,9 @@ Rules:
 - `StorageCluster.spec.management: external` disables Bootwright-managed Ceph
   provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
   and `StorageObjectGateway` are not declared for imported Ceph.
-- `nodeSSH` is the bastion-to-node SSH identity Bootwright uses to reach
-  preinstalled RHEL nodes. `clusterSSH` is the SSH identity passed to cephadm
-  for ongoing cluster orchestration.
+- `nodeSSH` is the bastion-to-node SSH identity rendered into the Ansible
+  seed-host inventory. `clusterSSH` is the SSH identity copied to the seed host
+  and passed to cephadm for ongoing cluster orchestration.
 - A storage-only `ClusterInfra` can omit OpenShift API, API-int, and ingress
   endpoints. Explicit bare-metal BMC fields are required only for
   `ContainerCluster` boot targets, not for storage-only preinstalled nodes.
@@ -1355,9 +1355,9 @@ Operators can tune task scheduling with `--parallelism`,
 `--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
 flags means Bootwright uses the maximum safe automatic value. Explicit limits
 only reduce automatic concurrency; provider-host and Redfish safety locks still
-apply. `apply addons` and `apply storage-cluster` use direct local executors and
-must not expose Ansible executable, become-password, provider-host, or Redfish
-flags.
+apply. `apply addons` uses direct local executors. `apply storage-cluster`
+uses the normal Ansible runner internally for storage tasks, but must not expose
+generic Ansible executable, become-password, provider-host, or Redfish flags.
 `apply <target> --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not
 mutate provider hosts, nodes, or clusters; operators must run
@@ -1368,15 +1368,18 @@ cluster.
 `apply all` is the primary happy path after `apply bastion`, `check all`, and
 `apply all --dry-run`. Phase commands remain available for advanced operations
 and recovery.
-`apply storage-cluster` renders the storage input set, SSHes from the bastion to the
-Ceph seed node, runs cephadm bootstrap on that node, applies cephadm services,
-and executes the rendered Ceph operations. `apply clusters` converges selected
-cluster infrastructure, managed storage clusters, OpenShift or OKD cluster
-installs, bound add-ons, and declared integrations. Independent storage and
-container cluster work may start in parallel; add-ons start after their target
-cluster install wait; storage binding tasks start after the target install
-wait, the matching storage provisioning task when selected, and the add-on wait
-task that provides `data-foundation`. Virtualized child clusters that use a
+`apply storage-cluster` renders the storage input set and runs an Ansible
+storage task against the synthetic Ceph seed host. The storage role SSHes from
+the bastion to the seed node, runs cephadm bootstrap on that node, applies
+cephadm services, executes the rendered Ceph operations, and writes only a
+temporary credential result for Go to save as the final Data Foundation
+external-cluster details record. `apply clusters` converges selected cluster
+infrastructure, managed storage clusters, OpenShift or OKD cluster installs,
+bound add-ons, and declared integrations. Independent storage and container
+cluster work may start in parallel; add-ons start after their target cluster
+install wait; storage binding tasks start after the target install wait, the
+matching storage provisioning task when selected, and the add-on wait task that
+provides `data-foundation`. Virtualized child clusters that use a
 Bootwright-managed host cluster wait for the parent install and its
 `provides: [kubevirt]` add-on before provisioning child infrastructure.
 `apply container-cluster` is the focused OpenShift install and add-on recovery

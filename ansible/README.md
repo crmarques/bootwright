@@ -16,6 +16,7 @@ state.
 | `roles/providers/` | Provider-scoped shared services. |
 | `roles/cluster_infra/` | Per-cluster substrate and network state. |
 | `roles/openshift/` | Agent installer execution, boot, wait, and destroy. |
+| `roles/storage/` | Remote storage host mutation and Ceph command execution. |
 
 ## Role Rules
 

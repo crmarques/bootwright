@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	storageapply "github.com/crmarques/bootwright/internal/storage"
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 	applyCreateISOPlaybook    = "playbooks/layers/openshift/create-agent-iso.yml"
 	applyBootMachinePlaybook  = "playbooks/layers/openshift/boot-agent-machine.yml"
 	applyWaitInstallPlaybook  = "playbooks/layers/openshift/wait-agent-install.yml"
+	applyStoragePlaybook      = "playbooks/layers/storage/apply.yml"
 )
 
 type ApplyTarget struct {
@@ -143,7 +145,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Dependencies: append([]string(nil), providerTaskIDs...),
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
-				State: storageTaskState(state, cluster.Metadata.Name),
+				Playbook:      applyStoragePlaybook,
+				Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
+				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
+				State:         storageTaskState(state, cluster.Metadata.Name),
 			})
 		}
 	}
@@ -644,9 +649,6 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	if task.Entry.Kind == ApplyTaskKindClusterAddonApply || task.Entry.Kind == ApplyTaskKindClusterAddonWait {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
-	if task.Entry.Kind == ApplyTaskKindStorageCluster {
-		return runOneStorageTask(ctx, stdout, stderr, runsDir, runID, opts, task)
-	}
 	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
 		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
@@ -681,6 +683,16 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+	}
+	if task.Entry.Kind == ApplyTaskKindStorageCluster && !result.Skipped {
+		if err := storageapply.PersistCephApplyResult(storageapply.CephApplyResultOptions{
+			State:              task.State,
+			ClustersDir:        opts.ClustersDir,
+			StorageClusterName: strings.TrimPrefix(task.Entry.ID, "storage."),
+			ResultPath:         filepath.Join(taskOpts.ArtifactsRoot, "storage-result.json"),
+		}); err != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+		}
 	}
 	if !result.Skipped {
 		if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, opts.SecretsDir, runID, task, now); recordErr != nil {

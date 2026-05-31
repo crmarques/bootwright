@@ -34,6 +34,7 @@ var RoleRelPaths = []string{
 	filepath.Join("roles", "providers"),
 	filepath.Join("roles", "cluster_infra"),
 	filepath.Join("roles", "openshift"),
+	filepath.Join("roles", "storage"),
 }
 
 func RolesPath(bundleDir string) string {

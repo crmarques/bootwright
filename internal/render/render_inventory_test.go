@@ -40,6 +40,7 @@ func TestInventoryStructure(t *testing.T) {
 		"bootwright_controller_hosts",
 		"bootwright_ocp_hosts",
 		"bootwright_agent_node_hosts",
+		"bootwright_storage_hosts",
 	} {
 		if _, ok := children[group].(map[string]any); !ok {
 			t.Fatalf("inventory missing required group %q (found groups: %v)", group, mapKeys(children))
@@ -374,5 +375,36 @@ func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	}
 	if got := counts[render.GroupBootHosts]; got == 0 {
 		t.Errorf("%s: want >0 for Redfish boot delegation, got 0", render.GroupBootHosts)
+	}
+}
+
+func TestStorageInventoryUsesManagedCephSeedHost(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	secretsDir := "/context/secrets"
+	inv := render.Inventory(state, secretsDir)
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	seedName := render.StorageSeedHostName("ceph-storage")
+	seed := hosts[seedName].(map[string]any)
+	if got := seed["ansible_host"]; got != "192.168.141.30" {
+		t.Fatalf("storage seed ansible_host = %v, want 192.168.141.30", got)
+	}
+	if got := seed["ansible_user"]; got != "root" {
+		t.Fatalf("storage seed ansible_user = %v, want root", got)
+	}
+	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
+		t.Fatalf("storage seed key = %v", got)
+	}
+	children := all["children"].(map[string]any)
+	groupHosts := children[render.GroupStorageHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := groupHosts[seedName]; !ok {
+		t.Fatalf("%s hosts = %v, want %s", render.GroupStorageHosts, groupHosts, seedName)
+	}
+	counts := render.HostGroupCounts(state)
+	if got := counts[render.GroupStorageHosts]; got != 1 {
+		t.Fatalf("%s count = %d, want 1", render.GroupStorageHosts, got)
 	}
 }

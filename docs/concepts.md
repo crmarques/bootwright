@@ -74,9 +74,10 @@ Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
 
 Storage actions also run from the bastion. For managed storage, Bootwright
-SSHes to preinstalled RHEL Ceph nodes, runs cephadm on the seed node, and
-applies generated Ceph operations from the rendered storage tree. For imported
-storage, `StorageCluster.spec.management: external` skips storage
+schedules an Ansible storage task that SSHes to the preinstalled RHEL Ceph seed
+node, runs cephadm there, and applies generated Ceph operations from the
+rendered storage tree. For imported storage,
+`StorageCluster.spec.management: external` skips storage
 provisioning; `ClusterAddonBinding.storage[].dataFoundation.externalDetailsRef`
 points at the operator-provided external-cluster details secret. The
 attachment applies later in the add-ons phase after the target cluster and Data

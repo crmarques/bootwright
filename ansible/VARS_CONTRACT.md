@@ -13,6 +13,7 @@ authors.
 | `bootwright_providers` | provider capability inventory |
 | `bootwright_infra_components` | host-bound infra services such as artifact servers |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
+| `bootwright_storage_clusters` | managed storage apply inputs, seed hosts, cephadm files, operation files, and attachment contexts |
 | `bootwright_provider_services` | host service instances with rendered role names |
 | `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
@@ -231,6 +232,46 @@ bootwright_provider_host_setups:
     applyRole: host_libvirt
 ```
 
+## Managed Storage Shape
+
+Managed storage playbooks consume one projected entry per
+`StorageCluster.spec.management: managed` Ceph cluster. Go owns validation,
+rendered file paths, scheduling, ledgers, and final Data Foundation attachment
+records. The storage role owns remote host mutation and `cephadm`, `ceph`, and
+`radosgw-admin` command execution.
+
+```yaml
+bootwright_storage_clusters:
+  - name: ceph-stretch
+    seedHost: storage__ceph-stretch
+    remoteWorkDir: /tmp/bootwright-storage-ceph-stretch
+    resultPath: "{{ bootwright_ansible_artifacts_dir }}/storage-result.json"
+    clusterNetworkCIDRs:
+      - 192.168.133.0/24
+    bootstrap:
+      seedNode: ceph-dc1-0
+      monIP: 192.168.133.30
+    ceph:
+      bootstrapSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/bootstrap-spec.yaml"
+      servicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/services.yaml"
+      operationsPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/ceph/operations.yaml"
+    clusterSSH:
+      user: root
+      privateKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh
+      publicKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh.pub
+    dataFoundationBindings:
+      - cluster: prod-3node
+        binding: prod-3node-addons
+        storage: ceph
+        export: ceph
+```
+
+The storage inventory also contains one synthetic seed host per managed storage
+cluster in `bootwright_storage_hosts`. The seed host renders
+`bootwright_storage_cluster_name`, `ansible_host`, `ansible_user`, and
+`ansible_ssh_private_key_file` from `nodeSSH`; omitted `nodeSSH.user` defaults
+to `root`.
+
 ## Projection Rule
 
 Roles consume already-projected blocks. They should not rediscover provider
@@ -251,9 +292,11 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | Fact | Shape |
 | --- | --- |
 | `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
+| `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage task |
 | `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_agent_node_machine_name` | ClusterInfra machine component name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_install_override` | Optional boolean from `bootwright apply cluster --override`; when true the install role ignores prior local kubeconfig availability |
+| `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 
 The OpenShift agent role uses those vars to create and publish one cluster ISO,
 boot all selected node pseudo-hosts through Ansible host fanout, and run the

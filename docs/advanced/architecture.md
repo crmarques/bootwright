@@ -55,7 +55,7 @@ available for advanced operations and recovery:
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.
 - `apply storage-cluster` provisions external storage clusters from rendered cephadm
-  and Ceph operation files.
+  and Ceph operation files through the Ansible storage layer.
 - `apply clusters` creates the agent ISO, boots each declared node as its own
   task, waits for `openshift-install agent wait-for install-complete`, and then
   applies bound add-ons and declared integrations.

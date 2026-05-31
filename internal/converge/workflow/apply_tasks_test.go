@@ -30,6 +30,43 @@ func (f *fakeClusterAvailabilityChecker) Available(_ context.Context, kubeconfig
 	return f.available, f.err
 }
 
+type storageResultRunner struct {
+	fakeRunner
+	t *testing.T
+}
+
+func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) error {
+	if err := r.fakeRunner.Run(ctx, spec); err != nil {
+		return err
+	}
+	resultPath := filepath.Join(spec.ArtifactsDir, "storage-result.json")
+	result := map[string]any{
+		"dataFoundation": map[string]render.DataFoundationExternalSecrets{
+			"demo": {
+				AdminSecret:          "admin-key",
+				FSID:                 "fsid-123",
+				MonSecret:            "mon-key",
+				HealthcheckerKey:     "healthchecker-key",
+				RBDNodeKey:           "rbd-node-key",
+				RBDProvisionerKey:    "rbd-provisioner-key",
+				CephFSNodeKey:        "cephfs-node-key",
+				CephFSProvisionerKey: "cephfs-provisioner-key",
+			},
+		},
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		r.t.Fatalf("marshal result: %v", err)
+	}
+	if err := os.MkdirAll(spec.ArtifactsDir, 0o700); err != nil {
+		r.t.Fatalf("mkdir storage artifacts: %v", err)
+	}
+	if err := os.WriteFile(resultPath, data, 0o600); err != nil {
+		r.t.Fatalf("write storage result: %v", err)
+	}
+	return nil
+}
+
 func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 	dir := t.TempDir()
 	state := minimalState()
@@ -562,6 +599,65 @@ func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.
 	}
 	if len(result.InstallerAssets) != 0 {
 		t.Fatalf("storage task rendered installer assets: %#v", result.InstallerAssets)
+	}
+}
+
+func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
+	state := storageAttachmentPlanningState()
+	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
+		RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
+		CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+	}
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("storage tasks got %d, want 1", len(tasks))
+	}
+	task := tasks[0]
+	if task.Playbook != "playbooks/layers/storage/apply.yml" {
+		t.Fatalf("storage playbook = %q", task.Playbook)
+	}
+	if task.Limit != render.StorageSeedHostName("ceph") {
+		t.Fatalf("storage limit = %q", task.Limit)
+	}
+	if !reflect.DeepEqual(task.ExtraVarPairs, []string{"bootwright_task_storage_cluster_name=ceph"}) {
+		t.Fatalf("storage extra vars = %v", task.ExtraVarPairs)
+	}
+
+	dir := t.TempDir()
+	runner := &storageResultRunner{t: t}
+	_, err = RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	if !runner.runCalled {
+		t.Fatal("storage task did not invoke Ansible runner")
+	}
+	if !strings.HasSuffix(runner.lastSpec.Playbook, "playbooks/layers/storage/apply.yml") {
+		t.Fatalf("storage playbook = %q", runner.lastSpec.Playbook)
+	}
+	if _, err := os.Stat(filepath.Join(runner.lastSpec.ArtifactsDir, "storage-result.json")); !os.IsNotExist(err) {
+		t.Fatalf("storage result was not removed, stat err=%v", err)
+	}
+	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(filepath.Join(dir, "clusters"), "demo", "ceph-binding", "ceph")
+	if err != nil || !found {
+		t.Fatalf("LoadDataFoundationAttachmentDetails found=%v err=%v", found, err)
+	}
+	if !strings.Contains(detailsJSON, "rbd-node-key") {
+		t.Fatalf("external details missing runtime result: %s", detailsJSON)
 	}
 }
 

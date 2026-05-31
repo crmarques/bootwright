@@ -84,8 +84,8 @@ cluster selected by `kubeconfigRef`. When the host is Bootwright-managed, the
 
 The first supported external storage topology is Ceph stretch mode with two
 data sites and one monitor-only tiebreaker site. Ceph nodes are preinstalled
-RHEL machines reached from the bastion over SSH; Bootwright does not install
-RHEL in this feature.
+RHEL machines reached by the Ansible storage layer from the bastion over SSH;
+Bootwright does not install RHEL in this feature.
 
 ## UX Principles
 

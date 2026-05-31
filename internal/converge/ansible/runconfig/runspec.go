@@ -60,6 +60,10 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve provider state dir: %w", err)
 	}
+	artifactsDirAbs, err := filepath.Abs(cfg.ArtifactsDir)
+	if err != nil {
+		return ansible.RunSpec{}, fmt.Errorf("resolve Ansible artifacts dir: %w", err)
+	}
 	pairs := []string{
 		"bootwright_rendered_dir=" + renderedDirAbs,
 		"bootwright_clusters_dir=" + clustersDirAbs,
@@ -67,6 +71,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		"bootwright_secrets_dir=" + secretsDirAbs,
 		"bootwright_managed_services_dir=" + managedServicesDirAbs,
 		"bootwright_provider_state_dir=" + providerStateDirAbs,
+		"bootwright_ansible_artifacts_dir=" + artifactsDirAbs,
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)
 	return ansible.RunSpec{
@@ -81,7 +86,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		Forks:              cfg.Forks,
 		ExtraVars:          cfg.VarsPath,
 		ExtraVarPairs:      pairs,
-		ArtifactsDir:       cfg.ArtifactsDir,
+		ArtifactsDir:       artifactsDirAbs,
 		OutputLogPath:      cfg.OutputLogPath,
 		Check:              cfg.Check,
 		AskBecomePass:      cfg.AskBecomePass,

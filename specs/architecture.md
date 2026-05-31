@@ -42,12 +42,14 @@ Post-install add-on apply is scheduled after that install wait when
 `apply clusters` or `apply all` is selected, and as standalone direct `oc`
 tasks when `apply addons` is selected for an already installed cluster.
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
-tool inputs under `storage/<storageCluster>/`, reaches preinstalled RHEL Ceph
-nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed node,
-applies cephadm service specs, then runs rendered Ceph operations. Imported
-storage clusters skip this storage task. Storage binding tasks run in the
-add-ons phase after the storage task when one exists and the Data
-Foundation-providing add-on readiness task.
+tool inputs under `storage/<storageCluster>/` and schedules an Ansible storage
+task against a synthetic seed host. The storage role reaches preinstalled RHEL
+Ceph nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed
+node, applies cephadm service specs, runs rendered Ceph operations, and writes
+a temporary credential result for Go to convert into final Data Foundation
+attachment records. Imported storage clusters skip this storage task. Storage
+binding tasks run in the add-ons phase after the storage task when one exists
+and the Data Foundation-providing add-on readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
 `apply all` adds graph edges from the child infrastructure task to both
 `wait.<host-cluster>` and the host add-on wait task that provides
@@ -111,10 +113,11 @@ These boundaries are reflected in rendering:
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.
 - Storage tool inputs render to cephadm host/service specs,
-  `ceph/operations.yaml`, and generated Data Foundation manifests for managed
-  storage. Imported storage renders only Data Foundation attachment manifests.
-  CephFS metadata and data pool roles are expressed by `StorageFilesystem`
-  because the renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
+  `ceph/operations.yaml`, the `bootwright_storage_clusters[]` Ansible
+  contract, and generated Data Foundation manifests for managed storage.
+  Imported storage renders only Data Foundation attachment manifests. CephFS
+  metadata and data pool roles are expressed by `StorageFilesystem` because the
+  renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
 - Extension apply plans are rendered from `ClusterAddonBinding` expansion,
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.

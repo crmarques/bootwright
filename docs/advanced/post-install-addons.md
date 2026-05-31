@@ -7,6 +7,9 @@ description: Declarative bootstrap components applied after cluster installation
 
 Post-install add-ons are for initial cluster bootstrap and early platform
 components. They are not a replacement for long-term day-2 GitOps management.
+Bootwright can install GitOps operators and apply initial Argo CD connection
+resources, but repository publication and ongoing reconciliation flows stay
+outside Bootwright scope.
 
 Bootwright keeps these components out of `ContainerCluster.spec.install`.
 Cluster provisioning remains the responsibility of `ContainerCluster`,

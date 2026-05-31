@@ -1,17 +1,9 @@
 package workflow
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"path/filepath"
-	"strings"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
-	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
-	storageapply "github.com/crmarques/bootwright/internal/storage"
 )
 
 type StorageAttachmentPlan struct {
@@ -78,46 +70,10 @@ func dataFoundationExtensionWaitDeps(state v1alpha1.State, cluster string) []str
 	return deps
 }
 
-func runOneStorageTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
-	taskLog, closeTaskLog, err := taskLogWriter(TaskLogPath(runsDir, runID, task.Entry.ID))
-	if err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
-	defer closeTaskLog()
-	stdout = io.MultiWriter(stdout, taskLog)
-	stderr = io.MultiWriter(stderr, taskLog)
-	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
-	renderDir := filepath.Join(taskRoot, "rendered")
-	result, err := render.All(renderDir, opts.ClustersDir, opts.SecretsDir, task.State)
-	if err != nil {
-		return applyTaskResult{id: task.Entry.ID, err: err}
-	}
-	asset := storageAssetFor(result.StorageAssets, strings.TrimPrefix(task.Entry.ID, "storage."))
-	if asset.StorageClusterName == "" {
-		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("storage asset for %s not rendered", task.Entry.ID)}
-	}
-	err = storageapply.ApplyCeph(ctx, stdout, stderr, nil, storageapply.ApplyOptions{
-		State:       task.State,
-		ClustersDir: opts.ClustersDir,
-		SecretsDir:  opts.SecretsDir,
-		Asset:       asset,
-	})
-	return applyTaskResult{id: task.Entry.ID, err: err}
-}
-
 func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	filtered := stategraph.FilterStateToStorageClusters(state, []string{name})
 	filtered.ContainerClusters = nil
 	return filtered
-}
-
-func storageAssetFor(assets []render.StorageAsset, name string) render.StorageAsset {
-	for _, asset := range assets {
-		if asset.StorageClusterName == name {
-			return asset
-		}
-	}
-	return render.StorageAsset{}
 }
 
 func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {

@@ -1441,6 +1441,82 @@ func TestProviderPlaybooksDispatchRenderedRoles(t *testing.T) {
 	}
 }
 
+func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/playbooks/layers/storage/apply.yml")
+	if len(plays) != 1 {
+		t.Fatalf("storage apply playbook has %d plays, want 1", len(plays))
+	}
+	if got := plays[0]["hosts"]; got != "bootwright_storage_hosts" {
+		t.Fatalf("storage apply play hosts = %v, want bootwright_storage_hosts", got)
+	}
+	tasks, ok := plays[0]["tasks"].([]any)
+	if !ok {
+		t.Fatalf("storage apply play has no tasks")
+	}
+	decoded := make([]map[string]any, 0, len(tasks))
+	for i, task := range tasks {
+		item, ok := task.(map[string]any)
+		if !ok {
+			t.Fatalf("storage apply task %d is not a map", i)
+		}
+		decoded = append(decoded, item)
+	}
+	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "cephadm")
+}
+
+func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
+	mainTasks := readAnsibleTasks(t, "ansible/roles/storage/cephadm/tasks/main.yml")
+	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")
+	for _, name := range []string{
+		"Copy cephadm cluster private SSH key",
+		"Copy cephadm cluster public SSH key",
+		"Capture base Data Foundation external-cluster secrets",
+		"Write captured storage result",
+	} {
+		task := block[findAnsibleTask(t, block, name)]
+		if got := task["no_log"]; got != true {
+			t.Fatalf("%s must be no_log, got %v", name, got)
+		}
+	}
+	write := block[findAnsibleTask(t, block, "Write captured storage result")]
+	copyTask, ok := write["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("Write captured storage result has no copy body")
+	}
+	if got := copyTask["dest"]; !strings.Contains(fmt.Sprint(got), "bootwright_selected_storage_cluster.resultPath") {
+		t.Fatalf("storage result must write to rendered resultPath, got %v", got)
+	}
+	if got := copyTask["mode"]; got != "0600" {
+		t.Fatalf("storage result mode = %v, want 0600", got)
+	}
+	if got := write["delegate_to"]; got != "localhost" {
+		t.Fatalf("storage result must be written locally, got delegate_to=%v", got)
+	}
+
+	always := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "always")
+	cleanup := always[findAnsibleTask(t, always, "Remove managed Ceph work directory")]
+	fileTask, ok := cleanup["ansible.builtin.file"].(map[string]any)
+	if !ok || fileTask["state"] != "absent" {
+		t.Fatalf("storage role must clean the remote work directory, got %v", cleanup)
+	}
+
+	operationTasks := readAnsibleTasks(t, "ansible/roles/storage/cephadm/tasks/operation.yml")
+	run := operationTasks[findAnsibleTask(t, operationTasks, "Run Ceph operation")]
+	command, ok := run["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("Run Ceph operation has no command body")
+	}
+	if got := command["argv"]; got != "{{ bootwright_ceph_op_command }}" {
+		t.Fatalf("Run Ceph operation must consume rendered argv, got %v", got)
+	}
+	if _, ok := run["changed_when"]; !ok {
+		t.Fatalf("Run Ceph operation must declare changed_when")
+	}
+	if _, ok := run["no_log"]; !ok {
+		t.Fatalf("Run Ceph operation must redact captured output")
+	}
+}
+
 func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 	for _, path := range []string{
 		"ansible/ansible.cfg",
@@ -1476,6 +1552,13 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 		}
 		if !strings.Contains(args, "StrictHostKeyChecking=accept-new") {
 			t.Fatalf("%s SSH common args must accept new host keys without accepting changed keys; got %q", path, args)
+		}
+		rolesPath, ok := ansibleCfgValue(cfg, "defaults", "roles_path")
+		if !ok {
+			t.Fatalf("%s must explicitly configure roles_path", path)
+		}
+		if !strings.Contains(rolesPath, "./roles/storage") {
+			t.Fatalf("%s roles_path must include storage roles, got %q", path, rolesPath)
 		}
 	}
 }

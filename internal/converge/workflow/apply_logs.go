@@ -109,14 +109,6 @@ func (w *lockedApplyWriter) Write(p []byte) (int, error) {
 	return w.w.Write(p)
 }
 
-func taskLogWriter(path string) (io.Writer, func() error, error) {
-	file, err := openApplyLogFile(path, "task log")
-	if err != nil {
-		return nil, nil, err
-	}
-	return &lockedApplyWriter{mu: &sync.Mutex{}, w: file}, file.Close, nil
-}
-
 func TaskLogPath(runsDir, runID, taskID string) string {
 	return filepath.Join(runsDir, "history", runID, "tasks", taskID, ansible.OutputLogName)
 }

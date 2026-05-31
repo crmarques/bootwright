@@ -62,6 +62,9 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	if setups := providerHostSetupsVars(state); len(setups) > 0 {
 		out["bootwright_provider_host_setups"] = setups
 	}
+	if storageClusters := storageClustersVars(state, secretsDir); len(storageClusters) > 0 {
+		out["bootwright_storage_clusters"] = storageClusters
+	}
 	if proxyVars := bootwrightProxyVars(state, env); len(proxyVars) > 0 {
 		out["bootwright_proxy"] = proxyVars
 	}

@@ -110,6 +110,44 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	}
 }
 
+func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := render.VarsWithSecretsDir(state, "/context/secrets")
+	clusters := vars["bootwright_storage_clusters"].([]any)
+	if len(clusters) != 1 {
+		t.Fatalf("bootwright_storage_clusters got %d, want 1", len(clusters))
+	}
+	cluster := clusters[0].(map[string]any)
+	if got := cluster["name"]; got != "ceph-storage" {
+		t.Fatalf("storage cluster name = %v", got)
+	}
+	if got := cluster["seedHost"]; got != render.StorageSeedHostName("ceph-storage") {
+		t.Fatalf("seedHost = %v", got)
+	}
+	bootstrap := cluster["bootstrap"].(map[string]any)
+	if got := bootstrap["monIP"]; got != "192.168.141.30" {
+		t.Fatalf("bootstrap monIP = %v", got)
+	}
+	ceph := cluster["ceph"].(map[string]any)
+	if got := ceph["bootstrapSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/bootstrap-spec.yaml" {
+		t.Fatalf("bootstrapSpecPath = %v", got)
+	}
+	clusterSSH := cluster["clusterSSH"].(map[string]any)
+	if got := clusterSSH["privateKeyPath"]; got != filepath.Join("/context/secrets", "cephadm-cluster-ssh") {
+		t.Fatalf("cluster ssh private key = %v", got)
+	}
+	if got := clusterSSH["publicKeyPath"]; got != filepath.Join("/context/secrets", "cephadm-cluster-ssh.pub") {
+		t.Fatalf("cluster ssh public key = %v", got)
+	}
+	bindings := cluster["dataFoundationBindings"].([]any)
+	if len(bindings) != 4 {
+		t.Fatalf("dataFoundationBindings got %d, want 4", len(bindings))
+	}
+}
+
 func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecret(t *testing.T) {
 	sourceDir := t.TempDir()
 	secretPath := filepath.Join(sourceDir, "shared-ceph-external-cluster-details.json")

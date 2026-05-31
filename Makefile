@@ -46,7 +46,7 @@ GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
 GO_TEST_PACKAGES ?= ./...
 GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race
-ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/cluster_infra:ansible/roles/openshift
+ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/cluster_infra:ansible/roles/openshift:ansible/roles/storage
 ANSIBLE_SYNTAX_FILTER_PLUGINS = $(STATE_DIR)/ansible-syntax/filter_plugins
 ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
@@ -57,6 +57,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 	ansible/playbooks/targets/infra/destroy-artifact-server.yml \
 	ansible/playbooks/targets/infra/destroy.yml \
 	ansible/playbooks/layers/openshift/create-agent-iso.yml \
+	ansible/playbooks/layers/storage/apply.yml \
 	ansible/playbooks/layers/openshift/boot-agent-machine.yml \
 	ansible/playbooks/layers/openshift/wait-agent-install.yml \
 	ansible/playbooks/targets/clusters/apply.yml \

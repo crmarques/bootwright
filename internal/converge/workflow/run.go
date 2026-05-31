@@ -132,7 +132,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	spec, err := runconfig.NewRunSpec(runconfig.RunSpecConfig{
 		Executable:         opts.Executable,
 		BundleDir:          opts.BundleDir,
-		RenderedDir:        opts.RenderedDir,
+		RenderedDir:        renderDir,
 		ClustersDir:        opts.ClustersDir,
 		RunsDir:            opts.RunsDir,
 		SecretsDir:         opts.SecretsDir,
