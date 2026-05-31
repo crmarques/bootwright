@@ -11,9 +11,6 @@ var Substrates = map[Provider]Substrate{
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
-      generated:
-        credentials:
-          username: admin
 `,
 		EnvArtifactServer: `  infraComponents:
     nameResolution:
@@ -63,9 +60,6 @@ spec:
         uri: qemu:///system
         bmcEmulationDefaults:
           enabled: true
-          protocol: redfish
-          port: 8000
-          vmediaPort: 8001
           auth:
             credentialRef:
               name: bmc-credentials
@@ -96,7 +90,6 @@ spec:
     hostRef:
       name: lab-host
     bindAddress: 192.168.130.1
-    port: 53
 `,
 		ClusterMachineFrom: `        from:
           provider: {{.ProviderID}}
@@ -132,9 +125,6 @@ spec:
 		EnvExtraSecrets: `    provider-host-ssh:
       file: ~/.ssh/id_rsa
     bmc-credentials:
-      generated:
-        credentials:
-          username: admin
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Host
@@ -181,7 +171,6 @@ spec:
           deviceName: /dev/sda
         bmc:
           address: redfish-virtualmedia+https://bmc-rack1-srv1.example.test/redfish/v1/Systems/1
-          protocol: redfish
           credentialsRef:
             name: bmc-credentials
           disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
@@ -194,10 +183,6 @@ spec:
   artifactServer:
     hostRef:
       name: services-host
-    listeners:
-      - name: https
-        protocol: https
-        port: 8443
     endpoints:
       - name: bmc
         listener: https

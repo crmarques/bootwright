@@ -84,13 +84,12 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright example init lab",
 		"bootwright check syntax -f ./lab-input",
 		"bootwright context init lab",
-		"bootwright context validate",
-		"bootwright check bastion",
+		"bootwright context update lab",
 		"bootwright apply bastion --yes",
-		"bootwright check infra",
-		"bootwright apply infra --dry-run",
-		"bootwright check cluster",
-		"bootwright apply cluster --dry-run",
+		"bootwright check all",
+		"bootwright render effective",
+		"bootwright apply all --dry-run",
+		"bootwright apply all --yes",
 		"bootwright status --watch",
 	} {
 		if !strings.Contains(stdout, want) {

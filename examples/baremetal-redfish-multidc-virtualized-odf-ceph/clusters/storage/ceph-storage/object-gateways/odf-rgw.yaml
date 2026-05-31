@@ -8,8 +8,6 @@ spec:
 
   publicEndpoint:
     dnsName: rgw-ceph.bootwright.test
-    port: 443 # default
-    scheme: https # default
 
   ceph:
     serviceID: odf
@@ -22,7 +20,6 @@ spec:
         - ceph-dc2-1
         - ceph-dc2-2
       countPerHost: 1
-    frontendPort: 8080 # default
     ingresses:
       - name: dc1
         virtualIP: 192.168.141.80/24

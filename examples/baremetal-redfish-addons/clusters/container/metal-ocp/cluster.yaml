@@ -4,21 +4,8 @@ metadata:
   name: metal-ocp
 spec:
   distribution:
-    type: openshift
     release:
       version: 4.21.15
-
-  install:
-    method: agent
-    mode: connected
-
-  controlPlane:
-    name: master
-    replicas: 1
-
-  compute:
-    - name: worker
-      replicas: 0
 
   networking:
     clusterNetwork:

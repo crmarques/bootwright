@@ -6,10 +6,6 @@ spec:
   artifactServer:
     hostRef:
       name: bastion
-    listeners:
-      - name: https
-        protocol: https
-        port: 8443
     endpoints:
       - name: bmc
         listener: https

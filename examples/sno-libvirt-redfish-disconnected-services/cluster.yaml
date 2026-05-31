@@ -4,21 +4,11 @@ metadata:
   name: sno-disconnected
 spec:
   distribution:
-    type: openshift
     release:
       version: 4.21.15
 
   install:
-    method: agent
     mode: disconnected
-
-  controlPlane:
-    name: master
-    replicas: 1
-
-  compute:
-    - name: worker
-      replicas: 0
 
   networking:
     clusterNetwork:

@@ -6,18 +6,14 @@ spec:
   baseDomain: bootwright.test
 
   secrets:
-    openshift-pull-secret: null
+    openshift-pull-secret:
     cluster-admin-ssh-key:
       generated:
         sshKeyPair:
-          type: ed25519
           comment: bootwright-cluster-admin
     provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
-      generated:
-        credentials:
-          username: admin
 
   infraComponents:
     artifactServers:

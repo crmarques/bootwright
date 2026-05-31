@@ -34,7 +34,7 @@ instead of compact inline maps.
 | `StorageExport` | Storage services prepared for downstream consumers |
 | `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
 | `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
-| `ClusterAddonBinding` | Cluster binding for add-ons, profiles, and optional storage exports |
+| `ClusterAddonBinding` | One cluster's post-install bootstrap set: add-ons, profiles, and optional storage exports |
 
 ## Reference Flow
 
@@ -112,10 +112,11 @@ deterministic: referenced `profiles` expand in declared order, then direct
 first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
 `clusterRef.name`; use multiple binding resources for multiple clusters.
 
-`bootwright apply cluster --yes` installs the selected clusters and then applies
-their bound post-install components. Use `bootwright apply addons --yes`
-when the clusters are already installed and only add-on convergence is
-needed, or `bootwright apply all --yes` to include infrastructure first.
+`bootwright apply all --yes` is the normal end-to-end path and includes
+infrastructure, storage, cluster install, and bound post-install components.
+Use `bootwright apply cluster --yes` or `bootwright apply addons --yes` for
+advanced recovery or maintenance when you intentionally want one slice of the
+graph.
 
 ## NMState Templates
 
@@ -145,7 +146,7 @@ for literal resolver IPs that are not modeled as Bootwright services.
 
 `ContainerCluster.spec.distribution` supports:
 
-- `type: openshift`, with exact OCP version, optional channel, or explicit
+- OpenShift by default, with exact OCP version, optional channel, or explicit
   release image
 - `type: okd`, preferably with an explicit OKD release image
 

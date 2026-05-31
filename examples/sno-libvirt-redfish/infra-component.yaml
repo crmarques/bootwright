@@ -8,7 +8,6 @@ spec:
     hostRef:
       name: lab-host
     bindAddress: 192.168.132.1
-    port: 53
     additionalIngressHosts:
       - console-openshift-console.apps.sno-libvirt.bootwright.test
       - oauth-openshift.apps.sno-libvirt.bootwright.test

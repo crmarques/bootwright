@@ -30,7 +30,7 @@ Operators author desired state as sixteen YAML kinds:
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
-| `ClusterAddonBinding` | Which installed cluster should receive add-ons and optional storage exports after install? |
+| `ClusterAddonBinding` | Which installed cluster should receive the post-install bootstrap set: add-ons, profiles, and optional storage exports? |
 
 Every fact has one owner. References flow from cluster intent to cluster
 infrastructure, then to providers, infra components, and hosts. Machine MACs

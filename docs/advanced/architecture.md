@@ -48,8 +48,9 @@ defaults. That keeps provider swaps and release changes explicit.
 
 ## Apply Workflow
 
-`apply bastion` prepares bastion-local tools on localhost. Provisioning apply
-targets run through the rendered Ansible bundle:
+`apply bastion` prepares bastion-local tools on localhost. `apply all` is the
+normal convergence target after `check all` and a dry run. Phase targets remain
+available for advanced operations and recovery:
 
 - `apply infra` converges provider hosts, substrate state, and managed infra
   components.
@@ -60,7 +61,7 @@ targets run through the rendered Ansible bundle:
   applies bound add-ons.
 - `apply addons` applies declarative post-install bootstrap components to
   already installed clusters with `oc`.
-- `apply all` runs infrastructure, storage, container-cluster, storage-cluster, and add-on phases in
+- `apply all` runs infrastructure, storage, cluster install, and add-ons in
   one target.
 
 Every apply writes a current run ledger under the context state directory.

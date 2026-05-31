@@ -14,7 +14,6 @@ spec:
         uri: qemu:///system
         bmcEmulationDefaults:
           enabled: true
-          protocol: redfish
           auth:
             credentialRef:
               name: bmc-credentials

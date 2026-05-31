@@ -73,6 +73,9 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
   # Render only one cluster's external tool input files
   bootwright render --output-dir ./rendered --scope managed-01 --sensitive
 
+  # Inspect normalized desired state with defaults applied
+  bootwright render effective
+
   # Render placeholder installer files into the context rendered-dir
   bootwright render installer`,
 	}
@@ -81,6 +84,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render with --output-dir")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
 	cmd.AddCommand(
+		newRenderEffectiveCmd(stdout, stderr),
 		newRenderClusterInstallFilesCmd(stdout, stderr),
 		newRenderStorageCmd(stdout, stderr),
 	)

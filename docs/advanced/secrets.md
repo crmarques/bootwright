@@ -25,22 +25,15 @@ secret.
 
 ```yaml
 spec:
-  secretStorage:
-    mode: context
-
   secrets:
     openshift-pull-secret:
     cluster-admin-ssh-key:
       generated:
         sshKeyPair:
-          type: ed25519
           comment: bootwright-cluster-admin
     provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
-      generated:
-        credentials:
-          username: admin
     proxy-credentials:
       generated:
         credentials:

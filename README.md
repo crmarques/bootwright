@@ -9,7 +9,7 @@ and OKD clusters from bare hardware or virtualized substrates. You describe the
 environment, providers, shared components, infrastructure, networks, clusters,
 storage clusters, and bootstrap add-ons with declarative YAML kinds. Bootwright validates
 that intent, renders the deterministic input files expected by installer and
-provider CLIs, and coordinates each phase idempotently.
+provider CLIs, and converges the workflow idempotently.
 
 **Supported distributions:** OpenShift and OKD.
 
@@ -23,28 +23,23 @@ The CLI covers the provisioning pipeline:
 bootwright example init lab --output ./lab-input
 bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
-bootwright context validate
+bootwright context update lab -f ./lab-input
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret materialize
-bootwright check syntax
-bootwright check bastion
 bootwright apply bastion --yes
-bootwright check infra
-bootwright apply infra --dry-run
-bootwright apply infra --yes
-bootwright check cluster
-bootwright apply cluster --dry-run
-bootwright apply cluster --yes
-bootwright check addons
-bootwright apply addons --dry-run
-bootwright apply addons --yes
+bootwright check all
+bootwright render effective
+bootwright apply all --dry-run
+bootwright apply all --yes
 bootwright status --watch
+bootwright container-cluster access
 ```
 
-`cluster` means both container and storage clusters. `apply cluster` provisions
-selected container and storage clusters and applies bound add-ons. Use
-`container-cluster` or `storage-cluster` commands when you need one family.
+`apply all` is the normal convergence path. Phase commands such as
+`apply infra`, `apply storage-cluster`, `apply cluster`, and `apply addons`
+remain available for advanced operations and recovery when you need one slice
+of the graph.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -132,7 +127,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
 | `StorageExport` | Exported storage surface prepared for downstream consumers such as Data Foundation external mode |
 | `ClusterAddon` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
-| `ClusterAddonBinding` | A binding from one installed cluster to add-ons, profiles, and optional storage exports |
+| `ClusterAddonBinding` | One installed cluster's post-install bootstrap set: add-ons, profiles, and optional storage exports |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with
 Redfish emulation to real bare metal edits the substrate-owned objects:
@@ -160,7 +155,7 @@ today.
 bootwright example init lab --output ./lab-input
 bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
-bootwright context validate
+bootwright context update lab -f ./lab-input
 bootwright context current
 bootwright cluster list
 bootwright container-cluster access
@@ -172,8 +167,13 @@ bootwright secret materialize
 bootwright secret list
 bootwright print-env [--sensitive]
 bootwright check syntax
-bootwright check bastion
 bootwright apply bastion --yes
+bootwright check all
+bootwright render effective
+bootwright apply all --dry-run
+bootwright apply all --yes
+bootwright status --watch
+bootwright container-cluster access
 bootwright check all --dry-run
 bootwright apply infra --dry-run
 bootwright apply infra --yes
@@ -186,7 +186,6 @@ bootwright check addons
 bootwright apply addons --dry-run
 bootwright apply addons --yes
 bootwright status
-bootwright status --watch
 bootwright destroy container-cluster --yes
 bootwright destroy infra --yes
 bootwright destroy infra --scope artifact-server --yes
@@ -206,15 +205,19 @@ URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Single-cluster apply runs stream native
 Ansible output; multi-cluster apply runs keep Ansible output in per-task and
 per-cluster logs while the terminal shows cluster log paths and high-level
-progress. `bootwright apply cluster` provisions selected container and storage
-clusters and applies their bound add-ons; `bootwright apply addons` is
-available for standalone add-on convergence after install.
+progress. `bootwright apply all` is the normal end-to-end workflow.
+`bootwright apply cluster` provisions selected container and storage clusters
+and applies their bound add-ons; `bootwright apply addons` is available for
+standalone add-on convergence after install. Use phase commands for scoped
+maintenance or recovery.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including
 `openshift-install/<cluster>/{install,agent}-config.yaml`, for operators who
 want to run supplier or community tools such as `openshift-install` themselves.
 Treat that output as local runtime material because it contains secrets.
+`bootwright render effective` writes the normalized desired state with defaults
+applied to the current context rendered directory for inspection before apply.
 
 ## Repository Layout
 

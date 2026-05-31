@@ -6,10 +6,6 @@ spec:
   artifactServer:
     hostRef:
       name: lab-host
-    listeners:
-      - name: https
-        protocol: https
-        port: 8443
     endpoints:
       - name: cluster
         listener: https

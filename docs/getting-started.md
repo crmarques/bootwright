@@ -131,7 +131,7 @@ Create the context from the edited directory:
 ```text
 bootwright check syntax -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
-bootwright context validate
+bootwright context update lab -f ./my-sno-lab
 bootwright context current
 bootwright secret list
 ```
@@ -184,40 +184,32 @@ eval "$(bootwright print-env --sensitive)"
 ## 6. Check And Apply
 
 ```text
-bootwright check syntax
-bootwright check bastion
 bootwright apply bastion --yes
-bootwright check infra
-bootwright apply infra --dry-run
-bootwright apply infra --yes
-bootwright apply storage-cluster --dry-run
-bootwright apply storage-cluster --yes
-bootwright check cluster
-bootwright apply cluster --dry-run
-bootwright apply cluster --yes
-bootwright check addons
-bootwright apply addons --dry-run
-bootwright apply addons --yes
-bootwright status
+bootwright check all
+bootwright render effective
+bootwright apply all --dry-run
+bootwright apply all --yes
+bootwright status --watch
 ```
 
-`apply bastion` installs bastion-host prerequisites. `apply infra`
-converges provider hosts, substrate state, and managed infra components.
-`apply storage-cluster` provisions external storage clusters such as Ceph from
-preinstalled storage nodes.
-`apply cluster` provisions selected container and storage clusters, then applies
-bound post-install add-ons.
-`apply addons` uses the installed cluster kubeconfig and `oc apply` for
-post-install bootstrap components declared as `ClusterAddon` resources.
-`apply all` includes infrastructure and storage before the same cluster and
-add-on phases. Storage bindings wait for both the storage task and a bound
-add-on with `provides: [data-foundation]`.
+`apply bastion` installs bastion-host prerequisites. `check all` validates the
+full graph before convergence. `render effective` writes
+`effective-state.yaml` with defaults applied so you can inspect the normalized
+state before applying it.
+
+`apply all` is the normal end-to-end convergence path. It includes
+infrastructure, managed storage, OpenShift or OKD cluster install, and bound
+post-install add-ons. Storage bindings wait for both the storage task and a
+bound add-on with `provides: [data-foundation]`.
 For KubeVirt child clusters, `apply all` also waits for the parent cluster
 install and its `provides: [kubevirt]` add-on before creating child VM
 infrastructure. `apply infra --scope <child>` requires that parent cluster to
 already be installed and KubeVirt-ready; scoped child applies do not install the
 parent implicitly.
-Running `apply cluster --yes` again skips cluster install tasks when the prior
+Phase commands such as `apply infra`, `apply storage-cluster`, `apply cluster`,
+and `apply addons` are still available for advanced operations and recovery
+when you need one slice of the graph. Running `apply cluster --yes` again skips
+cluster install tasks when the prior
 install record, rendered desired-input fingerprint, and kubeconfig availability
 probe all match, then applies add-ons idempotently. If an interrupted apply
 already booted nodes, the next apply resumes at the install wait phase instead
@@ -236,6 +228,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright check syntax --output json` | Supported | Read-only diagnostics |
 | `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright render effective --output json` | Supported | Writes normalized desired state |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
 | `bootwright container-cluster access --output json` | Supported | Read-only cluster access inventory |
@@ -255,6 +248,12 @@ For mutating automation, run the apply or destroy command with `--yes`, then
 poll `bootwright status --output json` or `bootwright status --watch`.
 
 ## Export External CLI Inputs
+
+Render the normalized desired state with defaults applied:
+
+```text
+bootwright render effective
+```
 
 Render placeholder installer files into context state:
 
@@ -301,6 +300,8 @@ This does not destroy container-cluster nodes or the rest of the infrastructure.
 
 - Authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input/`.
+- Effective state lives at
+  `/var/lib/bootwright/contexts/<context>/rendered/effective-state.yaml`.
 - Placeholder installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
 - Rendered storage tool inputs live under
@@ -314,7 +315,7 @@ This does not destroy container-cluster nodes or the rest of the infrastructure.
 
 ## Add The Cluster Kube Context
 
-After `apply cluster` completes, merge the generated admin kubeconfig into your
+After `apply all` completes, merge the generated admin kubeconfig into your
 user kubeconfig:
 
 ```text

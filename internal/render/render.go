@@ -82,6 +82,25 @@ func All(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Res
 	return AllOn(defaultFS, renderedDir, clustersDir, secretsDir, state)
 }
 
+// Effective writes only the normalized effective-state snapshot. It is used by
+// `bootwright render effective` so operators can inspect defaults without
+// rendering installer, Ansible, or storage tool inputs.
+func Effective(renderedDir string, state v1alpha1.State) (Result, error) {
+	return EffectiveOn(defaultFS, renderedDir, state)
+}
+
+// EffectiveOn is Effective parameterised on FileSystem for tests.
+func EffectiveOn(fs FileSystem, renderedDir string, state v1alpha1.State) (Result, error) {
+	result := Result{EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml")}
+	if err := ensureLocalDir(fs, renderedDir); err != nil {
+		return result, err
+	}
+	if err := writeYAML(fs, result.EffectiveStatePath, EffectiveState(state)); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 // AllOn is All parameterised on FileSystem so tests can assert mode invariants
 // without touching disk. Production callers use All.
 func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
@@ -110,7 +129,7 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 		path  string
 		value any
 	}{
-		{path: result.EffectiveStatePath, value: state},
+		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
 		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
 		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},
@@ -246,7 +265,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 		path  string
 		value any
 	}{
-		{path: result.EffectiveStatePath, value: state},
+		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
 		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
 		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},

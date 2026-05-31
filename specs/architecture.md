@@ -10,7 +10,7 @@ YAML desired state
   -> load and strict decode
   -> normalize defaults
   -> validate ownership and references
-  -> render effective installer/provider/storage inputs
+  -> render effective state and tool inputs
   -> apply substrate, storage, cluster, and add-on phases
 ```
 
@@ -93,8 +93,8 @@ The desired-state API is defined in `api/v1alpha1` and specified in
   connection from storage to one installed cluster.
 - `ClusterAddon` owns reusable post-install component intent.
 - `ClusterAddonProfile` owns ordered platform profiles made from add-ons.
-- `ClusterAddonBinding` owns one cluster's post-install add-ons and optional
-  storage attachments.
+- `ClusterAddonBinding` owns one cluster's post-install add-ons, profiles, and
+  optional storage attachments.
 - `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:

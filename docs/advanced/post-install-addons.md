@@ -67,8 +67,6 @@ spec:
       package: kubevirt-hyperconverged
       channel: stable
       source: redhat-operators
-      sourceNamespace: openshift-marketplace
-      installPlanApproval: Automatic
     customResources:
       - apiVersion: hco.kubevirt.io/v1beta1
         kind: HyperConverged
@@ -76,7 +74,6 @@ spec:
           name: kubevirt-hyperconverged
           namespace: openshift-cnv
   readiness:
-    timeout: 30m
     checks:
       - type: csvSucceeded
         namespace: openshift-cnv
@@ -129,10 +126,12 @@ spec:
 ## CLI Flow
 
 ```text
-bootwright apply cluster --yes
+bootwright apply all --yes
 ```
 
-To converge add-ons again after the cluster is already installed:
+Phase commands are available when you intentionally want only the cluster or
+add-on slice, for example to converge add-ons again after the cluster is
+already installed:
 
 ```text
 bootwright check addons
@@ -143,7 +142,7 @@ bootwright apply addons --yes
 `apply addons --dry-run` shows the selected clusters, expanded add-on
 order, task plan, and generated resource summary without mutating the cluster.
 
-`apply cluster --yes` and `apply all --yes` include add-ons after the cluster
+`apply all --yes` and `apply cluster --yes` include add-ons after the cluster
 install wait task.
 
 ## Records And Readiness

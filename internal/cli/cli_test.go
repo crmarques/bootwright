@@ -241,6 +241,11 @@ func TestHumanOutputStructuredText(t *testing.T) {
 			want: []string{"Bootwright: installer render", "Rendered artifacts", "Installer placeholders", "install-config.yaml", "agent-config.yaml"},
 		},
 		{
+			name: "render effective",
+			args: []string{"render", "effective"},
+			want: []string{"Bootwright: effective-state render", "Rendered artifacts", "Effective state", "Objects"},
+		},
+		{
 			name: "apply infra dry-run",
 			args: []string{"apply", "infra", "--dry-run", "--ask-become-pass=false"},
 			want: []string{"Bootwright: infra apply", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Provider services", "Rendered artifacts", "Bundle"},
@@ -413,6 +418,40 @@ func TestRenderInstallerScopedFixtureJSON(t *testing.T) {
 	}
 	if !strings.HasPrefix(cluster.InstallConfigPath, filepath.Join(ctx.ClustersDir, "sno-libvirt", "rendered", render.InstallerRelativeDir)) {
 		t.Fatalf("install config path %q is outside cluster installer state dir %q", cluster.InstallConfigPath, ctx.ClustersDir)
+	}
+}
+
+func TestRenderEffectiveWritesNormalizedState(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "render", "effective", "--output", "json")
+	if code != 0 {
+		t.Fatalf("render effective exited %d, stderr=%q", code, stderr)
+	}
+	var report renderEffectiveReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	wantPath := filepath.Join(ctx.RenderedDir, "effective-state.yaml")
+	if report.EffectiveStatePath != wantPath {
+		t.Fatalf("effectiveStatePath = %q, want %q", report.EffectiveStatePath, wantPath)
+	}
+	data, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("read effective state: %v", err)
+	}
+	var state v1alpha1.State
+	if err := yaml.Unmarshal(data, &state); err != nil {
+		t.Fatalf("decode effective state: %v\n%s", err, data)
+	}
+	if len(state.ContainerClusters) != 1 {
+		t.Fatalf("expected one container cluster, got %d", len(state.ContainerClusters))
+	}
+	cluster := state.ContainerClusters[0]
+	if cluster.Spec.Distribution.Type != "openshift" {
+		t.Fatalf("distribution.type = %q, want openshift", cluster.Spec.Distribution.Type)
+	}
+	if cluster.Spec.Install.Method != "agent" || cluster.Spec.Install.Mode != "connected" {
+		t.Fatalf("install defaults = method %q mode %q, want agent/connected", cluster.Spec.Install.Method, cluster.Spec.Install.Mode)
 	}
 }
 
@@ -1103,6 +1142,8 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"render"}, want: false},
 		{args: []string{"render", "--scope", "managed-01"}, want: false},
 		{args: []string{"render", "installer"}, want: true},
+		{args: []string{"render", "storage"}, want: true},
+		{args: []string{"render", "effective"}, want: true},
 		{args: []string{"render", "--output-dir", "./rendered", "--sensitive"}, want: true},
 		{args: []string{"render", "--output-dir=./rendered", "--sensitive"}, want: true},
 	}

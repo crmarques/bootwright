@@ -5,8 +5,6 @@ metadata:
 spec:
   type: ceph
 
-  management: managed # default
-
   clusterInfraRef:
     name: ceph-storage-infra
 
@@ -16,10 +14,9 @@ spec:
         seedNode: ceph-dc1-0
         monIP:
           machineRef:
-            clusterInfra: ceph-storage-infra # default
-            name: ceph-dc1-0 # default
+            clusterInfra: ceph-storage-infra
+            name: ceph-dc1-0
           interface: primary
-          family: ipv4 # default
       nodeSSH:
         user: root
         keyPairRef:

@@ -10,7 +10,6 @@ spec:
     name: stretch-replicated
 
   ceph:
-    type: replicated # default
     role: rbd
     replicated:
       size: 4

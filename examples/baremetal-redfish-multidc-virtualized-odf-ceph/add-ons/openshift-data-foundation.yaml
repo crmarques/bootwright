@@ -23,11 +23,8 @@ spec:
       package: odf-operator
       channel: stable-4.21
       source: redhat-operators
-      sourceNamespace: openshift-marketplace # default
-      installPlanApproval: Automatic # default
 
   readiness:
-    timeout: 30m # default
     checks:
       - type: csvSucceeded
         namespace: openshift-storage

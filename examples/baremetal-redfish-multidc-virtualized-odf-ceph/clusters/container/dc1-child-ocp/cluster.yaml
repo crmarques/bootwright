@@ -4,26 +4,8 @@ metadata:
   name: dc1-child-ocp
 spec:
   distribution:
-    type: openshift # default
     release:
       version: 4.21.15
-
-  install:
-    method: agent # default
-    mode: connected # default
-    pullSecretRef:
-      name: openshift-pull-secret # inherited from Environment.defaults.install
-    nodeSSH:
-      keyPairRef:
-        name: cluster-admin-ssh-key # inherited from Environment.defaults.install
-
-  controlPlane:
-    name: master
-    replicas: 3
-
-  compute:
-    - name: worker
-      replicas: 3
 
   networking:
     networkType: OVNKubernetes

@@ -198,6 +198,34 @@ func TestWorkspaceUsesContextSecretDeclaration(t *testing.T) {
 	}
 }
 
+func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
+	for _, p := range scaffold.KnownProviders() {
+		t.Run(p, func(t *testing.T) {
+			files, err := scaffold.Workspace("compact", scaffold.Provider(p))
+			if err != nil {
+				t.Fatalf("workspace: %v", err)
+			}
+			for _, f := range files {
+				for _, forbidden := range []string{
+					"type: ed25519",
+					"username: admin",
+					"type: openshift",
+					"method: agent",
+					"mode: connected",
+					"protocol: redfish",
+					"port: 8000",
+					"vmediaPort: 8001",
+					"port: 8443",
+				} {
+					if strings.Contains(f.Body, forbidden) {
+						t.Fatalf("%s contains deterministic default %q:\n%s", f.Name, forbidden, f.Body)
+					}
+				}
+			}
+		})
+	}
+}
+
 // TestSubstratesCarryDistinctConnectivity verifies the Substrates map
 // hasn't accidentally cross-wired two substrates to the same
 // connectivity arm. The whole point of having four substrates is that

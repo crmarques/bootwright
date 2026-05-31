@@ -11,8 +11,8 @@ Ceph storage:
   inside installed OpenShift or OKD clusters.
 - `ClusterAddonProfile` owns ordered reusable platform profiles made from
   add-ons and nested profiles.
-- `ClusterAddonBinding` owns one cluster's post-install add-ons and optional
-  storage attachments.
+- `ClusterAddonBinding` owns one cluster's post-install add-ons, profiles, and
+  optional storage attachments.
 - `StorageCluster` owns external storage cluster provisioning intent.
 - `StoragePlacementPolicy` owns storage placement and CRUSH policy intent.
 - `StoragePool` owns Ceph pool desired state.
@@ -69,30 +69,15 @@ spec:
     - add-ons/platform-profile.yaml
     - clusters/container/demo/add-on-binding.yaml
 
-  secretStorage:
-    mode: context
-
-  defaults:
-    install:
-      pullSecretRef:
-        name: openshift-pull-secret
-      nodeSSH:
-        keyPairRef:
-          name: cluster-admin-ssh-key
-
   secrets:
     openshift-pull-secret:
     cluster-admin-ssh-key:
       generated:
         sshKeyPair:
-          type: ed25519
           comment: bootwright-cluster-admin
     provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
-      generated:
-        credentials:
-          username: admin
     proxy-credentials:
       generated:
         credentials:
@@ -278,18 +263,10 @@ metadata:
   name: prod-3node
 spec:
   distribution:
-    type: openshift
     release:
       version: 4.20.15
 
   install:
-    method: agent
-    mode: connected
-    pullSecretRef:
-      name: openshift-pull-secret
-    nodeSSH:
-      keyPairRef:
-        name: cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - name: cluster-extra-ca
     servingCertificates:
@@ -302,14 +279,6 @@ spec:
       ingress:
         defaultCertificateRef:
           name: prod-apps-wildcard-tls
-
-  controlPlane:
-    name: master
-    replicas: 3
-
-  compute:
-    - name: worker
-      replicas: 0
 
   networking:
     networkType: OVNKubernetes
@@ -543,8 +512,6 @@ spec:
       channel: stable
       startingCSV: kubevirt-hyperconverged-operator.v4.21.8
       source: redhat-operators
-      sourceNamespace: openshift-marketplace
-      installPlanApproval: Automatic
 
     customResources:
       - apiVersion: hco.kubevirt.io/v1beta1
@@ -554,7 +521,6 @@ spec:
           namespace: openshift-cnv
 
   readiness:
-    timeout: 30m
     checks:
       - type: csvSucceeded
         namespace: openshift-cnv
@@ -1323,6 +1289,8 @@ bootwright check all [--dry-run]
 bootwright apply bastion --yes
 bootwright check infra
 bootwright check infra --dry-run --output json
+bootwright render effective
+bootwright render effective --output json
 bootwright render installer --scope <cluster>
 bootwright render installer --sensitive
 bootwright render installer --output json
@@ -1376,6 +1344,9 @@ kubeadmin password bytes, tokens, or other cluster credential material.
 require or mutate the current context. It is the pre-import validation path for
 generated examples, copied examples, and CI jobs that review authored desired
 state before `context init`.
+`render effective` writes only the normalized desired-state snapshot with
+defaults applied to `<context>/rendered/effective-state.yaml`, and supports
+JSON output for the rendered path and object counts.
 Ansible-backed apply commands may execute independent tasks concurrently.
 Operators can tune task scheduling with `--parallelism`,
 `--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
@@ -1391,6 +1362,9 @@ mutate provider hosts, nodes, or clusters; operators must run
 `apply addons --dry-run` shows add-on tasks, selected clusters,
 expanded add-on order, and generated resource summaries without mutating the
 cluster.
+`apply all` is the primary happy path after `apply bastion`, `check all`, and
+`apply all --dry-run`. Phase commands remain available for advanced operations
+and recovery.
 `apply storage-cluster` renders the storage input set, SSHes from the bastion to the
 Ceph seed node, runs cephadm bootstrap on that node, applies cephadm services,
 and executes the rendered Ceph operations. `apply cluster` installs each

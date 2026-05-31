@@ -10,7 +10,6 @@ spec:
     name: stretch-replicated
 
   ceph:
-    type: replicated # default
     role: cephfs-metadata
     replicated:
       size: 4

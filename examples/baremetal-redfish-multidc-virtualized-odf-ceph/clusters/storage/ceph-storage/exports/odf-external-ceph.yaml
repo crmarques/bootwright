@@ -3,8 +3,6 @@ kind: StorageExport
 metadata:
   name: odf-external-ceph
 spec:
-  type: data-foundation # default when dataFoundation exists
-
   storageClusterRef:
     name: ceph-storage
 

@@ -23,8 +23,6 @@ spec:
       package: kubevirt-hyperconverged
       channel: stable
       source: redhat-operators
-      sourceNamespace: openshift-marketplace # default
-      installPlanApproval: Automatic # default
     customResources:
       - apiVersion: hco.kubevirt.io/v1beta1
         kind: HyperConverged
@@ -33,7 +31,6 @@ spec:
           namespace: openshift-cnv
 
   readiness:
-    timeout: 30m # default
     checks:
       - type: csvSucceeded
         namespace: openshift-cnv

@@ -251,7 +251,6 @@ spec:
     cluster-admin-ssh-key:
       generated:
         sshKeyPair:
-          type: ed25519
           comment: bootwright-cluster-admin
 {{.EnvSecrets}}
 `
@@ -328,13 +327,8 @@ metadata:
   name: {{.Cluster}}
 spec:
   distribution:
-    type: openshift                     # openshift | okd
     release:
       version: 4.21.15
-
-  install:
-    method: agent
-    mode: connected                     # connected | disconnected
 
   networking:
     clusterNetwork:

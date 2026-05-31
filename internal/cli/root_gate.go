@@ -196,7 +196,7 @@ func renderArgsHaveExecutionTarget(args []string) bool {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
-		case arg == "installer":
+		case arg == "installer" || arg == "storage" || arg == "effective":
 			return true
 		case arg == "--output-dir":
 			return i+1 < len(args)
