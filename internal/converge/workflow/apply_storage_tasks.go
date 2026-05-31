@@ -79,6 +79,13 @@ func dataFoundationExtensionWaitDeps(state v1alpha1.State, cluster string) []str
 }
 
 func runOneStorageTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask) applyTaskResult {
+	taskLog, closeTaskLog, err := taskLogWriter(TaskLogPath(runsDir, runID, task.Entry.ID))
+	if err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
+	defer closeTaskLog()
+	stdout = io.MultiWriter(stdout, taskLog)
+	stderr = io.MultiWriter(stderr, taskLog)
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
 	result, err := render.All(renderDir, opts.ClustersDir, opts.SecretsDir, task.State)

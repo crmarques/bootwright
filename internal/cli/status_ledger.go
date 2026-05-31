@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.RunLedger, found bool, loadErr error) {
+func printApplyLedgerStatus(p *cliout.Printer, runsDir string, clustersDir string, ledger workflow.RunLedger, found bool, loadErr error) {
 	p.Section("Current apply")
 	if loadErr != nil {
 		p.Status(cliout.StatusWarn, "Apply ledger", loadErr.Error())
@@ -36,9 +36,9 @@ func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.R
 		printApplyRunActivity(p, runsDir, ledger)
 	}
 	p.Section("Progress")
-	p.Progress("Tasks", progressFields(ledger))
-	printApplyLedgerRunning(p, ledger)
-	printApplyLedgerClusters(p, ledger)
+	p.ProgressBar("Tasks", applyProgressDone(ledger), len(ledger.Tasks), applyProgressFields(ledger))
+	printApplyLedgerRunning(p, clustersDir, ledger)
+	printApplyLedgerClusters(p, clustersDir, ledger)
 	printApplyLedgerBlocked(p, ledger)
 	printApplyLedgerFailures(p, ledger)
 }
@@ -61,7 +61,7 @@ func printApplyRunActivity(p *cliout.Printer, runsDir string, ledger workflow.Ru
 	}
 }
 
-func printApplyLedgerRunning(p *cliout.Printer, ledger workflow.RunLedger) {
+func printApplyLedgerRunning(p *cliout.Printer, clustersDir string, ledger workflow.RunLedger) {
 	running := ledger.RunningTasks()
 	if len(running) == 0 {
 		return
@@ -69,154 +69,18 @@ func printApplyLedgerRunning(p *cliout.Printer, ledger workflow.RunLedger) {
 	p.Section("Running work")
 	lines := make([]cliout.TaskLine, 0, len(running))
 	for _, task := range running {
-		detail := task.Kind
-		if task.LogPath != "" {
-			detail += "; log " + task.LogPath
-		}
-		lines = append(lines, cliout.TaskLine{Status: cliout.StatusWarn, Label: applyTaskDisplayLabel(task.Label), Detail: detail})
+		lines = append(lines, cliout.TaskLine{Status: cliout.StatusRunning, Label: applyTaskDisplayLabel(task.Label), Detail: applyTaskRunDetail(clustersDir, task)})
 	}
 	p.Tasks(lines)
 }
 
-func printApplyLedgerClusters(p *cliout.Printer, ledger workflow.RunLedger) {
+func printApplyLedgerClusters(p *cliout.Printer, clustersDir string, ledger workflow.RunLedger) {
 	names := ledger.ClusterNames()
 	if len(names) == 0 {
 		return
 	}
 	p.Section("Apply clusters")
-	var items []cliout.TaskLine
-	for _, name := range names {
-		tasks := ledger.TasksForCluster(name)
-		status, detail := applyClusterSummary(tasks)
-		items = append(items, cliout.TaskLine{Status: status, Label: name, Detail: detail})
-	}
-	p.Tasks(items)
-}
-
-func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, string) {
-	status := cliout.StatusOK
-	kindStatuses := map[string]workflow.TaskStatus{}
-	var otherParts []string
-	nodeCounts := map[workflow.TaskStatus]int{}
-	nodeTotal := 0
-	for _, task := range tasks {
-		status = applyLedgerTaskStatus(status, task.Status)
-		if task.Kind == workflow.ApplyTaskKindNodeBoot {
-			nodeTotal++
-			nodeCounts[task.Status]++
-			continue
-		}
-		if applyLedgerKnownClusterKind(task.Kind) {
-			kindStatuses[task.Kind] = task.Status
-			continue
-		}
-		otherParts = append(otherParts, applyLedgerTaskKindLabel(task.Kind)+" "+string(task.Status))
-	}
-	parts := make([]string, 0, len(tasks))
-	for _, kind := range []string{workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO} {
-		if taskStatus, ok := kindStatuses[kind]; ok {
-			parts = append(parts, applyLedgerTaskKindLabel(kind)+" "+string(taskStatus))
-		}
-	}
-	if nodeTotal > 0 {
-		parts = append(parts, applyNodeBootSummary(nodeTotal, nodeCounts))
-	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindInstallWait]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindInstallWait)+" "+string(taskStatus))
-	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageCluster]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageCluster)+" "+string(taskStatus))
-	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterAddonApply]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterAddonApply)+" "+string(taskStatus))
-	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterAddonWait]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterAddonWait)+" "+string(taskStatus))
-	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageAttachmentApply]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageAttachmentApply)+" "+string(taskStatus))
-	}
-	parts = append(parts, otherParts...)
-	return status, strings.Join(parts, ", ")
-}
-
-func applyLedgerKnownClusterKind(kind string) bool {
-	switch kind {
-	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait,
-		workflow.ApplyTaskKindClusterAddonApply, workflow.ApplyTaskKindClusterAddonWait,
-		workflow.ApplyTaskKindStorageAttachmentApply:
-		return true
-	default:
-		return false
-	}
-}
-
-func applyLedgerTaskKindLabel(kind string) string {
-	switch kind {
-	case workflow.ApplyTaskKindClusterInfra:
-		return "infra"
-	case workflow.ApplyTaskKindClusterISO:
-		return "ISO"
-	case workflow.ApplyTaskKindInstallWait:
-		return "install wait"
-	case workflow.ApplyTaskKindStorageCluster:
-		return "storage"
-	case workflow.ApplyTaskKindClusterAddonApply:
-		return "addon apply"
-	case workflow.ApplyTaskKindClusterAddonWait:
-		return "addon wait"
-	case workflow.ApplyTaskKindStorageAttachmentApply:
-		return "storage attachment"
-	default:
-		return kind
-	}
-}
-
-func applyNodeBootSummary(total int, counts map[workflow.TaskStatus]int) string {
-	parts := []string{fmt.Sprintf("%d/%d boot stages done", counts[workflow.TaskStatusOK], total)}
-	for _, status := range []workflow.TaskStatus{
-		workflow.TaskStatusRunning,
-		workflow.TaskStatusReady,
-		workflow.TaskStatusPending,
-		workflow.TaskStatusBlocked,
-		workflow.TaskStatusFailed,
-		workflow.TaskStatusSkipped,
-		workflow.TaskStatusCancelled,
-	} {
-		if counts[status] > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts[status], status))
-		}
-	}
-	return strings.Join(parts, ", ")
-}
-
-func applyLedgerTaskStatus(current cliout.Status, taskStatus workflow.TaskStatus) cliout.Status {
-	next := cliout.StatusOK
-	switch taskStatus {
-	case workflow.TaskStatusFailed:
-		next = cliout.StatusFail
-	case workflow.TaskStatusRunning, workflow.TaskStatusReady:
-		next = cliout.StatusWarn
-	case workflow.TaskStatusPending, workflow.TaskStatusBlocked, workflow.TaskStatusSkipped, workflow.TaskStatusCancelled:
-		next = cliout.StatusSkip
-	}
-	if applyStatusPriority(next) > applyStatusPriority(current) {
-		return next
-	}
-	return current
-}
-
-func applyStatusPriority(status cliout.Status) int {
-	switch status {
-	case cliout.StatusFail:
-		return 3
-	case cliout.StatusWarn:
-		return 2
-	case cliout.StatusSkip:
-		return 1
-	default:
-		return 0
-	}
+	p.ClusterPhases(applyClusterPhaseLines(clustersDir, ledger))
 }
 
 func printApplyLedgerBlocked(p *cliout.Printer, ledger workflow.RunLedger) {
@@ -227,7 +91,7 @@ func printApplyLedgerBlocked(p *cliout.Printer, ledger workflow.RunLedger) {
 	p.Section("Blocked work")
 	lines := make([]cliout.TaskLine, 0, len(blocked))
 	for _, task := range blocked {
-		lines = append(lines, cliout.TaskLine{Status: cliout.StatusSkip, Label: applyTaskDisplayLabel(task.Label), Detail: task.SkippedReason})
+		lines = append(lines, cliout.TaskLine{Status: cliout.StatusBlocked, Label: applyTaskDisplayLabel(task.Label), Detail: task.SkippedReason})
 	}
 	p.Tasks(lines)
 }
@@ -244,17 +108,9 @@ func printApplyLedgerFailures(p *cliout.Printer, ledger workflow.RunLedger) {
 		if task.LogPath != "" {
 			detail = strings.TrimSpace(detail + "; log " + task.LogPath)
 		}
-		lines = append(lines, cliout.TaskLine{Status: cliout.StatusFail, Label: applyTaskDisplayLabel(task.Label), Detail: detail})
+		lines = append(lines, cliout.TaskLine{Status: cliout.StatusFailed, Label: applyTaskDisplayLabel(task.Label), Detail: detail})
 	}
 	p.Tasks(lines)
-}
-
-func progressFields(ledger workflow.RunLedger) []cliout.ProgressField {
-	fields := make([]cliout.ProgressField, 0, len(ledger.ProgressCounts()))
-	for _, count := range ledger.ProgressCounts() {
-		fields = append(fields, cliout.ProgressField{Label: string(count.Status), Count: count.Count})
-	}
-	return fields
 }
 
 func ledgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, existing []string) []string {

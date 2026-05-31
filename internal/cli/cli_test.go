@@ -2504,9 +2504,9 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{Parallelism: 2}, []workflow.TaskLedgerEntry{
 		{ID: "provider", Kind: "providerServices", Label: "provider services", Status: workflow.TaskStatusOK},
-		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"provider"}},
-		{ID: "boot.sno-libvirt", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt nodes", Cluster: "sno-libvirt", Dependencies: []string{"iso.sno-libvirt"}},
-		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", Dependencies: []string{"boot.sno-libvirt"}},
+		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt", ClusterKind: workflow.ApplyClusterKindContainer, Dependencies: []string{"provider"}},
+		{ID: "boot.sno-libvirt", Kind: workflow.ApplyTaskKindNodeBoot, Label: "boot sno-libvirt nodes", Cluster: "sno-libvirt", ClusterKind: workflow.ApplyClusterKindContainer, Dependencies: []string{"iso.sno-libvirt"}},
+		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Label: "wait install sno-libvirt", Cluster: "sno-libvirt", ClusterKind: workflow.ApplyClusterKindContainer, Dependencies: []string{"boot.sno-libvirt"}},
 	}, now)
 	ledger.MarkOK("provider", now.Add(time.Second))
 	ledger.MarkOK("iso.sno-libvirt", now.Add(2*time.Second))
@@ -2522,7 +2522,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"Current apply", "apply-test", "Progress", "Boot sno-libvirt nodes", "0/1 boot stages done", "bootwright status --watch"} {
+	for _, want := range []string{"Current apply", "apply-test", "Progress", "Boot sno-libvirt nodes", "[RUNNING] Prepare", "bootwright status --watch"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("status output missing %q:\n%s", want, stdout)
 		}
@@ -2761,7 +2761,7 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	if len(bootTask.ResourceKeys) != 3 {
 		t.Fatalf("boot resource keys = %v, want three Redfish keys", bootTask.ResourceKeys)
 	}
-	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "runs", "dry-run", "install.log")) {
+	if bootTask.ClusterLogPath == "" || !strings.Contains(bootTask.ClusterLogPath, filepath.Join("clusters", "3-nodes-ocp-baremetal", "runs", "dry-run", "bootwright.log")) {
 		t.Fatalf("boot cluster log path = %q", bootTask.ClusterLogPath)
 	}
 	wait := tasks[len(tasks)-1]

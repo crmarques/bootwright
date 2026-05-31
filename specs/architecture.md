@@ -21,12 +21,11 @@ fingerprint so repeated applies can skip completed installs and resume only
 from known-safe phases. The ledger is the
 operator-facing status source for long-running work: each planned task has a
 stable ID, dependency list, status, log path, and optional cluster, node, or
-host association. Human apply output summarizes task progress from that ledger.
-When an apply selects one `ContainerCluster`, Ansible stdout/stderr streams
-pass through to the terminal without Bootwright decoration and are also tee'd
-into root-managed per-task artifact logs. When an apply selects multiple `ContainerCluster`
-objects, Bootwright keeps Ansible output in logs and prints per-cluster install
-log paths plus high-level progress instead.
+host association. Human apply output is a ledger-backed fleet dashboard with
+run and cluster log paths, per-cluster phase status, running work, and concise
+failures. Native Ansible, `oc`, SSH, SCP, Ceph, and installer process output
+stays in root-managed run, task, and cluster logs instead of streaming through
+the terminal.
 
 Context-backed bastion and OpenShift installer actions run on localhost.
 Commands that need context data re-exec through `sudo` when necessary and

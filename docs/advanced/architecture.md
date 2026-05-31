@@ -69,11 +69,12 @@ Every apply writes a current run ledger under the context state directory.
 or clusters, and `bootwright status --watch` follows it until the run reaches a
 terminal state.
 
-When one cluster is selected, Bootwright streams raw Ansible output to the
-terminal and keeps the same output in root-managed per-task logs. When multiple
-clusters are selected, Bootwright runs independent cluster DAG tasks
-concurrently where resource locks allow it, prints one install log path per
-cluster, and keeps the terminal focused on high-level apply progress.
+Bootwright runs independent cluster DAG tasks concurrently where resource locks
+allow it. Apply output is a ledger-backed fleet dashboard with run and cluster
+log paths, per-cluster phase status, running work, and concise failures. Native
+Ansible, `oc`, SSH, SCP, Ceph, and installer process output stays in
+root-managed run, task, and cluster logs instead of streaming through the
+terminal.
 
 Post-install bootstrap components are planned as direct `oc` tasks after the
 cluster install wait task when `apply clusters` or `apply all` is selected, or

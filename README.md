@@ -205,10 +205,11 @@ Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
 intentionally prints raw shell exports. `bootwright container-cluster access` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
-never prints kubeconfig or password bytes. Single-cluster apply runs stream native
-Ansible output; multi-cluster apply runs keep Ansible output in per-task and
-per-cluster logs while the terminal shows cluster log paths and high-level
-progress. `bootwright apply all` is the normal end-to-end workflow.
+never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
+SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
+while the terminal shows a ledger-backed fleet dashboard with log paths,
+phase status, running work, and concise failures. `bootwright apply all` is the
+normal end-to-end workflow.
 `bootwright apply clusters` provisions selected cluster infrastructure,
 storage clusters, OpenShift or OKD clusters, bound add-ons, and declared
 storage integrations as dependency-ready tasks. `bootwright apply

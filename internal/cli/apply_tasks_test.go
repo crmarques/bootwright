@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -133,19 +134,88 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	}
 }
 
-func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
+func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) {
+	clustersDir := filepath.Join(t.TempDir(), "clusters")
+	now := time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC)
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "infra.cluster-a", Kind: workflow.ApplyTaskKindClusterInfra, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "iso.cluster-a", Kind: workflow.ApplyTaskKindClusterISO, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "boot.cluster-a", Kind: workflow.ApplyTaskKindNodeBoot, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
+		{ID: "wait.cluster-a", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},
+		{ID: "storage.ceph-a", Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+		{ID: "storageattachment.cluster-a.binding.data.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
+	}, now)
+
+	lines := applyClusterPhaseLines(clustersDir, ledger)
+	byName := map[string]output.ClusterPhaseLine{}
+	for _, line := range lines {
+		byName[line.Name] = line
+	}
+	container := byName["cluster-a"]
+	if container.Kind != "ContainerCluster" {
+		t.Fatalf("cluster-a kind = %q, want ContainerCluster", container.Kind)
+	}
+	requireApplyPhase(t, container, "Infrastructure", output.StatusOK)
+	requireApplyPhase(t, container, "Prepare", output.StatusRunning)
+	requireApplyPhase(t, container, "Install", output.StatusPending)
+	requireApplyPhase(t, container, "Post-install", output.StatusBlocked)
+	storage := byName["ceph-a"]
+	if storage.Kind != "StorageCluster" {
+		t.Fatalf("ceph-a kind = %q, want StorageCluster", storage.Kind)
+	}
+	requireApplyPhase(t, storage, "Infrastructure", output.StatusOK)
+	requireApplyPhase(t, storage, "Prepare", output.StatusOK)
+	requireApplyPhase(t, storage, "Provision", output.StatusOK)
+	requireApplyPhase(t, storage, "Publish", output.StatusBlocked)
+}
+
+func TestApplyPhaseStatusTerminalStates(t *testing.T) {
+	cases := []struct {
+		name   string
+		tasks  []workflow.TaskLedgerEntry
+		status output.Status
+	}{
+		{name: "failed", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusOK}, {Status: workflow.TaskStatusFailed}}, status: output.StatusFailed},
+		{name: "blocked", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusBlocked}, {Status: workflow.TaskStatusPending}}, status: output.StatusBlocked},
+		{name: "cancelled", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusOK}, {Status: workflow.TaskStatusCancelled}}, status: output.StatusCancel},
+		{name: "skipped", tasks: []workflow.TaskLedgerEntry{{Status: workflow.TaskStatusSkipped}, {Status: workflow.TaskStatusSkipped}}, status: output.StatusSkipped},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := applyPhaseStatus(tc.tasks, output.StatusPending); got != tc.status {
+				t.Fatalf("status = %s, want %s", got, tc.status)
+			}
+		})
+	}
+}
+
+func requireApplyPhase(t *testing.T, line output.ClusterPhaseLine, label string, status output.Status) {
+	t.Helper()
+	for _, phase := range line.Phases {
+		if phase.Label == label {
+			if phase.Status != status {
+				t.Fatalf("%s phase %s = %s, want %s", line.Name, label, phase.Status, status)
+			}
+			return
+		}
+	}
+	t.Fatalf("%s missing phase %s in %+v", line.Name, label, line.Phases)
+}
+
+func TestApplyDashboardPrintsRunningInstallerLogPath(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
-		ID:      "wait.sno-libvirt",
-		Kind:    workflow.ApplyTaskKindInstallWait,
-		Label:   "wait install sno-libvirt",
-		Cluster: "sno-libvirt",
-		Status:  workflow.TaskStatusPending,
+		ID:          "wait.sno-libvirt",
+		Kind:        workflow.ApplyTaskKindInstallWait,
+		Label:       "wait install sno-libvirt",
+		Cluster:     "sno-libvirt",
+		ClusterKind: workflow.ApplyClusterKindContainer,
+		Status:      workflow.TaskStatusPending,
 	}}, time.Now())
 	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(clustersDir, "ansible-output.log"), time.Now())
 
 	var stdout bytes.Buffer
-	printApplyTaskStart(&stdout, clustersDir, ledger, "wait.sno-libvirt")
+	printApplyDashboard(&stdout, clustersDir, ledger)
 
 	want := workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt")
 	if !strings.Contains(stdout.String(), want) {
@@ -153,7 +223,7 @@ func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
 	}
 }
 
-func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
+func TestApplyDashboardPrintsClusterLogPaths(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	clusterLogPath := workflow.ApplyClusterLogPath(clustersDir, "apply-test", "sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
@@ -161,12 +231,13 @@ func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
 		Kind:           workflow.ApplyTaskKindInstallWait,
 		Label:          "wait install sno-libvirt",
 		Cluster:        "sno-libvirt",
+		ClusterKind:    workflow.ApplyClusterKindContainer,
 		Status:         workflow.TaskStatusPending,
 		ClusterLogPath: clusterLogPath,
 	}}, time.Now())
 
 	var stdout bytes.Buffer
-	printApplyClusterLogPaths(&stdout, clustersDir, ledger)
+	printApplyDashboard(&stdout, clustersDir, ledger)
 
 	for _, want := range []string{
 		clusterLogPath,
@@ -178,7 +249,7 @@ func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
 	}
 }
 
-func TestRunApplyTaskGraphStreamsAnsibleOutput(t *testing.T) {
+func TestRunApplyTaskGraphWritesAnsibleOutputToLogs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses a POSIX shell script")
 	}
@@ -226,14 +297,12 @@ echo ansible-stderr-line >&2
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "ansible-stdout-line") {
-		t.Fatalf("stdout missing live ansible output:\n%s", stdout.String())
+	if strings.Contains(stdout.String(), "ansible-stdout-line") || strings.Contains(stderr.String(), "ansible-stderr-line") {
+		t.Fatalf("terminal output streamed ansible output\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "ansible-stderr-line") {
-		t.Fatalf("stderr missing live ansible output:\n%s", stderr.String())
-	}
-	if strings.Contains(stdout.String(), "log "+runsDir) {
-		t.Fatalf("stdout should not point normal progress at the ansible log:\n%s", stdout.String())
+	runLogData, err := os.ReadFile(workflow.ApplyRunLogPath(runsDir, ledger.RunID))
+	if err != nil {
+		t.Fatalf("read run log: %v", err)
 	}
 	logPath := workflow.TaskLogPath(runsDir, ledger.RunID, "provider")
 	logData, err := os.ReadFile(logPath)
@@ -244,6 +313,81 @@ echo ansible-stderr-line >&2
 		if !strings.Contains(string(logData), want) {
 			t.Fatalf("ansible output log missing %q:\n%s", want, string(logData))
 		}
+		if !strings.Contains(string(runLogData), want) {
+			t.Fatalf("run log missing %q:\n%s", want, string(runLogData))
+		}
+	}
+}
+
+func TestRunApplyTaskGraphFailureSummaryIsConcise(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "fake-ansible-playbook")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
+echo 'TASK [boot cluster-a nodes]'
+echo 'fatal: [node-0]: FAILED! => {"msg":"Redfish boot media action failed"}'
+i=1
+while [ "$i" -le 10 ]; do
+  echo "raw-tail-$i"
+  i=$((i + 1))
+done
+exit 2
+`), 0o755); err != nil {
+		t.Fatalf("write fake ansible-playbook: %v", err)
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+		}},
+	}
+	renderedDir := filepath.Join(dir, "rendered")
+	clustersDir := filepath.Join(dir, "clusters")
+	runsDir := filepath.Join(dir, "runs")
+	task := workflow.ApplyTask{
+		Entry: workflow.TaskLedgerEntry{
+			ID:     "provider",
+			Kind:   workflow.ApplyTaskKindProvider,
+			Label:  "provider services",
+			Status: workflow.TaskStatusPending,
+		},
+		Playbook: "playbooks/layers/providers/apply.yml",
+		State:    state,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	ledger, err := workflow.RunApplyTaskGraph(context.Background(), &stdout, &stderr, runsDir, workflow.RunOptions{
+		State:              state,
+		RenderedDir:        renderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            runsDir,
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		Executable:         executable,
+		BundleDir:          filepath.Join(dir, "bundle"),
+		ArtifactsBaseName:  "provider",
+	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
+	if err == nil {
+		t.Fatalf("workflow.RunApplyTaskGraph succeeded unexpectedly\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	for _, text := range []string{stdout.String(), stderr.String(), err.Error(), ledger.FailedTasks()[0].Failure} {
+		if strings.Contains(text, "raw-tail-10") {
+			t.Fatalf("concise failure output leaked raw tail:\n%s", text)
+		}
+	}
+	for _, want := range []string{"failed task: Provider services", "reason: fatal: [node-0]: FAILED!", "ansible-output.log"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("failure summary missing %q:\n%s", want, stdout.String())
+		}
+	}
+	runLogData, err := os.ReadFile(workflow.ApplyRunLogPath(runsDir, ledger.RunID))
+	if err != nil {
+		t.Fatalf("read run log: %v", err)
+	}
+	if !strings.Contains(string(runLogData), "raw-tail-10") {
+		t.Fatalf("run log missing raw tail:\n%s", string(runLogData))
 	}
 }
 
@@ -277,11 +421,12 @@ echo "ansible stderr ${cluster}" >&2
 	tasks := []workflow.ApplyTask{
 		{
 			Entry: workflow.TaskLedgerEntry{
-				ID:      "iso.cluster-a",
-				Kind:    workflow.ApplyTaskKindClusterISO,
-				Label:   "iso cluster-a",
-				Cluster: "cluster-a",
-				Status:  workflow.TaskStatusPending,
+				ID:          "iso.cluster-a",
+				Kind:        workflow.ApplyTaskKindClusterISO,
+				Label:       "iso cluster-a",
+				Cluster:     "cluster-a",
+				ClusterKind: workflow.ApplyClusterKindContainer,
+				Status:      workflow.TaskStatusPending,
 			},
 			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
 			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-a"},
@@ -289,11 +434,12 @@ echo "ansible stderr ${cluster}" >&2
 		},
 		{
 			Entry: workflow.TaskLedgerEntry{
-				ID:      "iso.cluster-b",
-				Kind:    workflow.ApplyTaskKindClusterISO,
-				Label:   "iso cluster-b",
-				Cluster: "cluster-b",
-				Status:  workflow.TaskStatusPending,
+				ID:          "iso.cluster-b",
+				Kind:        workflow.ApplyTaskKindClusterISO,
+				Label:       "iso cluster-b",
+				Cluster:     "cluster-b",
+				ClusterKind: workflow.ApplyClusterKindContainer,
+				Status:      workflow.TaskStatusPending,
 			},
 			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
 			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-b"},
@@ -313,14 +459,14 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "clusters",
-	}, clustersScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, clustersDir), nil)
+	}, clustersScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "ansible stdout") || strings.Contains(stderr.String(), "ansible stderr") {
 		t.Fatalf("multi-cluster output streamed ansible to terminal\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{"Logs", "cluster-a:", "cluster-b:", "Create agent ISOs"} {
+	for _, want := range []string{"Run", "Fleet progress", "cluster-a (ContainerCluster)", "cluster-b (ContainerCluster)", "Bootwright log", "[OK] Prepare"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}
@@ -333,6 +479,14 @@ echo "ansible stderr ${cluster}" >&2
 		}
 		if !strings.Contains(string(data), "ansible stdout "+cluster) || !strings.Contains(string(data), "ansible stderr "+cluster) {
 			t.Fatalf("cluster log %s missing ansible output:\n%s", cluster, data)
+		}
+		taskLogPath := workflow.TaskLogPath(runsDir, ledger.RunID, "iso."+cluster)
+		taskLog, err := os.ReadFile(taskLogPath)
+		if err != nil {
+			t.Fatalf("read task log %s: %v", taskLogPath, err)
+		}
+		if !strings.Contains(string(taskLog), "ansible stdout "+cluster) || !strings.Contains(string(taskLog), "ansible stderr "+cluster) {
+			t.Fatalf("task log %s missing ansible output:\n%s", cluster, taskLog)
 		}
 	}
 }

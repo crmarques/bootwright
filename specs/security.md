@@ -139,8 +139,9 @@ Generated output boundaries are part of the safety contract:
   They may be consumed by KubeVirt child-cluster operations through
   `hostContainerClusterRef`, but must never be copied into authored desired state.
 - Bootwright-managed apply logs that can include external tool output live under
-  `/var/lib/bootwright/contexts/<context>/runs/`, with restrictive file
-  modes, and must never be versioned.
+  `/var/lib/bootwright/contexts/<context>/runs/` and
+  `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runs/`, with
+  restrictive file modes, and must never be versioned.
 - Per-cluster install records live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/install-record.json`.
   They may contain cluster names, non-secret desired-input fingerprints,

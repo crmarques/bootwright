@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -12,151 +13,124 @@ import (
 type applyReporter struct {
 	stdout      io.Writer
 	stderr      io.Writer
+	contextName string
+	runsDir     string
 	clustersDir string
+	dynamic     bool
+	lines       int
+	last        string
 }
 
-func newApplyReporter(stdout, stderr io.Writer, clustersDir string) *applyReporter {
-	return &applyReporter{stdout: stdout, stderr: stderr, clustersDir: clustersDir}
+func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir string, clustersDir string) *applyReporter {
+	return &applyReporter{
+		stdout:      stdout,
+		stderr:      stderr,
+		contextName: contextName,
+		runsDir:     runsDir,
+		clustersDir: clustersDir,
+		dynamic:     output.Interactive(stdout),
+	}
 }
 
 func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
-	printApplyRunStart(r.stdout, ledger)
-}
-
-func (r *applyReporter) ClusterLogPaths(ledger workflow.RunLedger) {
-	printApplyClusterLogPaths(r.stdout, r.clustersDir, ledger)
+	printApplyRunStart(r.stdout, r.contextName, r.runsDir, ledger)
 }
 
 func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
-	printApplyStageSnapshot(r.stdout, ledger)
-}
-
-func (r *applyReporter) AnsibleExecutionStart() {
-	printApplyAnsibleExecutionStart(r.stdout)
-}
-
-func (r *applyReporter) TaskStart(ledger workflow.RunLedger, id string) {
-	printApplyTaskStart(r.stdout, r.clustersDir, ledger, id)
-}
-
-func (r *applyReporter) TaskResult(ledger workflow.RunLedger, id string) {
-	printApplyTaskResult(r.stdout, ledger, id)
+	var buf bytes.Buffer
+	printApplyDashboard(&buf, r.clustersDir, ledger)
+	text := buf.String()
+	if text == r.last {
+		return
+	}
+	if r.dynamic && r.lines > 0 {
+		output.ClearLines(r.stdout, r.lines)
+	}
+	output.Write(r.stdout, text)
+	r.lines = strings.Count(text, "\n")
+	r.last = text
 }
 
 func (r *applyReporter) RunSummary(ledger workflow.RunLedger) {
-	printApplyRunSummary(r.stdout, ledger)
+	if r.dynamic && r.lines > 0 {
+		output.ClearLines(r.stdout, r.lines)
+		r.lines = 0
+	}
+	printApplyRunSummary(r.stdout, r.clustersDir, ledger)
 }
 
 func (r *applyReporter) PromptGap() {
 	output.NewContinuation(r.stderr).BlankLine()
 }
 
-func printApplyRunStart(stdout io.Writer, ledger workflow.RunLedger) {
+func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
-	p.Section("Apply run")
+	p.Section("Run")
 	fields := []output.Field{
-		{Key: "Run", Value: ledger.RunID},
+		{Key: "ID", Value: ledger.RunID},
 		{Key: "Target", Value: ledger.Target},
 		{Key: "Tasks", Value: fmt.Sprintf("%d", len(ledger.Tasks))},
-		{Key: "Parallelism", Value: fmt.Sprintf("%d task(s), %d per host, %d Redfish",
+		{Key: "Parallelism", Value: fmt.Sprintf("%d tasks, %d per host, %d Redfish",
 			ledger.Limits.Parallelism,
 			ledger.Limits.ParallelismPerHost,
 			ledger.Limits.ParallelismRedfish,
 		)},
+		{Key: "Run log", Value: workflow.ApplyRunLogPath(runsDir, ledger.RunID)},
+	}
+	if contextName != "" {
+		fields = append([]output.Field{{Key: "Context", Value: contextName}}, fields...)
 	}
 	if ledger.Scope != "" {
 		fields = append(fields, output.Field{Key: "Scope", Value: ledger.Scope})
 	}
 	p.Fields(fields)
-	printApplyProgress(stdout, ledger)
 }
 
-func printApplyAnsibleExecutionStart(stdout io.Writer) {
-	output.NewContinuation(stdout).Section("Ansible execution")
+func printApplyDashboard(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
+	p := output.NewContinuation(stdout)
+	p.ProgressBar("Fleet progress", applyProgressDone(ledger), len(ledger.Tasks), applyProgressFields(ledger))
+	p.ClusterPhases(applyClusterPhaseLines(clustersDir, ledger))
+	printApplyRunning(stdout, clustersDir, ledger)
 }
 
-func printApplyClusterLogPaths(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
-	paths := applyClusterLogPaths(ledger)
-	installerPaths := applyClusterInstallerLogPaths(clustersDir, ledger)
-	if len(paths) == 0 && len(installerPaths) == 0 {
+func printApplyRunning(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
+	running := ledger.RunningTasks()
+	if len(running) == 0 {
 		return
 	}
 	p := output.NewContinuation(stdout)
-	p.Section("Logs")
-	fields := make([]output.Field, 0, len(paths)+len(installerPaths))
-	for _, cluster := range ledger.ClusterNames() {
-		if path := paths[cluster]; path != "" {
-			fields = append(fields, output.Field{Key: cluster, Value: path})
-		}
-		if path := installerPaths[cluster]; path != "" {
-			fields = append(fields, output.Field{Key: cluster + " installer log", Value: path})
-		}
+	p.Section("Running")
+	lines := make([]output.TaskLine, 0, len(running))
+	for _, task := range running {
+		lines = append(lines, output.TaskLine{
+			Status: output.StatusRunning,
+			Label:  applyTaskDisplayLabel(task.Label),
+			Detail: applyTaskRunDetail(clustersDir, task),
+		})
 	}
-	p.Fields(fields)
+	p.Tasks(lines)
 }
 
-func printApplyTaskStart(stdout io.Writer, clustersDir string, ledger workflow.RunLedger, id string) {
-	task, ok := ledger.Task(id)
-	if !ok {
-		return
-	}
-	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
-		Status: output.StatusRunning,
-		Label:  applyTaskDisplayLabel(task.Label),
-		Detail: applyTaskRunningDetail(clustersDir, task),
-	}})
-}
-
-func printApplyTaskResult(stdout io.Writer, ledger workflow.RunLedger, id string) {
-	task, ok := ledger.Task(id)
-	if !ok {
-		return
-	}
-	status := output.StatusOK
-	detail := "complete"
-	switch task.Status {
-	case workflow.TaskStatusSkipped:
-		status = output.StatusSkip
-		detail = task.SkippedReason
-	case workflow.TaskStatusFailed:
-		status = output.StatusFail
-		detail = task.Failure
-	case workflow.TaskStatusBlocked:
-		status = output.StatusSkip
-		detail = task.SkippedReason
-	}
-	output.NewContinuation(stdout).Tasks([]output.TaskLine{{
-		Status: status,
-		Label:  applyTaskDisplayLabel(task.Label),
-		Detail: detail,
-	}})
-	printApplyProgress(stdout, ledger)
-}
-
-func printApplyStageSnapshot(stdout io.Writer, ledger workflow.RunLedger) {
-	output.NewContinuation(stdout).Tasks(applyStageLines(ledger))
-}
-
-func printApplyRunSummary(stdout io.Writer, ledger workflow.RunLedger) {
+func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	p.Section("Summary")
 	status := output.StatusOK
 	detail := "complete"
 	switch ledger.Status {
 	case workflow.RunStatusFailed:
-		status = output.StatusFail
+		status = output.StatusFailed
 		detail = "failed"
 	case workflow.RunStatusRunning:
 		status = output.StatusRunning
 		detail = "running"
 	case workflow.RunStatusCancelled:
-		status = output.StatusSkip
+		status = output.StatusCancel
 		detail = "cancelled"
 	}
 	p.Status(status, ledger.Target+" apply", detail)
-	var lines []output.TaskLine
+	lines := make([]output.TaskLine, 0, len(ledger.ClusterNames()))
 	for _, cluster := range ledger.ClusterNames() {
-		clusterStatus, clusterDetail := applyClusterSummary(ledger.TasksForCluster(cluster))
+		clusterStatus, clusterDetail := applyClusterLifecycleSummary(ledger, cluster)
 		lines = append(lines, output.TaskLine{
 			Status: clusterStatus,
 			Label:  cluster,
@@ -164,133 +138,36 @@ func printApplyRunSummary(stdout io.Writer, ledger workflow.RunLedger) {
 		})
 	}
 	p.Tasks(lines)
+	printApplyFailureDetails(stdout, clustersDir, ledger)
 }
 
-func printApplyProgress(stdout io.Writer, ledger workflow.RunLedger) {
-	var fields []output.ProgressField
-	for _, count := range ledger.ProgressCounts() {
-		fields = append(fields, output.ProgressField{Label: string(count.Status), Count: count.Count})
-	}
-	output.NewContinuation(stdout).Progress("Progress", fields)
-}
-
-func applyClusterLogPaths(ledger workflow.RunLedger) map[string]string {
-	paths := map[string]string{}
-	for _, task := range ledger.Tasks {
-		if task.Cluster != "" && task.ClusterLogPath != "" {
-			paths[task.Cluster] = task.ClusterLogPath
+func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
+	p := output.NewContinuation(stdout)
+	for _, task := range ledger.FailedTasks() {
+		fields := []output.Field{
+			{Key: "failed task", Value: applyTaskDisplayLabel(task.Label)},
+			{Key: "phase", Value: applyFailedPhase(ledger, task)},
+			{Key: "reason", Value: applyFailureReason(task.Failure)},
 		}
-	}
-	return paths
-}
-
-func applyClusterInstallerLogPaths(clustersDir string, ledger workflow.RunLedger) map[string]string {
-	paths := map[string]string{}
-	if strings.TrimSpace(clustersDir) == "" {
-		return paths
-	}
-	for _, task := range ledger.Tasks {
-		if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" {
-			paths[task.Cluster] = workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)
+		if task.LogPath != "" {
+			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
 		}
+		p.Details(fields)
 	}
-	return paths
-}
-
-func applyTaskRunningDetail(clustersDir string, task workflow.TaskLedgerEntry) string {
-	if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" && strings.TrimSpace(clustersDir) != "" {
-		return "running; installer log " + workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)
-	}
-	return "running"
-}
-
-func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
-	lines := []output.TaskLine{{
-		Status: output.StatusDone,
-		Label:  "Render inputs",
-	}}
-	if applyLedgerHasAnyKind(ledger, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot, workflow.ApplyTaskKindInstallWait) {
-		lines = append(lines, output.TaskLine{Status: output.StatusDone, Label: "Resolve installer inputs"})
-	}
-	for _, stage := range []struct {
-		label string
-		kinds []string
-	}{
-		{label: "Provider services", kinds: []string{workflow.ApplyTaskKindProvider}},
-		{label: "Cluster infrastructure", kinds: []string{workflow.ApplyTaskKindClusterInfra}},
-		{label: "Provision storage", kinds: []string{workflow.ApplyTaskKindStorageCluster}},
-		{label: "Create agent ISOs", kinds: []string{workflow.ApplyTaskKindClusterISO}},
-		{label: "Boot nodes", kinds: []string{workflow.ApplyTaskKindNodeBoot}},
-		{label: "Wait for installs", kinds: []string{workflow.ApplyTaskKindInstallWait}},
-		{label: "Apply addons", kinds: []string{workflow.ApplyTaskKindClusterAddonApply}},
-		{label: "Wait for addons", kinds: []string{workflow.ApplyTaskKindClusterAddonWait}},
-		{label: "Apply storage attachments", kinds: []string{workflow.ApplyTaskKindStorageAttachmentApply}},
-	} {
-		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
-		if ok {
-			lines = append(lines, output.TaskLine{Status: status, Label: stage.label, Detail: detail})
+	for _, task := range ledger.BlockedTasks() {
+		fields := []output.Field{
+			{Key: "blocked task", Value: applyTaskDisplayLabel(task.Label)},
+			{Key: "phase", Value: applyFailedPhase(ledger, task)},
+			{Key: "reason", Value: applyBlockedReason(task)},
 		}
-	}
-	return lines
-}
-
-func applyLedgerHasAnyKind(ledger workflow.RunLedger, kinds ...string) bool {
-	kindSet := map[string]bool{}
-	for _, kind := range kinds {
-		kindSet[kind] = true
-	}
-	for _, task := range ledger.Tasks {
-		if kindSet[task.Kind] {
-			return true
+		if task.ClusterLogPath != "" {
+			fields = append(fields, output.Field{Key: "log", Value: task.ClusterLogPath})
+		} else if task.LogPath != "" {
+			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
+		} else if task.Cluster != "" {
+			fields = append(fields, output.Field{Key: "log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, task.Cluster)})
 		}
-	}
-	return false
-}
-
-func applyStageStatus(ledger workflow.RunLedger, kinds ...string) (output.Status, string, bool) {
-	kindSet := map[string]bool{}
-	for _, kind := range kinds {
-		kindSet[kind] = true
-	}
-	counts := map[workflow.TaskStatus]int{}
-	total := 0
-	for _, task := range ledger.Tasks {
-		if !kindSet[task.Kind] {
-			continue
-		}
-		total++
-		counts[task.Status]++
-	}
-	if total == 0 {
-		return output.StatusPending, "", false
-	}
-	done := counts[workflow.TaskStatusOK] + counts[workflow.TaskStatusSkipped]
-	running := counts[workflow.TaskStatusRunning] + counts[workflow.TaskStatusReady]
-	failed := counts[workflow.TaskStatusFailed] + counts[workflow.TaskStatusBlocked] + counts[workflow.TaskStatusCancelled]
-	pending := counts[workflow.TaskStatusPending]
-	detail := ""
-	if total > 1 {
-		parts := []string{fmt.Sprintf("%d/%d done", done, total)}
-		if running > 0 {
-			parts = append(parts, fmt.Sprintf("%d running", running))
-		}
-		if pending > 0 {
-			parts = append(parts, fmt.Sprintf("%d pending", pending))
-		}
-		if failed > 0 {
-			parts = append(parts, fmt.Sprintf("%d failed", failed))
-		}
-		detail = strings.Join(parts, ", ")
-	}
-	switch {
-	case failed > 0:
-		return output.StatusFail, detail, true
-	case done == total:
-		return output.StatusDone, detail, true
-	case running > 0 || done > 0:
-		return output.StatusRunning, detail, true
-	default:
-		return output.StatusPending, detail, true
+		p.Details(fields)
 	}
 }
 
@@ -310,6 +187,10 @@ func applyTaskDisplayLabel(label string) string {
 		return "Wait install " + strings.TrimPrefix(label, "wait install ")
 	case strings.HasPrefix(label, "addon "):
 		return "Addon " + strings.TrimPrefix(label, "addon ")
+	case strings.HasPrefix(label, "storage attachment "):
+		return "Storage attachment " + strings.TrimPrefix(label, "storage attachment ")
+	case strings.HasPrefix(label, "storage "):
+		return "Provision " + strings.TrimPrefix(label, "storage ")
 	default:
 		return label
 	}

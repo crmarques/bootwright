@@ -119,7 +119,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	}
 
 	ledger, ledgerFound, ledgerErr := workflow.LoadRunLedger(ctx.RunsDir)
-	printApplyLedgerStatus(p, ctx.RunsDir, ledger, ledgerFound, ledgerErr)
+	printApplyLedgerStatus(p, ctx.RunsDir, ctx.ClustersDir, ledger, ledgerFound, ledgerErr)
 
 	p.Section("Next steps")
 	var items []cliout.Item

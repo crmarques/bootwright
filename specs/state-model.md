@@ -1383,12 +1383,12 @@ Bootwright-managed host cluster wait for the parent install and its
 target. `apply addons` uses the installed cluster kubeconfig and `oc apply`
 directly for standalone add-on convergence. `apply all` includes provider
 services before the same cluster lifecycle graph.
-When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
-to the terminal between Bootwright prerequisite output and the Bootwright
-summary. When an apply selects two or more `ContainerCluster` objects,
-Bootwright does not stream live Ansible output to the terminal; it prints a
-`Logs` section with one install log path per cluster and keeps task output in
-the task artifact log plus the owning cluster log.
+Apply terminal output is a ledger-backed fleet dashboard for both single-cluster
+and multi-cluster runs. It shows run metadata, run and cluster log paths,
+task-count progress, per-cluster lifecycle phases, running work, and concise
+failures. Bootwright does not stream live Ansible, `oc`, SSH, SCP, Ceph, or
+installer process output to the terminal; that output stays in the run log,
+task logs, and owning cluster log.
 `bootwright apply clusters --override` forces OpenShift agent install tasks to
 run even when local cluster secrets kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
@@ -1412,7 +1412,7 @@ IDs, task dependencies, task statuses, timestamps, and per-task
 `ansible-output.log` paths under
 `<runs-dir>/history/<run>/tasks/<task>/`.
 Cluster-owned tasks also record
-`/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runs/<run>/install.log`.
+`/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runs/<run>/bootwright.log`.
 Per-cluster install state is stored under
 `<clusters-dir>/<cluster>/runtime/install-record.json`; it records the desired
 input fingerprint, install status, last safe phase, run ID, timestamps, and
@@ -1467,8 +1467,9 @@ Fixed storage layout:
 - Secret-inlined installer inputs and install records live under
   `clusters/<cluster>/runtime/`.
 - Generated cluster access material lives under `clusters/<cluster>/secrets/`.
-- Apply ledgers, leases, task logs, and artifacts live under `runs/`; per-cluster
-  install logs live under `clusters/<cluster>/runs/<run>/install.log`.
+- Apply ledgers, leases, task logs, run logs, and artifacts live under `runs/`;
+  per-cluster apply logs live under
+  `clusters/<cluster>/runs/<run>/bootwright.log`.
 - Managed service files live under `managed-services/<component-name>/`.
   Artifact server web roots mount only `managed-services/<component-name>/public/`;
   TLS keys and generated config stay outside the served root.

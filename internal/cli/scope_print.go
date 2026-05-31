@@ -80,11 +80,9 @@ func printPhaseStart(w io.Writer, phase Phase, askBecomePass bool) {
 	p.List([]output.Item{{Label: phase.Name, Detail: phase.Description}})
 }
 
-// printWorkflowEnd writes a single-line completion banner after a
-// successful Ansible playbook run. Failures already surface via the
-// streamed Ansible output and the non-zero exit; this banner gives the
-// operator a clean "done" marker between a long stream of Ansible
-// output and the rendered-artifact summary that follows.
+// printWorkflowEnd writes a single-line completion banner after a successful
+// workflow run. Failure details are reported by the caller that owns the
+// command's output mode.
 func printWorkflowEnd(w io.Writer, workflowName string) {
 	output.NewContinuation(w).Summary(output.StatusOK, workflowName, "complete")
 }

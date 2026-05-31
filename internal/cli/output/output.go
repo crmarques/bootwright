@@ -19,8 +19,12 @@ const (
 	StatusPending Status = "PENDING"
 	StatusMissing Status = "MISSING"
 	StatusFail    Status = "FAIL"
+	StatusFailed  Status = "FAILED"
 	StatusWarn    Status = "WARN"
 	StatusSkip    Status = "SKIP"
+	StatusSkipped Status = "SKIPPED"
+	StatusBlocked Status = "BLOCKED"
+	StatusCancel  Status = "CANCELLED"
 )
 
 type Field struct {
@@ -62,6 +66,18 @@ type TaskLine struct {
 	Status Status
 	Label  string
 	Detail string
+}
+
+type PhaseStatus struct {
+	Label  string
+	Status Status
+}
+
+type ClusterPhaseLine struct {
+	Name   string
+	Kind   string
+	Fields []Field
+	Phases []PhaseStatus
 }
 
 type Printer struct {
@@ -161,6 +177,38 @@ func (p *Printer) Progress(label string, fields []ProgressField) {
 	p.Status(StatusOK, label, strings.Join(parts, ", "))
 }
 
+func (p *Printer) ProgressBar(label string, done int, total int, fields []ProgressField) {
+	if p == nil || p.w == nil {
+		return
+	}
+	if total < 0 {
+		total = 0
+	}
+	if done < 0 {
+		done = 0
+	}
+	if done > total {
+		done = total
+	}
+	const width = 20
+	filled := 0
+	if total > 0 {
+		filled = done * width / total
+	}
+	bar := strings.Repeat("#", filled) + strings.Repeat("-", width-filled)
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field.Count > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", field.Count, strings.ToUpper(field.Label)))
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "0 tasks")
+	}
+	fmt.Fprintf(p.w, "%s  [%s] %d/%d %s\n", label, bar, done, total, strings.Join(parts, "  "))
+	p.wrote = true
+}
+
 func (p *Printer) Tasks(items []TaskLine) {
 	if p == nil || p.w == nil || len(items) == 0 {
 		return
@@ -171,6 +219,34 @@ func (p *Printer) Tasks(items []TaskLine) {
 			continue
 		}
 		fmt.Fprintf(p.w, "  %s %s: %s\n", p.statusLabel(item.Status), item.Label, item.Detail)
+	}
+	p.wrote = true
+}
+
+func (p *Printer) ClusterPhases(items []ClusterPhaseLine) {
+	if p == nil || p.w == nil || len(items) == 0 {
+		return
+	}
+	for i, item := range items {
+		if i > 0 || p.wrote {
+			fmt.Fprintln(p.w)
+		}
+		heading := item.Name
+		if item.Kind != "" {
+			heading += " (" + item.Kind + ")"
+		}
+		fmt.Fprintln(p.w, p.style(heading, color.Bold))
+		for _, field := range item.Fields {
+			fmt.Fprintf(p.w, "  %s: %s\n", field.Key, field.Value)
+		}
+		if len(item.Phases) == 0 {
+			continue
+		}
+		parts := make([]string, 0, len(item.Phases))
+		for _, phase := range item.Phases {
+			parts = append(parts, p.statusLabel(phase.Status)+" "+phase.Label)
+		}
+		fmt.Fprintf(p.w, "  %s\n", strings.Join(parts, "   "))
 	}
 	p.wrote = true
 }
@@ -248,6 +324,16 @@ func (p *Printer) BlankLine() {
 	p.wrote = true
 }
 
+func (p *Printer) Details(fields []Field) {
+	if p == nil || p.w == nil || len(fields) == 0 {
+		return
+	}
+	for _, field := range fields {
+		fmt.Fprintf(p.w, "      %s: %s\n", field.Key, field.Value)
+	}
+	p.wrote = true
+}
+
 func (p *Printer) Error(err error) {
 	if err == nil {
 		return
@@ -283,11 +369,13 @@ func (p *Printer) statusLabel(status Status) string {
 		return p.style(label, color.FgHiBlack)
 	case StatusMissing:
 		return p.style(label, color.Bold, color.FgYellow)
-	case StatusFail:
+	case StatusFail, StatusFailed:
 		return p.style(label, color.Bold, color.FgRed)
 	case StatusWarn:
 		return p.style(label, color.FgYellow)
-	case StatusSkip:
+	case StatusBlocked:
+		return p.style(label, color.Bold, color.FgYellow)
+	case StatusSkip, StatusSkipped, StatusCancel:
 		return p.style(label, color.FgHiBlack)
 	default:
 		return label
@@ -305,6 +393,13 @@ func colorEnabled(w io.Writer) bool {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		return false
 	}
+	return Interactive(w)
+}
+
+func Interactive(w io.Writer) bool {
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
 	file, ok := w.(*os.File)
 	if !ok {
 		return false
@@ -314,6 +409,20 @@ func colorEnabled(w io.Writer) bool {
 		return false
 	}
 	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func Write(w io.Writer, text string) {
+	if w == nil || text == "" {
+		return
+	}
+	_, _ = io.WriteString(w, text)
+}
+
+func ClearLines(w io.Writer, lines int) {
+	if w == nil || lines <= 0 {
+		return
+	}
+	fmt.Fprintf(w, "\x1b[%dA\x1b[J", lines)
 }
 
 type checkGroup struct {

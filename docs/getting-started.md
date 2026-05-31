@@ -229,6 +229,11 @@ all match, then applies add-ons and integrations idempotently. If an interrupted
 apply already booted nodes, the next apply resumes at the install wait phase
 instead of recreating the ISO or rebooting machines.
 
+Apply terminal output shows a fleet dashboard with log paths, phase status,
+running work, and concise failures. Native Ansible, `oc`, SSH, SCP, Ceph, and
+installer process output is kept under the run, task, and cluster logs in
+Bootwright storage.
+
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an
 interrupted process leaves only a stale ledger, the next `apply` or `destroy`

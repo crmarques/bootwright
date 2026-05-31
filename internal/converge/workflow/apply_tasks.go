@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -66,16 +64,13 @@ type applyTaskResult struct {
 	id            string
 	skipped       bool
 	skippedReason string
+	failure       string
 	err           error
 }
 
 type ApplyReporter interface {
 	RunStart(ledger RunLedger)
-	ClusterLogPaths(ledger RunLedger)
 	StageSnapshot(ledger RunLedger)
-	AnsibleExecutionStart()
-	TaskStart(ledger RunLedger, id string)
-	TaskResult(ledger RunLedger, id string)
 	RunSummary(ledger RunLedger)
 	PromptGap()
 }
@@ -372,7 +367,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	return RunPreparedApplyTaskGraph(ctx, stdout, stderr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory)
 }
 
-func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return RunLedger{}, fmt.Errorf("clusters dir is required")
 	}
@@ -418,25 +413,15 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 		}
 		return RemoveRunLease(runsDir)
 	}
-	multiClusterOutput := len(ledger.ClusterNames()) > 1
-	clusterLogs, err := openApplyClusterLogs(opts.ClustersDir, ledger)
+	logs, err := openApplyLogs(runsDir, opts.ClustersDir, ledger)
 	if err != nil {
 		_ = finishRun(RunStatusFailed)
 		return ledger, err
 	}
-	defer clusterLogs.Close()
+	defer logs.Close()
 	if reporter != nil {
 		reporter.RunStart(ledger)
-	}
-	if multiClusterOutput {
-		if reporter != nil {
-			reporter.ClusterLogPaths(ledger)
-			reporter.StageSnapshot(ledger)
-		}
-	} else {
-		if reporter != nil && target.Name != ApplyPhaseAddons {
-			reporter.AnsibleExecutionStart()
-		}
+		reporter.StageSnapshot(ledger)
 	}
 	if len(tasks) == 0 {
 		_ = finishRun(RunStatusOK)
@@ -445,9 +430,6 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 		}
 		return ledger, nil
 	}
-	outputMu := &sync.Mutex{}
-	taskStdout := &applyTaskOutputWriter{mu: outputMu, w: stdout}
-	taskStderr := &applyTaskOutputWriter{mu: outputMu, w: stderr}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -494,21 +476,15 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 				firstErr = err
 				cancel()
 			}
-			if multiClusterOutput {
-				if reporter != nil {
-					reporter.StageSnapshot(ledger)
-				}
-			} else {
-				if reporter != nil {
-					reporter.TaskStart(ledger, task.Entry.ID)
-				}
+			if reporter != nil {
+				reporter.StageSnapshot(ledger)
 			}
-			if opts.AskBecomePass && !multiClusterOutput {
+			if opts.AskBecomePass {
 				if reporter != nil {
 					reporter.PromptGap()
 				}
 			}
-			stdoutWriter, stderrWriter := applyTaskWriters(task, taskStdout, taskStderr, clusterLogs, multiClusterOutput)
+			stdoutWriter, stderrWriter := applyTaskWriters(task, logs)
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- runOneApplyTask(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
@@ -527,7 +503,11 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 		releaseTaskResources(taskByID[event.id], runningResources)
 		completed++
 		if event.err != nil {
-			ledger.MarkFailed(event.id, event.err.Error(), time.Now())
+			failure := event.failure
+			if failure == "" {
+				failure = event.err.Error()
+			}
+			ledger.MarkFailed(event.id, failure, time.Now())
 			if firstErr == nil {
 				firstErr = event.err
 				cancel()
@@ -546,14 +526,8 @@ func RunPreparedApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.
 			firstErr = saveErr
 			cancel()
 		}
-		if multiClusterOutput {
-			if reporter != nil {
-				reporter.StageSnapshot(ledger)
-			}
-		} else {
-			if reporter != nil {
-				reporter.TaskResult(ledger, event.id)
-			}
+		if reporter != nil {
+			reporter.StageSnapshot(ledger)
 		}
 	}
 
@@ -655,6 +629,18 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 }
 
 func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
+	result := runOneApplyTaskInner(ctx, stdout, stderr, runsDir, runID, opts, task, runnerFactory)
+	if result.err == nil {
+		return result
+	}
+	failure := conciseApplyTaskFailure(result.err.Error())
+	logPath := TaskLogPath(runsDir, runID, task.Entry.ID)
+	result.failure = failure
+	result.err = fmt.Errorf("%s failed: %s (log: %s)", task.Entry.Label, failure, logPath)
+	return result
+}
+
+func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult {
 	if task.Entry.Kind == ApplyTaskKindClusterAddonApply || task.Entry.Kind == ApplyTaskKindClusterAddonWait {
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
@@ -704,90 +690,35 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }
 
-type applyTaskOutputWriter struct {
-	mu *sync.Mutex
-	w  io.Writer
-}
-
-func (w *applyTaskOutputWriter) Write(p []byte) (int, error) {
-	if w == nil || w.w == nil {
-		return len(p), nil
-	}
-	if w.mu != nil {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-	}
-	return w.w.Write(p)
-}
-
-type applyClusterLogSet struct {
-	files   []*os.File
-	writers map[string]io.Writer
-}
-
-func openApplyClusterLogs(clustersDir string, ledger RunLedger) (*applyClusterLogSet, error) {
-	names := ledger.ClusterNames()
-	logs := &applyClusterLogSet{writers: map[string]io.Writer{}}
-	if len(names) <= 1 {
-		return logs, nil
-	}
-	for _, name := range names {
-		path := ApplyClusterLogPath(clustersDir, ledger.RunID, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			logs.Close()
-			return nil, fmt.Errorf("create cluster log directory: %w", err)
-		}
-		if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-			logs.Close()
-			return nil, fmt.Errorf("chmod cluster log directory: %w", err)
-		}
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-		if err != nil {
-			logs.Close()
-			return nil, fmt.Errorf("create cluster install log: %w", err)
-		}
-		if err := os.Chmod(path, 0o600); err != nil {
-			file.Close()
-			logs.Close()
-			return nil, fmt.Errorf("chmod cluster install log: %w", err)
-		}
-		logs.files = append(logs.files, file)
-		logs.writers[name] = &applyTaskOutputWriter{mu: &sync.Mutex{}, w: file}
-	}
-	return logs, nil
-}
-
-func (s *applyClusterLogSet) Writer(cluster string) io.Writer {
-	if s == nil {
-		return io.Discard
-	}
-	if writer, ok := s.writers[cluster]; ok {
-		return writer
-	}
-	return io.Discard
-}
-
-func (s *applyClusterLogSet) Close() error {
-	if s == nil {
-		return nil
-	}
-	var firstErr error
-	for _, file := range s.files {
-		if err := file.Close(); err != nil && firstErr == nil {
-			firstErr = err
+func conciseApplyTaskFailure(message string) string {
+	lines := strings.Split(message, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "failure:") {
+			return trimApplyTaskFailure(strings.TrimSpace(strings.TrimPrefix(line, "failure:")))
 		}
 	}
-	return firstErr
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "last ") || strings.HasPrefix(line, "underlying error:") {
+			continue
+		}
+		return trimApplyTaskFailure(line)
+	}
+	return "task failed"
 }
 
-func applyTaskWriters(task ApplyTask, stdout io.Writer, stderr io.Writer, clusterLogs *applyClusterLogSet, multiClusterOutput bool) (io.Writer, io.Writer) {
-	if !multiClusterOutput {
-		return stdout, stderr
+func trimApplyTaskFailure(value string) string {
+	const limit = 180
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
 	}
-	if task.Entry.Cluster == "" {
-		return io.Discard, io.Discard
-	}
-	writer := clusterLogs.Writer(task.Entry.Cluster)
+	return value[:limit-3] + "..."
+}
+
+func applyTaskWriters(task ApplyTask, logs *applyLogSet) (io.Writer, io.Writer) {
+	writer := logs.Writer(task.Entry.Cluster)
 	return writer, writer
 }
 
@@ -951,18 +882,6 @@ func nodeBootTaskCount(tasks []ApplyTask) int {
 		}
 	}
 	return count
-}
-
-func TaskLogPath(runsDir, runID, taskID string) string {
-	return filepath.Join(runsDir, "history", runID, "tasks", taskID, ansible.OutputLogName)
-}
-
-func ApplyClusterLogPath(clustersDir, runID, cluster string) string {
-	return filepath.Join(clustersDir, cluster, "runs", runID, "install.log")
-}
-
-func OpenShiftInstallerLogPath(clustersDir, cluster string) string {
-	return filepath.Join(clustersDir, cluster, "runtime", render.RuntimeRelativeDir, ".openshift_install.log")
 }
 
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {
