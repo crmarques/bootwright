@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM docker.io/redhat/ubi9:9.7 AS builder
+FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92 AS builder
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
@@ -58,7 +58,7 @@ RUN --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod,sharing=locked \
     if [ -z "${git_commit}" ]; then git_commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; fi; \
     make build VERSION="${version}" GIT_COMMIT="${git_commit}"
 
-FROM docker.io/redhat/ubi9:9.7
+FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92
 
 COPY --from=builder /src/bin/bootwright /usr/local/bin/bootwright
 

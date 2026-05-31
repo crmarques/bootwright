@@ -1,7 +1,7 @@
 ---
 - name: Discover Redfish System ID
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems"
+    url: "{{ '/redfish/v1/Systems' | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
@@ -25,7 +25,7 @@
 
 - name: Resolve Redfish System VirtualMedia collection URL
   ansible.builtin.set_fact:
-    bootwright_redfish_system_vmedia_url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/VirtualMedia"
+    bootwright_redfish_system_vmedia_url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/VirtualMedia') | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
   changed_when: false
 
 - name: List VirtualMedia members for the target system
@@ -46,7 +46,7 @@
 
 - name: List Redfish managers
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Managers"
+    url: "{{ '/redfish/v1/Managers' | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -67,7 +67,7 @@
 
 - name: Collect Redfish manager VirtualMedia collection URLs
   ansible.builtin.set_fact:
-    bootwright_redfish_manager_vmedia_urls: "{{ bootwright_redfish_manager_vmedia_urls + [bootwright_component.boot.redfish.baseUrl ~ item['@odata.id'] ~ '/VirtualMedia'] }}"
+    bootwright_redfish_manager_vmedia_urls: "{{ bootwright_redfish_manager_vmedia_urls + [((item['@odata.id'] ~ '/VirtualMedia') | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl))] }}"
   loop: "{{ bootwright_redfish_managers_list.json.Members | default([]) }}"
   changed_when: false
 
@@ -113,7 +113,7 @@
 
 - name: Collect Redfish VirtualMedia member URLs
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_member_urls: "{{ bootwright_redfish_vmedia_member_urls + [bootwright_component.boot.redfish.baseUrl ~ item['@odata.id']] }}"
+    bootwright_redfish_vmedia_member_urls: "{{ bootwright_redfish_vmedia_member_urls + [(item['@odata.id'] | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl))] }}"
   loop: "{{ bootwright_redfish_vmedia_member_refs }}"
   changed_when: false
 
@@ -219,14 +219,7 @@
 
 - name: Probe Redfish VMM ActionInfo
   ansible.builtin.uri:
-    url: >-
-      {{
-        item.actionInfo
-        if (item.actionInfo | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ item.actionInfo)
-        if (item.actionInfo | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ item.actionInfo)
-      }}
+    url: "{{ item.actionInfo | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -273,22 +266,8 @@
 
 - name: Resolve VirtualMedia absolute action URLs
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_insert_url: >-
-      {{
-        bootwright_redfish_vmedia_insert_target
-        if (bootwright_redfish_vmedia_insert_target | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_vmedia_insert_target)
-        if (bootwright_redfish_vmedia_insert_target | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_vmedia_insert_target)
-      }}
-    bootwright_redfish_vmedia_eject_url: >-
-      {{
-        bootwright_redfish_vmedia_eject_target
-        if (bootwright_redfish_vmedia_eject_target | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_vmedia_eject_target)
-        if (bootwright_redfish_vmedia_eject_target | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_vmedia_eject_target)
-      }}
+    bootwright_redfish_vmedia_insert_url: "{{ bootwright_redfish_vmedia_insert_target | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    bootwright_redfish_vmedia_eject_url: "{{ bootwright_redfish_vmedia_eject_target | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
   changed_when: false
 
 - name: Resolve VirtualMedia eject request body

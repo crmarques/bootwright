@@ -399,6 +399,8 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 	limits := ResolveApplyConcurrencyLimits(prepared.Limits, tasks)
 	runID := prepared.RunID
 	startedAt := prepared.StartedAt
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
 	if err := SaveRunLedger(runsDir, ledger); err != nil {
 		return ledger, err
@@ -409,7 +411,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 		_ = SaveRunLedger(runsDir, ledger)
 		return ledger, err
 	}
-	stopLeaseHeartbeat := startRunLeaseHeartbeat(ctx, runsDir, lease)
+	stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)
 	finishRun := func(status RunStatus) error {
 		stopLeaseHeartbeat()
 		ledger.Finish(status, time.Now())
@@ -435,9 +437,6 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 		}
 		return ledger, nil
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	taskByID := map[string]ApplyTask{}
 	for _, task := range tasks {
@@ -500,7 +499,16 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 		if running == 0 && !startedAny {
 			break
 		}
-		event := <-events
+		var event applyTaskResult
+		select {
+		case event = <-events:
+		case err := <-leaseErrors:
+			if err != nil && firstErr == nil {
+				firstErr = err
+				cancel()
+			}
+			continue
+		}
 		running--
 		if taskByID[event.id].Entry.Kind == ApplyTaskKindNodeBoot {
 			runningRedfish -= taskRedfishSlots(taskByID[event.id], redfishLimit)
@@ -536,6 +544,20 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 		}
 	}
 
+	if firstErr == nil {
+		blocked := blockUnfinishedApplyTasks(&ledger, time.Now())
+		if len(blocked) > 0 {
+			progressErr := fmt.Errorf("apply task graph could not make progress; blocked task(s): %s", strings.Join(blocked, ", "))
+			if saveErr := SaveRunLedger(runsDir, ledger); saveErr != nil {
+				firstErr = fmt.Errorf("%v; save apply ledger: %w", progressErr, saveErr)
+			} else {
+				firstErr = progressErr
+			}
+			if reporter != nil {
+				reporter.StageSnapshot(ledger)
+			}
+		}
+	}
 	if firstErr != nil {
 		_ = finishRun(RunStatusFailed)
 		if reporter != nil {
@@ -552,12 +574,18 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 	return ledger, nil
 }
 
-func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease) func() {
+var (
+	applyLeaseHeartbeatInterval = ApplyLeaseHeartbeatInterval
+	saveRunLease                = SaveRunLease
+)
+
+func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease) (func(), <-chan error) {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
+	errors := make(chan error, 1)
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(ApplyLeaseHeartbeatInterval)
+		ticker := time.NewTicker(applyLeaseHeartbeatInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -565,12 +593,15 @@ func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease)
 				return
 			case now := <-ticker.C:
 				lease.HeartbeatAt = now.UTC()
-				_ = SaveRunLease(runsDir, lease)
+				if err := saveRunLease(runsDir, lease); err != nil {
+					errors <- fmt.Errorf("refresh apply lease: %w", err)
+					return
+				}
 			}
 		}
 	}()
 	stopped := false
-	return func() {
+	stop := func() {
 		if stopped {
 			return
 		}
@@ -578,6 +609,44 @@ func startRunLeaseHeartbeat(ctx context.Context, runsDir string, lease RunLease)
 		cancel()
 		<-done
 	}
+	return stop, errors
+}
+
+func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
+	blocked := []string{}
+	for i := range ledger.Tasks {
+		task := &ledger.Tasks[i]
+		if taskTerminal(task.Status) {
+			continue
+		}
+		task.Status = TaskStatusBlocked
+		t := now.UTC()
+		task.EndedAt = &t
+		task.SkippedReason = blockedApplyTaskReason(*ledger, *task)
+		blocked = append(blocked, task.ID)
+	}
+	sort.Strings(blocked)
+	return blocked
+}
+
+func blockedApplyTaskReason(ledger RunLedger, task TaskLedgerEntry) string {
+	unresolved := []string{}
+	for _, dep := range task.Dependencies {
+		depTask, ok := ledger.Task(dep)
+		if !ok {
+			unresolved = append(unresolved, dep+" (missing)")
+			continue
+		}
+		switch depTask.Status {
+		case TaskStatusOK, TaskStatusSkipped:
+		default:
+			unresolved = append(unresolved, fmt.Sprintf("%s (%s)", dep, depTask.Status))
+		}
+	}
+	if len(unresolved) > 0 {
+		return "dependencies did not complete: " + strings.Join(unresolved, ", ")
+	}
+	return "apply task graph could not make progress"
 }
 
 func taskSlotAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {

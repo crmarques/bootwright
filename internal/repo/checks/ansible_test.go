@@ -566,7 +566,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri body", powerTasks[securityRefreshIdx]["name"])
 	}
-	if got := securityRefresh["url"]; got != "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}" {
+	if got := securityRefresh["url"]; got != "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
 		t.Fatalf("SecurityService probe must use discovered manager SecurityService, got %v", got)
 	}
 	if got := powerTasks[securityRefreshIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "(bootwright_redfish_security_service_member | default('') | length) > 0") {
@@ -905,7 +905,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri task", ejectTasks[waitEjectIdx]["name"])
 	}
-	if got := waitURI["url"]; got != "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}" {
+	if got := waitURI["url"]; got != "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
 		t.Fatalf("virtual media eject wait must poll VirtualMedia member, got %v", got)
 	}
 	if got := ejectTasks[waitEjectIdx]["register"]; got != "bootwright_redfish_vmedia_eject_probe" {

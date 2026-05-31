@@ -61,7 +61,7 @@
 
 - name: Refresh Redfish manager SecurityService for HTTPS file transfer
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    url: "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -99,7 +99,7 @@
 
 - name: Disable HTTPS transfer certificate verification for BMC media fetch
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_security_service_member }}"
+    url: "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_security_service_if_match }}"
@@ -215,7 +215,7 @@
 
 - name: Refresh Redfish system metadata before CD boot override
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -244,7 +244,7 @@
 
 - name: Set one-time boot to CD
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_system_if_match }}"
@@ -281,7 +281,7 @@
 
 - name: Force power off (tolerate already-off)
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/Actions/ComputerSystem.Reset"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset') | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: POST
     body_format: json
     body:
@@ -302,7 +302,7 @@
 
 - name: Power on
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}/Actions/ComputerSystem.Reset"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset') | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: POST
     body_format: json
     body:
@@ -317,7 +317,7 @@
 
 - name: Wait for BMC to report PowerState=On
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"

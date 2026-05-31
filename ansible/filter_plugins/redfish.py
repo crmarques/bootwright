@@ -11,6 +11,21 @@ def bootwright_redfish_action_targets(resource, action_name):
     return [action["target"] for action in bootwright_redfish_action_descriptors(resource, action_name)]
 
 
+def bootwright_redfish_url(ref, base_url):
+    ref_text = _string(ref).strip()
+    if not ref_text:
+        return ""
+    parsed = urlsplit(ref_text)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return ref_text
+    base_text = _string(base_url).rstrip("/")
+    if not base_text:
+        return ref_text
+    if ref_text.startswith("/"):
+        return base_text + ref_text
+    return base_text + "/" + ref_text
+
+
 def bootwright_redfish_action_descriptors(resource, action_name):
     if not isinstance(resource, dict) or not isinstance(action_name, str) or not action_name:
         return []
@@ -253,6 +268,7 @@ class FilterModule:
             "bootwright_redfish_action_targets": bootwright_redfish_action_targets,
             "bootwright_redfish_ethernet_macs": bootwright_redfish_ethernet_macs,
             "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
+            "bootwright_redfish_url": bootwright_redfish_url,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,
             "bootwright_redfish_vmm_control_actions": bootwright_redfish_vmm_control_actions,
         }

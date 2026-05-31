@@ -18,6 +18,7 @@ bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descri
 bootwright_redfish_action_targets = _module.bootwright_redfish_action_targets
 bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
 bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
+bootwright_redfish_url = _module.bootwright_redfish_url
 bootwright_redfish_vmedia_attached = _module.bootwright_redfish_vmedia_attached
 bootwright_redfish_vmm_control_actions = _module.bootwright_redfish_vmm_control_actions
 
@@ -180,6 +181,39 @@ class RedfishVMMControlActions(unittest.TestCase):
         self.assertEqual(got, [])
 
 
+class RedfishURL(unittest.TestCase):
+    def test_preserves_absolute_http_urls(self):
+        self.assertEqual(
+            bootwright_redfish_url(
+                "https://bmc.example/redfish/v1/Managers/1",
+                "https://other.example",
+            ),
+            "https://bmc.example/redfish/v1/Managers/1",
+        )
+
+    def test_joins_rooted_references_to_base_without_duplicate_slashes(self):
+        self.assertEqual(
+            bootwright_redfish_url(
+                "/redfish/v1/Managers/1",
+                "https://bmc.example/",
+            ),
+            "https://bmc.example/redfish/v1/Managers/1",
+        )
+
+    def test_joins_relative_references_to_base(self):
+        self.assertEqual(
+            bootwright_redfish_url(
+                "redfish/v1/Managers/1",
+                "https://bmc.example/redfish-root",
+            ),
+            "https://bmc.example/redfish-root/redfish/v1/Managers/1",
+        )
+
+    def test_bad_input_returns_empty_string(self):
+        self.assertEqual(bootwright_redfish_url(None, "https://bmc.example"), "")
+        self.assertEqual(bootwright_redfish_url("", "https://bmc.example"), "")
+
+
 class RedfishVirtualMediaAttached(unittest.TestCase):
     def test_accepts_exact_image_match(self):
         resource = {
@@ -322,6 +356,7 @@ class FilterRegistration(unittest.TestCase):
         self.assertIn("bootwright_redfish_action_targets", registered)
         self.assertIn("bootwright_redfish_ethernet_macs", registered)
         self.assertIn("bootwright_redfish_mac_validation", registered)
+        self.assertIn("bootwright_redfish_url", registered)
         self.assertIn("bootwright_redfish_vmedia_attached", registered)
         self.assertIn("bootwright_redfish_vmm_control_actions", registered)
         self.assertIs(
@@ -337,6 +372,7 @@ class FilterRegistration(unittest.TestCase):
             registered["bootwright_redfish_mac_validation"],
             bootwright_redfish_mac_validation,
         )
+        self.assertIs(registered["bootwright_redfish_url"], bootwright_redfish_url)
         self.assertIs(
             registered["bootwright_redfish_vmedia_attached"],
             bootwright_redfish_vmedia_attached,

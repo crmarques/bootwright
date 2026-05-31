@@ -1,7 +1,7 @@
 ---
 - name: Refresh Redfish system metadata for declared MAC validation
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}/redfish/v1/Systems/{{ bootwright_redfish_system_id }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -28,14 +28,7 @@
 
 - name: List Redfish EthernetInterface members
   ansible.builtin.uri:
-    url: >-
-      {{
-        bootwright_redfish_ethernet_interfaces_path
-        if (bootwright_redfish_ethernet_interfaces_path | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_ethernet_interfaces_path)
-        if (bootwright_redfish_ethernet_interfaces_path | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_ethernet_interfaces_path)
-      }}
+    url: "{{ bootwright_redfish_ethernet_interfaces_path | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -51,14 +44,7 @@
 
 - name: Probe Redfish EthernetInterface members
   ansible.builtin.uri:
-    url: >-
-      {{
-        item['@odata.id']
-        if (item['@odata.id'] | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ item['@odata.id'])
-        if (item['@odata.id'] | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ item['@odata.id'])
-      }}
+    url: "{{ item['@odata.id'] | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]

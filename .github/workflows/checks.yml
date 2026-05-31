@@ -46,7 +46,7 @@ jobs:
       - name: Staticcheck
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
-          "$(go env GOPATH)/bin/staticcheck" ./...
+          make staticcheck STATICCHECK="$(go env GOPATH)/bin/staticcheck"
 
       - name: Python filter tests
         run: make python-test

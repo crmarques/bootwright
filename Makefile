@@ -1,6 +1,7 @@
 GO ?= go
 PYTHON ?= python3
 DOCKER ?= docker
+STATICCHECK ?= $(shell command -v staticcheck 2>/dev/null)
 COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
@@ -66,7 +67,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
-.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout python-test ansible-syntax-check stale-term-check cli-file-size-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
+.PHONY: all build container-build sync-bundle test validate plan check check-fast check-go-source-visibility check-gofmt go-test-clean-checkout staticcheck python-test ansible-syntax-check stale-term-check cli-file-size-check containerfile-pin-check check-e2e-deps check-e2e-case list-e2e-cases e2e-dry-run e2e clean clean-e2e-state help
 
 # Architecture guardrail: keep internal/cli files thin so domain logic stays
 # in internal/converge/workflow/. The current observed max (init.go ~391) is the
@@ -149,13 +150,14 @@ test:
 # race tests or clean-copy tests when lightweight guardrails already caught it.
 check: check-fast
 	$(GO) vet $(GO_TEST_PACKAGES)
+	$(MAKE) staticcheck
 	$(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) python-test
 	$(MAKE) ansible-syntax-check
 	$(GO) test $(GO_TEST_RACE_FLAGS) $(GO_TEST_PACKAGES)
 	$(MAKE) go-test-clean-checkout
 
-check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check check-e2e-deps
+check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check check-e2e-deps
 
 check-go-source-visibility:
 	@ignored=$$(find api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
@@ -189,6 +191,10 @@ go-test-clean-checkout:
 	mkdir -p "$$tmp/go-build-cache" "$$tmp/go-tmp"; \
 	cd "$$work"; \
 	GOCACHE="$$tmp/go-build-cache" GOTMPDIR="$$tmp/go-tmp" $(GO) test $(GO_TEST_CHECK_FLAGS) $(GO_TEST_PACKAGES)
+
+staticcheck:
+	@test -n "$(STATICCHECK)" || { printf '%s\n' 'staticcheck not found in PATH; install with go install honnef.co/go/tools/cmd/staticcheck@v0.7.0 or set STATICCHECK=/path/to/staticcheck'; exit 1; }
+	$(STATICCHECK) $(GO_TEST_PACKAGES)
 
 # Filter-plugin unit tests use only stdlib unittest so the check works
 # on any Python 3 install without a venv. If pytest is installed
@@ -243,6 +249,9 @@ cli-file-size-check:
 		printf '%s\n' "workflow files over $(WORKFLOW_FILE_LINE_LIMIT) lines (split planning, scheduling, resources, logs, and ledger responsibilities):" "$$over"; \
 		exit 1; \
 	fi
+
+containerfile-pin-check:
+	@awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "Containerfile base image must be digest-pinned: %s\n", $$0; status = 1 } END { exit status }' $(CONTAINERFILE)
 
 validate: build
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --yes

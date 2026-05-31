@@ -23,7 +23,7 @@
 
 - name: Refresh virtual media metadata before PATCH operations
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -53,7 +53,7 @@
 
 - name: Disable HTTPS certificate verification for virtual-media fetch
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_vmedia_if_match }}"
@@ -134,11 +134,7 @@
   ansible.builtin.set_fact:
     bootwright_redfish_insert_task_url: >-
       {{
-        bootwright_redfish_insert_task_ref
-        if (bootwright_redfish_insert_task_ref | regex_search('^https?://'))
-        else (bootwright_component.boot.redfish.baseUrl ~ bootwright_redfish_insert_task_ref)
-        if (bootwright_redfish_insert_task_ref | regex_search('^/'))
-        else (bootwright_component.boot.redfish.baseUrl ~ '/' ~ bootwright_redfish_insert_task_ref)
+        bootwright_redfish_insert_task_ref | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
         if (bootwright_redfish_insert_task_ref | length) > 0
         else ''
       }}
@@ -272,7 +268,7 @@
 
 - name: Probe virtual media after failed InsertMedia task
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -289,7 +285,7 @@
 
 - name: Probe virtual media after mounted InsertMedia task
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -308,7 +304,7 @@
 
 - name: Wait for virtual media to report inserted agent ISO
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -373,7 +369,7 @@
 
 - name: Patch virtual media attachment when InsertMedia action is not reflected
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_vmedia_patch_if_match }}"
@@ -393,7 +389,7 @@
 
 - name: Wait for virtual media to report inserted agent ISO after PATCH fallback
   ansible.builtin.uri:
-    url: "{{ bootwright_component.boot.redfish.baseUrl }}{{ bootwright_redfish_vmedia_member }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]

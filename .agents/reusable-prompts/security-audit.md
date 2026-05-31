@@ -10,8 +10,9 @@ a practical, evidence-backed improvement plan. This is a review-only audit
 unless the user explicitly asks you to edit files.
 
 Prioritize issues that could expose secrets, allow unintended command or file
-system access, weaken cluster install trust, broaden privileges, or make supply
-chain inputs mutable or unverifiable.
+system access, weaken cluster install trust, broaden privileges, make supply
+chain inputs mutable or unverifiable, or let a Bootwright CLI run mutate hosts,
+BMCs, VMs, storage, or installed clusters beyond the operator's intended scope.
 
 Out of scope: broad architecture redesign, speculative vulnerability claims,
 dependency churn without an identified risk, and implementation edits unless
@@ -45,7 +46,9 @@ Useful read-only commands:
 ```bash
 git status --short
 rg --files
-rg -n 'secret|token|password|credential|kubeconfig|pullSecret|private key|no_log|chmod|0600|0644|latest|curl|wget|exec.Command|sh -c|sudo|insecure|skip.*verify|tls' .
+rg -n 'secret|token|password|credential|kubeconfig|pullSecret|private key|no_log|chmod|0600|0644|latest|curl|wget|exec.Command|sh -c|sudo|insecure|skip.*verify|tls|idempot|changed_when|failed_when|creates:|removes:|--yes|--dry-run|confirm|destroy|purge|force' .
+rg -n 'version|digest|componentImages|image:|uses:|go [0-9]|require |ansible-galaxy|collections:' go.mod go.sum ansible .github specs examples internal
+go list -m all
 go list ./...
 go test ./...
 go vet ./...
@@ -147,6 +150,43 @@ Look for:
 - destructive commands or cleanup targets without constrained paths and
   explicit safeguards
 
+### Idempotency and Destructive Operation Safety
+
+Look for:
+
+- Go orchestration paths that do not respect Bootwright's idempotent apply
+  contract: durable run ledgers, non-secret desired-input fingerprints,
+  ownership records, skip/resume guards, resource leases, and safe repeated
+  execution when desired state has not changed
+- CLI commands that can harm the environment without an explicit operator
+  intent signal, such as scoped target selection, confirmation prompts,
+  `--yes` gates for non-interactive runs, `--dry-run` previews where supported,
+  and output that names the current context, selected clusters, affected hosts,
+  BMC targets, KubeVirt namespaces, storage objects, and installed-cluster
+  resources before mutation
+- destructive or high-impact paths that do not fail closed when target
+  ownership is ambiguous, fingerprints are stale, shared services are still
+  consumed, locks cannot be acquired, a kubeconfig or trust source is outside
+  the declared secret boundary, or a requested scope would affect resources
+  outside the selected desired-state graph
+- Ansible tasks that are not idempotent across reruns: shell or command tasks
+  without intentional `changed_when`, `failed_when`, `creates`, `removes`, or
+  equivalent pre-checks; read-only probes marked changed; cleanup tasks that do
+  not tolerate already-absent resources; or privileged partial state left after
+  failure
+- provider, BMC, VM, storage, and cluster mutations that bypass capability
+  checks, resource locks, ownership records, official tool idempotency, or
+  normalized adapter boundaries
+- missing tests that prove a second identical Go apply, Ansible role run,
+  destroy preview, or aborted confirmation is a no-op or a safe refusal
+
+When proposing safeguards for harmful CLI flows, prefer the smallest logic that
+keeps clusters secure: validate and normalize desired state, resolve the exact
+target graph, present or emit the concrete mutation set, require explicit
+confirmation for destructive runs, acquire locks before side effects, execute
+through official tools or idempotent Ansible modules, persist only non-secret
+operation records, and refuse ambiguous, stale, shared, or out-of-scope targets.
+
 ### Trust, TLS, and Installer Security
 
 Look for:
@@ -168,6 +208,12 @@ Look for:
   Actions, downloaded artifacts, or runtime image references
 - mutable tags such as `latest`, omitted image tags, non-version tags, or
   unverified downloads
+- pinned component versions that are behind the most recent stable upstream
+  release or vendor-supported stable channel without an explicit accepted
+  reason; when internet access is unavailable or not allowed, list the exact
+  components whose latest-stable status still needs external verification
+- prerelease, nightly, branch, commit, or floating-channel references treated as
+  stable without evidence from the upstream project or vendor support policy
 - dependency or tool installation paths that assume network access during
   normal validation
 - lock files, rendered component image pins, and environment overrides that do

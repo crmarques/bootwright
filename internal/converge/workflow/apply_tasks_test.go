@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -35,6 +36,10 @@ type storageResultRunner struct {
 	t *testing.T
 }
 
+type blockingApplyRunner struct {
+	started chan struct{}
+}
+
 func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) error {
 	if err := r.fakeRunner.Run(ctx, spec); err != nil {
 		return err
@@ -65,6 +70,16 @@ func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) err
 		r.t.Fatalf("write storage result: %v", err)
 	}
 	return nil
+}
+
+func (r *blockingApplyRunner) Run(ctx context.Context, _ ansible.RunSpec) error {
+	close(r.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (r *blockingApplyRunner) Command(ansible.RunSpec) []string {
+	return []string{"ansible-playbook"}
 }
 
 func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
@@ -115,6 +130,102 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 	}
 	if !strings.HasSuffix(runner.lastSpec.Playbook, "playbooks/layers/providers/apply.yml") {
 		t.Fatalf("playbook = %q", runner.lastSpec.Playbook)
+	}
+}
+
+func TestRunApplyTaskGraphFailsWhenTasksCannotMakeProgress(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	calls := 0
+	task := ApplyTask{
+		Entry: TaskLedgerEntry{
+			ID:           "provider.service-host",
+			Kind:         ApplyTaskKindProvider,
+			Label:        "provider services service-host",
+			Status:       TaskStatusPending,
+			Dependencies: []string{"provider.missing"},
+		},
+		Playbook: "playbooks/layers/providers/apply.yml",
+		State:    state,
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		calls++
+		return &fakeRunner{}
+	})
+	if err == nil || !strings.Contains(err.Error(), "could not make progress") {
+		t.Fatalf("RunApplyTaskGraph error = %v, want progress error", err)
+	}
+	if calls != 0 {
+		t.Fatalf("runner factory calls = %d, want 0", calls)
+	}
+	if ledger.Status != RunStatusFailed {
+		t.Fatalf("ledger status = %s, want failed", ledger.Status)
+	}
+	got, ok := ledger.Task("provider.service-host")
+	if !ok {
+		t.Fatal("missing provider task")
+	}
+	if got.Status != TaskStatusBlocked {
+		t.Fatalf("task status = %s, want blocked", got.Status)
+	}
+	if !strings.Contains(got.SkippedReason, "provider.missing (missing)") {
+		t.Fatalf("blocked reason = %q, want missing dependency", got.SkippedReason)
+	}
+}
+
+func TestRunApplyTaskGraphReportsLeaseHeartbeatFailure(t *testing.T) {
+	dir := t.TempDir()
+	oldSave := saveRunLease
+	oldInterval := applyLeaseHeartbeatInterval
+	saveRunLease = func(string, RunLease) error {
+		return errors.New("lease store unavailable")
+	}
+	applyLeaseHeartbeatInterval = time.Millisecond
+	t.Cleanup(func() {
+		saveRunLease = oldSave
+		applyLeaseHeartbeatInterval = oldInterval
+	})
+
+	state := minimalState()
+	runner := &blockingApplyRunner{started: make(chan struct{})}
+	task := ApplyTask{
+		Entry: TaskLedgerEntry{
+			ID:     "provider.service-host",
+			Kind:   ApplyTaskKindProvider,
+			Label:  "provider services service-host",
+			Status: TaskStatusPending,
+		},
+		Playbook: "playbooks/layers/providers/apply.yml",
+		State:    state,
+	}
+	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err == nil || !strings.Contains(err.Error(), "refresh apply lease") {
+		t.Fatalf("RunApplyTaskGraph error = %v, want lease heartbeat error", err)
+	}
+	select {
+	case <-runner.started:
+	default:
+		t.Fatal("runner did not start before heartbeat failure")
 	}
 }
 
