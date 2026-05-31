@@ -14,8 +14,8 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
-func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, fromFile, username, password string, passwordStdin, generate bool) (int, error) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, fromFile, username, password, passwordStdin, generate)
+func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool) (int, error) {
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate)
 	if err != nil {
 		return 1, err
 	}
@@ -23,7 +23,7 @@ func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, std
 	return runWithLocalRoot(ctx, rootArgs, rootStdin, stdout, stderr, false)
 }
 
-func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, fromFile, username, password string, passwordStdin, generate bool) ([]string, io.Reader, func(), error) {
+func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool) ([]string, io.Reader, func(), error) {
 	rootArgs := []string{"secret", "set", name}
 	rootStdin := stdin
 	tempDir := ""
@@ -94,6 +94,18 @@ func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey,
 			return nil, nil, func() {}, err
 		}
 		rootArgs = append(rootArgs, "--tls-cert", certPath, "--tls-key", keyPath)
+	case rawFile != "":
+		data, err := os.ReadFile(rawFile)
+		if err != nil {
+			cleanup()
+			return nil, nil, func() {}, fmt.Errorf("read raw secret file %s: %w", rawFile, err)
+		}
+		path, err := stage("raw-secret", data)
+		if err != nil {
+			cleanup()
+			return nil, nil, func() {}, err
+		}
+		rootArgs = append(rootArgs, "--raw-file", path)
 	case fromFile != "":
 		data, err := os.ReadFile(fromFile)
 		if err != nil {

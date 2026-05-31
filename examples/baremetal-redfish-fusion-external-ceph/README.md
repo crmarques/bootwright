@@ -10,9 +10,7 @@ The cluster is `demo-ocp`. The post-install extension order is:
    `isf-data-foundation-catalog`.
 2. Install the IBM Fusion Data Foundation operator package `odf-operator` from
    that IBM catalog in `openshift-storage`.
-3. Apply fake external Ceph connection details, then create an external-mode
-   `StorageCluster` and `StorageSystem` that connect through those details.
-4. Install OpenShift Virtualization and wait for the `HyperConverged` resource.
+3. Install OpenShift Virtualization and wait for the `HyperConverged` resource.
 
 IBM Fusion Data Foundation still uses the ODF/OCS API surface in OpenShift:
 the OLM package is `odf-operator`, external mode is reconciled by
@@ -21,26 +19,21 @@ the OLM package is `odf-operator`, external mode is reconciled by
 Foundation subscription to `stable-4.20`, and the IBM catalog image to
 `icr.io/cpopen/isf-data-foundation-catalog:v4.20`.
 
-`ClusterExtension` does not connect to Ceph directly. Bootwright uses the
-binding to apply Kubernetes resources to `demo-ocp` after the cluster is
-installed. The Data Foundation operator consumes
-`rook-ceph-external-cluster-details`, then reconciles
-`ocs-external-storagecluster` into Ceph CSI and object storage resources.
-
-This example is complete Bootwright input. For a real environment, update only
-the `REPLACE_WITH_*` values in
-`extensions/manifests/01-rook-ceph-external-cluster-details.yaml`. Those values
-are the external IBM Storage Ceph monitor endpoints, FSID, CSI keys, RBD pool,
-CephFS filesystem and pool, RGW endpoint, RGW pool prefix, and RGW keys. The
-surrounding Secret, `StorageCluster`, `StorageSystem`, extension binding, and
-extension order do not need structural changes.
+`StorageCluster/shared-ceph` is declared with `management: external`.
+Bootwright does not run `cephadm`, create pools, or create Ceph users for this
+example. `StorageExport/shared-ceph-data-foundation` reads the raw external
+details JSON from `Environment.spec.secrets.shared-ceph-external-details`, and
+`StorageClusterBinding/shared-ceph-data-foundation` renders and applies the
+Data Foundation `rook-ceph-external-cluster-details`, `StorageCluster`, and
+`StorageSystem` manifests to `demo-ocp` after the cluster and Data Foundation
+operator are ready.
 
 The `openshift-pull-secret` used for the cluster install must also include the
 registry credentials required by your IBM Fusion Data Foundation entitlement.
 
 The Data Foundation exporter can produce the same values. Run it with RBD,
-CephFS, and RGW inputs on the external IBM Storage Ceph side, then copy the
-corresponding values into the manifest:
+CephFS, and RGW inputs on the external IBM Storage Ceph side, then store the
+resulting raw JSON array in the active Bootwright context:
 
 ```text
 python3 ceph-external-cluster-details-exporter.py \
@@ -53,32 +46,25 @@ python3 ceph-external-cluster-details-exporter.py \
   --run-as-user <client-name>
 ```
 
-The Fusion extensions apply these manifests in order:
+The generated JSON includes the external IBM Storage Ceph monitor endpoints,
+FSID, CSI keys, RBD pool, CephFS filesystem and pool, RGW endpoint, RGW pool
+prefix, and RGW keys. Keep that file outside versioned content and load it
+with `bootwright secret set shared-ceph-external-details --raw-file <external-details.json>`.
 
-- `00-isf-data-foundation-catalog.yaml` supplies the IBM Fusion Data Foundation
-  catalog source used by the `odf-operator` subscription.
-- `01-rook-ceph-external-cluster-details.yaml` supplies the monitor,
-  healthchecker, CSI, RBD, CephFS, RGW, and monitoring values.
-- `02-ocs-external-storagecluster.yaml` enables Data Foundation external mode.
-- `03-ocs-external-storagesystem.yaml` creates the Data Foundation storage
-  system wrapper.
+The Fusion extension set still applies `00-isf-data-foundation-catalog.yaml`
+before the operator subscription so the `odf-operator` package resolves from
+the IBM Fusion Data Foundation catalog.
 
-The storage extension waits for these classes to exist:
-
-- `ocs-external-storagecluster-ceph-rbd` for block volumes
-- `ocs-external-storagecluster-cephfs` for file volumes
-- `ocs-external-storagecluster-ceph-rgw` for Ceph RGW S3
-- `openshift-storage.noobaa.io` for Multicloud Object Gateway S3
-
-For a first install, copy this example to a working directory, update the
-`REPLACE_WITH_*` values, then run the install and extension phases in one flow:
+For a first install, copy this example to a working directory, prepare
+`external-details.json`, then run the install and extension phases in one flow:
 
 ```text
 bootwright check syntax -f ./my-fusion-baremetal
 bootwright context init fusion-baremetal -f ./my-fusion-baremetal
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
+bootwright secret set shared-ceph-external-details --raw-file ./external-details.json
 bootwright secret generate
-bootwright apply cluster --yes
+bootwright apply all --yes
 ```
 
 Use `ocs-external-storagecluster-ceph-rbd` as the KubeVirt profile

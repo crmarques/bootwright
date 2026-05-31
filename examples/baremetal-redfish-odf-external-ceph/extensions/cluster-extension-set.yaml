@@ -5,5 +5,4 @@ metadata:
 spec:
   extensions:
     - name: openshift-data-foundation-operator
-    - name: openshift-data-foundation-external-ceph
     - name: openshift-virtualization

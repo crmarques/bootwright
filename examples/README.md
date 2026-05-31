@@ -27,17 +27,18 @@ Current examples:
 - `baremetal-redfish-postinstall`: the bare-metal Redfish shape plus
   declarative post-install OpenShift Virtualization resources.
 - `baremetal-redfish-odf-external-ceph`: a three-node bare-metal Redfish
-  cluster with Red Hat OpenShift Data Foundation external Ceph storage and
-  OpenShift Virtualization extensions.
+  cluster with Red Hat OpenShift Data Foundation bound to imported external
+  Ceph details through `StorageClusterBinding`, plus OpenShift Virtualization.
 - `baremetal-redfish-fusion-external-ceph`: a three-node bare-metal Redfish
-  cluster with IBM Fusion Data Foundation backed by external IBM Storage Ceph
-  and OpenShift Virtualization extensions.
+  cluster with IBM Fusion Data Foundation bound to imported IBM Storage Ceph
+  details through `StorageClusterBinding`, plus OpenShift Virtualization.
 - `baremetal-redfish-fleet-stretched-ceph-data-foundation`: two compact
   bare-metal Redfish clusters bound through IBM Fusion Data Foundation to a
   Bootwright-provisioned seven-node Ceph stretch cluster.
 - `baremetal-redfish-fleet-imported-ceph-data-foundation`: two compact
   bare-metal Redfish clusters bound through OpenShift Data Foundation to a
-  previously provisioned external Ceph cluster.
+  previously provisioned external Ceph cluster by loading exporter JSON with
+  `bootwright secret set shared-ceph-external-details --raw-file <path>`.
 - `baremetal-redfish-virtualized-child`: a bare-metal SNO parent with
   OpenShift Virtualization and a KubeVirt-backed SNO child cluster.
 - `baremetal-redfish-fleet`: two bare-metal Redfish clusters sharing common

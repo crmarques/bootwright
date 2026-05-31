@@ -33,8 +33,7 @@ spec:
       generated:
         credentials:
           username: admin
-    shared-ceph-external-details:
-      file: ../secrets/shared-ceph-external-cluster-details.json
+    shared-ceph-external-details: null
 
   infraComponents:
     artifactServers:

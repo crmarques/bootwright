@@ -1466,7 +1466,7 @@ func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 }
 
 func TestSecretSetStagesPasswordInputBeforeSudo(t *testing.T) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "proxy", "", true, false)
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "", "proxy", "", true, false)
 	if err != nil {
 		t.Fatalf("stagedSecretSetRootArgs: %v", err)
 	}
@@ -1492,6 +1492,84 @@ func TestSecretSetStagesPasswordInputBeforeSudo(t *testing.T) {
 	n, err := rootStdin.Read(buf)
 	if n != 0 || err == nil {
 		t.Fatalf("root stdin should be drained, read n=%d err=%v", n, err)
+	}
+}
+
+func TestSecretSetStagesRawFileInputBeforeSudo(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "external-details.json")
+	body := []byte(`[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"external-fsid"}}]`)
+	if err := os.WriteFile(source, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rootArgs, _, cleanup, err := stagedSecretSetRootArgs(strings.NewReader(""), "shared-ceph-external-details", "", "", "", source, "", "", "", false, false)
+	if err != nil {
+		t.Fatalf("stagedSecretSetRootArgs: %v", err)
+	}
+	defer cleanup()
+	if slices.Contains(rootArgs, source) {
+		t.Fatalf("root args used original raw secret source instead of staged input: %v", rootArgs)
+	}
+	if commandContains(rootArgs, string(body)) {
+		t.Fatalf("root args exposed raw secret body: %v", rootArgs)
+	}
+	idx := slices.Index(rootArgs, "--raw-file")
+	if idx < 0 || idx+1 >= len(rootArgs) {
+		t.Fatalf("root args missing staged raw secret file: %v", rootArgs)
+	}
+	got, err := os.ReadFile(rootArgs[idx+1])
+	if err != nil {
+		t.Fatalf("read staged raw secret: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("staged raw secret = %q, want %q", got, body)
+	}
+}
+
+func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	source := filepath.Join(t.TempDir(), "external-details.json")
+	body := []byte("[{\"name\":\"rook-ceph-mon\",\"kind\":\"Secret\",\"data\":{\"fsid\":\"external-fsid\"}}]\n")
+	if err := os.WriteFile(source, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", source)
+	if code != 0 {
+		t.Fatalf("secret set --raw-file exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	target := filepath.Join(ctx.SecretsDir, "shared-ceph-external-details")
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read raw secret: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("raw secret = %q, want %q", got, body)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat raw secret: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("raw secret mode = %o, want 0600", info.Mode().Perm())
+	}
+	for _, stream := range []string{stdout, stderr} {
+		if strings.Contains(stream, "external-fsid") {
+			t.Fatalf("secret output leaked raw secret body: stdout=%q stderr=%q", stdout, stderr)
+		}
+	}
+}
+
+func TestSecretSetRawFileRejectsConflictingInputModes(t *testing.T) {
+	setTestHomeAndRoot(t)
+	source := filepath.Join(t.TempDir(), "external-details.json")
+	if err := os.WriteFile(source, []byte(`[]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", source, "--from-file", source)
+	if code == 0 {
+		t.Fatal("secret set --raw-file unexpectedly accepted conflicting input modes")
+	}
+	if !strings.Contains(stderr, "mutually exclusive") {
+		t.Fatalf("stderr = %q, want mutually exclusive error", stderr)
 	}
 }
 

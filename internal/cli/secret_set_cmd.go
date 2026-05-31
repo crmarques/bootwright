@@ -20,6 +20,7 @@ import (
 func newSecretSetCmd(stdout io.Writer) *cobra.Command {
 	var (
 		pullSecret    string
+		rawFile       string
 		fromFile      string
 		tlsCert       string
 		tlsKey        string
@@ -36,6 +37,7 @@ Exactly one input mode is required:
 
   --pull-secret <file>             store an OpenShift pull-secret JSON file
   --tls-cert <file> --tls-key <file> store a TLS certificate chain and key
+  --raw-file <file>                store arbitrary secret bytes
   --from-file <file>               store an existing "username:password" file
   --username <u> --password-stdin  read the password from stdin
   --generate                       generate a random password (default username "admin")
@@ -52,12 +54,16 @@ provides. Use --generate for test fixtures.`,
   # Use a pre-existing username:password file
   bootwright secret set bmc-credentials --from-file ./bmc.txt
 
+  # Store imported Data Foundation external cluster details JSON
+  bootwright secret set shared-ceph-external-details --raw-file ./external-details.json
+
   # Generate a random password for a test fixture
   bootwright secret set proxy-credentials --generate --username proxy`,
 	}
 	cmd.Flags().StringVar(&pullSecret, "pull-secret", "", "path to an OpenShift pull-secret JSON file")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to a PEM TLS certificate chain file")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to a PEM TLS private key file")
+	cmd.Flags().StringVar(&rawFile, "raw-file", "", "path to a file containing arbitrary secret bytes")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "path to a file containing one line: username:password")
 	cmd.Flags().StringVar(&username, "username", "", "username (required with --password, --password-stdin, or --generate)")
 	cmd.Flags().StringVar(&password, "password", "", "password (mutually exclusive with --password-stdin and --generate)")
@@ -82,6 +88,9 @@ provides. Use --generate for test fixtures.`,
 		if fromFile != "" {
 			modes++
 		}
+		if rawFile != "" {
+			modes++
+		}
 		if password != "" {
 			modes++
 		}
@@ -92,13 +101,13 @@ provides. Use --generate for test fixtures.`,
 			modes++
 		}
 		if modes == 0 {
-			return failf(2, "one of --pull-secret, --tls-cert/--tls-key, --from-file, --password, --password-stdin, or --generate is required")
+			return failf(2, "one of --pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password, --password-stdin, or --generate is required")
 		}
 		if modes > 1 {
-			return failf(2, "--pull-secret, --tls-cert/--tls-key, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
+			return failf(2, "--pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
 		}
 		if shouldRunLocalRootChild() {
-			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, fromFile, username, password, passwordStdin, generate)
+			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -117,6 +126,9 @@ provides. Use --generate for test fixtures.`,
 		}
 		if tlsCert != "" {
 			return runSecretSetTLS(stdout, name, tlsCert, tlsKey, ctx.SecretsDir)
+		}
+		if rawFile != "" {
+			return runSecretSetRawFile(stdout, name, rawFile, ctx.SecretsDir)
 		}
 		return runSecretSetCredentials(c, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.SecretsDir)
 	}
@@ -196,6 +208,35 @@ func runSecretSetPullSecret(stdout io.Writer, name, fromFile, secretsDir string)
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, fmt.Sprintf("%s pull secret at %s", action, target))
+	return nil
+}
+
+func runSecretSetRawFile(stdout io.Writer, name, fromFile, secretsDir string) error {
+	data, err := os.ReadFile(fromFile)
+	if err != nil {
+		return failErr(1, fmt.Errorf("read raw secret file %s: %w", fromFile, err))
+	}
+	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
+	}
+	if err := os.Chmod(secretsDir, 0o700); err != nil {
+		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
+	}
+	target := filepath.Join(secretsDir, name)
+	exists, err := safefs.RegularFileExists(target)
+	if err != nil {
+		return failErr(1, err)
+	}
+	if err := safefs.AtomicWriteFile(target, data, 0o600); err != nil {
+		return failErr(1, err)
+	}
+	action := "wrote"
+	if exists {
+		action = "updated"
+	}
+	p := output.New(stdout)
+	p.Command("secret set")
+	p.Summary(output.StatusOK, name, fmt.Sprintf("%s raw secret at %s", action, target))
 	return nil
 }
 

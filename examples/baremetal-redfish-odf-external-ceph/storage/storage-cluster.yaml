@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: shared-ceph
+spec:
+  type: ceph
+
+  management: external

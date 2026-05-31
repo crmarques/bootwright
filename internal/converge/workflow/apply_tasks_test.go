@@ -446,6 +446,97 @@ func TestPlanApplyAllExternalStorageBindingSkipsStorageTask(t *testing.T) {
 	assertTaskDeps(t, tasks, "storagebinding.demo.shared-ceph-binding.apply", "wait.demo", "extension.demo.odf.wait")
 }
 
+func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
+	examplesRoot := filepath.Join("..", "..", "..", "examples")
+	entries, err := os.ReadDir(examplesRoot)
+	if err != nil {
+		t.Fatalf("read examples: %v", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		t.Run(name, func(t *testing.T) {
+			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+			if _, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state); err != nil {
+				t.Fatalf("render.All: %v", err)
+			}
+			if _, err := PlanApplyTasksChecked(applyAllTarget(), state); err != nil {
+				t.Fatalf("PlanApplyTasksChecked apply all: %v", err)
+			}
+		})
+	}
+}
+
+func TestExternalStorageExamplesPlanDataFoundationBindingsWithoutCephTask(t *testing.T) {
+	cases := []struct {
+		example        string
+		clusters       []string
+		binding        string
+		extension      string
+		storageTask    string
+		wantStorageJob bool
+	}{
+		{
+			example:     "baremetal-redfish-odf-external-ceph",
+			clusters:    []string{"demo-ocp"},
+			binding:     "shared-ceph-data-foundation",
+			extension:   "openshift-data-foundation-operator",
+			storageTask: "storage.shared-ceph",
+		},
+		{
+			example:     "baremetal-redfish-fusion-external-ceph",
+			clusters:    []string{"demo-ocp"},
+			binding:     "shared-ceph-data-foundation",
+			extension:   "ibm-fusion-data-foundation-operator",
+			storageTask: "storage.shared-ceph",
+		},
+		{
+			example:     "baremetal-redfish-fleet-imported-ceph-data-foundation",
+			clusters:    []string{"dc1-ocp", "dc2-ocp"},
+			binding:     "shared-ceph-data-foundation",
+			extension:   "openshift-data-foundation-operator",
+			storageTask: "storage.shared-ceph",
+		},
+		{
+			example:        "baremetal-redfish-fleet-stretched-ceph-data-foundation",
+			clusters:       []string{"dc1-ocp", "dc2-ocp"},
+			binding:        "ceph-stretch-data-foundation",
+			extension:      "ibm-fusion-data-foundation-operator",
+			storageTask:    "storage.ceph-stretch",
+			wantStorageJob: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.example, func(t *testing.T) {
+			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", tc.example)})
+			if err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+			tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+			if err != nil {
+				t.Fatalf("PlanApplyTasksChecked: %v", err)
+			}
+			if tc.wantStorageJob {
+				assertTaskPresent(t, tasks, tc.storageTask)
+			} else {
+				assertTaskMissing(t, tasks, tc.storageTask)
+			}
+			for _, cluster := range tc.clusters {
+				deps := []string{"wait." + cluster, "extension." + cluster + "." + tc.extension + ".wait"}
+				if tc.wantStorageJob {
+					deps = []string{"wait." + cluster, tc.storageTask, "extension." + cluster + "." + tc.extension + ".wait"}
+				}
+				assertTaskDeps(t, tasks, "storagebinding."+cluster+"."+tc.binding+".apply", deps...)
+			}
+		})
+	}
+}
+
 func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-fleet-stretched-ceph-data-foundation")})
 	if err != nil {
@@ -781,6 +872,29 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 		out = append(out, task.Entry.ID)
 	}
 	return out
+}
+
+func applyAllTarget() ApplyTarget {
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseCluster, ApplyPhaseStorage, ApplyPhaseClusters, ApplyPhaseExtensions}}
+}
+
+func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.Entry.ID == id {
+			return
+		}
+	}
+	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+}
+
+func assertTaskMissing(t *testing.T, tasks []ApplyTask, id string) {
+	t.Helper()
+	for _, task := range tasks {
+		if task.Entry.ID == id {
+			t.Fatalf("task %s unexpectedly found in %+v", id, applyTaskIDs(tasks))
+		}
+	}
 }
 
 func assertTaskDeps(t *testing.T, tasks []ApplyTask, id string, want ...string) {
