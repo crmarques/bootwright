@@ -1254,7 +1254,9 @@ normalized and validated before any render or apply step.
 Context-backed commands fail before doing work when the selected context is
 not structurally ready. Controller-local actions run on localhost;
 `bootwright context validate` reports each checked aspect as `OK` or
-`MISSING`.
+`MISSING`, reports missing declared secret material as `WARN`, and supports
+`--output json` for automation. `WARN` does not block structurally ready
+contexts; `MISSING` and `FAIL` remain blocking.
 
 Primary commands:
 
@@ -1263,6 +1265,7 @@ bootwright example init lab --output ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context validate
+bootwright context validate --output json
 bootwright context list
 bootwright context use lab
 bootwright context current [--short]
@@ -1301,16 +1304,16 @@ bootwright apply infra --dry-run --output json
 bootwright apply infra --yes
 bootwright apply infra --parallelism 4 --yes
 bootwright apply infra --scope managed-01 --yes
-bootwright check cluster
-bootwright check cluster --dry-run --output json
+bootwright check clusters
+bootwright check clusters --dry-run --output json
 bootwright check addons
 bootwright apply storage-cluster --dry-run
 bootwright apply storage-cluster --yes
 bootwright apply storage-cluster --scope <storage-cluster> --yes
-bootwright apply cluster --dry-run
-bootwright apply cluster --dry-run --output json
-bootwright apply cluster --yes
-bootwright apply cluster --override --yes
+bootwright apply clusters --dry-run
+bootwright apply clusters --dry-run --output json
+bootwright apply clusters --yes
+bootwright apply clusters --override --yes
 bootwright apply addons --dry-run
 bootwright apply addons --dry-run --output json
 bootwright apply addons --yes
@@ -1367,32 +1370,37 @@ cluster.
 and recovery.
 `apply storage-cluster` renders the storage input set, SSHes from the bastion to the
 Ceph seed node, runs cephadm bootstrap on that node, applies cephadm services,
-and executes the rendered Ceph operations. `apply cluster` installs each
-selected cluster, then applies bound add-ons after the cluster install wait
-task. `apply addons` uses the installed cluster kubeconfig and `oc apply`
-directly for standalone add-on convergence. Storage binding tasks run in
-the add-ons phase after the target cluster install wait, the matching
-storage provisioning task when selected, and the add-on wait task that
-provides `data-foundation`. `apply all` includes infrastructure and storage
-before the same cluster and add-on phases.
+and executes the rendered Ceph operations. `apply clusters` converges selected
+cluster infrastructure, managed storage clusters, OpenShift or OKD cluster
+installs, bound add-ons, and declared integrations. Independent storage and
+container cluster work may start in parallel; add-ons start after their target
+cluster install wait; storage binding tasks start after the target install
+wait, the matching storage provisioning task when selected, and the add-on wait
+task that provides `data-foundation`. Virtualized child clusters that use a
+Bootwright-managed host cluster wait for the parent install and its
+`provides: [kubevirt]` add-on before provisioning child infrastructure.
+`apply container-cluster` is the focused OpenShift install and add-on recovery
+target. `apply addons` uses the installed cluster kubeconfig and `oc apply`
+directly for standalone add-on convergence. `apply all` includes provider
+services before the same cluster lifecycle graph.
 When an apply selects one `ContainerCluster`, raw Ansible stdout/stderr streams
 to the terminal between Bootwright prerequisite output and the Bootwright
 summary. When an apply selects two or more `ContainerCluster` objects,
 Bootwright does not stream live Ansible output to the terminal; it prints a
 `Logs` section with one install log path per cluster and keeps task output in
 the task artifact log plus the owning cluster log.
-`bootwright apply cluster --override` forces OpenShift agent install tasks to
+`bootwright apply clusters --override` forces OpenShift agent install tasks to
 run even when local cluster secrets kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
 replaced the target machines; it does not wipe disks, destroy substrate
 machines, power off nodes, or remove provider services.
-Without `--override`, `apply cluster` must not regenerate the agent ISO or
+Without `--override`, `apply clusters` and `apply container-cluster` must not regenerate the agent ISO or
 reboot nodes when Bootwright can prove that the selected cluster is already
 installed for the same rendered desired inputs. Completed installs are proven by
 the per-cluster install record, the non-secret desired-input fingerprint, and a
 local kubeconfig probe that reports `ClusterVersion Available=True`. If the
 stored fingerprint differs from the current rendered inputs, apply must stop and
-require either `destroy container-cluster` or `apply cluster --override` after the
+require either `destroy container-cluster` or `apply clusters --override` after the
 operator has reset or replaced target machines. If an interrupted run already
 booted nodes, apply resumes at `openshift-install agent wait-for
 install-complete` instead of creating a new ISO or rebooting machines. Add-on

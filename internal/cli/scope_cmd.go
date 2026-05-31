@@ -18,8 +18,9 @@ const (
 	// including bare-metal/all-external shapes like test 002 where the
 	// other two groups would otherwise be empty and ansible would abort
 	// with "no hosts to target".
-	infraAnsibleLimit   = "bootwright_provider_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
-	clusterAnsibleLimit = "bootwright_ocp_hosts:bootwright_boot_hosts"
+	infraAnsibleLimit    = "bootwright_provider_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
+	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"
+	clusterAnsibleLimit  = "bootwright_ocp_hosts:bootwright_boot_hosts"
 )
 
 // scopeCommonFlags collects the four flags shared by every scope
@@ -34,7 +35,7 @@ type scopeCommonFlags struct {
 
 // registerScopeCommonFlags wires the standard flag set onto cmd and
 // gates --scope on whether the scope accepts cluster-scoped filtering
-// (i.e. infra / cluster / all-for-check-apply; destroy never accepts
+// (i.e. infra / clusters / all-for-check-apply; destroy never accepts
 // "all" because allScope.destroyPlaybook is empty).
 func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, f, allowClusterScope, scopeAction, true, "ContainerCluster")
@@ -66,7 +67,7 @@ func printBundlePath(stdout io.Writer, bundleDir string) {
 // commands exclude it via destroyOnly=true; check/apply include it.
 func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {
 	switch scope.name {
-	case "cluster", "container-cluster", "storage-cluster", "infra", "addons":
+	case "clusters", "container-cluster", "storage-cluster", "infra", "addons":
 		return true
 	case "all":
 		return !destroyOnly
@@ -79,7 +80,9 @@ func ansibleLimitForScope(name string) string {
 	switch name {
 	case "infra":
 		return infraAnsibleLimit
-	case "cluster", "container-cluster":
+	case "clusters":
+		return clustersAnsibleLimit
+	case "container-cluster":
 		return clusterAnsibleLimit
 	default:
 		return ""

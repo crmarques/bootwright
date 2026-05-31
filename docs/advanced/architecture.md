@@ -56,9 +56,9 @@ available for advanced operations and recovery:
   components.
 - `apply storage-cluster` provisions external storage clusters from rendered cephadm
   and Ceph operation files.
-- `apply cluster` creates the agent ISO, boots each declared node as its own
+- `apply clusters` creates the agent ISO, boots each declared node as its own
   task, waits for `openshift-install agent wait-for install-complete`, and then
-  applies bound add-ons.
+  applies bound add-ons and declared integrations.
 - `apply addons` applies declarative post-install bootstrap components to
   already installed clusters with `oc`.
 - `apply all` runs infrastructure, storage, cluster install, and add-ons in
@@ -76,7 +76,7 @@ concurrently where resource locks allow it, prints one install log path per
 cluster, and keeps the terminal focused on high-level apply progress.
 
 Post-install bootstrap components are planned as direct `oc` tasks after the
-cluster install wait task when `apply cluster` or `apply all` is selected, or
+cluster install wait task when `apply clusters` or `apply all` is selected, or
 without install dependencies when `apply addons` is selected for an already
 installed cluster.
 Storage attachment tasks are planned in the same add-ons phase and wait for the

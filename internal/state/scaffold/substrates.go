@@ -9,7 +9,7 @@ var Substrates = map[Provider]Substrate{
 		ProviderNameSuffix: "libvirt",
 		NetworkNameSuffix:  "bridge",
 		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/id_rsa
+      file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
 `,
 		EnvArtifactServer: `  infraComponents:
@@ -123,7 +123,7 @@ spec:
 		ProviderNameSuffix: "bare-metal",
 		NetworkNameSuffix:  "vlan",
 		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/id_rsa
+      file: ~/.ssh/bootwright-ssh-key
     bmc-credentials:
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
@@ -219,7 +219,7 @@ spec:
 		ProviderNameSuffix: "vsphere",
 		NetworkNameSuffix:  "portgroup",
 		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/id_rsa
+      file: ~/.ssh/bootwright-ssh-key
     vcenter-credentials:
       file: ../secrets/vcenter-credentials
 `,
@@ -300,7 +300,7 @@ spec:
 		ProviderNameSuffix: "kubevirt",
 		NetworkNameSuffix:  "nad",
 		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/id_rsa
+      file: ~/.ssh/bootwright-ssh-key
     cnv-cluster-kubeconfig:
       file: ~/.kube/cnv-cluster.kubeconfig
 `,

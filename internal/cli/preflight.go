@@ -183,7 +183,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			info, err := deps.statPath(path)
 			switch {
 			case err != nil:
-				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --scope or run bootwright apply cluster --scope "+name+" --yes first"))
+				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --scope or run bootwright apply clusters --scope "+name+" --yes first"))
 			case info.IsDir():
 				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
 			default:

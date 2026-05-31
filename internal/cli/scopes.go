@@ -21,12 +21,12 @@ var infraScope = scopeSpec{
 	artifactsBaseName: "infra",
 }
 
-var clusterScope = scopeSpec{
-	name:              "cluster",
-	short:             "Provision selected container and storage clusters",
-	phaseNames:        []string{"storage-cluster", "container-cluster", "addons"},
+var clustersScope = scopeSpec{
+	name:              "clusters",
+	short:             "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations",
+	phaseNames:        []string{"cluster-infra", "storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
-	artifactsBaseName: "cluster",
+	artifactsBaseName: "clusters",
 }
 
 var containerClusterScope = scopeSpec{
@@ -34,7 +34,7 @@ var containerClusterScope = scopeSpec{
 	short:             "Install and configure managed OpenShift clusters via openshift-install agent",
 	phaseNames:        []string{"container-cluster"},
 	applyPhaseNames:   []string{"container-cluster", "addons"},
-	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
+	applyPlaybook:     "playbooks/targets/container-cluster/apply.yml",
 	destroyPlaybook:   "playbooks/targets/clusters/destroy.yml",
 	artifactsBaseName: "container-cluster",
 }

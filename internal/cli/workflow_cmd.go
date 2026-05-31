@@ -22,7 +22,7 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		newCheckSyntaxCmd(stdout),
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
 		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
-		retargetCommand(newScopeCheckCmd(clusterScope, stdout, stderr), "cluster", "Check container and storage cluster prerequisites"),
+		retargetCommand(newScopeCheckCmd(clustersScope, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
 		retargetCommand(newScopeCheckCmd(containerClusterScope, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
 		retargetCommand(newScopeCheckCmd(storageClusterScope, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
 		retargetCommand(newAddonsCheckCmd(stdout), "addons", "Check post-install cluster addon prerequisites"),
@@ -41,7 +41,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 	cmd.AddCommand(
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
 		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
-		retargetCommand(newScopeApplyCmd(clusterScope, stdin, stdout, stderr), "cluster", "Provision container and storage clusters and apply addons"),
+		retargetCommand(newScopeApplyCmd(clustersScope, stdin, stdout, stderr), "clusters", "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations"),
 		retargetCommand(newScopeApplyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Install OpenShift clusters and apply addons"),
 		retargetCommand(newScopeApplyCmd(storageClusterScope, stdin, stdout, stderr), "storage-cluster", "Provision external storage clusters"),
 		retargetCommand(newScopeApplyCmd(addonsScope, stdin, stdout, stderr), "addons", "Apply post-install cluster addons"),

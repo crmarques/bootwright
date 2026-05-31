@@ -483,11 +483,11 @@ func TestDefaultLookPathPrefersExtraDirs(t *testing.T) {
 	}
 }
 
-func TestClusterCheckLimitIncludesBootHosts(t *testing.T) {
-	limit := ansibleLimitForScope("cluster")
-	for _, want := range []string{"bootwright_ocp_hosts", "bootwright_boot_hosts"} {
+func TestClustersCheckLimitIncludesInfraAndBootHosts(t *testing.T) {
+	limit := ansibleLimitForScope("clusters")
+	for _, want := range []string{"bootwright_infra_hosts", "bootwright_ocp_hosts", "bootwright_boot_hosts"} {
 		if !strings.Contains(limit, want) {
-			t.Fatalf("cluster limit %q missing %q", limit, want)
+			t.Fatalf("clusters limit %q missing %q", limit, want)
 		}
 	}
 }

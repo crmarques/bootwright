@@ -49,7 +49,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
 	scopeTargetKind := "ContainerCluster"
-	if scope.name == "cluster" {
+	if scope.name == "clusters" {
 		scopeTargetKind = "cluster"
 	}
 	if scope.name == "storage-cluster" {
@@ -267,7 +267,7 @@ func scopeUsesAnsible(scope scopeSpec) bool {
 
 func scopeTargetsContainerInstall(scope scopeSpec) bool {
 	switch scope.name {
-	case "cluster", "container-cluster", "all":
+	case "clusters", "container-cluster", "all":
 		return true
 	default:
 		return false

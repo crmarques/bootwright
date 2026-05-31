@@ -40,7 +40,7 @@ cluster task on a remote bastion host: create the cluster agent ISO with
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
 Post-install add-on apply is scheduled after that install wait when
-`apply cluster` or `apply all` is selected, and as standalone direct `oc`
+`apply clusters` or `apply all` is selected, and as standalone direct `oc`
 tasks when `apply addons` is selected for an already installed cluster.
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
 tool inputs under `storage/<storageCluster>/`, reaches preinstalled RHEL Ceph

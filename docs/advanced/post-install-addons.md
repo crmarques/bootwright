@@ -142,7 +142,7 @@ bootwright apply addons --yes
 `apply addons --dry-run` shows the selected clusters, expanded add-on
 order, task plan, and generated resource summary without mutating the cluster.
 
-`apply all --yes` and `apply cluster --yes` include add-ons after the cluster
+`apply all --yes` and `apply clusters --yes` include add-ons after the cluster
 install wait task.
 
 ## Records And Readiness

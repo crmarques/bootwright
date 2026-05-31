@@ -126,7 +126,7 @@ func TestRunApplyTaskGraphSkipsInstalledClusterBeforeAnsible(t *testing.T) {
 		ProviderStateDir:           filepath.Join(dir, "provider-state"),
 		BundleDir:                  filepath.Join(dir, "bundle"),
 		ClusterAvailabilityChecker: checker,
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -173,7 +173,7 @@ func TestRunApplyTaskGraphBlocksInstalledClusterHashMismatch(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -229,7 +229,7 @@ func TestRunApplyTaskGraphBlocksEmptyDesiredHashAfterNodeBoot(t *testing.T) {
 				ManagedServicesDir: managedServicesDir,
 				ProviderStateDir:   filepath.Join(dir, "provider-state"),
 				BundleDir:          filepath.Join(dir, "bundle"),
-			}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+			}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 				calls++
 				return &fakeRunner{}
 			})
@@ -276,7 +276,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 		ManagedServicesDir: managedServicesDir,
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, "", PlanApplyTasks(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}, state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return runner
 	})
@@ -395,10 +395,10 @@ func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
 }
 
-func TestPlanApplyClusterRunsAddonsAfterInstallWait(t *testing.T) {
+func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "cluster", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -418,6 +418,23 @@ func TestPlanApplyClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	assertTaskDeps(t, tasks, "addon.demo.a.wait", "addon.demo.a.apply")
 	assertTaskDeps(t, tasks, "addon.demo.b.apply", "addon.demo.a.wait")
 	assertTaskDeps(t, tasks, "addon.demo.b.wait", "addon.demo.b.apply")
+}
+
+func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
+	state := storageAttachmentPlanningState()
+
+	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+
+	assertTaskDeps(t, tasks, "storage.ceph")
+	assertTaskDeps(t, tasks, "infra.demo")
+	assertTaskDeps(t, tasks, "iso.demo", "infra.demo")
+	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
+	assertTaskDeps(t, tasks, "addon.demo.odf.apply", "wait.demo")
+	assertTaskDeps(t, tasks, "addon.demo.odf.wait", "addon.demo.odf.apply")
+	assertTaskDeps(t, tasks, "storageattachment.demo.ceph-binding.ceph.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
 }
 
 func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundation(t *testing.T) {
@@ -621,10 +638,10 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 	}
 }
 
-func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
+func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	state := kubeVirtChildPlanningState(true)
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -634,10 +651,10 @@ func TestPlanApplyAllOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
 
-func TestPlanApplyAllRejectsScopedKubeVirtChildWithoutHostCluster(t *testing.T) {
+func TestPlanApplyClustersRejectsScopedKubeVirtChildWithoutHostCluster(t *testing.T) {
 	state := kubeVirtChildPlanningState(false)
 
-	_, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	_, err := PlanApplyTasksChecked(applyClustersTarget(), state)
 	if err == nil {
 		t.Fatal("expected missing host cluster dependency error, got nil")
 	}
@@ -832,6 +849,14 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 
 func applyAllTarget() ApplyTarget {
 	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+}
+
+func applyClustersTarget() ApplyTarget {
+	return ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+}
+
+func applyContainerClusterTarget() ApplyTarget {
+	return ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}
 }
 
 func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) {

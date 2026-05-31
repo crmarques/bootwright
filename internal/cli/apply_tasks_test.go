@@ -52,9 +52,9 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	}
 }
 
-func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
+func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -62,7 +62,7 @@ func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
 		t.Fatalf("task = %s, want iso.sno-libvirt", tasks[0].Entry.ID)
 	}
 	if len(tasks[0].Entry.Dependencies) != 0 {
-		t.Fatalf("cluster-only iso deps = %v, want none", tasks[0].Entry.Dependencies)
+		t.Fatalf("container-cluster-only iso deps = %v, want none", tasks[0].Entry.Dependencies)
 	}
 	if tasks[1].Entry.ID != "boot.sno-libvirt" {
 		t.Fatalf("task = %s, want boot.sno-libvirt", tasks[1].Entry.ID)
@@ -80,7 +80,7 @@ func TestPlanApplyTasksClusterScopeHasIndependentInstallTask(t *testing.T) {
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -111,7 +111,7 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 
 func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(clusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
 	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
 	if limits.Parallelism != len(tasks) {
 		t.Fatalf("global parallelism = %d, want %d", limits.Parallelism, len(tasks))
@@ -135,7 +135,7 @@ func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 
 func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
-	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
+	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:      "wait.sno-libvirt",
 		Kind:    workflow.ApplyTaskKindInstallWait,
 		Label:   "wait install sno-libvirt",
@@ -156,7 +156,7 @@ func TestApplyTaskStartPrintsInstallerLogPath(t *testing.T) {
 func TestApplyClusterLogPathsPrintInstallerLogPaths(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	clusterLogPath := workflow.ApplyClusterLogPath(clustersDir, "apply-test", "sno-libvirt")
-	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
+	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:             "wait.sno-libvirt",
 		Kind:           workflow.ApplyTaskKindInstallWait,
 		Label:          "wait install sno-libvirt",
@@ -312,8 +312,8 @@ echo "ansible stderr ${cluster}" >&2
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
-		ArtifactsBaseName:  "cluster",
-	}, clusterScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, clustersDir), nil)
+		ArtifactsBaseName:  "clusters",
+	}, clustersScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, clustersDir), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}

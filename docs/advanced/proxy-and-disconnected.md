@@ -7,11 +7,10 @@ description: Environment proxy defaults, managed proxies, and disconnected mirro
 
 Proxy and mirror settings are split by source of truth.
 
-Complete desired-state examples live under `examples/`:
-`sno-libvirt-redfish-external-proxy`,
-`sno-libvirt-redfish-managed-proxy`,
-`sno-libvirt-redfish-disconnected-external-mirror`, and
-`sno-libvirt-redfish-managed-registry`.
+Complete desired-state examples live under `examples/`. Start with
+`sno-libvirt-redfish-disconnected-services` for a single-node lab with managed
+proxy and registry services, or `baremetal-redfish-fleet` for the larger fleet
+layout that separates shared infrastructure under `infra/`.
 
 ## Environment Proxy
 

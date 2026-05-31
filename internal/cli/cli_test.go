@@ -21,6 +21,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
@@ -67,10 +68,10 @@ func TestHubCommandsNotAdvertised(t *testing.T) {
 	}
 }
 
-func TestClusterTargetIsSingular(t *testing.T) {
+func TestClusterTargets(t *testing.T) {
 	for _, args := range [][]string{
-		{"check", "cluster", "--help"},
-		{"apply", "cluster", "--help"},
+		{"check", "clusters", "--help"},
+		{"apply", "clusters", "--help"},
 		{"check", "container-cluster", "--help"},
 		{"apply", "container-cluster", "--help"},
 		{"destroy", "container-cluster", "--help"},
@@ -82,16 +83,16 @@ func TestClusterTargetIsSingular(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"check", "clusters"},
-		{"apply", "clusters"},
+		{"check", "cluster"},
+		{"apply", "cluster"},
 		{"destroy", "clusters"},
 	} {
 		_, stderr, code := runCLI(t, args...)
 		if code == 0 {
 			t.Fatalf("bootwright %s unexpectedly succeeded", strings.Join(args, " "))
 		}
-		if !strings.Contains(stderr, `invalid argument "clusters"`) {
-			t.Fatalf("%s stderr %q does not reject plural target", strings.Join(args, " "), stderr)
+		if !strings.Contains(stderr, `invalid argument`) {
+			t.Fatalf("%s stderr %q does not reject unsupported target", strings.Join(args, " "), stderr)
 		}
 	}
 
@@ -113,12 +114,12 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 		t.Fatalf("apply all help does not mention addons:\n%s", stdout)
 	}
 
-	stdout, stderr, code = runCLI(t, "apply", "cluster", "--help")
+	stdout, stderr, code = runCLI(t, "apply", "clusters", "--help")
 	if code != 0 {
-		t.Fatalf("apply cluster --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply clusters --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Provision container and storage clusters and apply addons") {
-		t.Fatalf("apply cluster help does not mention addons:\n%s", stdout)
+	if !strings.Contains(stdout, "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations") {
+		t.Fatalf("apply clusters help does not mention lifecycle integrations:\n%s", stdout)
 	}
 
 	stdout, stderr, code = runCLI(t, "apply", "addons", "--help")
@@ -216,6 +217,9 @@ func TestJSONErrorEnvelopeBeforeRootReexec(t *testing.T) {
 	}
 	if report.OK || report.Error == "" || !strings.Contains(report.Error, "legacy context registry map") {
 		t.Fatalf("unexpected error report: %+v", report)
+	}
+	if len(report.Diagnostics) == 0 || !strings.Contains(report.Diagnostics[0].Remediation, "context init") {
+		t.Fatalf("error report missing command remediation: %+v", report.Diagnostics)
 	}
 }
 
@@ -1085,6 +1089,39 @@ func TestContextValidateReportsReadyAndMissingChecks(t *testing.T) {
 	}
 }
 
+func TestContextValidateJSONReportsWarningsWithoutBlocking(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "context", "validate", "--output", "json")
+	if code != 0 {
+		t.Fatalf("context validate json exited %d, stderr=%q", code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("context validate json wrote stderr: %q", stderr)
+	}
+	var report contextValidateReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode context validate json: %v\n%s", err, stdout)
+	}
+	if !report.OK || report.Context.Name != "test" {
+		t.Fatalf("unexpected context validate report: %+v", report)
+	}
+	foundSecretWarning := false
+	for _, check := range report.Checks {
+		if check.Group == "Declared secrets" && check.Status == string(output.StatusWarn) {
+			foundSecretWarning = true
+			if check.Remediation == "" {
+				t.Fatalf("secret warning missing remediation: %+v", check)
+			}
+		}
+	}
+	if !foundSecretWarning {
+		t.Fatalf("context validate report missing declared-secret warning: %+v", report.Checks)
+	}
+	if len(report.NextSteps) == 0 {
+		t.Fatalf("context validate report missing next steps: %+v", report)
+	}
+}
+
 func TestContextValidateRejectsAccidentalAlias(t *testing.T) {
 	stdout, stderr, code := runCLI(t, "context", "validade")
 	if code == 0 {
@@ -1205,7 +1242,7 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 	}{
 		{args: []string{"apply", "bastion"}, want: true},
 		{args: []string{"apply", "infra"}, want: true},
-		{args: []string{"apply", "cluster"}, want: true},
+		{args: []string{"apply", "clusters"}, want: true},
 		{args: []string{"apply", "all"}, want: true},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"destroy", "container-cluster"}, want: true},
@@ -2495,7 +2532,7 @@ func TestStatusReportsApplyLedger(t *testing.T) {
 func TestStatusReportsStaleApplyLedger(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
-	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+	ledger := workflow.NewRunLedger("apply-stale", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt", Cluster: "sno-libvirt"},
 	}, now)
 	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
@@ -2544,7 +2581,7 @@ func TestStatusJSONIncludesApplyLedger(t *testing.T) {
 func TestReconcileCurrentApplyCancelsStaleLedger(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
-	ledger := workflow.NewRunLedger("apply-stale", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+	ledger := workflow.NewRunLedger("apply-stale", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
 		{ID: "iso.sno-libvirt", Kind: workflow.ApplyTaskKindClusterISO, Label: "iso sno-libvirt"},
 	}, now)
 	if err := workflow.SaveRunLedger(runsDir, ledger); err != nil {
@@ -2570,7 +2607,7 @@ func TestReconcileCurrentApplyCancelsStaleLedger(t *testing.T) {
 func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Now().UTC()
-	ledger := workflow.NewRunLedger("apply-active", "cluster", "", workflow.ConcurrencyLimits{}, nil, now)
+	ledger := workflow.NewRunLedger("apply-active", "clusters", "", workflow.ConcurrencyLimits{}, nil, now)
 	if err := workflow.SaveRunLedger(runsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}
@@ -2595,7 +2632,7 @@ func TestReconcileCurrentApplyBlocksFreshLedger(t *testing.T) {
 	}
 }
 
-func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testing.T) {
+func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test uses POSIX shell scripts")
 	}
@@ -2657,12 +2694,12 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 		t.Fatalf("write sentinel install-config: %v", err)
 	}
 
-	stdout, stderr, code := runCLI(t, "apply", "cluster", "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
+	stdout, stderr, code := runCLI(t, "apply", "container-cluster", "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
 	if code == 0 {
-		t.Fatalf("apply cluster unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply container-cluster unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "different install inputs") {
-		t.Fatalf("apply cluster stderr missing install mismatch:\n%s", stderr)
+		t.Fatalf("apply container-cluster stderr missing install mismatch:\n%s", stderr)
 	}
 	data, err := os.ReadFile(installConfig)
 	if err != nil {
@@ -2678,7 +2715,7 @@ func TestApplyClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite(t *testi
 
 func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	initTestContext(t, "005-3nodes-baremetal")
-	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--ask-become-pass=true")
+	stdout, stderr, code := runCLI(t, "apply", "container-cluster", "--dry-run", "--output", "json", "--ask-become-pass=true")
 	if code != 0 {
 		t.Fatalf("apply dry-run json exited %d, stderr=%q", code, stderr)
 	}
@@ -2772,19 +2809,19 @@ func TestApplyAddonsDryRunJSONPlansAddonTasks(t *testing.T) {
 	}
 }
 
-func TestApplyClusterDryRunJSONPlansAddonTasks(t *testing.T) {
+func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 	initTestContextWithClusterAddon(t)
 
-	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "apply", "clusters", "--dry-run", "--output", "json")
 	if code != 0 {
-		t.Fatalf("apply cluster dry-run json exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply clusters dry-run json exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
 	}
-	if report.Target != "cluster" {
-		t.Fatalf("target = %q, want cluster", report.Target)
+	if report.Target != "clusters" {
+		t.Fatalf("target = %q, want clusters", report.Target)
 	}
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
@@ -2794,6 +2831,7 @@ func TestApplyClusterDryRunJSONPlansAddonTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
+		"infra.sno-libvirt.lab-host",
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",
@@ -2801,7 +2839,7 @@ func TestApplyClusterDryRunJSONPlansAddonTasks(t *testing.T) {
 		"addon.sno-libvirt.openshift-virtualization.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
-		t.Fatalf("apply cluster task IDs = %v, want %v", gotIDs, wantIDs)
+		t.Fatalf("apply clusters task IDs = %v, want %v", gotIDs, wantIDs)
 	}
 	if got := report.ApplyPlan.Addons; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Addon != "openshift-virtualization" {
 		t.Fatalf("addon plan = %+v, want sno-libvirt openshift-virtualization", got)
@@ -2809,15 +2847,16 @@ func TestApplyClusterDryRunJSONPlansAddonTasks(t *testing.T) {
 	if got := report.ApplyPlan.Addons[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
 		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt", "infra.sno-libvirt.lab-host")
 	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
 	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.wait", "addon.sno-libvirt.openshift-virtualization.apply")
 }
 
-func TestApplyClusterOverrideDryRunPassesInstallOverride(t *testing.T) {
+func TestApplyClustersOverrideDryRunPassesInstallOverride(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "apply", "cluster", "--dry-run", "--output", "json", "--override")
+	stdout, stderr, code := runCLI(t, "apply", "clusters", "--dry-run", "--output", "json", "--override")
 	if code != 0 {
-		t.Fatalf("apply cluster override dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply clusters override dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -2844,7 +2883,7 @@ func TestStatusWatchStopsWhenNoRunLedgerExists(t *testing.T) {
 
 func TestStatusWatchStopsWhenApplyLedgerIsStale(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	ledger := workflow.NewRunLedger("apply-stale-watch", "cluster", "", workflow.ConcurrencyLimits{}, nil, time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC))
+	ledger := workflow.NewRunLedger("apply-stale-watch", "clusters", "", workflow.ConcurrencyLimits{}, nil, time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC))
 	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
 		t.Fatalf("SaveRunLedger: %v", err)
 	}

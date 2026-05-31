@@ -114,7 +114,8 @@ first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
 
 `bootwright apply all --yes` is the normal end-to-end path and includes
 infrastructure, storage, cluster install, and bound post-install components.
-Use `bootwright apply cluster --yes` or `bootwright apply addons --yes` for
+Use `bootwright apply clusters --yes`, `bootwright apply container-cluster --yes`,
+or `bootwright apply addons --yes` for
 advanced recovery or maintenance when you intentionally want one slice of the
 graph.
 

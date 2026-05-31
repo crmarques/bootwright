@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
@@ -68,8 +69,41 @@ func writeCommandErrorJSON(stdout io.Writer, args []string, code int, err error)
 		ExitCode:    code,
 		Command:     append([]string(nil), args...),
 		Error:       err.Error(),
-		Diagnostics: desiredstate.Diagnostics(err),
+		Diagnostics: commandDiagnostics(err),
 	})
+}
+
+func commandDiagnostics(err error) []desiredstate.Diagnostic {
+	var validationErr desiredstate.ValidationError
+	if errors.As(err, &validationErr) {
+		return desiredstate.Diagnostics(err)
+	}
+	diagnostics := desiredstate.Diagnostics(err)
+	remediation := commandErrorRemediation(err.Error())
+	for i := range diagnostics {
+		diagnostics[i].Remediation = remediation
+		if diagnostics[i].Rule == "" || diagnostics[i].Rule == diagnostics[i].Message {
+			diagnostics[i].Rule = err.Error()
+		}
+	}
+	return diagnostics
+}
+
+func commandErrorRemediation(message string) string {
+	switch {
+	case strings.Contains(message, "legacy context registry map"):
+		return "remove the legacy context registry and recreate contexts with bootwright context init <name> -f <path> --yes"
+	case strings.Contains(message, "context") && strings.Contains(message, "not ready"):
+		return "run bootwright context validate and fix the reported checks"
+	case strings.Contains(message, "would write OpenShift installer files with secret material"):
+		return "rerun with --sensitive only for a local, unversioned output directory"
+	case strings.Contains(message, "no such file or directory") || strings.Contains(message, "not found"):
+		return "check that the referenced path or command exists and rerun the command"
+	case strings.Contains(message, "unknown command") || strings.Contains(message, "invalid argument"):
+		return "run bootwright --help or the parent command help to choose a supported command"
+	default:
+		return "fix the reported command error and rerun the command"
+	}
 }
 
 func argsRequestJSON(args []string) bool {

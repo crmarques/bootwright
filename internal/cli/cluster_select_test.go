@@ -22,9 +22,9 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	}
 }
 
-func TestValidateScopedApplySharedServicesFailsForInfraAndAllSharedKinds(t *testing.T) {
+func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds(t *testing.T) {
 	state := cliStateWithAllSharedProviderServices()
-	for _, target := range []string{"infra", "all"} {
+	for _, target := range []string{"infra", "clusters", "all"} {
 		t.Run(target, func(t *testing.T) {
 			err := validateScopedApplySharedServices(state, target, "cluster-a")
 			if err == nil {
@@ -45,9 +45,9 @@ func TestValidateScopedApplySharedServicesFailsForInfraAndAllSharedKinds(t *test
 	}
 }
 
-func TestValidateScopedApplySharedServicesAllowsClusterScope(t *testing.T) {
-	if err := validateScopedApplySharedServices(cliStateWithSharedDNS(), "cluster", "cluster-a"); err != nil {
-		t.Fatalf("cluster apply scope should not validate provider services: %v", err)
+func TestValidateScopedApplySharedServicesAllowsContainerClusterScope(t *testing.T) {
+	if err := validateScopedApplySharedServices(cliStateWithSharedDNS(), "container-cluster", "cluster-a"); err != nil {
+		t.Fatalf("container-cluster apply scope should not validate provider services: %v", err)
 	}
 }
 

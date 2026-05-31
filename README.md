@@ -24,6 +24,7 @@ bootwright example init lab --output ./lab-input
 bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
+bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret materialize
@@ -37,7 +38,7 @@ bootwright container-cluster access
 ```
 
 `apply all` is the normal convergence path. Phase commands such as
-`apply infra`, `apply storage-cluster`, `apply cluster`, and `apply addons`
+`apply infra`, `apply storage-cluster`, `apply clusters`, and `apply addons`
 remain available for advanced operations and recovery when you need one slice
 of the graph.
 
@@ -157,6 +158,8 @@ bootwright check syntax -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context current
+bootwright context validate
+bootwright context validate --output json
 bootwright cluster list
 bootwright container-cluster access
 bootwright container-cluster access --cluster demo-ocp
@@ -181,7 +184,7 @@ bootwright render installer --scope demo-ocp
 bootwright render storage --scope ceph-stretch
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
 bootwright apply storage-cluster --scope ceph-stretch --yes
-bootwright apply cluster --yes
+bootwright apply clusters --yes
 bootwright check addons
 bootwright apply addons --dry-run
 bootwright apply addons --yes
@@ -192,7 +195,7 @@ bootwright destroy infra --scope artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. Provisioning targets are
-`bastion`, `infra`, `cluster`, `container-cluster`, `storage-cluster`,
+`bastion`, `infra`, `clusters`, `container-cluster`, `storage-cluster`,
 `addons`, and `all`. Top-level groups are `context`, `cluster`,
 `container-cluster`, `example`, `print-env`, `secret`, `check`, `status`,
 `render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
@@ -206,10 +209,12 @@ never prints kubeconfig or password bytes. Single-cluster apply runs stream nati
 Ansible output; multi-cluster apply runs keep Ansible output in per-task and
 per-cluster logs while the terminal shows cluster log paths and high-level
 progress. `bootwright apply all` is the normal end-to-end workflow.
-`bootwright apply cluster` provisions selected container and storage clusters
-and applies their bound add-ons; `bootwright apply addons` is available for
-standalone add-on convergence after install. Use phase commands for scoped
-maintenance or recovery.
+`bootwright apply clusters` provisions selected cluster infrastructure,
+storage clusters, OpenShift or OKD clusters, bound add-ons, and declared
+storage integrations as dependency-ready tasks. `bootwright apply
+container-cluster` remains available for focused OpenShift install recovery,
+and `bootwright apply addons` is available for standalone add-on convergence
+after install. Use phase commands for scoped maintenance or recovery.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

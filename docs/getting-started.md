@@ -58,16 +58,19 @@ OpenShift Virtualization bootstrap resources.
 with two parent clusters, two KubeVirt child clusters, and stretched Ceph with
 Data Foundation.
 
-The copied directory contains desired-state files for the relevant kinds:
+The copied directory contains desired-state files for the relevant kinds.
+Starter inputs may keep shared objects under `shared/*.yaml` and one cluster
+under `clusters/<cluster>/`. Fleet inputs usually split shared infrastructure
+under `infra/` and cluster intent under `clusters/container/<cluster>/`:
 
 ```text
 environment.yaml                         Environment
-host.yaml or infra/hosts/*.yaml          Host
-provider.yaml or infra/providers/*.yaml  InfraProvider
-infra-component.yaml or infra/components/*.yaml
-networkconfig.yaml or infra/networkconfigs/*.yaml
-cluster-infra.yaml or clusters/container/<cluster>/cluster-infra.yaml
-cluster.yaml or clusters/container/<cluster>/cluster.yaml
+host.yaml or shared/hosts.yaml or infra/hosts/*.yaml
+provider.yaml or shared/provider.yaml or infra/providers/*.yaml
+infra-component.yaml or shared/components.yaml or infra/components/*.yaml
+networkconfig.yaml or shared/networks.yaml or infra/networkconfigs/*.yaml
+cluster-infra.yaml or clusters/<cluster>/cluster-infra.yaml or clusters/container/<cluster>/cluster-infra.yaml
+container-cluster.yaml or cluster.yaml or clusters/<cluster>/container-cluster.yaml or clusters/container/<cluster>/cluster.yaml
 add-ons/*.yaml                           optional ClusterAddon resources
 clusters/storage/<cluster>/*.yaml        optional storage resources
 ```
@@ -80,11 +83,17 @@ Edit these first:
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
   external or managed proxy, DNS, artifact, registry, or NTP services.
 - `Host.spec.addresses[]` and SSH key references for provider/service hosts.
-- Physical MACs, BMC addresses, or virtual machine profiles in `shared/provider.yaml`.
-- Machine CIDRs and NMState templates in `shared/networks.yaml`.
-- Endpoint VIP ownership and per-machine IP overlays in `clusters/<cluster>/cluster-infra.yaml`.
+- Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`,
+  `shared/provider.yaml`, or `infra/providers/*.yaml`.
+- Machine CIDRs and NMState templates in `networkconfig.yaml`,
+  `shared/networks.yaml`, or `infra/networkconfigs/*.yaml`.
+- Endpoint VIP ownership and per-machine IP overlays in
+  `cluster-infra.yaml`, `clusters/<cluster>/cluster-infra.yaml`, or
+  `clusters/container/<cluster>/cluster-infra.yaml`.
 - OpenShift or OKD release, install mode, and node bindings in
-  `clusters/<cluster>/container-cluster.yaml`.
+  `container-cluster.yaml`, `cluster.yaml`,
+  `clusters/<cluster>/container-cluster.yaml`, or
+  `clusters/container/<cluster>/cluster.yaml`.
 
 Provider swaps should leave `Environment` and `ContainerCluster` unchanged
 unless the cluster intent itself changes.
@@ -133,6 +142,7 @@ bootwright check syntax -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
 bootwright context update lab -f ./my-sno-lab
 bootwright context current
+bootwright context validate
 bootwright secret list
 ```
 
@@ -157,6 +167,7 @@ bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pul
 bootwright secret generate
 bootwright secret materialize
 bootwright secret list
+bootwright context validate
 ```
 
 Get the OpenShift pull secret from
@@ -206,14 +217,17 @@ install and its `provides: [kubevirt]` add-on before creating child VM
 infrastructure. `apply infra --scope <child>` requires that parent cluster to
 already be installed and KubeVirt-ready; scoped child applies do not install the
 parent implicitly.
-Phase commands such as `apply infra`, `apply storage-cluster`, `apply cluster`,
-and `apply addons` are still available for advanced operations and recovery
-when you need one slice of the graph. Running `apply cluster --yes` again skips
-cluster install tasks when the prior
-install record, rendered desired-input fingerprint, and kubeconfig availability
-probe all match, then applies add-ons idempotently. If an interrupted apply
-already booted nodes, the next apply resumes at the install wait phase instead
-of recreating the ISO or rebooting machines.
+Phase commands such as `apply infra`, `apply storage-cluster`, `apply clusters`,
+`apply container-cluster`, and `apply addons` are still available for advanced
+operations and recovery when you need one slice of the graph. `apply clusters`
+converges cluster infrastructure, storage clusters, OpenShift or OKD installs,
+bound add-ons, and declared integrations; independent storage and container
+cluster work starts in parallel where dependencies allow it. Running
+`apply clusters --yes` again skips cluster install tasks when the prior install
+record, rendered desired-input fingerprint, and kubeconfig availability probe
+all match, then applies add-ons and integrations idempotently. If an interrupted
+apply already booted nodes, the next apply resumes at the install wait phase
+instead of recreating the ISO or rebooting machines.
 
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an
@@ -224,10 +238,11 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 
 | Command | JSON support | Behavior |
 | --- | --- | --- |
+| `bootwright context validate --output json` | Supported | Context structure and declared secret material checks |
 | `bootwright check syntax -f <input-dir> --output json` | Supported | Pre-import diagnostics |
 | `bootwright check syntax --output json` | Supported | Read-only diagnostics |
 | `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check cluster --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright check clusters --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright render effective --output json` | Supported | Writes normalized desired state |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
@@ -236,7 +251,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply storage-cluster --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply cluster --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply clusters --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply addons --dry-run --output json` | Supported | Dry-run add-on apply plan |
 | `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |

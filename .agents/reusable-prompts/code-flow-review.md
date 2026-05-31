@@ -19,7 +19,7 @@ The user should provide one or more of:
 
 - desired-state input files or directories
 - an example, fixture, or context import source
-- a command flow, such as `check`, `render`, `apply infra`, or `apply cluster`
+- a command flow, such as `check`, `render`, `apply infra`, or `apply clusters`
 - the expected user intent or final output to verify
 
 When the user asks for an examples-wide review, or when the review scope is

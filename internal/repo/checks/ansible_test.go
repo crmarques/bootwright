@@ -48,12 +48,22 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	}
 }
 
-func TestClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
+func TestClustersApplyRunsPreflightBeforeInfraAndInstall(t *testing.T) {
 	body := readRepoFile(t, "ansible/playbooks/targets/clusters/apply.yml")
+	preflight := strings.Index(body, "../../checks/preflight.yml")
+	infra := strings.Index(body, "../../layers/cluster_infra/apply.yml")
+	install := strings.Index(body, "../../layers/openshift/install-agent.yml")
+	if preflight < 0 || infra < 0 || install < 0 || preflight > infra || infra > install {
+		t.Fatalf("clusters apply must run preflight before cluster-infra and install-agent")
+	}
+}
+
+func TestContainerClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
+	body := readRepoFile(t, "ansible/playbooks/targets/container-cluster/apply.yml")
 	preflight := strings.Index(body, "../../checks/preflight.yml")
 	install := strings.Index(body, "../../layers/openshift/install-agent.yml")
 	if preflight < 0 || install < 0 || preflight > install {
-		t.Fatalf("cluster apply must run preflight before install-agent")
+		t.Fatalf("container-cluster apply must run preflight before install-agent")
 	}
 }
 

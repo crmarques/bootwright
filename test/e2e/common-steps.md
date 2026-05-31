@@ -20,9 +20,9 @@ The case context input references four or five secrets through
 | --- | --- | --- |
 | `cluster-admin-ssh-key` | Context-local generated SSH key pair | OpenShift node SSH access |
 | `provider-host-ssh` | `~/.ssh/bootwright-ssh-key` | Bastion→host SSH |
-| `openshift-pull-secret` | Context-local, set from the pull-secret JSON | `render installer`, `apply cluster` |
+| `openshift-pull-secret` | Context-local, set from the pull-secret JSON | `render installer`, `apply clusters` |
 | `proxy-credentials` (optional) | Context-local generated or set — see [proxy.md](proxy.md) | `apply bastion`, install-config proxy block |
-| `bmc-credentials` | Context-local generated or set | `apply infra`, `apply cluster` |
+| `bmc-credentials` | Context-local generated or set | `apply infra`, `apply clusters` |
 
 Confirm the provider-host SSH key pair, then set the pull secret:
 
@@ -105,14 +105,14 @@ with placeholder strings in place of pull secret, SSH key, trust bundle, and
 TLS data. These files are generated and can be regenerated.
 
 ```bash
-bootwright check cluster
+bootwright check clusters
 bootwright render installer
 
-bootwright apply cluster --dry-run
-bootwright apply cluster --yes
+bootwright apply clusters --dry-run
+bootwright apply clusters --yes
 ```
 
-`apply cluster` materializes
+`apply clusters` materializes
 `/var/lib/bootwright/contexts/$CASE/clusters/<cluster>/runtime/installer/{install,agent}-config.yaml`
 with secret material inlined (mode `0600`) — the form `openshift-install`
 consumes. It stages those files under
@@ -130,13 +130,13 @@ bootwright render installer --sensitive
 ```
 
 That writes the runtime copies eagerly so you can review them. It is
-**not** required for the install — `apply cluster` regenerates the
+**not** required for the install — `apply clusters` regenerates the
 same runtime copies on its own. Skip it when you want the rendered
 files to stay free of secret material.
 
 ### Following The Install Logs
 
-`bootwright apply cluster` is one long-running command. Its Ansible output
+`bootwright apply clusters` is one long-running command. Its Ansible output
 streams to the foreground terminal; the `openshift-install agent
 wait-for install-complete` phase that gates the run writes a richer log
 to disk. Open a second shell on the bastion to follow it:
@@ -174,7 +174,7 @@ oc get clusterversion
 oc get clusteroperators
 
 bootwright check infra
-bootwright check cluster
+bootwright check clusters
 ```
 
 The case README lists the per-case expectation for `oc get nodes`

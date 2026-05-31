@@ -40,7 +40,9 @@ ansible/roles/
 Target playbooks are thin wrappers. `targets/infra/apply.yml` imports
 `layers/providers/apply.yml` and then `layers/cluster_infra/apply.yml`;
 destroy runs cluster infrastructure before provider-scoped services.
-`targets/clusters/apply.yml` imports the OpenShift install layer.
+`targets/clusters/apply.yml` imports preflight, cluster infrastructure, and
+OpenShift install layers. `targets/container-cluster/apply.yml` remains the
+thin OpenShift install wrapper used by the focused container-cluster target.
 
 Role dispatch is computed by the Go driver registry and projected as exact
 role names in the rendered vars. Diagnostic labels stay on each machine, but
