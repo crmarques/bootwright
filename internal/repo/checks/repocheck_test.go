@@ -19,7 +19,7 @@ import (
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
-		"seventeen kinds",
+		"sixteen kinds",
 		"`Host`",
 		"`NetworkConfig`",
 		"`InfraProvider`",
@@ -32,7 +32,6 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"`StorageFilesystem`",
 		"`StorageObjectGateway`",
 		"`StorageExport`",
-		"`StorageClusterBinding`",
 		"`ClusterAddon`",
 		"`ClusterAddonProfile`",
 		"`ClusterAddonBinding`",
@@ -48,6 +47,8 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"six kinds",
 		"seven kinds",
 		"ten kinds",
+		"seventeen kinds",
+		"`StorageClusterBinding`",
 		"`HostPool`",
 		"providerRefs",
 	}

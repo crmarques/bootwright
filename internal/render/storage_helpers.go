@@ -14,18 +14,28 @@ func storageFailureDomain(cluster v1alpha1.StorageCluster) string {
 	return "host"
 }
 
-func storageBindingsByStorageCluster(state v1alpha1.State) map[string][]v1alpha1.StorageClusterBinding {
+type StorageAttachment struct {
+	Binding v1alpha1.ClusterAddonBinding
+	Storage v1alpha1.ClusterAddonBindingStorage
+}
+
+func storageAttachmentsByStorageCluster(state v1alpha1.State) map[string][]StorageAttachment {
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		exports[export.Metadata.Name] = export
 	}
-	out := map[string][]v1alpha1.StorageClusterBinding{}
-	for _, binding := range state.StorageClusterBindings {
-		export, ok := exports[binding.Spec.StorageExportRef.Name]
-		if !ok {
-			continue
+	out := map[string][]StorageAttachment{}
+	for _, binding := range state.ClusterAddonBindings {
+		for _, storage := range binding.Spec.Storage {
+			export, ok := exports[storage.ExportRef.Name]
+			if !ok {
+				continue
+			}
+			out[export.Spec.StorageClusterRef.Name] = append(out[export.Spec.StorageClusterRef.Name], StorageAttachment{
+				Binding: binding,
+				Storage: storage,
+			})
 		}
-		out[export.Spec.StorageClusterRef.Name] = append(out[export.Spec.StorageClusterRef.Name], binding)
 	}
 	return out
 }
@@ -106,13 +116,18 @@ func storageClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCl
 	return v1alpha1.StorageCluster{}, false
 }
 
-func storageBindingByName(state v1alpha1.State, name string) (v1alpha1.StorageClusterBinding, bool) {
-	for _, binding := range state.StorageClusterBindings {
-		if binding.Metadata.Name == name {
-			return binding, true
+func storageAttachmentByName(state v1alpha1.State, bindingName, storageName string) (StorageAttachment, bool) {
+	for _, binding := range state.ClusterAddonBindings {
+		if binding.Metadata.Name != bindingName {
+			continue
+		}
+		for _, storage := range binding.Spec.Storage {
+			if storage.Name == storageName {
+				return StorageAttachment{Binding: binding, Storage: storage}, true
+			}
 		}
 	}
-	return v1alpha1.StorageClusterBinding{}, false
+	return StorageAttachment{}, false
 }
 
 func storageExportByName(state v1alpha1.State, name string) (v1alpha1.StorageExport, bool) {

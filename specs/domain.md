@@ -11,7 +11,7 @@ is deliberately out of scope for this repository.
 
 ## Operating Model
 
-Operators author desired state as seventeen YAML kinds:
+Operators author desired state as sixteen YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
@@ -28,10 +28,9 @@ Operators author desired state as seventeen YAML kinds:
 | `StorageFilesystem` | Which CephFS filesystems should exist, and which pools hold metadata and data? |
 | `StorageObjectGateway` | Which RGW service and cephadm ingress VIPs should serve object traffic? |
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
-| `StorageClusterBinding` | Which installed clusters should consume an exported storage surface? |
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
-| `ClusterAddonBinding` | Which clusters should receive those add-ons after install? |
+| `ClusterAddonBinding` | Which installed cluster should receive add-ons and optional storage exports after install? |
 
 Every fact has one owner. References flow from cluster intent to cluster
 infrastructure, then to providers, infra components, and hosts. Machine MACs
@@ -43,9 +42,9 @@ they are separate desired-state resources selected by `Environment` and bound
 to clusters after provisioning completes.
 External storage also stays outside `ContainerCluster`. `StorageCluster` is a
 peer of `ContainerCluster` and reuses `ClusterInfra`, `InfraProvider`, and
-`NetworkConfig` for machine facts. Storage bindings connect exported storage to
-installed clusters after both storage provisioning and the selected
-Data Foundation add-on are ready.
+`NetworkConfig` for machine facts. `ClusterAddonBinding.storage[]` connects
+exported storage to installed clusters after both storage provisioning and the
+selected Data Foundation add-on are ready.
 
 ## Compatibility Goal
 
@@ -55,7 +54,8 @@ operational fact:
 
 - `ContainerCluster` renders cluster-level installer intent.
 - `StorageCluster` renders Ceph cephadm input files and storage operations.
-- `StorageClusterBinding` renders Data Foundation external-mode manifests.
+- `ClusterAddonBinding.storage[]` renders Data Foundation external-mode
+  attachment manifests.
 - `NetworkConfig` renders machine networks and reusable NMState templates.
 - `ClusterInfra` renders platform and host bindings.
 - `InfraProvider` renders substrate inventory and platform facts.

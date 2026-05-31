@@ -366,5 +366,5 @@ func installerInstallConfigPath(clustersDir, clusterName string) string {
 }
 
 func hasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.StorageClusterBindings)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
+	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
 }

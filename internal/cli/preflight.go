@@ -96,9 +96,6 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	if phaseInScope("addons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if phaseInScope("addons", selected, hasState) && len(state.StorageClusterBindings) > 0 {
-		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
-	}
 	if phaseInScope("storage-cluster", selected, hasState) && stateHasManagedStorageClusters(state) {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),

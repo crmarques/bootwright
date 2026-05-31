@@ -35,12 +35,6 @@ func TestLoadClusterAddonResources(t *testing.T) {
 	if got := len(state.ClusterAddonBindings); got != 1 {
 		t.Fatalf("ClusterAddonBindings = %d, want 1", got)
 	}
-	if !state.ClusterAddonBindings[0].Spec.Policy.UseServerSideApply() {
-		t.Fatal("binding policy did not default serverSideApply to true")
-	}
-	if got := state.ClusterAddonBindings[0].Spec.Policy.FieldManager; got != "bootwright" {
-		t.Fatalf("fieldManager = %q, want bootwright", got)
-	}
 }
 
 func TestClusterAddonLoaderRejectsOperandsField(t *testing.T) {
@@ -77,13 +71,13 @@ func TestClusterAddonLoaderRejectsOldSchemaNames(t *testing.T) {
 		},
 		{
 			name: "old-binding-selector",
-			body: strings.Replace(extensionBindingYAML("binding", "set"), "containerClusterSelector:", "clusterSelector:", 1),
-			want: "field clusterSelector not found",
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "clusterRef:", "containerClusterSelector:", 1),
+			want: "field containerClusterSelector not found",
 		},
 		{
 			name: "old-binding-phase",
-			body: strings.Replace(extensionBindingYAML("binding", "set"), "containerClusterInstalled", "clusterInstalled", 1),
-			want: `spec.applyAfter.phase "clusterInstalled" must be "containerClusterInstalled"`,
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "  addonProfiles:", "  applyAfter:\n    phase: containerClusterInstalled\n  addonProfiles:", 1),
+			want: "field applyAfter not found",
 		},
 	}
 	for _, tc := range cases {
@@ -180,7 +174,7 @@ spec:
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "missing"), "demo-ocp", "sno", 1),
 				"cluster.yaml":   newClusterYAML,
 			},
-			wantSubstring: `ClusterAddonBinding/binding spec.profiles[0].name "missing" does not match any ClusterAddonProfile`,
+			wantSubstring: `ClusterAddonBinding/binding spec.addonProfiles[0].name "missing" does not match any ClusterAddonProfile`,
 		},
 		{
 			name: "set-cycle",
@@ -231,27 +225,7 @@ spec:
 				"set.yaml":       extensionSetYAML("set", "virt"),
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "sno", "missing-cluster", 1),
 			},
-			wantSubstring: `spec.containerClusterSelector.names[0] "missing-cluster" does not match any ContainerCluster`,
-		},
-		{
-			name: "invalid-apply-phase",
-			files: map[string]string{
-				"extension.yaml": extensionYAML("virt"),
-				"set.yaml":       extensionSetYAML("set", "virt"),
-				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "phase: containerClusterInstalled", "phase: clusterReady", 1),
-				"cluster.yaml":   strings.Replace(newClusterYAML, "name: sno", "name: demo-ocp", 2),
-			},
-			wantSubstring: `spec.applyAfter.phase "clusterReady" must be "containerClusterInstalled"`,
-		},
-		{
-			name: "prune-rejected",
-			files: map[string]string{
-				"extension.yaml": extensionYAML("virt"),
-				"set.yaml":       extensionSetYAML("set", "virt"),
-				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "prune: false", "prune: true", 1),
-				"cluster.yaml":   strings.Replace(newClusterYAML, "name: sno", "name: demo-ocp", 2),
-			},
-			wantSubstring: "spec.policy.prune=true is not supported in MVP",
+			wantSubstring: `spec.clusterRef.name "missing-cluster" does not match any ContainerCluster`,
 		},
 	}
 	for _, tc := range cases {
@@ -341,7 +315,7 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 			resources: []string{
 				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.profiles[0]; add "set.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.addonProfiles[0]; add "set.yaml"`,
 		},
 		{
 			name: "set-requires-extension",
@@ -362,8 +336,8 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 kind: ClusterAddonBinding
 metadata: { name: demo-ocp-addons }
 spec:
-  containerClusterSelector:
-    names: [sno]
+  clusterRef:
+    name: sno
   addons:
     - name: openshift-virtualization
 `
@@ -436,18 +410,10 @@ kind: ClusterAddonBinding
 metadata:
   name: ` + name + `
 spec:
-  containerClusterSelector:
-    names:
-      - sno
-  applyAfter:
-    phase: containerClusterInstalled
-  profiles:
+  clusterRef:
+    name: sno
+  addonProfiles:
     - name: ` + set + `
-  policy:
-    prune: false
-    serverSideApply: true
-    fieldManager: bootwright
-    continueOnError: false
 `
 }
 

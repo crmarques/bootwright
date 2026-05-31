@@ -24,7 +24,7 @@ spec:
         credentials:
           username: admin
     imported-ceph-odf-details:
-      file: ./secrets/imported-ceph-odf-details.yaml
+      file: ./secrets/imported-ceph-odf-details.json
 
   infraComponents:
     artifactServers:
@@ -38,4 +38,3 @@ spec:
             endpoint: bmc
           containerClusterInstall:
             endpoint: cluster
-

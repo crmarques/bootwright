@@ -99,7 +99,6 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		len(state.StorageFilesystems) == 0 &&
 		len(state.StorageObjectGateways) == 0 &&
 		len(state.StorageExports) == 0 &&
-		len(state.StorageClusterBindings) == 0 &&
 		len(state.ClusterAddons) == 0 &&
 		len(state.ClusterAddonProfiles) == 0 &&
 		len(state.ClusterAddonBindings) == 0 {
@@ -321,13 +320,6 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.StorageExports = append(state.StorageExports, item)
-		case v1alpha1.KindStorageClusterBinding:
-			var item v1alpha1.StorageClusterBinding
-			if err := decodeKnown(node, &item); err != nil {
-				return fmt.Errorf("decode %s document %d: %w", path, index, err)
-			}
-			item.SourcePath = path
-			state.StorageClusterBindings = append(state.StorageClusterBindings, item)
 		case v1alpha1.KindClusterAddon:
 			var item v1alpha1.ClusterAddon
 			if err := decodeKnown(node, &item); err != nil {
@@ -472,12 +464,6 @@ func sortState(state *v1alpha1.State) {
 			return state.StorageExports[i].SourcePath < state.StorageExports[j].SourcePath
 		}
 		return state.StorageExports[i].Metadata.Name < state.StorageExports[j].Metadata.Name
-	}))
-	sort.SliceStable(state.StorageClusterBindings, sortByName(func(i, j int) bool {
-		if state.StorageClusterBindings[i].Metadata.Name == state.StorageClusterBindings[j].Metadata.Name {
-			return state.StorageClusterBindings[i].SourcePath < state.StorageClusterBindings[j].SourcePath
-		}
-		return state.StorageClusterBindings[i].Metadata.Name < state.StorageClusterBindings[j].Metadata.Name
 	}))
 	sort.SliceStable(state.ClusterAddons, sortByName(func(i, j int) bool {
 		if state.ClusterAddons[i].Metadata.Name == state.ClusterAddons[j].Metadata.Name {

@@ -22,7 +22,7 @@ The render step merges the provisioning kinds into concrete outputs:
 - provider variables from `InfraProvider`, `InfraComponent`, `Host`, and
   `ClusterInfra.components`
 - storage inputs from `StorageCluster`, storage pools, CephFS, RGW, exports,
-  and Data Foundation bindings
+  and Data Foundation attachments
 
 Shared provider services are resolved once as a service graph. Validation,
 rendering, status, and scoped apply checks use the same service identities and
@@ -78,7 +78,7 @@ Post-install bootstrap components are planned as direct `oc` tasks after the
 cluster install wait task when `apply cluster` or `apply all` is selected, or
 without install dependencies when `apply addons` is selected for an already
 installed cluster.
-Storage binding tasks are planned in the same add-ons phase and wait for the
+Storage attachment tasks are planned in the same add-ons phase and wait for the
 selected Data Foundation add-on readiness before applying generated
 external-mode manifests.
 

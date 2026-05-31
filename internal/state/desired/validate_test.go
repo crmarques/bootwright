@@ -1870,16 +1870,21 @@ spec:
         name: kubevirt
         namespace: openshift-cnv
 `,
-		"binding.yaml": `apiVersion: bootwright.io/v1alpha1
+		"binding-a.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
-metadata: { name: virt }
+metadata: { name: virt-a }
 spec:
-  containerClusterSelector:
-    names:
-      - cluster-a
-      - cluster-b
-  applyAfter:
-    phase: containerClusterInstalled
+  clusterRef:
+    name: cluster-a
+  addons:
+    - name: openshift-virtualization
+`,
+		"binding-b.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata: { name: virt-b }
+spec:
+  clusterRef:
+    name: cluster-b
   addons:
     - name: openshift-virtualization
 `,

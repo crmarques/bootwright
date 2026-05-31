@@ -39,27 +39,26 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
-			plan := BindingPlan{
-				Binding: binding.Metadata.Name,
-				Cluster: cluster,
-				Policy:  binding.Spec.Policy,
-			}
-			for _, name := range names {
-				extension, ok := addons[name]
-				if !ok {
-					return nil, fmt.Errorf("ClusterAddonBinding/%s references missing ClusterAddon/%s", binding.Metadata.Name, name)
-				}
-				plan.Addons = append(plan.Addons, ExtensionPlan{
-					Name:      name,
-					Binding:   binding.Metadata.Name,
-					Cluster:   cluster,
-					Extension: extension,
-					Policy:    binding.Spec.Policy,
-				})
-			}
-			out = append(out, plan)
+		cluster := binding.Spec.ClusterRef.Name
+		plan := BindingPlan{
+			Binding: binding.Metadata.Name,
+			Cluster: cluster,
+			Policy:  DefaultPolicy(),
 		}
+		for _, name := range names {
+			extension, ok := addons[name]
+			if !ok {
+				return nil, fmt.Errorf("ClusterAddonBinding/%s references missing ClusterAddon/%s", binding.Metadata.Name, name)
+			}
+			plan.Addons = append(plan.Addons, ExtensionPlan{
+				Name:      name,
+				Binding:   binding.Metadata.Name,
+				Cluster:   cluster,
+				Extension: extension,
+				Policy:    DefaultPolicy(),
+			})
+		}
+		out = append(out, plan)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Cluster != out[j].Cluster {
@@ -97,10 +96,10 @@ func ResourceSummaries(extension v1alpha1.ClusterAddon) []ResourceSummary {
 
 func expandBindingExtensionNames(state v1alpha1.State, binding v1alpha1.ClusterAddonBinding) ([]string, error) {
 	var expanded []string
-	for _, ref := range binding.Spec.Profiles {
+	for _, ref := range binding.Spec.AddonProfiles {
 		names, err := ExpandSet(state, ref.Name)
 		if err != nil {
-			return nil, fmt.Errorf("ClusterAddonBinding/%s spec.profiles[%s]: %w", binding.Metadata.Name, ref.Name, err)
+			return nil, fmt.Errorf("ClusterAddonBinding/%s spec.addonProfiles[%s]: %w", binding.Metadata.Name, ref.Name, err)
 		}
 		expanded = append(expanded, names...)
 	}
@@ -151,6 +150,13 @@ func firstOccurrence(in []string) []string {
 		out = append(out, name)
 	}
 	return out
+}
+
+func DefaultPolicy() v1alpha1.ClusterAddonPolicy {
+	return v1alpha1.ClusterAddonPolicy{
+		ServerSideApply: v1alpha1.BoolPtr(true),
+		FieldManager:    v1alpha1.DefaultClusterAddonFieldManager,
+	}
 }
 
 func extensionIndex(state v1alpha1.State) map[string]v1alpha1.ClusterAddon {

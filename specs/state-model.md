@@ -1,6 +1,6 @@
 # Desired-State Model
 
-Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and seventeen
+Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and sixteen
 user-authored kinds. The provisioning schema intentionally tracks the inputs
 consumed by `openshift-install` for agent installs and `cephadm` for external
 Ceph storage:
@@ -11,15 +11,15 @@ Ceph storage:
   inside installed OpenShift or OKD clusters.
 - `ClusterAddonProfile` owns ordered reusable platform profiles made from
   add-ons and nested profiles.
-- `ClusterAddonBinding` owns cluster-to-add-on attachment after install.
+- `ClusterAddonBinding` owns one cluster's post-install add-ons and optional
+  storage attachments.
 - `StorageCluster` owns external storage cluster provisioning intent.
 - `StoragePlacementPolicy` owns storage placement and CRUSH policy intent.
 - `StoragePool` owns Ceph pool desired state.
 - `StorageFilesystem` owns CephFS metadata/data pool wiring and MDS placement.
 - `StorageObjectGateway` owns RGW service and cephadm ingress VIP placement.
-- `StorageExport` owns the exported storage surface.
-- `StorageClusterBinding` owns cluster-to-storage attachment through Data
-  Foundation external mode.
+- `StorageExport` owns the exported storage surface. The consuming cluster is
+  selected by `ClusterAddonBinding.spec.storage[]`.
 - `ClusterInfra` owns the selected machines, install endpoints, and platform
   render mode.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
@@ -174,13 +174,13 @@ Rules:
 - A listed file is loaded as a complete YAML file. A listed directory is walked
   deterministically for YAML files. Every Bootwright resource referenced by any
   selected resource must also be selected.
-- When a selected `ClusterAddonBinding` references profiles or
+- When a selected `ClusterAddonBinding` references addon profiles or
   add-ons, those referenced resource files must also be selected. When a
   selected `ClusterAddonProfile` references child profiles or add-ons, those
   files must also be selected.
 - When a selected storage object references a `StorageCluster`,
   `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
-  `StorageObjectGateway`, `StorageExport`, `StorageClusterBinding`, or storage
+  `StorageObjectGateway`, `StorageExport`, or storage
   `ClusterInfra`, those referenced resource files must also be selected.
 - `containerClusters[]`, when set, is the effective fleet selection list for
   render, apply, status, destroy, and check flows. Omitted means every loaded
@@ -390,9 +390,12 @@ bastion over SSH.
 
 `StorageCluster.spec.management` defaults to `managed`. `external` declares a
 previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
-Bootwright renders and applies only Data Foundation binding manifests for that
-cluster. The external connection file is declared on the `StorageExport` with
-`spec.dataFoundation.externalDetailsRef`.
+Bootwright renders and applies only Data Foundation attachment manifests for that
+cluster. For imported Ceph, the user declares the Data Foundation
+external-cluster-details JSON as a secret and references it from
+`ClusterAddonBinding.spec.storage[].dataFoundation.externalDetailsRef`.
+For managed Ceph, Bootwright generates the same JSON during storage
+provisioning and stores it as restrictive runtime secret material.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -476,17 +479,19 @@ Rules:
   balancer. Each site-local ingress can place a VIP on nodes in that site, and
   the aggregate ingress placement must cover at least two ingress-capable
   nodes per data site.
-- `StorageClusterBinding` connects a `StorageExport` to selected
-  `ContainerCluster` objects. Each selected cluster must have a bound
-  `ClusterAddon` that provides `data-foundation`; binding manifests are
-  applied after that add-on reports readiness.
+- `ClusterAddonBinding.spec.storage[]` connects a `StorageExport` to the
+  binding's `ContainerCluster`. The cluster must have a bound `ClusterAddon`
+  that provides `data-foundation`; storage attachment manifests are applied
+  after that add-on reports readiness.
 - Data Foundation exports render per-consuming-cluster Ceph auth operations
   in `ceph/operations.yaml` and per-cluster external connection manifests.
   Rendered manifests carry generated-at-apply placeholders for secret keys;
   authored examples must not contain generated external-cluster secret bytes.
-- Imported Data Foundation exports render a placeholder in normal output and
-  inline `externalDetailsRef` secret JSON only for sensitive render output and
-  apply-time task artifacts.
+- Imported Data Foundation attachments render a placeholder in normal output
+  and inline `externalDetailsRef` secret JSON only for sensitive render output
+  and apply-time task artifacts. Managed Ceph attachments read generated
+  details from
+  `clusters/<cluster>/secrets/storage-attachments/<binding>/<storage>/external-cluster-details.json`.
 
 Rendered storage files are deterministic and are the same files used during
 apply:
@@ -495,9 +500,9 @@ apply:
 storage/<storageCluster>/cephadm/bootstrap-spec.yaml
 storage/<storageCluster>/cephadm/services.yaml
 storage/<storageCluster>/ceph/operations.yaml
-storage/<storageCluster>/data-foundation/<binding>/<cluster>/rook-ceph-external-cluster-details.yaml
-storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagecluster.yaml
-storage/<storageCluster>/data-foundation/<binding>/<cluster>/ocs-external-storagesystem.yaml
+storage/<storageCluster>/data-foundation/<binding>/<storage>/<cluster>/rook-ceph-external-cluster-details.yaml
+storage/<storageCluster>/data-foundation/<binding>/<storage>/<cluster>/ocs-external-storagecluster.yaml
+storage/<storageCluster>/data-foundation/<binding>/<storage>/<cluster>/ocs-external-storagesystem.yaml
 ```
 
 The `cephadm/` and `ceph/` files are omitted for imported storage clusters.
@@ -565,7 +570,7 @@ spec:
 ```
 
 `provides[]` advertises add-on-provided cluster capabilities consumed by
-cross-cluster substrates and storage bindings. Accepted values are `kubevirt`
+cross-cluster substrates and storage attachments. Accepted values are `kubevirt`
 and `data-foundation`. An add-on that provides a capability must declare
 readiness checks so dependent work waits for the actual platform capability,
 not just resource submission.
@@ -614,8 +619,8 @@ append direct `addons` in declared order. Duplicate add-on names after
 expansion are allowed and de-duplicated by first occurrence. Cycles are
 rejected.
 
-`ClusterAddonBinding` attaches profiles and direct add-ons to container
-clusters selected by name:
+`ClusterAddonBinding` attaches profiles, direct add-ons, and optional storage
+exports to one container cluster:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -623,30 +628,28 @@ kind: ClusterAddonBinding
 metadata:
   name: demo-ocp-addons
 spec:
-  containerClusterSelector:
-    names:
-      - demo-ocp
+  clusterRef:
+    name: demo-ocp
 
-  applyAfter:
-    phase: containerClusterInstalled
-
-  profiles:
+  addonProfiles:
     - name: virtualization-platform
 
   addons:
     - name: console-customization
 
-  policy:
-    prune: false
-    serverSideApply: true
-    fieldManager: bootwright
-    continueOnError: false
+  storage:
+    - name: ceph
+      exportRef:
+        name: ceph-stretch-data-foundation
 ```
 
 Binding expansion follows the same order as profiles: referenced
-`profiles`, then direct `addons`, with first occurrence
-de-duplication. The expanded order becomes the apply order for each selected
-cluster. `applyAfter.phase` only supports `containerClusterInstalled` in the MVP.
+`addonProfiles`, then direct `addons`, with first occurrence
+de-duplication. The expanded order becomes the apply order for
+`clusterRef.name`. Addon-only bindings are valid. Storage entries wait for
+the required addon capability, such as `data-foundation`, plus managed storage
+provisioning when applicable. Apply uses fixed Bootwright server-side apply
+defaults.
 
 Rules:
 
@@ -676,13 +679,16 @@ Rules:
   `condition.status`; namespace is optional for cluster-scoped resources.
 - `resourceExists` requires `apiVersion`, `kind`, and `name`; namespace is
   optional.
-- `ClusterAddonBinding.spec.containerClusterSelector.names[]` must name existing
-  `ContainerCluster` objects. Label selectors are not part of the MVP.
-- `policy.serverSideApply` defaults to `true`,
-  `policy.fieldManager` defaults to `bootwright`, and
-  `policy.continueOnError` defaults to `false`.
-- `policy.prune: true` is rejected in the MVP.
-- `policy.continueOnError: true` is rejected in the MVP.
+- `ClusterAddonBinding.spec.clusterRef.name` must name exactly one existing
+  `ContainerCluster`.
+- `ClusterAddonBinding.spec.addonProfiles[]` and `spec.addons[]` references
+  must resolve.
+- `ClusterAddonBinding.spec.storage[].name` is required and unique within the
+  binding. `spec.storage[].exportRef.name` must resolve to a
+  `StorageExport`.
+- Imported Ceph requires
+  `spec.storage[].dataFoundation.externalDetailsRef.name`. Managed Ceph rejects
+  user-provided `externalDetailsRef`.
 - Future add-on types may include `kustomize` and `helm`; they are not
   accepted by the MVP schema.
 
@@ -1192,7 +1198,8 @@ Bootwright renders:
   boot-artifact publication.
 - Storage tool inputs from selected storage resources: cephadm host and
   service specs, Ceph operations for stretch mode, pools, CephFS, RGW users,
-  and Data Foundation external-mode manifests for each selected binding.
+  and Data Foundation external-mode manifests for each selected storage
+  attachment.
 - Add-on apply plans from selected `ClusterAddonBinding` resources.
   OLM add-ons generate Namespace, OperatorGroup, Subscription, and custom
   resources. Manifest-set add-ons reference declared files and include file
@@ -1239,21 +1246,22 @@ Validation rejects:
 - Unsupported `ClusterAddon.spec.provides[]` capabilities. Current values
   are `kubevirt` and `data-foundation`; duplicate values and capabilities
   without readiness checks are invalid.
-- Invalid storage references, stretch-mode topology, monitor placement,
+- Invalid storage references, storage attachments, stretch-mode topology, monitor placement,
   tiebreaker roles, replicated pool defaults, erasure-coded stretch pools,
   CephFS metadata/data pool wiring, RGW/MDS placement, or Data Foundation
-  binding selectors.
+  capability dependencies.
 - Unsafe `manifest-set` paths, including absolute paths, directory escapes,
   symlinks, missing files, and non-YAML add-on manifests.
 - KubeVirt profiles missing exactly one host reference, referencing a missing
   host cluster, referencing an undeclared kubeconfig secret, missing
   `namespace`, using a non-KubeVirt network config, or creating a cluster
   dependency cycle.
-- `ClusterAddonBinding` cluster selectors that name missing clusters.
-- `ClusterAddonBinding.policy.prune: true`, because pruning is not
-  implemented in the MVP.
-- `ClusterAddonBinding.policy.continueOnError: true`, because task-level
-  error continuation is not implemented in the MVP.
+- `ClusterAddonBinding.spec.clusterRef.name` values that name missing
+  clusters.
+- Imported Ceph storage attachments without
+  `ClusterAddonBinding.spec.storage[].dataFoundation.externalDetailsRef`.
+- Managed Ceph storage attachments with user-provided
+  `externalDetailsRef`.
 
 ## CLI Contract
 

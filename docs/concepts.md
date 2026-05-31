@@ -8,7 +8,7 @@ description: How Bootwright distributes installer input across desired-state obj
 Bootwright keeps installer-compatible fields close to the object that owns the
 operational fact. The renderer then merges those objects into the input files
 that installer and provider CLIs consume, including `install-config.yaml`,
-`agent-config.yaml`, provider variables, cephadm specs, and storage binding
+`agent-config.yaml`, provider variables, cephadm specs, and storage attachment
 manifests.
 
 Authored desired-state YAML uses block-style mappings in examples, e2e inputs,
@@ -32,10 +32,9 @@ instead of compact inline maps.
 | `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
 | `StorageObjectGateway` | RGW service, public endpoint, and cephadm ingress VIPs |
 | `StorageExport` | Storage services prepared for downstream consumers |
-| `StorageClusterBinding` | Data Foundation external-mode binding to selected clusters |
 | `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
 | `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
-| `ClusterAddonBinding` | Cluster binding for add-ons and profiles |
+| `ClusterAddonBinding` | Cluster binding for add-ons, profiles, and optional storage exports |
 
 ## Reference Flow
 
@@ -60,7 +59,7 @@ KubeVirt child InfraProvider
   -> host ContainerCluster
   -> ClusterAddon providing kubevirt
 
-StorageClusterBinding
+ClusterAddonBinding.storage[]
   -> StorageExport
   -> StorageCluster
   -> ClusterInfra.components.machines[*] (managed storage only)
@@ -78,9 +77,11 @@ Storage actions also run from the bastion. For managed storage, Bootwright
 SSHes to preinstalled RHEL Ceph nodes, runs cephadm on the seed node, and
 applies generated Ceph operations from the rendered storage tree. For imported
 storage, `StorageCluster.spec.management: external` skips storage
-provisioning; Data Foundation bindings read the declared external-cluster
-details secret and apply later in the add-ons phase after the target
-cluster and Data Foundation add-on are ready.
+provisioning; `ClusterAddonBinding.storage[].dataFoundation.externalDetailsRef`
+points at the operator-provided external-cluster details secret. The
+attachment applies later in the add-ons phase after the target cluster and Data
+Foundation add-on are ready. Managed Ceph generates those details during
+storage apply and saves them as restrictive runtime secret material.
 
 ## KubeVirt Child Clusters
 
@@ -108,8 +109,8 @@ Virtualization are declared as `ClusterAddon` resources, grouped with
 MVP add-on types are `olm-operator` and `manifest-set`. Profile expansion is
 deterministic: referenced `profiles` expand in declared order, then direct
 `addons` append in declared order, and duplicate add-ons are removed by
-first occurrence. Binding expansion follows the same order and produces one
-apply plan per selected cluster.
+first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
+`clusterRef.name`; use multiple binding resources for multiple clusters.
 
 `bootwright apply cluster --yes` installs the selected clusters and then applies
 their bound post-install components. Use `bootwright apply addons --yes`

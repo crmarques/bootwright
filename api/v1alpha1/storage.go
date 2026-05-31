@@ -214,33 +214,7 @@ type StorageExportSpec struct {
 }
 
 type StorageExportDataFoundationSpec struct {
-	RBDPoolRef         LocalObjectReference `yaml:"rbdPoolRef" json:"rbdPoolRef"`
-	CephFSRef          LocalObjectReference `yaml:"cephFSRef" json:"cephFSRef"`
-	ObjectGatewayRef   LocalObjectReference `yaml:"objectGatewayRef,omitempty" json:"objectGatewayRef,omitempty"`
-	ExternalDetailsRef SecretRef            `yaml:"externalDetailsRef,omitempty" json:"externalDetailsRef,omitempty"`
-}
-
-type StorageClusterBinding struct {
-	APIVersion string                    `yaml:"apiVersion" json:"apiVersion"`
-	Kind       string                    `yaml:"kind" json:"kind"`
-	Metadata   Metadata                  `yaml:"metadata" json:"metadata"`
-	Spec       StorageClusterBindingSpec `yaml:"spec" json:"spec"`
-	SourcePath string                    `yaml:"-" json:"-"`
-}
-
-type StorageClusterBindingSpec struct {
-	StorageExportRef         LocalObjectReference                          `yaml:"storageExportRef" json:"storageExportRef"`
-	ContainerClusterSelector StorageClusterBindingContainerClusterSelector `yaml:"containerClusterSelector" json:"containerClusterSelector"`
-	DataFoundation           StorageClusterBindingDataFoundation           `yaml:"dataFoundation,omitempty" json:"dataFoundation,omitempty"`
-}
-
-type StorageClusterBindingContainerClusterSelector struct {
-	Names []string `yaml:"names,omitempty" json:"names,omitempty"`
-}
-
-type StorageClusterBindingDataFoundation struct {
-	Product            string `yaml:"product,omitempty" json:"product,omitempty"`
-	Namespace          string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	StorageClusterName string `yaml:"storageClusterName,omitempty" json:"storageClusterName,omitempty"`
-	StorageSystemName  string `yaml:"storageSystemName,omitempty" json:"storageSystemName,omitempty"`
+	RBDPoolRef       LocalObjectReference `yaml:"rbdPoolRef" json:"rbdPoolRef"`
+	CephFSRef        LocalObjectReference `yaml:"cephFSRef" json:"cephFSRef"`
+	ObjectGatewayRef LocalObjectReference `yaml:"objectGatewayRef,omitempty" json:"objectGatewayRef,omitempty"`
 }

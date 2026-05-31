@@ -3,20 +3,15 @@ kind: ClusterAddonBinding
 metadata:
   name: dc1-metal-ocp-addons
 spec:
-  containerClusterSelector:
-    names:
-      - dc1-metal-ocp
-
-  applyAfter:
-    phase: containerClusterInstalled
+  clusterRef:
+    name: dc1-metal-ocp
 
   addons:
     - name: openshift-virtualization
     - name: openshift-data-foundation
     - name: child-network
 
-  policy:
-    prune: false # default
-    serverSideApply: true # default
-    fieldManager: bootwright # default
-    continueOnError: false # default
+  storage:
+    - name: ceph
+      exportRef:
+        name: odf-external-ceph

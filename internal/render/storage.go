@@ -15,11 +15,12 @@ type StorageAsset struct {
 	BootstrapSpecPath  string
 	ServicesSpecPath   string
 	OperationsPath     string
-	Bindings           []StorageBindingAsset
+	Attachments        []StorageAttachmentAsset
 }
 
-type StorageBindingAsset struct {
+type StorageAttachmentAsset struct {
 	BindingName                string
+	StorageName                string
 	ContainerClusterName       string
 	Dir                        string
 	ExternalClusterDetailsPath string
@@ -38,14 +39,14 @@ func (a StorageAsset) Directories() []string {
 			dirs = append(dirs, dir)
 		}
 	}
-	for _, binding := range a.Bindings {
-		dirs = append(dirs, binding.Dir)
+	for _, attachment := range a.Attachments {
+		dirs = append(dirs, attachment.Dir)
 	}
 	return dirs
 }
 
 func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
-	bindingsByCluster := storageBindingsByStorageCluster(state)
+	attachmentsByCluster := storageAttachmentsByStorageCluster(state)
 	var assets []StorageAsset
 	for _, cluster := range state.StorageClusters {
 		dir := filepath.Join(baseDir, "storage", cluster.Metadata.Name)
@@ -61,18 +62,18 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 			asset.ServicesSpecPath = filepath.Join(dir, "cephadm", "services.yaml")
 			asset.OperationsPath = filepath.Join(dir, "ceph", "operations.yaml")
 		}
-		for _, binding := range bindingsByCluster[cluster.Metadata.Name] {
-			for _, containerCluster := range binding.Spec.ContainerClusterSelector.Names {
-				bindingDir := filepath.Join(asset.DataFoundationDir, binding.Metadata.Name, containerCluster)
-				asset.Bindings = append(asset.Bindings, StorageBindingAsset{
-					BindingName:                binding.Metadata.Name,
-					ContainerClusterName:       containerCluster,
-					Dir:                        bindingDir,
-					ExternalClusterDetailsPath: filepath.Join(bindingDir, "rook-ceph-external-cluster-details.yaml"),
-					StorageClusterPath:         filepath.Join(bindingDir, "ocs-external-storagecluster.yaml"),
-					StorageSystemPath:          filepath.Join(bindingDir, "ocs-external-storagesystem.yaml"),
-				})
-			}
+		for _, attachment := range attachmentsByCluster[cluster.Metadata.Name] {
+			containerCluster := attachment.Binding.Spec.ClusterRef.Name
+			bindingDir := filepath.Join(asset.DataFoundationDir, attachment.Binding.Metadata.Name, attachment.Storage.Name, containerCluster)
+			asset.Attachments = append(asset.Attachments, StorageAttachmentAsset{
+				BindingName:                attachment.Binding.Metadata.Name,
+				StorageName:                attachment.Storage.Name,
+				ContainerClusterName:       containerCluster,
+				Dir:                        bindingDir,
+				ExternalClusterDetailsPath: filepath.Join(bindingDir, "rook-ceph-external-cluster-details.yaml"),
+				StorageClusterPath:         filepath.Join(bindingDir, "ocs-external-storagecluster.yaml"),
+				StorageSystemPath:          filepath.Join(bindingDir, "ocs-external-storagesystem.yaml"),
+			})
 		}
 		assets = append(assets, asset)
 	}
@@ -96,30 +97,30 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				return err
 			}
 		}
-		for _, bindingAsset := range asset.Bindings {
-			binding, ok := storageBindingByName(state, bindingAsset.BindingName)
+		for _, attachmentAsset := range asset.Attachments {
+			attachment, ok := storageAttachmentByName(state, attachmentAsset.BindingName, attachmentAsset.StorageName)
 			if !ok {
 				continue
 			}
-			export, ok := storageExportByName(state, binding.Spec.StorageExportRef.Name)
-			if !ok || export.Spec.DataFoundation == nil {
+			export, ok := storageExportByName(state, attachment.Storage.ExportRef.Name)
+			if !ok {
 				continue
 			}
-			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, binding, bindingAsset.ContainerClusterName)
-			if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
-				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, export.Spec.DataFoundation.ExternalDetailsRef)
+			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, attachment, attachmentAsset.ContainerClusterName)
+			if attachment.Storage.DataFoundation.ExternalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
+				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, attachment.Storage.DataFoundation.ExternalDetailsRef)
 				if err != nil {
 					return err
 				}
-				externalDetails = DataFoundationExternalDetailsRawJSONManifest(binding, detailsJSON, export.Spec.DataFoundation.ExternalDetailsRef.Name)
+				externalDetails = DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, attachment.Storage.DataFoundation.ExternalDetailsRef.Name)
 			}
-			if err := writeYAML(fs, bindingAsset.ExternalClusterDetailsPath, externalDetails); err != nil {
+			if err := writeYAML(fs, attachmentAsset.ExternalClusterDetailsPath, externalDetails); err != nil {
 				return err
 			}
-			if err := writeYAML(fs, bindingAsset.StorageClusterPath, dataFoundationStorageClusterManifest(binding)); err != nil {
+			if err := writeYAML(fs, attachmentAsset.StorageClusterPath, dataFoundationStorageClusterManifest()); err != nil {
 				return err
 			}
-			if err := writeYAML(fs, bindingAsset.StorageSystemPath, dataFoundationStorageSystemManifest(binding)); err != nil {
+			if err := writeYAML(fs, attachmentAsset.StorageSystemPath, dataFoundationStorageSystemManifest()); err != nil {
 				return err
 			}
 		}

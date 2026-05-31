@@ -116,16 +116,21 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 			selectedExports[export.Metadata.Name] = true
 		}
 	}
-	var bindings []v1alpha1.StorageClusterBinding
+	var bindings []v1alpha1.ClusterAddonBinding
 	selectedContainerClusters := map[string]bool{}
-	for _, binding := range state.StorageClusterBindings {
-		if !selectedExports[binding.Spec.StorageExportRef.Name] {
+	for _, binding := range state.ClusterAddonBindings {
+		var storageItems []v1alpha1.ClusterAddonBindingStorage
+		for _, storage := range binding.Spec.Storage {
+			if selectedExports[storage.ExportRef.Name] {
+				storageItems = append(storageItems, storage)
+			}
+		}
+		if len(storageItems) == 0 {
 			continue
 		}
+		binding.Spec.Storage = storageItems
 		bindings = append(bindings, binding)
-		for _, name := range binding.Spec.ContainerClusterSelector.Names {
-			selectedContainerClusters[name] = true
-		}
+		selectedContainerClusters[binding.Spec.ClusterRef.Name] = true
 	}
 	var containerClusters []v1alpha1.ContainerCluster
 	for _, cluster := range state.ContainerClusters {
@@ -167,7 +172,7 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	state.StorageFilesystems = filesystems
 	state.StorageObjectGateways = gateways
 	state.StorageExports = exports
-	state.StorageClusterBindings = bindings
+	state.ClusterAddonBindings = bindings
 	state = filterAddonsToClusters(state, selectedContainerClusters)
 	return state
 }
@@ -177,18 +182,11 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 	selectedAddons := map[string]bool{}
 	var filteredBindings []v1alpha1.ClusterAddonBinding
 	for _, binding := range state.ClusterAddonBindings {
-		var names []string
-		for _, name := range binding.Spec.ContainerClusterSelector.Names {
-			if selectedClusters[name] {
-				names = append(names, name)
-			}
-		}
-		if len(names) == 0 {
+		if !selectedClusters[binding.Spec.ClusterRef.Name] {
 			continue
 		}
-		binding.Spec.ContainerClusterSelector.Names = names
 		filteredBindings = append(filteredBindings, binding)
-		for _, ref := range binding.Spec.Profiles {
+		for _, ref := range binding.Spec.AddonProfiles {
 			selectedSets[ref.Name] = true
 		}
 		for _, ref := range binding.Spec.Addons {
@@ -238,20 +236,13 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 
 func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]bool) (v1alpha1.State, map[string]bool) {
 	selectedExports := map[string]bool{}
-	var filteredBindings []v1alpha1.StorageClusterBinding
-	for _, binding := range state.StorageClusterBindings {
-		var names []string
-		for _, name := range binding.Spec.ContainerClusterSelector.Names {
-			if selectedClusters[name] {
-				names = append(names, name)
-			}
-		}
-		if len(names) == 0 {
+	for _, binding := range state.ClusterAddonBindings {
+		if !selectedClusters[binding.Spec.ClusterRef.Name] {
 			continue
 		}
-		binding.Spec.ContainerClusterSelector.Names = names
-		filteredBindings = append(filteredBindings, binding)
-		selectedExports[binding.Spec.StorageExportRef.Name] = true
+		for _, storage := range binding.Spec.Storage {
+			selectedExports[storage.ExportRef.Name] = true
+		}
 	}
 
 	selectedStorageClusters := map[string]bool{}
@@ -341,7 +332,6 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 	state.StorageFilesystems = filteredFilesystems
 	state.StorageObjectGateways = filteredGateways
 	state.StorageExports = filteredExports
-	state.StorageClusterBindings = filteredBindings
 	return state, storageInfra
 }
 
@@ -371,7 +361,6 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 	storageFilesystems := map[string]bool{}
 	storageObjectGateways := map[string]bool{}
 	storageExports := map[string]bool{}
-	storageClusterBindings := map[string]bool{}
 	clusterAddons := map[string]bool{}
 	clusterAddonProfiles := map[string]bool{}
 	clusterAddonBindings := map[string]bool{}
@@ -385,7 +374,6 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 		addNames(storageFilesystems, part.StorageFilesystems, func(item v1alpha1.StorageFilesystem) string { return item.Metadata.Name })
 		addNames(storageObjectGateways, part.StorageObjectGateways, func(item v1alpha1.StorageObjectGateway) string { return item.Metadata.Name })
 		addNames(storageExports, part.StorageExports, func(item v1alpha1.StorageExport) string { return item.Metadata.Name })
-		addNames(storageClusterBindings, part.StorageClusterBindings, func(item v1alpha1.StorageClusterBinding) string { return item.Metadata.Name })
 		addNames(clusterAddons, part.ClusterAddons, func(item v1alpha1.ClusterAddon) string { return item.Metadata.Name })
 		addNames(clusterAddonProfiles, part.ClusterAddonProfiles, func(item v1alpha1.ClusterAddonProfile) string { return item.Metadata.Name })
 		addNames(clusterAddonBindings, part.ClusterAddonBindings, func(item v1alpha1.ClusterAddonBinding) string { return item.Metadata.Name })
@@ -399,7 +387,6 @@ func mergeFilteredStates(base v1alpha1.State, parts []v1alpha1.State) v1alpha1.S
 	out.StorageFilesystems = filterByName(base.StorageFilesystems, storageFilesystems, func(item v1alpha1.StorageFilesystem) string { return item.Metadata.Name })
 	out.StorageObjectGateways = filterByName(base.StorageObjectGateways, storageObjectGateways, func(item v1alpha1.StorageObjectGateway) string { return item.Metadata.Name })
 	out.StorageExports = filterByName(base.StorageExports, storageExports, func(item v1alpha1.StorageExport) string { return item.Metadata.Name })
-	out.StorageClusterBindings = filterByName(base.StorageClusterBindings, storageClusterBindings, func(item v1alpha1.StorageClusterBinding) string { return item.Metadata.Name })
 	out.ClusterAddons = filterByName(base.ClusterAddons, clusterAddons, func(item v1alpha1.ClusterAddon) string { return item.Metadata.Name })
 	out.ClusterAddonProfiles = filterByName(base.ClusterAddonProfiles, clusterAddonProfiles, func(item v1alpha1.ClusterAddonProfile) string { return item.Metadata.Name })
 	out.ClusterAddonBindings = filterByName(base.ClusterAddonBindings, clusterAddonBindings, func(item v1alpha1.ClusterAddonBinding) string { return item.Metadata.Name })

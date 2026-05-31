@@ -19,15 +19,15 @@ import (
 )
 
 const (
-	ApplyTaskKindProvider                   = "providerServices"
-	ApplyTaskKindClusterInfra               = "clusterInfra"
-	ApplyTaskKindClusterISO                 = "clusterISO"
-	ApplyTaskKindNodeBoot                   = "nodeBoot"
-	ApplyTaskKindInstallWait                = "installWait"
-	ApplyTaskKindStorageCluster             = "storageCluster"
-	ApplyTaskKindStorageClusterBindingApply = "storageClusterBindingApply"
-	ApplyTaskKindClusterAddonApply          = "clusterAddonApply"
-	ApplyTaskKindClusterAddonWait           = "clusterAddonWait"
+	ApplyTaskKindProvider               = "providerServices"
+	ApplyTaskKindClusterInfra           = "clusterInfra"
+	ApplyTaskKindClusterISO             = "clusterISO"
+	ApplyTaskKindNodeBoot               = "nodeBoot"
+	ApplyTaskKindInstallWait            = "installWait"
+	ApplyTaskKindStorageCluster         = "storageCluster"
+	ApplyTaskKindStorageAttachmentApply = "storageAttachmentApply"
+	ApplyTaskKindClusterAddonApply      = "clusterAddonApply"
+	ApplyTaskKindClusterAddonWait       = "clusterAddonWait"
 
 	ApplyClusterKindContainer = "container"
 	ApplyClusterKindStorage   = "storage"
@@ -51,15 +51,15 @@ type ApplyTarget struct {
 }
 
 type ApplyTask struct {
-	Entry          TaskLedgerEntry
-	Playbook       string
-	Limit          string
-	Forks          int
-	RedfishSlots   int
-	ExtraVarPairs  []string
-	State          v1alpha1.State
-	Extension      *extensionplan.ExtensionPlan
-	StorageBinding *StorageBindingPlan
+	Entry             TaskLedgerEntry
+	Playbook          string
+	Limit             string
+	Forks             int
+	RedfishSlots      int
+	ExtraVarPairs     []string
+	State             v1alpha1.State
+	Extension         *extensionplan.ExtensionPlan
+	StorageAttachment *StorageAttachmentPlan
 }
 
 type applyTaskResult struct {
@@ -278,7 +278,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return tasks, err
 		}
 		tasks = append(tasks, addonTasks...)
-		tasks = append(tasks, planStorageBindingTasks(state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster)...)
+		tasks = append(tasks, planStorageAttachmentTasks(state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster)...)
 	}
 	return tasks, nil
 }
@@ -661,8 +661,8 @@ func runOneApplyTask(ctx context.Context, stdout io.Writer, stderr io.Writer, ru
 	if task.Entry.Kind == ApplyTaskKindStorageCluster {
 		return runOneStorageTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
-	if task.Entry.Kind == ApplyTaskKindStorageClusterBindingApply {
-		return runOneStorageBindingTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
+		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")

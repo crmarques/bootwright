@@ -37,7 +37,7 @@ Post-install add-on kinds were added later as separate desired-state
 resources: `ClusterAddon`, `ClusterAddonProfile`,
 `ClusterAddonBinding`, and the storage resource family. They do not change
 the provisioning ownership split defined here, but the full current
-user-authored API surface is seventeen kinds.
+user-authored API surface is sixteen kinds.
 
 ## Consequences
 

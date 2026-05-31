@@ -175,7 +175,7 @@ func TestApplyCephSkipsBootstrapWhenCephAlreadyRunning(t *testing.T) {
 	findCallContaining(t, runner.calls, "ssh", "rm")
 }
 
-func TestApplyCephCapturesDataFoundationBindingCredentials(t *testing.T) {
+func TestApplyCephCapturesDataFoundationAttachmentCredentials(t *testing.T) {
 	root := t.TempDir()
 	asset := render.StorageAsset{
 		StorageClusterName: "ceph",
@@ -219,25 +219,21 @@ func TestApplyCephCapturesDataFoundationBindingCredentials(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ApplyCeph: %v", err)
 	}
-	record, found, err := LoadDataFoundationBindingRecord(clustersDir, "demo", "ceph-binding")
+	detailsJSON, found, err := LoadDataFoundationAttachmentDetails(clustersDir, "demo", "ceph-binding", "ceph")
 	if err != nil || !found {
-		t.Fatalf("LoadDataFoundationBindingRecord found=%v err=%v", found, err)
+		t.Fatalf("LoadDataFoundationAttachmentDetails found=%v err=%v", found, err)
 	}
-	if record.Secrets.FSID != "fsid-123" || record.Secrets.AdminSecret != "admin-key" || record.Secrets.MonSecret != "mon-key" {
-		t.Fatalf("cluster secrets = %+v", record.Secrets)
+	for _, token := range []string{"fsid-123", "admin-key", "mon-key", "rbd-node-key", "cephfs-provisioner-key", "rgw-access", "rgw-secret"} {
+		if !strings.Contains(detailsJSON, token) {
+			t.Fatalf("external details missing %q: %s", token, detailsJSON)
+		}
 	}
-	if record.Secrets.RBDNodeKey != "rbd-node-key" || record.Secrets.CephFSProvisionerKey != "cephfs-provisioner-key" {
-		t.Fatalf("client secrets = %+v", record.Secrets)
-	}
-	if record.Secrets.RGWAccessKey != "rgw-access" || record.Secrets.RGWSecretKey != "rgw-secret" {
-		t.Fatalf("rgw secrets = %+v", record.Secrets)
-	}
-	info, err := os.Stat(DataFoundationBindingRecordPath(clustersDir, "demo", "ceph-binding"))
+	info, err := os.Stat(DataFoundationAttachmentDetailsPath(clustersDir, "demo", "ceph-binding", "ceph"))
 	if err != nil {
-		t.Fatalf("stat record: %v", err)
+		t.Fatalf("stat external details: %v", err)
 	}
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("record mode = %v, want 0600", info.Mode().Perm())
+		t.Fatalf("external details mode = %v, want 0600", info.Mode().Perm())
 	}
 }
 
@@ -308,6 +304,9 @@ func minimalStorageState() v1alpha1.State {
 
 func dataFoundationStorageState() v1alpha1.State {
 	state := minimalStorageState()
+	state.ContainerClusters = []v1alpha1.ContainerCluster{{
+		Metadata: v1alpha1.Metadata{Name: "demo"},
+	}}
 	state.StorageExports = []v1alpha1.StorageExport{{
 		Metadata: v1alpha1.Metadata{Name: "export"},
 		Spec: v1alpha1.StorageExportSpec{
@@ -319,11 +318,14 @@ func dataFoundationStorageState() v1alpha1.State {
 			},
 		},
 	}}
-	state.StorageClusterBindings = []v1alpha1.StorageClusterBinding{{
+	state.ClusterAddonBindings = []v1alpha1.ClusterAddonBinding{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
-		Spec: v1alpha1.StorageClusterBindingSpec{
-			StorageExportRef:         v1alpha1.LocalObjectReference{Name: "export"},
-			ContainerClusterSelector: v1alpha1.StorageClusterBindingContainerClusterSelector{Names: []string{"demo"}},
+		Spec: v1alpha1.ClusterAddonBindingSpec{
+			ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+			Storage: []v1alpha1.ClusterAddonBindingStorage{{
+				Name:      "ceph",
+				ExportRef: v1alpha1.LocalObjectReference{Name: "export"},
+			}},
 		},
 	}}
 	return state

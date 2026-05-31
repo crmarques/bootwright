@@ -3,18 +3,13 @@ kind: ClusterAddonBinding
 metadata:
   name: dc1-child-ocp-addons
 spec:
-  containerClusterSelector:
-    names:
-      - dc1-child-ocp
-
-  applyAfter:
-    phase: containerClusterInstalled
+  clusterRef:
+    name: dc1-child-ocp
 
   addons:
     - name: openshift-data-foundation
 
-  policy:
-    prune: false # default
-    serverSideApply: true # default
-    fieldManager: bootwright # default
-    continueOnError: false # default
+  storage:
+    - name: ceph
+      exportRef:
+        name: odf-external-ceph

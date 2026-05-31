@@ -99,6 +99,9 @@ Evaluate alternatives through:
 - **Schema economy:** Does every kind, attribute, reference, and file boundary
   earn its place, or could it be removed, defaulted, derived, replaced, or
   moved to a clearer owner without losing meaningful desired-state intent?
+- **Naming clarity:** Do commands, flags, parameters, kinds, object names,
+  field names, selectors, references, generated paths, and output labels use
+  the words an operator would naturally expect?
 
 ## First-Principles Questions
 
@@ -135,6 +138,9 @@ Use these as provocations, not a checklist.
 - How should the CLI communicate progress until the desired state is achieved?
   Consider task graphs, per-cluster logs, skipped work, blocked work, and
   next steps.
+- Are command names, subcommands, scopes, flags, parameters, output labels, and
+  help text consistent with the workflow users are trying to perform? Which
+  names should be kept, renamed, collapsed, or split?
 
 ### Input File and Schema Experience
 
@@ -164,6 +170,27 @@ Use these as provocations, not a checklist.
   desired state more clearly without breaking ownership rules?
 - What is the leanest final file set that a new user can understand without
   hiding critical bindings behind surprising defaults?
+
+### Naming and Language
+
+Reevaluate naming from scratch. Treat naming as UX, not polish. For every
+important command, flag, parameter, kind, object name, attribute, reference,
+selector, generated path, status, and output label in the reviewed scope:
+
+- Is the name the word an operator would naturally search for or type?
+- Does it describe user intent instead of implementation mechanics?
+- Does the same concept use one name everywhere across CLI, YAML, docs,
+  examples, validation errors, rendered files, and status output?
+- Does the name scale from single-cluster examples to multi-cluster,
+  multi-provider, storage, add-on, and disconnected workflows?
+- Could a shorter, clearer, or more domain-specific name remove explanation?
+- Would renaming create enough UX benefit to justify the `v1alpha1` clean
+  break, docs updates, fixture changes, and test changes?
+
+Recommend keeping current names when alternatives do not clearly improve
+discoverability, readability, or consistency. Recommend renaming when the
+current name is ambiguous, implementation-shaped, stale, inconsistent, too
+broad, too narrow, or likely to make users put facts in the wrong place.
 
 ### Schema Necessity and File Efficiency
 
@@ -211,6 +238,8 @@ For each alternative, state:
 - Which current artifacts would change.
 - What gets simpler.
 - Which schemas, fields, references, or files become unnecessary.
+- Which commands, flags, parameters, kinds, fields, selectors, references, or
+  output labels would be renamed, and why.
 - Which defaults become part of the authoring model and how users discover
   their effective values.
 - What gets riskier or less explicit.
@@ -238,6 +267,9 @@ Base claims on current repository evidence:
   lower operational risk, or lack of meaningful gain from alternatives.
 - If a recommendation changes the CLI, define the mutation boundary,
   automation behavior, and recovery path.
+- If a recommendation changes naming, state the old name, proposed name,
+  affected surfaces, user-facing benefit, and validation/docs/examples that
+  must change.
 - If a recommendation changes examples or scaffolds, show the target learning
   path and the minimal useful input set.
 
@@ -288,6 +320,8 @@ Review the input files and schemas with a critical view:
   inspect effective values before apply.
 - Which file boundaries help or hurt readability, reuse, efficient
   declaration, and object binding comprehension.
+- Which kind, object, field, selector, and reference names help or hurt the
+  user's mental model, and which should be renamed.
 - What the minimal useful authoring shape should be, including the smallest
   final file set that remains understandable to a new user.
 
@@ -305,6 +339,8 @@ Include:
 
 - target CLI flow
 - target input layout and schema posture
+- naming changes for commands, flags, parameters, kinds, objects, attributes,
+  selectors, references, generated paths, and output labels
 - schema elements to keep, default, derive, replace, or remove
 - key behavior changes
 - expected user-visible improvements

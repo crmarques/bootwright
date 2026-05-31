@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,50 +12,42 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 )
 
-const dataFoundationBindingRecordRelativeDir = "storage-bindings"
+const dataFoundationAttachmentSecretRelativeDir = "storage-attachments"
 
-type DataFoundationBindingRecord struct {
-	StorageCluster string                               `json:"storageCluster"`
-	Binding        string                               `json:"binding"`
-	Cluster        string                               `json:"cluster"`
-	Secrets        render.DataFoundationExternalSecrets `json:"secrets"`
+func DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage string) string {
+	return filepath.Join(clustersDir, cluster, "secrets", dataFoundationAttachmentSecretRelativeDir, binding, storage, "external-cluster-details.json")
 }
 
-func DataFoundationBindingRecordPath(clustersDir, cluster, binding string) string {
-	return filepath.Join(clustersDir, cluster, "runtime", dataFoundationBindingRecordRelativeDir, binding+".json")
-}
-
-func LoadDataFoundationBindingRecord(clustersDir, cluster, binding string) (DataFoundationBindingRecord, bool, error) {
-	path := DataFoundationBindingRecordPath(clustersDir, cluster, binding)
+func LoadDataFoundationAttachmentDetails(clustersDir, cluster, binding, storage string) (string, bool, error) {
+	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return DataFoundationBindingRecord{}, false, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return DataFoundationBindingRecord{}, false, fmt.Errorf("read Data Foundation storage binding record: %w", err)
+		return "", false, fmt.Errorf("read Data Foundation storage attachment details: %w", err)
 	}
-	var record DataFoundationBindingRecord
-	if err := json.Unmarshal(data, &record); err != nil {
-		return DataFoundationBindingRecord{}, true, fmt.Errorf("decode Data Foundation storage binding record %s: %w", path, err)
+	details, err := render.NormalizeDataFoundationExternalDetailsJSON(binding+"/"+storage, path, data)
+	if err != nil {
+		return "", true, err
 	}
-	return record, true, nil
+	return details, true, nil
 }
 
-func SaveDataFoundationBindingRecord(clustersDir string, record DataFoundationBindingRecord) error {
-	path := DataFoundationBindingRecordPath(clustersDir, record.Cluster, record.Binding)
+func SaveDataFoundationAttachmentDetails(clustersDir, cluster, binding, storage, detailsJSON string) error {
+	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create Data Foundation storage binding record directory: %w", err)
+		return fmt.Errorf("create Data Foundation storage attachment details directory: %w", err)
 	}
 	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("chmod Data Foundation storage binding record directory: %w", err)
+		return fmt.Errorf("chmod Data Foundation storage attachment details directory: %w", err)
 	}
-	data, err := json.MarshalIndent(record, "", "  ")
+	details, err := render.NormalizeDataFoundationExternalDetailsJSON(binding+"/"+storage, path, []byte(detailsJSON))
 	if err != nil {
-		return fmt.Errorf("encode Data Foundation storage binding record: %w", err)
+		return err
 	}
-	data = append(data, '\n')
-	if err := safefs.AtomicWriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write Data Foundation storage binding record: %w", err)
+	if err := safefs.AtomicWriteFile(path, append([]byte(details), '\n'), 0o600); err != nil {
+		return fmt.Errorf("write Data Foundation storage attachment details: %w", err)
 	}
 	return nil
 }

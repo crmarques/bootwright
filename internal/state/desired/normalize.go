@@ -24,9 +24,6 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ClusterAddons {
 		normalizeClusterAddon(&state.ClusterAddons[i])
 	}
-	for i := range state.ClusterAddonBindings {
-		normalizeClusterAddonBinding(&state.ClusterAddonBindings[i])
-	}
 	for i := range state.StorageClusters {
 		normalizeStorageCluster(&state.StorageClusters[i])
 	}
@@ -41,9 +38,6 @@ func Normalize(state *v1alpha1.State) {
 	}
 	for i := range state.StorageExports {
 		normalizeStorageExport(&state.StorageExports[i])
-	}
-	for i := range state.StorageClusterBindings {
-		normalizeStorageClusterBinding(&state.StorageClusterBindings[i])
 	}
 }
 
@@ -167,15 +161,6 @@ func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {
 	}
 }
 
-func normalizeClusterAddonBinding(binding *v1alpha1.ClusterAddonBinding) {
-	if binding.Spec.Policy.FieldManager == "" {
-		binding.Spec.Policy.FieldManager = v1alpha1.DefaultClusterAddonFieldManager
-	}
-	if binding.Spec.Policy.ServerSideApply == nil {
-		binding.Spec.Policy.ServerSideApply = v1alpha1.BoolPtr(true)
-	}
-}
-
 func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if cluster.Spec.Management == "" {
 		cluster.Spec.Management = v1alpha1.StorageClusterManagementManaged
@@ -225,21 +210,6 @@ func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 func normalizeStorageExport(export *v1alpha1.StorageExport) {
 	if export.Spec.Type == "" && export.Spec.DataFoundation != nil {
 		export.Spec.Type = v1alpha1.StorageExportTypeDataFoundation
-	}
-}
-
-func normalizeStorageClusterBinding(binding *v1alpha1.StorageClusterBinding) {
-	if binding.Spec.DataFoundation.Product == "" {
-		binding.Spec.DataFoundation.Product = v1alpha1.DataFoundationProductOpenShiftDataFoundation
-	}
-	if binding.Spec.DataFoundation.Namespace == "" {
-		binding.Spec.DataFoundation.Namespace = "openshift-storage"
-	}
-	if binding.Spec.DataFoundation.StorageClusterName == "" {
-		binding.Spec.DataFoundation.StorageClusterName = "ocs-external-storagecluster"
-	}
-	if binding.Spec.DataFoundation.StorageSystemName == "" {
-		binding.Spec.DataFoundation.StorageSystemName = binding.Spec.DataFoundation.StorageClusterName + "-storagesystem"
 	}
 }
 

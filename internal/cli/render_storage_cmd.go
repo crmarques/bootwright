@@ -51,8 +51,8 @@ func printStorageFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.StorageAssets {
 		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
-		for _, binding := range asset.Bindings {
-			paths = appendNonEmpty(paths, binding.ExternalClusterDetailsPath, binding.StorageClusterPath, binding.StorageSystemPath)
+		for _, attachment := range asset.Attachments {
+			paths = appendNonEmpty(paths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
 		}
 	}
 	p := cliout.NewContinuation(stdout)

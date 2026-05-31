@@ -52,20 +52,19 @@ type statusApplyRunActivity struct {
 }
 
 type statusDesired struct {
-	Source                 string `json:"source"`
-	Loaded                 bool   `json:"loaded"`
-	LoadError              string `json:"loadError,omitempty"`
-	Environments           int    `json:"environments"`
-	InfraProviders         int    `json:"infraProviders"`
-	Hosts                  int    `json:"hosts"`
-	ClusterInfras          int    `json:"clusterInfras"`
-	ContainerClusters      int    `json:"containerClusters"`
-	StorageClusters        int    `json:"storageClusters"`
-	StoragePools           int    `json:"storagePools"`
-	StorageClusterBindings int    `json:"storageClusterBindings"`
-	ClusterAddons          int    `json:"clusterAddons"`
-	ClusterAddonProfiles   int    `json:"clusterAddonProfiles"`
-	ClusterAddonBindings   int    `json:"clusterAddonBindings"`
+	Source               string `json:"source"`
+	Loaded               bool   `json:"loaded"`
+	LoadError            string `json:"loadError,omitempty"`
+	Environments         int    `json:"environments"`
+	InfraProviders       int    `json:"infraProviders"`
+	Hosts                int    `json:"hosts"`
+	ClusterInfras        int    `json:"clusterInfras"`
+	ContainerClusters    int    `json:"containerClusters"`
+	StorageClusters      int    `json:"storageClusters"`
+	StoragePools         int    `json:"storagePools"`
+	ClusterAddons        int    `json:"clusterAddons"`
+	ClusterAddonProfiles int    `json:"clusterAddonProfiles"`
+	ClusterAddonBindings int    `json:"clusterAddonBindings"`
 }
 
 type statusCluster struct {
@@ -134,7 +133,6 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.ContainerClusters = len(state.ContainerClusters)
 		report.Desired.StorageClusters = len(state.StorageClusters)
 		report.Desired.StoragePools = len(state.StoragePools)
-		report.Desired.StorageClusterBindings = len(state.StorageClusterBindings)
 		report.Desired.ClusterAddons = len(state.ClusterAddons)
 		report.Desired.ClusterAddonProfiles = len(state.ClusterAddonProfiles)
 		report.Desired.ClusterAddonBindings = len(state.ClusterAddonBindings)

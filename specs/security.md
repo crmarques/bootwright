@@ -32,9 +32,12 @@ cephadm for ongoing orchestration. Data Foundation external-cluster details
 render with placeholders for Ceph client secrets; generated Ceph keys are
 created or read during apply and must not be committed. Imported Ceph
 connection JSON is declared through
-`StorageExport.spec.dataFoundation.externalDetailsRef`; normal render output
-uses a placeholder, while sensitive render and apply-time artifacts inline the
-secret JSON only in local restrictive-mode output.
+`ClusterAddonBinding.spec.storage[].dataFoundation.externalDetailsRef`; normal
+render output uses a placeholder, while sensitive render and apply-time
+artifacts inline the secret JSON only in local restrictive-mode output.
+Managed Ceph saves generated connection JSON under
+`clusters/<cluster>/secrets/storage-attachments/<binding>/<storage>/external-cluster-details.json`
+with restrictive permissions.
 
 ## Installer Trust
 
@@ -157,6 +160,31 @@ Generated output boundaries are part of the safety contract:
   storage tool inputs, under `<dir>` with restrictive file modes. The command
   must fail without
   `--sensitive`. Operators must keep that directory local and unversioned.
+
+## Code Surface Hygiene
+
+Unused code and duplicated implementations are security and maintenance risks.
+They preserve stale paths for privileges, filesystem access, command
+execution, TLS, trust material, redaction, generated-output boundaries, and
+secret handling after the maintained path has moved on.
+
+Implementation and review work must search for unused packages, files,
+functions, roles, tasks, templates, scripts, tests, and examples in the touched
+scope. Confirmed unused code must be removed rather than kept for speculative
+future use.
+
+Duplicated behavior must be treated as responsibility drift. Validation,
+normalization, rendering, path safety, redaction, command construction,
+privilege boundaries, and provider or BMC capability handling should have one
+domain owner. Other components must call that owner instead of reimplementing
+the rule locally.
+
+Code should stay clean, lean, and direct. Domain-driven design boundaries are
+part of the safety model: domain concepts and invariants live in the package
+or role that owns the domain responsibility, adapters translate external
+systems into that model, and CLI or orchestration layers coordinate rather
+than duplicate domain decisions. When duplication is found, refactor toward one
+centralized implementation that current workflows use and tests cover.
 
 ## Supply Chain
 

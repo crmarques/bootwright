@@ -22,6 +22,13 @@ The user should provide one or more of:
 - a command flow, such as `check`, `render`, `apply infra`, or `apply cluster`
 - the expected user intent or final output to verify
 
+When the user asks for an examples-wide review, or when the review scope is
+the current repository examples, enumerate every available example directory
+under `examples/` and mentally exercise each represented flow. Treat each
+example as user-authored desired state and trace every Go package, generated
+contract, Ansible playbook, role, template, script, and external command path
+that flow touches.
+
 If the starting files or command are missing, infer a narrow scope from the
 conversation or ask one blocking question. Do not invent a scenario when the
 review depends on concrete input.
@@ -57,6 +64,7 @@ Useful commands:
 ```bash
 git status --short
 rg --files
+find examples -maxdepth 2 -type d | sort
 go list ./...
 go test ./...
 go vet ./...
@@ -68,6 +76,7 @@ Use narrower searches once you know the flow:
 ```bash
 rg -n '<kind-or-field-name>|<object-name>|<command>|<ansible-var>' .
 rg -n 'render|validate|normalize|apply|inventory|vars|playbook|role' internal api ansible test docs specs
+rg -n '<example-name>|<cluster-name>|<provider-name>|<storage-name>|<addon-name>' internal api ansible test docs specs examples
 ```
 
 For Ansible and scripts, use these when the tools are already available:
@@ -103,6 +112,10 @@ implement changes that violate them:
 - CLI user-facing human output must use `internal/cli/output`. Preserve raw
   output only for JSON, shell exports, Cobra help, prompts, and external
   process passthrough such as Ansible streams.
+- Go owns CLI behavior, input loading and validation, normalization,
+  rendering, Bootwright storage intent, task planning, locking, ledgers,
+  status, and orchestration. Ansible owns configuration and installation
+  execution on the bastion and target hosts or clusters.
 - `v1alpha1` can break cleanly. Do not propose migrations, aliases,
   compatibility shims, or legacy examples.
 - Fix local defects with the smallest coherent change. Do not hide errors,
@@ -141,6 +154,14 @@ the path in this order:
     runtime state, logs, and side effects against the original intent and specs.
 12. **Tests.** Identify which unit, fixture, renderer, CLI, or Ansible tests
     already prove the behavior and which focused tests are missing.
+
+For examples-wide reviews, repeat this mentally for every example under
+`examples/`. Do not stop after sampling one happy path. Build an example
+inventory that names each example, selected `Environment`, loaded resources,
+declared clusters, storage clusters, add-ons, providers, supported command
+flows, expected rendered artifacts, and Ansible/scripts touched. Compare
+examples against each other to find stale patterns, duplicate flow logic,
+provider-specific leaks, missing tests, and spec drift.
 
 Produce a trace matrix for non-trivial flows:
 
@@ -202,6 +223,28 @@ Look for:
 - cleanup or destroy behavior that can remove the wrong path or leave stale
   state
 
+### Code Quality and Duplication
+
+Look for:
+
+- duplicated validation, normalization, rendering, planning, command
+  construction, path handling, redaction, status, or Ansible variable logic
+- unused Go functions, types, packages, Ansible roles, tasks, templates,
+  scripts, fixtures, or examples touched by no current flow
+- example-specific branches that should be represented as provider
+  capabilities, normalized adapters, rendered variables, or shared domain
+  helpers
+- CLI, renderer, planner, Ansible, or tests reimplementing the same domain rule
+  instead of using one centralized owner
+- code paths that are harder than necessary to trace from desired state to
+  final output
+- responsibilities sitting on the wrong side of the Go/Ansible boundary
+
+Treat confirmed duplication and unused code as maintainability and security
+risks. Recommend deletion for dead code and focused refactors for duplicated
+logic. Code should remain clean, lean, direct, and organized around domain
+responsibilities used by the other components.
+
 ### Security and Safety
 
 Look for:
@@ -226,7 +269,7 @@ For every finding:
 - cite a real path and line number whenever possible
 - state severity: Critical, High, Medium, or Low
 - classify it as Bug, Intent drift, Go/Ansible contract, Security, Test gap,
-  Docs, or Maintainability
+  Docs, Code quality, Duplication, or Maintainability
 - explain the impact in Bootwright terms
 - name the smallest safe fix
 - name the focused tests or checks that would prove the fix
@@ -253,6 +296,10 @@ State the input files, command flow, expected intent, packages, roles, scripts,
 generated artifacts, and tests reviewed. Name important areas intentionally not
 reviewed.
 
+For an examples-wide review, list every example under `examples/`, the flows
+mentally exercised for each, and any example that could not be traced with the
+reason.
+
 ## 2. Flow Trace
 
 For each reviewed flow, provide the trace matrix described above. Keep it
@@ -264,7 +311,7 @@ List findings in severity order. For each:
 
 - **Severity:** Critical / High / Medium / Low
 - **Type:** Bug / Intent drift / Go-Ansible contract / Security / Test gap /
-  Docs / Maintainability
+  Docs / Code quality / Duplication / Maintainability
 - **Location:** `path:line` where possible
 - **Trace:** input -> Go path -> generated contract -> Ansible path -> final
   output
@@ -285,12 +332,20 @@ Name contract mismatches between rendered Go output and Ansible consumption:
 vars, inventory, paths, roles, templates, command arguments, logs, file modes,
 and idempotency.
 
-## 6. Tests and Checks
+## 6. Code Quality, Duplication, and Improvement Review
+
+Identify quality issues found while tracing the flows: unused code or examples,
+duplicated implementation, duplicated domain rules, responsibility drift,
+overly indirect code paths, and opportunities to centralize responsibilities.
+For each, propose the smallest improvement that keeps behavior clear and
+testable.
+
+## 7. Tests and Checks
 
 List commands run and summarize results. List missing tests that should be
 added for each proven issue. Report useful checks that could not run and why.
 
-## 7. Fix Plan
+## 8. Fix Plan
 
 Group fix-ready work into:
 
@@ -304,7 +359,7 @@ Group fix-ready work into:
 For each item, include affected artifacts, implementation approach, validation,
 and risk of change: Low, Medium, or High.
 
-## 8. Open Questions
+## 9. Open Questions
 
 List only questions that block a safe fix or materially change prioritization.
 

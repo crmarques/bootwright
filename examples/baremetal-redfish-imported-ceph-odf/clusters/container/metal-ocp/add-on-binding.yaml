@@ -3,13 +3,16 @@ kind: ClusterAddonBinding
 metadata:
   name: metal-ocp-odf
 spec:
-  containerClusterSelector:
-    names:
-      - metal-ocp
-
-  applyAfter:
-    phase: containerClusterInstalled
+  clusterRef:
+    name: metal-ocp
 
   addons:
     - name: openshift-data-foundation
 
+  storage:
+    - name: ceph
+      exportRef:
+        name: imported-ceph-odf
+      dataFoundation:
+        externalDetailsRef:
+          name: imported-ceph-odf-details

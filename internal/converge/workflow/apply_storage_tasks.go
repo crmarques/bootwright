@@ -14,43 +14,45 @@ import (
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 )
 
-type StorageBindingPlan struct {
+type StorageAttachmentPlan struct {
 	Cluster string
-	Binding v1alpha1.StorageClusterBinding
+	Binding v1alpha1.ClusterAddonBinding
+	Storage v1alpha1.ClusterAddonBindingStorage
 }
 
-func planStorageBindingTasks(state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) []ApplyTask {
+func planStorageAttachmentTasks(state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) []ApplyTask {
 	var tasks []ApplyTask
 	exportByName := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		exportByName[export.Metadata.Name] = export
 	}
-	for _, binding := range state.StorageClusterBindings {
-		export, ok := exportByName[binding.Spec.StorageExportRef.Name]
-		if !ok {
-			continue
-		}
-		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
+	for _, binding := range state.ClusterAddonBindings {
+		cluster := binding.Spec.ClusterRef.Name
+		for _, storage := range binding.Spec.Storage {
+			export, ok := exportByName[storage.ExportRef.Name]
+			if !ok {
+				continue
+			}
 			deps := []string{}
 			if installPhasePlanned {
 				deps = append(deps, "wait."+cluster)
 			}
 			deps = append(deps, storageDepsByCluster[export.Spec.StorageClusterRef.Name]...)
 			deps = append(deps, dataFoundationExtensionWaitDeps(state, cluster)...)
-			id := "storagebinding." + cluster + "." + binding.Metadata.Name + ".apply"
-			bindingPlan := StorageBindingPlan{Cluster: cluster, Binding: binding}
+			id := "storageattachment." + cluster + "." + binding.Metadata.Name + "." + storage.Name + ".apply"
+			attachmentPlan := StorageAttachmentPlan{Cluster: cluster, Binding: binding, Storage: storage}
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           id,
-					Kind:         ApplyTaskKindStorageClusterBindingApply,
-					Label:        "storage binding " + cluster + " " + binding.Metadata.Name + " apply",
+					Kind:         ApplyTaskKindStorageAttachmentApply,
+					Label:        "storage attachment " + cluster + " " + binding.Metadata.Name + "/" + storage.Name + " apply",
 					Cluster:      cluster,
 					ClusterKind:  ApplyClusterKindContainer,
 					Status:       TaskStatusPending,
 					Dependencies: deps,
 				},
-				State:          stategraph.FilterStateToClusters(state, []string{cluster}),
-				StorageBinding: &bindingPlan,
+				State:             stategraph.FilterStateToClusters(state, []string{cluster}),
+				StorageAttachment: &attachmentPlan,
 			})
 		}
 	}
@@ -99,9 +101,6 @@ func runOneStorageTask(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	filtered := stategraph.FilterStateToStorageClusters(state, []string{name})
 	filtered.ContainerClusters = nil
-	filtered.ClusterAddons = nil
-	filtered.ClusterAddonProfiles = nil
-	filtered.ClusterAddonBindings = nil
 	return filtered
 }
 

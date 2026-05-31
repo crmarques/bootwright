@@ -94,19 +94,20 @@ type ClusterAddonBinding struct {
 }
 
 type ClusterAddonBindingSpec struct {
-	ContainerClusterSelector ClusterAddonContainerClusterSelector `yaml:"containerClusterSelector" json:"containerClusterSelector"`
-	ApplyAfter               ClusterAddonApplyAfter               `yaml:"applyAfter,omitempty" json:"applyAfter,omitempty"`
-	Profiles                 []LocalObjectReference               `yaml:"profiles,omitempty" json:"profiles,omitempty"`
-	Addons                   []LocalObjectReference               `yaml:"addons,omitempty" json:"addons,omitempty"`
-	Policy                   ClusterAddonPolicy                   `yaml:"policy,omitempty" json:"policy,omitempty"`
+	ClusterRef    LocalObjectReference         `yaml:"clusterRef" json:"clusterRef"`
+	AddonProfiles []LocalObjectReference       `yaml:"addonProfiles,omitempty" json:"addonProfiles,omitempty"`
+	Addons        []LocalObjectReference       `yaml:"addons,omitempty" json:"addons,omitempty"`
+	Storage       []ClusterAddonBindingStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
 }
 
-type ClusterAddonContainerClusterSelector struct {
-	Names []string `yaml:"names,omitempty" json:"names,omitempty"`
+type ClusterAddonBindingStorage struct {
+	Name           string                                   `yaml:"name" json:"name"`
+	ExportRef      LocalObjectReference                     `yaml:"exportRef" json:"exportRef"`
+	DataFoundation ClusterAddonBindingStorageDataFoundation `yaml:"dataFoundation,omitempty" json:"dataFoundation,omitempty"`
 }
 
-type ClusterAddonApplyAfter struct {
-	Phase string `yaml:"phase,omitempty" json:"phase,omitempty"`
+type ClusterAddonBindingStorageDataFoundation struct {
+	ExternalDetailsRef SecretRef `yaml:"externalDetailsRef,omitempty" json:"externalDetailsRef,omitempty"`
 }
 
 type ClusterAddonPolicy struct {

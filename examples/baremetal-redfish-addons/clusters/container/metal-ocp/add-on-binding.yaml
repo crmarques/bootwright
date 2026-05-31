@@ -3,13 +3,8 @@ kind: ClusterAddonBinding
 metadata:
   name: metal-ocp-platform
 spec:
-  containerClusterSelector:
-    names:
-      - metal-ocp
+  clusterRef:
+    name: metal-ocp
 
-  applyAfter:
-    phase: containerClusterInstalled
-
-  profiles:
+  addonProfiles:
     - name: platform-bootstrap
-

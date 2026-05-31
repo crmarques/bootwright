@@ -180,8 +180,8 @@ func printToolInputFiles(stdout io.Writer, result render.Result) {
 	var storagePaths []string
 	for _, asset := range result.StorageAssets {
 		storagePaths = appendNonEmpty(storagePaths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
-		for _, binding := range asset.Bindings {
-			storagePaths = appendNonEmpty(storagePaths, binding.ExternalClusterDetailsPath, binding.StorageClusterPath, binding.StorageSystemPath)
+		for _, attachment := range asset.Attachments {
+			storagePaths = appendNonEmpty(storagePaths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
 		}
 	}
 	groups := []cliout.ArtifactGroup{

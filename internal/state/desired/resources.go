@@ -260,13 +260,17 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, binding := range state.ClusterAddonBindings {
-		for i, ref := range binding.Spec.Profiles {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.profiles[%d]", binding.Metadata.Name, i),
+		for i, ref := range binding.Spec.AddonProfiles {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfiles[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
 		for i, ref := range binding.Spec.Addons {
 			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddon, ref.Name)
+		}
+		for i, storage := range binding.Spec.Storage {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d].exportRef", binding.Metadata.Name, i),
+				v1alpha1.KindStorageExport, storage.ExportRef.Name)
 		}
 	}
 	for _, cluster := range state.StorageClusters {
@@ -308,10 +312,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.objectGatewayRef", export.Metadata.Name),
 				v1alpha1.KindStorageObjectGateway, df.ObjectGatewayRef.Name)
 		}
-	}
-	for _, binding := range state.StorageClusterBindings {
-		require(fmt.Sprintf("StorageClusterBinding/%s spec.storageExportRef", binding.Metadata.Name),
-			v1alpha1.KindStorageExport, binding.Spec.StorageExportRef.Name)
 	}
 	for _, env := range state.Environments {
 		for _, entry := range env.Spec.InfraComponents.Proxies {
@@ -378,9 +378,6 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	}
 	for _, item := range state.StorageExports {
 		out[resourceKey{kind: v1alpha1.KindStorageExport, name: item.Metadata.Name}] = true
-	}
-	for _, item := range state.StorageClusterBindings {
-		out[resourceKey{kind: v1alpha1.KindStorageClusterBinding, name: item.Metadata.Name}] = true
 	}
 	for _, item := range state.ClusterAddons {
 		out[resourceKey{kind: v1alpha1.KindClusterAddon, name: item.Metadata.Name}] = true
@@ -453,7 +450,6 @@ func knownResourceKind(kind string) bool {
 		v1alpha1.KindStorageFilesystem,
 		v1alpha1.KindStorageObjectGateway,
 		v1alpha1.KindStorageExport,
-		v1alpha1.KindStorageClusterBinding,
 		v1alpha1.KindClusterAddon,
 		v1alpha1.KindClusterAddonProfile,
 		v1alpha1.KindClusterAddonBinding:

@@ -88,11 +88,13 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 - `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, and
   `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and ingress
   desired state.
-- `StorageExport` and `StorageClusterBinding` own the Data Foundation
-  external-mode connection from storage to installed clusters.
+- `StorageExport` owns the exported storage surface, while
+  `ClusterAddonBinding.storage[]` owns the Data Foundation external-mode
+  connection from storage to one installed cluster.
 - `ClusterAddon` owns reusable post-install component intent.
 - `ClusterAddonProfile` owns ordered platform profiles made from add-ons.
-- `ClusterAddonBinding` owns cluster-to-add-on attachment.
+- `ClusterAddonBinding` owns one cluster's post-install add-ons and optional
+  storage attachments.
 - `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:
@@ -111,7 +113,7 @@ These boundaries are reflected in rendering:
   `NetworkConfig.spec.dnsRefs[]`.
 - Storage tool inputs render to cephadm host/service specs,
   `ceph/operations.yaml`, and generated Data Foundation manifests for managed
-  storage. Imported storage renders only Data Foundation binding manifests.
+  storage. Imported storage renders only Data Foundation attachment manifests.
   CephFS metadata and data pool roles are expressed by `StorageFilesystem`
   because the renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.
 - Extension apply plans are rendered from `ClusterAddonBinding` expansion,

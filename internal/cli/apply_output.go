@@ -224,7 +224,7 @@ func applyStageLines(ledger workflow.RunLedger) []output.TaskLine {
 		{label: "Wait for installs", kinds: []string{workflow.ApplyTaskKindInstallWait}},
 		{label: "Apply addons", kinds: []string{workflow.ApplyTaskKindClusterAddonApply}},
 		{label: "Wait for addons", kinds: []string{workflow.ApplyTaskKindClusterAddonWait}},
-		{label: "Apply storage bindings", kinds: []string{workflow.ApplyTaskKindStorageClusterBindingApply}},
+		{label: "Apply storage attachments", kinds: []string{workflow.ApplyTaskKindStorageAttachmentApply}},
 	} {
 		status, detail, ok := applyStageStatus(ledger, stage.kinds...)
 		if ok {

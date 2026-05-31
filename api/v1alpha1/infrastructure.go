@@ -27,7 +27,6 @@ const (
 	KindStorageFilesystem      = "StorageFilesystem"
 	KindStorageObjectGateway   = "StorageObjectGateway"
 	KindStorageExport          = "StorageExport"
-	KindStorageClusterBinding  = "StorageClusterBinding"
 	KindClusterAddon           = "ClusterAddon"
 	KindClusterAddonProfile    = "ClusterAddonProfile"
 	KindClusterAddonBinding    = "ClusterAddonBinding"
@@ -181,9 +180,7 @@ const (
 	StoragePoolRoleCephFSData     = "cephfs-data"
 	StoragePoolRoleRGW            = "rgw"
 
-	StorageExportTypeDataFoundation              = "data-foundation"
-	DataFoundationProductOpenShiftDataFoundation = "openshift-data-foundation"
-	DataFoundationProductIBMFusion               = "ibm-fusion-data-foundation"
+	StorageExportTypeDataFoundation = "data-foundation"
 )
 
 // State is the loaded fleet.
@@ -201,7 +198,6 @@ type State struct {
 	StorageFilesystems       []StorageFilesystem      `yaml:"storageFilesystems,omitempty" json:"storageFilesystems,omitempty"`
 	StorageObjectGateways    []StorageObjectGateway   `yaml:"storageObjectGateways,omitempty" json:"storageObjectGateways,omitempty"`
 	StorageExports           []StorageExport          `yaml:"storageExports,omitempty" json:"storageExports,omitempty"`
-	StorageClusterBindings   []StorageClusterBinding  `yaml:"storageClusterBindings,omitempty" json:"storageClusterBindings,omitempty"`
 	ClusterAddons            []ClusterAddon           `yaml:"clusterAddons,omitempty" json:"clusterAddons,omitempty"`
 	ClusterAddonProfiles     []ClusterAddonProfile    `yaml:"clusterAddonProfiles,omitempty" json:"clusterAddonProfiles,omitempty"`
 	ClusterAddonBindings     []ClusterAddonBinding    `yaml:"clusterAddonBindings,omitempty" json:"clusterAddonBindings,omitempty"`

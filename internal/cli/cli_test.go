@@ -2881,12 +2881,9 @@ kind: ClusterAddonBinding
 metadata:
   name: sno-libvirt-addons
 spec:
-  containerClusterSelector:
-    names:
-      - sno-libvirt
-  applyAfter:
-    phase: containerClusterInstalled
-  profiles:
+  clusterRef:
+    name: sno-libvirt
+  addonProfiles:
     - name: virtualization-platform
 `), 0o600); err != nil {
 		t.Fatalf("write addon binding: %v", err)

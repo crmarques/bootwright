@@ -364,11 +364,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.nodeSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.NodeSSH, requireSSHKey)
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.ClusterSSH, requireSSHKey)
 	}
-	for _, export := range state.StorageExports {
-		if export.Spec.DataFoundation == nil {
-			continue
+	for _, binding := range state.ClusterAddonBindings {
+		for i, storage := range binding.Spec.Storage {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d].dataFoundation.externalDetailsRef", binding.Metadata.Name, i), storage.DataFoundation.ExternalDetailsRef)
 		}
-		require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.externalDetailsRef", export.Metadata.Name), export.Spec.DataFoundation.ExternalDetailsRef)
 	}
 	return errs
 }

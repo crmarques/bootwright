@@ -175,16 +175,16 @@ func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
 		{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a-addons"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"cluster-a", "cluster-b"}},
-				Profiles:                 []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
-				Addons:                   []v1alpha1.LocalObjectReference{{Name: "console"}},
+				ClusterRef:    v1alpha1.LocalObjectReference{Name: "cluster-a"},
+				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
+				Addons:        []v1alpha1.LocalObjectReference{{Name: "console"}},
 			},
 		},
 		{
 			Metadata: v1alpha1.Metadata{Name: "cluster-b-addons"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ContainerClusterSelector: v1alpha1.ClusterAddonContainerClusterSelector{Names: []string{"cluster-b"}},
-				Addons:                   []v1alpha1.LocalObjectReference{{Name: "unused"}},
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "cluster-b"},
+				Addons:     []v1alpha1.LocalObjectReference{{Name: "unused"}},
 			},
 		},
 	}
@@ -193,8 +193,8 @@ func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
 	if got := len(filtered.ClusterAddonBindings); got != 1 {
 		t.Fatalf("bindings = %d, want 1", got)
 	}
-	if got := filtered.ClusterAddonBindings[0].Spec.ContainerClusterSelector.Names; !reflect.DeepEqual(got, []string{"cluster-a"}) {
-		t.Fatalf("binding selected clusters = %v, want [cluster-a]", got)
+	if got := filtered.ClusterAddonBindings[0].Spec.ClusterRef.Name; got != "cluster-a" {
+		t.Fatalf("binding selected cluster = %v, want cluster-a", got)
 	}
 	if got := namesOfProfiles(filtered.ClusterAddonProfiles); !reflect.DeepEqual(got, []string{"base-platform"}) {
 		t.Fatalf("extension sets = %v, want [base-platform]", got)

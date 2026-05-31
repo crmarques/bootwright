@@ -113,7 +113,7 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
 
 | Kind | Owns |
 | --- | --- |
@@ -130,10 +130,9 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds
 | `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
 | `StorageObjectGateway` | RGW desired state, public endpoint, and cephadm ingress VIP placement |
 | `StorageExport` | Exported storage surface prepared for downstream consumers such as Data Foundation external mode |
-| `StorageClusterBinding` | Binding from a storage export to selected container clusters through Data Foundation external mode |
 | `ClusterAddon` | A reusable post-install component applied inside an installed OpenShift or OKD cluster |
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
-| `ClusterAddonBinding` | A binding from add-ons or profiles to selected container clusters |
+| `ClusterAddonBinding` | A binding from one installed cluster to add-ons, profiles, and optional storage exports |
 
 `ContainerCluster` stays provider-neutral. Swapping from libvirt with
 Redfish emulation to real bare metal edits the substrate-owned objects:
@@ -145,8 +144,9 @@ selected by `Environment`, bound to clusters, and applied after cluster
 installation.
 External storage provisioning is also separate from `ContainerCluster`.
 `StorageCluster` uses the same lower-layer `ClusterInfra` and `InfraProvider`
-objects for machine facts, while storage bindings wait for both the storage
-cluster and a `ClusterAddon` that provides `data-foundation`.
+objects for machine facts, while storage attachments in `ClusterAddonBinding`
+wait for both the storage cluster and a `ClusterAddon` that provides
+`data-foundation`.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
 bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift

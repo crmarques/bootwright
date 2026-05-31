@@ -87,16 +87,16 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 	bindings := dataFoundationBindingContexts(opts.State, cluster.Metadata.Name)
 	if len(bindings) > 0 {
 		if strings.TrimSpace(opts.ClustersDir) == "" {
-			return fmt.Errorf("clusters dir is required to persist Data Foundation storage binding credentials")
+			return fmt.Errorf("clusters dir is required to persist Data Foundation storage attachment details")
 		}
 		secrets, err := collectDataFoundationClusterSecrets(ctx, runner, keyPath, remote)
 		if err != nil {
 			return err
 		}
 		for i := range bindings {
-			bindings[i].Record.Secrets.AdminSecret = secrets.AdminSecret
-			bindings[i].Record.Secrets.FSID = secrets.FSID
-			bindings[i].Record.Secrets.MonSecret = secrets.MonSecret
+			bindings[i].Secrets.AdminSecret = secrets.AdminSecret
+			bindings[i].Secrets.FSID = secrets.FSID
+			bindings[i].Secrets.MonSecret = secrets.MonSecret
 		}
 	}
 	ops, err := readOperations(opts.Asset.OperationsPath)
@@ -119,10 +119,11 @@ func ApplyCeph(ctx context.Context, stdout io.Writer, stderr io.Writer, runner C
 		}
 	}
 	for _, binding := range bindings {
-		if missing := MissingDataFoundationSecrets(binding.Export, binding.Record.Secrets); len(missing) > 0 {
-			return fmt.Errorf("data foundation storage binding %s/%s missing generated credentials: %s", binding.Record.Cluster, binding.Record.Binding, strings.Join(missing, ", "))
+		if missing := MissingDataFoundationSecrets(binding.Export, binding.Secrets); len(missing) > 0 {
+			return fmt.Errorf("data foundation storage attachment %s/%s/%s missing generated credentials: %s", binding.Cluster, binding.Binding, binding.Storage, strings.Join(missing, ", "))
 		}
-		if err := SaveDataFoundationBindingRecord(opts.ClustersDir, binding.Record); err != nil {
+		details := render.DataFoundationExternalDetailsJSON(opts.State, cluster, binding.Export, binding.Cluster, binding.Secrets)
+		if err := SaveDataFoundationAttachmentDetails(opts.ClustersDir, binding.Cluster, binding.Binding, binding.Storage, details); err != nil {
 			return err
 		}
 	}
@@ -343,8 +344,11 @@ func readOperations(path string) (operationsFile, error) {
 }
 
 type dataFoundationBindingContext struct {
-	Record DataFoundationBindingRecord
-	Export v1alpha1.StorageExport
+	Binding string
+	Storage string
+	Cluster string
+	Export  v1alpha1.StorageExport
+	Secrets render.DataFoundationExternalSecrets
 }
 
 type dataFoundationCapture struct {
@@ -361,22 +365,17 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 		}
 	}
 	var out []dataFoundationBindingContext
-	for _, binding := range state.StorageClusterBindings {
-		export, ok := exports[binding.Spec.StorageExportRef.Name]
-		if !ok {
-			continue
-		}
-		if export.Spec.DataFoundation.ExternalDetailsRef.Name != "" {
-			continue
-		}
-		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
+	for _, binding := range state.ClusterAddonBindings {
+		for _, storage := range binding.Spec.Storage {
+			export, ok := exports[storage.ExportRef.Name]
+			if !ok {
+				continue
+			}
 			out = append(out, dataFoundationBindingContext{
-				Record: DataFoundationBindingRecord{
-					StorageCluster: storageCluster,
-					Binding:        binding.Metadata.Name,
-					Cluster:        cluster,
-				},
-				Export: export,
+				Binding: binding.Metadata.Name,
+				Storage: storage.Name,
+				Cluster: binding.Spec.ClusterRef.Name,
+				Export:  export,
 			})
 		}
 	}
@@ -416,12 +415,12 @@ func dataFoundationCaptureForOperation(name string, bindings []dataFoundationBin
 	}
 	for _, binding := range bindings {
 		for _, field := range fields {
-			if name == field.Prefix+binding.Record.Cluster {
-				return dataFoundationCapture{Cluster: binding.Record.Cluster, Field: field.Field}, true
+			if name == field.Prefix+binding.Cluster {
+				return dataFoundationCapture{Cluster: binding.Cluster, Field: field.Field}, true
 			}
 		}
-		if name == "create-data-foundation-rgw-admin-user-"+binding.Record.Cluster {
-			return dataFoundationCapture{Cluster: binding.Record.Cluster, RGW: true}, true
+		if name == "create-data-foundation-rgw-admin-user-"+binding.Cluster {
+			return dataFoundationCapture{Cluster: binding.Cluster, RGW: true}, true
 		}
 	}
 	return dataFoundationCapture{}, false
@@ -434,11 +433,11 @@ func applyDataFoundationCapture(bindings []dataFoundationBindingContext, capture
 			return err
 		}
 		for i := range bindings {
-			if bindings[i].Record.Cluster != capture.Cluster {
+			if bindings[i].Cluster != capture.Cluster {
 				continue
 			}
-			bindings[i].Record.Secrets.RGWAccessKey = accessKey
-			bindings[i].Record.Secrets.RGWSecretKey = secretKey
+			bindings[i].Secrets.RGWAccessKey = accessKey
+			bindings[i].Secrets.RGWSecretKey = secretKey
 		}
 		return nil
 	}
@@ -447,20 +446,20 @@ func applyDataFoundationCapture(bindings []dataFoundationBindingContext, capture
 		return err
 	}
 	for i := range bindings {
-		if bindings[i].Record.Cluster != capture.Cluster {
+		if bindings[i].Cluster != capture.Cluster {
 			continue
 		}
 		switch capture.Field {
 		case "healthchecker":
-			bindings[i].Record.Secrets.HealthcheckerKey = key
+			bindings[i].Secrets.HealthcheckerKey = key
 		case "rbd-node":
-			bindings[i].Record.Secrets.RBDNodeKey = key
+			bindings[i].Secrets.RBDNodeKey = key
 		case "rbd-provisioner":
-			bindings[i].Record.Secrets.RBDProvisionerKey = key
+			bindings[i].Secrets.RBDProvisionerKey = key
 		case "cephfs-node":
-			bindings[i].Record.Secrets.CephFSNodeKey = key
+			bindings[i].Secrets.CephFSNodeKey = key
 		case "cephfs-provisioner":
-			bindings[i].Record.Secrets.CephFSProvisionerKey = key
+			bindings[i].Secrets.CephFSProvisionerKey = key
 		}
 	}
 	return nil

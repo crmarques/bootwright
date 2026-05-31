@@ -133,8 +133,8 @@ func applyClusterSummary(tasks []workflow.TaskLedgerEntry) (cliout.Status, strin
 	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindClusterAddonWait]; ok {
 		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindClusterAddonWait)+" "+string(taskStatus))
 	}
-	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageClusterBindingApply]; ok {
-		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageClusterBindingApply)+" "+string(taskStatus))
+	if taskStatus, ok := kindStatuses[workflow.ApplyTaskKindStorageAttachmentApply]; ok {
+		parts = append(parts, applyLedgerTaskKindLabel(workflow.ApplyTaskKindStorageAttachmentApply)+" "+string(taskStatus))
 	}
 	parts = append(parts, otherParts...)
 	return status, strings.Join(parts, ", ")
@@ -144,7 +144,7 @@ func applyLedgerKnownClusterKind(kind string) bool {
 	switch kind {
 	case workflow.ApplyTaskKindClusterInfra, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindInstallWait,
 		workflow.ApplyTaskKindClusterAddonApply, workflow.ApplyTaskKindClusterAddonWait,
-		workflow.ApplyTaskKindStorageClusterBindingApply:
+		workflow.ApplyTaskKindStorageAttachmentApply:
 		return true
 	default:
 		return false
@@ -165,8 +165,8 @@ func applyLedgerTaskKindLabel(kind string) string {
 		return "addon apply"
 	case workflow.ApplyTaskKindClusterAddonWait:
 		return "addon wait"
-	case workflow.ApplyTaskKindStorageClusterBindingApply:
-		return "storage binding"
+	case workflow.ApplyTaskKindStorageAttachmentApply:
+		return "storage attachment"
 	default:
 		return kind
 	}

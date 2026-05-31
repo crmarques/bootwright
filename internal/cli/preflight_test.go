@@ -228,7 +228,7 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	var detailsCheck *preflightCheck
 	for i := range checks {
 		check := &checks[i]
-		if check.Name == "shared-ceph-data-foundation dataFoundation externalDetailsRef" {
+		if check.Name == "shared-ceph-binding storage[ceph] dataFoundation externalDetailsRef" {
 			detailsCheck = check
 			break
 		}
@@ -307,9 +307,21 @@ func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1
 		StorageExports: []v1alpha1.StorageExport{{
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
 			Spec: v1alpha1.StorageExportSpec{
-				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
-					ExternalDetailsRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
-				},
+				Type:              v1alpha1.StorageExportTypeDataFoundation,
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+			},
+		}},
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				Storage: []v1alpha1.ClusterAddonBindingStorage{{
+					Name:      "ceph",
+					ExportRef: v1alpha1.LocalObjectReference{Name: "shared-ceph-data-foundation"},
+					DataFoundation: v1alpha1.ClusterAddonBindingStorageDataFoundation{
+						ExternalDetailsRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
+					},
+				}},
 			},
 		}},
 	}

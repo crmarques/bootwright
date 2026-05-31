@@ -339,34 +339,16 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate ClusterAddonBinding %q", binding.Metadata.Name))
 		}
 		seen[binding.Metadata.Name] = true
-		if len(binding.Spec.ContainerClusterSelector.Names) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.containerClusterSelector.names must include at least one ContainerCluster", binding.Metadata.Name))
+		if binding.Spec.ClusterRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef.name is required", binding.Metadata.Name))
+		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef.name %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
 		}
-		selected := map[string]bool{}
-		for i, name := range binding.Spec.ContainerClusterSelector.Names {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.containerClusterSelector.names[%d]", binding.Metadata.Name, i)
-			if name == "" {
-				errs = append(errs, owner+" must not be empty")
-				continue
-			}
-			if selected[name] {
-				errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
-				continue
-			}
-			selected[name] = true
-			if _, ok := clusters[name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ContainerCluster", owner, name))
-			}
+		if len(binding.Spec.AddonProfiles) == 0 && len(binding.Spec.Addons) == 0 && len(binding.Spec.Storage) == 0 {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfiles, addons, or storage", binding.Metadata.Name))
 		}
-		if phase := binding.Spec.ApplyAfter.Phase; phase != "" && phase != v1alpha1.ClusterAddonApplyPhaseContainerClusterInstalled {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.applyAfter.phase %q must be %q",
-				binding.Metadata.Name, phase, v1alpha1.ClusterAddonApplyPhaseContainerClusterInstalled))
-		}
-		if len(binding.Spec.Profiles) == 0 && len(binding.Spec.Addons) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of profiles or addons", binding.Metadata.Name))
-		}
-		for i, ref := range binding.Spec.Profiles {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.profiles[%d].name", binding.Metadata.Name, i)
+		for i, ref := range binding.Spec.AddonProfiles {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfiles[%d].name", binding.Metadata.Name, i)
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := sets[ref.Name]; !ok {
@@ -381,11 +363,18 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, ref.Name))
 			}
 		}
-		if binding.Spec.Policy.Prune {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.policy.prune=true is not supported in MVP", binding.Metadata.Name))
-		}
-		if binding.Spec.Policy.ContinueOnError {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.policy.continueOnError=true is not supported in MVP", binding.Metadata.Name))
+		storageNames := map[string]bool{}
+		for i, storage := range binding.Spec.Storage {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d]", binding.Metadata.Name, i)
+			if storage.Name == "" {
+				errs = append(errs, owner+".name is required")
+			} else if storageNames[storage.Name] {
+				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, storage.Name))
+			}
+			storageNames[storage.Name] = true
+			if storage.ExportRef.Name == "" {
+				errs = append(errs, owner+".exportRef.name is required")
+			}
 		}
 	}
 	return errs
@@ -396,18 +385,20 @@ func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]boo
 	out := map[string]map[string]bool{}
 	for _, binding := range state.ClusterAddonBindings {
 		names := bindingProvidedExtensionNames(state, binding)
-		for _, cluster := range binding.Spec.ContainerClusterSelector.Names {
-			if out[cluster] == nil {
-				out[cluster] = map[string]bool{}
+		cluster := binding.Spec.ClusterRef.Name
+		if cluster == "" {
+			continue
+		}
+		if out[cluster] == nil {
+			out[cluster] = map[string]bool{}
+		}
+		for _, name := range names {
+			extension, ok := addons[name]
+			if !ok {
+				continue
 			}
-			for _, name := range names {
-				extension, ok := addons[name]
-				if !ok {
-					continue
-				}
-				for _, capability := range extension.Spec.Provides {
-					out[cluster][capability] = true
-				}
+			for _, capability := range extension.Spec.Provides {
+				out[cluster][capability] = true
 			}
 		}
 	}
@@ -442,7 +433,7 @@ func bindingProvidedExtensionNames(state v1alpha1.State, binding v1alpha1.Cluste
 			}
 		}
 	}
-	for _, ref := range binding.Spec.Profiles {
+	for _, ref := range binding.Spec.AddonProfiles {
 		visitSet(ref.Name, map[string]bool{})
 	}
 	for _, ref := range binding.Spec.Addons {

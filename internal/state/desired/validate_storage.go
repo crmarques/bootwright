@@ -26,7 +26,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
 	errs = append(errs, validateStorageExports(state.StorageExports, clusters, pools, filesystems, gateways)...)
-	errs = append(errs, validateStorageClusterBindings(state.StorageClusterBindings, exports, containerClusters, provided)...)
+	errs = append(errs, validateClusterAddonBindingStorage(state.ClusterAddonBindings, exports, clusters, containerClusters, provided)...)
 	return errs
 }
 
@@ -488,10 +488,6 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 		}
 		switch export.Spec.Type {
 		case v1alpha1.StorageExportTypeDataFoundation:
-			if export.Spec.DataFoundation == nil {
-				errs = append(errs, prefix+".dataFoundation is required when spec.type=data-foundation")
-				continue
-			}
 		case "":
 			errs = append(errs, prefix+".type is required")
 			continue
@@ -500,21 +496,14 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 			continue
 		}
 		df := export.Spec.DataFoundation
-		if df == nil {
-			continue
-		}
-		usesImportedDetails := df.ExternalDetailsRef.Name != ""
-		if usesImportedDetails {
-			if clusterOK && !storageClusterExternal(cluster) {
-				errs = append(errs, fmt.Sprintf("%s.dataFoundation.externalDetailsRef.name requires StorageCluster/%s spec.management=external", prefix, cluster.Metadata.Name))
-			}
-			if df.RBDPoolRef.Name != "" || df.CephFSRef.Name != "" || df.ObjectGatewayRef.Name != "" {
-				errs = append(errs, prefix+".dataFoundation.externalDetailsRef is mutually exclusive with rbdPoolRef, cephFSRef, and objectGatewayRef")
-			}
-			continue
-		}
 		if clusterOK && storageClusterExternal(cluster) {
-			errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name is required when storageClusterRef points to a StorageCluster with spec.management=external")
+			if df != nil {
+				errs = append(errs, fmt.Sprintf("%s.dataFoundation must be empty when storageClusterRef points to StorageCluster/%s with spec.management=external", prefix, cluster.Metadata.Name))
+			}
+			continue
+		}
+		if df == nil {
+			errs = append(errs, prefix+".dataFoundation is required when storageClusterRef points to managed Ceph")
 			continue
 		}
 		if df.RBDPoolRef.Name == "" {
@@ -542,60 +531,46 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 	return errs
 }
 
-func validateStorageClusterBindings(items []v1alpha1.StorageClusterBinding, exports map[string]v1alpha1.StorageExport, clusters map[string]v1alpha1.ContainerCluster, provided map[string]map[string]bool) []string {
+func validateClusterAddonBindingStorage(items []v1alpha1.ClusterAddonBinding, exports map[string]v1alpha1.StorageExport, storageClusters map[string]v1alpha1.StorageCluster, clusters map[string]v1alpha1.ContainerCluster, provided map[string]map[string]bool) []string {
 	var errs []string
-	seen := map[string]bool{}
 	for _, binding := range items {
-		if e := validateName(v1alpha1.KindStorageClusterBinding, binding.Metadata.Name); e != "" {
-			errs = append(errs, e)
+		if len(binding.Spec.Storage) == 0 {
 			continue
 		}
-		if seen[binding.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate StorageClusterBinding %q", binding.Metadata.Name))
+		clusterName := binding.Spec.ClusterRef.Name
+		if _, ok := clusters[clusterName]; !ok {
+			continue
 		}
-		seen[binding.Metadata.Name] = true
-		prefix := fmt.Sprintf("StorageClusterBinding/%s spec", binding.Metadata.Name)
-		if binding.Spec.StorageExportRef.Name == "" {
-			errs = append(errs, prefix+".storageExportRef.name is required")
-		} else if _, ok := exports[binding.Spec.StorageExportRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.storageExportRef.name %q does not match any StorageExport", prefix, binding.Spec.StorageExportRef.Name))
-		}
-		if len(binding.Spec.ContainerClusterSelector.Names) == 0 {
-			errs = append(errs, prefix+".containerClusterSelector.names must include at least one ContainerCluster")
-		}
-		selected := map[string]bool{}
-		for i, name := range binding.Spec.ContainerClusterSelector.Names {
-			owner := fmt.Sprintf("%s.containerClusterSelector.names[%d]", prefix, i)
-			if name == "" {
-				errs = append(errs, owner+" must not be empty")
+		for i, storage := range binding.Spec.Storage {
+			prefix := fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d]", binding.Metadata.Name, i)
+			export, exportOK := exports[storage.ExportRef.Name]
+			if storage.ExportRef.Name == "" {
 				continue
 			}
-			if selected[name] {
-				errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
+			if !exportOK {
+				errs = append(errs, fmt.Sprintf("%s.exportRef.name %q does not match any StorageExport", prefix, storage.ExportRef.Name))
 				continue
 			}
-			selected[name] = true
-			if _, ok := clusters[name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ContainerCluster", owner, name))
+			if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
+				errs = append(errs, fmt.Sprintf("%s.exportRef.name %q must reference a data-foundation StorageExport", prefix, storage.ExportRef.Name))
 				continue
 			}
-			if !provided[name][v1alpha1.ClusterAddonProvidesDataFoundation] {
-				errs = append(errs, fmt.Sprintf("%s %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q", owner, name, v1alpha1.ClusterAddonProvidesDataFoundation))
+			if !provided[clusterName][v1alpha1.ClusterAddonProvidesDataFoundation] {
+				errs = append(errs, fmt.Sprintf("%s requires ClusterAddonBinding resources for ContainerCluster/%s to include a ClusterAddon providing %q", prefix, clusterName, v1alpha1.ClusterAddonProvidesDataFoundation))
 			}
-		}
-		switch binding.Spec.DataFoundation.Product {
-		case "", v1alpha1.DataFoundationProductOpenShiftDataFoundation, v1alpha1.DataFoundationProductIBMFusion:
-		default:
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.product %q must be one of {%s, %s}", prefix, binding.Spec.DataFoundation.Product, v1alpha1.DataFoundationProductOpenShiftDataFoundation, v1alpha1.DataFoundationProductIBMFusion))
-		}
-		if binding.Spec.DataFoundation.Namespace == "" {
-			errs = append(errs, prefix+".dataFoundation.namespace is required")
-		}
-		if binding.Spec.DataFoundation.StorageClusterName == "" {
-			errs = append(errs, prefix+".dataFoundation.storageClusterName is required")
-		}
-		if binding.Spec.DataFoundation.StorageSystemName == "" {
-			errs = append(errs, prefix+".dataFoundation.storageSystemName is required")
+			cluster, clusterOK := storageClusters[export.Spec.StorageClusterRef.Name]
+			if !clusterOK {
+				continue
+			}
+			if storageClusterExternal(cluster) {
+				if storage.DataFoundation.ExternalDetailsRef.Name == "" {
+					errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name is required when exportRef points to an external StorageCluster")
+				}
+				continue
+			}
+			if storage.DataFoundation.ExternalDetailsRef.Name != "" {
+				errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name must be empty when exportRef points to a managed StorageCluster")
+			}
 		}
 	}
 	return errs

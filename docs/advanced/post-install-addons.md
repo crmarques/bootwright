@@ -26,19 +26,20 @@ after the target cluster is installed and reachable.
 `profiles` first, then direct `addons`; duplicate add-on names are
 removed by first occurrence. Cycles are rejected.
 
-`ClusterAddonBinding` selects container clusters by name and attaches profiles
-and direct add-ons. It supports only `applyAfter.phase: containerClusterInstalled` in
-the MVP. `policy.serverSideApply` defaults to `true`,
-`policy.fieldManager` defaults to `bootwright`, and pruning is intentionally
-not supported yet. `policy.continueOnError: true` is also rejected in the MVP
-so failures cannot be silently skipped.
+`ClusterAddonBinding` names exactly one container cluster with
+`clusterRef.name` and attaches profiles, direct add-ons, and optional
+storage exports. Use multiple binding resources for multiple clusters.
+Bootwright applies add-ons after the target cluster is installed and uses fixed
+server-side apply defaults.
 
 `ClusterAddon.spec.provides[]` advertises capabilities that other desired
 state may depend on. Current accepted capabilities are `kubevirt` and
 `data-foundation`. Use `kubevirt` on the OpenShift Virtualization add-on so
 KubeVirt child infrastructure waits for the host cluster to be ready. Use
 `data-foundation` on the Red Hat ODF or IBM Fusion Data Foundation operator
-add-on so storage bindings wait for external-mode components to be ready.
+add-on so storage attachments wait for external-mode components to be ready.
+Addon-only bindings are valid, so the same resource works for Virtualization,
+GitOps, or any other post-install component that does not consume storage.
 
 ## OpenShift Virtualization
 
@@ -105,17 +106,24 @@ kind: ClusterAddonBinding
 metadata:
   name: demo-ocp-addons
 spec:
-  containerClusterSelector:
-    names:
-      - demo-ocp
-  applyAfter:
-    phase: containerClusterInstalled
-  profiles:
+  clusterRef:
+    name: demo-ocp
+  addonProfiles:
     - name: virtualization-platform
-  policy:
-    prune: false
-    serverSideApply: true
-    fieldManager: bootwright
+```
+
+An add-on that does not expose or consume storage uses the same binding shape:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: demo-ocp-gitops
+spec:
+  clusterRef:
+    name: demo-ocp
+  addons:
+    - name: openshift-gitops
 ```
 
 ## CLI Flow
