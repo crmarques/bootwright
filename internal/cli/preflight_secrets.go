@@ -78,7 +78,7 @@ func secretRefChecksWithLocalityPolicy(state v1alpha1.State, secretsDir string, 
 			continue
 		}
 		path := secret.ResolveMaterialPath(req.refName, env, secretsDir, req.role)
-		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, deps))
+		checks = append(checks, secretFileCheck(req.refName, path, req.label, req.role == secret.MaterialSSHPublic, req.source == secretRefSourceContext, secret.MaterialPathUsesExternalSource(req.refName, env, req.role), deps))
 	}
 	return checks
 }
@@ -306,8 +306,8 @@ func tlsSecretFileChecks(req secretRefRequirement, env *v1alpha1.Environment, se
 	certPath := resolvedSecretPath(req.refName, env, secretsDir)
 	keyPath := secret.ResolveTLSKeyPath(req.refName, env, secretsDir)
 	return []preflightCheck{
-		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
-		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, deps),
+		secretFileCheck(req.refName, certPath, req.label+" tls.crt", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialPrimary), deps),
+		secretFileCheck(req.refName, keyPath, req.label+" tls.key", false, req.source == secretRefSourceContext || req.source == secretRefSourceGenerated, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialTLSKey), deps),
 	}
 }
 

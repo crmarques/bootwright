@@ -1,10 +1,48 @@
 ---
+- name: Validate process cleanup selector
+  ansible.builtin.assert:
+    that:
+      - bootwright_process_cleanup_podman_filters is defined or bootwright_process_cleanup_pattern is defined
+    fail_msg: "process cleanup requires podman label filters or an explicitly allowed process pattern"
+
+- name: Validate Podman cleanup filters
+  ansible.builtin.assert:
+    that:
+      - bootwright_process_cleanup_podman_filters | length > 0
+      - (bootwright_process_cleanup_podman_filters | select('match', '^label=bootwright\\.') | list | length) == (bootwright_process_cleanup_podman_filters | length)
+    fail_msg: "bootwright_process_cleanup_podman_filters must contain only bootwright label filters"
+  when: bootwright_process_cleanup_podman_filters is defined
+
+- name: Find Bootwright Podman cleanup candidates
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['podman', 'ps', '-aq']
+        + (bootwright_process_cleanup_podman_filters | map('regex_replace', '^', '--filter=') | list)
+      }}
+  register: bootwright_process_cleanup_podman
+  changed_when: false
+  when: bootwright_process_cleanup_podman_filters is defined
+
+- name: Remove Bootwright Podman cleanup candidates
+  ansible.builtin.command:
+    argv: "{{ ['podman', 'rm', '-f'] + bootwright_process_cleanup_podman.stdout_lines }}"
+  register: bootwright_process_cleanup_podman_remove
+  changed_when: >-
+    (bootwright_process_cleanup_mark_changed | default(true) | bool)
+    and (bootwright_process_cleanup_podman.stdout_lines | length) > 0
+  when:
+    - bootwright_process_cleanup_podman_filters is defined
+    - (bootwright_process_cleanup_podman.stdout_lines | length) > 0
+
 - name: Validate process cleanup pattern
   ansible.builtin.assert:
     that:
+      - bootwright_process_cleanup_allow_pattern | default(false) | bool
       - bootwright_process_cleanup_pattern is defined
       - bootwright_process_cleanup_pattern | length > 0
-    fail_msg: "bootwright_process_cleanup_pattern is required"
+    fail_msg: "bootwright_process_cleanup_pattern requires explicit allow and a non-empty pattern"
+  when: bootwright_process_cleanup_pattern is defined
 
 - name: Find process cleanup candidates
   ansible.builtin.command:
@@ -16,6 +54,7 @@
   register: bootwright_process_cleanup_pgrep
   failed_when: false
   changed_when: false
+  when: bootwright_process_cleanup_pattern is defined
 
 - name: Stop process cleanup candidates
   ansible.builtin.shell: |
@@ -54,4 +93,6 @@
   changed_when: >-
     (bootwright_process_cleanup_mark_changed | default(true) | bool)
     and bootwright_process_cleanup_pgrep.rc == 0
-  when: bootwright_process_cleanup_pgrep.rc == 0
+  when:
+    - bootwright_process_cleanup_pattern is defined
+    - bootwright_process_cleanup_pgrep.rc == 0

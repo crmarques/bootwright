@@ -101,6 +101,14 @@ func ResolveSourceMaterialPath(name string, env *v1alpha1.Environment, role Mate
 	return ""
 }
 
+func MaterialPathUsesExternalSource(name string, env *v1alpha1.Environment, role MaterialRole) bool {
+	spec, ok := environmentSecretSpec(name, env)
+	if !ok || spec.File == "" {
+		return false
+	}
+	return !shouldUseContextSecretPath(name, env, role)
+}
+
 func environmentSecretSpec(name string, env *v1alpha1.Environment) (v1alpha1.EnvironmentSecretSpec, bool) {
 	if env == nil {
 		return v1alpha1.EnvironmentSecretSpec{}, false

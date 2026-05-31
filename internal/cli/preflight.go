@@ -59,15 +59,17 @@ func pythonVersionCheck(deps preflightDeps) preflightCheck {
 type preflightCheck = output.Check
 
 type preflightDeps struct {
-	lookPath      func(name string, extraDirs []string) (string, error)
-	statPath      func(path string) (os.FileInfo, error)
-	commandOutput func(name string, args ...string) ([]byte, error)
-	uid           func() int
+	lookPath         func(name string, extraDirs []string) (string, error)
+	statPath         func(path string) (os.FileInfo, error)
+	statExternalPath func(path string) (os.FileInfo, error)
+	commandOutput    func(name string, args ...string) ([]byte, error)
+	uid              func() int
 }
 
 var defaultPreflightDeps = preflightDeps{
-	lookPath: defaultLookPath,
-	statPath: secret.Stat,
+	lookPath:         defaultLookPath,
+	statPath:         secret.Stat,
+	statExternalPath: secret.StatExternalFile,
 	commandOutput: func(name string, args ...string) ([]byte, error) {
 		if out, ok, err := callerio.CommandOutput(name, args...); ok {
 			return out, err
@@ -75,6 +77,13 @@ var defaultPreflightDeps = preflightDeps{
 		return exec.Command(name, args...).CombinedOutput()
 	},
 	uid: os.Getuid,
+}
+
+func (d preflightDeps) statSecretPath(path string, externalSource bool) (os.FileInfo, error) {
+	if externalSource && d.statExternalPath != nil {
+		return d.statExternalPath(path)
+	}
+	return d.statPath(path)
 }
 
 func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, clustersDir string, deps preflightDeps) []preflightCheck {
@@ -246,9 +255,9 @@ func secretsDirCheck(secretsDir string, deps preflightDeps) preflightCheck {
 	return okCheck(checkGroupSecretMaterial, name, secretsDir)
 }
 
-func secretFileCheck(refName, path, label string, publicKey, contextBacked bool, deps preflightDeps) preflightCheck {
+func secretFileCheck(refName, path, label string, publicKey, contextBacked, externalSource bool, deps preflightDeps) preflightCheck {
 	name := label
-	info, err := deps.statPath(path)
+	info, err := deps.statSecretPath(path, externalSource)
 	if err != nil {
 		remediation := "create " + path + " or update Environment.spec.secrets[" + refName + "].file"
 		switch {

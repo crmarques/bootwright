@@ -338,7 +338,7 @@ func materializeFileSecretCopy(request fileSecretCopyRequest) (string, error) {
 	if filepath.Clean(request.source) == filepath.Clean(request.target) {
 		return "source already context-local at " + request.target, nil
 	}
-	data, err := secret.ReadFile(request.source)
+	data, err := secret.ReadExternalFile(request.source)
 	if err != nil {
 		return "", fmt.Errorf("read file-sourced secret %s for %s: %w", request.source, request.name, err)
 	}

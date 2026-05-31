@@ -8,9 +8,10 @@
   ansible.builtin.include_role:
     name: process_cleanup
   vars:
-    bootwright_process_cleanup_pattern: "dnsmasq.*--conf-file=/etc/dnsmasq.conf"
-    bootwright_process_cleanup_require_cgroup_match: true
-    bootwright_process_cleanup_cgroup_pattern: libpod
+    bootwright_process_cleanup_podman_filters:
+      - "label=bootwright.kind=nameResolution"
+      - "label=bootwright.provider={{ bootwright_component.providerName }}"
+      - "label=bootwright.name={{ bootwright_component.name }}"
     bootwright_process_cleanup_mark_changed: false
 
 - name: Close DNS port on host firewall (firewalld)

@@ -217,6 +217,45 @@ func TestSecretRefChecksRequireInstallTrustCABundle(t *testing.T) {
 	}
 }
 
+func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
+	sourceDir := t.TempDir()
+	pullSecret := filepath.Join(sourceDir, "pull-secret.json")
+	if err := os.WriteFile(pullSecret, []byte(`{"auths":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"openshift-pull-secret": {File: pullSecret},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster"},
+			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
+				PullSecretRef: v1alpha1.SecretRef{Name: "openshift-pull-secret"},
+			}},
+		}},
+	}
+	var externalStats int
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+		statPath: func(path string) (os.FileInfo, error) {
+			t.Fatalf("file source %s was statted through root-managed path", path)
+			return nil, os.ErrInvalid
+		},
+		statExternalPath: func(path string) (os.FileInfo, error) {
+			externalStats++
+			return os.Stat(path)
+		},
+	})
+	if externalStats != 1 {
+		t.Fatalf("external stat calls = %d, want 1", externalStats)
+	}
+	assertPreflightCheckStatus(t, checks, "cluster pullSecretRef", "OK")
+}
+
 func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
 	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "addons"}}, preflightDeps{

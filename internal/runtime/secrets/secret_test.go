@@ -101,6 +101,30 @@ func TestResolveContextStorageSSHFileSourcePaths(t *testing.T) {
 	}
 }
 
+func TestMaterialPathUsesExternalSource(t *testing.T) {
+	env := &v1alpha1.Environment{
+		SourcePath: filepath.Join("/input", "environment.yaml"),
+		Spec: v1alpha1.EnvironmentSpec{
+			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"pull-secret": {File: "pull-secret.json"},
+				"api-tls":     {File: "api.crt", KeyFile: "api.key"},
+			},
+		},
+	}
+	if !MaterialPathUsesExternalSource("pull-secret", env, MaterialPrimary) {
+		t.Fatal("source-mode file secret should use external source reads")
+	}
+	if !MaterialPathUsesExternalSource("api-tls", env, MaterialTLSKey) {
+		t.Fatal("source-mode keyFile should use external source reads")
+	}
+
+	contextEnv := *env
+	contextEnv.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeContext
+	if MaterialPathUsesExternalSource("pull-secret", &contextEnv, MaterialPrimary) {
+		t.Fatal("context-mode file secret should use context-local reads")
+	}
+}
+
 func TestParseBMCCredentials(t *testing.T) {
 	cases := []struct {
 		name             string

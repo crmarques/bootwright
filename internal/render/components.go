@@ -10,7 +10,7 @@ import (
 // Bump the matching constant whenever a pin is updated.
 const versionLookupDate = "2026-05-21"
 const currentVersionLookupDate = "2026-05-21"
-const ansibleCoreLookupDate = "2026-05-24"
+const ansibleCoreLookupDate = "2026-05-31"
 
 const (
 	defaultSushyToolsVersion = "2.2.0"
@@ -29,7 +29,7 @@ type ComponentPin struct {
 // when an LB capability is referenced, etc.).
 func ComponentPins(state v1alpha1.State) []ComponentPin {
 	pins := []ComponentPin{
-		{Name: "ansible-core", Version: "2.20.5", Source: "https://pypi.org/project/ansible-core/", LookupDate: ansibleCoreLookupDate},
+		{Name: "ansible-core", Version: "2.21.0", Source: "https://pypi.org/project/ansible-core/", LookupDate: ansibleCoreLookupDate},
 		{Name: "pip", Version: "26.1.1", Source: "https://pypi.org/project/pip/", LookupDate: currentVersionLookupDate},
 		{Name: "go.yaml.in/yaml/v3", Version: "v3.0.4", Source: "https://go.yaml.in/yaml/v3", LookupDate: versionLookupDate},
 	}

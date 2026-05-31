@@ -122,8 +122,13 @@ func LoadDataFoundationExternalDetailsJSON(state v1alpha1.State, secretsDir stri
 	if strings.TrimSpace(ref.Name) == "" {
 		return "", fmt.Errorf("data foundation externalDetailsRef.name is required")
 	}
-	path := secret.ResolvePath(ref.Name, primaryEnvironment(state), secretsDir)
-	data, err := secret.ReadFile(path)
+	env := primaryEnvironment(state)
+	path := secret.ResolvePath(ref.Name, env, secretsDir)
+	read := secret.ReadFile
+	if secret.MaterialPathUsesExternalSource(ref.Name, env, secret.MaterialPrimary) {
+		read = secret.ReadExternalFile
+	}
+	data, err := read(path)
 	if err != nil {
 		return "", fmt.Errorf("read data foundation external details secret %q at %s: %w", ref.Name, path, err)
 	}

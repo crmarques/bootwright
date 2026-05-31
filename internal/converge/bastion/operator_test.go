@@ -187,7 +187,7 @@ func TestComponentPinnedVersion(t *testing.T) {
 		name string
 		want string
 	}{
-		{name: "ansible-core", want: "2.20.5"},
+		{name: "ansible-core", want: "2.21.0"},
 		{name: "pip", want: "26.1.1"},
 	}
 	for _, tc := range cases {
@@ -360,7 +360,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenv(t *testing.T) {
 			"python3.12":      []byte("Python 3.12.4"),
 			venvBin("python"): []byte("Python 3.12.4"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
-			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.20.5\n"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenvWithoutSystemPython(t *testing.T) {
 		outputs: map[string][]byte{
 			venvBin("python"): []byte("Python 3.12.4"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
-			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.20.5\n"),
+			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
 	}.deps(), "/venv", venvBin, false, false)
 	if err != nil {
@@ -405,7 +405,7 @@ func TestBootstrapPlanWithDepsRecreatesOutdatedPinnedVenv(t *testing.T) {
 	want := [][]string{
 		{"python3.12", "-m", "venv", "--clear", "/venv"},
 		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.1"},
-		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.20.5"},
+		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.21.0"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d steps, want %d: %+v", len(got), len(want), got)
@@ -431,7 +431,7 @@ func TestBootstrapPlanWithDepsRepairsUsableVenvWithoutSystemPython(t *testing.T)
 	}
 	want := [][]string{
 		{"/venv/bin/python", "-m", "pip", "install", "pip==26.1.1"},
-		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.20.5"},
+		{"/venv/bin/python", "-m", "pip", "install", "ansible-core==2.21.0"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d steps, want %d: %+v", len(got), len(want), got)

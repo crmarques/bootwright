@@ -38,7 +38,11 @@ func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerClust
 			continue
 		}
 		seen[key] = true
-		info, err := secret.Stat(path)
+		stat := secret.Stat
+		if secret.MaterialPathUsesExternalSource(ref.name, env, ref.role()) {
+			stat = secret.StatExternalFile
+		}
+		info, err := stat(path)
 		if err != nil {
 			return nil, fmt.Errorf("%s %s at %s: %w", ocp.Metadata.Name, ref.label, path, err)
 		}
@@ -68,6 +72,17 @@ type installerSecretRef struct {
 	name      string
 	tlsKey    bool
 	sshPublic bool
+}
+
+func (r installerSecretRef) role() secret.MaterialRole {
+	switch {
+	case r.tlsKey:
+		return secret.MaterialTLSKey
+	case r.sshPublic:
+		return secret.MaterialSSHPublic
+	default:
+		return secret.MaterialPrimary
+	}
 }
 
 func installerSecretRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []installerSecretRef {

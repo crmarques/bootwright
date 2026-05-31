@@ -27,7 +27,11 @@ func resolveProxyEnv(state v1alpha1.State, secretsDir string) (map[string]string
 		authority := ""
 		if effectiveProxyEnvUsesCredentials(eff) {
 			path := resolvedSecretPath(eff.Auth.Name, &env, secretsDir)
-			creds, err := secret.ReadUserPasswordFile(path, "proxy credentials")
+			read := secret.ReadUserPasswordFile
+			if secret.MaterialPathUsesExternalSource(eff.Auth.Name, &env, secret.MaterialPrimary) {
+				read = secret.ReadExternalUserPasswordFile
+			}
+			creds, err := read(path, "proxy credentials")
 			if err != nil {
 				return nil, err
 			}

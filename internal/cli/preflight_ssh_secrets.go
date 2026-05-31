@@ -13,8 +13,8 @@ func sshKeyPairFileChecks(req secretRefRequirement, env *v1alpha1.Environment, s
 	privatePath := secret.ResolveSSHPrivateKeyPath(req.refName, env, secretsDir)
 	publicPath := secret.ResolveSSHPublicKeyPath(req.refName, env, secretsDir)
 	return []preflightCheck{
-		secretFileCheck(req.refName, privatePath, req.label+" private", false, contextBacked, deps),
-		secretFileCheck(req.refName, publicPath, req.label+" public", true, contextBacked, deps),
+		secretFileCheck(req.refName, privatePath, req.label+" private", false, contextBacked, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialSSHPrivate), deps),
+		secretFileCheck(req.refName, publicPath, req.label+" public", true, contextBacked, secret.MaterialPathUsesExternalSource(req.refName, env, secret.MaterialSSHPublic), deps),
 	}
 }
 

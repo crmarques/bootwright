@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/support"
+	"github.com/crmarques/bootwright/internal/render"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -1438,6 +1440,56 @@ func TestProviderPlaybooksDispatchRenderedRoles(t *testing.T) {
 				t.Fatalf("%s must dispatch using rendered %s", path, want)
 			}
 		}
+	}
+}
+
+func TestProviderDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
+	roles := map[string]string{
+		"ansible/roles/providers/artifacts_http/tasks/destroy.yml":        "artifacts",
+		"ansible/roles/providers/load_balancer_haproxy/tasks/destroy.yml": "load-balancer",
+		"ansible/roles/providers/dns_dnsmasq/tasks/destroy.yml":           "nameResolution",
+		"ansible/roles/providers/proxy_squid/tasks/destroy.yml":           "proxy",
+		"ansible/roles/providers/mirror_registry/tasks/destroy.yml":       "registry",
+	}
+	for path, kind := range roles {
+		body := readRepoFile(t, path)
+		if strings.Contains(body, "bootwright_process_cleanup_pattern") {
+			t.Fatalf("%s must not cleanup provider containers by process pattern", path)
+		}
+		for _, want := range []string{
+			"bootwright_process_cleanup_podman_filters:",
+			"label=bootwright.kind=" + kind,
+			"label=bootwright.provider={{ bootwright_component.providerName }}",
+			"label=bootwright.name={{ bootwright_component.name }}",
+		} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("%s cleanup missing %q", path, want)
+			}
+		}
+	}
+}
+
+func TestAnsibleCorePinsStayAligned(t *testing.T) {
+	pin := ""
+	for _, component := range render.ComponentPins(v1alpha1.State{}) {
+		if component.Name == "ansible-core" {
+			pin = component.Version
+			break
+		}
+	}
+	if pin == "" {
+		t.Fatal("ansible-core component pin missing")
+	}
+	for _, path := range []string{
+		".github/workflows/checks.yml",
+		".github/workflows/release.yml",
+	} {
+		if body := readRepoFile(t, path); !strings.Contains(body, "ansible-core=="+pin) {
+			t.Fatalf("%s must install ansible-core==%s", path, pin)
+		}
+	}
+	if body := readRepoFile(t, "Containerfile"); !strings.Contains(body, "ARG ANSIBLE_CORE_VERSION="+pin) {
+		t.Fatalf("Containerfile must set ANSIBLE_CORE_VERSION=%s", pin)
 	}
 }
 

@@ -95,8 +95,9 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 	for _, name := range names {
 		spec := env.Spec.Secrets[name]
 		typ := secretSpecType(name, spec, state)
-		paths := secretSpecPaths(name, spec, env, secretsDir, state)
-		present, detail := secretPathsPresent(paths)
+		pathEntries := secretSpecPathEntries(name, spec, env, secretsDir, state)
+		paths := secretPathEntryPaths(pathEntries)
+		present, detail := secretPathsPresent(pathEntries)
 		entries = append(entries, secretListEntry{
 			Name:    name,
 			Type:    typ,
@@ -106,6 +107,11 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 		})
 	}
 	return entries, nil
+}
+
+type secretPathEntry struct {
+	path           string
+	externalSource bool
 }
 
 func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1alpha1.State) string {
@@ -131,25 +137,44 @@ func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1al
 	}
 }
 
-func secretSpecPaths(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []string {
-	path := secret.ResolveMaterialPath(name, env, secretsDir, secret.MaterialPrimary)
+func secretSpecPathEntries(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []secretPathEntry {
+	entry := func(role secret.MaterialRole) secretPathEntry {
+		return secretPathEntry{
+			path:           secret.ResolveMaterialPath(name, env, secretsDir, role),
+			externalSource: secret.MaterialPathUsesExternalSource(name, env, role),
+		}
+	}
 	if spec.Generated != nil && spec.Generated.SSHKeyPair != nil {
-		return []string{path, secret.ResolveSSHPublicKeyPath(name, env, secretsDir)}
+		return []secretPathEntry{
+			entry(secret.MaterialPrimary),
+			entry(secret.MaterialSSHPublic),
+		}
 	}
 	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
-		return []string{path, secret.ResolveTLSKeyPath(name, env, secretsDir)}
+		return []secretPathEntry{
+			entry(secret.MaterialPrimary),
+			entry(secret.MaterialTLSKey),
+		}
 	}
 	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secretConsumedAsClusterSSH(name, state) || secretConsumedAsStorageSSH(name, state) || secretConsumedAsHostSSH(name, state)) {
-		var paths []string
+		var paths []secretPathEntry
 		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsStorageSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
-			paths = append(paths, secret.ResolveSSHPrivateKeyPath(name, env, secretsDir))
+			paths = append(paths, entry(secret.MaterialSSHPrivate))
 		}
 		if secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsStorageSSHPublic(name, state) {
-			paths = append(paths, secret.ResolveSSHPublicKeyPath(name, env, secretsDir))
+			paths = append(paths, entry(secret.MaterialSSHPublic))
 		}
 		return paths
 	}
-	return []string{path}
+	return []secretPathEntry{entry(secret.MaterialPrimary)}
+}
+
+func secretPathEntryPaths(entries []secretPathEntry) []string {
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.path)
+	}
+	return paths
 }
 
 func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
@@ -236,17 +261,21 @@ func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {
 	return false
 }
 
-func secretPathsPresent(paths []string) (bool, string) {
+func secretPathsPresent(paths []secretPathEntry) (bool, string) {
 	for _, path := range paths {
-		info, err := secret.Stat(path)
+		stat := secret.Stat
+		if path.externalSource {
+			stat = secret.StatExternalFile
+		}
+		info, err := stat(path.path)
 		if errors.Is(err, os.ErrNotExist) {
-			return false, "missing " + path
+			return false, "missing " + path.path
 		}
 		if err != nil {
-			return false, fmt.Sprintf("stat %s: %v", path, err)
+			return false, fmt.Sprintf("stat %s: %v", path.path, err)
 		}
 		if info.IsDir() {
-			return false, path + " is a directory"
+			return false, path.path + " is a directory"
 		}
 	}
 	return true, ""
