@@ -100,6 +100,7 @@ type BMCAuth struct {
 // interface.
 type MachineCapability struct {
 	Name      string                      `yaml:"name" json:"name"`
+	Labels    map[string]string           `yaml:"labels,omitempty" json:"labels,omitempty"`
 	BareMetal *MachineBareMetalCapability `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
 }
 

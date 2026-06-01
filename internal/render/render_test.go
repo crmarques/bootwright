@@ -186,6 +186,55 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	}
 }
 
+func TestProviderMachineLabelsRenderToVars(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	var providerIndex int
+	foundProviderMachine := false
+	for i := range state.InfraProviders {
+		if len(state.InfraProviders[i].Spec.Machines) == 0 {
+			continue
+		}
+		providerIndex = i
+		foundProviderMachine = true
+		break
+	}
+	if !foundProviderMachine {
+		t.Fatal("fixture has no provider machines")
+	}
+	state.InfraProviders[providerIndex].Spec.Machines[0].Labels = map[string]string{
+		"datacenter": "dc1",
+	}
+
+	vars := render.VarsWithSecretsDir(state, t.TempDir())
+	var machine map[string]any
+	for _, raw := range vars["bootwright_providers"].([]any) {
+		provider := raw.(map[string]any)
+		capabilities := provider["capabilities"].(map[string]any)
+		machines, ok := capabilities["machines"].([]any)
+		if !ok || len(machines) == 0 {
+			continue
+		}
+		machine = machines[0].(map[string]any)
+		break
+	}
+	if machine == nil {
+		t.Fatal("vars have no provider machines")
+	}
+	if got := machine["labels"].(map[string]string)["datacenter"]; got != "dc1" {
+		t.Fatalf("provider machine label got %q, want dc1", got)
+	}
+
+	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
+	component := firstMachineComponent(t, cluster)
+	server := component["server"].(map[string]any)
+	if got := server["labels"].(map[string]string)["datacenter"]; got != "dc1" {
+		t.Fatalf("component server label got %q, want dc1", got)
+	}
+}
+
 func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{

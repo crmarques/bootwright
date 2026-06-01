@@ -244,10 +244,14 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 		out["fromName"] = m.From.Name
 		if provider, ok := findProvider(state, m.From.Provider); ok {
 			if server, ok := findProviderMachine(provider, m.From.Name); ok {
-				out["server"] = map[string]any{
+				serverVars := map[string]any{
 					"name":       server.Name,
 					"interfaces": providerInterfacesVars(server),
 				}
+				if len(server.Labels) > 0 {
+					serverVars["labels"] = server.Labels
+				}
+				out["server"] = serverVars
 				if server.BareMetal != nil {
 					out["bmc"] = map[string]any{
 						"address":                        server.BareMetal.BMC.Address,

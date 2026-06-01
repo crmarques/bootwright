@@ -222,6 +222,7 @@ func validateMachineProfileKubeVirt(prefix string, k *v1alpha1.MachineProfileKub
 func validateProviderMachine(p v1alpha1.InfraProvider, m v1alpha1.MachineCapability, requireBoot bool) []string {
 	var errs []string
 	prefix := fmt.Sprintf("InfraProvider/%s spec.machines[%s]", p.Metadata.Name, m.Name)
+	errs = append(errs, validateMachineLabels(prefix, m.Labels)...)
 	set := 0
 	if m.BareMetal != nil {
 		set++
@@ -229,6 +230,28 @@ func validateProviderMachine(p v1alpha1.InfraProvider, m v1alpha1.MachineCapabil
 	}
 	if set != 1 {
 		errs = append(errs, fmt.Sprintf("%s must set exactly one of {baremetal} (got %d)", prefix, set))
+	}
+	return errs
+}
+
+func validateMachineLabels(prefix string, labels map[string]string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	var errs []string
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		field := fmt.Sprintf("%s.labels[%q]", prefix, key)
+		if !isLabelKey(key) {
+			errs = append(errs, fmt.Sprintf("%s %q is not a valid label key", field, key))
+		}
+		if value := labels[key]; !isLabelValue(value) {
+			errs = append(errs, fmt.Sprintf("%s value %q is not a valid label value", field, value))
+		}
 	}
 	return errs
 }

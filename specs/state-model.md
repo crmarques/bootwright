@@ -801,6 +801,8 @@ metadata:
 spec:
   machines:
     - name: rack1-srv1
+      labels:
+        datacenter: dc1
       baremetal:
         bootMACAddress: 52:54:00:33:11:10
         interfaces:
@@ -922,6 +924,9 @@ kubevirt:
 Rules:
 
 - Provider credentials are always `SecretRef`s.
+- `machines[].labels` is optional non-secret metadata for selection,
+  reporting, and operator grouping. Label keys and values use Kubernetes label
+  syntax.
 - Bare metal physical facts stay provider-owned: BMC, boot MAC, physical NIC
   MACs, and root device hints.
 - `machineProfiles[].libvirt.bmcEmulationDefaults` is required for current

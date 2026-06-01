@@ -35,10 +35,40 @@ func Validate(state v1alpha1.State) error {
 }
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+var dnsSubdomain = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+var labelName = regexp.MustCompile(`^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$`)
+var labelValue = regexp.MustCompile(`^([A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?)?$`)
 
 // IsDNSLabel returns whether s matches the canonical
 // `[a-z0-9]([-a-z0-9]*[a-z0-9])?` DNS-label form.
 func IsDNSLabel(s string) bool { return dnsLabel.MatchString(s) }
+
+func isLabelKey(s string) bool {
+	prefix, name, ok := strings.Cut(s, "/")
+	if !ok {
+		name = prefix
+		prefix = ""
+	}
+	if name == "" || len(name) > 63 || !labelName.MatchString(name) {
+		return false
+	}
+	if prefix == "" {
+		return true
+	}
+	if len(prefix) > 253 || !dnsSubdomain.MatchString(prefix) {
+		return false
+	}
+	for _, part := range strings.Split(prefix, ".") {
+		if len(part) > 63 {
+			return false
+		}
+	}
+	return true
+}
+
+func isLabelValue(s string) bool {
+	return len(s) <= 63 && labelValue.MatchString(s)
+}
 
 func validateName(kind, name string) string {
 	if name == "" {

@@ -187,6 +187,57 @@ spec:
 	}
 }
 
+func TestProviderMachineLabelsValidation(t *testing.T) {
+	cases := []struct {
+		name          string
+		labelsYAML    string
+		wantSubstring string
+	}{
+		{
+			name: "valid-labels",
+			labelsYAML: `        datacenter: dc1
+        topology.kubernetes.io/zone: dc1-a
+`,
+		},
+		{
+			name: "invalid-key",
+			labelsYAML: `        bad key: dc1
+`,
+			wantSubstring: `labels["bad key"] "bad key" is not a valid label key`,
+		},
+		{
+			name: "invalid-value",
+			labelsYAML: `        datacenter: "dc1/room"
+`,
+			wantSubstring: `labels["datacenter"] value "dc1/room" is not a valid label value`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["provider.yaml"] = strings.Replace(newProviderYAML, "    - name: srv1\n", "    - name: srv1\n      labels:\n"+tc.labelsYAML, 1)
+			writeFiles(t, dir, files)
+			state, err := LoadNormalizeValidate([]string{dir})
+			if tc.wantSubstring == "" {
+				if err != nil {
+					t.Fatalf("LoadNormalizeValidate: %v", err)
+				}
+				if got := state.InfraProviders[0].Spec.Machines[0].Labels["datacenter"]; got != "dc1" {
+					t.Fatalf("datacenter label got %q, want dc1", got)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantSubstring)
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
 func TestArtifactServerEndpointNamesAreRouteSelectors(t *testing.T) {
 	files := newBaselineFiles()
 	files["hosts.yaml"] = strings.Replace(files["hosts.yaml"],

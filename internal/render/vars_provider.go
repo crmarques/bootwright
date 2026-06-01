@@ -31,11 +31,15 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 	if len(p.Spec.Machines) > 0 {
 		machines := make([]any, 0, len(p.Spec.Machines))
 		for _, m := range p.Spec.Machines {
-			machines = append(machines, map[string]any{
+			entry := map[string]any{
 				"name":        m.Name,
 				"interfaces":  providerInterfacesVars(m),
 				"provisioner": machineProvisionerVars(m),
-			})
+			}
+			if len(m.Labels) > 0 {
+				entry["labels"] = m.Labels
+			}
+			machines = append(machines, entry)
 		}
 		out["machines"] = machines
 	}
