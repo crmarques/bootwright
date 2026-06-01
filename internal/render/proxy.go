@@ -5,8 +5,7 @@ package render
 // URL from `(hostRef, port)` via internal/infra/proxy.ManagedProxyURL. The
 // cluster-facing URL is
 // substituted with the primary network's gateway (via
-// internal/infra/proxy.ClusterFacingHostAddress), which is substrate-blind
-// — it reads whichever connectivity arm the network declares.
+// internal/infra/proxy.ClusterFacingHostAddress).
 //
 // This file is intentionally thin; the substantive logic now lives in
 // internal/infra/proxy/effective.go (Resolve, ManagedProxyURL) and is

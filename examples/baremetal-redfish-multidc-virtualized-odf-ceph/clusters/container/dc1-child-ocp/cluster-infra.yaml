@@ -14,6 +14,14 @@ spec:
     ingress:
       externalVip: 192.168.151.21
 
+  networkBindings:
+    - networkConfigRef:
+        name: dc1-child-net
+      providerRef:
+        name: kubevirt-provider
+      attachmentRef:
+        name: dc1-child-net
+
   components:
     machines:
       - name: master-0

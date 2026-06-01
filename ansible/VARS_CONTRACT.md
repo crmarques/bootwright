@@ -73,12 +73,6 @@ bootwright_clusters:
           - { cidr: 192.168.133.0/24 }
         dnsServers: [192.168.133.1]
         template: {}
-        substrate:
-          kind: libvirt | vsphere | kubevirt | baremetal
-          libvirt: { bridge }
-          vsphere: { portgroup }
-          kubevirt: { nad }
-          physical: { vlan }
     components:
       - kind: machines
         name: master-0
@@ -93,6 +87,12 @@ bootwright_clusters:
         bootApplyRole: boot_redfish
         mediaPrepareRole: media_libvirt
         hostSetupRoles:
+        networkAttachment:
+          kind: libvirt | vsphere | kubevirt | baremetal
+          libvirt: { bridge }
+          vsphere: { portgroup }
+          kubevirt: { nad }
+          baremetal: { vlan }
           - host_libvirt
         requiresKVM: true
         networkConfig:

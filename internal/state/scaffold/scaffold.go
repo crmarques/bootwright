@@ -114,13 +114,16 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.HostsYAML, err = render("HostsYAML", s.HostsYAML); err != nil {
 		return s, err
 	}
-	if s.NetworkConnectivity, err = render("NetworkConnectivity", s.NetworkConnectivity); err != nil {
+	if s.ProviderNetworkAttachments, err = render("ProviderNetworkAttachments", s.ProviderNetworkAttachments); err != nil {
 		return s, err
 	}
 	if s.NetworkDNSRefs, err = render("NetworkDNSRefs", s.NetworkDNSRefs); err != nil {
 		return s, err
 	}
 	if s.ProviderCapabilities, err = render("ProviderCapabilities", s.ProviderCapabilities); err != nil {
+		return s, err
+	}
+	if s.ClusterNetworkBindings, err = render("ClusterNetworkBindings", s.ClusterNetworkBindings); err != nil {
 		return s, err
 	}
 	if s.InfraComponentYAML, err = render("InfraComponentYAML", s.InfraComponentYAML); err != nil {
@@ -180,22 +183,23 @@ func ApplySupport(kind Provider) support.DispatchSupport {
 // the Substrates registry to construct values; the field names are an
 // internal contract between this file and the templates below.
 type Substrate struct {
-	ProviderNameSuffix   string
-	NetworkNameSuffix    string
-	EnvExtraSecrets      string
-	EnvArtifactServer    string
-	HostsYAML            string
-	NetworkConnectivity  string
-	NetworkDNSServers    string
-	NetworkDNSRefs       string
-	ProviderCapabilities string
-	InfraComponentYAML   string
-	ClusterMachineFrom   string
-	ClusterMachineExtras string
-	ClusterServices      string
-	EndpointsYAML        string
-	PlatformYAML         string
-	BootDevice           string
+	ProviderNameSuffix         string
+	NetworkNameSuffix          string
+	EnvExtraSecrets            string
+	EnvArtifactServer          string
+	HostsYAML                  string
+	NetworkDNSServers          string
+	NetworkDNSRefs             string
+	ProviderCapabilities       string
+	ProviderNetworkAttachments string
+	InfraComponentYAML         string
+	ClusterNetworkBindings     string
+	ClusterMachineFrom         string
+	ClusterMachineExtras       string
+	ClusterServices            string
+	EndpointsYAML              string
+	PlatformYAML               string
+	BootDevice                 string
 }
 
 type templateData struct {
@@ -283,15 +287,14 @@ spec:
             next-hop-address: 192.168.130.1
             next-hop-interface: primary
             table-id: 254
-
-{{.Substrate.NetworkConnectivity}}`
+`
 
 const providerTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
   name: {{.ProviderID}}
 spec:
-{{.Substrate.ProviderCapabilities}}`
+{{.Substrate.ProviderCapabilities}}{{.Substrate.ProviderNetworkAttachments}}`
 
 const infraComponentTmpl = `{{.Substrate.InfraComponentYAML}}`
 
@@ -303,6 +306,7 @@ spec:
 {{.Substrate.PlatformYAML}}
   endpoints:
 {{.Substrate.EndpointsYAML}}
+{{.Substrate.ClusterNetworkBindings}}
 
   components:
     machines:

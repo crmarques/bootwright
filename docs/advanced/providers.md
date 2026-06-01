@@ -136,10 +136,20 @@ kubevirt:
 ```
 
 Exactly one of `hostContainerClusterRef` or `kubeconfigRef` is required. The namespace is
-required and the storage class is optional. KubeVirt machines must select a
-`NetworkConfig` with `spec.kubevirt.nad`, and `apply all` waits for the host
-cluster add-on that advertises `provides: [kubevirt]` before creating child
-VMs.
+required and the storage class is optional. KubeVirt machines must bind their
+selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
+and `apply all` waits for the host cluster add-on that advertises
+`provides: [kubevirt]` before creating child VMs.
+
+```yaml
+spec:
+  networkAttachments:
+    - name: child-machine-net
+      kubevirt:
+        nadRef:
+          name: child-machine-net
+          namespace: bootwright-child-ocp
+```
 
 ## Services
 

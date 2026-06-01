@@ -32,6 +32,15 @@ func indexNetworkConfigs(nets []v1alpha1.NetworkConfig) map[string]v1alpha1.Netw
 	return out
 }
 
+func lookupNetworkAttachment(provider v1alpha1.InfraProvider, name string) (v1alpha1.NetworkAttachmentCapability, bool) {
+	for _, attachment := range provider.Spec.NetworkAttachments {
+		if attachment.Name == name {
+			return attachment, true
+		}
+	}
+	return v1alpha1.NetworkAttachmentCapability{}, false
+}
+
 func indexClusterInfras(items []v1alpha1.ClusterInfra) map[string]v1alpha1.ClusterInfra {
 	out := make(map[string]v1alpha1.ClusterInfra, len(items))
 	for _, ci := range items {

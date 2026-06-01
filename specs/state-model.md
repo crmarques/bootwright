@@ -20,11 +20,12 @@ Ceph storage:
 - `StorageObjectGateway` owns RGW service and cephadm ingress VIP placement.
 - `StorageExport` owns the exported storage surface. The consuming cluster is
   selected by `ClusterAddonBinding.spec.storage[]`.
-- `ClusterInfra` owns the selected machines, install endpoints, and platform
-  render mode.
+- `ClusterInfra` owns the selected machines, install endpoints, platform
+  render mode, and logical-to-substrate network bindings.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
   selections, and the NMState template rendered into `agent-config.yaml`.
-- `InfraProvider` owns substrate inventory and capabilities.
+- `InfraProvider` owns substrate inventory, network attachments, and
+  capabilities.
 - `InfraComponent` owns host-bound shared infra services and their routable
   endpoints.
 - `Environment` owns fleet-wide defaults, context resource selection, secret
@@ -713,9 +714,6 @@ spec:
             next-hop-address: 192.168.133.1
             next-hop-interface: bond0
             table-id: 254
-
-  physical:
-    vlan: 0
 ```
 
 Rules:
@@ -734,8 +732,10 @@ Rules:
 - Common overlays should be limited to `addresses[]`; advanced users may set a
   full machine-level `networkConfig` override.
 - Static overlay IPs must fit at least one referenced machine network CIDR.
-- Optional substrate hints are `libvirt`, `vsphere`, `kubevirt`, or `physical`.
-  They are Bootwright provisioning hints, not the OpenShift cluster network.
+- Substrate attachments such as libvirt bridges, vSphere portgroups,
+  KubeVirt NADs, and bare-metal VLANs belong to
+  `InfraProvider.spec.networkAttachments[]` and are selected from
+  `ClusterInfra.spec.networkBindings[]`.
 
 ## Host
 
@@ -921,6 +921,32 @@ kubevirt:
   namespace: bootwright-child-ocp
 ```
 
+Provider network attachments name substrate-specific network surfaces that a
+cluster may bind to a logical `NetworkConfig`:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: child-kubevirt
+spec:
+  networkAttachments:
+    - name: child-machine-net
+      kubevirt:
+        nadRef:
+          name: child-machine-net
+          namespace: bootwright-child-ocp
+    - name: lab-bridge
+      libvirt:
+        bridge: vbr-lab
+    - name: vm-network
+      vsphere:
+        portgroup: VM_Network_1
+    - name: rack-vlan730
+      baremetal:
+        vlan: 730
+```
+
 Rules:
 
 - Provider credentials are always `SecretRef`s.
@@ -949,9 +975,17 @@ Rules:
   a kubeconfig path or context-local kubeconfig material and never stores bytes
   in desired state.
 - `kubevirt.namespace` is required. `storageClassRef.name` is optional.
-- KubeVirt-backed machines must use a `NetworkConfig` with `spec.kubevirt.nad`.
-  The referenced NAD is supplied by the operator or by a parent-cluster
-  `manifest-set` add-on.
+- `networkAttachments[]` names are unique within one `InfraProvider` and each
+  attachment sets exactly one of `libvirt`, `vsphere`, `kubevirt`, or
+  `baremetal`.
+- KubeVirt `networkAttachments[].kubevirt.nadRef` requires `name` and
+  `namespace`. The referenced NAD is supplied by the operator or by a
+  parent-cluster `manifest-set` add-on.
+- Bare-metal `networkAttachments[].baremetal.vlan` is optional and must be in
+  range `0..4094` when set.
+- KubeVirt, libvirt, and vSphere-backed machines must have a matching
+  `ClusterInfra.spec.networkBindings[]` entry for the selected provider and
+  `NetworkConfig`.
 - KubeVirt `hostContainerClusterRef` dependencies must be acyclic. A cluster cannot host
   itself directly or through another child cluster.
 - Capability names are scoped by capability kind.
@@ -1039,6 +1073,14 @@ spec:
     ingress:
       externalVip: 192.168.133.11
 
+  networkBindings:
+    - networkConfigRef:
+        name: rack1-bonded-machine
+      providerRef:
+        name: rack1-baremetal
+      attachmentRef:
+        name: rack1-vlan
+
   components:
     machines:
       - name: master-0
@@ -1091,6 +1133,13 @@ Rules:
   Redfish virtual media on the existing machine network.
 - `components.machines[]` selects provider machines or profiles and applies
   per-machine network overlays.
+- `networkBindings[]` maps a logical `NetworkConfig` and selected provider to
+  one `InfraProvider.spec.networkAttachments[]` entry. Bindings are unique per
+  `(providerRef.name, networkConfigRef.name)` pair.
+- Binding attachment kind must match the machine substrate: libvirt machines
+  bind to libvirt attachments, vSphere machines to vSphere attachments,
+  KubeVirt machines to KubeVirt attachments, and bare-metal machines to
+  bare-metal attachments when a binding is declared.
 - `endpoints` is a map keyed by exactly `api`, `apiInt`, and `ingress`.
   Each endpoint must set exactly one ownership field:
   `vip` for OpenShift-managed VIPs, `externalVip` for operator-owned external

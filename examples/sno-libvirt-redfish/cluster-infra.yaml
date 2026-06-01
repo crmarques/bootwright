@@ -16,6 +16,14 @@ spec:
     ingress:
       externalVip: 192.168.132.11
 
+  networkBindings:
+    - networkConfigRef:
+        name: sno-bridge
+      providerRef:
+        name: lab-libvirt-provider
+      attachmentRef:
+        name: sno-bridge
+
   components:
     machines:
       - name: master-0
@@ -32,4 +40,3 @@ spec:
                   prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda
-

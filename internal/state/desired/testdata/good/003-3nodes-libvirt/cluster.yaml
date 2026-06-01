@@ -25,6 +25,14 @@ spec:
         componentRef:
           name: load-balancer
 
+  networkBindings:
+    - networkConfigRef:
+        name: cluster-3n-bridge
+      providerRef:
+        name: lab-libvirt-provider
+      attachmentRef:
+        name: cluster-3n-bridge
+
   components:
     machines:
       - name: master-0

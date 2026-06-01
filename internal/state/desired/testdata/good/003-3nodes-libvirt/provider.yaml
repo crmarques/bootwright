@@ -18,3 +18,8 @@ spec:
           auth:
             credentialRef:
               name: bmc-credentials
+
+  networkAttachments:
+    - name: cluster-3n-bridge
+      libvirt:
+        bridge: vbr-cb-3n

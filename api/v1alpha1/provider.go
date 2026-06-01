@@ -11,8 +11,38 @@ type InfraProvider struct {
 }
 
 type InfraProviderSpec struct {
-	MachineProfiles []MachineProfileCapability `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
-	Machines        []MachineCapability        `yaml:"machines,omitempty" json:"machines,omitempty"`
+	MachineProfiles    []MachineProfileCapability    `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+	Machines           []MachineCapability           `yaml:"machines,omitempty" json:"machines,omitempty"`
+	NetworkAttachments []NetworkAttachmentCapability `yaml:"networkAttachments,omitempty" json:"networkAttachments,omitempty"`
+}
+
+type NetworkAttachmentCapability struct {
+	Name      string                      `yaml:"name" json:"name"`
+	Libvirt   *NetworkAttachmentLibvirt   `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
+	VSphere   *NetworkAttachmentVSphere   `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
+	KubeVirt  *NetworkAttachmentKubeVirt  `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+	BareMetal *NetworkAttachmentBareMetal `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
+}
+
+type NetworkAttachmentLibvirt struct {
+	Bridge string `yaml:"bridge" json:"bridge"`
+}
+
+type NetworkAttachmentVSphere struct {
+	Portgroup string `yaml:"portgroup" json:"portgroup"`
+}
+
+type NetworkAttachmentKubeVirt struct {
+	NADRef KubeVirtNADReference `yaml:"nadRef" json:"nadRef"`
+}
+
+type KubeVirtNADReference struct {
+	Name      string `yaml:"name" json:"name"`
+	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+type NetworkAttachmentBareMetal struct {
+	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
 }
 
 // MachineProfileCapability is a parameterised machine template; the
@@ -132,4 +162,19 @@ type RootDeviceHints struct {
 	MinSizeGigabytes int    `yaml:"minSizeGigabytes,omitempty" json:"minSizeGigabytes,omitempty"`
 	WWN              string `yaml:"wwn,omitempty" json:"wwn,omitempty"`
 	Rotational       *bool  `yaml:"rotational,omitempty" json:"rotational,omitempty"`
+}
+
+func NetworkAttachmentKind(attachment NetworkAttachmentCapability) string {
+	switch {
+	case attachment.Libvirt != nil:
+		return ProvisionerLibvirt
+	case attachment.VSphere != nil:
+		return ProvisionerVSphere
+	case attachment.KubeVirt != nil:
+		return ProvisionerKubeVirt
+	case attachment.BareMetal != nil:
+		return ProvisionerBareMetal
+	default:
+		return ""
+	}
 }

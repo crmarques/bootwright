@@ -227,14 +227,10 @@ func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 	}
 }
 
-// TestSubstratesCarryDistinctConnectivity verifies the Substrates map
-// hasn't accidentally cross-wired two substrates to the same
-// connectivity arm. The whole point of having four substrates is that
-// each emits its own connectivity block.
-func TestSubstratesCarryDistinctConnectivity(t *testing.T) {
+func TestSubstratesCarryDistinctNetworkAttachments(t *testing.T) {
 	want := map[scaffold.Provider]string{
 		scaffold.ProviderEmulatedBareMetal: "libvirt:",
-		scaffold.ProviderBareMetal:         "physical:",
+		scaffold.ProviderBareMetal:         "baremetal:",
 		scaffold.ProviderVSphere:           "vsphere:",
 		scaffold.ProviderKubeVirt:          "kubevirt:",
 	}
@@ -244,8 +240,8 @@ func TestSubstratesCarryDistinctConnectivity(t *testing.T) {
 			if !ok {
 				t.Fatalf("substrate %q missing", p)
 			}
-			if !strings.Contains(s.NetworkConnectivity, fragment) {
-				t.Errorf("%s connectivity should mention %q, got: %s", p, fragment, s.NetworkConnectivity)
+			if !strings.Contains(s.ProviderNetworkAttachments, fragment) {
+				t.Errorf("%s network attachment should mention %q, got: %s", p, fragment, s.ProviderNetworkAttachments)
 			}
 		})
 	}

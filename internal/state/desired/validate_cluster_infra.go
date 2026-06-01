@@ -28,6 +28,7 @@ func validateClusterInfras(state v1alpha1.State) []string {
 		if containerInfraNames[ci.Metadata.Name] || len(ci.Spec.Endpoints) > 0 {
 			errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs, containerInfraNames[ci.Metadata.Name])...)
 		}
+		errs = append(errs, validateClusterNetworkBindings(ci, providers, networkConfigs)...)
 		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
 	}
@@ -218,6 +219,40 @@ func loadBalancerHasBindAddress(lb *v1alpha1.LoadBalancerComponent, name string)
 	return false
 }
 
+func validateClusterNetworkBindings(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, binding := range ci.Spec.NetworkBindings {
+		prefix := fmt.Sprintf("ClusterInfra/%s spec.networkBindings[%d]", ci.Metadata.Name, i)
+		if binding.NetworkConfigRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.networkConfigRef.name is required", prefix))
+		} else if _, ok := networkConfigs[binding.NetworkConfigRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.networkConfigRef.name %q does not match any NetworkConfig", prefix, binding.NetworkConfigRef.Name))
+		}
+		provider, hasProvider := providers[binding.ProviderRef.Name]
+		if binding.ProviderRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.providerRef.name is required", prefix))
+		} else if !hasProvider {
+			errs = append(errs, fmt.Sprintf("%s.providerRef.name %q does not match any InfraProvider", prefix, binding.ProviderRef.Name))
+		}
+		if binding.AttachmentRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.attachmentRef.name is required", prefix))
+		} else if hasProvider {
+			if _, ok := lookupNetworkAttachment(provider, binding.AttachmentRef.Name); !ok {
+				errs = append(errs, fmt.Sprintf("%s.attachmentRef.name %q does not match any InfraProvider/%s spec.networkAttachments[].name",
+					prefix, binding.AttachmentRef.Name, provider.Metadata.Name))
+			}
+		}
+		key := binding.ProviderRef.Name + "\x00" + binding.NetworkConfigRef.Name
+		if seen[key] {
+			errs = append(errs, fmt.Sprintf("%s duplicates providerRef.name %q and networkConfigRef.name %q",
+				prefix, binding.ProviderRef.Name, binding.NetworkConfigRef.Name))
+		}
+		seen[key] = true
+	}
+	return errs
+}
+
 func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	if len(ci.Spec.Components.Machines) == 0 {
@@ -238,7 +273,7 @@ func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1al
 		seen[m.Name] = true
 		errs = append(errs, validateClusterMachineFrom(prefix, ci, m, providers)...)
 		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs)...)
-		errs = append(errs, validateKubeVirtMachineNetworkConfig(prefix, m, providers, networkConfigs)...)
+		errs = append(errs, validateClusterMachineNetworkBinding(prefix, ci, m, providers)...)
 		errs = append(errs, validateBareMetalMachineNetworkInterfaces(prefix, m, providers, networkConfigs)...)
 	}
 	return errs
@@ -337,23 +372,63 @@ func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachin
 	return errs
 }
 
-func validateKubeVirtMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
-	if m.From.Provider == "" || m.From.Profile == "" || m.NetworkConfig.Ref.Name == "" {
+func validateClusterMachineNetworkBinding(prefix string, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider) []string {
+	if m.From.Provider == "" || m.NetworkConfig.Ref.Name == "" {
 		return nil
 	}
 	provider, ok := providers[m.From.Provider]
 	if !ok {
 		return nil
 	}
-	profile, ok := lookupMachineProfile(provider, m.From.Profile)
-	if !ok || v1alpha1.ProfileProvisionerKind(profile) != v1alpha1.ProvisionerKubeVirt {
+	machineKind, ok := clusterMachineProvisionerKind(m, provider)
+	if !ok {
 		return nil
 	}
-	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
-	if !ok || networkConfig.Spec.KubeVirt != nil {
+	binding, ok := clusterNetworkBinding(ci, m.From.Provider, m.NetworkConfig.Ref.Name)
+	if !ok {
+		if machineKind == v1alpha1.ProvisionerBareMetal {
+			return nil
+		}
+		return []string{fmt.Sprintf("%s.networkConfig.ref %q has no ClusterInfra/%s spec.networkBindings entry for InfraProvider/%s",
+			prefix, m.NetworkConfig.Ref.Name, ci.Metadata.Name, m.From.Provider)}
+	}
+	attachment, ok := lookupNetworkAttachment(provider, binding.AttachmentRef.Name)
+	if !ok {
 		return nil
 	}
-	return []string{fmt.Sprintf("%s.networkConfig.ref %q must reference a NetworkConfig with spec.kubevirt.nad for KubeVirt machines", prefix, m.NetworkConfig.Ref.Name)}
+	attachmentKind := v1alpha1.NetworkAttachmentKind(attachment)
+	if attachmentKind != machineKind {
+		return []string{fmt.Sprintf("%s.networkConfig.ref %q binds to InfraProvider/%s networkAttachment %q of kind %q, but machine substrate is %q",
+			prefix, m.NetworkConfig.Ref.Name, provider.Metadata.Name, attachment.Name, attachmentKind, machineKind)}
+	}
+	return nil
+}
+
+func clusterMachineProvisionerKind(m v1alpha1.ClusterMachineComponent, provider v1alpha1.InfraProvider) (string, bool) {
+	if m.From.Profile != "" {
+		profile, ok := lookupMachineProfile(provider, m.From.Profile)
+		if !ok {
+			return "", false
+		}
+		return v1alpha1.ProfileProvisionerKind(profile), true
+	}
+	if m.From.Name != "" {
+		machine, ok := lookupMachine(provider, m.From.Name)
+		if !ok {
+			return "", false
+		}
+		return v1alpha1.MachineProvisionerKind(machine), true
+	}
+	return "", false
+}
+
+func clusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkConfigName string) (v1alpha1.ClusterNetworkBinding, bool) {
+	for _, binding := range ci.Spec.NetworkBindings {
+		if binding.ProviderRef.Name == providerName && binding.NetworkConfigRef.Name == networkConfigName {
+			return binding, true
+		}
+	}
+	return v1alpha1.ClusterNetworkBinding{}, false
 }
 
 func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {

@@ -52,6 +52,11 @@ spec:
           credentialsRef:
             name: bmc-credentials
           disableCertificateVerification: true
+
+  networkAttachments:
+    - name: rack1-bond140-machine
+      baremetal:
+        vlan: 140
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

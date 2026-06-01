@@ -77,12 +77,12 @@ The desired-state API is defined in `api/v1alpha1` and specified in
   selection, secret sources, service access catalog entries, registry mirrors,
   and component images.
 - `InfraProvider` owns capabilities: explicit bare-metal machines, virtual
-  machine profiles, and substrate capabilities.
+  machine profiles, substrate network attachments, and substrate capabilities.
 - `InfraComponent` owns host-bound shared infra services, service placement,
   listeners, bind addresses, and routable endpoints.
 - `NetworkConfig` owns reusable machine-network data and NMState templates.
-- `ClusterInfra` owns endpoint VIP ownership, platform render mode, and
-  selected machines.
+- `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
+  machines, and logical-to-substrate network bindings.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
 - `StorageCluster` owns external storage intent. Managed clusters provision
   Ceph; imported clusters reference previously provisioned Ceph.
@@ -106,6 +106,8 @@ These boundaries are reflected in rendering:
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
+- Machine and VIP provider variables resolve substrate network attachments from
+  `ClusterInfra.networkBindings[]` to `InfraProvider.networkAttachments[]`.
 - `agent-config.yaml` global boot-artifact and time-source fields are rendered
   from disconnected install mode, the environment-selected artifact server
   route, and environment NTP sources.

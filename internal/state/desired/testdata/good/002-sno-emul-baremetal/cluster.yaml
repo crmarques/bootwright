@@ -16,6 +16,14 @@ spec:
     ingress:
       externalVip: 192.168.132.11
 
+  networkBindings:
+    - networkConfigRef:
+        name: sno-vlan
+      providerRef:
+        name: rack1-baremetal-provider
+      attachmentRef:
+        name: sno-vlan
+
   components:
     machines:
       - name: master-0

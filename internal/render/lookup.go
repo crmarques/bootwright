@@ -36,6 +36,24 @@ func findProviderMachine(p v1alpha1.InfraProvider, name string) (v1alpha1.Machin
 	return stateview.Machine(p, name)
 }
 
+func findNetworkAttachment(p v1alpha1.InfraProvider, name string) (v1alpha1.NetworkAttachmentCapability, bool) {
+	for _, attachment := range p.Spec.NetworkAttachments {
+		if attachment.Name == name {
+			return attachment, true
+		}
+	}
+	return v1alpha1.NetworkAttachmentCapability{}, false
+}
+
+func findClusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkName string) (v1alpha1.ClusterNetworkBinding, bool) {
+	for _, binding := range ci.Spec.NetworkBindings {
+		if binding.ProviderRef.Name == providerName && binding.NetworkConfigRef.Name == networkName {
+			return binding, true
+		}
+	}
+	return v1alpha1.ClusterNetworkBinding{}, false
+}
+
 func findClusterMachine(ci v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterMachineComponent, bool) {
 	for _, m := range ci.Spec.Components.Machines {
 		if m.Name == name {

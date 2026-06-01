@@ -35,12 +35,16 @@ func validateProviderCapabilities(p v1alpha1.InfraProvider, hosts map[string]v1a
 	caps := p.Spec
 	errs = append(errs, validateUniqueCapabilityNames(p, "machineProfiles", capabilityNames(caps.MachineProfiles, func(x v1alpha1.MachineProfileCapability) string { return x.Name }))...)
 	errs = append(errs, validateUniqueCapabilityNames(p, "machines", capabilityNames(caps.Machines, func(x v1alpha1.MachineCapability) string { return x.Name }))...)
+	errs = append(errs, validateUniqueCapabilityNames(p, "networkAttachments", capabilityNames(caps.NetworkAttachments, func(x v1alpha1.NetworkAttachmentCapability) string { return x.Name }))...)
 
 	for _, mp := range caps.MachineProfiles {
 		errs = append(errs, validateMachineProfile(p, mp, hosts, clusters)...)
 	}
 	for _, m := range caps.Machines {
 		errs = append(errs, validateProviderMachine(p, m, containerMachines[m.Name])...)
+	}
+	for _, a := range caps.NetworkAttachments {
+		errs = append(errs, validateProviderNetworkAttachment(p, a)...)
 	}
 	return errs
 }
@@ -90,6 +94,45 @@ func validateMachineProfile(p v1alpha1.InfraProvider, mp v1alpha1.MachineProfile
 	}
 	if set != 1 {
 		errs = append(errs, fmt.Sprintf("%s must set exactly one of {libvirt, vsphere, kubevirt} (got %d)", prefix, set))
+	}
+	return errs
+}
+
+func validateProviderNetworkAttachment(p v1alpha1.InfraProvider, a v1alpha1.NetworkAttachmentCapability) []string {
+	var errs []string
+	prefix := fmt.Sprintf("InfraProvider/%s spec.networkAttachments[%s]", p.Metadata.Name, a.Name)
+	set := 0
+	if a.Libvirt != nil {
+		set++
+		if a.Libvirt.Bridge == "" {
+			errs = append(errs, fmt.Sprintf("%s.libvirt.bridge is required", prefix))
+		}
+	}
+	if a.VSphere != nil {
+		set++
+		if a.VSphere.Portgroup == "" {
+			errs = append(errs, fmt.Sprintf("%s.vsphere.portgroup is required", prefix))
+		}
+	}
+	if a.KubeVirt != nil {
+		set++
+		if a.KubeVirt.NADRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.name is required", prefix))
+		}
+		if a.KubeVirt.NADRef.Namespace == "" {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.namespace is required", prefix))
+		} else if !IsDNSLabel(a.KubeVirt.NADRef.Namespace) {
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.namespace %q is not a DNS label", prefix, a.KubeVirt.NADRef.Namespace))
+		}
+	}
+	if a.BareMetal != nil {
+		set++
+		if vlan := a.BareMetal.VLAN; vlan < 0 || vlan > 4094 {
+			errs = append(errs, fmt.Sprintf("%s.baremetal.vlan %d must be 0..4094", prefix, vlan))
+		}
+	}
+	if set != 1 {
+		errs = append(errs, fmt.Sprintf("%s must set exactly one of {libvirt, vsphere, kubevirt, baremetal} (got %d)", prefix, set))
 	}
 	return errs
 }

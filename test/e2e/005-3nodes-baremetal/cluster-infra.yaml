@@ -16,6 +16,14 @@ spec:
     ingress:
       vip: 192.168.140.11
 
+  networkBindings:
+    - networkConfigRef:
+        name: rack1-bond140-machine
+      providerRef:
+        name: rack1-baremetal-provider
+      attachmentRef:
+        name: rack1-bond140-machine
+
   components:
     machines:
       - name: master-0

@@ -160,13 +160,11 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if got := agentIface["macAddress"]; got != mac {
 		t.Fatalf("agent-config MAC = %v, want vars MAC %s", got, mac)
 	}
-	networks := child["networks"].([]any)
-	network := networks[0].(map[string]any)
-	substrate := network["substrate"].(map[string]any)
-	if got := substrate["kind"]; got != v1alpha1.ProvisionerKubeVirt {
-		t.Fatalf("network substrate kind = %v, want kubevirt", got)
+	attachment := machine["networkAttachment"].(map[string]any)
+	if got := attachment["kind"]; got != v1alpha1.ProvisionerKubeVirt {
+		t.Fatalf("network attachment kind = %v, want kubevirt", got)
 	}
-	if got := substrate["kubevirt"].(map[string]any)["nad"]; got != "bootwright-dc1-child-ocp/dc1-child-net" {
+	if got := attachment["kubevirt"].(map[string]any)["nad"]; got != "bootwright-dc1-child-ocp/dc1-child-net" {
 		t.Fatalf("network NAD = %v, want bootwright-dc1-child-ocp/dc1-child-net", got)
 	}
 

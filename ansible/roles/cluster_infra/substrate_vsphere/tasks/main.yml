@@ -7,6 +7,6 @@
         from.profile  → bootwright_component.vsphere.{vcenters,
                           failureDomains,nodeNetworking,template}
         networkConfig → bootwright_component.networkConfig.ref
-        networks      → bootwright_current_cluster.networks[].substrate.vsphere.portgroup
+        networkAttachment → bootwright_component.networkAttachment.vsphere.portgroup
       Implement vCenter session + clone tasks here when adding vSphere
       runtime support.

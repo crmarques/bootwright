@@ -12,15 +12,6 @@
           | first
         ) | default({})
       }}
-    bootwright_kubevirt_network: >-
-      {{
-        (
-          bootwright_current_cluster.networks
-          | selectattr('name', 'equalto', bootwright_component.networkConfig.ref)
-          | list
-          | first
-        ) | default({})
-      }}
   changed_when: false
 
 - name: Resolve KubeVirt substrate inputs
@@ -28,7 +19,7 @@
     bootwright_kubevirt_kubeconfig: "{{ bootwright_component.kubevirt.kubeconfig | default('') }}"
     bootwright_kubevirt_namespace: "{{ bootwright_component.kubevirt.namespace | default('') }}"
     bootwright_kubevirt_storage_class: "{{ bootwright_component.kubevirt.storageClassRef | default(bootwright_kubevirt_default_storage_class) }}"
-    bootwright_kubevirt_nad: "{{ bootwright_kubevirt_network.substrate.kubevirt.nad | default('') }}"
+    bootwright_kubevirt_nad: "{{ bootwright_component.networkAttachment.kubevirt.nad | default('') }}"
     bootwright_kubevirt_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_kubevirt_root_dv_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}-root"
   changed_when: false

@@ -3,12 +3,12 @@
 # this host. Per-cluster: `bootwright_current_cluster` is set by the
 # layer playbook. The renderer projects per-frontend `attachment` on
 # every loadBalancer component:
-#   frontends[].attachment.kind     — libvirt | physical | vsphere | kubevirt
+#   frontends[].attachment.kind     — libvirt | baremetal | vsphere | kubevirt
 #   frontends[].attachment.libvirt  — { bridge, prefix } for kind=libvirt
 #
 # The role plumbs VIPs only when attachment.kind == 'libvirt'; for the
 # other kinds the VIP reaches the LB host through fabric the operator
-# owns (physical NIC, vSphere portgroup, kubevirt NAD) and needs no
+# owns (bare-metal NIC, vSphere portgroup, kubevirt NAD) and needs no
 # Linux IP plumbing.
 
 - name: Resolve LB components for this cluster on this host

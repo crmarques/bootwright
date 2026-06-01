@@ -27,6 +27,3 @@ spec:
             next-hop-address: 192.168.151.1
             next-hop-interface: primary
             table-id: 254
-
-  kubevirt:
-    nad: bootwright-dc1-child-ocp/dc1-child-net

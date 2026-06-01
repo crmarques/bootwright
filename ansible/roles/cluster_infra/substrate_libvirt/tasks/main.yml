@@ -20,7 +20,7 @@
 
 - name: Resolve libvirt network identifiers
   ansible.builtin.set_fact:
-    bootwright_libvirt_bridge: "{{ bootwright_libvirt_network.substrate.libvirt.bridge }}"
+    bootwright_libvirt_bridge: "{{ bootwright_component.networkAttachment.libvirt.bridge }}"
     bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
     bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
     bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"

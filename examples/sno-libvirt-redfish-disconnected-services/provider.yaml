@@ -18,3 +18,7 @@ spec:
             credentialRef:
               name: bmc-credentials
 
+  networkAttachments:
+    - name: sno-bridge
+      libvirt:
+        bridge: vbr-cb-sno-disc

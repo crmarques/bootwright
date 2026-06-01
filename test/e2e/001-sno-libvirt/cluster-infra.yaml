@@ -25,6 +25,14 @@ spec:
         componentRef:
           name: load-balancer
 
+  networkBindings:
+    - networkConfigRef:
+        name: sno-bridge
+      providerRef:
+        name: lab-libvirt-provider
+      attachmentRef:
+        name: sno-bridge
+
   components:
     machines:
       - name: master-0

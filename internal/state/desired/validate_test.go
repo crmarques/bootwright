@@ -173,7 +173,6 @@ spec:
       routes:
         config:
           - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: bond0.132, table-id: 254 }
-  physical: {}
 `
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "interface: primary", "interface: bond0.132", 1)
 	writeFiles(t, dir, files)
@@ -1713,11 +1712,32 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not declared in Environment/env spec.secrets`,
 		},
 		{
-			name: "missing-nad",
+			name: "missing-network-binding",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "\n  kubevirt:\n    nad: bootwright-child-ocp/child-ocp-net\n", "\n", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "  networkBindings:\n    - networkConfigRef: { name: child-machine-net }\n      providerRef: { name: child-kubevirt-provider }\n      attachmentRef: { name: child-machine-net }\n", "", 1)
 			},
-			wantSubstring: `networkConfig.ref "child-machine-net" must reference a NetworkConfig with spec.kubevirt.nad for KubeVirt machines`,
+			wantSubstring: `networkConfig.ref "child-machine-net" has no ClusterInfra/child-ocp-infra spec.networkBindings entry for InfraProvider/child-kubevirt-provider`,
+		},
+		{
+			name: "missing-network-attachment",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "attachmentRef: { name: child-machine-net }", "attachmentRef: { name: missing }", 1)
+			},
+			wantSubstring: `attachmentRef.name "missing" does not match any InfraProvider/child-kubevirt-provider spec.networkAttachments[].name`,
+		},
+		{
+			name: "network-attachment-kind-mismatch",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n", "      libvirt:\n        bridge: vbr-child\n", 1)
+			},
+			wantSubstring: `networkConfig.ref "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment "child-machine-net" of kind "libvirt", but machine substrate is "kubevirt"`,
+		},
+		{
+			name: "network-attachment-nad-namespace-required",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "          namespace: bootwright-child-ocp\n", "", 1)
+			},
+			wantSubstring: `networkAttachments[child-machine-net].kubevirt.nadRef.namespace is required`,
 		},
 		{
 			name: "missing-kubevirt-capability",
@@ -1800,8 +1820,6 @@ spec:
       routes:
         config:
           - { destination: 0.0.0.0/0, next-hop-address: 192.168.134.1, next-hop-interface: primary, table-id: 254 }
-  kubevirt:
-    nad: bootwright-child-ocp/child-ocp-net
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -1818,6 +1836,12 @@ spec:
         namespace: bootwright-child-ocp
         storageClassRef:
           name: lvms-vg1
+  networkAttachments:
+    - name: child-machine-net
+      kubevirt:
+        nadRef:
+          name: child-ocp-net
+          namespace: bootwright-child-ocp
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterInfra
@@ -1832,6 +1856,10 @@ spec:
       externalVip: 192.168.134.20
     ingress:
       externalVip: 192.168.134.21
+  networkBindings:
+    - networkConfigRef: { name: child-machine-net }
+      providerRef: { name: child-kubevirt-provider }
+      attachmentRef: { name: child-machine-net }
   components:
     machines:
       - name: master-0
@@ -1885,8 +1913,8 @@ spec:
     openshift-pull-secret:
     cluster-admin-ssh-key: { file: ~/ssh.pub }
 `,
-		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1", "ns-a/net-a"),
-		"network-b.yaml": kubeVirtCycleNetworkYAML("net-b", "192.168.141.0/24", "192.168.141.1", "ns-b/net-b"),
+		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1"),
+		"network-b.yaml": kubeVirtCycleNetworkYAML("net-b", "192.168.141.0/24", "192.168.141.1"),
 		"provider-a.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata: { name: provider-a }
@@ -1900,6 +1928,12 @@ spec:
         hostContainerClusterRef:
           name: cluster-b
         namespace: ns-a
+  networkAttachments:
+    - name: net-a
+      kubevirt:
+        nadRef:
+          name: net-a
+          namespace: ns-a
 `,
 		"provider-b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -1914,6 +1948,12 @@ spec:
         hostContainerClusterRef:
           name: cluster-a
         namespace: ns-b
+  networkAttachments:
+    - name: net-b
+      kubevirt:
+        nadRef:
+          name: net-b
+          namespace: ns-b
 `,
 		"infra-a.yaml":   kubeVirtCycleInfraYAML("infra-a", "provider-a", "net-a", "192.168.140.20", "192.168.140.21"),
 		"infra-b.yaml":   kubeVirtCycleInfraYAML("infra-b", "provider-b", "net-b", "192.168.141.20", "192.168.141.21"),
@@ -1964,7 +2004,7 @@ metadata:
 	}
 }
 
-func kubeVirtCycleNetworkYAML(name, cidr, gateway, nad string) string {
+func kubeVirtCycleNetworkYAML(name, cidr, gateway string) string {
 	return `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata: { name: ` + name + ` }
@@ -1978,8 +2018,6 @@ spec:
       routes:
         config:
           - { destination: 0.0.0.0/0, next-hop-address: ` + gateway + `, next-hop-interface: primary, table-id: 254 }
-  kubevirt:
-    nad: ` + nad + `
 `
 }
 
@@ -1997,6 +2035,10 @@ spec:
       externalVip: ` + nodeIP + `
     ingress:
       externalVip: ` + ingressIP + `
+  networkBindings:
+    - networkConfigRef: { name: ` + network + ` }
+      providerRef: { name: ` + provider + ` }
+      attachmentRef: { name: ` + network + ` }
   components:
     machines:
       - name: master-0
@@ -2072,9 +2114,8 @@ spec:
     networkConfig:
       interfaces:
         - { name: ens192, type: ethernet, state: up, ipv4: { enabled: true, dhcp: false }, ipv6: { enabled: false } }
-  vsphere: { portgroup: VM_Network_1 }
 `,
-		"provider.yaml": `apiVersion: bootwright.io/v1alpha1
+		"provider.yaml": strings.Replace(`apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata: { name: vsphere }
 spec:
@@ -2099,7 +2140,11 @@ spec:
               computeCluster: /dc1/host/cluster1
               datastore: /dc1/datastore/datastore1
               networks: [VM_Network_1, VM_Network_2]
-` + nodeNetworking,
+__NODE_NETWORKING__  networkAttachments:
+    - name: vsphere-net
+      vsphere:
+        portgroup: VM_Network_1
+`, "__NODE_NETWORKING__", nodeNetworking, 1),
 		"cluster.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterInfra
 metadata: { name: vsphere-infra }
@@ -2113,6 +2158,10 @@ spec:
       externalVip: 192.168.133.10
     ingress:
       externalVip: 192.168.133.11
+  networkBindings:
+    - networkConfigRef: { name: vsphere-net }
+      providerRef: { name: vsphere }
+      attachmentRef: { name: vsphere-net }
   components:
     machines:
       - name: master-0
@@ -2286,7 +2335,6 @@ spec:
       routes:
         config:
           - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: primary, table-id: 254 }
-  physical: {}
 `
 
 const newProviderYAML = `apiVersion: bootwright.io/v1alpha1

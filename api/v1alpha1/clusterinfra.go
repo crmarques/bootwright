@@ -11,9 +11,16 @@ type ClusterInfra struct {
 }
 
 type ClusterInfraSpec struct {
-	Platform   ClusterInfraPlatform `yaml:"platform,omitempty" json:"platform,omitempty"`
-	Endpoints  map[string]Endpoint  `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
-	Components ClusterComponents    `yaml:"components" json:"components"`
+	Platform        ClusterInfraPlatform    `yaml:"platform,omitempty" json:"platform,omitempty"`
+	Endpoints       map[string]Endpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	NetworkBindings []ClusterNetworkBinding `yaml:"networkBindings,omitempty" json:"networkBindings,omitempty"`
+	Components      ClusterComponents       `yaml:"components" json:"components"`
+}
+
+type ClusterNetworkBinding struct {
+	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef" json:"networkConfigRef"`
+	ProviderRef      LocalObjectReference `yaml:"providerRef" json:"providerRef"`
+	AttachmentRef    LocalObjectReference `yaml:"attachmentRef" json:"attachmentRef"`
 }
 
 type ClusterInfraPlatform struct {

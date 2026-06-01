@@ -184,6 +184,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 		"bootRole":      driver.Dispatch.BootRole,
 		"networkConfig": clusterMachineNetworkConfigVars(m.NetworkConfig),
 	}
+	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
+		out["networkAttachment"] = attachment
+	}
 	applyMachineRoleContract(out, driver.Roles)
 	if ip := machinePrimaryIP(m); ip != "" {
 		out["primaryIPAddress"] = ip

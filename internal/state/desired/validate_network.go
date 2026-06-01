@@ -74,34 +74,6 @@ func validateNetworkConfigSpec(n v1alpha1.NetworkConfig, dnsRefs map[string]bool
 			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", owner, ref))
 		}
 	}
-	set := 0
-	if n.Spec.Libvirt != nil {
-		set++
-		if n.Spec.Libvirt.Bridge == "" {
-			errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.libvirt.bridge is required", n.Metadata.Name))
-		}
-	}
-	if n.Spec.VSphere != nil {
-		set++
-		if n.Spec.VSphere.Portgroup == "" {
-			errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.vsphere.portgroup is required", n.Metadata.Name))
-		}
-	}
-	if n.Spec.KubeVirt != nil {
-		set++
-		if n.Spec.KubeVirt.NAD == "" {
-			errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.kubevirt.nad is required", n.Metadata.Name))
-		}
-	}
-	if n.Spec.Physical != nil {
-		set++
-		if vlan := n.Spec.Physical.VLAN; vlan < 0 || vlan > 4094 {
-			errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec.physical.vlan %d must be 0..4094", n.Metadata.Name, vlan))
-		}
-	}
-	if set > 1 {
-		errs = append(errs, fmt.Sprintf("NetworkConfig/%s spec may set at most one substrate hint of {libvirt, vsphere, kubevirt, physical} (got %d)", n.Metadata.Name, set))
-	}
 	return errs
 }
 

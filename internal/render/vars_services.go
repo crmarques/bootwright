@@ -77,29 +77,22 @@ func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, compo
 			"backends":    backends,
 		}
 		if net, ok := endpointNetworkConfig(state, ci, vip); ok {
-			entry["attachment"] = vipAttachmentVars(net)
+			entry["attachment"] = vipAttachmentVars(state, ci, net)
 		}
 		out = append(out, entry)
 	}
 	return out
 }
 
-func vipAttachmentVars(net v1alpha1.NetworkConfig) map[string]any {
-	out := map[string]any{}
-	switch {
-	case net.Spec.Libvirt != nil:
-		out["kind"] = v1alpha1.ProvisionerLibvirt
-		libvirt := map[string]any{"bridge": net.Spec.Libvirt.Bridge}
+func vipAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, net v1alpha1.NetworkConfig) map[string]any {
+	out := clusterNetworkAttachmentVars(state, ci, net.Metadata.Name)
+	if out == nil {
+		return map[string]any{}
+	}
+	if libvirt, ok := out["libvirt"].(map[string]any); ok {
 		if p := cidrPrefix(firstMachineNetworkCIDR(net)); p > 0 {
 			libvirt["prefix"] = p
 		}
-		out["libvirt"] = libvirt
-	case net.Spec.VSphere != nil:
-		out["kind"] = v1alpha1.ProvisionerVSphere
-	case net.Spec.KubeVirt != nil:
-		out["kind"] = v1alpha1.ProvisionerKubeVirt
-	case net.Spec.Physical != nil:
-		out["kind"] = v1alpha1.ProvisionerBareMetal
 	}
 	return out
 }

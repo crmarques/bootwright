@@ -18,6 +18,11 @@ spec:
           credentialsRef:
             name: bmc-credentials
           disableCertificateVerification: true
+
+  networkAttachments:
+    - name: sno-vlan
+      baremetal:
+        vlan: 0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

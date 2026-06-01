@@ -17,10 +17,10 @@ Operators author desired state as sixteen YAML kinds:
 | --- | --- |
 | `Environment` | What defaults, selected resource files, secrets, proxy, mirrors, and component image pins apply to the fleet? |
 | `Host` | Which SSH targets and named addresses can provider or service actions use? |
-| `InfraProvider` | What machines and profiles does each substrate offer? |
+| `InfraProvider` | What machines, profiles, and network attachments does each substrate offer? |
 | `InfraComponent` | Which host-bound shared services and routable endpoints exist outside cluster intent? |
 | `NetworkConfig` | What machine CIDRs and NMState templates can nodes consume? |
-| `ClusterInfra` | Which machines, endpoints, platform mode, and infra components back this cluster? |
+| `ClusterInfra` | Which machines, endpoints, network bindings, platform mode, and infra components back this cluster? |
 | `ContainerCluster` | What OpenShift or OKD cluster should be installed on those machines? |
 | `StorageCluster` | What external storage cluster should be provisioned from preinstalled storage nodes? |
 | `StoragePlacementPolicy` | Which storage placement and replicated-pool defaults should pools use? |
@@ -33,10 +33,11 @@ Operators author desired state as sixteen YAML kinds:
 | `ClusterAddonBinding` | Which installed cluster should receive the post-install bootstrap set: add-ons, profiles, and optional storage exports? |
 
 Every fact has one owner. References flow from cluster intent to cluster
-infrastructure, then to providers, infra components, and hosts. Machine MACs
-and BMC details live in `InfraProvider`; artifact service endpoints live in
-`InfraComponent`; per-machine IP overlays live in `ClusterInfra`; cluster and
-service networks live in `ContainerCluster`.
+infrastructure, then to providers, infra components, and hosts. Machine MACs,
+BMC details, and substrate network attachments live in `InfraProvider`;
+artifact service endpoints live in `InfraComponent`; per-machine IP overlays
+and network attachment bindings live in `ClusterInfra`; cluster and service
+networks live in `ContainerCluster`.
 Post-install components do not live under `ContainerCluster.spec.install`;
 they are separate desired-state resources selected by `Environment` and bound
 to clusters after provisioning completes.
@@ -57,8 +58,10 @@ operational fact:
 - `ClusterAddonBinding.storage[]` renders Data Foundation external-mode
   attachment manifests.
 - `NetworkConfig` renders machine networks and reusable NMState templates.
-- `ClusterInfra` renders platform and host bindings.
-- `InfraProvider` renders substrate inventory and platform facts.
+- `ClusterInfra` renders platform, host bindings, and network attachment
+  bindings.
+- `InfraProvider` renders substrate inventory, network attachments, and
+  platform facts.
 - `InfraComponent` renders shared service placement and routeable endpoints.
 - `ClusterAddon` renders generated OLM resources or manifest-set apply
   plans after the target cluster is installed.

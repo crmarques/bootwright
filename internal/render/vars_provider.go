@@ -43,6 +43,15 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 		}
 		out["machines"] = machines
 	}
+	if len(p.Spec.NetworkAttachments) > 0 {
+		attachments := make([]any, 0, len(p.Spec.NetworkAttachments))
+		for _, attachment := range p.Spec.NetworkAttachments {
+			entry := networkAttachmentVars(attachment)
+			entry["name"] = attachment.Name
+			attachments = append(attachments, entry)
+		}
+		out["networkAttachments"] = attachments
+	}
 	return out
 }
 

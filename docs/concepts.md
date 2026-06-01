@@ -128,6 +128,11 @@ graph.
   machine.
 - `template.networkConfig` renders to each agent host after overlays.
 
+Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
+KubeVirt NADs, and bare-metal VLANs, live in
+`InfraProvider.spec.networkAttachments[]`. A cluster selects them with
+`ClusterInfra.spec.networkBindings[]`.
+
 Most hosts reuse the same NMState template and only override addresses in
 `ClusterInfra.components.machines[].networkConfig.addresses[]`. Advanced hosts
 may provide a full machine-level `networkConfig` override.

@@ -9,7 +9,10 @@ description: NetworkConfig templates, machine overlays, endpoints, and load bala
 
 - `machineNetwork[]`, rendered into `install-config.yaml`
 - `template.networkConfig`, rendered into `agent-config.yaml`
-- optional substrate hints for Bootwright provider setup
+
+Substrate network surfaces live on
+`InfraProvider.spec.networkAttachments[]`. `ClusterInfra.spec.networkBindings[]`
+maps a logical `NetworkConfig` to the selected provider attachment.
 
 ## Bonded Bare-Metal Template
 
@@ -72,6 +75,35 @@ networkConfig:
       ipv4:
         - ip: 192.168.133.20
           prefix-length: 24
+```
+
+## Provider Attachments
+
+Provider attachments describe how a substrate exposes a logical machine
+network:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  networkAttachments:
+    - name: rack1-machine-net
+      libvirt:
+        bridge: vbr-rack1
+```
+
+Bind that attachment from the cluster infrastructure:
+
+```yaml
+networkBindings:
+  - networkConfigRef:
+      name: rack1-bonded-machine
+    providerRef:
+      name: lab-libvirt
+    attachmentRef:
+      name: rack1-machine-net
 ```
 
 ## Endpoints

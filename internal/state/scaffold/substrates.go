@@ -40,8 +40,21 @@ spec:
     - libvirt
     - container-runtime
 `,
-		NetworkConnectivity: `  libvirt:
-    bridge: vbr-{{.NetworkID}}          # libvirt bridge Bootwright will create
+		ProviderNetworkAttachments: `
+  networkAttachments:
+    - name: {{.NetworkID}}
+      libvirt:
+        bridge: vbr-{{.NetworkID}}      # libvirt bridge Bootwright will create
+
+`,
+		ClusterNetworkBindings: `
+  networkBindings:
+    - networkConfigRef:
+        name: {{.NetworkID}}
+      providerRef:
+        name: {{.ProviderID}}
+      attachmentRef:
+        name: {{.NetworkID}}
 `,
 		NetworkDNSServers: "",
 		NetworkDNSRefs: `  dnsRefs:
@@ -155,8 +168,21 @@ spec:
             endpoint: bmc
 
 `,
-		NetworkConnectivity: `  physical:
-    vlan: 0                              # untagged; set a non-zero VLAN ID for tagged
+		ProviderNetworkAttachments: `
+  networkAttachments:
+    - name: {{.NetworkID}}
+      baremetal:
+        vlan: 0                          # untagged; set a non-zero VLAN ID for tagged
+
+`,
+		ClusterNetworkBindings: `
+  networkBindings:
+    - networkConfigRef:
+        name: {{.NetworkID}}
+      providerRef:
+        name: {{.ProviderID}}
+      attachmentRef:
+        name: {{.NetworkID}}
 `,
 		ProviderCapabilities: `  machines:                           # explicit hardware inventory
     - name: rack1-srv1
@@ -238,8 +264,21 @@ spec:
   capabilities:
     - container-runtime
 `,
-		NetworkConnectivity: `  vsphere:
-    portgroup: ocp-install              # vSphere portgroup fronting this network
+		ProviderNetworkAttachments: `
+  networkAttachments:
+    - name: {{.NetworkID}}
+      vsphere:
+        portgroup: ocp-install          # vSphere portgroup fronting this network
+
+`,
+		ClusterNetworkBindings: `
+  networkBindings:
+    - networkConfigRef:
+        name: {{.NetworkID}}
+      providerRef:
+        name: {{.ProviderID}}
+      attachmentRef:
+        name: {{.NetworkID}}
 `,
 		ProviderCapabilities: `  machineProfiles:
     - name: sno
@@ -294,69 +333,5 @@ spec:
 `,
 		BootDevice: "/dev/sda",
 	},
-	ProviderKubeVirt: {
-		ProviderNameSuffix: "kubevirt",
-		NetworkNameSuffix:  "nad",
-		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    cnv-cluster-kubeconfig:
-      file: ~/.kube/cnv-cluster.kubeconfig
-`,
-		HostsYAML: `apiVersion: bootwright.io/v1alpha1
-kind: Host
-metadata:
-  name: bastion
-spec:
-  addresses:
-    - name: ssh
-      address: bastion.example.test       # change to the bastion host's address
-
-  ssh:
-    addressName: ssh
-    keyRef:
-      name: provider-host-ssh
-
-  capabilities:
-    - container-runtime
-`,
-		NetworkConnectivity: `  kubevirt:
-    nad: ocp-install                    # NetworkAttachmentDefinition on the host cluster
-`,
-		ProviderCapabilities: `  machineProfiles:
-    - name: sno
-      cpu: 8
-      memoryMiB: 22528
-      diskGiB: 120
-      kubevirt:
-        kubeconfigRef:
-          name: cnv-cluster-kubeconfig
-        namespace: bootwright-vms
-        # storageClassRef:
-        #   name: <storage-class>       # optional override
-`,
-		ClusterMachineFrom: `        from:
-          provider: {{.ProviderID}}
-          profile: sno`,
-		ClusterMachineExtras: "",
-		// No nameResolution component on this substrate, so the
-		// renderer will not auto-inject a DNS service IP — keep an
-		// explicit upstream resolver here.
-		NetworkDNSServers: `      dns-resolver:
-        config:
-          server:
-            - 192.168.130.1
-`,
-		ClusterServices: "",
-		EndpointsYAML: `    api:
-      externalVip: 192.168.130.10
-    apiInt:
-      externalVip: 192.168.130.10
-    ingress:
-      externalVip: 192.168.130.11
-`,
-		PlatformYAML: `  platform:
-    type: none
-`,
-		BootDevice: "/dev/vda",
-	},
+	ProviderKubeVirt: kubeVirtSubstrate,
 }
