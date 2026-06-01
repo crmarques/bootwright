@@ -56,6 +56,17 @@ func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommo
 	}
 }
 
+func scopeTargetKind(scope scopeSpec) string {
+	switch scope.name {
+	case "clusters", "infra", "all":
+		return "cluster"
+	case "storage-cluster":
+		return "StorageCluster"
+	default:
+		return "ContainerCluster"
+	}
+}
+
 func printBundlePath(stdout io.Writer, bundleDir string) {
 	p := cliout.NewContinuation(stdout)
 	p.Section("Bundle")

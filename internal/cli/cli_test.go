@@ -113,6 +113,9 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if !strings.Contains(stdout, "Apply infrastructure, storage, OpenShift clusters, and addons") {
 		t.Fatalf("apply all help does not mention addons:\n%s", stdout)
 	}
+	if !strings.Contains(stdout, "comma-separated cluster names to apply") {
+		t.Fatalf("apply all help does not describe mixed cluster scope:\n%s", stdout)
+	}
 
 	stdout, stderr, code = runCLI(t, "apply", "clusters", "--help")
 	if code != 0 {
@@ -134,6 +137,16 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	for _, reject := range []string{"--ansible-playbook", "--ask-become-pass", "--check", "--parallelism-per-host", "--parallelism-redfish"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply addons help exposes provider-host flag %q:\n%s", reject, stdout)
+		}
+	}
+
+	stdout, stderr, code = runCLI(t, "check", "storage-cluster", "--help")
+	if code != 0 {
+		t.Fatalf("check storage-cluster --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"comma-separated StorageCluster names to check", "bootwright check storage-cluster --scope ceph-storage"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("check storage-cluster help missing %q:\n%s", want, stdout)
 		}
 	}
 }

@@ -6,12 +6,26 @@ is to start from the requested user-authored input files and trace the whole
 implementation path until the final user-visible and machine-consumed output.
 
 Find bugs, unimplemented intent, spec drift, stale assumptions, unsafe side
-effects, and Go-to-Ansible contract mismatches. Be ready to fix the problems
-you find: every finding should identify the smallest safe implementation
-change, the tests or checks that would prove it, and the files likely touched.
+effects, and Go-to-Ansible contract mismatches. Always treat every input file
+under `examples/` as user-authored desired state and virtually execute every
+represented flow, even when the user asks about one narrower file or command.
+The review is not complete until you have traced each example through the Go
+loader, resource selection, normalization, validation, graph filtering,
+renderer, apply planner, generated contracts, Ansible playbooks, roles,
+templates, scripts, external commands, tests, fixtures, docs, and final
+operator-visible or machine-consumed outputs that the flow touches. Be ready
+to fix the problems you find: every finding should identify the smallest safe
+implementation change, the tests or checks that would prove it, and the files
+likely touched.
 
 This is a deep code review. Do not edit files during the review unless the user
 explicitly asks you to fix findings now or selects findings to implement.
+Do not run `make check` while executing this review prompt unless the user
+explicitly asks for it. Use targeted, read-only commands such as
+`bootwright check syntax`, focused render or plan inspection, narrow searches,
+and existing test evidence. If the user asks you to fix findings during the
+same turn, implement the smallest safe fixes and run only the focused
+validation that proves those fixes.
 
 ## Expected User Input
 
@@ -22,12 +36,29 @@ The user should provide one or more of:
 - a command flow, such as `check`, `render`, `apply infra`, or `apply clusters`
 - the expected user intent or final output to verify
 
-When the user asks for an examples-wide review, or when the review scope is
-the current repository examples, enumerate every available example directory
-under `examples/` and mentally exercise each represented flow. Treat each
-example as user-authored desired state and trace every Go package, generated
-contract, Ansible playbook, role, template, script, and external command path
-that flow touches.
+Always enumerate every available example directory under `examples/` and every
+YAML input file inside those directories before judging implementation. For
+each example, build an inventory that lists:
+
+- every input file and authored kind it contributes;
+- the effective `Environment.spec.resources[]` selection and any files
+  intentionally excluded from Bootwright decoding, such as manifest-set
+  payloads;
+- selected container clusters, storage clusters, add-on bindings, providers,
+  hosts, network configs, infra components, storage objects, and add-ons;
+- represented command flows: `check syntax`, `check all` readiness surfaces,
+  `render effective`, `render installer`, `render storage`, `apply infra`,
+  `apply storage-cluster`, `apply clusters`, `apply container-cluster`,
+  `apply addons`, `apply all`, and relevant destroy/status/access flows.
+
+Mentally execute every represented flow from input to final side effect. Trace
+every Go package, function family, generated file, inventory group, variable,
+lock key, ledger entry, install record, Ansible playbook, role, task, handler,
+template, script, and external command that the example can touch. Use the
+requested input as the primary focus when provided, but keep the full example
+set as the mandatory drift and regression baseline. Do not sample one happy
+path and generalize; compare examples against each other to find stale
+patterns and missing coverage.
 
 If the starting files or command are missing, infer a narrow scope from the
 conversation or ask one blocking question. Do not invent a scenario when the
@@ -155,13 +186,13 @@ the path in this order:
 12. **Tests.** Identify which unit, fixture, renderer, CLI, or Ansible tests
     already prove the behavior and which focused tests are missing.
 
-For examples-wide reviews, repeat this mentally for every example under
-`examples/`. Do not stop after sampling one happy path. Build an example
-inventory that names each example, selected `Environment`, loaded resources,
-declared clusters, storage clusters, add-ons, providers, supported command
-flows, expected rendered artifacts, and Ansible/scripts touched. Compare
-examples against each other to find stale patterns, duplicate flow logic,
-provider-specific leaks, missing tests, and spec drift.
+For every review, repeat this mentally for every example under `examples/`.
+Do not stop after sampling one happy path. Build an example inventory that
+names each example, every input file, selected `Environment`, loaded
+resources, declared clusters, storage clusters, add-ons, providers, supported
+command flows, expected rendered artifacts, and Ansible/scripts touched.
+Compare examples against each other to find stale patterns, duplicate flow
+logic, provider-specific leaks, missing tests, and spec drift.
 
 Produce a trace matrix for non-trivial flows:
 

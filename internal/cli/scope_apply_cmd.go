@@ -48,14 +48,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
-	scopeTargetKind := "ContainerCluster"
-	if scope.name == "clusters" {
-		scopeTargetKind = "cluster"
-	}
-	if scope.name == "storage-cluster" {
-		scopeTargetKind = "StorageCluster"
-	}
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible, scopeTargetKind)
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible, scopeTargetKind(scope))
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)

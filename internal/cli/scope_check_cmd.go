@@ -18,20 +18,13 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		dryRun bool
 	)
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Check " + scope.name + " prerequisites",
-		Args:  cobra.NoArgs,
-		Example: fmt.Sprintf(`  # Validate the current context and run the read-only Ansible preflight
-  bootwright check %[1]s
-
-  # Limit to specific clusters
-  bootwright check %[1]s --scope sno-libvirt,managed-01
-
-  # Print the planned Ansible command without executing it
-  bootwright check %[1]s --dry-run`, scope.name),
+		Use:     "check",
+		Short:   "Check " + scope.name + " prerequisites",
+		Args:    cobra.NoArgs,
+		Example: scopeCheckExample(scope.name),
 	}
 	cf := addCommonFlags()
-	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, false), "check")
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "check", true, scopeTargetKind(scope))
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
@@ -101,4 +94,27 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		return nil
 	}
 	return cmd
+}
+
+func scopeCheckExample(scopeName string) string {
+	switch scopeName {
+	case "storage-cluster":
+		return fmt.Sprintf(`  # Validate the current context and run the read-only Ansible preflight
+  bootwright check %[1]s
+
+  # Limit to specific storage clusters
+  bootwright check %[1]s --scope ceph-storage
+
+  # Print the planned Ansible command without executing it
+  bootwright check %[1]s --dry-run`, scopeName)
+	default:
+		return fmt.Sprintf(`  # Validate the current context and run the read-only Ansible preflight
+  bootwright check %[1]s
+
+  # Limit to specific clusters
+  bootwright check %[1]s --scope sno-libvirt,managed-01
+
+  # Print the planned Ansible command without executing it
+  bootwright check %[1]s --dry-run`, scopeName)
+	}
 }
