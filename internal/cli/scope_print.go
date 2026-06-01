@@ -247,7 +247,7 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 
 func clusterUsesLoadBalancerComponent(ci v1alpha1.ClusterInfra) bool {
 	for _, endpoint := range ci.Spec.Endpoints {
-		if endpoint.ProvidedBy != nil && endpoint.ProvidedBy.ComponentRef.Name != "" {
+		if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent && endpoint.Source.ComponentRef.Name != "" {
 			return true
 		}
 	}

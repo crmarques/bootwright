@@ -340,7 +340,11 @@ func clusterInfra(name, machineProvider, networkName string) v1alpha1.ClusterInf
 		Spec: v1alpha1.ClusterInfraSpec{
 			Endpoints: map[string]v1alpha1.Endpoint{
 				v1alpha1.EndpointAPI: {
-					ProvidedBy: &v1alpha1.EndpointProvidedBy{ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"}, Address: "api"},
+					Source: v1alpha1.EndpointSource{
+						Type:         v1alpha1.EndpointSourceInfraComponent,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
+						BindAddress:  "api",
+					},
 				},
 			},
 			Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
@@ -358,7 +362,12 @@ func containerCluster(name, infraName string) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Install: v1alpha1.OCPInstallSpec{Mode: v1alpha1.InstallModeDisconnected},
+			Install: v1alpha1.OCPInstallSpec{
+				Mode: v1alpha1.InstallModeDisconnected,
+				EndpointRefs: v1alpha1.ContainerEndpointRefs{
+					API: v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
+				},
+			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",
 				Role:     "master",

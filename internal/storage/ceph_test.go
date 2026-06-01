@@ -107,15 +107,20 @@ func minimalStorageState() v1alpha1.State {
 	return v1alpha1.State{
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
-				Name: "ceph-dc1-0",
-				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-					Addresses: []v1alpha1.NetworkConfigAddress{{
-						Interface: "primary",
-						IPv4:      []v1alpha1.NetworkIPAddress{{IP: "192.168.141.30"}},
-					}},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Endpoints: map[string]v1alpha1.Endpoint{
+					"rgw-public": {DNSName: "rgw.example.test", Port: 443},
 				},
-			}}}},
+				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+					Name: "ceph-dc1-0",
+					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
+						Addresses: []v1alpha1.NetworkConfigAddress{{
+							Interface: "primary",
+							IPv4:      []v1alpha1.NetworkIPAddress{{IP: "192.168.141.30"}},
+						}},
+					},
+				}}},
+			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -162,7 +167,7 @@ func dataFoundationStorageState() v1alpha1.State {
 		Metadata: v1alpha1.Metadata{Name: "rgw"},
 		Spec: v1alpha1.StorageObjectGatewaySpec{
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-			PublicEndpoint:    v1alpha1.StoragePublicEndpoint{DNSName: "rgw.example.test", Port: 443},
+			PublicEndpointRef: v1alpha1.EndpointRef{Name: "rgw-public"},
 			Ceph:              v1alpha1.StorageObjectGatewayCephSpec{ServiceID: "rgw"},
 		},
 	}}

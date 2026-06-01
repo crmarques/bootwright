@@ -109,8 +109,12 @@ func usesSushyTools(state v1alpha1.State) bool {
 }
 
 func usesManagedHAProxy(state v1alpha1.State) bool {
-	for _, ci := range state.ClusterInfras {
-		if len(loadBalancerComponentsForCluster(state, ci)) > 0 {
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInfraForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
+		if len(loadBalancerComponentsForCluster(state, ci, ocp)) > 0 {
 			return true
 		}
 	}

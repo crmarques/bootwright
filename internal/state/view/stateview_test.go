@@ -72,7 +72,11 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 		Spec: v1alpha1.ClusterInfraSpec{
 			Endpoints: map[string]v1alpha1.Endpoint{
 				v1alpha1.EndpointAPI: {
-					ProvidedBy: &v1alpha1.EndpointProvidedBy{ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"}, Address: "api"},
+					Source: v1alpha1.EndpointSource{
+						Type:         v1alpha1.EndpointSourceInfraComponent,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"},
+						BindAddress:  "api",
+					},
 				},
 			},
 			Components: v1alpha1.ClusterComponents{
@@ -147,7 +151,7 @@ func TestHostRouteAddressFallback(t *testing.T) {
 	infra := v1alpha1.ClusterInfra{
 		Spec: v1alpha1.ClusterInfraSpec{
 			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI: {VIP: "192.168.133.10"},
+				v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
 			},
 			Components: v1alpha1.ClusterComponents{
 				Machines: []v1alpha1.ClusterMachineComponent{{

@@ -43,4 +43,9 @@
 - name: Report external endpoint DNS diagnostics
   ansible.builtin.import_role:
     name: external_network_validate
-  when: bootwright_current_cluster.endpoints | selectattr('externalVip', 'defined') | list | length > 0
+  when: >-
+    bootwright_current_cluster.endpoints
+    | selectattr('source', 'defined')
+    | selectattr('source.type', 'equalto', 'external')
+    | list
+    | length > 0

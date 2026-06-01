@@ -669,9 +669,9 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 			Spec: v1alpha1.ClusterInfraSpec{
 				Platform: v1alpha1.ClusterInfraPlatform{Type: v1alpha1.PlatformTypeVSphere},
 				Endpoints: map[string]v1alpha1.Endpoint{
-					v1alpha1.EndpointAPI:     {ExternalVIP: "192.168.133.10"},
-					v1alpha1.EndpointAPIInt:  {ExternalVIP: "192.168.133.10"},
-					v1alpha1.EndpointIngress: {ExternalVIP: "192.168.133.11"},
+					v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
+					"api-int":            {Address: "192.168.133.10"},
+					"apps":               {Address: "192.168.133.11"},
 				},
 				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
 					Name:          "master-0",
@@ -692,6 +692,7 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
+			Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname:   "master-0",
 				Role:       v1alpha1.NodeRoleMaster,

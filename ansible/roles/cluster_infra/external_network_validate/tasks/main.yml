@@ -1,14 +1,16 @@
 ---
 # External-LB / external-DNS diagnostics. Runs when a cluster's endpoints use
-# externalVip — the operator owns the LB and DNS records. This reports hostname
-# resolution from the provider-host vantage point without failing the apply.
+# source.type=external — the operator owns the LB and DNS records. This reports
+# hostname resolution from the provider-host vantage point without failing the
+# apply.
 
 - name: Resolve external endpoints for this cluster
   ansible.builtin.set_fact:
     bootwright_external_endpoints: >-
       {{
         bootwright_current_cluster.endpoints
-        | selectattr('externalVip', 'defined')
+        | selectattr('source', 'defined')
+        | selectattr('source.type', 'equalto', 'external')
         | list
       }}
   changed_when: false
@@ -25,7 +27,7 @@
       - "{{ item.name }}.{{ bootwright_current_cluster.name }}.{{ bootwright_environment.baseDomain }}"
   loop: "{{ bootwright_external_endpoints }}"
   loop_control:
-    label: "{{ item.name }} -> {{ item.externalVip }}"
+    label: "{{ item.name }} -> {{ item.address }}"
   changed_when: false
   failed_when: false
   register: bootwright_external_dns_probes
@@ -34,7 +36,7 @@
   ansible.builtin.debug:
     msg: >-
       {{ item.item.name }}.{{ bootwright_current_cluster.name }}.{{ bootwright_environment.baseDomain }}
-      {{ '→ ' ~ item.stdout if item.rc == 0 else '(no resolution; operator must add DNS to ' ~ item.item.externalVip ~ ')' }}
+      {{ '-> ' ~ item.stdout if item.rc == 0 else '(no resolution; operator must add DNS to ' ~ item.item.address ~ ')' }}
   loop: "{{ bootwright_external_dns_probes.results }}"
   loop_control:
     label: "{{ item.item.name }}"

@@ -27,8 +27,8 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 	ci := v1alpha1.ClusterInfra{
 		Spec: v1alpha1.ClusterInfraSpec{
 			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI:     {ExternalVIP: "192.168.140.10"},
-				v1alpha1.EndpointIngress: {ExternalVIP: "192.168.140.11"},
+				v1alpha1.EndpointAPI: {Address: "192.168.140.10"},
+				"apps":               {Address: "192.168.140.11"},
 			},
 			Components: v1alpha1.ClusterComponents{
 				Machines: []v1alpha1.ClusterMachineComponent{

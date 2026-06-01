@@ -71,6 +71,11 @@ const (
 	EndpointAPIInt  = "apiInt"
 	EndpointIngress = "ingress"
 
+	EndpointSourceOpenShift      = "openshift"
+	EndpointSourceCephadm        = "cephadm"
+	EndpointSourceExternal       = "external"
+	EndpointSourceInfraComponent = "infraComponent"
+
 	// Standard component slot names (consume side, in ClusterInfra.spec.components).
 	ComponentSlotMachines       = "machines"
 	ComponentSlotLoadBalancer   = "loadBalancer"

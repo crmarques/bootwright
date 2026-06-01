@@ -9,6 +9,13 @@ spec:
       version: 4.21.15
 
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     method: agent
     mode: connected
 

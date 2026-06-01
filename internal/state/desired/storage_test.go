@@ -90,9 +90,6 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.MachineRef = v1alpha1.StorageMachineRef{}
 	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.Family = ""
 	state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default = false
-	state.StorageObjectGateways[0].Spec.PublicEndpoint = v1alpha1.StoragePublicEndpoint{
-		DNSName: "rgw-ceph.example.test",
-	}
 	state.StorageExports[0].Spec.Type = ""
 
 	Normalize(&state)
@@ -109,10 +106,6 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	}
 	if !state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default {
 		t.Fatal("single CephFS data pool did not default to default=true")
-	}
-	endpoint := state.StorageObjectGateways[0].Spec.PublicEndpoint
-	if endpoint.Port != 443 || endpoint.Scheme != "https" {
-		t.Fatalf("publicEndpoint = %+v, want port 443 scheme https", endpoint)
 	}
 	if state.StorageExports[0].Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
 		t.Fatalf("storage export type = %q, want data-foundation", state.StorageExports[0].Spec.Type)
@@ -230,11 +223,16 @@ func storageValidationState() v1alpha1.State {
 	return v1alpha1.State{
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{
-				{Name: "ceph-dc1-0"}, {Name: "ceph-dc1-1"}, {Name: "ceph-dc1-2"},
-				{Name: "ceph-dc2-0"}, {Name: "ceph-dc2-1"}, {Name: "ceph-dc2-2"},
-				{Name: "ceph-arbiter"},
-			}}},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Endpoints: map[string]v1alpha1.Endpoint{
+					"rgw-public": {DNSName: "rgw-ceph.example.test", Port: 443, Scheme: "https"},
+				},
+				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{
+					{Name: "ceph-dc1-0"}, {Name: "ceph-dc1-1"}, {Name: "ceph-dc1-2"},
+					{Name: "ceph-dc2-0"}, {Name: "ceph-dc2-1"}, {Name: "ceph-dc2-2"},
+					{Name: "ceph-arbiter"},
+				}},
+			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
@@ -303,11 +301,7 @@ func storageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "rgw"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				PublicEndpoint: v1alpha1.StoragePublicEndpoint{
-					DNSName: "rgw-ceph.example.test",
-					Port:    443,
-					Scheme:  "https",
-				},
+				PublicEndpointRef: v1alpha1.EndpointRef{Name: "rgw-public"},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf",
 					Placement: v1alpha1.StoragePlacement{

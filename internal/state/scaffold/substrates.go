@@ -109,20 +109,23 @@ spec:
 		ClusterMachineExtras: "",
 		ClusterServices:      "",
 		EndpointsYAML: `    api:
-      providedBy:
-        address: control-plane
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
-    apiInt:
-      providedBy:
-        address: control-plane
+        bindAddress: control-plane
+    api-int:
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
-    ingress:
-      providedBy:
-        address: apps
+        bindAddress: control-plane
+    apps:
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
+        bindAddress: apps
 `,
 		PlatformYAML: `  platform:
     type: baremetal
@@ -226,11 +229,17 @@ spec:
 `,
 		ClusterServices: "",
 		EndpointsYAML: `    api:
-      externalVip: 192.168.130.10       # an operator-owned LB owns the VIP
-    apiInt:
-      externalVip: 192.168.130.10
-    ingress:
-      externalVip: 192.168.130.11
+      address: 192.168.130.10       # an operator-owned LB owns the VIP
+      source:
+        type: external
+    api-int:
+      address: 192.168.130.10
+      source:
+        type: external
+    apps:
+      address: 192.168.130.11
+      source:
+        type: external
 `,
 		PlatformYAML: `  platform:
     type: baremetal
@@ -322,11 +331,17 @@ spec:
 `,
 		ClusterServices: "",
 		EndpointsYAML: `    api:
-      externalVip: 192.168.130.10
-    apiInt:
-      externalVip: 192.168.130.10
-    ingress:
-      externalVip: 192.168.130.11
+      address: 192.168.130.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.130.10
+      source:
+        type: external
+    apps:
+      address: 192.168.130.11
+      source:
+        type: external
 `,
 		PlatformYAML: `  platform:
     type: vsphere

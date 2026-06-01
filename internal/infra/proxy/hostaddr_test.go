@@ -26,7 +26,7 @@ func clusterFacingState(hostSSH, hostClusterAddr, networkGateway string) v1alpha
 			Metadata: v1alpha1.Metadata{Name: "c1"},
 			Spec: v1alpha1.ClusterInfraSpec{
 				Endpoints: map[string]v1alpha1.Endpoint{
-					v1alpha1.EndpointAPI: {ExternalVIP: "192.168.132.10"},
+					v1alpha1.EndpointAPI: {Address: "192.168.132.10"},
 				},
 				Components: v1alpha1.ClusterComponents{
 					Machines: []v1alpha1.ClusterMachineComponent{{
@@ -144,7 +144,7 @@ func TestManagedProxyURLAutoSubstitutesLoopback(t *testing.T) {
 		Spec:     networkConfigSpec("192.168.132.0/24", "192.168.132.1"),
 	}}
 	state.ClusterInfras[0].Spec.Endpoints = map[string]v1alpha1.Endpoint{
-		v1alpha1.EndpointAPI: {ExternalVIP: "192.168.132.10"},
+		v1alpha1.EndpointAPI: {Address: "192.168.132.10"},
 	}
 	state.ClusterInfras[0].Spec.Components.Machines = []v1alpha1.ClusterMachineComponent{{
 		Name: "master-0",

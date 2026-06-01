@@ -16,9 +16,9 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Nodes) == 1 && ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
 }
 
-func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra, _ v1alpha1.ContainerCluster) map[string]any {
-	apiVIPs, ingressVIPs := vipsFromEndpoints(state, ci)
-	userManaged := !allEndpointsOpenShift(ci)
+func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) map[string]any {
+	apiVIPs, ingressVIPs := vipsFromEndpoints(state, ci, ocp)
+	userManaged := !allContainerEndpointsOpenShift(ci, ocp)
 	switch kind {
 	case v1alpha1.PlatformTypeVSphere:
 		out := map[string]any{
@@ -214,11 +214,11 @@ func vSphereNetworkSubnetConfig(n *v1alpha1.VSphereNetworkSubnet) map[string]any
 	return out
 }
 
-func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra) (api []any, ingress []any) {
-	if vip := endpointAddress(state, ci, v1alpha1.EndpointAPI); vip != "" {
+func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) (api []any, ingress []any) {
+	if vip := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointAPI); vip != "" {
 		api = append(api, vip)
 	}
-	if vip := endpointAddress(state, ci, v1alpha1.EndpointIngress); vip != "" {
+	if vip := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointIngress); vip != "" {
 		ingress = append(ingress, vip)
 	}
 	if api == nil {
@@ -230,10 +230,10 @@ func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra) (api []an
 	return api, ingress
 }
 
-func allEndpointsOpenShift(ci v1alpha1.ClusterInfra) bool {
+func allContainerEndpointsOpenShift(ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) bool {
 	for _, name := range standardEndpointNames {
-		endpoint, ok := ci.Spec.Endpoints[name]
-		if !ok || endpoint.VIP == "" {
+		endpoint, ok := containerEndpoint(ci, ocp, name)
+		if !ok || endpointSourceType(endpoint, v1alpha1.EndpointSourceOpenShift) != v1alpha1.EndpointSourceOpenShift {
 			return false
 		}
 	}

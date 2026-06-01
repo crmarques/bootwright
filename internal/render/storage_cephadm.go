@@ -55,15 +55,20 @@ func cephadmServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 		}
 		spec := map[string]any{"rgw_frontend_port": gw.Spec.Ceph.FrontendPort}
 		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, gw.Spec.Ceph.Placement.Hosts, gw.Spec.Ceph.Placement.CountPerHost, spec))
+		publicEndpoint, _ := storageGatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {
+			endpoint, ok := storageGatewayEndpoint(state, gw, ingress.EndpointRef)
+			if !ok {
+				continue
+			}
 			ingressSpec := map[string]any{
 				"backend_service": "rgw." + gw.Spec.Ceph.ServiceID,
-				"virtual_ip":      ingress.VirtualIP,
-				"frontend_port":   gw.Spec.PublicEndpoint.Port,
+				"virtual_ip":      cephadmVirtualIP(endpoint),
+				"frontend_port":   endpointPort(publicEndpoint, 443),
 				"monitor_port":    1967,
 			}
-			if len(ingress.VirtualInterfaceNetworks) > 0 {
-				ingressSpec["virtual_interface_networks"] = ingress.VirtualInterfaceNetworks
+			if len(endpoint.InterfaceNetworks) > 0 {
+				ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
 			}
 			docs = append(docs, cephadmPlacementService("ingress", "rgw."+gw.Spec.Ceph.ServiceID+"."+ingress.Name, ingress.Placement.Hosts, 0, ingressSpec))
 		}

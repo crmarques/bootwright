@@ -298,8 +298,8 @@ spec:
 		{
 			name: "containercluster-installmode-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"install:\n    method: agent\n    mode: connected",
-				"installMode: connected\n  install:\n    method: agent\n    mode: connected", 1)},
+				"  install:\n",
+				"  installMode: connected\n  install:\n", 1)},
 			wantSubstring: "field installMode not found",
 		},
 		{
@@ -444,9 +444,9 @@ spec:
 		{
 			name: "endpoint-owner-required",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"api:\n      externalVip: 192.168.132.10",
+				"api:\n      address: 192.168.132.10\n      source:\n        type: external",
 				"api: {}", 1)},
-			wantSubstring: "spec.endpoints.api must set exactly one of {vip, externalVip, providedBy}",
+			wantSubstring: "spec.endpoints.api must set address, dnsName, or source.type=infraComponent",
 		},
 		{
 			name: "missing-machine-ref-rejected",
@@ -1362,32 +1362,36 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 		wantSubstring string
 	}{
 		{
-			name: "external-vips-accepted",
+			name: "external-endpoints-accepted",
 		},
 		{
-			name: "sno-openshift-vips-rejected",
+			name: "sno-openshift-endpoints-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      vip: 192.168.132.10
-    apiInt:
-      vip: 192.168.132.10
-    ingress:
-      vip: 192.168.132.11
+      address: 192.168.132.10
+    api-int:
+      address: 192.168.132.10
+    apps:
+      address: 192.168.132.11
 `)
 			},
-			wantSubstring: "single-node clusters forbid ClusterInfra/sno spec.endpoints.",
+			wantSubstring: "single-node clusters forbid ClusterInfra/sno spec.endpoints.api source.type=openshift",
 		},
 		{
 			name: "single-bind-address-shortcut-accepted",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy:
+      source:
+        type: infraComponent
         componentRef: { name: control-plane }
-    apiInt:
-      providedBy:
+    api-int:
+      source:
+        type: infraComponent
         componentRef: { name: control-plane }
-    ingress:
-      externalVip: 192.168.132.11
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `)
 				addLoadBalancerInfraComponent(files, "control-plane", "- ip: 192.168.132.10\n")
 			},
@@ -1396,11 +1400,20 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 			name: "named-bind-address-selection-accepted",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
-    apiInt:
-      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
-    ingress:
-      providedBy: { componentRef: { name: load-balancer }, address: apps }
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: control-plane
+    api-int:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: control-plane
+    apps:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: apps
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
 			},
@@ -1409,11 +1422,20 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 			name: "missing-bind-address-names-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
-    apiInt:
-      providedBy: { componentRef: { name: load-balancer }, address: control-plane }
-    ingress:
-      providedBy: { componentRef: { name: load-balancer }, address: apps }
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: control-plane
+    api-int:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: control-plane
+    apps:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: apps
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { ip: 192.168.132.10 }\n    - { ip: 192.168.132.11 }\n")
 			},
@@ -1423,56 +1445,79 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 			name: "bad-loadbalancer-reference-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy:
+      source:
+        type: infraComponent
         componentRef: { name: missing }
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `)
 			},
-			wantSubstring: `providedBy.componentRef.name "missing" does not resolve to an InfraComponent loadBalancer`,
+			wantSubstring: `source.componentRef.name "missing" does not resolve to an InfraComponent loadBalancer`,
 		},
 		{
 			name: "bad-bind-address-reference-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      providedBy: { componentRef: { name: load-balancer }, address: missing }
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: missing
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n")
 			},
-			wantSubstring: `providedBy.address "missing" does not match`,
+			wantSubstring: `source.bindAddress "missing" does not match`,
 		},
 		{
 			name: "vip-outside-selected-machine-network-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      externalVip: 192.168.140.10
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+      address: 192.168.140.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `)
 			},
-			wantSubstring: `spec.endpoints.api effective VIP "192.168.140.10" is outside selected NetworkConfig machine networks`,
+			wantSubstring: `spec.endpoints.api.address "192.168.140.10" is outside selected NetworkConfig machine networks`,
 		},
 		{
-			name: "multiple-owners-rejected",
+			name: "invalid-source-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
-      vip: 192.168.132.10
-      externalVip: 192.168.132.10
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+      address: 192.168.132.10
+      source:
+        type: manual
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `)
 			},
-			wantSubstring: "spec.endpoints.api must set exactly one of {vip, externalVip, providedBy}",
+			wantSubstring: `spec.endpoints.api.source.type "manual" must be one of`,
 		},
 	}
 
@@ -1851,11 +1896,17 @@ spec:
     type: none
   endpoints:
     api:
-      externalVip: 192.168.134.20
-    apiInt:
-      externalVip: 192.168.134.20
-    ingress:
-      externalVip: 192.168.134.21
+      address: 192.168.134.20
+      source:
+        type: external
+    api-int:
+      address: 192.168.134.20
+      source:
+        type: external
+    apps:
+      address: 192.168.134.21
+      source:
+        type: external
   networkBindings:
     - networkConfigRef: { name: child-machine-net }
       providerRef: { name: child-kubevirt-provider }
@@ -1879,6 +1930,13 @@ spec:
     type: openshift
     release: { version: 4.21.15 }
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     method: agent
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }
@@ -2030,11 +2088,17 @@ spec:
     type: none
   endpoints:
     api:
-      externalVip: ` + nodeIP + `
-    apiInt:
-      externalVip: ` + nodeIP + `
-    ingress:
-      externalVip: ` + ingressIP + `
+      address: ` + nodeIP + `
+      source:
+        type: external
+    api-int:
+      address: ` + nodeIP + `
+      source:
+        type: external
+    apps:
+      address: ` + ingressIP + `
+      source:
+        type: external
   networkBindings:
     - networkConfigRef: { name: ` + network + ` }
       providerRef: { name: ` + provider + ` }
@@ -2061,6 +2125,13 @@ spec:
     type: openshift
     release: { version: 4.21.15 }
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     method: agent
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }
@@ -2153,11 +2224,17 @@ spec:
     type: vsphere
   endpoints:
     api:
-      externalVip: 192.168.133.10
-    apiInt:
-      externalVip: 192.168.133.10
-    ingress:
-      externalVip: 192.168.133.11
+      address: 192.168.133.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.133.10
+      source:
+        type: external
+    apps:
+      address: 192.168.133.11
+      source:
+        type: external
   networkBindings:
     - networkConfigRef: { name: vsphere-net }
       providerRef: { name: vsphere }
@@ -2181,6 +2258,13 @@ spec:
     type: openshift
     release: { version: 4.21.15 }
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     pullSecretRef: { name: openshift-pull-secret }
     nodeSSH:
       keyPairRef: { name: cluster-admin-ssh-key }
@@ -2213,11 +2297,17 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 func replaceBaselineEndpoints(t *testing.T, clusterYAML, endpoints string) string {
 	t.Helper()
 	old := `    api:
-      externalVip: 192.168.132.10
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+      address: 192.168.132.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
 `
 	if !strings.Contains(clusterYAML, old) {
 		t.Fatalf("baseline cluster endpoints block not found")
@@ -2378,11 +2468,17 @@ spec:
     baremetal: { provisioningNetwork: disabled }
   endpoints:
     api:
-      externalVip: 192.168.132.10
-    apiInt:
-      externalVip: 192.168.132.10
-    ingress:
-      externalVip: 192.168.132.11
+      address: 192.168.132.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
   components:
     machines:
       - name: master-0
@@ -2403,6 +2499,13 @@ spec:
     release:
       version: 4.21.15
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     method: agent
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }

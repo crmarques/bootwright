@@ -334,6 +334,15 @@ spec:
     release:
       version: 4.21.15
 
+  install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
+
   networking:
     clusterNetwork:
       - cidr: 10.128.0.0/14

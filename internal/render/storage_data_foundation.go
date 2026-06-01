@@ -168,7 +168,9 @@ func dataFoundationExternalDetails(state v1alpha1.State, cluster v1alpha1.Storag
 		rbdPool = df.RBDPoolRef.Name
 		rgwPoolPrefix = df.ObjectGatewayRef.Name
 		if gw, ok := storageGatewayByName(state, df.ObjectGatewayRef.Name); ok {
-			rgwEndpoint = fmt.Sprintf("%s:%d", gw.Spec.PublicEndpoint.DNSName, gw.Spec.PublicEndpoint.Port)
+			if endpoint, endpointOK := storageGatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef); endpointOK {
+				rgwEndpoint = fmt.Sprintf("%s:%d", endpoint.DNSName, endpointPort(endpoint, 443))
+			}
 		}
 	}
 	details := []map[string]any{

@@ -81,14 +81,14 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 - `InfraComponent` owns host-bound shared infra services, service placement,
   listeners, bind addresses, and routable endpoints.
 - `NetworkConfig` owns reusable machine-network data and NMState templates.
-- `ClusterInfra` owns endpoint VIP ownership, platform render mode, selected
+- `ClusterInfra` owns endpoint definitions, platform render mode, selected
   machines, and logical-to-substrate network bindings.
 - `ContainerCluster` owns OpenShift or OKD install intent and node bindings.
 - `StorageCluster` owns external storage intent. Managed clusters provision
   Ceph; imported clusters reference previously provisioned Ceph.
 - `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, and
-  `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and ingress
-  desired state.
+  `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and endpoint
+  bindings for public and cephadm ingress traffic.
 - `StorageExport` owns the exported storage surface, while
   `ClusterAddonBinding.storage[]` owns the Data Foundation external-mode
   connection from storage to one installed cluster.
@@ -101,12 +101,12 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 These boundaries are reflected in rendering:
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
-  selected machine `NetworkConfig` references, endpoint VIP ownership, and
+  selected machine `NetworkConfig` references, endpoint refs, and
   `ClusterInfra.platform`.
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
   `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
-- Machine and VIP provider variables resolve substrate network attachments from
+- Machine and endpoint provider variables resolve substrate network attachments from
   `ClusterInfra.networkBindings[]` to `InfraProvider.networkAttachments[]`.
 - `agent-config.yaml` global boot-artifact and time-source fields are rendered
   from disconnected install mode, the environment-selected artifact server

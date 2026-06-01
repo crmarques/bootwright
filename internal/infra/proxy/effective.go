@@ -115,7 +115,7 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 		}
 	}
 	for _, ci := range state.ClusterInfras {
-		for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+		for name := range ci.Spec.Endpoints {
 			if address := stateview.EndpointAddress(state, ci, name); address != "" {
 				out = append(out, address)
 			}

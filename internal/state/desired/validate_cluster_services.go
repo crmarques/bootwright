@@ -40,7 +40,7 @@ func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalan
 	}
 	for _, bind := range binds {
 		if bind.Name != "" && !referenced[bind.Name] {
-			errs = append(errs, fmt.Sprintf("%s.bindAddresses[%s] is not referenced by any endpoint providedBy.address",
+			errs = append(errs, fmt.Sprintf("%s.bindAddresses[%s] is not referenced by any endpoint source.bindAddress",
 				prefix, bind.Name))
 		}
 	}

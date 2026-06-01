@@ -24,7 +24,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
-	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters)...)
+	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters, infras)...)
 	errs = append(errs, validateStorageExports(state.StorageExports, clusters, pools, filesystems, gateways)...)
 	errs = append(errs, validateClusterAddonBindingStorage(state.ClusterAddonBindings, exports, clusters, containerClusters, provided)...)
 	return errs
@@ -397,7 +397,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 	return errs
 }
 
-func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster) []string {
+func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster, infras map[string]v1alpha1.ClusterInfra) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, gw := range items {
@@ -424,17 +424,8 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		if gw.Spec.Ceph.FrontendPort < 0 || gw.Spec.Ceph.FrontendPort > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.ceph.frontendPort %d out of range", prefix, gw.Spec.Ceph.FrontendPort))
 		}
-		if gw.Spec.PublicEndpoint.DNSName == "" {
-			errs = append(errs, prefix+".publicEndpoint.dnsName is required")
-		}
-		if gw.Spec.PublicEndpoint.Port < 0 || gw.Spec.PublicEndpoint.Port > 65535 {
-			errs = append(errs, fmt.Sprintf("%s.publicEndpoint.port %d out of range", prefix, gw.Spec.PublicEndpoint.Port))
-		}
-		switch gw.Spec.PublicEndpoint.Scheme {
-		case "", "http", "https":
-		default:
-			errs = append(errs, fmt.Sprintf("%s.publicEndpoint.scheme %q must be http or https", prefix, gw.Spec.PublicEndpoint.Scheme))
-		}
+		infra, infraOK := storageGatewayClusterInfra(cluster, ok, infras)
+		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".publicEndpointRef", gw, infra, infraOK)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", gw.Spec.Ceph.Placement.Hosts, cluster, v1alpha1.StorageCephRoleRGW)...)
@@ -449,20 +440,70 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, ingress.Name))
 			}
 			ingressNames[ingress.Name] = true
-			if ingress.VirtualIP == "" {
-				errs = append(errs, owner+".virtualIP is required")
-			} else {
-				errs = append(errs, validateIPOrCIDR(owner+".virtualIP", ingress.VirtualIP)...)
-			}
-			for j, cidr := range ingress.VirtualInterfaceNetworks {
-				errs = append(errs, validateCIDR(fmt.Sprintf("%s.virtualInterfaceNetworks[%d]", owner, j), cidr)...)
-			}
+			errs = append(errs, validateStorageGatewayIngressEndpoint(owner+".endpointRef", ingress.EndpointRef, gw, infra, infraOK)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
 			ingressHosts = append(ingressHosts, ingress.Placement.Hosts...)
 		}
 		if ok && storageClusterStretchEnabled(cluster) && len(gw.Spec.Ceph.Ingresses) > 0 {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.ingresses", ingressHosts, cluster, v1alpha1.StorageCephRoleIngress)...)
 		}
+	}
+	return errs
+}
+
+func storageGatewayClusterInfra(cluster v1alpha1.StorageCluster, clusterOK bool, infras map[string]v1alpha1.ClusterInfra) (v1alpha1.ClusterInfra, bool) {
+	if !clusterOK {
+		return v1alpha1.ClusterInfra{}, false
+	}
+	infra, ok := infras[cluster.Spec.ClusterInfraRef.Name]
+	return infra, ok
+}
+
+func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObjectGateway, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+	ref := gw.Spec.PublicEndpointRef
+	if ref.Name == "" {
+		return []string{prefix + ".name is required"}
+	}
+	if !infraOK {
+		return nil
+	}
+	endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	if !ok {
+		return []string{fmt.Sprintf("%s.name %q does not match any ClusterInfra/%s spec.endpoints entry", prefix, ref.Name, infra.Metadata.Name)}
+	}
+	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceExternal)
+	if source != v1alpha1.EndpointSourceExternal {
+		return []string{fmt.Sprintf("%s.name %q references endpoint source.type %q; StorageObjectGateway publicEndpointRef requires %q",
+			prefix, ref.Name, source, v1alpha1.EndpointSourceExternal)}
+	}
+	if endpoint.DNSName == "" {
+		return []string{fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.dnsName is required for StorageObjectGateway/%s publicEndpointRef", infra.Metadata.Name, ref.Name, gw.Metadata.Name)}
+	}
+	return nil
+}
+
+func validateStorageGatewayIngressEndpoint(prefix string, ref v1alpha1.EndpointRef, gw v1alpha1.StorageObjectGateway, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+	if ref.Name == "" {
+		return []string{prefix + ".name is required"}
+	}
+	if !infraOK {
+		return nil
+	}
+	endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	if !ok {
+		return []string{fmt.Sprintf("%s.name %q does not match any ClusterInfra/%s spec.endpoints entry", prefix, ref.Name, infra.Metadata.Name)}
+	}
+	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceCephadm)
+	if source != v1alpha1.EndpointSourceCephadm {
+		return []string{fmt.Sprintf("%s.name %q references endpoint source.type %q; StorageObjectGateway ingress endpointRef requires %q",
+			prefix, ref.Name, source, v1alpha1.EndpointSourceCephadm)}
+	}
+	var errs []string
+	if endpoint.Address == "" {
+		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.address is required for StorageObjectGateway/%s ingress", infra.Metadata.Name, ref.Name, gw.Metadata.Name))
+	}
+	if endpoint.PrefixLength == 0 {
+		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.prefixLength is required for StorageObjectGateway/%s ingress", infra.Metadata.Name, ref.Name, gw.Metadata.Name))
 	}
 	return errs
 }
@@ -634,16 +675,6 @@ func validateCIDR(owner, value string) []string {
 	}
 	if _, _, err := net.ParseCIDR(value); err != nil {
 		return []string{fmt.Sprintf("%s %q is not a valid CIDR", owner, value)}
-	}
-	return nil
-}
-
-func validateIPOrCIDR(owner, value string) []string {
-	if ip := net.ParseIP(value); ip != nil {
-		return nil
-	}
-	if _, _, err := net.ParseCIDR(value); err != nil {
-		return []string{fmt.Sprintf("%s %q is not a valid IP or CIDR", owner, value)}
 	}
 	return nil
 }

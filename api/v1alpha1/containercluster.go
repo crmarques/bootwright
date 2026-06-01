@@ -22,10 +22,17 @@ type ContainerClusterSpec struct {
 type OCPInstallSpec struct {
 	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
 	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
+	EndpointRefs              ContainerEndpointRefs    `yaml:"endpointRefs,omitempty" json:"endpointRefs,omitempty"`
 	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
 	NodeSSH                   NodeSSHSpec              `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
 	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
+}
+
+type ContainerEndpointRefs struct {
+	API     EndpointRef `yaml:"api" json:"api"`
+	APIInt  EndpointRef `yaml:"apiInt" json:"apiInt"`
+	Ingress EndpointRef `yaml:"ingress" json:"ingress"`
 }
 
 type NodeSSHSpec struct {

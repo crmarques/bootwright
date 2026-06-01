@@ -306,11 +306,16 @@ func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1a
 func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
 	seen := map[string]bool{}
 	var out []ProviderServiceConsumer
-	for _, endpoint := range infra.Spec.Endpoints {
-		if endpoint.ProvidedBy == nil || endpoint.ProvidedBy.ComponentRef.Name == "" {
+	for _, ref := range []v1alpha1.EndpointRef{
+		cluster.Spec.Install.EndpointRefs.API,
+		cluster.Spec.Install.EndpointRefs.APIInt,
+		cluster.Spec.Install.EndpointRefs.Ingress,
+	} {
+		endpoint, ok := infra.Spec.Endpoints[ref.Name]
+		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent || endpoint.Source.ComponentRef.Name == "" {
 			continue
 		}
-		name := endpoint.ProvidedBy.ComponentRef.Name
+		name := endpoint.Source.ComponentRef.Name
 		if seen[name] {
 			continue
 		}
@@ -323,7 +328,7 @@ func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cl
 		out = append(out, newServiceConsumer(
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
-			fmt.Sprintf("ClusterInfra/%s endpoint providedBy InfraComponent/%s", infra.Metadata.Name, component.Metadata.Name),
+			fmt.Sprintf("ClusterInfra/%s endpoint source InfraComponent/%s", infra.Metadata.Name, component.Metadata.Name),
 			v1alpha1.ComponentSlotLoadBalancer,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,

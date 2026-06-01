@@ -1,6 +1,6 @@
 # Load Balancer Modes
 
-Cluster VIP ownership is declared per endpoint in
+Cluster endpoint ownership is declared per endpoint in
 `ClusterInfra.spec.endpoints`.
 
 Bootwright-provisioned load balancer:
@@ -8,10 +8,11 @@ Bootwright-provisioned load balancer:
 ```yaml
 endpoints:
   api:
-    providedBy:
+    source:
+      type: infraComponent
       componentRef:
         name: control-plane
-      address: control-plane-ip
+      bindAddress: control-plane-ip
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
@@ -32,7 +33,9 @@ External load balancer:
 ```yaml
 endpoints:
   api:
-    externalVip: 192.168.133.10
+    address: 192.168.133.10
+    source:
+      type: external
 ```
 
 OpenShift-managed endpoint ownership is reserved for supported multi-node agent
@@ -41,5 +44,8 @@ installs:
 ```yaml
 endpoints:
   api:
-    vip: 192.168.133.10
+    address: 192.168.133.10
 ```
+
+The omitted `source.type` defaults to `openshift` when a
+`ContainerCluster.spec.install.endpointRefs` role uses the endpoint.

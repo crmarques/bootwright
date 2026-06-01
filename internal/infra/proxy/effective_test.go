@@ -127,7 +127,7 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
 			Spec: v1alpha1.ClusterInfraSpec{
-				Endpoints: map[string]v1alpha1.Endpoint{"api": {ExternalVIP: "10.10.0.10"}},
+				Endpoints: map[string]v1alpha1.Endpoint{"api": {Address: "10.10.0.10"}},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{

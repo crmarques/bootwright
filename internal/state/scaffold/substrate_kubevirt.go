@@ -66,11 +66,17 @@ spec:
 `,
 	ClusterServices: "",
 	EndpointsYAML: `    api:
-      externalVip: 192.168.130.10
-    apiInt:
-      externalVip: 192.168.130.10
-    ingress:
-      externalVip: 192.168.130.11
+      address: 192.168.130.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.130.10
+      source:
+        type: external
+    apps:
+      address: 192.168.130.11
+      source:
+        type: external
 `,
 	PlatformYAML: `  platform:
     type: none

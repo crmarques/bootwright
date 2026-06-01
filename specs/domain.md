@@ -26,7 +26,7 @@ Operators author desired state as sixteen YAML kinds:
 | `StoragePlacementPolicy` | Which storage placement and replicated-pool defaults should pools use? |
 | `StoragePool` | Which Ceph pools should exist and what role should each serve? |
 | `StorageFilesystem` | Which CephFS filesystems should exist, and which pools hold metadata and data? |
-| `StorageObjectGateway` | Which RGW service and cephadm ingress VIPs should serve object traffic? |
+| `StorageObjectGateway` | Which RGW service and endpoint refs should serve public and cephadm ingress traffic? |
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |

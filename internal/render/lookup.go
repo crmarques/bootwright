@@ -21,6 +21,15 @@ func findHost(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
 	return stateview.Host(state, name)
 }
 
+func findContainerCluster(state v1alpha1.State, name string) (v1alpha1.ContainerCluster, bool) {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == name {
+			return cluster, true
+		}
+	}
+	return v1alpha1.ContainerCluster{}, false
+}
+
 func lookupHostAddress(state v1alpha1.State, name string) string {
 	if h, ok := findHost(state, name); ok && h.Spec.SSH != nil {
 		return v1alpha1.HostSSHAddress(h)

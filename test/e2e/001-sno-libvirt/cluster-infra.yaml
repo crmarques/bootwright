@@ -10,20 +10,23 @@ spec:
 
   endpoints:
     api:
-      providedBy:
-        address: control-plane
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
-    apiInt:
-      providedBy:
-        address: control-plane
+        bindAddress: control-plane
+    api-int:
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
-    ingress:
-      providedBy:
-        address: apps
+        bindAddress: control-plane
+    apps:
+      source:
+        type: infraComponent
         componentRef:
           name: load-balancer
+        bindAddress: apps
 
   networkBindings:
     - networkConfigRef:

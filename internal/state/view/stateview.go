@@ -134,33 +134,29 @@ func EndpointAddress(state v1alpha1.State, infra v1alpha1.ClusterInfra, name str
 	if !ok {
 		return ""
 	}
-	switch {
-	case endpoint.VIP != "":
-		return endpoint.VIP
-	case endpoint.ExternalVIP != "":
-		return endpoint.ExternalVIP
-	case endpoint.ProvidedBy != nil:
-		if bind, ok := LoadBalancerBindAddress(state, *endpoint.ProvidedBy); ok {
+	if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent {
+		if bind, ok := LoadBalancerBindAddress(state, endpoint.Source); ok {
 			return bind.IP
 		}
+		return ""
 	}
-	return ""
+	return endpoint.Address
 }
 
-func LoadBalancerBindAddress(state v1alpha1.State, ref v1alpha1.EndpointProvidedBy) (v1alpha1.LoadBalancerBindAddress, bool) {
-	component, ok := InfraComponent(state, ref.ComponentRef.Name)
+func LoadBalancerBindAddress(state v1alpha1.State, source v1alpha1.EndpointSource) (v1alpha1.LoadBalancerBindAddress, bool) {
+	component, ok := InfraComponent(state, source.ComponentRef.Name)
 	if !ok || component.Spec.LoadBalancer == nil {
 		return v1alpha1.LoadBalancerBindAddress{}, false
 	}
 	binds := component.Spec.LoadBalancer.BindAddresses
-	if ref.Address == "" {
+	if source.BindAddress == "" {
 		if len(binds) == 1 {
 			return binds[0], true
 		}
 		return v1alpha1.LoadBalancerBindAddress{}, false
 	}
 	for _, bind := range binds {
-		if bind.Name == ref.Address {
+		if bind.Name == source.BindAddress {
 			return bind, true
 		}
 	}
@@ -249,12 +245,12 @@ func PrimaryNetworkGateway(state v1alpha1.State, infra v1alpha1.ClusterInfra) st
 }
 
 func PrimaryClusterNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra) *v1alpha1.NetworkConfig {
-	if address := EndpointAddress(state, infra, v1alpha1.EndpointAPI); address != "" {
-		if network, ok := EndpointNetworkConfig(state, infra, address); ok {
-			return &network
-		}
+	names := make([]string, 0, len(infra.Spec.Endpoints))
+	for name := range infra.Spec.Endpoints {
+		names = append(names, name)
 	}
-	for _, name := range []string{v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+	sort.Strings(names)
+	for _, name := range names {
 		if address := EndpointAddress(state, infra, name); address != "" {
 			if network, ok := EndpointNetworkConfig(state, infra, address); ok {
 				return &network

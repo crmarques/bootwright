@@ -30,7 +30,7 @@ instead of compact inline maps.
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
 | `StoragePool` | Ceph pool role, placement, and replication settings |
 | `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
-| `StorageObjectGateway` | RGW service, public endpoint, and cephadm ingress VIPs |
+| `StorageObjectGateway` | RGW service and refs to public and cephadm ingress endpoints |
 | `StorageExport` | Storage services prepared for downstream consumers |
 | `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
 | `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
@@ -141,8 +141,10 @@ Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and
 matching NMState interfaces.
 
-Endpoint VIP ownership stays on `ClusterInfra.spec.endpoints`. Effective VIPs
-must land inside one selected machine-network CIDR.
+Endpoint definitions stay on `ClusterInfra.spec.endpoints`. Consumers bind to
+endpoint names explicitly, such as `ContainerCluster.spec.install.endpointRefs`
+or `StorageObjectGateway` endpoint refs. Effective VIPs must land inside one
+selected machine-network CIDR.
 
 DNS resolver intent is intentionally outside raw NMState when it selects a
 managed or external Bootwright name-resolution entry. Put the service reference
@@ -192,7 +194,7 @@ selects environment name-resolution entries.
 | Name resolution for installer host networking | `NetworkConfig.spec.dnsRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
 | Artifact publication for Redfish media and disconnected install files | `Environment.spec.infraComponents.artifactServers[].routes` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
 | Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
-| Load balancer VIPs | `ClusterInfra.spec.endpoints.*.providedBy` | Managed `InfraComponent.spec.loadBalancer` or operator-owned external addresses |
+| Load balancer VIPs | `ClusterInfra.spec.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, cephadm, or operator-owned external addresses |
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a

@@ -61,9 +61,9 @@ func dnsRecordsState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "infra-a"},
 			Spec: v1alpha1.ClusterInfraSpec{
 				Endpoints: map[string]v1alpha1.Endpoint{
-					v1alpha1.EndpointAPI:     {ExternalVIP: "192.168.130.10"},
-					v1alpha1.EndpointAPIInt:  {ExternalVIP: "192.168.130.10"},
-					v1alpha1.EndpointIngress: {ExternalVIP: "192.168.130.11"},
+					v1alpha1.EndpointAPI: {Address: "192.168.130.10"},
+					"api-int":            {Address: "192.168.130.10"},
+					"apps":               {Address: "192.168.130.11"},
 				},
 				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
 					Name: "master-a",
@@ -75,13 +75,16 @@ func dnsRecordsState() v1alpha1.State {
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
-			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname: "master-a",
-				MachineRef: v1alpha1.NodeMachineRef{
-					ClusterInfra: "infra-a",
-					Name:         "master-a",
-				},
-			}}},
+			Spec: v1alpha1.ContainerClusterSpec{
+				Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
+				Nodes: []v1alpha1.OCPNodeSpec{{
+					Hostname: "master-a",
+					MachineRef: v1alpha1.NodeMachineRef{
+						ClusterInfra: "infra-a",
+						Name:         "master-a",
+					},
+				}},
+			},
 		}},
 	}
 }
@@ -98,4 +101,12 @@ func recordPairs(raw any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func defaultEndpointRefs() v1alpha1.ContainerEndpointRefs {
+	return v1alpha1.ContainerEndpointRefs{
+		API:     v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
+		APIInt:  v1alpha1.EndpointRef{Name: "api-int"},
+		Ingress: v1alpha1.EndpointRef{Name: "apps"},
+	}
 }

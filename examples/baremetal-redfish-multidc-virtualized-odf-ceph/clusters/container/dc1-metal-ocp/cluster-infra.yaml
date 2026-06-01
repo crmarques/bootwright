@@ -10,11 +10,17 @@ spec:
 
   endpoints:
     api:
-      externalVip: 192.168.141.20
-    apiInt:
-      externalVip: 192.168.141.20
-    ingress:
-      externalVip: 192.168.141.21
+      address: 192.168.141.20
+      source:
+        type: external
+    api-int:
+      address: 192.168.141.20
+      source:
+        type: external
+    apps:
+      address: 192.168.141.21
+      source:
+        type: external
 
   components:
     machines:

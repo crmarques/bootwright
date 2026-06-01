@@ -82,24 +82,9 @@ func validateClusterEndpoints(ci v1alpha1.ClusterInfra, components map[string]v1
 		}
 		return errs
 	}
-	allowed := map[string]bool{
-		v1alpha1.EndpointAPI:     true,
-		v1alpha1.EndpointAPIInt:  true,
-		v1alpha1.EndpointIngress: true,
-	}
-	for name := range ci.Spec.Endpoints {
-		if !allowed[name] {
-			errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s is not supported; expected only {%s, %s, %s}",
-				ci.Metadata.Name, name, v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress))
-		}
-	}
-	for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
-		endpoint, ok := ci.Spec.Endpoints[name]
-		if !ok {
-			if requireOpenShiftEndpoints {
-				errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s is required", ci.Metadata.Name, name))
-			}
-			continue
+	for name, endpoint := range ci.Spec.Endpoints {
+		if !dnsLabel.MatchString(name) {
+			errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s name is not a DNS label", ci.Metadata.Name, name))
 		}
 		errs = append(errs, validateClusterEndpoint(ci, components, name, endpoint, networkConfigs)...)
 	}
@@ -121,90 +106,138 @@ func referencedContainerClusterInfraNames(state v1alpha1.State) map[string]bool 
 func validateClusterEndpoint(ci v1alpha1.ClusterInfra, components map[string]v1alpha1.InfraComponent, name string, endpoint v1alpha1.Endpoint, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s", ci.Metadata.Name, name)
-	set := 0
-	if endpoint.VIP != "" {
-		set++
+	if endpoint.Address != "" {
+		ip := net.ParseIP(endpoint.Address)
+		if ip == nil {
+			errs = append(errs, fmt.Sprintf("%s.address %q is not a valid IP", prefix, endpoint.Address))
+		} else {
+			errs = append(errs, validateEndpointAddressNetwork(prefix+".address", ci, networkConfigs, endpoint.Address, ip)...)
+			errs = append(errs, validateEndpointPrefixLength(prefix+".prefixLength", endpoint.PrefixLength, ip)...)
+		}
+	} else if endpoint.PrefixLength != 0 {
+		errs = append(errs, prefix+".prefixLength requires address")
 	}
-	if endpoint.ExternalVIP != "" {
-		set++
+	if endpoint.DNSName != "" && !dnsSubdomain.MatchString(endpoint.DNSName) {
+		errs = append(errs, fmt.Sprintf("%s.dnsName %q is not a valid DNS subdomain", prefix, endpoint.DNSName))
 	}
-	if endpoint.ProvidedBy != nil {
-		set++
+	if endpoint.Port < 0 || endpoint.Port > 65535 {
+		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, endpoint.Port))
 	}
-	if set != 1 {
-		errs = append(errs, fmt.Sprintf("%s must set exactly one of {vip, externalVip, providedBy} (got %d)", prefix, set))
-		return errs
+	switch endpoint.Scheme {
+	case "", "http", "https":
+	default:
+		errs = append(errs, fmt.Sprintf("%s.scheme %q must be http or https", prefix, endpoint.Scheme))
 	}
-	if endpoint.ProvidedBy != nil {
-		errs = append(errs, validateEndpointProvider(prefix, *endpoint.ProvidedBy, components)...)
+	for i, cidr := range endpoint.InterfaceNetworks {
+		errs = append(errs, validateCIDR(fmt.Sprintf("%s.interfaceNetworks[%d]", prefix, i), cidr)...)
 	}
-	vip, ok := endpointVIP(components, endpoint)
-	if !ok {
-		return errs
+	switch endpoint.Source.Type {
+	case "":
+		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddress != "" {
+			errs = append(errs, prefix+".source.type is required when source component fields are set")
+		}
+	case v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceCephadm, v1alpha1.EndpointSourceExternal:
+		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddress != "" {
+			errs = append(errs, fmt.Sprintf("%s.source.type=%s must not set componentRef or bindAddress", prefix, endpoint.Source.Type))
+		}
+	case v1alpha1.EndpointSourceInfraComponent:
+		if endpoint.Address != "" {
+			errs = append(errs, prefix+".address must be empty when source.type=infraComponent; use source.bindAddress")
+		}
+		errs = append(errs, validateEndpointProvider(prefix, endpoint.Source, components)...)
+	default:
+		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s, %s}",
+			prefix, endpoint.Source.Type,
+			v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceCephadm, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
 	}
-	ip := net.ParseIP(vip)
-	if ip == nil {
-		errs = append(errs, fmt.Sprintf("%s effective VIP %q is not a valid IP", prefix, vip))
-		return errs
+	if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent {
+		if address, ok := endpointAddress(components, endpoint); ok {
+			ip := net.ParseIP(address)
+			if ip == nil {
+				errs = append(errs, fmt.Sprintf("%s effective address %q is not a valid IP", prefix, address))
+			} else {
+				errs = append(errs, validateEndpointAddressNetwork(prefix+" effective address", ci, networkConfigs, address, ip)...)
+			}
+		}
 	}
+	if endpoint.Address == "" && endpoint.DNSName == "" && endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent {
+		errs = append(errs, prefix+" must set address, dnsName, or source.type=infraComponent")
+	}
+	return errs
+}
+
+func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInfra, networkConfigs map[string]v1alpha1.NetworkConfig, address string, ip net.IP) []string {
+	var errs []string
 	matches := endpointNetworkMatches(ci, networkConfigs, ip)
 	switch len(matches) {
 	case 0:
-		errs = append(errs, fmt.Sprintf("%s effective VIP %q is outside selected NetworkConfig machine networks", prefix, vip))
+		errs = append(errs, fmt.Sprintf("%s %q is outside selected NetworkConfig machine networks", prefix, address))
 	case 1:
 	default:
-		errs = append(errs, fmt.Sprintf("%s effective VIP %q matches multiple selected NetworkConfigs (%s)",
-			prefix, vip, joinSortedNames(matches)))
+		errs = append(errs, fmt.Sprintf("%s %q matches multiple selected NetworkConfigs (%s)",
+			prefix, address, joinSortedNames(matches)))
 	}
 	return errs
 }
 
-func validateEndpointProvider(prefix string, ref v1alpha1.EndpointProvidedBy, components map[string]v1alpha1.InfraComponent) []string {
+func validateEndpointPrefixLength(prefix string, prefixLength int, ip net.IP) []string {
+	if prefixLength == 0 {
+		return nil
+	}
+	if ip.To4() != nil {
+		if prefixLength < 1 || prefixLength > 32 {
+			return []string{fmt.Sprintf("%s %d must be between 1 and 32 for IPv4", prefix, prefixLength)}
+		}
+		return nil
+	}
+	if prefixLength < 1 || prefixLength > 128 {
+		return []string{fmt.Sprintf("%s %d must be between 1 and 128 for IPv6", prefix, prefixLength)}
+	}
+	return nil
+}
+
+func validateEndpointProvider(prefix string, ref v1alpha1.EndpointSource, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	if ref.ComponentRef.Name == "" {
-		return []string{fmt.Sprintf("%s.providedBy.componentRef.name is required", prefix)}
+		return []string{fmt.Sprintf("%s.source.componentRef.name is required when source.type=infraComponent", prefix)}
 	}
 	component, ok := components[ref.ComponentRef.Name]
 	if !ok || component.Spec.LoadBalancer == nil {
-		return []string{fmt.Sprintf("%s.providedBy.componentRef.name %q does not resolve to an InfraComponent loadBalancer", prefix, ref.ComponentRef.Name)}
+		return []string{fmt.Sprintf("%s.source.componentRef.name %q does not resolve to an InfraComponent loadBalancer", prefix, ref.ComponentRef.Name)}
 	}
 	lb := component.Spec.LoadBalancer
 	if len(lb.BindAddresses) == 0 {
-		return []string{fmt.Sprintf("InfraComponent/%s spec.loadBalancer.bindAddresses is required for provided endpoints", component.Metadata.Name)}
+		return []string{fmt.Sprintf("InfraComponent/%s spec.loadBalancer.bindAddresses is required for infraComponent endpoints", component.Metadata.Name)}
 	}
-	if len(lb.BindAddresses) > 1 && ref.Address == "" {
-		errs = append(errs, fmt.Sprintf("%s.providedBy.address is required because InfraComponent/%s spec.loadBalancer has multiple bindAddresses",
+	if len(lb.BindAddresses) > 1 && ref.BindAddress == "" {
+		errs = append(errs, fmt.Sprintf("%s.source.bindAddress is required because InfraComponent/%s spec.loadBalancer has multiple bindAddresses",
 			prefix, component.Metadata.Name))
 	}
-	if ref.Address != "" && !loadBalancerHasBindAddress(lb, ref.Address) {
-		errs = append(errs, fmt.Sprintf("%s.providedBy.address %q does not match any InfraComponent/%s spec.loadBalancer.bindAddresses[].name",
-			prefix, ref.Address, component.Metadata.Name))
+	if ref.BindAddress != "" && !loadBalancerHasBindAddress(lb, ref.BindAddress) {
+		errs = append(errs, fmt.Sprintf("%s.source.bindAddress %q does not match any InfraComponent/%s spec.loadBalancer.bindAddresses[].name",
+			prefix, ref.BindAddress, component.Metadata.Name))
 	}
 	return errs
 }
 
-func endpointVIP(components map[string]v1alpha1.InfraComponent, endpoint v1alpha1.Endpoint) (string, bool) {
-	switch {
-	case endpoint.VIP != "":
-		return endpoint.VIP, true
-	case endpoint.ExternalVIP != "":
-		return endpoint.ExternalVIP, true
-	case endpoint.ProvidedBy != nil:
-		component, ok := components[endpoint.ProvidedBy.ComponentRef.Name]
-		if !ok || component.Spec.LoadBalancer == nil || len(component.Spec.LoadBalancer.BindAddresses) == 0 {
-			return "", false
+func endpointAddress(components map[string]v1alpha1.InfraComponent, endpoint v1alpha1.Endpoint) (string, bool) {
+	if endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent {
+		return endpoint.Address, endpoint.Address != ""
+	}
+	component, ok := components[endpoint.Source.ComponentRef.Name]
+	if !ok || component.Spec.LoadBalancer == nil || len(component.Spec.LoadBalancer.BindAddresses) == 0 {
+		return "", false
+	}
+	lb := component.Spec.LoadBalancer
+	if endpoint.Source.BindAddress == "" {
+		if len(lb.BindAddresses) == 1 {
+			return lb.BindAddresses[0].IP, true
 		}
-		lb := component.Spec.LoadBalancer
-		if endpoint.ProvidedBy.Address == "" {
-			if len(lb.BindAddresses) == 1 {
-				return lb.BindAddresses[0].IP, true
-			}
-			return "", false
-		}
-		for _, bind := range lb.BindAddresses {
-			if bind.Name == endpoint.ProvidedBy.Address {
-				return bind.IP, true
-			}
+		return "", false
+	}
+	for _, bind := range lb.BindAddresses {
+		if bind.Name == endpoint.Source.BindAddress {
+			return bind.IP, true
 		}
 	}
 	return "", false

@@ -134,9 +134,10 @@ func cliStateWithAllSharedProviderServices() v1alpha1.State {
 	for i := range state.ClusterInfras {
 		state.ClusterInfras[i].Spec.Endpoints = map[string]v1alpha1.Endpoint{
 			v1alpha1.EndpointAPI: {
-				ProvidedBy: &v1alpha1.EndpointProvidedBy{
+				Source: v1alpha1.EndpointSource{
+					Type:         v1alpha1.EndpointSourceInfraComponent,
 					ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
-					Address:      "api",
+					BindAddress:  "api",
 				},
 			},
 		}
@@ -229,9 +230,10 @@ func cliClusterInfra(name, machineProvider, networkName string, withEndpoints bo
 	endpoints := map[string]v1alpha1.Endpoint{}
 	if withEndpoints {
 		endpoints[v1alpha1.EndpointAPI] = v1alpha1.Endpoint{
-			ProvidedBy: &v1alpha1.EndpointProvidedBy{
+			Source: v1alpha1.EndpointSource{
+				Type:         v1alpha1.EndpointSourceInfraComponent,
 				ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
-				Address:      "api",
+				BindAddress:  "api",
 			},
 		}
 	}
@@ -253,13 +255,20 @@ func cliClusterInfra(name, machineProvider, networkName string, withEndpoints bo
 func cliContainerCluster(name, infraName string) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
-			Hostname: "master-0",
-			Role:     "master",
-			MachineRef: v1alpha1.NodeMachineRef{
-				ClusterInfra: infraName,
-				Name:         "master-0",
+		Spec: v1alpha1.ContainerClusterSpec{
+			Install: v1alpha1.OCPInstallSpec{
+				EndpointRefs: v1alpha1.ContainerEndpointRefs{
+					API: v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
+				},
 			},
-		}}},
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname: "master-0",
+				Role:     "master",
+				MachineRef: v1alpha1.NodeMachineRef{
+					ClusterInfra: infraName,
+					Name:         "master-0",
+				},
+			}},
+		},
 	}
 }

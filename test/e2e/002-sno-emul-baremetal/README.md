@@ -13,5 +13,5 @@ The desired state uses `ClusterInfra.spec.platform.type: baremetal` with
 this is a single-node cluster, the rendered installer input uses
 `platform.none`.
 
-Cluster endpoints use `externalVip`; the operator-owned external load
-balancer and DNS are outside this fixture.
+Cluster endpoints use `source.type=external`; the operator-owned external
+load balancer and DNS are outside this fixture.

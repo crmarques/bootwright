@@ -108,24 +108,30 @@ networkBindings:
 
 ## Endpoints
 
-Cluster endpoints live in `ClusterInfra.spec.endpoints` as a map keyed by
-`api`, `apiInt`, and `ingress`. Each endpoint declares who owns the VIP:
+Cluster endpoints live in `ClusterInfra.spec.endpoints` as named endpoint
+objects. Consumers bind to those names explicitly; OpenShift install uses
+`ContainerCluster.spec.install.endpointRefs`, while storage gateways use
+gateway endpoint refs.
 
 ```yaml
 endpoints:
   api:
-    vip: 192.168.133.10          # OpenShift-managed
-  apiInt:
-    externalVip: 192.168.133.10  # external LB/DNS, outside Bootwright
-  ingress:
-    providedBy:
+    address: 192.168.133.10      # source.type defaults to openshift
+  api-int:
+    address: 192.168.133.10
+    source:
+      type: external             # external LB/DNS, outside Bootwright
+  apps:
+    source:
+      type: infraComponent       # Bootwright-provisioned load balancer
       componentRef:
         name: apps
-      address: apps-ip           # Bootwright-provisioned load balancer
+      bindAddress: apps-ip
 ```
 
 For Bootwright-provisioned load balancers, declare the target component and its
-bind addresses:
+bind addresses. `source.bindAddress` is the bind-address name, not the IP
+itself; the effective IP comes from the matching `bindAddresses[].ip`.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -143,15 +149,34 @@ spec:
 ```
 
 If a load balancer has exactly one bind address, the endpoint may omit
-`providedBy.address`. Listener ports are derived from endpoint names. Effective
-VIPs are validated against the machine networks selected by cluster machines.
+`source.bindAddress`. Listener ports for OpenShift roles are derived from the
+consumer role, not from arbitrary endpoint names. Effective VIPs are validated
+against the machine networks selected by cluster machines.
 
 Bootwright renders and converges the HAProxy provider service for
-`providedBy` endpoints. Today, automatic VIP attachment is implemented only
-for libvirt-backed cluster infrastructure when the load-balancer host is also
-the infra host that can attach the address to the libvirt network. Other
-placements require the external network fabric to route the VIP to the
-load-balancer host.
+`source.type=infraComponent` endpoints. Today, automatic VIP attachment is
+implemented only for libvirt-backed cluster infrastructure when the
+load-balancer host is also the infra host that can attach the address to the
+libvirt network. Other placements require the external network fabric to route
+the VIP to the load-balancer host.
+
+Storage RGW ingress endpoints are also declared here. The endpoint address is
+the concrete VIP. `prefixLength` provides the `/24` style suffix cephadm expects
+for the keepalived virtual IP, and `interfaceNetworks[]` tells cephadm which
+site-local subnet can host that VIP:
+
+```yaml
+endpoints:
+  rgw-public:
+    dnsName: rgw-ceph.bootwright.test
+    scheme: https
+    port: 443
+  rgw-dc1:
+    address: 192.168.141.80
+    prefixLength: 24
+    interfaceNetworks:
+      - 192.168.141.0/24
+```
 
 ## Name Resolution
 

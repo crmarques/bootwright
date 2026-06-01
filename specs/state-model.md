@@ -17,10 +17,11 @@ Ceph storage:
 - `StoragePlacementPolicy` owns storage placement and CRUSH policy intent.
 - `StoragePool` owns Ceph pool desired state.
 - `StorageFilesystem` owns CephFS metadata/data pool wiring and MDS placement.
-- `StorageObjectGateway` owns RGW service and cephadm ingress VIP placement.
+- `StorageObjectGateway` owns RGW service and refs to public and cephadm
+  ingress endpoints.
 - `StorageExport` owns the exported storage surface. The consuming cluster is
   selected by `ClusterAddonBinding.spec.storage[]`.
-- `ClusterInfra` owns the selected machines, install endpoints, platform
+- `ClusterInfra` owns the selected machines, endpoint definitions, platform
   render mode, and logical-to-substrate network bindings.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
   selections, and the NMState template rendered into `agent-config.yaml`.
@@ -271,6 +272,13 @@ spec:
       version: 4.20.15
 
   install:
+    endpointRefs:
+      api:
+        name: api
+      apiInt:
+        name: api-int
+      ingress:
+        name: apps
     additionalTrustBundleRefs:
       - name: cluster-extra-ca
     servingCertificates:
@@ -314,6 +322,11 @@ Rules:
 
 - `install.mode` defaults to `connected`.
 - `install.method` defaults to `agent`; other methods are not accepted yet.
+- `install.endpointRefs.api`, `install.endpointRefs.apiInt`, and
+  `install.endpointRefs.ingress` explicitly bind OpenShift install roles to
+  named entries in the referenced `ClusterInfra.spec.endpoints` map.
+  The endpoint source defaults to `openshift` for these refs, so multi-node
+  bare-metal installs can omit `source.type` when OpenShift owns the VIP.
 - `install.nodeSSH` selects the SSH key material authorized during
   install and, when available, the private key Bootwright uses for
   post-install node SSH probes. `keyPairRef` names one `SecretRef`
@@ -452,6 +465,16 @@ Rules:
   balancer. Each site-local ingress can place a VIP on nodes in that site, and
   the aggregate ingress placement must cover at least two ingress-capable
   nodes per data site.
+- `StorageObjectGateway.spec.publicEndpointRef.name` points to a
+  `ClusterInfra.spec.endpoints` entry that describes the public RGW DNS name,
+  scheme, and port. Its source defaults to `external`.
+- `StorageObjectGateway.spec.ceph.ingresses[].endpointRef.name` points to a
+  `ClusterInfra.spec.endpoints` entry for the cephadm-managed ingress VIP.
+  Its source defaults to `cephadm`. For example, an endpoint named `rgw-dc1`
+  should set `address: 192.168.141.80` for the specific VIP,
+  `prefixLength: 24` for the keepalived virtual IP CIDR suffix, and
+  `interfaceNetworks: [192.168.141.0/24]` so cephadm can select the site-local
+  interface network.
 - `ClusterAddonBinding.spec.storage[]` connects a `StorageExport` to the
   binding's `ContainerCluster`. The cluster must have a bound `ClusterAddon`
   that provides `data-foundation`; storage attachment manifests are applied
@@ -1067,11 +1090,17 @@ spec:
 
   endpoints:
     api:
-      externalVip: 192.168.133.10
-    apiInt:
-      externalVip: 192.168.133.10
-    ingress:
-      externalVip: 192.168.133.11
+      address: 192.168.133.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.133.10
+      source:
+        type: external
+    apps:
+      address: 192.168.133.11
+      source:
+        type: external
 
   networkBindings:
     - networkConfigRef:
@@ -1140,14 +1169,22 @@ Rules:
   bind to libvirt attachments, vSphere machines to vSphere attachments,
   KubeVirt machines to KubeVirt attachments, and bare-metal machines to
   bare-metal attachments when a binding is declared.
-- `endpoints` is a map keyed by exactly `api`, `apiInt`, and `ingress`.
-  Each endpoint must set exactly one ownership field:
-  `vip` for OpenShift-managed VIPs, `externalVip` for operator-owned external
-  load balancers, or `providedBy` for Bootwright-provisioned load balancers.
-- `providedBy.componentRef.name` references an `InfraComponent` with
-  `spec.loadBalancer`. `providedBy.address` references
-  `spec.loadBalancer.bindAddresses[].name` and is required when the load
-  balancer has more than one bind address.
+- `endpoints` is an arbitrary map of named endpoint objects. Endpoint names
+  must be DNS labels. Consumers decide which endpoint names they use through
+  explicit refs, for example `ContainerCluster.spec.install.endpointRefs` or
+  `StorageObjectGateway.spec.publicEndpointRef`.
+- `address` is the concrete VIP or service IP. `dnsName`, `scheme`, and
+  `port` describe externally consumed endpoints. `prefixLength` and
+  `interfaceNetworks[]` are optional consumer inputs; cephadm RGW ingress uses
+  them to render keepalived virtual IP and interface network settings.
+- `source.type` records the endpoint owner. It may be `openshift`, `external`,
+  `cephadm`, or `infraComponent`. Consumers provide defaults: OpenShift install
+  endpoint refs default to `openshift`, `StorageObjectGateway.publicEndpointRef`
+  defaults to `external`, and RGW ingress endpoint refs default to `cephadm`.
+- `source.type=infraComponent` references an `InfraComponent` with
+  `spec.loadBalancer`. `source.bindAddress` is the name of an entry in
+  `spec.loadBalancer.bindAddresses[]`; it is required when the load balancer
+  has more than one bind address.
 - Bare-metal Redfish virtual-media boot and disconnected agent installs derive
   generated artifact publication from the environment-selected artifact server
   component and route endpoints.
@@ -1161,21 +1198,28 @@ addresses:
 ```yaml
 endpoints:
   api:
-    providedBy:
+    source:
+      type: infraComponent
       componentRef:
         name: control-plane
-      address: control-plane-ip
-  apiInt:
-    providedBy:
+      bindAddress: control-plane-ip
+  api-int:
+    source:
+      type: infraComponent
       componentRef:
         name: control-plane
-      address: control-plane-ip
-  ingress:
-    providedBy:
+      bindAddress: control-plane-ip
+  apps:
+    source:
+      type: infraComponent
       componentRef:
         name: apps
-      address: apps-ip
+      bindAddress: apps-ip
 ```
+
+Here `control-plane-ip` and `apps-ip` are not literal IP addresses. They are
+the names of `InfraComponent.spec.loadBalancer.bindAddresses[]` entries; the
+effective IP comes from those bind-address records.
 
 ## Render Behavior
 
@@ -1186,8 +1230,9 @@ Bootwright renders:
   `ContainerCluster` plus `Environment`.
 - `install-config.yaml networking.machineNetwork[]` from
   `NetworkConfig.spec.machineNetwork[]` referenced by selected machines.
-- `install-config.yaml` API and ingress VIPs from endpoint `vip`,
-  endpoint `externalVip`, or the referenced load balancer bind address IP.
+- `install-config.yaml` API and ingress VIPs from
+  `ContainerCluster.spec.install.endpointRefs`, resolving endpoint `address`
+  or the referenced load balancer bind-address IP.
 - `install-config.yaml platform.<type>` from `ClusterInfra.spec.platform`,
   endpoints, and provider capabilities. Single-node clusters render
   `platform.none` unless `ClusterInfra.spec.platform.type` is `external`,
@@ -1245,10 +1290,11 @@ Validation rejects:
 - Missing or invalid `ContainerCluster.spec.networking`, including malformed
   cluster or service CIDRs, missing `clusterNetwork[].hostPrefix`, or
   `hostPrefix` values outside the selected CIDR.
-- Missing, unknown, or incomplete endpoint keys.
-- Endpoint entries with zero or multiple ownership fields.
-- `providedBy.componentRef.name` or `providedBy.address` references that do
-  not resolve to declared load balancer components and bind addresses.
+- Missing, unknown, or incomplete endpoint refs from a consumer.
+- Endpoint entries without `address`, `dnsName`, or
+  `source.type=infraComponent`.
+- `source.componentRef.name` or `source.bindAddress` references that do not
+  resolve to declared load balancer components and bind addresses.
 - Unreferenced load balancers or named bind addresses.
 - Endpoint VIPs or machine overlay IPs outside selected machine networks.
 - Bare-metal machines selected by a non-bare-metal platform.

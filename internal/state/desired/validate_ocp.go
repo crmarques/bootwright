@@ -37,6 +37,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		errs = append(errs, nodeErrs...)
 		if ok {
 			errs = append(errs, validateNodes(ocp, ci)...)
+			errs = append(errs, validateContainerEndpointRefs(ocp, ci)...)
 			errs = append(errs, validateSNOOpenShiftEndpoints(ocp, ci)...)
 		}
 		errs = append(errs, validateInstallRefs(state, ocp)...)
@@ -209,14 +210,66 @@ func validateSNOOpenShiftEndpoints(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 		return nil
 	}
 	var errs []string
-	for name, endpoint := range ci.Spec.Endpoints {
-		if endpoint.VIP != "" {
-			errs = append(errs, fmt.Sprintf("ContainerCluster/%s single-node clusters forbid ClusterInfra/%s spec.endpoints.%s.vip",
-				ocp.Metadata.Name, ci.Metadata.Name, name))
-			return errs
+	for _, role := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+		refName := containerEndpointRefName(ocp, role)
+		endpoint, ok := ci.Spec.Endpoints[refName]
+		if ok && effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceOpenShift) == v1alpha1.EndpointSourceOpenShift {
+			errs = append(errs, fmt.Sprintf("ContainerCluster/%s single-node clusters forbid ClusterInfra/%s spec.endpoints.%s source.type=openshift",
+				ocp.Metadata.Name, ci.Metadata.Name, refName))
 		}
 	}
 	return errs
+}
+
+func validateContainerEndpointRefs(ocp v1alpha1.ContainerCluster, ci v1alpha1.ClusterInfra) []string {
+	var errs []string
+	for _, role := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+		refName := containerEndpointRefName(ocp, role)
+		prefix := fmt.Sprintf("ContainerCluster/%s spec.install.endpointRefs.%s", ocp.Metadata.Name, role)
+		if refName == "" {
+			errs = append(errs, prefix+".name is required")
+			continue
+		}
+		endpoint, ok := ci.Spec.Endpoints[refName]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.name %q does not match any ClusterInfra/%s spec.endpoints entry", prefix, refName, ci.Metadata.Name))
+			continue
+		}
+		source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceOpenShift)
+		switch source {
+		case v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal:
+			if endpoint.Address == "" {
+				errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.address is required for ContainerCluster/%s %s endpoint",
+					ci.Metadata.Name, refName, ocp.Metadata.Name, role))
+			}
+		case v1alpha1.EndpointSourceInfraComponent:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.name %q references endpoint source.type %q; container endpoints require one of {%s, %s, %s}",
+				prefix, refName, source,
+				v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
+		}
+	}
+	return errs
+}
+
+func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string {
+	switch role {
+	case v1alpha1.EndpointAPI:
+		return ocp.Spec.Install.EndpointRefs.API.Name
+	case v1alpha1.EndpointAPIInt:
+		return ocp.Spec.Install.EndpointRefs.APIInt.Name
+	case v1alpha1.EndpointIngress:
+		return ocp.Spec.Install.EndpointRefs.Ingress.Name
+	default:
+		return ""
+	}
+}
+
+func effectiveEndpointSource(endpoint v1alpha1.Endpoint, defaultSource string) string {
+	if endpoint.Source.Type != "" {
+		return endpoint.Source.Type
+	}
+	return defaultSource
 }
 
 func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {

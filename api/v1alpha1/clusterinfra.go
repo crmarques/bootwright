@@ -39,14 +39,23 @@ type ClusterInfraVSpherePlatform struct {
 }
 
 type Endpoint struct {
-	VIP         string              `yaml:"vip,omitempty" json:"vip,omitempty"`
-	ExternalVIP string              `yaml:"externalVip,omitempty" json:"externalVip,omitempty"`
-	ProvidedBy  *EndpointProvidedBy `yaml:"providedBy,omitempty" json:"providedBy,omitempty"`
+	Address           string         `yaml:"address,omitempty" json:"address,omitempty"`
+	DNSName           string         `yaml:"dnsName,omitempty" json:"dnsName,omitempty"`
+	Port              int            `yaml:"port,omitempty" json:"port,omitempty"`
+	Scheme            string         `yaml:"scheme,omitempty" json:"scheme,omitempty"`
+	PrefixLength      int            `yaml:"prefixLength,omitempty" json:"prefixLength,omitempty"`
+	InterfaceNetworks []string       `yaml:"interfaceNetworks,omitempty" json:"interfaceNetworks,omitempty"`
+	Source            EndpointSource `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
-type EndpointProvidedBy struct {
-	ComponentRef LocalObjectReference `yaml:"componentRef" json:"componentRef"`
-	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
+type EndpointSource struct {
+	Type         string               `yaml:"type,omitempty" json:"type,omitempty"`
+	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	BindAddress  string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+}
+
+type EndpointRef struct {
+	Name string `yaml:"name" json:"name"`
 }
 
 type ClusterComponents struct {

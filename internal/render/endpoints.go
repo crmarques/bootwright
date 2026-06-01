@@ -11,6 +11,39 @@ var standardEndpointNames = []string{
 	v1alpha1.EndpointIngress,
 }
 
+func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string {
+	switch role {
+	case v1alpha1.EndpointAPI:
+		return ocp.Spec.Install.EndpointRefs.API.Name
+	case v1alpha1.EndpointAPIInt:
+		return ocp.Spec.Install.EndpointRefs.APIInt.Name
+	case v1alpha1.EndpointIngress:
+		return ocp.Spec.Install.EndpointRefs.Ingress.Name
+	default:
+		return ""
+	}
+}
+
+func containerEndpoint(ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, role string) (v1alpha1.Endpoint, bool) {
+	name := containerEndpointRefName(ocp, role)
+	if name == "" {
+		return v1alpha1.Endpoint{}, false
+	}
+	endpoint, ok := ci.Spec.Endpoints[name]
+	return endpoint, ok
+}
+
+func containerEndpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, role string) string {
+	return endpointAddress(state, ci, containerEndpointRefName(ocp, role))
+}
+
+func endpointSourceType(endpoint v1alpha1.Endpoint, defaultType string) string {
+	if endpoint.Source.Type != "" {
+		return endpoint.Source.Type
+	}
+	return defaultType
+}
+
 func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInfra, name string) string {
 	return stateview.EndpointAddress(state, ci, name)
 }

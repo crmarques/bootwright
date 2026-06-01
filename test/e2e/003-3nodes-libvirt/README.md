@@ -8,5 +8,5 @@ Each `ContainerCluster.spec.nodes[]` entry binds a hostname and role to a
 `cluster-3n-bridge` `NetworkConfig` template and override only their static
 addresses.
 
-Cluster endpoints use `providedBy` and resolve to the managed HAProxy
-`InfraComponent/load-balancer` bind addresses.
+Cluster endpoints use `source.type=infraComponent` and resolve to the managed
+HAProxy `InfraComponent/load-balancer` bind addresses.

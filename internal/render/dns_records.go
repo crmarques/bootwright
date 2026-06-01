@@ -24,19 +24,19 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 			continue
 		}
 		clusterName := ocp.Metadata.Name
-		if address := endpointAddress(state, ci, v1alpha1.EndpointAPI); address != "" {
+		if address := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointAPI); address != "" {
 			hostRecords = append(hostRecords, dnsmasqRecord{
 				name:    "api." + clusterName + "." + baseDomain,
 				address: address,
 			})
 		}
-		if address := endpointAddress(state, ci, v1alpha1.EndpointAPIInt); address != "" {
+		if address := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointAPIInt); address != "" {
 			hostRecords = append(hostRecords, dnsmasqRecord{
 				name:    "api-int." + clusterName + "." + baseDomain,
 				address: address,
 			})
 		}
-		if address := endpointAddress(state, ci, v1alpha1.EndpointIngress); address != "" {
+		if address := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointIngress); address != "" {
 			domainRecords = append(domainRecords, dnsmasqRecord{
 				name:    "apps." + clusterName + "." + baseDomain,
 				address: address,

@@ -10,11 +10,11 @@ spec:
 
   endpoints:
     api:
-      vip: 192.168.142.10
-    apiInt:
-      vip: 192.168.142.10
-    ingress:
-      vip: 192.168.142.11
+      address: 192.168.142.10
+    api-int:
+      address: 192.168.142.10
+    apps:
+      address: 192.168.142.11
 
   components:
     machines:

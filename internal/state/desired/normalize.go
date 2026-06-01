@@ -199,12 +199,6 @@ func normalizeStorageObjectGateway(gateway *v1alpha1.StorageObjectGateway) {
 	if gateway.Spec.Ceph.FrontendPort == 0 {
 		gateway.Spec.Ceph.FrontendPort = 8080
 	}
-	if gateway.Spec.PublicEndpoint.Port == 0 {
-		gateway.Spec.PublicEndpoint.Port = 443
-	}
-	if gateway.Spec.PublicEndpoint.Scheme == "" {
-		gateway.Spec.PublicEndpoint.Scheme = "https"
-	}
 }
 
 func normalizeStorageExport(export *v1alpha1.StorageExport) {

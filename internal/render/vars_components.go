@@ -1,6 +1,8 @@
 package render
 
 import (
+	"sort"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
@@ -17,7 +19,7 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 	for _, m := range ci.Spec.Components.Machines {
 		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
 	}
-	for _, component := range loadBalancerComponentsForCluster(state, ci) {
+	for _, component := range loadBalancerComponentsForCluster(state, ci, ocp) {
 		lb := loadBalancerComponentVars(state, component)
 		lb["clusterName"] = clusterName
 		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))
@@ -55,14 +57,15 @@ type selectedRegistryComponent struct {
 	component v1alpha1.InfraComponent
 }
 
-func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra) []v1alpha1.InfraComponent {
+func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) []v1alpha1.InfraComponent {
 	seen := map[string]bool{}
 	out := []v1alpha1.InfraComponent{}
-	for _, endpoint := range ci.Spec.Endpoints {
-		if endpoint.ProvidedBy == nil || endpoint.ProvidedBy.ComponentRef.Name == "" {
+	for _, role := range standardEndpointNames {
+		endpoint, ok := containerEndpoint(ci, ocp, role)
+		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent || endpoint.Source.ComponentRef.Name == "" {
 			continue
 		}
-		name := endpoint.ProvidedBy.ComponentRef.Name
+		name := endpoint.Source.ComponentRef.Name
 		if seen[name] {
 			continue
 		}
@@ -146,27 +149,43 @@ func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerClu
 
 func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 	out := make([]any, 0, len(ci.Spec.Endpoints))
-	for _, name := range standardEndpointNames {
-		e, ok := ci.Spec.Endpoints[name]
-		if !ok {
-			continue
-		}
+	names := make([]string, 0, len(ci.Spec.Endpoints))
+	for name := range ci.Spec.Endpoints {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		e := ci.Spec.Endpoints[name]
 		entry := map[string]any{
-			"name":    name,
-			"address": endpointAddress(state, ci, name),
+			"name": name,
 		}
-		if e.VIP != "" {
-			entry["vip"] = e.VIP
+		if address := endpointAddress(state, ci, name); address != "" {
+			entry["address"] = address
 		}
-		if e.ExternalVIP != "" {
-			entry["externalVip"] = e.ExternalVIP
+		if e.DNSName != "" {
+			entry["dnsName"] = e.DNSName
 		}
-		if e.ProvidedBy != nil {
-			providedBy := map[string]any{"componentRef": e.ProvidedBy.ComponentRef.Name}
-			if e.ProvidedBy.Address != "" {
-				providedBy["address"] = e.ProvidedBy.Address
+		if e.Port > 0 {
+			entry["port"] = e.Port
+		}
+		if e.Scheme != "" {
+			entry["scheme"] = e.Scheme
+		}
+		if e.PrefixLength > 0 {
+			entry["prefixLength"] = e.PrefixLength
+		}
+		if len(e.InterfaceNetworks) > 0 {
+			entry["interfaceNetworks"] = stringSliceAny(e.InterfaceNetworks)
+		}
+		if e.Source.Type != "" {
+			source := map[string]any{"type": e.Source.Type}
+			if e.Source.ComponentRef.Name != "" {
+				source["componentRef"] = e.Source.ComponentRef.Name
 			}
-			entry["providedBy"] = providedBy
+			if e.Source.BindAddress != "" {
+				source["bindAddress"] = e.Source.BindAddress
+			}
+			entry["source"] = source
 		}
 		out = append(out, entry)
 	}

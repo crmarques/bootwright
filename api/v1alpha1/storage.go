@@ -175,7 +175,7 @@ type StorageObjectGateway struct {
 
 type StorageObjectGatewaySpec struct {
 	StorageClusterRef LocalObjectReference         `yaml:"storageClusterRef" json:"storageClusterRef"`
-	PublicEndpoint    StoragePublicEndpoint        `yaml:"publicEndpoint" json:"publicEndpoint"`
+	PublicEndpointRef EndpointRef                  `yaml:"publicEndpointRef" json:"publicEndpointRef"`
 	Ceph              StorageObjectGatewayCephSpec `yaml:"ceph" json:"ceph"`
 }
 
@@ -186,17 +186,10 @@ type StorageObjectGatewayCephSpec struct {
 	Ingresses    []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
 }
 
-type StoragePublicEndpoint struct {
-	DNSName string `yaml:"dnsName" json:"dnsName"`
-	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
-	Scheme  string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
-}
-
 type StorageObjectGatewayIngress struct {
-	Name                     string           `yaml:"name" json:"name"`
-	VirtualIP                string           `yaml:"virtualIP" json:"virtualIP"`
-	VirtualInterfaceNetworks []string         `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
-	Placement                StoragePlacement `yaml:"placement" json:"placement"`
+	Name        string           `yaml:"name" json:"name"`
+	EndpointRef EndpointRef      `yaml:"endpointRef" json:"endpointRef"`
+	Placement   StoragePlacement `yaml:"placement" json:"placement"`
 }
 
 type StorageExport struct {

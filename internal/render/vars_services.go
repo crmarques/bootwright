@@ -35,12 +35,16 @@ func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraCom
 // substrate-blind attachment block consumed by network_vips.
 func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, componentName, clusterName string, machines []v1alpha1.ClusterMachineComponent, nodes map[string]v1alpha1.OCPNodeSpec) []any {
 	out := []any{}
+	ocp, ok := findContainerCluster(state, clusterName)
+	if !ok {
+		return out
+	}
 	for _, name := range standardEndpointNames {
-		e, ok := ci.Spec.Endpoints[name]
-		if !ok || e.ProvidedBy == nil || e.ProvidedBy.ComponentRef.Name != componentName {
+		e, ok := containerEndpoint(ci, ocp, name)
+		if !ok || e.Source.Type != v1alpha1.EndpointSourceInfraComponent || e.Source.ComponentRef.Name != componentName {
 			continue
 		}
-		vip := endpointAddress(state, ci, name)
+		vip := containerEndpointAddress(state, ci, ocp, name)
 		if vip == "" {
 			continue
 		}

@@ -47,9 +47,9 @@ func TestProviderServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testing.T) {
 	state.ClusterInfras = append(state.ClusterInfras, state.ClusterInfras[0])
 	state.ClusterInfras[1].Metadata.Name = "infra-b"
 	state.ClusterInfras[1].Spec.Endpoints = map[string]v1alpha1.Endpoint{
-		v1alpha1.EndpointAPI:     {ExternalVIP: "192.168.131.10"},
-		v1alpha1.EndpointAPIInt:  {ExternalVIP: "192.168.131.10"},
-		v1alpha1.EndpointIngress: {ExternalVIP: "192.168.131.11"},
+		v1alpha1.EndpointAPI: {Address: "192.168.131.10"},
+		"api-int":            {Address: "192.168.131.10"},
+		"apps":               {Address: "192.168.131.11"},
 	}
 	state.ClusterInfras[1].Spec.Components.Machines = append([]v1alpha1.ClusterMachineComponent(nil), state.ClusterInfras[1].Spec.Components.Machines...)
 	state.ClusterInfras[1].Spec.Components.Machines[0].NetworkConfig.Ref.Name = "managed-net-b"

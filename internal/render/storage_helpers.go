@@ -157,6 +157,33 @@ func storageGatewayByName(state v1alpha1.State, name string) (v1alpha1.StorageOb
 	return v1alpha1.StorageObjectGateway{}, false
 }
 
+func storageGatewayEndpoint(state v1alpha1.State, gateway v1alpha1.StorageObjectGateway, ref v1alpha1.EndpointRef) (v1alpha1.Endpoint, bool) {
+	cluster, ok := storageClusterByName(state, gateway.Spec.StorageClusterRef.Name)
+	if !ok {
+		return v1alpha1.Endpoint{}, false
+	}
+	infra, ok := storageClusterInfraByName(state, cluster.Spec.ClusterInfraRef.Name)
+	if !ok {
+		return v1alpha1.Endpoint{}, false
+	}
+	endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	return endpoint, ok
+}
+
+func endpointPort(endpoint v1alpha1.Endpoint, defaultPort int) int {
+	if endpoint.Port != 0 {
+		return endpoint.Port
+	}
+	return defaultPort
+}
+
+func cephadmVirtualIP(endpoint v1alpha1.Endpoint) string {
+	if endpoint.PrefixLength > 0 {
+		return fmt.Sprintf("%s/%d", endpoint.Address, endpoint.PrefixLength)
+	}
+	return endpoint.Address
+}
+
 func storageClusterInfraByName(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, bool) {
 	for _, infra := range state.ClusterInfras {
 		if infra.Metadata.Name == name {

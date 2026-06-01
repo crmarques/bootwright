@@ -8,5 +8,5 @@ device hints for the three servers. `cluster-infra.yaml` selects those machines
 and assigns per-node addresses. `infra-component.yaml` declares the artifact
 service used for Redfish virtual-media boot.
 
-Cluster endpoints use `externalVip`; the operator-owned external load
-balancer and DNS are outside this fixture.
+Cluster endpoints use `source.type=external`; the operator-owned external
+load balancer and DNS are outside this fixture.
