@@ -12,14 +12,14 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 )
 
-const dataFoundationAttachmentSecretRelativeDir = "storage-attachments"
+const dataFoundationAddonSecretRelativeDir = "addons"
 
-func DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage string) string {
-	return filepath.Join(clustersDir, cluster, "secrets", dataFoundationAttachmentSecretRelativeDir, binding, storage, "external-cluster-details.json")
+func DataFoundationAttachmentDetailsPath(clustersDir, cluster, addon, input string) string {
+	return filepath.Join(clustersDir, cluster, "secrets", dataFoundationAddonSecretRelativeDir, addon, "inputs", input, "external-cluster-details.json")
 }
 
-func LoadDataFoundationAttachmentDetails(clustersDir, cluster, binding, storage string) (string, bool, error) {
-	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage)
+func LoadDataFoundationAttachmentDetails(clustersDir, cluster, addon, input string) (string, bool, error) {
+	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, addon, input)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", false, nil
@@ -27,22 +27,22 @@ func LoadDataFoundationAttachmentDetails(clustersDir, cluster, binding, storage 
 	if err != nil {
 		return "", false, fmt.Errorf("read Data Foundation storage attachment details: %w", err)
 	}
-	details, err := render.NormalizeDataFoundationExternalDetailsJSON(binding+"/"+storage, path, data)
+	details, err := render.NormalizeDataFoundationExternalDetailsJSON(addon+"/"+input, path, data)
 	if err != nil {
 		return "", true, err
 	}
 	return details, true, nil
 }
 
-func SaveDataFoundationAttachmentDetails(clustersDir, cluster, binding, storage, detailsJSON string) error {
-	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, binding, storage)
+func SaveDataFoundationAttachmentDetails(clustersDir, cluster, addon, input, detailsJSON string) error {
+	path := DataFoundationAttachmentDetailsPath(clustersDir, cluster, addon, input)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create Data Foundation storage attachment details directory: %w", err)
 	}
 	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("chmod Data Foundation storage attachment details directory: %w", err)
 	}
-	details, err := render.NormalizeDataFoundationExternalDetailsJSON(binding+"/"+storage, path, []byte(detailsJSON))
+	details, err := render.NormalizeDataFoundationExternalDetailsJSON(addon+"/"+input, path, []byte(detailsJSON))
 	if err != nil {
 		return err
 	}

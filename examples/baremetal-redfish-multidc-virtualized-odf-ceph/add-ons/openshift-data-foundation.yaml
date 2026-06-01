@@ -8,6 +8,22 @@ spec:
   provides:
     - data-foundation
 
+  accepts:
+    inputs:
+      - name: external-storage
+        schema:
+          type: object
+          required:
+            - exportRef
+          properties:
+            exportRef:
+              refKind: StorageExport
+            externalDetailsRef:
+              secretRef: true
+        effects:
+          - type: storage-export-attachment
+            provider: data-foundation
+
   olm:
     namespace:
       name: openshift-storage

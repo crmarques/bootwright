@@ -2,6 +2,7 @@ package cli
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -14,18 +15,17 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "nodeSSH", cluster.Spec.Ceph.Cephadm.NodeSSH)...)
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "clusterSSH", cluster.Spec.Ceph.Cephadm.ClusterSSH)...)
 	}
-	for _, binding := range state.ClusterAddonBindings {
-		for _, storage := range binding.Spec.Storage {
-			if storage.DataFoundation.ExternalDetailsRef.Name == "" {
-				continue
-			}
-			out = append(out, secretRefRequirement{
-				refName: storage.DataFoundation.ExternalDetailsRef.Name,
-				label:   binding.Metadata.Name + " storage[" + storage.Name + "] dataFoundation externalDetailsRef",
-				phases:  []string{"addons"},
-				role:    secret.MaterialPrimary,
-			})
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		ref := addoninputs.SecretRefValue(effect.Input.Values, "externalDetailsRef")
+		if ref.Name == "" {
+			continue
 		}
+		out = append(out, secretRefRequirement{
+			refName: ref.Name,
+			label:   effect.Addon.Name + " input[" + effect.Input.Name + "] externalDetailsRef",
+			phases:  []string{"addons"},
+			role:    secret.MaterialPrimary,
+		})
 	}
 	return out
 }

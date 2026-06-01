@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
 
 func storageFailureDomain(cluster v1alpha1.StorageCluster) string {
@@ -16,7 +17,8 @@ func storageFailureDomain(cluster v1alpha1.StorageCluster) string {
 
 type StorageAttachment struct {
 	Binding v1alpha1.ClusterAddonBinding
-	Storage v1alpha1.ClusterAddonBindingStorage
+	Addon   v1alpha1.ClusterAddonBindingAddon
+	Input   v1alpha1.ClusterAddonBindingInput
 }
 
 func storageAttachmentsByStorageCluster(state v1alpha1.State) map[string][]StorageAttachment {
@@ -25,17 +27,17 @@ func storageAttachmentsByStorageCluster(state v1alpha1.State) map[string][]Stora
 		exports[export.Metadata.Name] = export
 	}
 	out := map[string][]StorageAttachment{}
-	for _, binding := range state.ClusterAddonBindings {
-		for _, storage := range binding.Spec.Storage {
-			export, ok := exports[storage.ExportRef.Name]
-			if !ok {
-				continue
-			}
-			out[export.Spec.StorageClusterRef.Name] = append(out[export.Spec.StorageClusterRef.Name], StorageAttachment{
-				Binding: binding,
-				Storage: storage,
-			})
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		export, ok := exports[exportRef.Name]
+		if !ok {
+			continue
 		}
+		out[export.Spec.StorageClusterRef.Name] = append(out[export.Spec.StorageClusterRef.Name], StorageAttachment{
+			Binding: effect.Binding,
+			Addon:   effect.Addon,
+			Input:   effect.Input,
+		})
 	}
 	return out
 }
@@ -116,15 +118,13 @@ func storageClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCl
 	return v1alpha1.StorageCluster{}, false
 }
 
-func storageAttachmentByName(state v1alpha1.State, bindingName, storageName string) (StorageAttachment, bool) {
-	for _, binding := range state.ClusterAddonBindings {
-		if binding.Metadata.Name != bindingName {
+func storageAttachmentByName(state v1alpha1.State, clusterName, addonName, inputName string) (StorageAttachment, bool) {
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		if effect.Binding.Spec.ClusterRef.Name != clusterName {
 			continue
 		}
-		for _, storage := range binding.Spec.Storage {
-			if storage.Name == storageName {
-				return StorageAttachment{Binding: binding, Storage: storage}, true
-			}
+		if effect.Addon.Name == addonName && effect.Input.Name == inputName {
+			return StorageAttachment{Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}, true
 		}
 	}
 	return StorageAttachment{}, false

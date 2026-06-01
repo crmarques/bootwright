@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -37,7 +38,7 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 	}
 	var ops []map[string]any
 	for _, attachment := range storageAttachmentsByStorageCluster(state)[cluster.Metadata.Name] {
-		export, ok := exports[attachment.Storage.ExportRef.Name]
+		export, ok := exports[addonInputStorageExportRef(attachment).Name]
 		if !ok {
 			continue
 		}
@@ -66,8 +67,8 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 }
 
 func dataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, attachment StorageAttachment, containerCluster string) map[string]any {
-	if attachment.Storage.DataFoundation.ExternalDetailsRef.Name != "" {
-		return DataFoundationExternalDetailsRefPlaceholderManifest(attachment, attachment.Storage.DataFoundation.ExternalDetailsRef.Name)
+	if ref := addonInputExternalDetailsRef(attachment); ref.Name != "" {
+		return DataFoundationExternalDetailsRefPlaceholderManifest(attachment, ref.Name)
 	}
 	return DataFoundationExternalDetailsManifest(state, cluster, export, attachment, containerCluster, DataFoundationExternalSecrets{})
 }
@@ -96,8 +97,9 @@ func DataFoundationExternalDetailsRefPlaceholderManifest(attachment StorageAttac
 func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, detailsJSON string, sourceRef string) map[string]any {
 	annotations := map[string]any{
 		"bootwright.io/generated-from":        "ClusterAddonBinding/" + attachment.Binding.Metadata.Name,
-		"bootwright.io/storage-attachment":    attachment.Storage.Name,
-		"bootwright.io/storage-export":        attachment.Storage.ExportRef.Name,
+		"bootwright.io/addon":                 attachment.Addon.Name,
+		"bootwright.io/addon-input":           attachment.Input.Name,
+		"bootwright.io/storage-export":        addonInputStorageExportRef(attachment).Name,
 		"bootwright.io/container-cluster-ref": attachment.Binding.Spec.ClusterRef.Name,
 	}
 	if sourceRef != "" {
@@ -116,6 +118,14 @@ func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, 
 			"external_cluster_details": detailsJSON,
 		},
 	}
+}
+
+func addonInputStorageExportRef(attachment StorageAttachment) v1alpha1.LocalObjectReference {
+	return addoninputs.LocalObjectReferenceValue(attachment.Input.Values, "exportRef")
+}
+
+func addonInputExternalDetailsRef(attachment StorageAttachment) v1alpha1.SecretRef {
+	return addoninputs.SecretRefValue(attachment.Input.Values, "externalDetailsRef")
 }
 
 func LoadDataFoundationExternalDetailsJSON(state v1alpha1.State, secretsDir string, ref v1alpha1.SecretRef) (string, error) {

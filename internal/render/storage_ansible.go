@@ -2,6 +2,7 @@ package render
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -98,23 +99,22 @@ func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster stri
 		}
 	}
 	var out []any
-	for _, binding := range state.ClusterAddonBindings {
-		for _, storage := range binding.Spec.Storage {
-			export, ok := exports[storage.ExportRef.Name]
-			if !ok {
-				continue
-			}
-			entry := map[string]any{
-				"cluster": binding.Spec.ClusterRef.Name,
-				"binding": binding.Metadata.Name,
-				"storage": storage.Name,
-				"export":  export.Metadata.Name,
-			}
-			if export.Spec.DataFoundation != nil && export.Spec.DataFoundation.ObjectGatewayRef.Name != "" {
-				entry["objectGateway"] = export.Spec.DataFoundation.ObjectGatewayRef.Name
-			}
-			out = append(out, entry)
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		export, ok := exports[exportRef.Name]
+		if !ok {
+			continue
 		}
+		entry := map[string]any{
+			"cluster": effect.Binding.Spec.ClusterRef.Name,
+			"addon":   effect.Addon.Name,
+			"input":   effect.Input.Name,
+			"export":  export.Metadata.Name,
+		}
+		if export.Spec.DataFoundation != nil && export.Spec.DataFoundation.ObjectGatewayRef.Name != "" {
+			entry["objectGateway"] = export.Spec.DataFoundation.ObjectGatewayRef.Name
+		}
+		out = append(out, entry)
 	}
 	return out
 }

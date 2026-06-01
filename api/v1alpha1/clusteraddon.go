@@ -11,9 +11,36 @@ type ClusterAddon struct {
 type ClusterAddonSpec struct {
 	Type        string                   `yaml:"type" json:"type"`
 	Provides    []string                 `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Accepts     ClusterAddonAccepts      `yaml:"accepts,omitempty" json:"accepts,omitempty"`
 	OLM         *ClusterAddonOLMSpec     `yaml:"olm,omitempty" json:"olm,omitempty"`
 	ManifestSet *ClusterAddonManifestSet `yaml:"manifestSet,omitempty" json:"manifestSet,omitempty"`
 	Readiness   ClusterAddonReadiness    `yaml:"readiness,omitempty" json:"readiness,omitempty"`
+}
+
+type ClusterAddonAccepts struct {
+	Inputs []ClusterAddonAcceptedInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
+}
+
+type ClusterAddonAcceptedInput struct {
+	Name    string                    `yaml:"name" json:"name"`
+	Schema  ClusterAddonInputSchema   `yaml:"schema,omitempty" json:"schema,omitempty"`
+	Effects []ClusterAddonInputEffect `yaml:"effects,omitempty" json:"effects,omitempty"`
+}
+
+type ClusterAddonInputSchema struct {
+	Type       string                               `yaml:"type,omitempty" json:"type,omitempty"`
+	Required   []string                             `yaml:"required,omitempty" json:"required,omitempty"`
+	Properties map[string]ClusterAddonInputProperty `yaml:"properties,omitempty" json:"properties,omitempty"`
+}
+
+type ClusterAddonInputProperty struct {
+	RefKind   string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
+	SecretRef bool   `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
+}
+
+type ClusterAddonInputEffect struct {
+	Type     string `yaml:"type" json:"type"`
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
 }
 
 type ClusterAddonOLMSpec struct {
@@ -94,20 +121,19 @@ type ClusterAddonBinding struct {
 }
 
 type ClusterAddonBindingSpec struct {
-	ClusterRef    LocalObjectReference         `yaml:"clusterRef" json:"clusterRef"`
-	AddonProfiles []LocalObjectReference       `yaml:"addonProfiles,omitempty" json:"addonProfiles,omitempty"`
-	Addons        []LocalObjectReference       `yaml:"addons,omitempty" json:"addons,omitempty"`
-	Storage       []ClusterAddonBindingStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
+	ClusterRef    LocalObjectReference       `yaml:"clusterRef" json:"clusterRef"`
+	AddonProfiles []LocalObjectReference     `yaml:"addonProfiles,omitempty" json:"addonProfiles,omitempty"`
+	Addons        []ClusterAddonBindingAddon `yaml:"addons,omitempty" json:"addons,omitempty"`
 }
 
-type ClusterAddonBindingStorage struct {
-	Name           string                                   `yaml:"name" json:"name"`
-	ExportRef      LocalObjectReference                     `yaml:"exportRef" json:"exportRef"`
-	DataFoundation ClusterAddonBindingStorageDataFoundation `yaml:"dataFoundation,omitempty" json:"dataFoundation,omitempty"`
+type ClusterAddonBindingAddon struct {
+	Name   string                     `yaml:"name" json:"name"`
+	Inputs []ClusterAddonBindingInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 }
 
-type ClusterAddonBindingStorageDataFoundation struct {
-	ExternalDetailsRef SecretRef `yaml:"externalDetailsRef,omitempty" json:"externalDetailsRef,omitempty"`
+type ClusterAddonBindingInput struct {
+	Name   string         `yaml:"name" json:"name"`
+	Values map[string]any `yaml:"values,omitempty" json:"values,omitempty"`
 }
 
 type ClusterAddonPolicy struct {

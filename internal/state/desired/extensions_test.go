@@ -297,6 +297,240 @@ func TestClusterAddonManifestSetPathValidation(t *testing.T) {
 	}
 }
 
+func TestClusterAddonInputValidation(t *testing.T) {
+	addonWithInputs := func(inputYAML string) string {
+		return strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  accepts:\n    inputs:\n"+inputYAML, 1)
+	}
+	bindingWithInputs := func(inputYAML string) string {
+		return `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata: { name: binding }
+spec:
+  clusterRef:
+    name: sno
+  addons:
+    - name: virt
+` + inputYAML
+	}
+	validInput := `      - name: config
+        schema:
+          type: object
+          required:
+            - targetRef
+          properties:
+            targetRef:
+              refKind: ContainerCluster
+`
+
+	cases := []struct {
+		name          string
+		files         func() map[string]string
+		wantSubstring string
+	}{
+		{
+			name: "duplicate-accepted-input-name",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: config
+        schema:
+          type: object
+      - name: config
+        schema:
+          type: object
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[1].name "config" is duplicated`,
+		},
+		{
+			name: "required-property-not-declared",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: config
+        schema:
+          type: object
+          required:
+            - targetRef
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].schema.required[0] "targetRef" is not declared in properties`,
+		},
+		{
+			name: "unsupported-effect-type",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: config
+        schema:
+          type: object
+        effects:
+          - type: volume-attachment
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].effects[0].type "volume-attachment" is not supported`,
+		},
+		{
+			name: "unsupported-effect-provider",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
+        schema:
+          type: object
+        effects:
+          - type: storage-export-attachment
+            provider: kubevirt
+`)
+				return files
+			},
+			wantSubstring: `provider "kubevirt" must be "data-foundation" when type is "storage-export-attachment"`,
+		},
+		{
+			name: "unknown-supplied-input",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = extensionYAML("virt")
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: unknown
+          values: {}
+`)
+				return files
+			},
+			wantSubstring: `inputs[0].name "unknown" is not declared by ClusterAddon/virt spec.accepts.inputs`,
+		},
+		{
+			name: "duplicate-supplied-input",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(validInput)
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: config
+          values:
+            targetRef: { name: sno }
+        - name: config
+          values:
+            targetRef: { name: sno }
+`)
+				return files
+			},
+			wantSubstring: `spec.addons[0].inputs[1].name "config" is duplicated`,
+		},
+		{
+			name: "missing-required-value",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(validInput)
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: config
+          values: {}
+`)
+				return files
+			},
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.targetRef is required`,
+		},
+		{
+			name: "undeclared-value-property",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(validInput)
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: config
+          values:
+            targetRef: { name: sno }
+            otherRef: { name: sno }
+`)
+				return files
+			},
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.otherRef is not declared by the input schema`,
+		},
+		{
+			name: "secret-ref-value-must-exist",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: config
+        schema:
+          type: object
+          properties:
+            credentialRef:
+              secretRef: true
+`)
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: config
+          values:
+            credentialRef: { name: missing-secret }
+`)
+				return files
+			},
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialRef "missing-secret" is not declared in Environment/env spec.secrets`,
+		},
+		{
+			name: "duplicate-effective-application",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = extensionYAML("virt")
+				files["binding-a.yaml"] = strings.Replace(bindingWithInputs(""), "name: binding", "name: binding-a", 1)
+				files["binding-b.yaml"] = strings.Replace(bindingWithInputs(""), "name: binding", "name: binding-b", 1)
+				return files
+			},
+			wantSubstring: `applies ClusterAddon/virt to ContainerCluster/sno, already applied by ClusterAddonBinding/binding-a`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, tc.files())
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestClusterAddonBindingInputsCanConfigureProfileAddon(t *testing.T) {
+	addon := strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", `  type: olm-operator
+  accepts:
+    inputs:
+      - name: config
+        schema:
+          type: object
+          required:
+            - targetRef
+          properties:
+            targetRef:
+              refKind: ContainerCluster
+`, 1)
+	binding := `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata: { name: binding }
+spec:
+  clusterRef:
+    name: sno
+  addonProfiles:
+    - name: set
+  addons:
+    - name: virt
+      inputs:
+        - name: config
+          values:
+            targetRef: { name: sno }
+`
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["extension.yaml"] = addon
+	files["set.yaml"] = extensionSetYAML("set", "virt")
+	files["binding.yaml"] = binding
+	writeFiles(t, dir, files)
+
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
 func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T) {
 	cases := []struct {
 		name          string

@@ -582,7 +582,7 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf.apply", "wait.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf.wait", "addon.demo.odf.apply")
-	assertTaskDeps(t, tasks, "storageattachment.demo.ceph-binding.ceph.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
 }
 
 func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundation(t *testing.T) {
@@ -593,7 +593,7 @@ func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundatio
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "storageattachment.demo.ceph-binding.ceph.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "storage.ceph", "addon.demo.odf.wait")
 }
 
 func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
@@ -608,7 +608,7 @@ func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
 			t.Fatalf("external storage planned storage task: %v", applyTaskIDs(tasks))
 		}
 	}
-	assertTaskDeps(t, tasks, "storageattachment.demo.shared-ceph-binding.ceph.apply", "wait.demo", "addon.demo.odf.wait")
+	assertTaskDeps(t, tasks, "storageattachment.demo.odf.external-storage.apply", "wait.demo", "addon.demo.odf.wait")
 }
 
 func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
@@ -674,12 +674,12 @@ func TestExternalStorageExamplesPlanDataFoundationAttachmentsWithoutCephTask(t *
 			} else {
 				assertTaskMissing(t, tasks, tc.storageTask)
 			}
-			for cluster, binding := range tc.bindings {
+			for cluster := range tc.bindings {
 				deps := []string{"wait." + cluster, "addon." + cluster + "." + tc.addon + ".wait"}
 				if tc.wantStorageJob {
 					deps = []string{"wait." + cluster, tc.storageTask, "addon." + cluster + "." + tc.addon + ".wait"}
 				}
-				assertTaskDeps(t, tasks, "storageattachment."+cluster+"."+binding+".ceph.apply", deps...)
+				assertTaskDeps(t, tasks, "storageattachment."+cluster+"."+tc.addon+".external-storage.apply", deps...)
 			}
 		})
 	}
@@ -763,7 +763,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(runner.lastSpec.ArtifactsDir, "storage-result.json")); !os.IsNotExist(err) {
 		t.Fatalf("storage result was not removed, stat err=%v", err)
 	}
-	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(filepath.Join(dir, "clusters"), "demo", "ceph-binding", "ceph")
+	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(filepath.Join(dir, "clusters"), "demo", "odf", "external-storage")
 	if err != nil || !found {
 		t.Fatalf("LoadDataFoundationAttachmentDetails found=%v err=%v", found, err)
 	}
@@ -780,14 +780,15 @@ func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.
 	}
 	clustersDir := t.TempDir()
 	runtimeDetailsJSON := `[{"name":"rook-csi-rbd-node","kind":"Secret","data":{"userKey":"rbd-node-key"}}]`
-	if err := storageapply.SaveDataFoundationAttachmentDetails(clustersDir, "demo", "ceph-binding", "ceph", runtimeDetailsJSON); err != nil {
+	if err := storageapply.SaveDataFoundationAttachmentDetails(clustersDir, "demo", "odf", "external-storage", runtimeDetailsJSON); err != nil {
 		t.Fatalf("SaveDataFoundationAttachmentDetails: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
 	err := writeStorageAttachmentExternalDetails(path, state, StorageAttachmentPlan{
 		Cluster: "demo",
 		Binding: state.ClusterAddonBindings[0],
-		Storage: state.ClusterAddonBindings[0].Spec.Storage[0],
+		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
+		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
 	}, clustersDir, t.TempDir())
 	if err != nil {
 		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
@@ -826,7 +827,8 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 	err := writeStorageAttachmentExternalDetails(path, state, StorageAttachmentPlan{
 		Cluster: "demo",
 		Binding: state.ClusterAddonBindings[0],
-		Storage: state.ClusterAddonBindings[0].Spec.Storage[0],
+		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
+		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
 	}, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
@@ -927,7 +929,7 @@ func extensionPlanningState() v1alpha1.State {
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef:    v1alpha1.LocalObjectReference{Name: "demo"},
 				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "platform"}},
-				Addons:        []v1alpha1.LocalObjectReference{{Name: "b"}},
+				Addons:        []v1alpha1.ClusterAddonBindingAddon{{Name: "b"}},
 			},
 		}},
 	}
@@ -956,17 +958,14 @@ func storageAttachmentPlanningState() v1alpha1.State {
 			Spec: v1alpha1.ClusterAddonSpec{
 				Type:     v1alpha1.ClusterAddonTypeManifestSet,
 				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
+				Accepts:  dataFoundationAccepts(),
 			},
 		}},
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.LocalObjectReference{{Name: "odf"}},
-				Storage: []v1alpha1.ClusterAddonBindingStorage{{
-					Name:      "ceph",
-					ExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-				}},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export", "")},
 			},
 		}},
 	}
@@ -989,9 +988,46 @@ func externalStorageAttachmentPlanningState() v1alpha1.State {
 		},
 	}}
 	state.ClusterAddonBindings[0].Metadata.Name = "shared-ceph-binding"
-	state.ClusterAddonBindings[0].Spec.Storage[0].ExportRef.Name = "shared-ceph-export"
-	state.ClusterAddonBindings[0].Spec.Storage[0].DataFoundation.ExternalDetailsRef = v1alpha1.SecretRef{Name: "shared-ceph-external-details"}
+	state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0].Values = dataFoundationValues("shared-ceph-export", "shared-ceph-external-details")
 	return state
+}
+
+func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
+	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+		Name: "external-storage",
+		Schema: v1alpha1.ClusterAddonInputSchema{
+			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
+			Required: []string{"exportRef"},
+			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
+				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
+				"externalDetailsRef": {SecretRef: true},
+			},
+		},
+		Effects: []v1alpha1.ClusterAddonInputEffect{{
+			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
+			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+		}},
+	}}}
+}
+
+func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+	return v1alpha1.ClusterAddonBindingAddon{
+		Name: "odf",
+		Inputs: []v1alpha1.ClusterAddonBindingInput{{
+			Name:   "external-storage",
+			Values: dataFoundationValues(export, externalDetails),
+		}},
+	}
+}
+
+func dataFoundationValues(export, externalDetails string) map[string]any {
+	values := map[string]any{
+		"exportRef": map[string]any{"name": export},
+	}
+	if externalDetails != "" {
+		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
+	}
+	return values
 }
 
 func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
@@ -1040,7 +1076,7 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "virt"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-				Addons:     []v1alpha1.LocalObjectReference{{Name: "openshift-virtualization"}},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{{Name: "openshift-virtualization"}},
 			},
 		}},
 	}

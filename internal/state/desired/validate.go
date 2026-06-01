@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 )
 
@@ -394,9 +395,24 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.nodeSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.NodeSSH, requireSSHKey)
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.ClusterSSH, requireSSHKey)
 	}
-	for _, binding := range state.ClusterAddonBindings {
-		for i, storage := range binding.Spec.Storage {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d].dataFoundation.externalDetailsRef", binding.Metadata.Name, i), storage.DataFoundation.ExternalDetailsRef)
+	for _, effective := range addoninputs.EffectiveAddons(state) {
+		accepted := map[string]v1alpha1.ClusterAddonAcceptedInput{}
+		for _, input := range effective.Extension.Spec.Accepts.Inputs {
+			accepted[input.Name] = input
+		}
+		for _, input := range effective.Addon.Inputs {
+			acceptedInput, ok := accepted[input.Name]
+			if !ok {
+				continue
+			}
+			for name, property := range acceptedInput.Schema.Properties {
+				if !property.SecretRef {
+					continue
+				}
+				if ref := addoninputs.SecretRefValue(input.Values, name); ref.Name != "" {
+					require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.%s", effective.Binding.Metadata.Name, effective.Addon.Name, input.Name, name), ref)
+				}
+			}
 		}
 	}
 	return errs

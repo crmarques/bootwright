@@ -47,9 +47,9 @@ task against a synthetic seed host. The storage role reaches preinstalled RHEL
 Ceph nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed
 node, applies cephadm service specs, runs rendered Ceph operations, and writes
 a temporary credential result for Go to convert into final Data Foundation
-attachment records. Imported storage clusters skip this storage task. Storage
-binding tasks run in the add-ons phase after the storage task when one exists
-and the Data Foundation-providing add-on readiness task.
+attachment records. Imported storage clusters skip this storage task.
+Storage-export attachment tasks run in the add-ons phase after the storage task
+when one exists and the Data Foundation-providing add-on readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
 `apply all` adds graph edges from the child infrastructure task to both
 `wait.<host-cluster>` and the host add-on wait task that provides
@@ -90,12 +90,13 @@ The desired-state API is defined in `api/v1alpha1` and specified in
   `StorageObjectGateway` own Ceph placement, pool, CephFS, RGW, and endpoint
   bindings for public and cephadm ingress traffic.
 - `StorageExport` owns the exported storage surface, while
-  `ClusterAddonBinding.storage[]` owns the Data Foundation external-mode
-  connection from storage to one installed cluster.
+  `ClusterAddon.spec.accepts.inputs[]` declares the Data Foundation
+  external-mode effect consumed by one installed cluster through binding
+  input values.
 - `ClusterAddon` owns reusable post-install component intent.
 - `ClusterAddonProfile` owns ordered platform profiles made from add-ons.
 - `ClusterAddonBinding` owns one cluster's post-install add-ons, profiles, and
-  optional storage attachments.
+  binding-scoped add-on input values.
 - `Host` owns SSH reachability to provider or service hosts.
 
 These boundaries are reflected in rendering:

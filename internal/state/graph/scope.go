@@ -2,6 +2,7 @@ package stategraph
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -118,19 +119,13 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	}
 	var bindings []v1alpha1.ClusterAddonBinding
 	selectedContainerClusters := map[string]bool{}
-	for _, binding := range state.ClusterAddonBindings {
-		var storageItems []v1alpha1.ClusterAddonBindingStorage
-		for _, storage := range binding.Spec.Storage {
-			if selectedExports[storage.ExportRef.Name] {
-				storageItems = append(storageItems, storage)
-			}
-		}
-		if len(storageItems) == 0 {
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		if !selectedExports[exportRef.Name] {
 			continue
 		}
-		binding.Spec.Storage = storageItems
-		bindings = append(bindings, binding)
-		selectedContainerClusters[binding.Spec.ClusterRef.Name] = true
+		bindings = append(bindings, storageEffectBinding(effect))
+		selectedContainerClusters[effect.Binding.Spec.ClusterRef.Name] = true
 	}
 	var containerClusters []v1alpha1.ContainerCluster
 	for _, cluster := range state.ContainerClusters {
@@ -236,13 +231,11 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 
 func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]bool) (v1alpha1.State, map[string]bool) {
 	selectedExports := map[string]bool{}
-	for _, binding := range state.ClusterAddonBindings {
-		if !selectedClusters[binding.Spec.ClusterRef.Name] {
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		if !selectedClusters[effect.Binding.Spec.ClusterRef.Name] {
 			continue
 		}
-		for _, storage := range binding.Spec.Storage {
-			selectedExports[storage.ExportRef.Name] = true
-		}
+		selectedExports[addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name] = true
 	}
 
 	selectedStorageClusters := map[string]bool{}
@@ -333,6 +326,22 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 	state.StorageObjectGateways = filteredGateways
 	state.StorageExports = filteredExports
 	return state, storageInfra
+}
+
+func storageEffectBinding(effect addoninputs.EffectBinding) v1alpha1.ClusterAddonBinding {
+	return v1alpha1.ClusterAddonBinding{
+		APIVersion: effect.Binding.APIVersion,
+		Kind:       effect.Binding.Kind,
+		Metadata:   effect.Binding.Metadata,
+		Spec: v1alpha1.ClusterAddonBindingSpec{
+			ClusterRef: effect.Binding.Spec.ClusterRef,
+			Addons: []v1alpha1.ClusterAddonBindingAddon{{
+				Name:   effect.Addon.Name,
+				Inputs: []v1alpha1.ClusterAddonBindingInput{effect.Input},
+			}},
+		},
+		SourcePath: effect.Binding.SourcePath,
+	}
 }
 
 func SelectedClusterForInfra(clusters []v1alpha1.ContainerCluster, infraName string) (v1alpha1.ContainerCluster, bool) {

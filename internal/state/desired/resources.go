@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -268,10 +269,10 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddon, ref.Name)
 		}
-		for i, storage := range binding.Spec.Storage {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d].exportRef", binding.Metadata.Name, i),
-				v1alpha1.KindStorageExport, storage.ExportRef.Name)
-		}
+	}
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name),
+			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name)
 	}
 	for _, cluster := range state.StorageClusters {
 		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),

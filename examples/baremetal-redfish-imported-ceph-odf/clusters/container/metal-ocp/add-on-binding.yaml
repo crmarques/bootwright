@@ -8,11 +8,10 @@ spec:
 
   addons:
     - name: openshift-data-foundation
-
-  storage:
-    - name: ceph
-      exportRef:
-        name: imported-ceph-odf
-      dataFoundation:
-        externalDetailsRef:
-          name: imported-ceph-odf-details
+      inputs:
+        - name: external-storage
+          values:
+            exportRef:
+              name: imported-ceph-odf
+            externalDetailsRef:
+              name: imported-ceph-odf-details

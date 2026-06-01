@@ -104,9 +104,21 @@ func expandBindingExtensionNames(state v1alpha1.State, binding v1alpha1.ClusterA
 		expanded = append(expanded, names...)
 	}
 	for _, ref := range binding.Spec.Addons {
+		if contains(expanded, ref.Name) {
+			continue
+		}
 		expanded = append(expanded, ref.Name)
 	}
 	return firstOccurrence(expanded), nil
+}
+
+func contains(items []string, value string) bool {
+	for _, item := range items {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
 
 func ExpandSet(state v1alpha1.State, name string) ([]string, error) {

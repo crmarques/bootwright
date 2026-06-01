@@ -143,7 +143,7 @@ func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) 
 		{ID: "boot.cluster-a", Kind: workflow.ApplyTaskKindNodeBoot, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
 		{ID: "wait.cluster-a", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},
 		{ID: "storage.ceph-a", Kind: workflow.ApplyTaskKindStorageCluster, Cluster: "ceph-a", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
-		{ID: "storageattachment.cluster-a.binding.data.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
+		{ID: "storageattachment.cluster-a.openshift-data-foundation.external-storage.apply", Kind: workflow.ApplyTaskKindStorageAttachmentApply, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusBlocked, Dependencies: []string{"storage.ceph-a"}},
 	}, now)
 
 	lines := applyClusterPhaseLines(clustersDir, ledger)

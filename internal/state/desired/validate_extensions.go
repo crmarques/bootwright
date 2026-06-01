@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
 
 func validateClusterAddons(state v1alpha1.State) []string {
@@ -42,6 +43,82 @@ func validateClusterAddons(state v1alpha1.State) []string {
 		}
 		errs = append(errs, validateClusterAddonReadiness(extension)...)
 		errs = append(errs, validateClusterAddonProvides(extension)...)
+		errs = append(errs, validateClusterAddonAccepts(extension)...)
+	}
+	return errs
+}
+
+func validateClusterAddonAccepts(extension v1alpha1.ClusterAddon) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, input := range extension.Spec.Accepts.Inputs {
+		prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d]", extension.Metadata.Name, i)
+		if input.Name == "" {
+			errs = append(errs, prefix+".name is required")
+		} else if seen[input.Name] {
+			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", prefix, input.Name))
+		}
+		seen[input.Name] = true
+		errs = append(errs, validateClusterAddonInputSchema(prefix+".schema", input.Schema)...)
+		errs = append(errs, validateClusterAddonInputEffects(prefix+".effects", input.Effects)...)
+	}
+	return errs
+}
+
+func validateClusterAddonInputSchema(prefix string, schema v1alpha1.ClusterAddonInputSchema) []string {
+	var errs []string
+	switch schema.Type {
+	case "", v1alpha1.ClusterAddonInputSchemaTypeObject:
+	default:
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, schema.Type, v1alpha1.ClusterAddonInputSchemaTypeObject))
+	}
+	required := map[string]bool{}
+	for i, name := range schema.Required {
+		owner := fmt.Sprintf("%s.required[%d]", prefix, i)
+		if name == "" {
+			errs = append(errs, owner+" must not be empty")
+		} else if required[name] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, name))
+		} else if _, ok := schema.Properties[name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s %q is not declared in properties", owner, name))
+		}
+		required[name] = true
+	}
+	for name, property := range schema.Properties {
+		owner := prefix + ".properties." + name
+		if name == "" {
+			errs = append(errs, prefix+".properties contains an empty property name")
+		}
+		if property.RefKind != "" {
+			if !knownResourceKind(property.RefKind) {
+				errs = append(errs, fmt.Sprintf("%s.refKind %q is not a known Bootwright kind", owner, property.RefKind))
+			}
+			if property.SecretRef {
+				errs = append(errs, owner+" must not set both refKind and secretRef")
+			}
+			continue
+		}
+		if !property.SecretRef {
+			errs = append(errs, owner+" must set refKind or secretRef")
+		}
+	}
+	return errs
+}
+
+func validateClusterAddonInputEffects(prefix string, effects []v1alpha1.ClusterAddonInputEffect) []string {
+	var errs []string
+	for i, effect := range effects {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		switch effect.Type {
+		case v1alpha1.ClusterAddonInputEffectStorageExportAttachment:
+			if effect.Provider != v1alpha1.ClusterAddonProvidesDataFoundation {
+				errs = append(errs, fmt.Sprintf("%s.provider %q must be %q when type is %q", owner, effect.Provider, v1alpha1.ClusterAddonProvidesDataFoundation, effect.Type))
+			}
+		case "":
+			errs = append(errs, owner+".type is required")
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q is not supported", owner, effect.Type))
+		}
 	}
 	return errs
 }
@@ -330,6 +407,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 	addons := indexClusterAddons(state.ClusterAddons)
 	sets := indexClusterAddonProfiles(state.ClusterAddonProfiles)
 	seen := map[string]bool{}
+	effectiveApplications := map[string]string{}
 	for _, binding := range state.ClusterAddonBindings {
 		if e := validateName(v1alpha1.KindClusterAddonBinding, binding.Metadata.Name); e != "" {
 			errs = append(errs, e)
@@ -344,8 +422,8 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef.name %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
 		}
-		if len(binding.Spec.AddonProfiles) == 0 && len(binding.Spec.Addons) == 0 && len(binding.Spec.Storage) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfiles, addons, or storage", binding.Metadata.Name))
+		if len(binding.Spec.AddonProfiles) == 0 && len(binding.Spec.Addons) == 0 {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfiles or addons", binding.Metadata.Name))
 		}
 		for i, ref := range binding.Spec.AddonProfiles {
 			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfiles[%d].name", binding.Metadata.Name, i)
@@ -355,25 +433,100 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddonProfile", owner, ref.Name))
 			}
 		}
-		for i, ref := range binding.Spec.Addons {
+		for i, addon := range binding.Spec.Addons {
 			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].name", binding.Metadata.Name, i)
-			if ref.Name == "" {
+			if addon.Name == "" {
 				errs = append(errs, owner+" is required")
-			} else if _, ok := addons[ref.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, ref.Name))
+			} else if _, ok := addons[addon.Name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, addon.Name))
+			}
+			inputNames := map[string]bool{}
+			for j, input := range addon.Inputs {
+				inputOwner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].inputs[%d]", binding.Metadata.Name, i, j)
+				if input.Name == "" {
+					errs = append(errs, inputOwner+".name is required")
+				} else if inputNames[input.Name] {
+					errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", inputOwner, input.Name))
+				}
+				inputNames[input.Name] = true
 			}
 		}
-		storageNames := map[string]bool{}
-		for i, storage := range binding.Spec.Storage {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d]", binding.Metadata.Name, i)
-			if storage.Name == "" {
-				errs = append(errs, owner+".name is required")
-			} else if storageNames[storage.Name] {
-				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, storage.Name))
+		for _, addon := range addoninputs.EffectiveBindingAddons(state, binding) {
+			if addon.Name == "" {
+				continue
 			}
-			storageNames[storage.Name] = true
-			if storage.ExportRef.Name == "" {
-				errs = append(errs, owner+".exportRef.name is required")
+			applicationKey := binding.Spec.ClusterRef.Name + "/" + addon.Name
+			if previous := effectiveApplications[applicationKey]; previous != "" {
+				errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s applies ClusterAddon/%s to ContainerCluster/%s, already applied by ClusterAddonBinding/%s", binding.Metadata.Name, addon.Name, binding.Spec.ClusterRef.Name, previous))
+			} else {
+				effectiveApplications[applicationKey] = binding.Metadata.Name
+			}
+			extension, ok := addons[addon.Name]
+			if !ok {
+				continue
+			}
+			accepted := map[string]v1alpha1.ClusterAddonAcceptedInput{}
+			for _, input := range extension.Spec.Accepts.Inputs {
+				accepted[input.Name] = input
+			}
+			effectiveInputNames := map[string]bool{}
+			for i, input := range addon.Inputs {
+				owner := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s inputs[%d]", binding.Metadata.Name, addon.Name, i)
+				acceptedInput, ok := accepted[input.Name]
+				if input.Name == "" {
+					continue
+				}
+				if effectiveInputNames[input.Name] {
+					errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, input.Name))
+					continue
+				}
+				effectiveInputNames[input.Name] = true
+				if !ok {
+					errs = append(errs, fmt.Sprintf("%s.name %q is not declared by ClusterAddon/%s spec.accepts.inputs", owner, input.Name, addon.Name))
+					continue
+				}
+				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema)...)
+			}
+		}
+	}
+	return errs
+}
+
+func validateClusterAddonInputValues(prefix string, values map[string]any, schema v1alpha1.ClusterAddonInputSchema) []string {
+	var errs []string
+	if schema.Type != "" && schema.Type != v1alpha1.ClusterAddonInputSchemaTypeObject {
+		return errs
+	}
+	for _, name := range schema.Required {
+		if _, ok := values[name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.%s is required", prefix, name))
+		}
+	}
+	for name := range values {
+		if _, ok := schema.Properties[name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.%s is not declared by the input schema", prefix, name))
+		}
+	}
+	for name, property := range schema.Properties {
+		raw, ok := values[name]
+		if !ok {
+			continue
+		}
+		owner := prefix + "." + name
+		if property.RefKind != "" || property.SecretRef {
+			ref, ok := raw.(map[string]any)
+			if !ok {
+				errs = append(errs, owner+" must be an object with name")
+				continue
+			}
+			nameValue, _ := ref["name"].(string)
+			if nameValue == "" {
+				errs = append(errs, owner+".name is required")
+			}
+			for key := range ref {
+				if key != "name" {
+					errs = append(errs, fmt.Sprintf("%s.%s is not supported", owner, key))
+				}
 			}
 		}
 	}
@@ -384,7 +537,6 @@ func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]boo
 	addons := indexClusterAddons(state.ClusterAddons)
 	out := map[string]map[string]bool{}
 	for _, binding := range state.ClusterAddonBindings {
-		names := bindingProvidedExtensionNames(state, binding)
 		cluster := binding.Spec.ClusterRef.Name
 		if cluster == "" {
 			continue
@@ -392,54 +544,14 @@ func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]boo
 		if out[cluster] == nil {
 			out[cluster] = map[string]bool{}
 		}
-		for _, name := range names {
-			extension, ok := addons[name]
+		for _, item := range addoninputs.EffectiveBindingAddons(state, binding) {
+			extension, ok := addons[item.Name]
 			if !ok {
 				continue
 			}
 			for _, capability := range extension.Spec.Provides {
 				out[cluster][capability] = true
 			}
-		}
-	}
-	return out
-}
-
-func bindingProvidedExtensionNames(state v1alpha1.State, binding v1alpha1.ClusterAddonBinding) []string {
-	sets := indexClusterAddonProfiles(state.ClusterAddonProfiles)
-	seen := map[string]bool{}
-	var out []string
-	var visitSet func(string, map[string]bool)
-	visitSet = func(name string, stack map[string]bool) {
-		if stack[name] {
-			return
-		}
-		set, ok := sets[name]
-		if !ok {
-			return
-		}
-		nextStack := map[string]bool{}
-		for key, value := range stack {
-			nextStack[key] = value
-		}
-		nextStack[name] = true
-		for _, ref := range set.Spec.Profiles {
-			visitSet(ref.Name, nextStack)
-		}
-		for _, ref := range set.Spec.Addons {
-			if !seen[ref.Name] {
-				seen[ref.Name] = true
-				out = append(out, ref.Name)
-			}
-		}
-	}
-	for _, ref := range binding.Spec.AddonProfiles {
-		visitSet(ref.Name, map[string]bool{})
-	}
-	for _, ref := range binding.Spec.Addons {
-		if !seen[ref.Name] {
-			seen[ref.Name] = true
-			out = append(out, ref.Name)
 		}
 	}
 	return out

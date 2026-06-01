@@ -44,7 +44,7 @@ func TestPersistCephApplyResultCapturesDataFoundationAttachmentCredentials(t *te
 	if _, err := os.Stat(resultPath); !os.IsNotExist(err) {
 		t.Fatalf("storage result was not removed, stat err=%v", err)
 	}
-	detailsJSON, found, err := LoadDataFoundationAttachmentDetails(clustersDir, "demo", "ceph-binding", "ceph")
+	detailsJSON, found, err := LoadDataFoundationAttachmentDetails(clustersDir, "demo", "odf", "external-storage")
 	if err != nil || !found {
 		t.Fatalf("LoadDataFoundationAttachmentDetails found=%v err=%v", found, err)
 	}
@@ -53,7 +53,7 @@ func TestPersistCephApplyResultCapturesDataFoundationAttachmentCredentials(t *te
 			t.Fatalf("external details missing %q: %s", token, detailsJSON)
 		}
 	}
-	info, err := os.Stat(DataFoundationAttachmentDetailsPath(clustersDir, "demo", "ceph-binding", "ceph"))
+	info, err := os.Stat(DataFoundationAttachmentDetailsPath(clustersDir, "demo", "odf", "external-storage"))
 	if err != nil {
 		t.Fatalf("stat external details: %v", err)
 	}
@@ -182,15 +182,54 @@ func dataFoundationStorageState() v1alpha1.State {
 			},
 		},
 	}}
+	state.ClusterAddons = []v1alpha1.ClusterAddon{{
+		Metadata: v1alpha1.Metadata{Name: "odf"},
+		Spec: v1alpha1.ClusterAddonSpec{
+			Type:     v1alpha1.ClusterAddonTypeManifestSet,
+			Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
+			Accepts:  dataFoundationAccepts(),
+		},
+	}}
 	state.ClusterAddonBindings = []v1alpha1.ClusterAddonBinding{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 		Spec: v1alpha1.ClusterAddonBindingSpec{
 			ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-			Storage: []v1alpha1.ClusterAddonBindingStorage{{
-				Name:      "ceph",
-				ExportRef: v1alpha1.LocalObjectReference{Name: "export"},
-			}},
+			Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export", "")},
 		},
 	}}
 	return state
+}
+
+func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
+	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+		Name: "external-storage",
+		Schema: v1alpha1.ClusterAddonInputSchema{
+			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
+			Required: []string{"exportRef"},
+			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
+				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
+				"externalDetailsRef": {SecretRef: true},
+			},
+		},
+		Effects: []v1alpha1.ClusterAddonInputEffect{{
+			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
+			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+		}},
+	}}}
+}
+
+func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+	values := map[string]any{
+		"exportRef": map[string]any{"name": export},
+	}
+	if externalDetails != "" {
+		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
+	}
+	return v1alpha1.ClusterAddonBindingAddon{
+		Name: "odf",
+		Inputs: []v1alpha1.ClusterAddonBindingInput{{
+			Name:   "external-storage",
+			Values: values,
+		}},
+	}
 }

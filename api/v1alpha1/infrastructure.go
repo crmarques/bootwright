@@ -164,6 +164,8 @@ const (
 	DefaultClusterAddonFieldManager                 = "bootwright"
 	ClusterAddonProvidesKubeVirt                    = "kubevirt"
 	ClusterAddonProvidesDataFoundation              = "data-foundation"
+	ClusterAddonInputSchemaTypeObject               = "object"
+	ClusterAddonInputEffectStorageExportAttachment  = "storage-export-attachment"
 
 	StorageClusterTypeCeph = "ceph"
 

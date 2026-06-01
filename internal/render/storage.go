@@ -19,8 +19,8 @@ type StorageAsset struct {
 }
 
 type StorageAttachmentAsset struct {
-	BindingName                string
-	StorageName                string
+	AddonName                  string
+	InputName                  string
 	ContainerClusterName       string
 	Dir                        string
 	ExternalClusterDetailsPath string
@@ -64,15 +64,15 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 		}
 		for _, attachment := range attachmentsByCluster[cluster.Metadata.Name] {
 			containerCluster := attachment.Binding.Spec.ClusterRef.Name
-			bindingDir := filepath.Join(asset.DataFoundationDir, attachment.Binding.Metadata.Name, attachment.Storage.Name, containerCluster)
+			inputDir := filepath.Join(asset.DataFoundationDir, containerCluster, attachment.Addon.Name, attachment.Input.Name)
 			asset.Attachments = append(asset.Attachments, StorageAttachmentAsset{
-				BindingName:                attachment.Binding.Metadata.Name,
-				StorageName:                attachment.Storage.Name,
+				AddonName:                  attachment.Addon.Name,
+				InputName:                  attachment.Input.Name,
 				ContainerClusterName:       containerCluster,
-				Dir:                        bindingDir,
-				ExternalClusterDetailsPath: filepath.Join(bindingDir, "rook-ceph-external-cluster-details.yaml"),
-				StorageClusterPath:         filepath.Join(bindingDir, "ocs-external-storagecluster.yaml"),
-				StorageSystemPath:          filepath.Join(bindingDir, "ocs-external-storagesystem.yaml"),
+				Dir:                        inputDir,
+				ExternalClusterDetailsPath: filepath.Join(inputDir, "rook-ceph-external-cluster-details.yaml"),
+				StorageClusterPath:         filepath.Join(inputDir, "ocs-external-storagecluster.yaml"),
+				StorageSystemPath:          filepath.Join(inputDir, "ocs-external-storagesystem.yaml"),
 			})
 		}
 		assets = append(assets, asset)
@@ -98,21 +98,23 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			}
 		}
 		for _, attachmentAsset := range asset.Attachments {
-			attachment, ok := storageAttachmentByName(state, attachmentAsset.BindingName, attachmentAsset.StorageName)
+			attachment, ok := storageAttachmentByName(state, attachmentAsset.ContainerClusterName, attachmentAsset.AddonName, attachmentAsset.InputName)
 			if !ok {
 				continue
 			}
-			export, ok := storageExportByName(state, attachment.Storage.ExportRef.Name)
+			exportRef := addonInputStorageExportRef(attachment)
+			export, ok := storageExportByName(state, exportRef.Name)
 			if !ok {
 				continue
 			}
 			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, attachment, attachmentAsset.ContainerClusterName)
-			if attachment.Storage.DataFoundation.ExternalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
-				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, attachment.Storage.DataFoundation.ExternalDetailsRef)
+			externalDetailsRef := addonInputExternalDetailsRef(attachment)
+			if externalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
+				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, externalDetailsRef)
 				if err != nil {
 					return err
 				}
-				externalDetails = DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, attachment.Storage.DataFoundation.ExternalDetailsRef.Name)
+				externalDetails = DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, externalDetailsRef.Name)
 			}
 			if err := writeYAML(fs, attachmentAsset.ExternalClusterDetailsPath, externalDetails); err != nil {
 				return err

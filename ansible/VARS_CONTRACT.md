@@ -265,8 +265,8 @@ bootwright_storage_clusters:
       publicKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh.pub
     dataFoundationBindings:
       - cluster: prod-3node
-        binding: prod-3node-addons
-        storage: ceph
+        addon: openshift-data-foundation
+        input: external-storage
         export: ceph
 ```
 

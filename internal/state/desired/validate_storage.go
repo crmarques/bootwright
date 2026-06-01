@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 )
 
 func validateStorage(state v1alpha1.State) []string {
@@ -17,8 +18,6 @@ func validateStorage(state v1alpha1.State) []string {
 	gateways := indexStorageObjectGateways(state.StorageObjectGateways)
 	exports := indexStorageExports(state.StorageExports)
 	infras := indexClusterInfras(state.ClusterInfras)
-	containerClusters := indexContainerClusters(state.ContainerClusters)
-	provided := providedClusterCapabilities(state)
 
 	errs = append(errs, validateStorageClusters(state.StorageClusters, infras)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
@@ -26,7 +25,7 @@ func validateStorage(state v1alpha1.State) []string {
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters, infras)...)
 	errs = append(errs, validateStorageExports(state.StorageExports, clusters, pools, filesystems, gateways)...)
-	errs = append(errs, validateClusterAddonBindingStorage(state.ClusterAddonBindings, exports, clusters, containerClusters, provided)...)
+	errs = append(errs, validateStorageExportAttachmentEffects(state, exports, clusters)...)
 	return errs
 }
 
@@ -572,49 +571,51 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 	return errs
 }
 
-func validateClusterAddonBindingStorage(items []v1alpha1.ClusterAddonBinding, exports map[string]v1alpha1.StorageExport, storageClusters map[string]v1alpha1.StorageCluster, clusters map[string]v1alpha1.ContainerCluster, provided map[string]map[string]bool) []string {
+func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport, storageClusters map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
-	for _, binding := range items {
-		if len(binding.Spec.Storage) == 0 {
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name)
+		if !addonProvides(effect.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
+			errs = append(errs, fmt.Sprintf("%s effect %q with provider %q requires ClusterAddon/%s to provide %q", prefix, effect.Effect.Type, effect.Effect.Provider, effect.Addon.Name, v1alpha1.ClusterAddonProvidesDataFoundation))
+		}
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		if exportRef.Name == "" {
 			continue
 		}
-		clusterName := binding.Spec.ClusterRef.Name
-		if _, ok := clusters[clusterName]; !ok {
+		export, exportOK := exports[exportRef.Name]
+		if !exportOK {
+			errs = append(errs, fmt.Sprintf("%s.values.exportRef.name %q does not match any StorageExport", prefix, exportRef.Name))
 			continue
 		}
-		for i, storage := range binding.Spec.Storage {
-			prefix := fmt.Sprintf("ClusterAddonBinding/%s spec.storage[%d]", binding.Metadata.Name, i)
-			export, exportOK := exports[storage.ExportRef.Name]
-			if storage.ExportRef.Name == "" {
-				continue
+		if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
+			errs = append(errs, fmt.Sprintf("%s.values.exportRef.name %q must reference a data-foundation StorageExport", prefix, exportRef.Name))
+			continue
+		}
+		cluster, clusterOK := storageClusters[export.Spec.StorageClusterRef.Name]
+		if !clusterOK {
+			continue
+		}
+		externalDetailsRef := addoninputs.SecretRefValue(effect.Input.Values, "externalDetailsRef")
+		if storageClusterExternal(cluster) {
+			if externalDetailsRef.Name == "" {
+				errs = append(errs, prefix+".values.externalDetailsRef.name is required when exportRef points to an external StorageCluster")
 			}
-			if !exportOK {
-				errs = append(errs, fmt.Sprintf("%s.exportRef.name %q does not match any StorageExport", prefix, storage.ExportRef.Name))
-				continue
-			}
-			if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
-				errs = append(errs, fmt.Sprintf("%s.exportRef.name %q must reference a data-foundation StorageExport", prefix, storage.ExportRef.Name))
-				continue
-			}
-			if !provided[clusterName][v1alpha1.ClusterAddonProvidesDataFoundation] {
-				errs = append(errs, fmt.Sprintf("%s requires ClusterAddonBinding resources for ContainerCluster/%s to include a ClusterAddon providing %q", prefix, clusterName, v1alpha1.ClusterAddonProvidesDataFoundation))
-			}
-			cluster, clusterOK := storageClusters[export.Spec.StorageClusterRef.Name]
-			if !clusterOK {
-				continue
-			}
-			if storageClusterExternal(cluster) {
-				if storage.DataFoundation.ExternalDetailsRef.Name == "" {
-					errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name is required when exportRef points to an external StorageCluster")
-				}
-				continue
-			}
-			if storage.DataFoundation.ExternalDetailsRef.Name != "" {
-				errs = append(errs, prefix+".dataFoundation.externalDetailsRef.name must be empty when exportRef points to a managed StorageCluster")
-			}
+			continue
+		}
+		if externalDetailsRef.Name != "" {
+			errs = append(errs, prefix+".values.externalDetailsRef.name must be empty when exportRef points to a managed StorageCluster")
 		}
 	}
 	return errs
+}
+
+func addonProvides(extension v1alpha1.ClusterAddon, capability string) bool {
+	for _, item := range extension.Spec.Provides {
+		if item == capability {
+			return true
+		}
+	}
+	return false
 }
 
 func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlacement, cluster v1alpha1.StorageCluster, clusterOK bool, role string) []string {

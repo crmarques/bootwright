@@ -31,12 +31,11 @@ bastion-to-RHEL-node identity and `clusterSSH` is the identity passed to
 cephadm for ongoing orchestration. Data Foundation external-cluster details
 render with placeholders for Ceph client secrets; generated Ceph keys are
 created or read during apply and must not be committed. Imported Ceph
-connection JSON is declared through
-`ClusterAddonBinding.spec.storage[].dataFoundation.externalDetailsRef`; normal
-render output uses a placeholder, while sensitive render and apply-time
-artifacts inline the secret JSON only in local restrictive-mode output.
-Managed Ceph saves generated connection JSON under
-`clusters/<cluster>/secrets/storage-attachments/<binding>/<storage>/external-cluster-details.json`
+connection JSON is declared through a Data Foundation add-on input value named
+`externalDetailsRef`; normal render output uses a placeholder, while sensitive
+render and apply-time artifacts inline the secret JSON only in local
+restrictive-mode output. Managed Ceph saves generated connection JSON under
+`clusters/<cluster>/secrets/addons/<addon>/inputs/<input>/external-cluster-details.json`
 with restrictive permissions.
 
 ## Installer Trust

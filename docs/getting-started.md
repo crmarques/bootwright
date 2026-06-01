@@ -210,8 +210,8 @@ state before applying it.
 
 `apply all` is the normal end-to-end convergence path. It includes
 infrastructure, managed storage, OpenShift or OKD cluster install, and bound
-post-install add-ons. Storage bindings wait for both the storage task and a
-bound add-on with `provides: [data-foundation]`.
+post-install add-ons. Storage-export input effects wait for both the storage
+task and a bound add-on with `provides: [data-foundation]`.
 For KubeVirt child clusters, `apply all` also waits for the parent cluster
 install and its `provides: [kubevirt]` add-on before creating child VM
 infrastructure. `apply infra --scope <child>` requires that parent cluster to

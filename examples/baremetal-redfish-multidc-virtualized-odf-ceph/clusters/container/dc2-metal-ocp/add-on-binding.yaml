@@ -9,9 +9,9 @@ spec:
   addons:
     - name: openshift-virtualization
     - name: openshift-data-foundation
+      inputs:
+        - name: external-storage
+          values:
+            exportRef:
+              name: odf-external-ceph
     - name: child-network
-
-  storage:
-    - name: ceph
-      exportRef:
-        name: odf-external-ceph

@@ -47,7 +47,7 @@ func TestBindingPlansExpandSetsBeforeDirectAddonsAndDeduplicate(t *testing.T) {
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef:    v1alpha1.LocalObjectReference{Name: "demo"},
 				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "base"}, {Name: "observability"}},
-				Addons:        []v1alpha1.LocalObjectReference{{Name: "b"}, {Name: "d"}},
+				Addons:        []v1alpha1.ClusterAddonBindingAddon{{Name: "b"}, {Name: "d"}},
 			},
 		}},
 	}

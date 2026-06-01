@@ -30,7 +30,7 @@ Operators author desired state as sixteen YAML kinds:
 | `StorageExport` | Which storage services should be exported for a downstream platform? |
 | `ClusterAddon` | Which bootstrap component can be applied inside an installed cluster? |
 | `ClusterAddonProfile` | Which ordered group of add-ons defines a platform profile? |
-| `ClusterAddonBinding` | Which installed cluster should receive the post-install bootstrap set: add-ons, profiles, and optional storage exports? |
+| `ClusterAddonBinding` | Which installed cluster should receive the post-install bootstrap set: add-ons, profiles, and binding-scoped add-on inputs? |
 
 Every fact has one owner. References flow from cluster intent to cluster
 infrastructure, then to providers, infra components, and hosts. Machine MACs,
@@ -43,9 +43,9 @@ they are separate desired-state resources selected by `Environment` and bound
 to clusters after provisioning completes.
 External storage also stays outside `ContainerCluster`. `StorageCluster` is a
 peer of `ContainerCluster` and reuses `ClusterInfra`, `InfraProvider`, and
-`NetworkConfig` for machine facts. `ClusterAddonBinding.storage[]` connects
-exported storage to installed clusters after both storage provisioning and the
-selected Data Foundation add-on are ready.
+`NetworkConfig` for machine facts. Add-on input effects connect exported
+storage to installed clusters after both storage provisioning and the selected
+Data Foundation add-on are ready.
 
 ## Compatibility Goal
 
@@ -55,8 +55,8 @@ operational fact:
 
 - `ContainerCluster` renders cluster-level installer intent.
 - `StorageCluster` renders Ceph cephadm input files and storage operations.
-- `ClusterAddonBinding.storage[]` renders Data Foundation external-mode
-  attachment manifests.
+- `ClusterAddon.spec.accepts.inputs[]` declares add-on input APIs and native
+  effects such as Data Foundation external-mode storage attachment rendering.
 - `NetworkConfig` renders machine networks and reusable NMState templates.
 - `ClusterInfra` renders platform, host bindings, and network attachment
   bindings.

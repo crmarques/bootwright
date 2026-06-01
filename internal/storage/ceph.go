@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/render"
 )
 
@@ -23,8 +24,8 @@ type cephApplyResult struct {
 }
 
 type dataFoundationBindingContext struct {
-	Binding string
-	Storage string
+	Addon   string
+	Input   string
 	Cluster string
 	Export  v1alpha1.StorageExport
 	Secrets render.DataFoundationExternalSecrets
@@ -64,10 +65,10 @@ func PersistCephApplyResult(opts CephApplyResultOptions) (err error) {
 	}
 	for _, binding := range bindings {
 		if missing := MissingDataFoundationSecrets(binding.Export, binding.Secrets); len(missing) > 0 {
-			return fmt.Errorf("data foundation storage attachment %s/%s/%s missing generated credentials: %s", binding.Cluster, binding.Binding, binding.Storage, strings.Join(missing, ", "))
+			return fmt.Errorf("data foundation storage attachment %s/%s/%s missing generated credentials: %s", binding.Cluster, binding.Addon, binding.Input, strings.Join(missing, ", "))
 		}
 		details := render.DataFoundationExternalDetailsJSON(opts.State, cluster, binding.Export, binding.Cluster, binding.Secrets)
-		if err := SaveDataFoundationAttachmentDetails(opts.ClustersDir, binding.Cluster, binding.Binding, binding.Storage, details); err != nil {
+		if err := SaveDataFoundationAttachmentDetails(opts.ClustersDir, binding.Cluster, binding.Addon, binding.Input, details); err != nil {
 			return err
 		}
 	}
@@ -82,19 +83,18 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 		}
 	}
 	var out []dataFoundationBindingContext
-	for _, binding := range state.ClusterAddonBindings {
-		for _, storage := range binding.Spec.Storage {
-			export, ok := exports[storage.ExportRef.Name]
-			if !ok {
-				continue
-			}
-			out = append(out, dataFoundationBindingContext{
-				Binding: binding.Metadata.Name,
-				Storage: storage.Name,
-				Cluster: binding.Spec.ClusterRef.Name,
-				Export:  export,
-			})
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		export, ok := exports[exportRef.Name]
+		if !ok {
+			continue
 		}
+		out = append(out, dataFoundationBindingContext{
+			Addon:   effect.Addon.Name,
+			Input:   effect.Input.Name,
+			Cluster: effect.Binding.Spec.ClusterRef.Name,
+			Export:  export,
+		})
 	}
 	return out
 }

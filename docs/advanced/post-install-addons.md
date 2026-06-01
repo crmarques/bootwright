@@ -30,8 +30,8 @@ after the target cluster is installed and reachable.
 removed by first occurrence. Cycles are rejected.
 
 `ClusterAddonBinding` names exactly one container cluster with
-`clusterRef.name` and attaches profiles, direct add-ons, and optional
-storage exports. Use multiple binding resources for multiple clusters.
+`clusterRef.name` and attaches profiles, direct add-ons, and binding-scoped
+add-on inputs. Use multiple binding resources for multiple clusters.
 Bootwright applies add-ons after the target cluster is installed and uses fixed
 server-side apply defaults.
 
@@ -40,9 +40,17 @@ state may depend on. Current accepted capabilities are `kubevirt` and
 `data-foundation`. Use `kubevirt` on the OpenShift Virtualization add-on so
 KubeVirt child infrastructure waits for the host cluster to be ready. Use
 `data-foundation` on the Red Hat ODF or IBM Fusion Data Foundation operator
-add-on so storage attachments wait for external-mode components to be ready.
+add-on so storage-export input effects wait for external-mode components to be
+ready.
+
+`ClusterAddon.spec.accepts.inputs[]` declares input APIs that bindings may
+provide by name. An input schema can require Bootwright object refs and secret
+refs, and `effects[]` can opt into built-in behavior. Data Foundation external
+storage uses a generic `storage-export-attachment` effect; no behavior depends
+on the add-on name.
+
 Addon-only bindings are valid, so the same resource works for Virtualization,
-GitOps, or any other post-install component that does not consume storage.
+GitOps, or any other post-install component that does not consume inputs.
 
 ## OpenShift Virtualization
 
@@ -112,7 +120,7 @@ spec:
     - name: virtualization-platform
 ```
 
-An add-on that does not expose or consume storage uses the same binding shape:
+An add-on that does not expose or consume inputs uses the same binding shape:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
