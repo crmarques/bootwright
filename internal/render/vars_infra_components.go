@@ -79,7 +79,7 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 }
 
 func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.Endpoint)
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
 	if entry.Connection != nil {
 		connection := map[string]any{}
 		if entry.Connection.HTTPProxy != "" {
@@ -100,7 +100,7 @@ func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map
 }
 
 func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolutionComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.Endpoint)
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
 	if entry.IP != "" {
 		out["ip"] = entry.IP
 	}

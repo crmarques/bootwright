@@ -362,13 +362,9 @@ func validateEnvironmentProxyFor(env v1alpha1.Environment) []string {
 func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	seen := map[string]bool{}
-	defaults := 0
 	for i, entry := range env.Spec.InfraComponents.Proxies {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		if entry.Default {
-			defaults++
-		}
 		switch entry.Type {
 		case v1alpha1.EnvironmentComponentExternal:
 			errs = append(errs, validateEnvironmentProxyConnection(env.Metadata.Name, owner+".connection", entry.Connection)...)
@@ -386,22 +382,15 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
-	if defaults > 1 {
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.proxies must not mark more than one entry default", env.Metadata.Name))
-	}
 	return errs
 }
 
 func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	seen := map[string]bool{}
-	defaults := 0
 	for i, entry := range env.Spec.InfraComponents.NameResolution {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		if entry.Default {
-			defaults++
-		}
 		switch entry.Type {
 		case v1alpha1.EnvironmentComponentExternal:
 			if net.ParseIP(entry.IP) == nil {
@@ -420,9 +409,6 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
-	}
-	if defaults > 1 {
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution must not mark more than one entry default", env.Metadata.Name))
 	}
 	return errs
 }

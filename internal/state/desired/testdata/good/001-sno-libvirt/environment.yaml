@@ -26,13 +26,11 @@ spec:
   infraComponents:
     proxies:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: proxy
     nameResolution:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: name-resolution

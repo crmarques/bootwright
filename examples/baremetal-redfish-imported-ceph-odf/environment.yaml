@@ -26,7 +26,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:

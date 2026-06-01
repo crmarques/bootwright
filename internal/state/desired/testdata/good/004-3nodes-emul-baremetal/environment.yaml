@@ -27,7 +27,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:
@@ -35,7 +34,6 @@ spec:
             endpoint: bmc
     proxies:
       - name: default
-        default: true
         type: external
         connection:
           httpProxy: http://192.168.133.1:3128

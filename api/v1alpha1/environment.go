@@ -62,7 +62,6 @@ type EnvironmentArtifactRoute struct {
 
 type EnvironmentProxyComponent struct {
 	Name         string                      `yaml:"name" json:"name"`
-	Default      bool                        `yaml:"default,omitempty" json:"default,omitempty"`
 	Type         string                      `yaml:"type" json:"type"`
 	ComponentRef LocalObjectReference        `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	Endpoint     string                      `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
@@ -71,7 +70,6 @@ type EnvironmentProxyComponent struct {
 
 type EnvironmentNameResolutionComponent struct {
 	Name                   string               `yaml:"name" json:"name"`
-	Default                bool                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Type                   string               `yaml:"type" json:"type"`
 	ComponentRef           LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	Endpoint               string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`

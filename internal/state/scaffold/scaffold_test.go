@@ -216,6 +216,7 @@ func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 					"port: 8000",
 					"vmediaPort: 8001",
 					"port: 8443",
+					"default: true",
 				} {
 					if strings.Contains(f.Body, forbidden) {
 						t.Fatalf("%s contains deterministic default %q:\n%s", f.Name, forbidden, f.Body)

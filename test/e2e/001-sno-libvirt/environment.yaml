@@ -26,7 +26,6 @@ spec:
   infraComponents:
     nameResolution:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: name-resolution

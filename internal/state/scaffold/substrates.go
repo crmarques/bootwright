@@ -15,7 +15,6 @@ var Substrates = map[Provider]Substrate{
 		EnvArtifactServer: `  infraComponents:
     nameResolution:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: name-resolution
@@ -149,7 +148,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:

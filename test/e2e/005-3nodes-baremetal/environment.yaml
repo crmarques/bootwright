@@ -27,7 +27,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:
@@ -37,7 +36,6 @@ spec:
             endpoint: cluster
     proxies:
       - name: default
-        default: true
         type: external
         connection:
           httpProxy: http://proxy.bootwright.test:3128

@@ -98,7 +98,6 @@ spec:
   infraComponents:
     proxies:
       - name: default
-        default: true
         type: external
         connection:
           httpProxy: http://proxy.example.test:3128
@@ -116,7 +115,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:
@@ -193,9 +191,10 @@ Rules:
   Values from environment entries and managed
   `InfraComponent.spec.nameResolution.additionalIngressHosts[]` merge into DNS
   host records that point at each consuming cluster's ingress VIP.
-- `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select entries from
-  `infraComponents.proxies[]`. Omitted values default to `none`; `none` is a
-  reserved value that disables proxy use for that consumer.
+- `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
+  catalog entries by name. Proxy entries do not accept `default`. Omitted
+  values default to `none`; `none` is a reserved value that disables proxy use
+  for that consumer.
 - A `proxyFor.bootwright` selection may point at an external proxy for every
   command phase. If it points at a managed proxy, Bootwright must not depend on
   that proxy during `apply bastion` because the proxy component does not exist
@@ -203,7 +202,11 @@ Rules:
   views may use the managed proxy after its selected `InfraComponent` has been
   converged; pre-infra commands should report that bootstrap limitation rather
   than silently pretending the proxy is active.
-- At most one entry per environment service list may set `default: true`.
+- `NetworkConfig.spec.dnsRefs[]` selects name-resolution catalog entries by
+  name. Name-resolution entries do not accept `default`.
+- `infraComponents.artifactServers[]` and `infraComponents.registries[]`
+  infer their single entry as selected. When either list has multiple entries,
+  at most one entry may set `default: true`.
 - `infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`
   selects the artifact server endpoint used in BMC ISO fetch URLs.
 - `infraComponents.artifactServers[].routes.containerClusterInstall.endpoint` selects

@@ -325,7 +325,7 @@ spec:
 		{
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        default: true\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
+				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
 			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
@@ -815,28 +815,44 @@ func TestEnvironmentProxyOldSpecRejectsStrictDecode(t *testing.T) {
 	}
 }
 
-func TestEnvironmentProxyDefaultsMustBeUnique(t *testing.T) {
+func TestEnvironmentProxyDefaultRejected(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
-      - name: one
+      - name: default
         default: true
         type: external
         connection:
-          httpProxy: http://proxy-one.bootwright.test:3128
-      - name: two
-        default: true
-        type: external
-        connection:
-          httpProxy: http://proxy-two.bootwright.test:3128
+          httpProxy: http://proxy.bootwright.test:3128
     artifactServers:
 `, 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected duplicate proxy default error, got nil")
+		t.Fatal("expected proxy default decode error, got nil")
 	}
-	want := "spec.infraComponents.proxies must not mark more than one entry default"
+	want := "field default not found"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestEnvironmentNameResolutionDefaultRejected(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    nameResolution:
+      - name: default
+        default: true
+        type: external
+        ip: 192.168.132.1
+    artifactServers:
+`, 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected nameResolution default decode error, got nil")
+	}
+	want := "field default not found"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -2142,7 +2158,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:
@@ -2168,7 +2183,6 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        default: true
         componentRef:
           name: artifact-server
         routes:

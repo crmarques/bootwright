@@ -46,7 +46,6 @@ spec:
       - time.bootwright.test
     artifactServers:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: artifact-server
@@ -55,7 +54,6 @@ spec:
             endpoint: cluster
     proxies:
       - name: default
-        default: true
         type: external
         connection:
           httpProxy: http://proxy.bootwright.test:3128
@@ -68,7 +66,6 @@ spec:
               name: proxy-credentials
     nameResolution:
       - name: default
-        default: true
         type: external
         ip: 192.168.132.1
         additionalIngressHosts:
@@ -76,7 +73,6 @@ spec:
           - oauth-openshift.apps.sno-disconnected.bootwright.test
     registries:
       - name: default
-        default: true
         type: managed
         componentRef:
           name: mirror-registry
