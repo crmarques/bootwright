@@ -225,7 +225,7 @@ var allTemplates = []namedTemplate{
 	{name: "shared/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
 	{name: "shared/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
 	{name: "clusters/{{.Cluster}}/cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
-	{name: "clusters/{{.Cluster}}/container-cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
+	{name: "clusters/{{.Cluster}}/cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 }
 
 func mustTmpl(name, body string) *template.Template {

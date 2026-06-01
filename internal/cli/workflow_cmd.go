@@ -52,6 +52,26 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 	return cmd
 }
 
+func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	return newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
+		use:          "plan",
+		short:        "Preview the complete provisioning plan",
+		defaultPlan:  true,
+		hideDryRun:   true,
+		hideApproval: true,
+		commandLabel: "plan",
+		action:       "plan",
+		example: `  # Preview the full provisioning plan
+  bootwright plan
+
+  # Preview only selected managed clusters
+  bootwright plan --scope managed-01
+
+  # Machine-readable output for automation
+  bootwright plan --output json`,
+	})
+}
+
 func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
 		outputDir    string

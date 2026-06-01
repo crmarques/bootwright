@@ -202,6 +202,21 @@ func TestCheckSyntaxValidatesInputFilesWithoutContext(t *testing.T) {
 	}
 }
 
+func TestValidateCommandMatchesSyntaxCheck(t *testing.T) {
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"), "--output", "json")
+	if code != 0 {
+		t.Fatalf("validate -f exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	var report syntaxCheckReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !report.OK || report.ContainerClusters != 1 {
+		t.Fatalf("unexpected validate report: %+v", report)
+	}
+}
+
 func TestJSONErrorEnvelopeBeforeRootReexec(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -243,6 +258,11 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		want []string
 	}{
 		{
+			name: "validate",
+			args: []string{"validate"},
+			want: []string{"Bootwright: validate", "Objects", "Desired state", "[OK] validate"},
+		},
+		{
 			name: "check syntax",
 			args: []string{"check", "syntax"},
 			want: []string{"Bootwright: syntax check", "Objects", "Desired state", "[OK] syntax check"},
@@ -261,6 +281,11 @@ func TestHumanOutputStructuredText(t *testing.T) {
 			name: "render effective",
 			args: []string{"render", "effective"},
 			want: []string{"Bootwright: effective-state render", "Rendered artifacts", "Effective state", "Objects"},
+		},
+		{
+			name: "plan",
+			args: []string{"plan", "--ask-become-pass=false"},
+			want: []string{"Bootwright: plan", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Rendered artifacts", "Bundle"},
 		},
 		{
 			name: "apply infra dry-run",
@@ -337,6 +362,24 @@ func TestScopedApplyDryRunJSON(t *testing.T) {
 	}
 	if !strings.HasPrefix(report.Render.EffectiveStatePath, ctx.RenderedDir) {
 		t.Fatalf("effective state path %q is outside state dir %q", report.Render.EffectiveStatePath, ctx.RenderedDir)
+	}
+}
+
+func TestPlanDryRunJSON(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "plan", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("plan json exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "all" || report.Action != "plan" || !report.DryRun || !report.PlanOnly {
+		t.Fatalf("unexpected plan report header: %+v", report)
+	}
+	if report.ApplyPlan == nil || len(report.ApplyPlan.Tasks) == 0 {
+		t.Fatalf("plan report missing apply task graph: %+v", report.ApplyPlan)
 	}
 }
 

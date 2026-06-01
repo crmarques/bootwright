@@ -21,7 +21,7 @@ The CLI covers the provisioning pipeline:
 
 ```text
 bootwright example init lab --output ./lab-input
-bootwright check syntax -f ./lab-input
+bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context validate
@@ -31,10 +31,10 @@ bootwright secret materialize
 bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
-bootwright apply all --dry-run
+bootwright plan
 bootwright apply all --yes
 bootwright status --watch
-bootwright container-cluster access
+bootwright cluster access-info
 ```
 
 `apply all` is the normal convergence path. Phase commands such as
@@ -154,15 +154,15 @@ today.
 
 ```text
 bootwright example init lab --output ./lab-input
-bootwright check syntax -f ./lab-input
+bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context current
 bootwright context validate
 bootwright context validate --output json
 bootwright cluster list
-bootwright container-cluster access
-bootwright container-cluster access --cluster demo-ocp
+bootwright cluster access-info
+bootwright cluster access-info --cluster demo-ocp
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
@@ -173,10 +173,10 @@ bootwright check syntax
 bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
-bootwright apply all --dry-run
+bootwright plan
 bootwright apply all --yes
 bootwright status --watch
-bootwright container-cluster access
+bootwright cluster access-info
 bootwright check all --dry-run
 bootwright apply infra --dry-run
 bootwright apply infra --yes
@@ -196,14 +196,14 @@ bootwright destroy infra --scope artifact-server --yes
 
 The CLI is organized around workflow command groups. Provisioning targets are
 `bastion`, `infra`, `clusters`, `container-cluster`, `storage-cluster`,
-`addons`, and `all`. Top-level groups are `context`, `cluster`,
-`container-cluster`, `example`, `print-env`, `secret`, `check`, `status`,
-`render`, `apply`, `destroy`, and `version`. The formal CLI contract lives in
+`addons`, and `all`. Top-level groups are `validate`, `context`, `cluster`,
+`example`, `print-env`, `secret`, `check`, `status`, `plan`, `render`,
+`apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports. `bootwright container-cluster access` prints
+intentionally prints raw shell exports. `bootwright cluster access-info` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
@@ -224,6 +224,8 @@ want to run supplier or community tools such as `openshift-install` themselves.
 Treat that output as local runtime material because it contains secrets.
 `bootwright render effective` writes the normalized desired state with defaults
 applied to the current context rendered directory for inspection before apply.
+`bootwright plan` previews the full apply task graph without mutating remote
+systems.
 
 ## Repository Layout
 

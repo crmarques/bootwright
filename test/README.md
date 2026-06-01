@@ -49,7 +49,7 @@ bootwright context init <case> -f test/e2e/<case> --yes
 bootwright check bastion
 bootwright check infra --dry-run
 bootwright check all --dry-run
-bootwright apply all --dry-run
+bootwright plan
 bootwright apply all --yes
 ```
 

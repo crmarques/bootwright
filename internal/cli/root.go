@@ -24,7 +24,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		Long: "Bootwright renders, validates, and converges versioned desired-state YAML\n" +
 			"to drive OpenShift cluster lifecycle.",
 		Example: `  bootwright example init lab --output ./lab-input
-  bootwright check syntax -f ./lab-input
+  bootwright validate -f ./lab-input
   bootwright context init lab -f ./lab-input
   bootwright context update lab -f ./lab-input
   bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
@@ -33,9 +33,10 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright apply bastion --yes
   bootwright check all
   bootwright render effective
-  bootwright apply all --dry-run
+  bootwright plan
   bootwright apply all --yes
-  bootwright status --watch`,
+  bootwright status --watch
+  bootwright cluster access-info`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -54,6 +55,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	root.SetCompletionCommandGroupID(groupGeneral)
 
 	addWorkflow(root,
+		newValidateCmd(stdout),
 		newContextCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
 		newContainerClusterCmd(stdout),
@@ -62,6 +64,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newSecretCmd(stdin, stdout, stderr),
 		newCheckCmd(stdout, stderr),
 		newStatusCmd(stdout),
+		newPlanCmd(stdin, stdout, stderr),
 		newRenderCmd(stdout, stderr),
 		newApplyCmd(stdin, stdout, stderr),
 		newDestroyCmd(stdin, stdout, stderr),

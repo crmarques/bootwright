@@ -42,6 +42,7 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newClusterListCmd(stdout),
+		newClusterAccessInfoCmd(stdout),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)
@@ -50,11 +51,20 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 
 func newContainerClusterCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "container-cluster <command>",
-		Short: "Inspect container cluster access inventory",
+		Use:    "container-cluster <command>",
+		Short:  "Inspect container cluster access inventory",
+		Hidden: true,
 	}
 	cmd.AddCommand(
-		newClusterAccessCmd(stdout),
+		newClusterAccessCmd(stdout, clusterAccessCommandSpec{
+			use:   "access",
+			label: "container-cluster access",
+			example: `  # Print access details for every container cluster in the current context
+  bootwright container-cluster access
+
+  # Print access details for one container cluster
+  bootwright container-cluster access --cluster managed-01`,
+		}),
 	)
 	requireSubcommand(cmd)
 	showSubcommandFlagsInHelp(cmd)
@@ -90,18 +100,32 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newClusterAccessCmd(stdout io.Writer) *cobra.Command {
+func newClusterAccessInfoCmd(stdout io.Writer) *cobra.Command {
+	return newClusterAccessCmd(stdout, clusterAccessCommandSpec{
+		use:   "access-info",
+		label: "cluster access-info",
+		example: `  # Print access details for every managed cluster in the current context
+  bootwright cluster access-info
+
+  # Print access details for one managed cluster
+  bootwright cluster access-info --cluster managed-01`,
+	})
+}
+
+type clusterAccessCommandSpec struct {
+	use     string
+	label   string
+	example string
+}
+
+func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra.Command {
 	outputFormat := outputText
 	clusterName := ""
 	cmd := &cobra.Command{
-		Use:   "access",
-		Short: "Print local access details for installed clusters",
-		Args:  cobra.NoArgs,
-		Example: `  # Print access details for every container cluster in the current context
-  bootwright container-cluster access
-
-  # Print access details for one container cluster
-  bootwright container-cluster access --cluster managed-01`,
+		Use:     spec.use,
+		Short:   "Print local access details for installed clusters",
+		Args:    cobra.NoArgs,
+		Example: spec.example,
 	}
 	cmd.Flags().StringVar(&clusterName, "cluster", "", "ContainerCluster name to inspect")
 	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
@@ -125,7 +149,7 @@ func newClusterAccessCmd(stdout io.Writer) *cobra.Command {
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries})
 		}
-		printClusterAccessSummaries(stdout, "container-cluster access", summaries)
+		printClusterAccessSummaries(stdout, spec.label, summaries)
 		return nil
 	}
 	return cmd

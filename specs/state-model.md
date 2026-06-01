@@ -67,7 +67,7 @@ spec:
     - provider.yaml
     - infra-component.yaml
     - cluster-infra.yaml
-    - container-cluster.yaml
+    - cluster.yaml
     - add-ons/openshift-virtualization.yaml
     - add-ons/platform-profile.yaml
     - clusters/container/demo/add-on-binding.yaml
@@ -1402,6 +1402,8 @@ Primary commands:
 
 ```text
 bootwright example init lab --output ./lab-input
+bootwright validate -f ./lab-input
+bootwright validate --output json
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context validate
@@ -1412,9 +1414,9 @@ bootwright context current [--short]
 bootwright context delete lab [--purge --yes]
 bootwright cluster list
 bootwright cluster list --output json
-bootwright container-cluster access
-bootwright container-cluster access --cluster managed-01
-bootwright container-cluster access --output json
+bootwright cluster access-info
+bootwright cluster access-info --cluster managed-01
+bootwright cluster access-info --output json
 bootwright print-env [--sensitive]
 bootwright secret list
 bootwright secret list --output json
@@ -1457,6 +1459,8 @@ bootwright apply clusters --override --yes
 bootwright apply addons --dry-run
 bootwright apply addons --dry-run --output json
 bootwright apply addons --yes
+bootwright plan
+bootwright plan --output json
 bootwright apply all --dry-run
 bootwright apply all --dry-run --output json
 bootwright apply all --yes
@@ -1478,15 +1482,15 @@ must emit only JSON on stdout. Shell-export commands such as
 `bootwright print-env` intentionally emit only `export ...` lines. `secret
 show` intentionally emits raw secret bytes on stdout and is a sensitive
 raw-output exception.
-`bootwright cluster list` and `bootwright container-cluster access` read only local
+`bootwright cluster list` and `bootwright cluster access-info` read only local
 context state. They print cluster API and console URLs, local kubeconfig paths,
 the shell `KUBECONFIG=...` prefix, local password file paths, and the command
 operators can run when they need the password. They must not print kubeconfig contents,
 kubeadmin password bytes, tokens, or other cluster credential material.
-`check syntax -f <path>` loads YAML files or directories directly and must not
-require or mutate the current context. It is the pre-import validation path for
-generated examples, copied examples, and CI jobs that review authored desired
-state before `context init`.
+`validate -f <path>` and `check syntax -f <path>` load YAML files or directories
+directly and must not require or mutate the current context. `validate` is the
+primary pre-import validation path for generated examples, copied examples, and
+CI jobs that review authored desired state before `context init`.
 `render effective` writes only the normalized desired-state snapshot with
 defaults applied to `<context>/rendered/effective-state.yaml`, and supports
 JSON output for the rendered path and object counts.
@@ -1505,9 +1509,10 @@ mutate provider hosts, nodes, or clusters; operators must run
 `apply addons --dry-run` shows add-on tasks, selected clusters,
 expanded add-on order, and generated resource summaries without mutating the
 cluster.
-`apply all` is the primary happy path after `apply bastion`, `check all`, and
-`apply all --dry-run`. Phase commands remain available for advanced operations
-and recovery.
+`plan` is equivalent to a read-only full `apply all --dry-run` preview and is
+the primary plan command for the end-to-end path. `apply all` is the primary
+happy path after `apply bastion`, `check all`, and `plan`. Phase commands
+remain available for advanced operations and recovery.
 `apply storage-cluster` renders the storage input set and runs an Ansible
 storage task against the synthetic Ceph seed host. The storage role SSHes from
 the bastion to the seed node, runs cephadm bootstrap on that node, applies

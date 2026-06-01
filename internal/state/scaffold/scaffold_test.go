@@ -53,11 +53,11 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
 		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/container-cluster.yaml",
+		"clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/cluster.yaml",
 	}
 	namesWithArtifacts := []string{
 		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"shared/infra-component.yaml", "clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/container-cluster.yaml",
+		"shared/infra-component.yaml", "clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/cluster.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -122,11 +122,11 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectations := map[string][]string{
-		"environment.yaml":                           {"name: my-cluster"},
-		"shared/networks.yaml":                       {"name: my-cluster-bridge"},
-		"shared/provider.yaml":                       {"name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster-infra.yaml":     {"name: my-cluster", "provider: my-cluster-libvirt"},
-		"clusters/my-cluster/container-cluster.yaml": {"name: my-cluster"},
+		"environment.yaml":                       {"name: my-cluster"},
+		"shared/networks.yaml":                   {"name: my-cluster-bridge"},
+		"shared/provider.yaml":                   {"name: my-cluster-libvirt"},
+		"clusters/my-cluster/cluster-infra.yaml": {"name: my-cluster", "provider: my-cluster-libvirt"},
+		"clusters/my-cluster/cluster.yaml":       {"name: my-cluster"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]

@@ -16,13 +16,12 @@ import (
 // or rendering installer files. Designed to be safe and instant on
 // every edit.
 func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
-	output := outputText
-	var files []string
-	cmd := &cobra.Command{
-		Use:   "syntax",
-		Short: "Validate context input YAML offline (no Ansible, no host probes)",
-		Args:  cobra.NoArgs,
-		Example: `  # Validate the current context
+	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
+		use:   "syntax",
+		short: "Validate context input YAML offline (no Ansible, no host probes)",
+		label: "syntax check",
+		rerun: "bootwright check syntax",
+		example: `  # Validate the current context
   bootwright check syntax
 
   # Validate an input directory before importing a context
@@ -30,6 +29,42 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 
   # Machine-readable output for CI
   bootwright check syntax --output json`,
+	})
+}
+
+func newValidateCmd(stdout io.Writer) *cobra.Command {
+	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
+		use:   "validate",
+		short: "Validate desired-state YAML offline",
+		label: "validate",
+		rerun: "bootwright validate",
+		example: `  # Validate the current context
+  bootwright validate
+
+  # Validate an input directory before importing a context
+  bootwright validate -f ./lab-input
+
+  # Machine-readable output for CI
+  bootwright validate --output json`,
+	})
+}
+
+type syntaxValidationCommand struct {
+	use     string
+	short   string
+	label   string
+	rerun   string
+	example string
+}
+
+func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cobra.Command {
+	output := outputText
+	var files []string
+	cmd := &cobra.Command{
+		Use:     spec.use,
+		Short:   spec.short,
+		Args:    cobra.NoArgs,
+		Example: spec.example,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to validate before context import; may be repeated")
@@ -47,20 +82,20 @@ func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
 				return silentExit(1)
 			}
 			p := outputpkg(stdout)
-			p.Command("syntax check")
-			checks := syntaxDiagnosticChecks(err)
+			p.Command(spec.label)
+			checks := syntaxDiagnosticChecks(err, spec.rerun)
 			p.Checks(checks)
-			p.Summary(cliout.StatusFail, "syntax check", checkSummary(len(checks), failedCheckCount(checks)))
-			return failf(1, "syntax check failed: %v", err)
+			p.Summary(cliout.StatusFail, spec.label, checkSummary(len(checks), failedCheckCount(checks)))
+			return failf(1, "%s failed: %v", spec.label, err)
 		}
 		if output == outputJSON {
 			return writeSyntaxCheckJSON(stdout, state, nil)
 		}
 		p := outputpkg(stdout)
-		p.Command("syntax check")
+		p.Command(spec.label)
 		p.Section("Objects")
 		p.Fields(stateCountFields(state))
-		if err := renderCheckResults(stdout, "syntax check", []preflightCheck{
+		if err := renderCheckResults(stdout, spec.label, []preflightCheck{
 			okCheck("Desired state", "context input", "loads, normalizes, and validates"),
 		}); err != nil {
 			return err
@@ -124,10 +159,10 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error
 	return cliout.JSON(stdout, report)
 }
 
-func syntaxDiagnosticChecks(err error) []preflightCheck {
+func syntaxDiagnosticChecks(err error, rerun string) []preflightCheck {
 	diagnostics := desiredstate.Diagnostics(err)
 	if len(diagnostics) == 0 {
-		return []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun bootwright check syntax")}
+		return []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun "+rerun)}
 	}
 	checks := make([]preflightCheck, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {

@@ -13,10 +13,25 @@ import (
 )
 
 func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	return newScopeApplyCmdWithOptions(scope, stdin, stdout, stderr, scopeApplyOptions{})
+}
+
+type scopeApplyOptions struct {
+	use          string
+	short        string
+	example      string
+	defaultPlan  bool
+	hideDryRun   bool
+	hideApproval bool
+	commandLabel string
+	action       string
+}
+
+func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := scopeUsesAnsible(scope)
 	var (
 		flags         scopeCommonFlags
-		dryRun        bool
+		dryRun        = options.defaultPlan
 		check         bool
 		askBecomePass bool
 		yes           bool
@@ -26,19 +41,44 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		perHost       int
 		redfish       int
 	)
+	use := "apply"
+	if options.use != "" {
+		use = options.use
+	}
+	short := "Apply " + scope.name + " desired state"
+	if options.short != "" {
+		short = options.short
+	}
+	example := scopeApplyExample(scope.name, usesAnsible)
+	if options.example != "" {
+		example = options.example
+	}
+	commandLabel := scope.name + " apply"
+	if options.commandLabel != "" {
+		commandLabel = options.commandLabel
+	}
+	action := "apply"
+	if options.action != "" {
+		action = options.action
+	}
 	cmd := &cobra.Command{
-		Use:     "apply",
-		Short:   "Apply " + scope.name + " desired state",
+		Use:     use,
+		Short:   short,
 		Args:    cobra.NoArgs,
-		Example: scopeApplyExample(scope.name, usesAnsible),
+		Example: example,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print a plan only; does not run readiness checks or mutate remote systems")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", options.defaultPlan, "render artifacts and print a plan only; does not run readiness checks or mutate remote systems")
+	if options.hideDryRun {
+		_ = cmd.Flags().MarkHidden("dry-run")
+	}
 	if usesAnsible {
 		cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 		cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
+	if !options.hideApproval {
+		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
+	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	if scopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "run the cluster install even when prior cluster state reports an existing available cluster")
@@ -48,10 +88,18 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "apply", usesAnsible, scopeTargetKind(scope))
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
+	if options.defaultPlan {
+		if flag := cmd.Flags().Lookup("output"); flag != nil {
+			flag.Usage = "output format: text|json"
+		}
+	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
+		}
+		if options.defaultPlan && !dryRun {
+			return failErr(2, errors.New("plan is always read-only"))
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
@@ -66,7 +114,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
-			p.Command(scope.name + " apply")
+			p.Command(commandLabel)
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -75,7 +123,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return failErr(1, err)
 		}
 		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " apply"}})
+			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + commandLabel}})
 		}
 		if err := validateScopedApplySharedServices(state, scope.name, flags.clusterScope); err != nil {
 			return failErr(1, err)
@@ -108,7 +156,7 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "apply", plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, action, plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
@@ -171,12 +219,12 @@ func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
 			DryRun:             dryRun,
 			ResolveInstaller:   plan.targetsClusters,
-			Label:              scope.name + " apply",
+			Label:              commandLabel,
 			InstallOverride:    override,
 		}
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
-			reporter.DryRunTasks(scope.name+" apply", workflow.TaskLedgerEntries(dryRunTasks), limits)
+			reporter.DryRunTasks(commandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
 			if err != nil {

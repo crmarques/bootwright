@@ -132,7 +132,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 			InstallerAssets:    dryRunInstallerArtifacts(runResult),
 		},
 	}
-	if action == "apply" {
+	if action == "apply" || action == "plan" {
 		report.ApplyPlan = &scopeDryRunApply{
 			RunStatus: string(workflow.RunStatusRunning),
 			Limits:    limits,

@@ -70,7 +70,7 @@ provider.yaml or shared/provider.yaml or infra/providers/*.yaml
 infra-component.yaml or shared/components.yaml or infra/components/*.yaml
 networkconfig.yaml or shared/networks.yaml or infra/networkconfigs/*.yaml
 cluster-infra.yaml or clusters/<cluster>/cluster-infra.yaml or clusters/container/<cluster>/cluster-infra.yaml
-container-cluster.yaml or cluster.yaml or clusters/<cluster>/container-cluster.yaml or clusters/container/<cluster>/cluster.yaml
+cluster.yaml or clusters/<cluster>/cluster.yaml or clusters/container/<cluster>/cluster.yaml
 add-ons/*.yaml                           optional ClusterAddon resources
 clusters/storage/<cluster>/*.yaml        optional storage resources
 ```
@@ -91,8 +91,7 @@ Edit these first:
   `cluster-infra.yaml`, `clusters/<cluster>/cluster-infra.yaml`, or
   `clusters/container/<cluster>/cluster-infra.yaml`.
 - OpenShift or OKD release, install mode, and node bindings in
-  `container-cluster.yaml`, `cluster.yaml`,
-  `clusters/<cluster>/container-cluster.yaml`, or
+  `cluster.yaml`, `clusters/<cluster>/cluster.yaml`, or
   `clusters/container/<cluster>/cluster.yaml`.
 
 Provider swaps should leave `Environment` and `ContainerCluster` unchanged
@@ -118,7 +117,7 @@ Before importing a context, confirm the out-of-band inputs exist:
 Validate the edited YAML before it is imported into `/var/lib/bootwright`:
 
 ```text
-bootwright check syntax -f ./my-sno-lab
+bootwright validate -f ./my-sno-lab
 ```
 
 ## 2. Verify SSH Access
@@ -138,7 +137,7 @@ or service host.
 Create the context from the edited directory:
 
 ```text
-bootwright check syntax -f ./my-sno-lab
+bootwright validate -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
 bootwright context update lab -f ./my-sno-lab
 bootwright context current
@@ -198,15 +197,17 @@ eval "$(bootwright print-env --sensitive)"
 bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
-bootwright apply all --dry-run
+bootwright plan
 bootwright apply all --yes
 bootwright status --watch
+bootwright cluster access-info
 ```
 
 `apply bastion` installs bastion-host prerequisites. `check all` validates the
 full graph before convergence. `render effective` writes
 `effective-state.yaml` with defaults applied so you can inspect the normalized
-state before applying it.
+state before applying it. `plan` previews the full apply task graph without
+mutating provider hosts, nodes, storage clusters, or managed clusters.
 
 `apply all` is the normal end-to-end convergence path. It includes
 infrastructure, managed storage, OpenShift or OKD cluster install, and bound
@@ -244,6 +245,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | Command | JSON support | Behavior |
 | --- | --- | --- |
 | `bootwright context validate --output json` | Supported | Context structure and declared secret material checks |
+| `bootwright validate -f <input-dir> --output json` | Supported | Pre-import diagnostics |
 | `bootwright check syntax -f <input-dir> --output json` | Supported | Pre-import diagnostics |
 | `bootwright check syntax --output json` | Supported | Read-only diagnostics |
 | `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
@@ -251,9 +253,10 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright render effective --output json` | Supported | Writes normalized desired state |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
-| `bootwright container-cluster access --output json` | Supported | Read-only cluster access inventory |
+| `bootwright cluster access-info --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
+| `bootwright plan --output json` | Supported | Dry-run apply plan |
 | `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply storage-cluster --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply clusters --dry-run --output json` | Supported | Dry-run apply plan |
