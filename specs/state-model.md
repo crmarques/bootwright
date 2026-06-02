@@ -120,11 +120,6 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
-          containerClusterInstall:
-            endpoint: cluster
     ntpSources:
       - name: default-01
         type: external
@@ -193,9 +188,9 @@ Rules:
   Component entries are either `external` with direct access configuration, or
   `managed` with `componentRef.name` pointing at an `InfraComponent` arm of
   the matching kind.
-- External artifact server entries use `spec.redfishVirtualMediaURL` and/or
-  `spec.clusterInstallURL`. Managed artifact server entries use
-  `componentRef.name` plus `routes` endpoint selectors.
+- External artifact server entries use named `endpoints[]` with `url`.
+  Managed artifact server entries use `componentRef.name` to reference
+  `InfraComponent.spec.artifactServer`.
 - External NTP source entries use `address`. Managed NTP source entries use
   `componentRef.name` plus an optional `endpoint` selector. Resolved values
   feed installer `additionalNTPSources` in authored order with duplicates
@@ -217,14 +212,10 @@ Rules:
   than silently pretending the proxy is active.
 - `NetworkConfig.spec.dnsRefs[]` selects name-resolution catalog entries by
   name. Name-resolution entries do not accept `default`.
-- `infraComponents.artifactServers[]` and `infraComponents.registries[]`
-  infer their single entry as selected. When either list has multiple entries,
-  at most one entry may set `default: true`.
-- `infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`
-  selects the artifact server endpoint used in BMC ISO fetch URLs.
-- `infraComponents.artifactServers[].routes.containerClusterInstall.endpoint` selects
-  the artifact server endpoint used for disconnected agent-install boot
-  artifacts.
+- `infraComponents.artifactServers[]` is a catalog. Clusters select an artifact
+  server through `ClusterInfra.spec.artifactAccess.serverRef.name`.
+- `infraComponents.registries[]` infers its single entry as selected. When the
+  list has multiple entries, at most one entry may set `default: true`.
 - `secretStorage.mode` defaults to `source`. `source` preserves each declared
   secret source at runtime: `file:` resolves to the declared local path and
   context-local/generated material resolves under the context secrets directory.
@@ -1111,13 +1102,13 @@ Rules:
 - `artifactServer.listeners[]` declares the ports the container listens on.
   Supported protocols are `http` and `https`. If omitted, Bootwright defaults
   to one HTTPS listener named `https` on port `8443`.
-- `artifactServer.endpoints[]` names routeable service addresses. Each endpoint
+- `artifactServer.endpoints[]` names reachable service addresses. Each endpoint
   chooses a listener, and `hostAddress` must match a
   `Host.spec.addresses[].name` on `artifactServer.hostRef`; Bootwright uses
-  that address object's `address` value in routed URLs and TLS names.
-- Endpoint names are opaque route selectors, not DNS labels. They are the
-  stable binding surface used by
-  `Environment.spec.infraComponents.artifactServers[].routes`.
+  that address object's `address` value in endpoint URLs and TLS names.
+- Artifact endpoint names are opaque endpoint selectors, not DNS labels. They are
+  the stable binding surface used by
+  `ClusterInfra.spec.artifactAccess`.
 - The artifact server is implemented as a containerized static file service
   that serves generated ISOs and disconnected boot artifacts. HTTPS listeners
   use a self-signed certificate generated on the component host.
@@ -1165,6 +1156,16 @@ spec:
       address: 192.168.133.11
       source:
         type: external
+
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
+    containerClusterInstall:
+      endpointRef:
+        name: cluster
 
   networkBindings:
     - networkConfigRef:
@@ -1255,9 +1256,14 @@ Rules:
   `spec.loadBalancer`. `source.bindAddress` is the name of an entry in
   `spec.loadBalancer.bindAddresses[]`; it is required when the load balancer
   has more than one bind address.
+- `artifactAccess.serverRef.name` selects an environment artifact server
+  catalog entry for this cluster infrastructure.
+- `artifactAccess.redfishVirtualMedia.endpointRef.name` selects the artifact
+  endpoint used in BMC ISO fetch URLs.
+- `artifactAccess.containerClusterInstall.endpointRef.name` selects the
+  artifact endpoint used for disconnected agent-install boot artifacts.
 - Bare-metal Redfish virtual-media boot and disconnected agent installs derive
-  generated artifact publication from the environment-selected artifact server
-  component and route endpoints.
+  generated artifact publication from `artifactAccess`.
 - For vSphere multi-NIC installs, the first adapter network must correspond to
   the machine network unless `platform.vsphere.nodeNetworking` or profile
   `nodeNetworking` says otherwise.
@@ -1321,7 +1327,7 @@ Bootwright renders:
 - Provider or generated machine MACs into matching NMState interfaces when
   present.
 - `agent-config.yaml minimalISO` and `bootArtifactsBaseURL` for disconnected
-  installs that select an artifact server `containerClusterInstall` route.
+  installs that set `ClusterInfra.spec.artifactAccess.containerClusterInstall`.
 - `agent-config.yaml additionalNTPSources` from resolved
   `Environment.spec.infraComponents.ntpSources[]`: external entries contribute
   `address`, and managed entries contribute the selected endpoint host address
@@ -1375,8 +1381,8 @@ Validation rejects:
 - Invalid environment proxy or registry catalog entries, unresolved managed
   component refs, or conflicting service defaults.
 - Clusters that need generated artifact publication unless
-  `Environment.spec.infraComponents.artifactServers[]` selects an artifact
-  server entry and the required route endpoint resolves.
+  `ClusterInfra.spec.artifactAccess` selects an artifact server entry and the
+  required endpoint resolves.
 - Shared infra component service consumers with the same rendered service identity
   but incompatible host, role, realisation, bind address, port, or selected
   capability.

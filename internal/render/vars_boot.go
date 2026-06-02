@@ -55,7 +55,7 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.
 		if server.BareMetal == nil {
 			return nil
 		}
-		return baremetalBootVars(state, server, isoBasename)
+		return baremetalBootVars(state, ci, server, isoBasename)
 	}
 	return nil
 }
@@ -124,10 +124,10 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 	}
 }
 
-func baremetalBootVars(state v1alpha1.State, server v1alpha1.MachineCapability, isoBasename string) map[string]any {
+func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server v1alpha1.MachineCapability, isoBasename string) map[string]any {
 	bmc := server.BareMetal.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
-	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, isoBasename)
+	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
 
 	return map[string]any{
 		"redfish": map[string]any{
@@ -145,17 +145,17 @@ func baremetalBootVars(state v1alpha1.State, server v1alpha1.MachineCapability, 
 	}
 }
 
-func baremetalAgentISOTarget(state v1alpha1.State, isoBasename string) (stageHost, stagePath, fetchURL string) {
-	server, ok := artifacts.Select(state)
-	if !ok || server.Config == nil {
+func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, isoBasename string) (stageHost, stagePath, fetchURL string) {
+	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia)
+	if !ok {
 		return "", "", ""
+	}
+	fetchURL = artifactEndpointFetchURL(state, server, endpoint, agentISOPublishTokenExpr, isoBasename)
+	if fetchURL == "" || server.Config == nil {
+		return "", "", fetchURL
 	}
 	hostRef := server.Config.HostRef.Name
 	stagePath = fmt.Sprintf("{{ bootwright_managed_services_dir }}/%s/public/%s/%s", server.Component.Metadata.Name, agentISOPublishTokenExpr, isoBasename)
-	fetchURL = artifactEndpointFetchURL(state, server, server.Entry.Routes.RedfishVirtualMedia.Endpoint, agentISOPublishTokenExpr, isoBasename)
-	if fetchURL == "" {
-		return "", "", ""
-	}
 	return hostRef, stagePath, fetchURL
 }
 

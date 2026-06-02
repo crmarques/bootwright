@@ -444,39 +444,48 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	seen := map[string]bool{}
-	defaults := 0
 	for i, entry := range env.Spec.InfraComponents.ArtifactServers {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		if entry.Default {
-			defaults++
-		}
 		switch entry.Type {
 		case v1alpha1.EnvironmentComponentExternal:
-			if entry.Spec == nil || (entry.Spec.RedfishVirtualMediaURL == "" && entry.Spec.ClusterInstallURL == "") {
-				errs = append(errs, owner+".spec must set redfishVirtualMediaURL or clusterInstallURL for external artifact servers")
+			if entry.ComponentRef.Name != "" {
+				errs = append(errs, owner+".componentRef is only valid for managed artifactServers entries")
 			}
+			errs = append(errs, validateEnvironmentArtifactServerEndpoints(owner+".endpoints", entry.Endpoints)...)
 		case v1alpha1.EnvironmentComponentManaged:
 			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
 				return c.Spec.ArtifactServer != nil
 			}, "artifactServer")...)
-			if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.ArtifactServer != nil {
-				endpoints := map[string]bool{}
-				for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
-					endpoints[endpoint.Name] = true
-				}
-				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.redfishVirtualMedia", entry.Routes.RedfishVirtualMedia, endpoints)...)
-				errs = append(errs, validateEnvironmentArtifactRoute(owner+".routes.containerClusterInstall", entry.Routes.ContainerClusterInstall, endpoints)...)
-			}
-			if entry.Spec != nil {
-				errs = append(errs, owner+".spec is only valid for external artifactServers entries")
+			if len(entry.Endpoints) > 0 {
+				errs = append(errs, owner+".endpoints is only valid for external artifactServers entries")
 			}
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
-	if defaults > 1 {
-		errs = append(errs, fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers must not mark more than one entry default", env.Metadata.Name))
+	return errs
+}
+
+func validateEnvironmentArtifactServerEndpoints(owner string, endpoints []v1alpha1.EnvironmentArtifactServerEndpoint) []string {
+	if len(endpoints) == 0 {
+		return []string{owner + " is required for external artifactServers entries"}
+	}
+	var errs []string
+	seen := map[string]bool{}
+	for i, endpoint := range endpoints {
+		prefix := fmt.Sprintf("%s[%d]", owner, i)
+		if endpoint.Name == "" {
+			errs = append(errs, prefix+".name is required")
+		} else {
+			if seen[endpoint.Name] {
+				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", prefix, endpoint.Name))
+			}
+			seen[endpoint.Name] = true
+		}
+		if err := validateHTTPURL(endpoint.URL); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.url %q is invalid: %v", prefix, endpoint.URL, err))
+		}
 	}
 	return errs
 }
@@ -541,17 +550,11 @@ func validateManagedComponentRef(owner, name string, components map[string]v1alp
 	return nil
 }
 
-func validateEnvironmentArtifactRoute(owner string, route v1alpha1.EnvironmentArtifactRoute, endpoints map[string]bool) []string {
-	if route.Endpoint == "" {
-		return nil
-	}
-	if !endpoints[route.Endpoint] {
-		return []string{fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.artifactServer.endpoints", owner, route.Endpoint)}
-	}
-	return nil
+func validateProxyURL(raw string) error {
+	return validateHTTPURL(raw)
 }
 
-func validateProxyURL(raw string) error {
+func validateHTTPURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err

@@ -11,5 +11,5 @@
       bootwright_component.boot.{redfish.baseUrl,agentIso.fetchUrl}. An empty
       agentIso.fetchUrl means the cluster has no reachable artifact server;
       declare an InfraComponent.spec.artifactServer endpoint and bind
-      Environment.spec.infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint to
+      ClusterInfra.spec.artifactAccess.redfishVirtualMedia.endpointRef.name to
       the endpoint the BMC must use.

@@ -376,10 +376,13 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		Name:         "default",
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
-		Routes: v1alpha1.EnvironmentArtifactRoutes{
-			ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
-		},
 	}}
+	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+		ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+			EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+		},
+	}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
 		Name:         "default",
 		Type:         v1alpha1.EnvironmentComponentManaged,
@@ -426,7 +429,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		t.Fatalf("AgentConfig: %v", err)
 	}
 	if got := agent["bootArtifactsBaseURL"]; got != "https://192.168.132.99:9443/" {
-		t.Fatalf("bootArtifactsBaseURL = %v, want route-derived URL", got)
+		t.Fatalf("bootArtifactsBaseURL = %v, want artifact access endpoint URL", got)
 	}
 	sources, ok := cfg["imageDigestSources"].([]any)
 	if !ok {
@@ -453,6 +456,36 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		t.Fatalf("source %s missing mirror %q: %v", v1alpha1.OCPReleaseSourceQuayOCPRelease, wantMirror, src["mirrors"])
 	}
 	t.Fatalf("imageDigestSources missing %s: %v", v1alpha1.OCPReleaseSourceQuayOCPRelease, sources)
+}
+
+func TestAgentConfigUsesExternalArtifactEndpointForDisconnectedBootArtifacts(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
+		Name: "default",
+		Type: v1alpha1.EnvironmentComponentExternal,
+		Endpoints: []v1alpha1.EnvironmentArtifactServerEndpoint{{
+			Name: "install",
+			URL:  "https://artifacts.example.test:9443/install",
+		}},
+	}}
+	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+		ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+			EndpointRef: v1alpha1.LocalObjectReference{Name: "install"},
+		},
+	}
+	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+
+	agent, err := render.AgentConfig(state, state.ContainerClusters[0])
+	if err != nil {
+		t.Fatalf("AgentConfig: %v", err)
+	}
+	if got := agent["bootArtifactsBaseURL"]; got != "https://artifacts.example.test:9443/install/" {
+		t.Fatalf("bootArtifactsBaseURL = %v, want external artifact endpoint URL", got)
+	}
 }
 
 func TestInstallerConfigUsesOKDReleaseImageForDisconnectedMirror(t *testing.T) {

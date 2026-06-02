@@ -274,7 +274,7 @@ func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
-		server, ok := artifacts.Select(state)
+		server, ok := artifacts.Select(state, ci)
 		if !ok || server.Config == nil {
 			continue
 		}

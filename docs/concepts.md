@@ -195,13 +195,13 @@ selects environment name-resolution entries.
 | Proxy for Bootwright and cluster install traffic | `Environment.spec.infraComponents.proxies[]` plus `proxyFor` | External connection in `Environment`, or managed `InfraComponent.spec.proxy` |
 | Name resolution for installer host networking | `NetworkConfig.spec.dnsRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
 | NTP sources for agent installs | `Environment.spec.infraComponents.ntpSources[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
-| Artifact publication for Redfish media and disconnected install files | `Environment.spec.infraComponents.artifactServers[].routes` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
+| Artifact publication for Redfish media and disconnected install files | `ClusterInfra.spec.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
 | Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
 | Load balancer VIPs | `ClusterInfra.spec.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, cephadm, or operator-owned external addresses |
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a
 host, listeners, and named endpoints.
-`Environment.spec.infraComponents.artifactServers[].routes` binds each
-consumer path, such as Redfish virtual media or disconnected cluster install,
-to the endpoint that component can reach.
+`ClusterInfra.spec.artifactAccess` binds each consumer path, such as Redfish
+virtual media or disconnected cluster install, to the endpoint that component
+can reach.

@@ -19,12 +19,16 @@ type ResolvedEndpoint struct {
 	Host     string
 }
 
-func Select(state v1alpha1.State) (Server, bool) {
+func Select(state v1alpha1.State, ci v1alpha1.ClusterInfra) (Server, bool) {
+	return SelectByName(state, ci.Spec.ArtifactAccess.ServerRef.Name)
+}
+
+func SelectByName(state v1alpha1.State, name string) (Server, bool) {
 	env := stateview.Environment(state)
-	if env == nil {
+	if env == nil || name == "" {
 		return Server{}, false
 	}
-	entry, ok := selectedArtifactServer(env.Spec.InfraComponents.ArtifactServers)
+	entry, ok := artifactServerEntry(env.Spec.InfraComponents.ArtifactServers, name)
 	if !ok {
 		return Server{}, false
 	}
@@ -38,19 +42,39 @@ func Select(state v1alpha1.State) (Server, bool) {
 	return Server{Component: component, Config: component.Spec.ArtifactServer, Entry: entry}, true
 }
 
-func selectedArtifactServer(entries []v1alpha1.EnvironmentArtifactServerComponent) (v1alpha1.EnvironmentArtifactServerComponent, bool) {
-	if len(entries) == 0 {
+func artifactServerEntry(entries []v1alpha1.EnvironmentArtifactServerComponent, name string) (v1alpha1.EnvironmentArtifactServerComponent, bool) {
+	if name == "" {
 		return v1alpha1.EnvironmentArtifactServerComponent{}, false
 	}
 	for _, entry := range entries {
-		if entry.Default {
+		if entry.Name == name {
 			return entry, true
 		}
 	}
-	if len(entries) == 1 {
-		return entries[0], true
-	}
 	return v1alpha1.EnvironmentArtifactServerComponent{}, false
+}
+
+func ConsumerEndpointName(ci v1alpha1.ClusterInfra, consumer string) string {
+	switch consumer {
+	case v1alpha1.ArtifactConsumerRedfishVirtualMedia:
+		return ci.Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name
+	case v1alpha1.ArtifactConsumerContainerClusterInstall:
+		return ci.Spec.ArtifactAccess.ContainerClusterInstall.EndpointRef.Name
+	default:
+		return ""
+	}
+}
+
+func ResolveConsumerEndpoint(state v1alpha1.State, ci v1alpha1.ClusterInfra, consumer string) (Server, string, bool) {
+	endpointName := ConsumerEndpointName(ci, consumer)
+	if endpointName == "" {
+		return Server{}, "", false
+	}
+	server, ok := Select(state, ci)
+	if !ok || !EndpointAvailable(server, endpointName) {
+		return Server{}, "", false
+	}
+	return server, endpointName, true
 }
 
 func ResolveEndpoint(state v1alpha1.State, server Server, name string) (ResolvedEndpoint, bool) {
@@ -72,17 +96,25 @@ func ResolveEndpoint(state v1alpha1.State, server Server, name string) (Resolved
 	return ResolvedEndpoint{Endpoint: endpoint, Listener: listener, Host: host}, true
 }
 
-func RouteAvailable(server Server, endpointName string) bool {
+func EndpointAvailable(server Server, endpointName string) bool {
 	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal {
-		switch endpointName {
-		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
-			return server.Entry.Spec != nil && server.Entry.Spec.RedfishVirtualMediaURL != ""
-		case server.Entry.Routes.ContainerClusterInstall.Endpoint:
-			return server.Entry.Spec != nil && server.Entry.Spec.ClusterInstallURL != ""
-		}
+		_, ok := ExternalEndpoint(server, endpointName)
+		return ok
 	}
 	_, ok := Endpoint(server, endpointName)
 	return ok
+}
+
+func ExternalEndpoint(server Server, name string) (v1alpha1.EnvironmentArtifactServerEndpoint, bool) {
+	if name == "" {
+		return v1alpha1.EnvironmentArtifactServerEndpoint{}, false
+	}
+	for _, endpoint := range server.Entry.Endpoints {
+		if endpoint.Name == name && endpoint.URL != "" {
+			return endpoint, true
+		}
+	}
+	return v1alpha1.EnvironmentArtifactServerEndpoint{}, false
 }
 
 func Endpoint(server Server, name string) (v1alpha1.ArtifactServerEndpoint, bool) {

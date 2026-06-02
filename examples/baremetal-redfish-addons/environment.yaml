@@ -26,8 +26,3 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
-          containerClusterInstall:
-            endpoint: cluster

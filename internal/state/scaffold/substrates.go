@@ -186,9 +186,6 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
 
 `,
 		ProviderNetworkAttachments: `
@@ -206,6 +203,14 @@ spec:
         name: {{.ProviderID}}
       attachmentRef:
         name: {{.NetworkID}}
+`,
+		ClusterArtifactAccess: `
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
 `,
 		ProviderCapabilities: `  machines:                           # explicit hardware inventory
     - name: rack1-srv1

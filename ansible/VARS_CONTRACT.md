@@ -37,14 +37,10 @@ bootwright_environment:
         type: managed
         componentRef: ntp-server
         endpoint: cluster
-  artifactServer:
-    componentRef:
-      name: artifact-server
-    routes:
-      redfishVirtualMedia:
-        endpoint: bmc
-      clusterInstall:
-        endpoint: cluster
+    artifactServers:
+      - name: default
+        type: managed
+        componentRef: artifact-server
 ```
 
 ## Cluster Shape

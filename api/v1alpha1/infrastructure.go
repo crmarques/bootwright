@@ -136,8 +136,10 @@ const (
 	DefaultNTPPort               = 123
 	DefaultServiceBindAddress    = "0.0.0.0"
 
-	ArtifactServerProtocolHTTP  = "http"
-	ArtifactServerProtocolHTTPS = "https"
+	ArtifactServerProtocolHTTP              = "http"
+	ArtifactServerProtocolHTTPS             = "https"
+	ArtifactConsumerRedfishVirtualMedia     = "redfishVirtualMedia"
+	ArtifactConsumerContainerClusterInstall = "containerClusterInstall"
 
 	// Component image catalog — closed set of (category, type) pairs that
 	// Environment.spec.componentImages may pin.

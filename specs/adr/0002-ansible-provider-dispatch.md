@@ -58,14 +58,13 @@ playbooks do not construct role names from those labels:
 - `component.mediaPrepareRole`, when set, selects an optional virtual-media
   backend hook. `boot_redfish` remains the Redfish protocol role for both
   real BMCs and sushy-emulator.
-- Generated artifact publication resolves to the `InfraComponent` selected by
-  `Environment.spec.infraComponents.artifactServers[]`. Its `hostRef` gates
-  the rendered artifact service and limits it to that host. The component
-  declares listeners, endpoints, and optional bind address.
-  Bare-metal Redfish machines and disconnected agent installs derive
-  publication consumers automatically; BMC-specific and cluster-install
-  routes come from
-  `Environment.spec.infraComponents.artifactServers[].routes`.
+- Generated artifact publication resolves to the artifact server selected by
+  `ClusterInfra.spec.artifactAccess.serverRef`. For managed servers, the
+  selected `InfraComponent` `hostRef` gates the rendered artifact service and
+  limits it to that host. The component declares listeners, endpoints, and
+  optional bind address. Bare-metal Redfish machines and disconnected agent
+  installs bind BMC-specific and cluster-install endpoints through
+  `ClusterInfra.spec.artifactAccess`.
 
 `bmcRole` and `bootRole` are independent. BMC-driven substrates use a
 matched pair because the boot path runs through the BMC service

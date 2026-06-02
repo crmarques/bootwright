@@ -117,10 +117,15 @@ func cliStateWithAllSharedProviderServices() v1alpha1.State {
 		Name:         "default",
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
-		Routes: v1alpha1.EnvironmentArtifactRoutes{
-			ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
-		},
 	}}
+	for i := range state.ClusterInfras {
+		state.ClusterInfras[i].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+			ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+			ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+				EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+			},
+		}
+	}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
 		Name:         "default",
 		Type:         v1alpha1.EnvironmentComponentManaged,

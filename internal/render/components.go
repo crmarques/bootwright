@@ -144,16 +144,13 @@ func usesManagedDNS(state v1alpha1.State) bool {
 }
 
 func usesManagedArtifacts(state v1alpha1.State) bool {
-	server, ok := artifacts.Select(state)
-	if !ok || server.Config == nil {
-		return false
-	}
 	for _, ocp := range state.ContainerClusters {
 		ci, err := clusterInfraForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
-		if artifacts.ClusterNeedsPublication(state, ci, ocp) {
+		server, ok := artifacts.Select(state, ci)
+		if ok && server.Config != nil && artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			return true
 		}
 	}

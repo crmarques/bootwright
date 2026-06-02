@@ -29,9 +29,6 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
     proxies:
       - name: default
         type: external

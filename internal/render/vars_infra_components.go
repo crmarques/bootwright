@@ -130,16 +130,16 @@ func environmentNTPSourceComponentVars(entry v1alpha1.EnvironmentNTPSourceCompon
 }
 
 func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactServerComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, "")
-	routes := map[string]any{}
-	if endpoint := entry.Routes.RedfishVirtualMedia.Endpoint; endpoint != "" {
-		routes["redfishVirtualMedia"] = map[string]any{"endpoint": endpoint}
-	}
-	if endpoint := entry.Routes.ContainerClusterInstall.Endpoint; endpoint != "" {
-		routes["containerClusterInstall"] = map[string]any{"endpoint": endpoint}
-	}
-	if len(routes) > 0 {
-		out["routes"] = routes
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, "")
+	if len(entry.Endpoints) > 0 {
+		endpoints := make([]any, 0, len(entry.Endpoints))
+		for _, endpoint := range entry.Endpoints {
+			endpoints = append(endpoints, map[string]any{
+				"name": endpoint.Name,
+				"url":  endpoint.URL,
+			})
+		}
+		out["endpoints"] = endpoints
 	}
 	return out
 }

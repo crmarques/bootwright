@@ -250,7 +250,6 @@ func selectedManagedRegistry(env *v1alpha1.Environment) *v1alpha1.EnvironmentReg
 func validateArtifactServerRequirements(state v1alpha1.State) []string {
 	infraIndex := indexClusterInfras(state.ClusterInfras)
 	env := primaryEnvironment(&state)
-	server, hasServer := artifacts.Select(state)
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
 		ci, ok, _ := resolveContainerClusterInfra(ocp, infraIndex)
@@ -262,17 +261,21 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.infraComponents.artifactServers", prefix))
 			continue
 		}
-		if !hasServer {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; Environment/%s has no default artifact server", prefix, env.Metadata.Name))
+		if ci.Spec.ArtifactAccess.ServerRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set ClusterInfra/%s spec.artifactAccess.serverRef.name", prefix, ci.Metadata.Name))
 			continue
 		}
-		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected && !artifacts.RouteAvailable(server, server.Entry.Routes.ContainerClusterInstall.Endpoint) {
-			errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires Environment/%s selected artifact server routes.containerClusterInstall.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
-				prefix, env.Metadata.Name, server.Component.Metadata.Name))
+		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
+			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall); !ok {
+				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires ClusterInfra/%s spec.artifactAccess.containerClusterInstall.endpointRef.name to resolve on the selected artifact server",
+					prefix, ci.Metadata.Name))
+			}
 		}
-		if artifacts.ClusterUsesBareMetalMachine(state, ci) && !artifacts.RouteAvailable(server, server.Entry.Routes.RedfishVirtualMedia.Endpoint) {
-			errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires Environment/%s selected artifact server routes.redfishVirtualMedia.endpoint to resolve on InfraComponent/%s spec.artifactServer.endpoints",
-				prefix, env.Metadata.Name, server.Component.Metadata.Name))
+		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
+			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
+				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires ClusterInfra/%s spec.artifactAccess.redfishVirtualMedia.endpointRef.name to resolve on the selected artifact server",
+					prefix, ci.Metadata.Name))
+			}
 		}
 	}
 	return errs

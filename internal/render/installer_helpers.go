@@ -150,11 +150,15 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
 		return nil
 	}
-	server, ok := artifacts.Select(state)
+	ci, err := clusterInfraForOCP(state, ocp)
+	if err != nil {
+		return nil
+	}
+	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall)
 	if !ok {
 		return nil
 	}
-	url := artifactServerEndpointURL(state, server, server.Entry.Routes.ContainerClusterInstall.Endpoint)
+	url := artifactServerEndpointURL(state, server, endpoint)
 	if url == "" {
 		return nil
 	}

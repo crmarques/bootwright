@@ -285,7 +285,7 @@ func TestProviderMachineLabelsValidation(t *testing.T) {
 	}
 }
 
-func TestArtifactServerEndpointNamesAreRouteSelectors(t *testing.T) {
+func TestArtifactAccessEndpointNamesSelectInfraEndpoint(t *testing.T) {
 	files := newBaselineFiles()
 	files["hosts.yaml"] = strings.Replace(files["hosts.yaml"],
 		"    - name: bmc-lan\n      address: 192.168.132.1",
@@ -293,9 +293,9 @@ func TestArtifactServerEndpointNamesAreRouteSelectors(t *testing.T) {
 	files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"],
 		"name: bmc\n        listener: https\n        hostAddress: bmc-lan",
 		"name: dnsAlias\n        listener: https\n        hostAddress: dnsAlias", 1)
-	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
-		"endpoint: bmc",
-		"endpoint: dnsAlias", 1)
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
+		"        name: bmc",
+		"        name: dnsAlias", 1)
 
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
@@ -423,7 +423,7 @@ spec:
 		{
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", "", 1)},
+				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        componentRef:\n          name: artifact-server\n\n", "", 1)},
 			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
@@ -476,11 +476,32 @@ spec:
 			wantSubstring: "field addressName not found",
 		},
 		{
-			name: "artifact-server-route-endpoint-rejected",
+			name: "artifact-access-endpoint-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"        name: bmc",
+				"        name: missing", 1)},
+			wantSubstring: `spec.artifactAccess.redfishVirtualMedia.endpointRef.name "missing" does not resolve to the selected artifact server endpoints`,
+		},
+		{
+			name: "artifact-access-server-ref-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"  artifactAccess:\n    serverRef:\n      name: default",
+				"  artifactAccess:\n    serverRef:\n      name: missing", 1)},
+			wantSubstring: `spec.artifactAccess.serverRef.name "missing" does not resolve to Environment/env spec.infraComponents.artifactServers[].name`,
+		},
+		{
+			name: "environment-artifact-server-routes-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"endpoint: bmc",
-				"endpoint: missing", 1)},
-			wantSubstring: `routes.redfishVirtualMedia.endpoint "missing" does not resolve on selected InfraComponent spec.artifactServer.endpoints`,
+				"        componentRef:\n          name: artifact-server\n\n",
+				"        componentRef:\n          name: artifact-server\n        routes:\n          redfishVirtualMedia:\n            endpoint: bmc\n\n", 1)},
+			wantSubstring: "field routes not found",
+		},
+		{
+			name: "environment-external-artifact-server-spec-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"      - name: default\n        type: managed\n        componentRef:\n          name: artifact-server",
+				"      - name: default\n        type: external\n        spec:\n          redfishVirtualMedia"+"URL: https://artifacts.example.test:8443/\n          clusterInstall"+"URL: https://artifacts.example.test:8443/", 1)},
+			wantSubstring: "field spec not found",
 		},
 		{
 			name: "multiple-clusterinfra-refs-rejected",
@@ -2596,9 +2617,6 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
 
   secrets:
     - openshift-pull-secret
@@ -2625,9 +2643,6 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
 
   resources:
 `)
@@ -2789,6 +2804,12 @@ spec:
       address: 192.168.132.11
       source:
         type: external
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
   components:
     machines:
       - name: master-0

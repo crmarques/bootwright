@@ -96,11 +96,11 @@ continuing.
 `check infra` and `apply infra` require SSH to provider/service hosts. Validate
 the same key and address declared on the `Host` before retrying.
 
-Real BMCs must also reach the generated artifact HTTPS route used for the agent
-ISO. If Redfish virtual media insert fails after the bastion can download
+Real BMCs must also reach the generated artifact HTTPS endpoint used for the
+agent ISO. If Redfish virtual media insert fails after the bastion can download
 the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
-`Environment.spec.infraComponents.artifactServers[].routes.redfishVirtualMedia.endpoint`.
+`ClusterInfra.spec.artifactAccess.redfishVirtualMedia.endpointRef.name`.
 
 ## Context Input Looks Stale
 

@@ -27,8 +27,8 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 		out = append(out, lb)
 	}
 	if artifacts.ClusterNeedsPublication(state, ci, ocp) {
-		if server, ok := artifacts.Select(state); ok && server.Config != nil {
-			out = append(out, artifactServerComponentVars(state, server))
+		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
+			out = append(out, artifactServerComponentVars(state, ci, server))
 		}
 	}
 	for _, selected := range proxyComponentsForCluster(state) {

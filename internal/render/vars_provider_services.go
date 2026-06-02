@@ -73,11 +73,18 @@ func loadBalancerProviderServiceVars(state v1alpha1.State, service stategraph.Pr
 }
 
 func artifactProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
-	server, ok := artifacts.Select(state)
-	if !ok || server.Component.Metadata.Name != service.Identity.Name || server.Config == nil {
-		return nil, false
+	for _, consumer := range service.Consumers {
+		ci, ok := clusterInfraByName(state, consumer.ClusterInfra)
+		if !ok {
+			continue
+		}
+		server, ok := artifacts.Select(state, ci)
+		if !ok || server.Component.Metadata.Name != service.Identity.Name || server.Config == nil {
+			continue
+		}
+		return artifactServerComponentVars(state, ci, server), true
 	}
-	return artifactServerComponentVars(state, server), true
+	return nil, false
 }
 
 func proxyProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {

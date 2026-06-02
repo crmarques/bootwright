@@ -134,7 +134,7 @@ func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1
 	return networkConfigPrimaryIP(agentNetworkConfig(state, ci, m, ""))
 }
 
-func artifactServerComponentVars(state v1alpha1.State, server artifacts.Server) map[string]any {
+func artifactServerComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server artifacts.Server) map[string]any {
 	out := map[string]any{
 		"kind":          v1alpha1.ComponentSlotArtifacts,
 		"providerName":  v1alpha1.KindInfraComponent,
@@ -151,7 +151,7 @@ func artifactServerComponentVars(state v1alpha1.State, server artifacts.Server) 
 		out["realisation"] = v1alpha1.ArtifactServerProtocolHTTP
 		out["tls"] = artifactServerTLSVars(state, server)
 		out["image"] = managedArtifactsHTTPImage(state)
-		if endpoint := server.Entry.Routes.ContainerClusterInstall.Endpoint; endpoint != "" {
+		if endpoint := artifacts.ConsumerEndpointName(ci, v1alpha1.ArtifactConsumerContainerClusterInstall); endpoint != "" {
 			if url := artifactServerEndpointURL(state, server, endpoint); url != "" {
 				out["url"] = url
 			}
@@ -193,13 +193,12 @@ func artifactPrimaryPort(listeners []v1alpha1.ArtifactServerListener) int {
 }
 
 func artifactServerEndpointURL(state v1alpha1.State, server artifacts.Server, endpointName string) string {
-	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal && server.Entry.Spec != nil {
-		switch endpointName {
-		case server.Entry.Routes.RedfishVirtualMedia.Endpoint:
-			return trailingSlash(server.Entry.Spec.RedfishVirtualMediaURL)
-		case server.Entry.Routes.ContainerClusterInstall.Endpoint:
-			return trailingSlash(server.Entry.Spec.ClusterInstallURL)
+	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal {
+		endpoint, ok := artifacts.ExternalEndpoint(server, endpointName)
+		if !ok {
+			return ""
 		}
+		return trailingSlash(endpoint.URL)
 	}
 	endpoint, ok := artifacts.ResolveEndpoint(state, server, endpointName)
 	if !ok {

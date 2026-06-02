@@ -16,6 +16,16 @@ spec:
     apps:
       address: 192.168.140.11
 
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
+    containerClusterInstall:
+      endpointRef:
+        name: cluster
+
   networkBindings:
     - networkConfigRef:
         name: rack1-bond140-machine

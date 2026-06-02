@@ -247,7 +247,7 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 	out = append(out, selectedManagedNTPConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedRegistryConsumers(state, infra, cluster)...)
 	if artifacts.ClusterNeedsPublication(state, infra, cluster) {
-		if server, ok := artifacts.Select(state); ok && server.Config != nil {
+		if server, ok := artifacts.Select(state, infra); ok && server.Config != nil {
 			out = append(out, newServiceConsumer(
 				cluster.Metadata.Name,
 				infra.Metadata.Name,

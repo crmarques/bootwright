@@ -13,8 +13,19 @@ type ClusterInfra struct {
 type ClusterInfraSpec struct {
 	Platform        ClusterInfraPlatform    `yaml:"platform,omitempty" json:"platform,omitempty"`
 	Endpoints       map[string]Endpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	ArtifactAccess  ClusterArtifactAccess   `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 	NetworkBindings []ClusterNetworkBinding `yaml:"networkBindings,omitempty" json:"networkBindings,omitempty"`
 	Components      ClusterComponents       `yaml:"components" json:"components"`
+}
+
+type ClusterArtifactAccess struct {
+	ServerRef               LocalObjectReference       `yaml:"serverRef,omitempty" json:"serverRef,omitempty"`
+	RedfishVirtualMedia     ClusterArtifactEndpointRef `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	ContainerClusterInstall ClusterArtifactEndpointRef `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
+}
+
+type ClusterArtifactEndpointRef struct {
+	EndpointRef LocalObjectReference `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 }
 
 type ClusterNetworkBinding struct {

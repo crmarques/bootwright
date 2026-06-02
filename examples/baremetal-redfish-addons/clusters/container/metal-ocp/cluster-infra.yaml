@@ -22,6 +22,16 @@ spec:
       source:
         type: external
 
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
+    containerClusterInstall:
+      endpointRef:
+        name: cluster
+
   components:
     machines:
       - name: master-0

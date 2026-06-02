@@ -482,10 +482,10 @@ func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 	}
 	tls := service["tls"].(map[string]any)
 	if got := tls["commonName"]; got != "192.168.132.1" {
-		t.Errorf("artifact service tls.commonName got %v, want route host", got)
+		t.Errorf("artifact service tls.commonName got %v, want endpoint host", got)
 	}
 	if got := tls["ipAddresses"]; !containsAnyString(got.([]any), "192.168.132.1") {
-		t.Errorf("artifact service tls.ipAddresses got %v, want route host", got)
+		t.Errorf("artifact service tls.ipAddresses got %v, want endpoint host", got)
 	}
 }
 
@@ -508,7 +508,7 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		Listener:    "https",
 		HostAddress: "cluster-lan",
 	})
-	state.Environments[0].Spec.InfraComponents.ArtifactServers[0].Routes.RedfishVirtualMedia.Endpoint = "cluster"
+	state.ClusterInfras[0].Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "cluster"
 
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
@@ -517,6 +517,41 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	iso := boot["agentIso"].(map[string]any)
 	if got := iso["fetchUrl"]; got != "https://192.168.132.9:8443/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
 		t.Errorf("agentIso.fetchUrl got %v, want selected endpoint address", got)
+	}
+}
+
+func TestBareMetalArtifactFetchURLUsesExternalArtifactEndpoint(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
+		Name: "default",
+		Type: v1alpha1.EnvironmentComponentExternal,
+		Endpoints: []v1alpha1.EnvironmentArtifactServerEndpoint{{
+			Name: "bmc",
+			URL:  "https://artifacts.example.test:9443/vmedia",
+		}},
+	}}
+	state.ClusterInfras[0].Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "bmc"
+
+	vars := render.Vars(state)
+	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
+	machine := firstMachineComponent(t, cluster)
+	boot := machine["boot"].(map[string]any)
+	iso := boot["agentIso"].(map[string]any)
+	if got := iso["stageHost"]; got != "" {
+		t.Errorf("agentIso.stageHost got %v, want empty for external artifact endpoint", got)
+	}
+	if got := iso["stagePath"]; got != "" {
+		t.Errorf("agentIso.stagePath got %v, want empty for external artifact endpoint", got)
+	}
+	if got := iso["fetchUrl"]; got != "https://artifacts.example.test:9443/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-emul-baremetal.iso" {
+		t.Errorf("agentIso.fetchUrl got %v, want external artifact endpoint URL", got)
+	}
+	targets := cluster["agentIsoPublishTargets"].([]any)
+	if len(targets) != 0 {
+		t.Fatalf("agentIsoPublishTargets = %v, want no managed publish target for external artifact endpoint", targets)
 	}
 }
 

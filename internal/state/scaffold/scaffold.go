@@ -194,6 +194,7 @@ type Substrate struct {
 	ProviderNetworkAttachments string
 	InfraComponentYAML         string
 	ClusterNetworkBindings     string
+	ClusterArtifactAccess      string
 	ClusterMachineFrom         string
 	ClusterMachineExtras       string
 	ClusterServices            string
@@ -306,6 +307,7 @@ spec:
 {{.Substrate.PlatformYAML}}
   endpoints:
 {{.Substrate.EndpointsYAML}}
+{{.Substrate.ClusterArtifactAccess}}
 {{.Substrate.ClusterNetworkBindings}}
 
   components:

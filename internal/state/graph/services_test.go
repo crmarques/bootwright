@@ -242,9 +242,6 @@ func sharedManagedServiceState() v1alpha1.State {
 						Name:         "default",
 						Type:         v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
-						Routes: v1alpha1.EnvironmentArtifactRoutes{
-							ContainerClusterInstall: v1alpha1.EnvironmentArtifactRoute{Endpoint: "cluster"},
-						},
 					}},
 					Registries: []v1alpha1.EnvironmentRegistryComponent{{
 						Name:         "default",
@@ -345,6 +342,12 @@ func clusterInfra(name, machineProvider, networkName string) v1alpha1.ClusterInf
 	return v1alpha1.ClusterInfra{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ClusterInfraSpec{
+			ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+				ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+				ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+					EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+				},
+			},
 			Endpoints: map[string]v1alpha1.Endpoint{
 				v1alpha1.EndpointAPI: {
 					Source: v1alpha1.EndpointSource{

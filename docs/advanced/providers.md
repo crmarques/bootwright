@@ -206,14 +206,24 @@ spec:
         type: managed
         componentRef:
           name: artifact-server
-        routes:
-          redfishVirtualMedia:
-            endpoint: bmc
-          containerClusterInstall:
-            endpoint: cluster
 ```
 
-Endpoint names are route selectors; `hostAddress` values resolve against the
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterInfra
+spec:
+  artifactAccess:
+    serverRef:
+      name: default
+    redfishVirtualMedia:
+      endpointRef:
+        name: bmc
+    containerClusterInstall:
+      endpointRef:
+        name: cluster
+```
+
+Endpoint names are endpoint selectors; `hostAddress` values resolve against the
 named addresses on the selected `hostRef`. For `redfishVirtualMedia`, use a
 BMC-routable IP address entry in most environments; many BMCs do not reliably
 resolve DNS aliases, and Bootwright uses the matched address value directly in
@@ -230,7 +240,7 @@ typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
 that resolved graph into Ansible vars, and place the converging role under
 `ansible/roles/providers/`.
 
-For real BMCs, the artifact server endpoint used by
-`routes.redfishVirtualMedia.endpoint` should usually resolve to an IP address that
-the BMC network can reach. Controller reachability alone is not enough for
-virtual-media ISO fetches.
+For real BMCs, the artifact server endpoint selected by
+`artifactAccess.redfishVirtualMedia.endpointRef.name` should usually resolve
+to an IP address that the BMC network can reach. Controller reachability alone
+is not enough for virtual-media ISO fetches.

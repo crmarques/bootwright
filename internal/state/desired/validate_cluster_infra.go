@@ -13,6 +13,7 @@ func validateClusterInfras(state v1alpha1.State) []string {
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
 	dnsRefs := networkConfigDNSRefs(state)
 	components := indexInfraComponents(state.InfraComponents)
+	env := primaryEnvironment(&state)
 	containerInfraNames := referencedContainerClusterInfraNames(state)
 	seen := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
@@ -28,11 +29,78 @@ func validateClusterInfras(state v1alpha1.State) []string {
 		if containerInfraNames[ci.Metadata.Name] || len(ci.Spec.Endpoints) > 0 {
 			errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs, containerInfraNames[ci.Metadata.Name])...)
 		}
+		errs = append(errs, validateClusterArtifactAccess(ci, env, components)...)
 		errs = append(errs, validateClusterNetworkBindings(ci, providers, networkConfigs)...)
 		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs, dnsRefs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
 	}
 	return errs
+}
+
+func validateClusterArtifactAccess(ci v1alpha1.ClusterInfra, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	access := ci.Spec.ArtifactAccess
+	if access.ServerRef.Name == "" &&
+		access.RedfishVirtualMedia.EndpointRef.Name == "" &&
+		access.ContainerClusterInstall.EndpointRef.Name == "" {
+		return nil
+	}
+	prefix := fmt.Sprintf("ClusterInfra/%s spec.artifactAccess", ci.Metadata.Name)
+	var errs []string
+	if access.ServerRef.Name == "" {
+		return []string{prefix + ".serverRef.name is required when artifactAccess endpoints are set"}
+	}
+	if env == nil {
+		return []string{prefix + ".serverRef.name requires an Environment with spec.infraComponents.artifactServers"}
+	}
+	entry, ok := environmentArtifactServerByName(env, access.ServerRef.Name)
+	if !ok {
+		return []string{fmt.Sprintf("%s.serverRef.name %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name", prefix, access.ServerRef.Name, env.Metadata.Name)}
+	}
+	endpoints := artifactServerEndpointNames(entry, components)
+	if entry.Type == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
+		errs = append(errs, fmt.Sprintf("%s.serverRef.name %q does not resolve to managed artifact server endpoints", prefix, access.ServerRef.Name))
+	}
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef.name", access.RedfishVirtualMedia.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef.name", access.ContainerClusterInstall.EndpointRef.Name, endpoints)...)
+	return errs
+}
+
+func environmentArtifactServerByName(env *v1alpha1.Environment, name string) (v1alpha1.EnvironmentArtifactServerComponent, bool) {
+	for _, entry := range env.Spec.InfraComponents.ArtifactServers {
+		if entry.Name == name {
+			return entry, true
+		}
+	}
+	return v1alpha1.EnvironmentArtifactServerComponent{}, false
+}
+
+func artifactServerEndpointNames(entry v1alpha1.EnvironmentArtifactServerComponent, components map[string]v1alpha1.InfraComponent) map[string]bool {
+	out := map[string]bool{}
+	switch entry.Type {
+	case v1alpha1.EnvironmentComponentExternal:
+		for _, endpoint := range entry.Endpoints {
+			out[endpoint.Name] = true
+		}
+	case v1alpha1.EnvironmentComponentManaged:
+		component, ok := components[entry.ComponentRef.Name]
+		if !ok || component.Spec.ArtifactServer == nil {
+			return out
+		}
+		for _, endpoint := range component.Spec.ArtifactServer.Endpoints {
+			out[endpoint.Name] = true
+		}
+	}
+	return out
+}
+
+func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string]bool) []string {
+	if name == "" {
+		return nil
+	}
+	if !endpoints[name] {
+		return []string{fmt.Sprintf("%s %q does not resolve to the selected artifact server endpoints", owner, name)}
+	}
+	return nil
 }
 
 func validateClusterPlatform(ci v1alpha1.ClusterInfra) []string {

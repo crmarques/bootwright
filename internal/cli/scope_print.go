@@ -196,33 +196,54 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 }
 
 func printDestroyArtifactServerPreview(w io.Writer, state v1alpha1.State) {
-	server, ok := artifacts.Select(state)
-	if !ok || server.Config == nil {
-		return
-	}
-	clusters := artifactServerClusterConsumers(state)
-	if len(clusters) == 0 {
+	consumers := artifactServerClusterConsumers(state)
+	if len(consumers) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
 	p.Section("Will destroy")
-	p.List([]output.Item{{
-		Label:  "artifact-server " + server.Component.Metadata.Name,
-		Detail: "host " + server.Config.HostRef.Name + "; BMC ISO fetches for " + strings.Join(clusters, ", "),
-	}})
+	var names []string
+	for name := range consumers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	items := make([]output.Item, 0, len(names))
+	for _, name := range names {
+		usage := consumers[name]
+		items = append(items, output.Item{
+			Label:  "artifact-server " + name,
+			Detail: "host " + usage.hostRef + "; BMC ISO fetches for " + strings.Join(usage.clusters, ", "),
+		})
+	}
+	p.List(items)
 }
 
-func artifactServerClusterConsumers(state v1alpha1.State) []string {
-	var clusters []string
+type artifactServerDestroyUsage struct {
+	hostRef  string
+	clusters []string
+}
+
+func artifactServerClusterConsumers(state v1alpha1.State) map[string]artifactServerDestroyUsage {
+	out := map[string]artifactServerDestroyUsage{}
 	for _, ci := range state.ClusterInfras {
 		ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)
 		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
-		clusters = append(clusters, ocp.Metadata.Name)
+		server, ok := artifacts.Select(state, ci)
+		if !ok || server.Config == nil {
+			continue
+		}
+		usage := out[server.Component.Metadata.Name]
+		usage.hostRef = server.Config.HostRef.Name
+		usage.clusters = append(usage.clusters, ocp.Metadata.Name)
+		out[server.Component.Metadata.Name] = usage
 	}
-	sort.Strings(clusters)
-	return clusters
+	for name, usage := range out {
+		sort.Strings(usage.clusters)
+		out[name] = usage
+	}
+	return out
 }
 
 func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) string {
@@ -243,7 +264,9 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 		parts = append(parts, "registry")
 	}
 	if ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name); ok && artifacts.ClusterNeedsPublication(state, ci, ocp) {
-		parts = append(parts, "artifacts")
+		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
+			parts = append(parts, "artifacts")
+		}
 	}
 	return strings.Join(parts, ", ")
 }

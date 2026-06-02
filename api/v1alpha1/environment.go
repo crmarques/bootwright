@@ -85,27 +85,16 @@ type EnvironmentNTPSourceComponent struct {
 	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
 }
 
-type EnvironmentArtifactRoutes struct {
-	RedfishVirtualMedia     EnvironmentArtifactRoute `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
-	ContainerClusterInstall EnvironmentArtifactRoute `yaml:"containerClusterInstall,omitempty" json:"containerClusterInstall,omitempty"`
-}
-
-type EnvironmentArtifactRoute struct {
-	Endpoint string `yaml:"endpoint" json:"endpoint"`
-}
-
 type EnvironmentArtifactServerComponent struct {
-	Name         string                                 `yaml:"name" json:"name"`
-	Default      bool                                   `yaml:"default,omitempty" json:"default,omitempty"`
-	Type         string                                 `yaml:"type" json:"type"`
-	ComponentRef LocalObjectReference                   `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Routes       EnvironmentArtifactRoutes              `yaml:"routes,omitempty" json:"routes,omitempty"`
-	Spec         *EnvironmentExternalArtifactServerSpec `yaml:"spec,omitempty" json:"spec,omitempty"`
+	Name         string                              `yaml:"name" json:"name"`
+	Type         string                              `yaml:"type" json:"type"`
+	ComponentRef LocalObjectReference                `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	Endpoints    []EnvironmentArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 }
 
-type EnvironmentExternalArtifactServerSpec struct {
-	RedfishVirtualMediaURL string `yaml:"redfishVirtualMediaURL,omitempty" json:"redfishVirtualMediaURL,omitempty"`
-	ClusterInstallURL      string `yaml:"clusterInstallURL,omitempty" json:"clusterInstallURL,omitempty"`
+type EnvironmentArtifactServerEndpoint struct {
+	Name string `yaml:"name" json:"name"`
+	URL  string `yaml:"url" json:"url"`
 }
 
 type EnvironmentRegistryComponent struct {
