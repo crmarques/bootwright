@@ -30,7 +30,7 @@ the terminal.
 Context-backed bastion and OpenShift installer actions run on localhost.
 Commands that need context data re-exec through `sudo` when necessary and
 store all runtime state under
-`/var/lib/bootwright`; only the context registry remains in
+`/var/lib/bootwright`; only the caller's current context selection remains in
 `~/.bootwright/contexts.yaml`.
 
 OpenShift agent apply is scheduled as dependency stages instead of one opaque

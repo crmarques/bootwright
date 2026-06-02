@@ -66,7 +66,10 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := Store{Current: "lab", Contexts: []string{"lab"}}
+	if err := EnsureDirs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Current: "lab"}
 	if err := Save(path, store); err != nil {
 		t.Fatal(err)
 	}
@@ -86,32 +89,68 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(data)
-	if !strings.Contains(body, "contexts:\n    - lab\n") {
-		t.Fatalf("store was not saved in strict list format:\n%s", body)
+	if !strings.Contains(body, "current: lab\n") {
+		t.Fatalf("store did not save current context:\n%s", body)
 	}
-	if strings.Contains(body, "baseDir") || strings.Contains(body, "inputDir") {
-		t.Fatalf("store unexpectedly persisted derived paths:\n%s", body)
+	if strings.Contains(body, "contexts:") || strings.Contains(body, "baseDir") || strings.Contains(body, "inputDir") {
+		t.Fatalf("store unexpectedly persisted derived context data:\n%s", body)
 	}
 }
 
-func TestCurrentDerivesContextWithoutTraversingProtectedRoot(t *testing.T) {
+func TestLoadToleratesAndSaveStripsRetiredContextList(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "contexts.yaml")
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))
-	contextsDir := filepath.Join(root, "contexts")
-	if err := os.MkdirAll(contextsDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(contextsDir, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(contextsDir, 0o700) })
-
-	current, err := Current(Store{Current: "lab", Contexts: []string{"lab"}})
+	ctx, err := NewContext("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.BaseDir != filepath.Join(contextsDir, "lab") {
-		t.Fatalf("BaseDir = %q", current.BaseDir)
+	if err := EnsureDirs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("current: lab\ncontexts:\n  - lab\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Current != "lab" {
+		t.Fatalf("Current = %q, want lab", store.Current)
+	}
+	if err := Save(path, store); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "contexts:") {
+		t.Fatalf("retired contexts list was not stripped:\n%s", body)
+	}
+}
+
+func TestCurrentRequiresSharedContextStorage(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	if _, err := Current(Store{Current: "lab"}); err == nil {
+		t.Fatal("Current accepted missing shared context")
+	} else if !strings.Contains(err.Error(), "not available in shared storage") {
+		t.Fatalf("Current returned unclear stale-current error: %v", err)
+	}
+	ctx, err := NewContext("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDirs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Current(Store{Current: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.BaseDir != ctx.BaseDir {
+		t.Fatalf("BaseDir = %q, want %q", current.BaseDir, ctx.BaseDir)
 	}
 }
 
@@ -222,9 +261,53 @@ func TestPreparedContextImportYesReplacesExistingUnmarkedContextDir(t *testing.T
 }
 
 func TestCurrentRejectsMissingCurrentContext(t *testing.T) {
-	store := Store{Current: "lab", Contexts: []string{"other"}}
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	other, err := NewContext("other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDirs(other); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Current: "lab"}
 	if _, err := Current(store); err == nil {
-		t.Fatal("Current accepted a current context absent from the registry")
+		t.Fatal("Current accepted a current context absent from shared storage")
+	}
+}
+
+func TestListContextsReturnsOnlyUsableContextDirs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	lab, err := NewContext("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDirs(lab); err != nil {
+		t.Fatal(err)
+	}
+	contextsDir, err := ContextsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(contextsDir, "unmarked"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(contextsDir, "Invalid"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(contextsDir, "file"), []byte("data\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(lab.BaseDir, filepath.Join(contextsDir, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	contexts, err := ListContexts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contexts) != 1 || contexts[0].Name != "lab" {
+		t.Fatalf("contexts = %+v, want only lab", contexts)
 	}
 }
 

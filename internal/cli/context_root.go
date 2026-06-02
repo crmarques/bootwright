@@ -24,7 +24,7 @@ func runContextImportWithLocalRoot(ctx context.Context, baseArgs []string, files
 	if yes {
 		rootArgs = append(rootArgs, "--yes")
 	}
-	return runWithLocalRoot(ctx, rootArgs, stdin, stdout, stderr, true)
+	return runWithLocalRoot(ctx, rootArgs, stdin, stdout, stderr, len(baseArgs) >= 2 && baseArgs[1] == "init")
 }
 
 func stageContextInputForRoot(files []string) (string, func(), error) {

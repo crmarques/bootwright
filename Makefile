@@ -211,8 +211,11 @@ staticcheck:
 # locally, `python3 -m pytest $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter/` discovers the
 # same TestCase classes.
 python-test:
-	@cd $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter && python3 -m unittest discover -v
-	@$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
+	@set -e; \
+	trap 'find $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter scripts -type d -name __pycache__ -prune -exec rm -rf {} +' EXIT; \
+	cd $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter && python3 -m unittest discover -v; \
+	cd - >/dev/null; \
+	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 
 ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
 	@for playbook in $(ANSIBLE_SYNTAX_PLAYBOOKS); do \

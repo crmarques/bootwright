@@ -1425,28 +1425,33 @@ Validation rejects:
 
 ## CLI Contract
 
-The CLI resolves desired state from the current named context. Contexts are
-registered in `~/.bootwright/contexts.yaml` using only this list form:
+The CLI resolves desired state from the current named context. Context storage
+is shared across sudo-capable administrators under
+`/var/lib/bootwright/contexts/<context>/`; each OS user keeps only their
+private current-context selection in `~/.bootwright/contexts.yaml`:
 
 ```yaml
 current: lab
-contexts:
-  - lab
 ```
 
-All context data is derived from the fixed root-managed path
+Context names are discovered from the fixed root-managed path
 `/var/lib/bootwright/contexts/<context>/`; `context init` imports one or more
 YAML files or directories into that context's `input/` directory. Input
 directories are walked for YAML files unless exactly one discovered
 `Environment` sets `spec.resources`, in which case only that environment file
 plus the listed files are loaded.
-Legacy map-shaped registries are rejected with an actionable reset message;
-operators may remove `~/.bootwright/contexts.yaml` and recreate contexts with
+Legacy map-shaped registries are rejected with an actionable reset message.
+Retired list-shaped `contexts:` registry entries are ignored and removed on
+the next registry write. Operators may remove `~/.bootwright/contexts.yaml`
+and select or recreate contexts with `bootwright context use <name>` or
 `bootwright context init <name> -f <path> --yes`.
 Unknown fields are rejected at decode time, and all loaded objects are
 normalized and validated before any render or apply step.
 Context-backed commands fail before doing work when the selected context is
-not structurally ready. Controller-local actions run on localhost;
+missing from shared storage or is not structurally ready. Bootwright never
+auto-switches or auto-clears a stale private current selection; `context list`
+reports it and context-backed commands block until the user chooses an existing
+context or recreates it. Controller-local actions run on localhost;
 `bootwright context validate` reports each checked aspect as `OK` or
 `MISSING`, reports missing declared secret material as `WARN`, and supports
 `--output json` for automation. `WARN` does not block structurally ready
@@ -1465,7 +1470,7 @@ bootwright context validate --output json
 bootwright context list
 bootwright context use lab
 bootwright context current [--short]
-bootwright context delete lab [--purge --yes]
+bootwright context delete lab --purge --yes
 bootwright cluster list
 bootwright cluster list --output json
 bootwright cluster access-info
@@ -1652,7 +1657,10 @@ include every consumer or run without `--scope`.
 
 Fixed storage layout:
 
-- The only user-writable registry is `~/.bootwright/contexts.yaml`.
+- The only user-home state is `~/.bootwright/contexts.yaml`, containing that
+  user's current context selection only. Direct `sudo bootwright ...` uses
+  root's own private selection; normal `bootwright ...` commands preserve the
+  caller's registry across internal sudo re-exec.
 - The root-managed tree is `/var/lib/bootwright/`, mode `0700`.
 - `/var/lib/bootwright/` contains only shared cache/tooling and named
   contexts:

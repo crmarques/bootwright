@@ -30,8 +30,7 @@ const (
 )
 
 type Store struct {
-	Current  string   `yaml:"current,omitempty" json:"current,omitempty"`
-	Contexts []string `yaml:"contexts,omitempty" json:"contexts,omitempty"`
+	Current string `yaml:"current,omitempty" json:"current,omitempty"`
 }
 
 type Context struct {
@@ -173,7 +172,7 @@ func Save(path string, store Store) error {
 	if err := validateStore(store); err != nil {
 		return err
 	}
-	store.Contexts = normalizeNames(store.Contexts)
+	store.Current = strings.TrimSpace(store.Current)
 	data, err := yaml.Marshal(store)
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
@@ -193,54 +192,116 @@ func Save(path string, store Store) error {
 }
 
 func Current(store Store) (Context, error) {
-	if strings.TrimSpace(store.Current) == "" {
+	current := strings.TrimSpace(store.Current)
+	if current == "" {
 		return Context{}, errors.New("no current context; run `bootwright context init <name> -f <path>` or `bootwright context use <name>`")
 	}
-	if !Contains(store, store.Current) {
-		return Context{}, fmt.Errorf("current context %q is not defined", store.Current)
-	}
-	ctx, err := NewContext(store.Current)
+	ctx, err := RequireExistingContext(current)
 	if err != nil {
-		return Context{}, err
+		return Context{}, fmt.Errorf("current context %q is not available in shared storage: %w", current, err)
 	}
 	return ctx, nil
 }
 
-func Names(store Store) []string {
-	return normalizeNames(store.Contexts)
-}
-
-func Contains(store Store, name string) bool {
-	for _, got := range store.Contexts {
-		if got == name {
-			return true
+func ListContexts() ([]Context, error) {
+	contextsDir, err := ContextsDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(contextsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read contexts directory %s: %w", contextsDir, err)
+	}
+	var contexts []Context
+	for _, entry := range entries {
+		name := entry.Name()
+		if err := ValidateName(name); err != nil {
+			continue
+		}
+		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+			continue
+		}
+		ctx, err := NewContext(name)
+		if err != nil {
+			return nil, err
+		}
+		usable, err := isUsableContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if usable {
+			contexts = append(contexts, ctx)
 		}
 	}
-	return false
+	sort.Slice(contexts, func(i, j int) bool {
+		return contexts[i].Name < contexts[j].Name
+	})
+	return contexts, nil
 }
 
-func Add(store *Store, name string) error {
-	if err := ValidateName(name); err != nil {
-		return err
-	}
-	if !Contains(*store, name) {
-		store.Contexts = append(store.Contexts, name)
-	}
-	store.Contexts = normalizeNames(store.Contexts)
-	return nil
+func ContextsDir() (string, error) {
+	return cleanPath(filepath.Join(rootDir, "contexts"))
 }
 
-func Remove(store *Store, name string) {
-	out := make([]string, 0, len(store.Contexts))
-	for _, got := range store.Contexts {
-		if got != name {
-			out = append(out, got)
+func ContextExists(name string) (bool, error) {
+	ctx, err := NewContext(name)
+	if err != nil {
+		return false, err
+	}
+	return isUsableContext(ctx)
+}
+
+func RequireExistingContext(name string) (Context, error) {
+	ctx, err := NewContext(name)
+	if err != nil {
+		return Context{}, err
+	}
+	info, err := os.Lstat(ctx.BaseDir)
+	if errors.Is(err, os.ErrNotExist) {
+		contextsDir, dirErr := ContextsDir()
+		if dirErr != nil {
+			return Context{}, dirErr
 		}
+		return Context{}, fmt.Errorf("context %q not found under %s", name, contextsDir)
 	}
-	store.Contexts = out
-	if store.Current == name {
-		store.Current = ""
+	if err != nil {
+		return Context{}, fmt.Errorf("stat context %q at %s: %w", name, ctx.BaseDir, err)
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Context{}, fmt.Errorf("context %q path must not be a symlink: %s", name, ctx.BaseDir)
+	}
+	if !info.IsDir() {
+		return Context{}, fmt.Errorf("context %q path is not a directory: %s", name, ctx.BaseDir)
+	}
+	ok, err := managedroot.MarkerExists(ctx.BaseDir)
+	if err != nil {
+		return Context{}, err
+	}
+	if !ok {
+		return Context{}, fmt.Errorf("context %q is not marked as Bootwright-managed at %s", name, ctx.BaseDir)
+	}
+	return ctx, nil
+}
+
+func isUsableContext(ctx Context) (bool, error) {
+	info, err := os.Lstat(ctx.BaseDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("stat context %q at %s: %w", ctx.Name, ctx.BaseDir, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return false, nil
+	}
+	ok, err := managedroot.MarkerExists(ctx.BaseDir)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 func EnsureDirs(ctx Context) error {
@@ -369,26 +430,10 @@ func rejectLegacyContextMapRegistry(path string, data []byte) error {
 }
 
 func validateStore(store Store) error {
-	seen := map[string]bool{}
-	for _, name := range store.Contexts {
-		if err := ValidateName(name); err != nil {
-			return err
-		}
-		if seen[name] {
-			return fmt.Errorf("context %q is listed more than once", name)
-		}
-		seen[name] = true
-	}
-	if store.Current != "" && !seen[store.Current] {
-		return fmt.Errorf("current context %q is not defined", store.Current)
+	if strings.TrimSpace(store.Current) != "" {
+		return ValidateName(store.Current)
 	}
 	return nil
-}
-
-func normalizeNames(names []string) []string {
-	out := append([]string(nil), names...)
-	sort.Strings(out)
-	return out
 }
 
 func chownRegistryToInternalCaller(paths ...string) {

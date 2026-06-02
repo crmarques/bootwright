@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -68,7 +69,11 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 		if err != nil {
 			return failErr(1, err)
 		}
-		if contextstore.Contains(store, name) && !yes {
+		exists, err := contextstore.ContextExists(name)
+		if err != nil {
+			return failErr(1, err)
+		}
+		if exists && !yes {
 			return failf(1, "context %q already exists; rerun with --yes to replace it or `bootwright context update %s -f <path>` to refresh inputs", name, name)
 		}
 		prepared, err := contextstore.PrepareContextImport(name, files)
@@ -90,9 +95,6 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
 			return failErr(1, err)
-		}
-		if err := contextstore.Add(&store, name); err != nil {
-			return failErr(2, err)
 		}
 		store.Current = name
 		if err := contextstore.Save(registry, store); err != nil {
@@ -140,16 +142,12 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			}
 			return nil
 		}
-		ctx, err := contextstore.NewContext(name)
-		if err != nil {
+		if err := contextstore.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
-		registry, store, err := loadContextStore()
+		ctx, err := contextstore.RequireExistingContext(name)
 		if err != nil {
 			return failErr(1, err)
-		}
-		if !contextstore.Contains(store, name) {
-			return failf(1, "context %q not found", name)
 		}
 		info, err := os.Stat(ctx.BaseDir)
 		if err != nil {
@@ -176,9 +174,6 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		}
 		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
-			return failErr(1, err)
-		}
-		if err := contextstore.Save(registry, store); err != nil {
 			return failErr(1, err)
 		}
 		p := output.New(stdout)
@@ -216,8 +211,8 @@ func newContextUseCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if !contextstore.Contains(store, name) {
-			return failf(1, "context %q not found", name)
+		if _, err := contextstore.RequireExistingContext(name); err != nil {
+			return failErr(1, err)
 		}
 		store.Current = name
 		if err := contextstore.Save(registry, store); err != nil {
@@ -240,24 +235,37 @@ func newContextListCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
+		contexts, err := contextstore.ListContexts()
+		if err != nil {
+			return failErr(1, err)
+		}
 		var items []output.Item
-		for _, name := range contextstore.Names(store) {
-			label := name
-			if name == store.Current {
+		foundCurrent := false
+		current := strings.TrimSpace(store.Current)
+		for _, ctx := range contexts {
+			label := ctx.Name
+			if ctx.Name == current {
 				label = "* " + label
+				foundCurrent = true
 			} else {
 				label = "  " + label
 			}
-			ctx, _ := contextstore.NewContext(name)
 			items = append(items, output.Item{Label: label, Detail: ctx.BaseDir})
 		}
 		p := output.New(stdout)
 		p.Command("context list")
 		if len(items) == 0 {
 			p.Status(output.StatusWarn, "contexts", "none")
-			return nil
+		} else {
+			p.List(items)
 		}
-		p.List(items)
+		if current != "" && !foundCurrent {
+			contextsDir, dirErr := contextstore.ContextsDir()
+			if dirErr != nil {
+				return failErr(1, dirErr)
+			}
+			p.Status(output.StatusWarn, "current context", current+" not found under "+contextsDir)
+		}
 		return nil
 	}
 	return cmd
@@ -303,6 +311,9 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if err := contextstore.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
+		if !purge {
+			return failf(1, "context %q is stored in shared root state; rerun with --purge --yes to delete it", name)
+		}
 		if purge && shouldRunContextRootChild() {
 			ctx, ctxErr := contextstore.NewContext(name)
 			if ctxErr != nil {
@@ -324,33 +335,23 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if err != nil {
 			return failErr(1, err)
 		}
-		if !contextstore.Contains(store, name) {
-			return failf(1, "context %q not found", name)
-		}
-		var ctx contextstore.Context
-		if purge {
-			ctx, err = contextstore.NewContext(name)
-			if err != nil {
-				return failErr(2, err)
-			}
-			if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
-				return failErr(1, errors.New("context delete aborted"))
-			}
-		}
-		contextstore.Remove(&store, name)
-		if err := contextstore.Save(registry, store); err != nil {
+		ctx, err := contextstore.RequireExistingContext(name)
+		if err != nil {
 			return failErr(1, err)
 		}
-		if purge {
-			if err := contextstore.SafePurgeBaseDir(ctx); err != nil {
+		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
+			return failErr(1, errors.New("context delete aborted"))
+		}
+		if err := contextstore.SafePurgeBaseDir(ctx); err != nil {
+			return failErr(1, err)
+		}
+		if strings.TrimSpace(store.Current) == name {
+			store.Current = ""
+			if err := contextstore.Save(registry, store); err != nil {
 				return failErr(1, err)
 			}
 		}
-		detail := "registry entry removed"
-		if purge {
-			detail = "registry entry and base directory removed"
-		}
-		output.New(stdout).Status(output.StatusOK, "context "+name, detail)
+		output.New(stdout).Status(output.StatusOK, "context "+name, "base directory removed")
 		return nil
 	}
 	return cmd

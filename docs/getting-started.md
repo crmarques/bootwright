@@ -145,10 +145,14 @@ bootwright context validate
 bootwright secret list
 ```
 
-Bootwright records only the selected context names in
-`~/.bootwright/contexts.yaml`. Context data lives under
+Bootwright records only your current context selection in
+`~/.bootwright/contexts.yaml`. Context data is shared under
 `/var/lib/bootwright/contexts/<context-name>/`, and the imported authoring copy
-lives at `input/` inside that directory.
+lives at `input/` inside that directory. Other sudo-capable administrators on
+the same host see the same shared contexts, but keep their own current
+selection. Run `bootwright ...` as your user; if you run
+`sudo bootwright ...` directly, Bootwright uses root's private current-context
+selection instead.
 
 Re-run `context init` with `--yes` to replace the entire context directory, or
 use `bootwright context update lab -f <input-dir>` to replace only

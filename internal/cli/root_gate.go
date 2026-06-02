@@ -174,7 +174,11 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "list", "use", "current", "init", "update", "delete":
+		case "init", "update":
+			return false
+		case "list", "use", "current", "validate":
+			return true
+		case "delete":
 			return false
 		default:
 			return true
@@ -231,7 +235,26 @@ func argsHaveInputFileFlag(args []string) bool {
 }
 
 func argsMayMutateRegistry(args []string) bool {
-	return len(args) >= 2 && args[0] == "context" && (args[1] == "init" || args[1] == "update" || args[1] == "delete")
+	if len(args) < 2 || args[0] != "context" {
+		return false
+	}
+	switch args[1] {
+	case "init", "use":
+		return true
+	case "delete":
+		return contextDeleteArgsHavePurge(args[2:])
+	default:
+		return false
+	}
+}
+
+func contextDeleteArgsHavePurge(args []string) bool {
+	for _, arg := range args {
+		if arg == "--purge" || strings.HasPrefix(arg, "--purge=") {
+			return true
+		}
+	}
+	return false
 }
 
 func argsMayUseBecome(args []string) bool {

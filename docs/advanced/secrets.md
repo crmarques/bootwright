@@ -70,7 +70,7 @@ Bytes live under the root-managed Bootwright context directory:
 
 | Path | Location |
 | --- | --- |
-| Context registry | `~/.bootwright/contexts.yaml` |
+| Current context selection | `~/.bootwright/contexts.yaml` |
 | Context dir | `/var/lib/bootwright/contexts/<context-name>` |
 | Secrets dir | `/var/lib/bootwright/contexts/<context-name>/secrets` |
 

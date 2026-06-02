@@ -902,12 +902,8 @@ func TestContextUpdateRequiresExistingContext(t *testing.T) {
 	}
 }
 
-func TestContextCurrentAndListDoNotRequireContextDirAccess(t *testing.T) {
-	home := setTestHomeAndRoot(t)
-	root := filepath.Join(home, "bootwright-root")
-	lockTestContextsDir(t, root)
-	saveTestContextRegistry(t, "test", "test")
-	wantBase := filepath.Join(root, "contexts", "test")
+func TestContextCurrentAndListReadSharedContextStorage(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
 
 	stdout, stderr, code := runCLI(t, "context", "current", "--short")
 	if code != 0 {
@@ -920,65 +916,66 @@ func TestContextCurrentAndListDoNotRequireContextDirAccess(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context current exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, wantBase) {
-		t.Fatalf("context current stdout missing %s:\n%s", wantBase, stdout)
+	if !strings.Contains(stdout, ctx.BaseDir) {
+		t.Fatalf("context current stdout missing %s:\n%s", ctx.BaseDir, stdout)
 	}
 	stdout, stderr, code = runCLI(t, "context", "list")
 	if code != 0 {
 		t.Fatalf("context list exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, wantBase) {
-		t.Fatalf("context list stdout missing %s:\n%s", wantBase, stdout)
+	if !strings.Contains(stdout, "* test") || !strings.Contains(stdout, ctx.BaseDir) {
+		t.Fatalf("context list stdout missing current context:\n%s", stdout)
 	}
 }
 
-func TestContextDeleteWithoutPurgeDoesNotRequireContextDirAccess(t *testing.T) {
-	home := setTestHomeAndRoot(t)
-	root := filepath.Join(home, "bootwright-root")
-	lockTestContextsDir(t, root)
-	saveTestContextRegistry(t, "test", "test")
+func TestContextListReportsStaleCurrent(t *testing.T) {
+	setTestHomeAndRoot(t)
+	saveTestContextRegistry(t, "missing")
+
+	stdout, stderr, code := runCLI(t, "context", "list")
+	if code != 0 {
+		t.Fatalf("context list exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "[WARN] current context: missing not found") {
+		t.Fatalf("context list did not report stale current:\n%s", stdout)
+	}
+}
+
+func TestContextCurrentRejectsStaleCurrent(t *testing.T) {
+	setTestHomeAndRoot(t)
+	saveTestContextRegistry(t, "missing")
+
+	_, stderr, code := runCLI(t, "context", "current", "--short")
+	if code == 0 {
+		t.Fatal("context current unexpectedly accepted stale current")
+	}
+	if !strings.Contains(stderr, `current context "missing" is not available in shared storage`) {
+		t.Fatalf("stderr missing stale-current error: %q", stderr)
+	}
+}
+
+func TestContextDeleteWithoutPurgeFails(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
 
 	_, stderr, code := runCLI(t, "context", "delete", "test")
-	if code != 0 {
-		t.Fatalf("context delete exited %d, stderr=%q", code, stderr)
+	if code == 0 {
+		t.Fatal("context delete without --purge unexpectedly succeeded")
 	}
-	registry, err := contextstore.DefaultRegistryPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := contextstore.Load(registry)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if contextstore.Contains(store, "test") {
-		t.Fatalf("context delete left test registered: %+v", store)
+	if !strings.Contains(stderr, "rerun with --purge --yes") {
+		t.Fatalf("stderr missing purge remediation: %q", stderr)
 	}
 }
 
-func TestContextDeleteRemovesOnlyRegistryEntryWithoutPurge(t *testing.T) {
+func TestContextDeleteWithoutPurgeLeavesSharedContextData(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	keepPath := filepath.Join(ctx.RenderedDir, "keep")
 	if err := os.WriteFile(keepPath, []byte("state\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runCLI(t, "context", "delete", "test")
-	if code != 0 {
-		t.Fatalf("context delete exited %d, stderr=%q", code, stderr)
-	}
-	registry, err := contextstore.DefaultRegistryPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := contextstore.Load(registry)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if contextstore.Contains(store, "test") {
-		t.Fatalf("context delete left test registered: %+v", store)
-	}
-	if store.Current == "test" {
-		t.Fatalf("context delete left test current: %+v", store)
+	_, _, code := runCLI(t, "context", "delete", "test")
+	if code == 0 {
+		t.Fatal("context delete without --purge unexpectedly succeeded")
 	}
 	if _, err := os.Stat(keepPath); err != nil {
 		t.Fatalf("context delete without --purge removed context data: %v", err)
@@ -1004,11 +1001,93 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contextstore.Contains(store, "test") {
-		t.Fatalf("context delete --purge left test registered: %+v", store)
+	if store.Current != "" {
+		t.Fatalf("context delete --purge left current selected: %+v", store)
 	}
 	if _, err := os.Stat(ctx.BaseDir); !os.IsNotExist(err) {
 		t.Fatalf("context delete --purge did not remove context dir: %v", err)
+	}
+}
+
+func TestContextSelectionIsPerHomeWithSharedStorage(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(contextstore.SetRootDirForTest(root))
+	homeA := t.TempDir()
+	homeB := t.TempDir()
+
+	t.Setenv("HOME", homeA)
+	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("user A context init lab exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	t.Setenv("HOME", homeB)
+	stdout, stderr, code = runCLI(t, "context", "use", "lab")
+	if code != 0 {
+		t.Fatalf("user B context use lab exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	t.Setenv("HOME", homeA)
+	stdout, stderr, code = runCLI(t, "context", "init", "other", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("user A context init other exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "context", "current", "--short")
+	if code != 0 || stdout != "other\n" {
+		t.Fatalf("user A current stdout=%q code=%d stderr=%q", stdout, code, stderr)
+	}
+	t.Setenv("HOME", homeB)
+	stdout, stderr, code = runCLI(t, "context", "current", "--short")
+	if code != 0 || stdout != "lab\n" {
+		t.Fatalf("user B current stdout=%q code=%d stderr=%q", stdout, code, stderr)
+	}
+}
+
+func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(contextstore.SetRootDirForTest(root))
+	homeA := t.TempDir()
+	homeB := t.TempDir()
+
+	t.Setenv("HOME", homeA)
+	stdout, stderr, code := runCLI(t, "context", "init", "lab", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("user A context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	t.Setenv("HOME", homeB)
+	stdout, stderr, code = runCLI(t, "context", "use", "lab")
+	if code != 0 {
+		t.Fatalf("user B context use exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	t.Setenv("HOME", homeA)
+	_, stderr, code = runCLI(t, "context", "delete", "lab", "--purge", "--yes")
+	if code != 0 {
+		t.Fatalf("user A context delete --purge exited %d, stderr=%q", code, stderr)
+	}
+	registryA, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeA, err := contextstore.Load(registryA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeA.Current != "" {
+		t.Fatalf("user A current = %q, want cleared", storeA.Current)
+	}
+	t.Setenv("HOME", homeB)
+	registryB, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeB, err := contextstore.Load(registryB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeB.Current != "lab" {
+		t.Fatalf("user B current = %q, want stale lab", storeB.Current)
+	}
+	_, stderr, code = runCLI(t, "context", "current", "--short")
+	if code == 0 || !strings.Contains(stderr, `current context "lab" is not available in shared storage`) {
+		t.Fatalf("user B stale current code=%d stderr=%q", code, stderr)
 	}
 }
 
@@ -1207,13 +1286,14 @@ func TestLocalRootGateArgs(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{args: []string{"context", "list"}, want: false},
-		{args: []string{"context", "current"}, want: false},
-		{args: []string{"context", "use", "lab"}, want: false},
+		{args: []string{"context", "list"}, want: true},
+		{args: []string{"context", "current"}, want: true},
+		{args: []string{"context", "use", "lab"}, want: true},
 		{args: []string{"context", "init", "lab", "-f", "."}, want: false},
 		{args: []string{"context", "update", "lab", "-f", "."}, want: false},
 		{args: []string{"context", "delete", "lab"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge"}, want: false},
+		{args: []string{"context", "delete", "lab", "--purge=true"}, want: false},
 		{args: []string{"context", "validate"}, want: true},
 		{args: []string{"help", "check"}, want: false},
 		{args: []string{"completion", "bash"}, want: false},
@@ -1793,7 +1873,7 @@ func TestContextInitStagesInputAndSyncsRegistryAroundSudo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store.Current != "lab" || !contextstore.Contains(store, "lab") {
+	if store.Current != "lab" {
 		t.Fatalf("registry was not synced after sudo child: %+v", store)
 	}
 }
@@ -1828,7 +1908,109 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	if registry == "" {
 		os.Exit(2)
 	}
-	if err := contextstore.Save(registry, contextstore.Store{Current: "lab", Contexts: []string{"lab"}}); err != nil {
+	if err := contextstore.Save(registry, contextstore.Store{Current: "lab"}); err != nil {
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
+
+func TestContextUseSyncsRegistryAroundSudo(t *testing.T) {
+	setTestHomeAndRoot(t)
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			helperArgs := append([]string{"-test.run=TestContextRegistrySyncRootHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_CONTEXT_REGISTRY_SYNC_HELPER=1")
+			return cmd
+		},
+	}
+
+	stdout, stderr, code := runCLI(t, "context", "use", "lab")
+	if code != 0 {
+		t.Fatalf("context use exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	registry, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := contextstore.Load(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Current != "lab" {
+		t.Fatalf("registry current = %q, want lab", store.Current)
+	}
+}
+
+func TestContextDeletePurgeSyncsRegistryAroundSudo(t *testing.T) {
+	setTestHomeAndRoot(t)
+	saveTestContextRegistry(t, "lab")
+	previous := localRootGate
+	defer func() { localRootGate = previous }()
+
+	localRootGate = localRootGateDeps{
+		enabled:    true,
+		geteuid:    func() int { return 1000 },
+		executable: func() (string, error) { return "/usr/local/bin/bootwright", nil },
+		commandContext: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			helperArgs := append([]string{"-test.run=TestContextRegistrySyncRootHelperProcess", "--"}, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], helperArgs...)
+			cmd.Env = append(os.Environ(), "BOOTWRIGHT_CONTEXT_REGISTRY_SYNC_HELPER=1")
+			return cmd
+		},
+	}
+
+	stdout, stderr, code := runCLI(t, "context", "delete", "lab", "--purge", "--yes")
+	if code != 0 {
+		t.Fatalf("context delete --purge exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	registry, err := contextstore.DefaultRegistryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := contextstore.Load(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Current != "" {
+		t.Fatalf("registry current = %q, want cleared", store.Current)
+	}
+}
+
+func TestContextRegistrySyncRootHelperProcess(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_CONTEXT_REGISTRY_SYNC_HELPER") != "1" {
+		return
+	}
+	args := os.Args
+	sep := slices.Index(args, "--")
+	if sep < 0 {
+		os.Exit(2)
+	}
+	rootArgs := args[sep+1:]
+	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
+		os.Exit(0)
+	}
+	if len(rootArgs) < 10 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") {
+		os.Exit(2)
+	}
+	registry := strings.TrimPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=")
+	command := rootArgs[8:]
+	switch {
+	case reflect.DeepEqual(command, []string{"context", "use", "lab"}):
+		if err := contextstore.Save(registry, contextstore.Store{Current: "lab"}); err != nil {
+			os.Exit(2)
+		}
+	case reflect.DeepEqual(command, []string{"context", "delete", "lab", "--purge", "--yes"}):
+		if err := contextstore.Save(registry, contextstore.Store{}); err != nil {
+			os.Exit(2)
+		}
+	default:
 		os.Exit(2)
 	}
 	os.Exit(0)
@@ -2968,25 +3150,13 @@ func setTestHomeAndRoot(t *testing.T) string {
 	return home
 }
 
-func lockTestContextsDir(t *testing.T, root string) {
-	t.Helper()
-	contextsDir := filepath.Join(root, "contexts")
-	if err := os.MkdirAll(contextsDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(contextsDir, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(contextsDir, 0o700) })
-}
-
-func saveTestContextRegistry(t *testing.T, current string, names ...string) {
+func saveTestContextRegistry(t *testing.T, current string) {
 	t.Helper()
 	registry, err := contextstore.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := contextstore.Save(registry, contextstore.Store{Current: current, Contexts: names}); err != nil {
+	if err := contextstore.Save(registry, contextstore.Store{Current: current}); err != nil {
 		t.Fatal(err)
 	}
 }

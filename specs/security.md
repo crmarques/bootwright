@@ -89,8 +89,8 @@ images, mirror URLs, and non-secret cluster addresses.
 Generated output boundaries are part of the safety contract:
 
 - The context registry is the only user-home state:
-  `~/.bootwright/contexts.yaml`, containing only the current context name and a
-  list of context names.
+  `~/.bootwright/contexts.yaml`, containing only that user's current context
+  selection.
 - Context data is root-managed under `/var/lib/bootwright/contexts/<context>/`.
   Commands that read or write that tree re-exec through `sudo` when not already
   running as root.
