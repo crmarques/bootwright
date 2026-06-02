@@ -1,0 +1,55 @@
+---
+- name: Load chrony package list
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install chrony packages
+  ansible.builtin.package:
+    name: "{{ bootwright_chrony_packages }}"
+    state: present
+
+- name: Create chrony state and config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ bootwright_chrony_root }}"
+    - "{{ bootwright_chrony_include_dir }}"
+
+- name: Enable chrony include directory
+  ansible.builtin.lineinfile:
+    path: "{{ bootwright_chrony_main_conf }}"
+    line: "confdir {{ bootwright_chrony_include_dir }}"
+    insertafter: EOF
+  register: bootwright_chrony_include
+
+- name: Render chrony config
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: "{{ bootwright_chrony_conf_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_chrony_config
+
+- name: Enable and start chrony service
+  ansible.builtin.service:
+    name: "{{ bootwright_chrony_service }}"
+    enabled: true
+    state: started
+
+- name: Restart chrony service
+  ansible.builtin.service:
+    name: "{{ bootwright_chrony_service }}"
+    state: restarted
+  when: bootwright_chrony_include.changed or bootwright_chrony_config.changed
+
+- name: Open NTP port on host firewall
+  ansible.posix.firewalld:
+    port: "{{ bootwright_component.port | int }}/udp"
+    state: enabled
+    permanent: true
+    immediate: true
+  when: bootwright_firewalld_available | default(false)

@@ -1,0 +1,13 @@
+{% for source in bootwright_component.upstreamSources | default([]) %}
+server {{ source }} iburst
+{% endfor %}
+{% for network in bootwright_component.allowedNetworks | default([]) %}
+allow {{ network }}
+{% endfor %}
+bindaddress {{ bootwright_component.bindAddress }}
+port {{ bootwright_component.port | int }}
+local stratum 10
+makestep 1.0 3
+rtcsync
+cmdport 0
+driftfile {{ bootwright_chrony_root }}/chrony.drift

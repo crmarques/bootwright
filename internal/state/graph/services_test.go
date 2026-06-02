@@ -20,6 +20,7 @@ func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
 		v1alpha1.ComponentSlotArtifacts,
 		v1alpha1.ComponentSlotLoadBalancer,
 		v1alpha1.ComponentSlotNameResolution,
+		v1alpha1.ComponentSlotNTP,
 		v1alpha1.ComponentSlotProxy,
 		v1alpha1.ComponentSlotRegistry,
 	} {
@@ -232,6 +233,11 @@ func sharedManagedServiceState() v1alpha1.State {
 						Type:         v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "name-resolution"},
 					}},
+					NTPSources: []v1alpha1.EnvironmentNTPSourceComponent{{
+						Name:         "default",
+						Type:         v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"},
+					}},
 					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
 						Name:         "default",
 						Type:         v1alpha1.EnvironmentComponentManaged,
@@ -264,6 +270,7 @@ func sharedManagedServiceState() v1alpha1.State {
 		InfraComponents: []v1alpha1.InfraComponent{
 			loadBalancerComponent(),
 			nameResolutionComponent(),
+			ntpComponent(),
 			proxyComponent(),
 			registryComponent(),
 			artifactServerComponent(),
@@ -402,6 +409,18 @@ func nameResolutionComponent() v1alpha1.InfraComponent {
 			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultDNSPort,
+		}},
+	}
+}
+
+func ntpComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "ntp-server"},
+		Spec: v1alpha1.InfraComponentSpec{NTP: &v1alpha1.NTPComponent{
+			Type:        v1alpha1.InfraComponentTypeChrony,
+			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			BindAddress: "10.0.0.5",
+			Port:        v1alpha1.DefaultNTPPort,
 		}},
 	}
 }

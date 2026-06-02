@@ -40,11 +40,14 @@ func validateInfraComponentSpec(component v1alpha1.InfraComponent, hosts map[str
 	if component.Spec.NameResolution != nil {
 		set++
 	}
+	if component.Spec.NTP != nil {
+		set++
+	}
 	if component.Spec.Registry != nil {
 		set++
 	}
 	if set != 1 {
-		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, registry} (got %d)", prefix, set)}
+		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, ntp, registry} (got %d)", prefix, set)}
 	}
 	var errs []string
 	if component.Spec.ArtifactServer != nil {
@@ -58,6 +61,9 @@ func validateInfraComponentSpec(component v1alpha1.InfraComponent, hosts map[str
 	}
 	if component.Spec.NameResolution != nil {
 		errs = append(errs, validateNameResolutionComponent(component, hosts)...)
+	}
+	if component.Spec.NTP != nil {
+		errs = append(errs, validateNTPComponent(component, hosts)...)
 	}
 	if component.Spec.Registry != nil {
 		errs = append(errs, validateRegistryComponent(component, hosts)...)
@@ -189,6 +195,24 @@ func validateNameResolutionComponent(component v1alpha1.InfraComponent, hosts ma
 	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
 	if host, ok := hosts[dns.HostRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, host)...)
+	}
+	return errs
+}
+
+func validateNTPComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+	ntp := component.Spec.NTP
+	prefix := fmt.Sprintf("InfraComponent/%s spec.ntp", component.Metadata.Name)
+	var errs []string
+	if ntp.Type != v1alpha1.InfraComponentTypeChrony {
+		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, ntp.Type, v1alpha1.InfraComponentTypeChrony))
+	}
+	errs = append(errs, validateServiceHostRef(prefix+".hostRef", ntp.HostRef, hosts, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)...)
+	errs = append(errs, validateServiceParams(prefix, ntp.BindAddress, ntp.Port)...)
+	if host, ok := hosts[ntp.HostRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, ntp.Endpoints, host)...)
+	}
+	for i, source := range ntp.UpstreamSources {
+		errs = append(errs, validateNTPAddress(fmt.Sprintf("%s.upstreamSources[%d]", prefix, i), source)...)
 	}
 	return errs
 }

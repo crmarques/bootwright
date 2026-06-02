@@ -1,0 +1,3 @@
+---
+bootwright_chrony_root: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+bootwright_chrony_conf_file: "{{ bootwright_chrony_include_dir }}/bootwright-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}.conf"

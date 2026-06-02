@@ -1,0 +1,6 @@
+---
+bootwright_chrony_packages:
+  - chrony
+bootwright_chrony_main_conf: /etc/chrony/chrony.conf
+bootwright_chrony_include_dir: /etc/chrony/conf.d
+bootwright_chrony_service: chrony

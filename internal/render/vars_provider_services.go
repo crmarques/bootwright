@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/support"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func providerServicesVars(state v1alpha1.State) []any {
@@ -40,6 +41,8 @@ func providerServiceVarsFromGraph(state v1alpha1.State, service stategraph.Provi
 		return proxyProviderServiceVars(state, service)
 	case v1alpha1.ComponentSlotNameResolution:
 		return nameResolutionProviderServiceVars(state, service)
+	case v1alpha1.ComponentSlotNTP:
+		return ntpProviderServiceVars(state, service)
 	case v1alpha1.ComponentSlotRegistry:
 		return registryProviderServiceVars(state, service)
 	case v1alpha1.ProviderServiceKindBMC:
@@ -120,6 +123,41 @@ func nameResolutionProviderServiceVars(state v1alpha1.State, service stategraph.
 	}
 	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	return out, true
+}
+
+func ntpProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+	component, ok := findInfraComponent(state, service.Identity.Name)
+	if !ok || component.Spec.NTP == nil {
+		return nil, false
+	}
+	entry := v1alpha1.EnvironmentNTPSourceComponent{Name: serviceEntryName(service)}
+	out := ntpComponentVars(state, entry, component)
+	if networks := ntpAllowedNetworksForGraphService(state, service); len(networks) > 0 {
+		out["allowedNetworks"] = stringSliceAny(networks)
+	}
+	return out, true
+}
+
+func ntpAllowedNetworksForGraphService(state v1alpha1.State, service stategraph.ProviderService) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, consumer := range service.Consumers {
+		ci, ok := clusterInfraByName(state, consumer.ClusterInfra)
+		if !ok {
+			continue
+		}
+		for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
+			for _, item := range network.Spec.MachineNetwork {
+				if item.CIDR == "" || seen[item.CIDR] {
+					continue
+				}
+				seen[item.CIDR] = true
+				out = append(out, item.CIDR)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func registryProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {

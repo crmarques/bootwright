@@ -1,8 +1,8 @@
-{# Extract the IP-shaped ntpSources entries; DHCP option 42 (RFC 2132)
+{# Extract the IP-shaped resolved NTP sources; DHCP option 42 (RFC 2132)
    carries IPv4 addresses only, so any hostname-only entries are skipped
    here and reach the host via agent-config's additionalNTPSources
    instead. #}
-{% set _ntp_ips = ((bootwright_environment.infraComponents | default({})).ntpSources | default([])) | select('match', '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$') | list %}
+{% set _ntp_ips = (bootwright_resolved_ntp_sources | default([])) | select('match', '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$') | list %}
 <network{% if _ntp_ips %} xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'{% endif %}>
   <name>{{ bootwright_libvirt_network_name }}</name>
   <uuid>{{ bootwright_libvirt_network_uuid }}</uuid>

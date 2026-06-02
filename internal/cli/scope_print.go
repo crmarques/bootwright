@@ -233,6 +233,9 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 	if clusterUsesManagedNameResolution(state, ci) {
 		parts = append(parts, "nameResolution")
 	}
+	if environmentUsesManagedNTP(state) {
+		parts = append(parts, "ntp")
+	}
 	if environmentUsesManagedProxy(state) {
 		parts = append(parts, "proxy")
 	}
@@ -313,6 +316,19 @@ func environmentUsesManagedProxy(state v1alpha1.State) bool {
 	}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
 		if selected[entry.Name] && entry.Type == v1alpha1.EnvironmentComponentManaged {
+			return true
+		}
+	}
+	return false
+}
+
+func environmentUsesManagedNTP(state v1alpha1.State) bool {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return false
+	}
+	for _, entry := range env.Spec.InfraComponents.NTPSources {
+		if entry.Type == v1alpha1.EnvironmentComponentManaged {
 			return true
 		}
 	}

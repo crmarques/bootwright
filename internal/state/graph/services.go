@@ -244,6 +244,7 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 	out = append(out, bmcConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedProxyConsumers(state, infra, cluster)...)
 	out = append(out, networkNameResolutionConsumers(state, infra, cluster)...)
+	out = append(out, selectedManagedNTPConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedRegistryConsumers(state, infra, cluster)...)
 	if artifacts.ClusterNeedsPublication(state, infra, cluster) {
 		if server, ok := artifacts.Select(state); ok && server.Config != nil {
@@ -403,6 +404,39 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 			v1alpha1.InfraComponentTypeDnsmasq,
 			map[string]string{"hostRef": dns.HostRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
 			map[string][]string{"additionalIngressHosts": mergedHosts},
+		))
+	}
+	return out
+}
+
+func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	entries := map[string]v1alpha1.EnvironmentNTPSourceComponent{}
+	for _, entry := range env.Spec.InfraComponents.NTPSources {
+		if entry.Type == v1alpha1.EnvironmentComponentManaged {
+			entries[entry.ComponentRef.Name] = entry
+		}
+	}
+	var out []ProviderServiceConsumer
+	for componentName, entry := range entries {
+		component, ok := stateview.InfraComponent(state, componentName)
+		if !ok || component.Spec.NTP == nil {
+			continue
+		}
+		ntp := component.Spec.NTP
+		out = append(out, newServiceConsumer(
+			cluster.Metadata.Name,
+			infra.Metadata.Name,
+			fmt.Sprintf("Environment/%s infraComponents.ntpSources[%s]", env.Metadata.Name, entry.Name),
+			v1alpha1.ComponentSlotNTP,
+			v1alpha1.KindInfraComponent,
+			component.Metadata.Name,
+			v1alpha1.InfraComponentTypeChrony,
+			map[string]string{"hostRef": ntp.HostRef.Name, "entryName": entry.Name, "bindAddress": ntp.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, ntp.Port))},
+			nil,
 		))
 	}
 	return out

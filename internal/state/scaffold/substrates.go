@@ -18,6 +18,12 @@ var Substrates = map[Provider]Substrate{
         type: managed
         componentRef:
           name: name-resolution
+    ntpSources:
+      - name: default
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: cluster
 
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
@@ -102,6 +108,20 @@ spec:
     hostRef:
       name: lab-host
     bindAddress: 192.168.130.1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: ntp-server
+spec:
+  ntp:
+    type: chrony
+    hostRef:
+      name: lab-host
+    bindAddress: 192.168.130.1
+    endpoints:
+      - name: cluster
+        hostAddress: cluster-lan
 `,
 		ClusterMachineFrom: `        from:
           provider: {{.ProviderID}}

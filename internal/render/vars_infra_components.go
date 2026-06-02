@@ -31,6 +31,13 @@ func infraComponentsVars(state v1alpha1.State) []any {
 			}
 			entry["nameResolution"] = v
 		}
+		if ntp := component.Spec.NTP; ntp != nil {
+			v := serviceComponentVars(ntp.Type, ntp.HostRef.Name, ntp.BindAddress, ntp.Port, ntp.Endpoints)
+			if len(ntp.UpstreamSources) > 0 {
+				v["upstreamSources"] = stringSliceAny(ntp.UpstreamSources)
+			}
+			entry["ntp"] = v
+		}
 		if registry := component.Spec.Registry; registry != nil {
 			entry["registry"] = serviceComponentVars(registry.Type, registry.HostRef.Name, registry.BindAddress, registry.Port, registry.Endpoints)
 		}
@@ -70,7 +77,11 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 		out["registries"] = values
 	}
 	if len(env.Spec.InfraComponents.NTPSources) > 0 {
-		out["ntpSources"] = stringSliceAny(env.Spec.InfraComponents.NTPSources)
+		values := make([]any, 0, len(env.Spec.InfraComponents.NTPSources))
+		for _, entry := range env.Spec.InfraComponents.NTPSources {
+			values = append(values, environmentNTPSourceComponentVars(entry))
+		}
+		out["ntpSources"] = values
 	}
 	if len(out) == 0 {
 		return nil
@@ -106,6 +117,14 @@ func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolu
 	}
 	if len(entry.AdditionalIngressHosts) > 0 {
 		out["additionalIngressHosts"] = stringSliceAny(entry.AdditionalIngressHosts)
+	}
+	return out
+}
+
+func environmentNTPSourceComponentVars(entry v1alpha1.EnvironmentNTPSourceComponent) map[string]any {
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
+	if entry.Address != "" {
+		out["address"] = entry.Address
 	}
 	return out
 }

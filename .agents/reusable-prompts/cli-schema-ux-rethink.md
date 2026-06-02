@@ -55,6 +55,14 @@ Verify these in the current specs before relying on them:
   are outputs, not authored source of truth.
 - Every operational fact should have one owning kind. Do not improve UX by
   duplicating facts across layers.
+- Pressure-test attribute ownership, not just kind ownership. For each
+  important field, ask whether it belongs on the current object or should move
+  to another object that actually owns the intent. Lower-layer objects such as
+  `Host`, `InfraProvider`, `InfraComponent`, and provider inventories should
+  expose their own reachability, capabilities, services, and substrate facts;
+  they should not know, select, or refer to upper-layer consumers such as
+  `ContainerCluster`, `StorageCluster`, or future cluster types. Consumer
+  intent should reference downward instead.
 - Keep provider abstractions open for libvirt, bare metal, vSphere, OpenShift
   Virtualization, and future substrates.
 - Prefer official CLI capabilities from tools Bootwright drives before
@@ -155,6 +163,12 @@ Use these as provocations, not a checklist.
   a default, derivable from other desired state, replaceable by a clearer
   field, or removable.
 - For each major fact, can a user predict exactly one owning object and file?
+- For each major attribute, is it on the object that owns the fact or intent,
+  or has an upper-layer concern leaked into a lower-layer object? For example,
+  provider and host objects should describe available machines, services,
+  addresses, attachments, and capabilities without encoding whether that
+  infrastructure will later serve a container cluster, storage cluster, or a
+  future supported workload type.
 - Are defaults used as much as possible to keep authored inputs small, while
   still being visible enough that object bindings and emergent behavior do not
   surprise a new user?

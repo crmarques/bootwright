@@ -35,6 +35,13 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 			install: "Install mirror registry packages",
 			varName: "{{ bootwright_mr_packages }}",
 		},
+		{
+			role:    "ntp_chrony",
+			tasks:   "main.yml",
+			load:    "Load chrony package list",
+			install: "Install chrony packages",
+			varName: "{{ bootwright_chrony_packages }}",
+		},
 	}
 
 	for _, tc := range cases {

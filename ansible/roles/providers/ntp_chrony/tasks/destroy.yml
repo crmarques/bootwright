@@ -1,0 +1,30 @@
+---
+- name: Load chrony package list
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Remove Bootwright chrony config
+  ansible.builtin.file:
+    path: "{{ bootwright_chrony_conf_file }}"
+    state: absent
+  register: bootwright_chrony_config
+
+- name: Restart chrony service
+  ansible.builtin.service:
+    name: "{{ bootwright_chrony_service }}"
+    state: restarted
+  when: bootwright_chrony_config.changed
+  failed_when: false
+
+- name: Close NTP port on host firewall
+  ansible.posix.firewalld:
+    port: "{{ bootwright_component.port | int }}/udp"
+    state: disabled
+    permanent: true
+    immediate: true
+  when: bootwright_firewalld_available | default(false)
+  failed_when: false
+
+- name: Remove chrony state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_chrony_root }}"
+    state: absent

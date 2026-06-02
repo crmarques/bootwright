@@ -573,7 +573,11 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.InfraComponents.NTPSources = []string{"ntp.example.test", "192.168.132.1"}
+	state.Environments[0].Spec.InfraComponents.NTPSources = []v1alpha1.EnvironmentNTPSourceComponent{
+		{Name: "external", Type: v1alpha1.EnvironmentComponentExternal, Address: "ntp.example.test"},
+		{Name: "managed", Type: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"}, Endpoint: "cluster"},
+		{Name: "duplicate", Type: v1alpha1.EnvironmentComponentExternal, Address: "192.168.132.1"},
+	}
 
 	agent, err := render.AgentConfig(state, state.ContainerClusters[0])
 	if err != nil {
@@ -590,8 +594,16 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 		t.Fatalf("bootwright_environment rendered top-level ntpSources: %v", env["ntpSources"])
 	}
 	infra := env["infraComponents"].(map[string]any)
-	if got := infra["ntpSources"]; !reflect.DeepEqual(got, want) {
-		t.Fatalf("infraComponents.ntpSources got %v, want %v", got, want)
+	entries := infra["ntpSources"].([]any)
+	if len(entries) != 3 {
+		t.Fatalf("infraComponents.ntpSources got %v", entries)
+	}
+	first := entries[0].(map[string]any)
+	if first["name"] != "external" || first["type"] != v1alpha1.EnvironmentComponentExternal || first["address"] != "ntp.example.test" {
+		t.Fatalf("external ntp source vars got %v", first)
+	}
+	if got := vars["bootwright_resolved_ntp_sources"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("bootwright_resolved_ntp_sources got %v, want %v", got, want)
 	}
 }
 

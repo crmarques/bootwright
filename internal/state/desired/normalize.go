@@ -106,6 +106,14 @@ func normalizeInfraComponent(c *v1alpha1.InfraComponent) {
 			dns.Port = v1alpha1.DefaultDNSPort
 		}
 	}
+	if ntp := c.Spec.NTP; ntp != nil {
+		if ntp.BindAddress == "" {
+			ntp.BindAddress = v1alpha1.DefaultServiceBindAddress
+		}
+		if ntp.Port == 0 {
+			ntp.Port = v1alpha1.DefaultNTPPort
+		}
+	}
 	if registry := c.Spec.Registry; registry != nil {
 		if registry.BindAddress == "" {
 			registry.BindAddress = v1alpha1.DefaultServiceBindAddress

@@ -126,8 +126,14 @@ spec:
           containerClusterInstall:
             endpoint: cluster
     ntpSources:
-      - 0.pool.ntp.org
-      - 192.168.133.1
+      - name: default-01
+        type: external
+        address: ntp.example.test
+      - name: lab-ntp
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: cluster
 
   proxyFor:
     bootwright: default
@@ -190,6 +196,10 @@ Rules:
 - External artifact server entries use `spec.redfishVirtualMediaURL` and/or
   `spec.clusterInstallURL`. Managed artifact server entries use
   `componentRef.name` plus `routes` endpoint selectors.
+- External NTP source entries use `address`. Managed NTP source entries use
+  `componentRef.name` plus an optional `endpoint` selector. Resolved values
+  feed installer `additionalNTPSources` in authored order with duplicates
+  removed.
 - `infraComponents.nameResolution[].additionalIngressHosts[]` is optional.
   Values from environment entries and managed
   `InfraComponent.spec.nameResolution.additionalIngressHosts[]` merge into DNS
@@ -255,8 +265,10 @@ Rules:
   images. Each `local` or `public` reference must be pinned to an explicit
   version tag or digest; omitted tags, non-version tags, and `:latest` are
   invalid.
-- `infraComponents.ntpSources[]` is optional. Each entry must be a parseable IP
-  address or DNS hostname, and duplicate entries are rejected.
+- `infraComponents.ntpSources[]` is optional. Each entry must have a unique
+  `name` and `type: external` or `type: managed`. External entries require
+  `address`; managed entries require a matching `InfraComponent.spec.ntp`
+  reference and may select one of that component's endpoints.
 
 ## ContainerCluster
 
@@ -1093,7 +1105,7 @@ spec:
 Rules:
 
 - `spec` must set exactly one component arm: `artifactServer`,
-  `loadBalancer`, `proxy`, `nameResolution`, or `registry`.
+  `loadBalancer`, `proxy`, `nameResolution`, `ntp`, or `registry`.
 - `artifactServer.hostRef.name` references a `Host` with `container-runtime`.
 - `artifactServer.bindAddress` defaults to `0.0.0.0`.
 - `artifactServer.listeners[]` declares the ports the container listens on.
@@ -1109,17 +1121,20 @@ Rules:
 - The artifact server is implemented as a containerized static file service
   that serves generated ISOs and disconnected boot artifacts. HTTPS listeners
   use a self-signed certificate generated on the component host.
-- `loadBalancer`, `proxy`, `nameResolution`, and `registry` arms declare
+- `loadBalancer`, `proxy`, `nameResolution`, `ntp`, and `registry` arms declare
   their host placement and component-specific bind surface. Environment
-  catalog entries decide which consumers use proxy, DNS, registry, or artifact
-  services.
-- `proxy.endpoints[]`, `nameResolution.endpoints[]`, and
+  catalog entries decide which consumers use proxy, DNS, NTP, registry, or
+  artifact services.
+- `proxy.endpoints[]`, `nameResolution.endpoints[]`, `ntp.endpoints[]`, and
   `registry.endpoints[]`, when set, use `hostAddress` values that must match
   `Host.spec.addresses[].name` on their component `hostRef`.
 - `nameResolution.additionalIngressHosts[]` adds explicit host records that
   point at the consuming cluster's ingress VIP. Entries from the component and
   matching environment service catalog entry merge without mutating authored
   desired state.
+- `ntp.type` must be `chrony`. `ntp.bindAddress` defaults to `0.0.0.0`,
+  `ntp.port` defaults to `123`, and `ntp.upstreamSources[]` lists optional
+  upstream IP or DNS time sources used by the managed host service.
 
 ## ClusterInfra
 
@@ -1307,8 +1322,10 @@ Bootwright renders:
   present.
 - `agent-config.yaml minimalISO` and `bootArtifactsBaseURL` for disconnected
   installs that select an artifact server `containerClusterInstall` route.
-- `agent-config.yaml additionalNTPSources` from
-  `Environment.spec.infraComponents.ntpSources[]`.
+- `agent-config.yaml additionalNTPSources` from resolved
+  `Environment.spec.infraComponents.ntpSources[]`: external entries contribute
+  `address`, and managed entries contribute the selected endpoint host address
+  or a concrete non-unspecified `spec.ntp.bindAddress`.
 - Install-time OpenShift extra manifests under `openshift/` for declared API
   and ingress serving certificates. Placeholder render output redacts Secret
   data; runtime and `--sensitive` output include TLS material.

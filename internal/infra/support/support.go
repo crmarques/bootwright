@@ -214,6 +214,15 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "dnsmasq managed name resolution",
 	},
+	{Kind: v1alpha1.ComponentSlotNTP, Realisation: v1alpha1.InfraComponentTypeChrony}: {
+		Key:            ServiceKey{Kind: v1alpha1.ComponentSlotNTP, Realisation: v1alpha1.InfraComponentTypeChrony},
+		ApplyRole:      "ntp_chrony",
+		DestroyRole:    "ntp_chrony",
+		ConflictFields: []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		DefaultPort:    v1alpha1.DefaultNTPPort,
+		Status:         StatusSupported,
+		Summary:        "chrony managed NTP service",
+	},
 	{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry},
 		ApplyRole:        "mirror_registry",

@@ -146,7 +146,7 @@ func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1
 	errs = append(errs, validateEnvironmentNameResolutionComponents(env, components)...)
 	errs = append(errs, validateEnvironmentArtifactServerComponents(env, components)...)
 	errs = append(errs, validateEnvironmentRegistryComponents(env, components)...)
-	errs = append(errs, validateEnvironmentNTPSources(env)...)
+	errs = append(errs, validateEnvironmentNTPSources(env, components)...)
 	return errs
 }
 
@@ -187,35 +187,63 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 	return errs
 }
 
-func validateEnvironmentNTPSources(env v1alpha1.Environment) []string {
+func validateEnvironmentNTPSources(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	if len(env.Spec.InfraComponents.NTPSources) == 0 {
 		return nil
 	}
 	var errs []string
-	owner := fmt.Sprintf("Environment/%s spec.infraComponents.ntpSources", env.Metadata.Name)
 	seen := map[string]bool{}
-	for i, s := range env.Spec.InfraComponents.NTPSources {
-		if s == "" {
-			errs = append(errs, fmt.Sprintf("%s[%d] must not be empty", owner, i))
-			continue
-		}
-		if strings.TrimSpace(s) != s {
-			errs = append(errs, fmt.Sprintf("%s[%d] %q must not contain leading or trailing whitespace", owner, i, s))
-			continue
-		}
-		if seen[s] {
-			errs = append(errs, fmt.Sprintf("%s[%d] %q is a duplicate", owner, i, s))
-			continue
-		}
-		seen[s] = true
-		if net.ParseIP(s) != nil {
-			continue
-		}
-		if !ntpHostname.MatchString(s) {
-			errs = append(errs, fmt.Sprintf("%s[%d] %q is not a valid IP or DNS hostname", owner, i, s))
+	for i, entry := range env.Spec.InfraComponents.NTPSources {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.ntpSources[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
+		switch entry.Type {
+		case v1alpha1.EnvironmentComponentExternal:
+			errs = append(errs, validateNTPAddress(owner+".address", entry.Address)...)
+			if entry.ComponentRef.Name != "" {
+				errs = append(errs, owner+".componentRef is only valid for managed ntpSources entries")
+			}
+			if entry.Endpoint != "" {
+				errs = append(errs, owner+".endpoint is only valid for managed ntpSources entries")
+			}
+		case v1alpha1.EnvironmentComponentManaged:
+			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
+				return c.Spec.NTP != nil
+			}, "ntp")...)
+			if entry.Address != "" {
+				errs = append(errs, owner+".address is only valid for external ntpSources entries")
+			}
+			if entry.Endpoint != "" {
+				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.NTP != nil {
+					endpoints := map[string]bool{}
+					for _, endpoint := range component.Spec.NTP.Endpoints {
+						endpoints[endpoint.Name] = true
+					}
+					if !endpoints[entry.Endpoint] {
+						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.ntp.endpoints", owner, entry.Endpoint))
+					}
+				}
+			}
+		default:
+			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	return errs
+}
+
+func validateNTPAddress(owner, address string) []string {
+	if address == "" {
+		return []string{owner + " is required"}
+	}
+	if strings.TrimSpace(address) != address {
+		return []string{fmt.Sprintf("%s %q must not contain leading or trailing whitespace", owner, address)}
+	}
+	if net.ParseIP(address) != nil {
+		return nil
+	}
+	if !ntpHostname.MatchString(address) {
+		return []string{fmt.Sprintf("%s %q is not a valid IP or DNS hostname", owner, address)}
+	}
+	return nil
 }
 
 func validateEnvironmentSecrets(env v1alpha1.Environment) []string {

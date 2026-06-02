@@ -82,6 +82,7 @@ const (
 	ComponentSlotArtifacts      = "artifacts"
 	ComponentSlotProxy          = "proxy"
 	ComponentSlotNameResolution = "nameResolution"
+	ComponentSlotNTP            = "ntp"
 	ComponentSlotRegistry       = "registry"
 
 	// Provider service kinds that are rendered for Ansible but are not
@@ -100,6 +101,7 @@ const (
 	InfraComponentTypeHAProxy        = "haProxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"
+	InfraComponentTypeChrony         = "chrony"
 	InfraComponentTypeMirrorRegistry = "mirrorRegistry"
 
 	// Default secret names that the renderer falls back to when the
@@ -131,6 +133,7 @@ const (
 	DefaultSquidPort             = 3128
 	DefaultMirrorRegistryPort    = 5000
 	DefaultDNSPort               = 53
+	DefaultNTPPort               = 123
 	DefaultServiceBindAddress    = "0.0.0.0"
 
 	ArtifactServerProtocolHTTP  = "http"

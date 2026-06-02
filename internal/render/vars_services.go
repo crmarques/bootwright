@@ -336,6 +336,31 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	return out
 }
 
+func ntpComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNTPSourceComponent, component v1alpha1.InfraComponent) map[string]any {
+	ntp := component.Spec.NTP
+	port := ntp.Port
+	if port == 0 {
+		port = support.LookupService(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony).DefaultPort
+	}
+	out := map[string]any{
+		"kind":          v1alpha1.ComponentSlotNTP,
+		"providerName":  v1alpha1.KindInfraComponent,
+		"name":          component.Metadata.Name,
+		"componentName": component.Metadata.Name,
+		"entryName":     entry.Name,
+		"port":          port,
+		"bindAddress":   ntp.BindAddress,
+		"hostRef":       ntp.HostRef.Name,
+		"hostAddress":   lookupHostAddress(state, ntp.HostRef.Name),
+		"realisation":   v1alpha1.InfraComponentTypeChrony,
+	}
+	if len(ntp.UpstreamSources) > 0 {
+		out["upstreamSources"] = stringSliceAny(ntp.UpstreamSources)
+	}
+	applyServiceRoleContract(out, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)
+	return out
+}
+
 func registryComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentRegistryComponent, component v1alpha1.InfraComponent) map[string]any {
 	registry := component.Spec.Registry
 	port := registry.Port

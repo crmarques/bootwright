@@ -441,11 +441,11 @@ spec:
 			wantSubstring: "field clusterTrust not found",
 		},
 		{
-			name: "environment-infra-ntpsource-invalid-rejected",
+			name: "environment-infra-ntpsource-scalar-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  infraComponents:\n",
 				"  infraComponents:\n    ntpSources:\n      - \" ntp.example.test\"\n", 1)},
-			wantSubstring: `spec.infraComponents.ntpSources[0] " ntp.example.test" must not contain leading or trailing whitespace`,
+			wantSubstring: `cannot unmarshal`,
 		},
 		{
 			name: "artifact-server-listener-port-out-of-range-rejected",
@@ -630,6 +630,172 @@ spec:
 			_, err := LoadNormalizeValidate([]string{dir})
 			if err == nil {
 				t.Fatalf("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestEnvironmentNTPSourcesValidateTypedEntries(t *testing.T) {
+	files := baselineFilesWithNTPComponent()
+	files["environment.yaml"] = environmentYAMLWithNTPSources(`      - name: external
+        type: external
+        address: ntp.example.test
+      - name: managed
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: cluster
+`)
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+
+	state, err := LoadNormalizeValidate([]string{dir})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	if got := len(state.Environments[0].Spec.InfraComponents.NTPSources); got != 2 {
+		t.Fatalf("ntpSources got %d, want 2", got)
+	}
+	if got := state.InfraComponents[1].Spec.NTP.Port; got != v1alpha1.DefaultNTPPort {
+		t.Fatalf("ntp default port got %d, want %d", got, v1alpha1.DefaultNTPPort)
+	}
+}
+
+func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
+	cases := []struct {
+		name          string
+		sources       string
+		withComponent bool
+		wantSubstring string
+	}{
+		{
+			name: "duplicate names",
+			sources: `      - name: default
+        type: external
+        address: ntp.example.test
+      - name: default
+        type: external
+        address: time.example.test
+`,
+			wantSubstring: `spec.infraComponents.ntpSources[1].name "default" is duplicated`,
+		},
+		{
+			name: "invalid external address",
+			sources: `      - name: default
+        type: external
+        address: " ntp.example.test"
+`,
+			wantSubstring: `spec.infraComponents.ntpSources[0].address " ntp.example.test" must not contain leading or trailing whitespace`,
+		},
+		{
+			name: "external component ref",
+			sources: `      - name: default
+        type: external
+        address: ntp.example.test
+        componentRef:
+          name: ntp-server
+`,
+			wantSubstring: `componentRef is only valid for managed ntpSources entries`,
+		},
+		{
+			name: "managed missing component ref",
+			sources: `      - name: default
+        type: managed
+`,
+			wantSubstring: `componentRef.name is required for managed entries`,
+		},
+		{
+			name: "managed wrong component arm",
+			sources: `      - name: default
+        type: managed
+        componentRef:
+          name: artifact-server
+`,
+			wantSubstring: `resolves to InfraComponent/artifact-server without spec.ntp`,
+		},
+		{
+			name: "managed bad endpoint",
+			sources: `      - name: default
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: missing
+`,
+			withComponent: true,
+			wantSubstring: `endpoint "missing" does not resolve on selected InfraComponent spec.ntp.endpoints`,
+		},
+		{
+			name: "managed address",
+			sources: `      - name: default
+        type: managed
+        componentRef:
+          name: ntp-server
+        address: ntp.example.test
+`,
+			withComponent: true,
+			wantSubstring: `address is only valid for external ntpSources entries`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := newBaselineFiles()
+			if tc.withComponent {
+				files = baselineFilesWithNTPComponent()
+			}
+			files["environment.yaml"] = environmentYAMLWithNTPSources(tc.sources)
+			dir := t.TempDir()
+			writeFiles(t, dir, files)
+
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
+	cases := []struct {
+		name          string
+		replaceOld    string
+		replaceNew    string
+		wantSubstring string
+	}{
+		{
+			name:          "type",
+			replaceOld:    "type: chrony",
+			replaceNew:    "type: ntpd",
+			wantSubstring: `spec.ntp.type "ntpd" must be "chrony"`,
+		},
+		{
+			name:          "port",
+			replaceOld:    "bindAddress: 192.168.132.1",
+			replaceNew:    "bindAddress: 192.168.132.1\n    port: 70000",
+			wantSubstring: `spec.ntp.port 70000 out of range`,
+		},
+		{
+			name:          "upstream",
+			replaceOld:    "time.bootwright.test",
+			replaceNew:    `" time.bootwright.test"`,
+			wantSubstring: `spec.ntp.upstreamSources[0] " time.bootwright.test" must not contain leading or trailing whitespace`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baselineFilesWithNTPComponent()
+			files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"], tc.replaceOld, tc.replaceNew, 1)
+			dir := t.TempDir()
+			writeFiles(t, dir, files)
+
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstring) {
 				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
@@ -2409,6 +2575,16 @@ func newBaselineFiles() map[string]string {
 	}
 }
 
+func baselineFilesWithNTPComponent() map[string]string {
+	files := newBaselineFiles()
+	files["infra-component.yaml"] = files["infra-component.yaml"] + "---\n" + newNTPComponentYAML
+	return files
+}
+
+func environmentYAMLWithNTPSources(sources string) string {
+	return strings.Replace(newEnvironmentYAML, "    artifactServers:\n", "    ntpSources:\n"+sources+"    artifactServers:\n", 1)
+}
+
 const newEnvironmentYAML = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata: { name: env }
@@ -2535,6 +2711,22 @@ spec:
       - name: bmc
         listener: https
         hostAddress: bmc-lan
+`
+
+const newNTPComponentYAML = `apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: ntp-server }
+spec:
+  ntp:
+    type: chrony
+    hostRef:
+      name: services-host
+    bindAddress: 192.168.132.1
+    endpoints:
+      - name: cluster
+        hostAddress: bmc-lan
+    upstreamSources:
+      - time.bootwright.test
 `
 
 func baselineMachineNetworkConfigYAML() string {

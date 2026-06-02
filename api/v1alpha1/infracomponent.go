@@ -13,6 +13,7 @@ type InfraComponentSpec struct {
 	LoadBalancer   *LoadBalancerComponent   `yaml:"loadBalancer,omitempty" json:"loadBalancer,omitempty"`
 	Proxy          *ProxyComponent          `yaml:"proxy,omitempty" json:"proxy,omitempty"`
 	NameResolution *NameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
+	NTP            *NTPComponent            `yaml:"ntp,omitempty" json:"ntp,omitempty"`
 	Registry       *RegistryComponent       `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
@@ -56,6 +57,15 @@ type NameResolutionComponent struct {
 	Port                   int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints              []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
+}
+
+type NTPComponent struct {
+	Type            string               `yaml:"type" json:"type"`
+	HostRef         LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	BindAddress     string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
+	Port            int                  `yaml:"port,omitempty" json:"port,omitempty"`
+	Endpoints       []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	UpstreamSources []string             `yaml:"upstreamSources,omitempty" json:"upstreamSources,omitempty"`
 }
 
 type RegistryComponent struct {

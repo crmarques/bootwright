@@ -42,8 +42,11 @@ spec:
 
   infraComponents:
     ntpSources:
-      - 192.168.132.1
-      - time.bootwright.test
+      - name: default
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: cluster
     artifactServers:
       - name: default
         type: managed

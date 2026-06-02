@@ -17,6 +17,7 @@ authors.
 | `bootwright_provider_services` | host service instances with rendered role names |
 | `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
+| `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses rendered to installer input |
 
 ## Environment Shape
 
@@ -29,7 +30,13 @@ bootwright_environment:
     clusterInstall: default
   infraComponents:
     ntpSources:
-      - 0.pool.ntp.org
+      - name: external-01
+        type: external
+        address: ntp.example.test
+      - name: lab-ntp
+        type: managed
+        componentRef: ntp-server
+        endpoint: cluster
   artifactServer:
     componentRef:
       name: artifact-server
@@ -183,6 +190,21 @@ bootwright_clusters:
           - { name: api-int.prod-3node.example.test, address: 192.168.133.10 }
         domainRecords:
           - { name: apps.prod-3node.example.test, address: 192.168.133.11 }
+      - kind: ntp
+        name: ntp-server
+        componentName: ntp-server
+        providerName: InfraComponent
+        hostRef: services-host
+        hostAddress: 192.168.133.1
+        realisation: chrony
+        applyRole: ntp_chrony
+        destroyRole: ntp_chrony
+        bindAddress: 192.168.133.1
+        port: 123
+        upstreamSources:
+          - ntp.example.test
+        allowedNetworks:
+          - 192.168.133.0/24
     nodes:
       master-0:
         role: master
@@ -200,8 +222,8 @@ ports are conflict fields, and mergeable overlays are unioned in the resolved
 graph. The renderer then emits one aggregated Ansible service instance with
 `hostRef`, `applyRole`, and `destroyRole`; the service role consumes the rest of
 the flat component fields. Mergeable fields such as HAProxy `frontends`,
-dnsmasq records, dnsmasq `additionalIngressHosts`, and BMC `machines` carry
-per-cluster entries or graph-unioned values.
+dnsmasq records, dnsmasq `additionalIngressHosts`, chrony `allowedNetworks`,
+and BMC `machines` carry per-cluster entries or graph-unioned values.
 
 ```yaml
 bootwright_provider_services:
@@ -283,11 +305,12 @@ facts from the raw capability map and should not branch on user schema details.
 If a role needs a substrate-specific value, image reference, or tool version,
 add it to the Go renderer first and consume the flat field in Ansible.
 Container-backed managed service components (`loadBalancer`, `proxy`,
-`nameResolution`, and `registry`) consume `component.image`; the
-`bmc_emulated` role consumes provider-service `bmcEmulated.*`. Layer playbooks
-dispatch exact rendered role names (`applyRole`, `destroyRole`,
-`substrateApplyRole`, `bootApplyRole`, and `mediaPrepareRole`) rather than
-constructing role names from diagnostic labels.
+`nameResolution`, and `registry`) consume `component.image`; host-package
+services such as `ntp` consume package/config fields, and the `bmc_emulated`
+role consumes provider-service `bmcEmulated.*`. Layer playbooks dispatch exact
+rendered role names (`applyRole`, `destroyRole`, `substrateApplyRole`,
+`bootApplyRole`, and `mediaPrepareRole`) rather than constructing role names
+from diagnostic labels.
 
 ## Task-Scoped Apply Vars
 

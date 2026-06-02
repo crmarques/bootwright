@@ -34,6 +34,12 @@ spec:
         type: managed
         componentRef:
           name: name-resolution
+    ntpSources:
+      - name: default
+        type: managed
+        componentRef:
+          name: ntp-server
+        endpoint: cluster
 
   proxyFor:
     bootwright: default

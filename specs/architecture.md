@@ -111,7 +111,7 @@ These boundaries are reflected in rendering:
   `ClusterInfra.networkBindings[]` to `InfraProvider.networkAttachments[]`.
 - `agent-config.yaml` global boot-artifact and time-source fields are rendered
   from disconnected install mode, the environment-selected artifact server
-  route, and environment NTP sources.
+  route, and resolved environment NTP source entries.
 - Infra component variables are rendered from `InfraComponent` services
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.

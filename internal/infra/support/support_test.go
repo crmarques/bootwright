@@ -70,6 +70,13 @@ func TestLookupServiceUsesRegistry(t *testing.T) {
 	if got.DefaultPort != v1alpha1.DefaultDNSPort {
 		t.Fatalf("dnsmasq default port = %d, want %d", got.DefaultPort, v1alpha1.DefaultDNSPort)
 	}
+	ntp := LookupService(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)
+	if ntp.ApplyRole != "ntp_chrony" || ntp.DestroyRole != "ntp_chrony" {
+		t.Fatalf("chrony roles = %#v", ntp)
+	}
+	if ntp.DefaultPort != v1alpha1.DefaultNTPPort {
+		t.Fatalf("chrony default port = %d, want %d", ntp.DefaultPort, v1alpha1.DefaultNTPPort)
+	}
 	bmc := LookupService(v1alpha1.ProviderServiceKindBMC, "emulated")
 	if bmc.ApplyRole != "bmc_emulated" || bmc.DestroyRole != "bmc_emulated" {
 		t.Fatalf("bmc roles = %#v", bmc)

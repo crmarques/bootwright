@@ -34,6 +34,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 				"artifacts InfraComponent/artifact-server",
 				"loadBalancer InfraComponent/load-balancer",
 				"nameResolution InfraComponent/name-resolution",
+				"ntp InfraComponent/ntp-server",
 				"proxy InfraComponent/proxy",
 				"registry InfraComponent/registry",
 			} {
@@ -125,9 +126,15 @@ func cliStateWithAllSharedProviderServices() v1alpha1.State {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
+	state.Environments[0].Spec.InfraComponents.NTPSources = []v1alpha1.EnvironmentNTPSourceComponent{{
+		Name:         "default",
+		Type:         v1alpha1.EnvironmentComponentManaged,
+		ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"},
+	}}
 	state.InfraComponents = append(state.InfraComponents,
 		cliLoadBalancerComponent(),
 		cliProxyComponent(),
+		cliNTPComponent(),
 		cliRegistryComponent(),
 		cliArtifactServerComponent(),
 	)
@@ -200,6 +207,18 @@ func cliNameResolutionComponent() v1alpha1.InfraComponent {
 			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultDNSPort,
+		}},
+	}
+}
+
+func cliNTPComponent() v1alpha1.InfraComponent {
+	return v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "ntp-server"},
+		Spec: v1alpha1.InfraComponentSpec{NTP: &v1alpha1.NTPComponent{
+			Type:        v1alpha1.InfraComponentTypeChrony,
+			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			BindAddress: "10.0.0.5",
+			Port:        v1alpha1.DefaultNTPPort,
 		}},
 	}
 }

@@ -37,6 +37,9 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 	for _, selected := range nameResolutionComponentsForCluster(state, ci) {
 		out = append(out, nameResolutionComponentVars(state, selected.entry, selected.component))
 	}
+	for _, selected := range ntpComponentsForCluster(state) {
+		out = append(out, ntpComponentVars(state, selected.entry, selected.component))
+	}
 	if selected, ok := registryComponentForCluster(state, ocp); ok {
 		out = append(out, registryComponentVars(state, selected.entry, selected.component))
 	}
@@ -50,6 +53,11 @@ type selectedProxyComponent struct {
 
 type selectedNameResolutionComponent struct {
 	entry     v1alpha1.EnvironmentNameResolutionComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedNTPComponent struct {
+	entry     v1alpha1.EnvironmentNTPSourceComponent
 	component v1alpha1.InfraComponent
 }
 
@@ -124,6 +132,29 @@ func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.Cluste
 			if ok && component.Spec.NameResolution != nil {
 				out = append(out, selectedNameResolutionComponent{entry: entry, component: component})
 			}
+		}
+	}
+	return out
+}
+
+func ntpComponentsForCluster(state v1alpha1.State) []selectedNTPComponent {
+	env := primaryEnvironment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedNTPComponent{}
+	for _, entry := range env.Spec.InfraComponents.NTPSources {
+		if entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+			continue
+		}
+		if seen[entry.ComponentRef.Name] {
+			continue
+		}
+		seen[entry.ComponentRef.Name] = true
+		component, ok := findInfraComponent(state, entry.ComponentRef.Name)
+		if ok && component.Spec.NTP != nil {
+			out = append(out, selectedNTPComponent{entry: entry, component: component})
 		}
 	}
 	return out

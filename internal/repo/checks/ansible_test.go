@@ -1422,6 +1422,7 @@ func TestProviderPlaybooksDispatchRenderedRoles(t *testing.T) {
 			"artifacts_http",
 			"proxy_squid",
 			"dns_dnsmasq",
+			"ntp_chrony",
 			"mirror_registry",
 			"bmc_{{",
 		} {
@@ -1465,6 +1466,19 @@ func TestProviderDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 			if !strings.Contains(body, want) {
 				t.Fatalf("%s cleanup missing %q", path, want)
 			}
+		}
+	}
+}
+
+func TestLibvirtNetworkUsesResolvedNTPIPv4Sources(t *testing.T) {
+	body := readRepoFile(t, "ansible/roles/cluster_infra/substrate_libvirt/templates/network.xml.j2")
+	for _, want := range []string{
+		"bootwright_resolved_ntp_sources",
+		"select('match', '^[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.[0-9]+$')",
+		"dhcp-option=option:ntp-server",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("libvirt network template missing %q", want)
 		}
 	}
 }

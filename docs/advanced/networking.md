@@ -195,3 +195,24 @@ cluster apps wildcard for each consuming cluster. Use
 console or OAuth routes, must resolve before the cluster DNS operator is ready.
 Those hostnames point at the consuming cluster's ingress VIP, and values from
 the environment entry and component merge for shared services.
+
+## NTP Sources
+
+`Environment.spec.infraComponents.ntpSources[]` declares fleet-wide time
+sources for agent installs. External entries provide an `address` directly.
+Managed entries reference an `InfraComponent` with `spec.ntp`; Bootwright
+converges chrony on the selected host and renders the managed endpoint, or a
+concrete bind address, into installer `additionalNTPSources`.
+
+```yaml
+infraComponents:
+  ntpSources:
+    - name: external-01
+      type: external
+      address: ntp.example.test
+    - name: lab-ntp
+      type: managed
+      componentRef:
+        name: ntp-server
+      endpoint: cluster
+```

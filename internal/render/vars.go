@@ -68,6 +68,9 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	if proxyVars := bootwrightProxyVars(state, env); len(proxyVars) > 0 {
 		out["bootwright_proxy"] = proxyVars
 	}
+	if ntpSources := resolvedAdditionalNTPSources(state); len(ntpSources) > 0 {
+		out["bootwright_resolved_ntp_sources"] = stringSliceAny(ntpSources)
+	}
 	return out
 }
 

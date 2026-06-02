@@ -617,6 +617,7 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 		v1alpha1.ComponentSlotLoadBalancer:   1,
 		v1alpha1.ComponentSlotProxy:          1,
 		v1alpha1.ComponentSlotNameResolution: 1,
+		v1alpha1.ComponentSlotNTP:            1,
 		v1alpha1.ComponentSlotRegistry:       1,
 		v1alpha1.ProviderServiceKindBMC:      1,
 	}
@@ -641,6 +642,13 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 	dns := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotNameResolution)
 	if hosts := dns["additionalIngressHosts"].([]string); len(hosts) != 3 {
 		t.Fatalf("additionalIngressHosts got %v, want union from both clusters", hosts)
+	}
+	ntp := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotNTP)
+	if got := ntp["applyRole"]; got != "ntp_chrony" {
+		t.Fatalf("ntp applyRole got %v", got)
+	}
+	if got := ntp["allowedNetworks"].([]string); strings.Join(got, ",") != "192.168.132.0/24" {
+		t.Fatalf("ntp allowedNetworks got %v", got)
 	}
 	registry := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotRegistry)
 	if got := registry["consumingClusters"].([]string); strings.Join(got, ",") != "sno-libvirt,sno-libvirt-b" {

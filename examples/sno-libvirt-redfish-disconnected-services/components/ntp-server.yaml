@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: ntp-server
+spec:
+  ntp:
+    type: chrony
+    hostRef:
+      name: lab-host
+    bindAddress: 192.168.132.1
+    endpoints:
+      - name: cluster
+        hostAddress: cluster-lan
+    upstreamSources:
+      - time.bootwright.test
