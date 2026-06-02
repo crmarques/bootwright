@@ -782,8 +782,10 @@ Rules:
 
 - `spec.machineNetwork[]` renders to
   `install-config.yaml networking.machineNetwork[]`.
-- A given `spec.machineNetwork[].cidr` may appear in exactly one
-  `NetworkConfig`; duplicates across objects are invalid.
+- A given `NetworkConfig` must not repeat the same
+  `spec.machineNetwork[].cidr`. The same CIDR may appear on separate
+  `NetworkConfig` objects when different reusable NMState templates share one
+  L3 machine network.
 - `spec.template.networkConfig` renders to
   `agent-config.yaml hosts[].networkConfig` after per-machine overrides.
 - `spec.dnsRefs[]` selects entries from

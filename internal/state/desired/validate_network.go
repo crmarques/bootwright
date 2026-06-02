@@ -3,7 +3,6 @@ package desiredstate
 import (
 	"fmt"
 	"net"
-	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -23,7 +22,6 @@ func validateNetworkConfigs(state v1alpha1.State) []string {
 		seen[n.Metadata.Name] = true
 		errs = append(errs, validateNetworkConfigSpec(fmt.Sprintf("NetworkConfig/%s spec", n.Metadata.Name), n.Spec, dnsRefs)...)
 	}
-	errs = append(errs, validateNetworkConfigCIDRSharing(state.NetworkConfigs)...)
 	return errs
 }
 
@@ -79,30 +77,5 @@ func validateNetworkConfigSpec(owner string, spec v1alpha1.NetworkConfigSpec, dn
 			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", field, ref))
 		}
 	}
-	return errs
-}
-
-func validateNetworkConfigCIDRSharing(nets []v1alpha1.NetworkConfig) []string {
-	if len(nets) < 2 {
-		return nil
-	}
-	byCIDR := map[string][]string{}
-	for _, n := range nets {
-		for _, mn := range n.Spec.MachineNetwork {
-			if mn.CIDR == "" {
-				continue
-			}
-			byCIDR[mn.CIDR] = append(byCIDR[mn.CIDR], n.Metadata.Name)
-		}
-	}
-	var errs []string
-	for cidr, names := range byCIDR {
-		if len(names) < 2 {
-			continue
-		}
-		sort.Strings(names)
-		errs = append(errs, fmt.Sprintf("NetworkConfig machineNetwork cidr %q appears on multiple NetworkConfigs (%s); each CIDR must have exactly one owning NetworkConfig", cidr, joinSortedNames(names)))
-	}
-	sort.Strings(errs)
 	return errs
 }

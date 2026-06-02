@@ -41,3 +41,4 @@ __pycache__/
 
 # GitOpsPackageSet workspace generated output (expanded plan, rendered repos).
 .bootwright/
+examples/.gitignore

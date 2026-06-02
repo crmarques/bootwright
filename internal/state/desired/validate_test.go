@@ -1613,6 +1613,18 @@ func TestNetworkConfigDNSRefsSelectEnvironmentEntries(t *testing.T) {
 	}
 }
 
+func TestNetworkConfigsAllowSharedMachineCIDR(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["vm-network.yaml"] = strings.Replace(newNetworkConfigYAML, "name: cluster-net", "name: vm-net", 1)
+	files["vm-network.yaml"] = strings.Replace(files["vm-network.yaml"], "next-hop-interface: primary", "next-hop-interface: eth0", 1)
+	files["vm-network.yaml"] = strings.Replace(files["vm-network.yaml"], "name: primary", "name: eth0", 1)
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
 func TestNetworkConfigDNSRefsRejectDuplicates(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
