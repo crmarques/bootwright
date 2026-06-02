@@ -174,6 +174,53 @@ func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
 	}
 }
 
+func TestAgentNetworkConfigMergesPositionalMapListOverrides(t *testing.T) {
+	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{Name: "default"})
+	state.NetworkConfigs[0].Spec.Template.NetworkConfig["routes"] = map[string]any{
+		"config": []any{
+			map[string]any{
+				"destination":        "0.0.0.0/0",
+				"next-hop-address":   "10.7.3.252",
+				"next-hop-interface": "bond0.730",
+				"table-id":           254,
+				"metric":             400,
+			},
+			map[string]any{
+				"destination":        "10.7.4.0/24",
+				"next-hop-address":   "10.7.3.253",
+				"next-hop-interface": "bond0.730",
+			},
+		},
+	}
+	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
+	machine.NetworkConfig.Overrides = map[string]any{
+		"routes": map[string]any{
+			"config": []any{map[string]any{
+				"next-hop-interface": "ens65f0",
+			}},
+		},
+	}
+
+	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
+	routes := got["routes"].(map[string]any)["config"].([]any)
+	if len(routes) != 2 {
+		t.Fatalf("routes got %v, want two merged routes", routes)
+	}
+	defaultRoute := routes[0].(map[string]any)
+	if defaultRoute["destination"] != "0.0.0.0/0" ||
+		defaultRoute["next-hop-address"] != "10.7.3.252" ||
+		defaultRoute["next-hop-interface"] != "ens65f0" ||
+		defaultRoute["table-id"] != 254 ||
+		defaultRoute["metric"] != 400 {
+		t.Fatalf("default route was not merged field-by-field: %v", defaultRoute)
+	}
+	secondaryRoute := routes[1].(map[string]any)
+	if secondaryRoute["destination"] != "10.7.4.0/24" ||
+		secondaryRoute["next-hop-interface"] != "bond0.730" {
+		t.Fatalf("secondary route was not preserved: %v", secondaryRoute)
+	}
+}
+
 func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{

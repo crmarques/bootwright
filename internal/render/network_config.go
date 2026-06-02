@@ -35,16 +35,16 @@ func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInfra
 
 func mergeNetworkConfigOverrides(base map[string]any, overrides map[string]any) {
 	patch := cloneYAMLMap(overrides)
-	mergeNamedSequences(base, patch)
+	mergeStructuredSequences(base, patch)
 	_ = mergo.Merge(&base, patch, mergo.WithOverride)
 }
 
-func mergeNamedSequences(base map[string]any, patch map[string]any) {
+func mergeStructuredSequences(base map[string]any, patch map[string]any) {
 	for key, patchValue := range patch {
 		baseMap, baseIsMap := base[key].(map[string]any)
 		patchMap, patchIsMap := patchValue.(map[string]any)
 		if baseIsMap && patchIsMap {
-			mergeNamedSequences(baseMap, patchMap)
+			mergeStructuredSequences(baseMap, patchMap)
 			continue
 		}
 		baseSlice, baseIsSlice := base[key].([]any)
@@ -52,7 +52,7 @@ func mergeNamedSequences(base map[string]any, patch map[string]any) {
 		if !baseIsSlice || !patchIsSlice {
 			continue
 		}
-		merged, ok := mergeNamedSequence(baseSlice, patchSlice)
+		merged, ok := mergeStructuredSequence(baseSlice, patchSlice)
 		if !ok {
 			continue
 		}
@@ -61,10 +61,20 @@ func mergeNamedSequences(base map[string]any, patch map[string]any) {
 	}
 }
 
-func mergeNamedSequence(base []any, patch []any) ([]any, bool) {
-	if len(patch) == 0 || !sequenceUsesName(patch) {
-		return nil, false
+func mergeStructuredSequence(base []any, patch []any) ([]any, bool) {
+	if len(patch) == 0 {
+		return cloneYAMLValue(base).([]any), true
 	}
+	if sequenceUsesName(patch) {
+		return mergeNamedSequence(base, patch), true
+	}
+	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
+		return mergePositionalMapSequence(base, patch), true
+	}
+	return nil, false
+}
+
+func mergeNamedSequence(base []any, patch []any) []any {
 	out := cloneYAMLValue(base).([]any)
 	index := map[string]map[string]any{}
 	for _, item := range out {
@@ -86,7 +96,23 @@ func mergeNamedSequence(base []any, patch []any) ([]any, bool) {
 		}
 		out = append(out, cloneYAMLMap(entry))
 	}
-	return out, true
+	return out
+}
+
+func mergePositionalMapSequence(base []any, patch []any) []any {
+	out := cloneYAMLValue(base).([]any)
+	for i, item := range patch {
+		entry := item.(map[string]any)
+		if i < len(out) {
+			baseEntry, ok := out[i].(map[string]any)
+			if ok {
+				mergeNetworkConfigOverrides(baseEntry, entry)
+				continue
+			}
+		}
+		out = append(out, cloneYAMLMap(entry))
+	}
+	return out
 }
 
 func sequenceUsesName(items []any) bool {
@@ -97,6 +123,15 @@ func sequenceUsesName(items []any) bool {
 		}
 		name, _ := entry["name"].(string)
 		if name == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func sequenceUsesMaps(items []any) bool {
+	for _, item := range items {
+		if _, ok := item.(map[string]any); !ok {
 			return false
 		}
 	}
