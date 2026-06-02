@@ -12,10 +12,25 @@ import (
 )
 
 func providerServicesVars(state v1alpha1.State) []any {
-	builder := newProviderServiceBuilder()
-	graph := stategraph.ResolveProviderServices(state)
+	return hostServicesVars(state, func(service stategraph.HostService) bool {
+		return service.IsProviderService()
+	})
+}
+
+func infraComponentServicesVars(state v1alpha1.State) []any {
+	return hostServicesVars(state, func(service stategraph.HostService) bool {
+		return service.IsInfraComponentService()
+	})
+}
+
+func hostServicesVars(state v1alpha1.State, include func(stategraph.HostService) bool) []any {
+	builder := newHostServiceBuilder()
+	graph := stategraph.ResolveHostServices(state)
 	for _, service := range graph.Services {
-		component, ok := providerServiceVarsFromGraph(state, service)
+		if !include(service) {
+			continue
+		}
+		component, ok := hostServiceVarsFromGraph(state, service)
 		if !ok {
 			continue
 		}
@@ -31,28 +46,28 @@ func providerServicesVars(state v1alpha1.State) []any {
 	return builder.Services()
 }
 
-func providerServiceVarsFromGraph(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func hostServiceVarsFromGraph(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	switch service.Identity.Kind {
 	case v1alpha1.ComponentSlotLoadBalancer:
-		return loadBalancerProviderServiceVars(state, service)
+		return loadBalancerHostServiceVars(state, service)
 	case v1alpha1.ComponentSlotArtifacts:
-		return artifactProviderServiceVars(state, service)
+		return artifactHostServiceVars(state, service)
 	case v1alpha1.ComponentSlotProxy:
-		return proxyProviderServiceVars(state, service)
+		return proxyHostServiceVars(state, service)
 	case v1alpha1.ComponentSlotNameResolution:
-		return nameResolutionProviderServiceVars(state, service)
+		return nameResolutionHostServiceVars(state, service)
 	case v1alpha1.ComponentSlotNTP:
-		return ntpProviderServiceVars(state, service)
+		return ntpHostServiceVars(state, service)
 	case v1alpha1.ComponentSlotRegistry:
-		return registryProviderServiceVars(state, service)
+		return registryHostServiceVars(state, service)
 	case v1alpha1.ProviderServiceKindBMC:
-		return bmcProviderServiceVarsFromGraph(state, service)
+		return bmcHostServiceVarsFromGraph(state, service)
 	default:
 		return nil, false
 	}
 }
 
-func loadBalancerProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func loadBalancerHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	component, ok := findInfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.LoadBalancer == nil {
 		return nil, false
@@ -72,7 +87,7 @@ func loadBalancerProviderServiceVars(state v1alpha1.State, service stategraph.Pr
 	return out, true
 }
 
-func artifactProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func artifactHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	server, ok := artifacts.Select(state)
 	if !ok || server.Component.Metadata.Name != service.Identity.Name || server.Config == nil {
 		return nil, false
@@ -80,7 +95,7 @@ func artifactProviderServiceVars(state v1alpha1.State, service stategraph.Provid
 	return artifactServerComponentVars(state, server), true
 }
 
-func proxyProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func proxyHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	component, ok := findInfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.Proxy == nil {
 		return nil, false
@@ -89,7 +104,7 @@ func proxyProviderServiceVars(state v1alpha1.State, service stategraph.ProviderS
 	return proxyComponentVars(state, entry, component), true
 }
 
-func nameResolutionProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func nameResolutionHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	component, ok := findInfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.NameResolution == nil {
 		return nil, false
@@ -125,7 +140,7 @@ func nameResolutionProviderServiceVars(state v1alpha1.State, service stategraph.
 	return out, true
 }
 
-func ntpProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func ntpHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	component, ok := findInfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.NTP == nil {
 		return nil, false
@@ -138,7 +153,7 @@ func ntpProviderServiceVars(state v1alpha1.State, service stategraph.ProviderSer
 	return out, true
 }
 
-func ntpAllowedNetworksForGraphService(state v1alpha1.State, service stategraph.ProviderService) []string {
+func ntpAllowedNetworksForGraphService(state v1alpha1.State, service stategraph.HostService) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, consumer := range service.Consumers {
@@ -160,7 +175,7 @@ func ntpAllowedNetworksForGraphService(state v1alpha1.State, service stategraph.
 	return out
 }
 
-func registryProviderServiceVars(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func registryHostServiceVars(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	component, ok := findInfraComponent(state, service.Identity.Name)
 	if !ok || component.Spec.Registry == nil {
 		return nil, false
@@ -169,7 +184,7 @@ func registryProviderServiceVars(state v1alpha1.State, service stategraph.Provid
 	return registryComponentVars(state, entry, component), true
 }
 
-func bmcProviderServiceVarsFromGraph(state v1alpha1.State, service stategraph.ProviderService) (map[string]any, bool) {
+func bmcHostServiceVarsFromGraph(state v1alpha1.State, service stategraph.HostService) (map[string]any, bool) {
 	out := map[string]any{
 		"kind":             v1alpha1.ProviderServiceKindBMC,
 		"providerName":     service.Identity.ProviderName,
@@ -225,7 +240,7 @@ func clusterInfraByName(state v1alpha1.State, name string) (v1alpha1.ClusterInfr
 	return v1alpha1.ClusterInfra{}, false
 }
 
-func serviceEntryName(service stategraph.ProviderService) string {
+func serviceEntryName(service stategraph.HostService) string {
 	for _, consumer := range service.Consumers {
 		if entryName := consumer.Fields["entryName"]; entryName != "" {
 			return entryName
@@ -234,7 +249,7 @@ func serviceEntryName(service stategraph.ProviderService) string {
 	return ""
 }
 
-func serviceEntryNames(service stategraph.ProviderService) []string {
+func serviceEntryNames(service stategraph.HostService) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, consumer := range service.Consumers {
@@ -249,7 +264,7 @@ func serviceEntryNames(service stategraph.ProviderService) []string {
 	return out
 }
 
-func nameResolutionRecordsForGraphService(state v1alpha1.State, service stategraph.ProviderService) ([]any, []any) {
+func nameResolutionRecordsForGraphService(state v1alpha1.State, service stategraph.HostService) ([]any, []any) {
 	hostRecords := map[string]map[string]any{}
 	domainRecords := map[string]map[string]any{}
 	for _, entryName := range serviceEntryNames(service) {
@@ -260,7 +275,7 @@ func nameResolutionRecordsForGraphService(state v1alpha1.State, service stategra
 	return sortedRecordVars(hostRecords), sortedRecordVars(domainRecords)
 }
 
-func serviceEntryStringField(service stategraph.ProviderService, entryName, field string) []string {
+func serviceEntryStringField(service stategraph.HostService, entryName, field string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, consumer := range service.Consumers {

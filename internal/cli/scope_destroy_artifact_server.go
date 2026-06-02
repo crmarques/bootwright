@@ -12,7 +12,7 @@ const (
 	infraDestroyArtifactServerScope             = "artifact-server"
 	infraDestroyArtifactServerPlaybook          = "playbooks/targets/infra/destroy-artifact-server.yml"
 	infraDestroyArtifactServerArtifactsBaseName = "infra-destroy-artifact-server"
-	providerServiceScopeExtraVarName            = "bootwright_provider_service_scope"
+	infraComponentServiceScopeExtraVarName      = "bootwright_infra_component_service_scope"
 )
 
 var infraArtifactServerDestroyPhase = Phase{
@@ -27,7 +27,7 @@ func isInfraArtifactServerDestroyScope(scope scopeSpec, clusterScope string) boo
 
 func prepareInfraArtifactServerDestroyWorkflow(state v1alpha1.State, askBecomePass, dryRun bool) scopedWorkflowPlan {
 	selected := []Phase{infraArtifactServerDestroyPhase}
-	limit := render.GroupProviderHosts
+	limit := render.GroupInfraComponentHosts
 	noRemoteWork := !dryRun && workflow.LimitMatchesNoHosts(limit, state)
 	askBecomeForRun := askBecomePass && rootPhaseCount(selected) > 0 && !noRemoteWork
 	return scopedWorkflowPlan{
@@ -36,6 +36,6 @@ func prepareInfraArtifactServerDestroyWorkflow(state v1alpha1.State, askBecomePa
 		limit:         limit,
 		noRemoteWork:  noRemoteWork,
 		askBecomePass: askBecomeForRun,
-		extraVarPairs: []string{providerServiceScopeExtraVarName + "=" + infraDestroyArtifactServerScope},
+		extraVarPairs: []string{infraComponentServiceScopeExtraVarName + "=" + infraDestroyArtifactServerScope},
 	}
 }

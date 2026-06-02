@@ -58,15 +58,15 @@ they fail with a dependency message or require the parent kubeconfig and
 KubeVirt API to be ready before mutating child infrastructure.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
-for host-level work. Provider and cluster-infrastructure playbooks use
-Ansible-native host parallelism, while Bootwright enforces resource locks before
-launching concurrent playbooks: one mutating task per provider host until roles
-are classified more finely, and one task per Redfish system or BMC target.
-KubeVirt-backed child VM infrastructure and VM boot tasks also lock
-`kubevirt:<host-cluster-or-kubeconfig>:<namespace>` so namespace-scoped
-VirtualMachine and DataVolume operations cannot collide. Different clusters may
-provision concurrently whenever they do not share locked hosts, BMC targets, or
-KubeVirt namespaces.
+for host-level work. Provider, InfraComponent, and cluster-infrastructure
+playbooks use Ansible-native host parallelism, while Bootwright enforces
+resource locks before launching concurrent playbooks: one mutating task per
+provider or service host until roles are classified more finely, and one task
+per Redfish system or BMC target. KubeVirt-backed child VM infrastructure and
+VM boot tasks also lock `kubevirt:<host-cluster-or-kubeconfig>:<namespace>` so
+namespace-scoped VirtualMachine and DataVolume operations cannot collide.
+Different clusters may provision concurrently whenever they do not share locked
+hosts, BMC targets, or KubeVirt namespaces.
 
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.
@@ -125,12 +125,13 @@ These boundaries are reflected in rendering:
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.
 
-Shared host services are resolved through one service graph before
-validation, rendering, status, or scoped apply checks make decisions about
-them. The graph owns service identity `(kind, provider, name)`, consuming
-clusters, host placement, conflict fields, and mergeable overlay fields.
-Rendering consumes the resolved graph and does not patch authored desired
-state to make shared services converge.
+Shared host services are resolved through one service graph before validation,
+rendering, status, or scoped apply checks make decisions about them. The graph
+owns service identity `(kind, provider, name)`, consuming clusters, host
+placement, conflict fields, and mergeable overlay fields. Rendering consumes
+the resolved graph and emits separate provider/BMC and InfraComponent Ansible
+service lists without patching authored desired state to make shared services
+converge.
 
 ## Providers
 

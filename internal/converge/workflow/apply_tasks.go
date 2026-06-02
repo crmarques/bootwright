@@ -19,6 +19,7 @@ import (
 
 const (
 	ApplyTaskKindProvider               = "providerServices"
+	ApplyTaskKindInfraComponentServices = "infraComponentServices"
 	ApplyTaskKindClusterInfra           = "clusterInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
@@ -32,17 +33,19 @@ const (
 	ApplyClusterKindStorage   = "storage"
 
 	ApplyPhaseProvider         = "provider"
+	ApplyPhaseInfraComponents  = "infra-components"
 	ApplyPhaseClusterInfra     = "cluster-infra"
 	ApplyPhaseStorageCluster   = "storage-cluster"
 	ApplyPhaseContainerCluster = "container-cluster"
 	ApplyPhaseAddons           = "addons"
 
-	applyProviderPlaybook     = "playbooks/layers/providers/apply.yml"
-	applyClusterInfraPlaybook = "playbooks/layers/cluster_infra/apply.yml"
-	applyCreateISOPlaybook    = "playbooks/layers/openshift/create-agent-iso.yml"
-	applyBootMachinePlaybook  = "playbooks/layers/openshift/boot-agent-machine.yml"
-	applyWaitInstallPlaybook  = "playbooks/layers/openshift/wait-agent-install.yml"
-	applyStoragePlaybook      = "playbooks/layers/storage/apply.yml"
+	applyProviderPlaybook        = "playbooks/layers/providers/apply.yml"
+	applyInfraComponentsPlaybook = "playbooks/layers/infra_components/apply.yml"
+	applyClusterInfraPlaybook    = "playbooks/layers/cluster_infra/apply.yml"
+	applyCreateISOPlaybook       = "playbooks/layers/openshift/create-agent-iso.yml"
+	applyBootMachinePlaybook     = "playbooks/layers/openshift/boot-agent-machine.yml"
+	applyWaitInstallPlaybook     = "playbooks/layers/openshift/wait-agent-install.yml"
+	applyStoragePlaybook         = "playbooks/layers/storage/apply.yml"
 )
 
 type ApplyTarget struct {
@@ -97,7 +100,6 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		phaseSet[phase] = true
 	}
 	var tasks []ApplyTask
-	providerTaskIDs := []string{}
 	kubeVirtDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseClusterInfra] && phaseSet[ApplyPhaseContainerCluster] && phaseSet[ApplyPhaseAddons] {
 		var err error
@@ -106,26 +108,8 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
-	if phaseSet[ApplyPhaseProvider] {
-		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
-			taskID := "provider." + host
-			providerTaskIDs = append(providerTaskIDs, taskID)
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           taskID,
-					Kind:         ApplyTaskKindProvider,
-					Label:        "provider services " + host,
-					Host:         host,
-					ResourceKeys: []string{hostMutationResource(host)},
-					Status:       TaskStatusPending,
-				},
-				Playbook: applyProviderPlaybook,
-				Limit:    host,
-				Forks:    1,
-				State:    state,
-			})
-		}
-	}
+	hostServiceTasks, hostServiceTaskIDs := planHostServiceTasks(state, phaseSet)
+	tasks = append(tasks, hostServiceTasks...)
 	storageDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseStorageCluster] {
 		for _, cluster := range state.StorageClusters {
@@ -142,7 +126,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Cluster:      cluster.Metadata.Name,
 					ClusterKind:  ApplyClusterKindStorage,
 					Status:       TaskStatusPending,
-					Dependencies: append([]string(nil), providerTaskIDs...),
+					Dependencies: append([]string(nil), hostServiceTaskIDs...),
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
 				Playbook:      applyStoragePlaybook,
@@ -158,7 +142,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		if phaseSet[ApplyPhaseClusterInfra] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
-			deps := append([]string(nil), providerTaskIDs...)
+			deps := append([]string(nil), hostServiceTaskIDs...)
 			deps = append(deps, kubeVirtDepsByCluster[name]...)
 			resourceKeys := kubeVirtResourceKeys(state, name)
 			if len(infraHosts) == 0 {

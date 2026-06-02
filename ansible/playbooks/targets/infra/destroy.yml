@@ -1,7 +1,8 @@
 ---
 - import_playbook: ../../checks/become.yml
   vars:
-    bootwright_become_check_hosts: bootwright_provider_hosts:bootwright_infra_hosts
+    bootwright_become_check_hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts
 
 - import_playbook: ../../layers/cluster_infra/destroy.yml
+- import_playbook: ../../layers/infra_components/destroy.yml
 - import_playbook: ../../layers/providers/destroy.yml

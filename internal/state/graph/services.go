@@ -11,13 +11,13 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-type ProviderServiceIdentity struct {
+type HostServiceIdentity struct {
 	Kind         string
 	ProviderName string
 	Name         string
 }
 
-type ProviderServiceConsumer struct {
+type HostServiceConsumer struct {
 	Cluster           string
 	ClusterInfra      string
 	Owner             string
@@ -25,20 +25,28 @@ type ProviderServiceConsumer struct {
 	MergeStringFields map[string][]string
 }
 
-type ProviderService struct {
-	Identity           ProviderServiceIdentity
+type HostService struct {
+	Identity           HostServiceIdentity
 	HostRef            string
 	Fields             map[string]string
-	Consumers          []ProviderServiceConsumer
+	Consumers          []HostServiceConsumer
 	MergedStringFields map[string][]string
 }
 
-type ProviderServiceGraph struct {
-	Services []ProviderService
+type HostServiceGraph struct {
+	Services []HostService
 }
 
-func (s ProviderService) ConsumerClusters() []string {
+func (s HostService) ConsumerClusters() []string {
 	return serviceConsumerClusters(s.Consumers)
+}
+
+func (s HostService) IsProviderService() bool {
+	return s.Identity.Kind == v1alpha1.ProviderServiceKindBMC
+}
+
+func (s HostService) IsInfraComponentService() bool {
+	return !s.IsProviderService()
 }
 
 type SharedServiceGroup struct {
@@ -57,12 +65,12 @@ type DestroyScopeConflict struct {
 	UnscopedClusters []string
 }
 
-func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
-	entries := providerServiceConsumers(state)
-	grouped := map[providerServiceGroupKey]*ProviderService{}
-	var order []providerServiceGroupKey
+func ResolveHostServices(state v1alpha1.State) HostServiceGraph {
+	entries := hostServiceConsumers(state)
+	grouped := map[hostServiceGroupKey]*HostService{}
+	var order []hostServiceGroupKey
 	for _, entry := range entries {
-		id := ProviderServiceIdentity{
+		id := HostServiceIdentity{
 			Kind:         entry.Fields["kind"],
 			ProviderName: entry.Fields["providerName"],
 			Name:         entry.Fields["name"],
@@ -70,10 +78,10 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 		if id.Kind == "" || id.ProviderName == "" || id.Name == "" {
 			continue
 		}
-		key := providerServiceGroupingKey(id, entry.Fields["hostRef"])
+		key := hostServiceGroupingKey(id, entry.Fields["hostRef"])
 		service, ok := grouped[key]
 		if !ok {
-			service = &ProviderService{
+			service = &HostService{
 				Identity:           id,
 				HostRef:            entry.Fields["hostRef"],
 				Fields:             cloneStringMap(entry.Fields),
@@ -98,7 +106,7 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 		}
 		return order[i].HostRef < order[j].HostRef
 	})
-	out := make([]ProviderService, 0, len(order))
+	out := make([]HostService, 0, len(order))
 	for _, key := range order {
 		service := grouped[key]
 		sort.SliceStable(service.Consumers, func(i, j int) bool {
@@ -109,23 +117,23 @@ func ResolveProviderServices(state v1alpha1.State) ProviderServiceGraph {
 		})
 		out = append(out, *service)
 	}
-	return ProviderServiceGraph{Services: out}
+	return HostServiceGraph{Services: out}
 }
 
-type providerServiceGroupKey struct {
-	Identity ProviderServiceIdentity
+type hostServiceGroupKey struct {
+	Identity HostServiceIdentity
 	HostRef  string
 }
 
-func providerServiceGroupingKey(id ProviderServiceIdentity, hostRef string) providerServiceGroupKey {
-	key := providerServiceGroupKey{Identity: id}
+func hostServiceGroupingKey(id HostServiceIdentity, hostRef string) hostServiceGroupKey {
+	key := hostServiceGroupKey{Identity: id}
 	if id.Kind == v1alpha1.ProviderServiceKindBMC {
 		key.HostRef = hostRef
 	}
 	return key
 }
 
-func (g ProviderServiceGraph) ValidateSharedServices() []string {
+func (g HostServiceGraph) ValidateSharedServices() []string {
 	var errs []string
 	for _, service := range g.Services {
 		if len(service.Consumers) < 2 {
@@ -141,7 +149,7 @@ func (g ProviderServiceGraph) ValidateSharedServices() []string {
 					continue
 				}
 				errs = append(errs, fmt.Sprintf(
-					"shared infra component service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
+					"shared host service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
 					service.Identity.Kind,
 					service.Identity.ProviderName,
 					service.Identity.Name,
@@ -157,7 +165,7 @@ func (g ProviderServiceGraph) ValidateSharedServices() []string {
 	return errs
 }
 
-func (g ProviderServiceGraph) SharedServices() []SharedServiceGroup {
+func (g HostServiceGraph) SharedServices() []SharedServiceGroup {
 	out := make([]SharedServiceGroup, 0)
 	for _, service := range g.Services {
 		clusters := serviceConsumerClusters(service.Consumers)
@@ -175,7 +183,7 @@ func (g ProviderServiceGraph) SharedServices() []SharedServiceGroup {
 	return out
 }
 
-func (g ProviderServiceGraph) ScopeConflicts(selected []string) []DestroyScopeConflict {
+func (g HostServiceGraph) ScopeConflicts(selected []string) []DestroyScopeConflict {
 	selectedSet := map[string]bool{}
 	for _, name := range selected {
 		selectedSet[name] = true
@@ -213,7 +221,7 @@ func (g ProviderServiceGraph) ScopeConflicts(selected []string) []DestroyScopeCo
 	return conflicts
 }
 
-func (g ProviderServiceGraph) MergedStringField(id ProviderServiceIdentity, field string) []string {
+func (g HostServiceGraph) MergedStringField(id HostServiceIdentity, field string) []string {
 	for _, service := range g.Services {
 		if service.Identity != id {
 			continue
@@ -224,22 +232,22 @@ func (g ProviderServiceGraph) MergedStringField(id ProviderServiceIdentity, fiel
 }
 
 func SharedDestroyConflicts(state v1alpha1.State, selected []string) []DestroyScopeConflict {
-	return ResolveProviderServices(state).ScopeConflicts(selected)
+	return ResolveHostServices(state).ScopeConflicts(selected)
 }
 
-func providerServiceConsumers(state v1alpha1.State) []ProviderServiceConsumer {
+func hostServiceConsumers(state v1alpha1.State) []HostServiceConsumer {
 	infraToClusters := clustersByInfra(state)
-	var out []ProviderServiceConsumer
+	var out []HostServiceConsumer
 	for _, infra := range state.ClusterInfras {
 		for _, cluster := range infraToClusters[infra.Metadata.Name] {
-			out = append(out, infraProviderServiceConsumers(state, infra, cluster)...)
+			out = append(out, clusterHostServiceConsumers(state, infra, cluster)...)
 		}
 	}
 	return out
 }
 
-func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
-	var out []ProviderServiceConsumer
+func clusterHostServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+	var out []HostServiceConsumer
 	out = append(out, loadBalancerConsumers(state, infra, cluster)...)
 	out = append(out, bmcConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedProxyConsumers(state, infra, cluster)...)
@@ -269,8 +277,8 @@ func infraProviderServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 	return out
 }
 
-func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
-	var out []ProviderServiceConsumer
+func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+	var out []HostServiceConsumer
 	for _, machine := range infra.Spec.Components.Machines {
 		driver := machineDriver(state, machine)
 		if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
@@ -304,9 +312,9 @@ func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1a
 	return out
 }
 
-func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	seen := map[string]bool{}
-	var out []ProviderServiceConsumer
+	var out []HostServiceConsumer
 	for _, ref := range []v1alpha1.EndpointRef{
 		cluster.Spec.Install.EndpointRefs.API,
 		cluster.Spec.Install.EndpointRefs.APIInt,
@@ -341,7 +349,7 @@ func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cl
 	return out
 }
 
-func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
@@ -354,7 +362,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 			}
 		}
 	}
-	var out []ProviderServiceConsumer
+	var out []HostServiceConsumer
 	for componentName, entry := range entries {
 		component, ok := stateview.InfraComponent(state, componentName)
 		if !ok || component.Spec.Proxy == nil {
@@ -376,13 +384,13 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 	return out
 }
 
-func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
 	}
 	refs := networkDNSRefs(state, infra)
-	var out []ProviderServiceConsumer
+	var out []HostServiceConsumer
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
 		if !refs[entry.Name] || entry.Type != v1alpha1.EnvironmentComponentManaged {
 			continue
@@ -409,7 +417,7 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 	return out
 }
 
-func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
@@ -420,7 +428,7 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 			entries[entry.ComponentRef.Name] = entry
 		}
 	}
-	var out []ProviderServiceConsumer
+	var out []HostServiceConsumer
 	for componentName, entry := range entries {
 		component, ok := stateview.InfraComponent(state, componentName)
 		if !ok || component.Spec.NTP == nil {
@@ -442,7 +450,7 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 	return out
 }
 
-func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []ProviderServiceConsumer {
+func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	if v1alpha1.InstallMode(cluster) != v1alpha1.InstallModeDisconnected {
 		return nil
 	}
@@ -459,7 +467,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		return nil
 	}
 	registry := component.Spec.Registry
-	return []ProviderServiceConsumer{newServiceConsumer(
+	return []HostServiceConsumer{newServiceConsumer(
 		cluster.Metadata.Name,
 		infra.Metadata.Name,
 		fmt.Sprintf("Environment/%s infraComponents.registries[%s]", env.Metadata.Name, entry.Name),
@@ -523,7 +531,7 @@ func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 	return strings.Join(parts, ",")
 }
 
-func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) ProviderServiceConsumer {
+func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) HostServiceConsumer {
 	driver := support.LookupService(kind, realisation)
 	out := cloneStringMap(fields)
 	out["kind"] = kind
@@ -532,7 +540,7 @@ func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation
 	out["realisation"] = realisation
 	out["applyRole"] = driver.ApplyRole
 	out["destroyRole"] = driver.DestroyRole
-	return ProviderServiceConsumer{
+	return HostServiceConsumer{
 		Cluster:           cluster,
 		ClusterInfra:      infra,
 		Owner:             owner,
@@ -642,7 +650,7 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterMachineCo
 	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialRef)
 }
 
-func serviceConsumerClusters(consumers []ProviderServiceConsumer) []string {
+func serviceConsumerClusters(consumers []HostServiceConsumer) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, consumer := range consumers {

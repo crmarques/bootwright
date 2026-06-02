@@ -14,8 +14,8 @@ type scopeSpec struct {
 
 var infraScope = scopeSpec{
 	name:              "infra",
-	short:             "Install and configure InfraProvider and ClusterInfra",
-	phaseNames:        []string{"provider", "cluster-infra"},
+	short:             "Install and configure InfraProvider, InfraComponent, and ClusterInfra",
+	phaseNames:        []string{"provider", "infra-components", "cluster-infra"},
 	applyPlaybook:     "playbooks/targets/infra/apply.yml",
 	destroyPlaybook:   "playbooks/targets/infra/destroy.yml",
 	artifactsBaseName: "infra",
@@ -56,7 +56,7 @@ var addonsScope = scopeSpec{
 var allScope = scopeSpec{
 	name:              "all",
 	short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
-	phaseNames:        []string{"provider", "cluster-infra", "storage-cluster", "container-cluster", "addons"},
+	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "playbooks/targets/all/apply.yml",
 	artifactsBaseName: "all",
 }

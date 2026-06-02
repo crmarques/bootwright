@@ -16,9 +16,9 @@ const (
 	// `check infra` target. `bootwright_ocp_hosts` is included so
 	// bastion-side external_validate can run in every context input set,
 	// including bare-metal/all-external shapes like test 002 where the
-	// other two groups would otherwise be empty and ansible would abort
+	// other remote groups would otherwise be empty and ansible would abort
 	// with "no hosts to target".
-	infraAnsibleLimit    = "bootwright_provider_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
+	infraAnsibleLimit    = "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
 	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"
 	clusterAnsibleLimit  = "bootwright_ocp_hosts:bootwright_boot_hosts"
 )

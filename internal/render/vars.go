@@ -10,7 +10,7 @@ import (
 // Vars produces the per-cluster Ansible variables consumed by the
 // layers under ansible/playbooks/. The contract is documented in
 // ADR-0002: each machine component carries diagnostic dispatch labels
-// plus exact rendered role names; provider services carry their own
+// plus exact rendered role names; host services carry their own
 // apply/destroy role names.
 //
 // Vars is the public entry point; the implementation is split across
@@ -58,6 +58,9 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	}
 	if services := providerServicesVars(state); len(services) > 0 {
 		out["bootwright_provider_services"] = services
+	}
+	if services := infraComponentServicesVars(state); len(services) > 0 {
+		out["bootwright_infra_component_services"] = services
 	}
 	if setups := providerHostSetupsVars(state); len(setups) > 0 {
 		out["bootwright_provider_host_setups"] = setups

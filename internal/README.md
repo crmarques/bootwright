@@ -4,8 +4,8 @@ Bootwright's desired-state pipeline flows through these internal packages:
 
 - `state/desired`: load YAML, strict-decode resources, normalize defaults, and validate ownership and references.
 - `state/view`: read-only selectors over a loaded `v1alpha1.State`.
-- `state/graph`: resolve shared provider services, consumers, host placement, merge fields, and scoped-apply conflicts.
-- `infra/support`: dispatch and provider-service support registry, including exact Ansible role contracts.
+- `state/graph`: resolve shared host services, consumers, host placement, merge fields, and scoped-apply conflicts.
+- `infra/support`: dispatch and host-service support registry, including exact Ansible role contracts.
 - `render`: deterministically project desired state into installer inputs, Ansible inventory, Ansible vars, manifests, and locks.
 - `converge/workflow`: plan and run cross-cluster DAG tasks, leases, ledgers, resource locks, and install records.
 - `converge/ansible`: execute rendered Ansible playbooks.

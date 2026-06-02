@@ -230,7 +230,7 @@ func TestSummarizeFailureExtractsTaskAndReason(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "out.log")
 	body := strings.Join([]string{
-		"PLAY [Apply provider services] *",
+		"PLAY [Apply infra component services] *",
 		"TASK [Gathering Facts] *",
 		"ok: [host-a]",
 		"TASK [proxy_squid : Ensure container exists] *",

@@ -129,7 +129,7 @@ func phaseList(selected []Phase) string {
 // detail. The output differs by scope because the two destroy targets
 // remove very different things: `destroy container-cluster` removes only the
 // root-managed per-cluster runtime dir on the controller; `destroy infra`
-// tears down VMs, networks, and provider services on provider hosts.
+// tears down VMs, networks, provider services, and infra component services.
 func printDestroyPreview(w io.Writer, scope scopeSpec, clustersDir string, state v1alpha1.State) {
 	switch scope.name {
 	case "container-cluster":
@@ -155,7 +155,7 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime")})
 	}
 	p.List(items)
-	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove provider services; run destroy infra for that")
+	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove host services; run destroy infra for that")
 }
 
 func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {

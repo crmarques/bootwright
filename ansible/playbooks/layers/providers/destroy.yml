@@ -7,7 +7,6 @@
   become: true
 
   vars:
-    bootwright_provider_service_destroy_scope: "{{ bootwright_provider_service_scope | default('') }}"
     bootwright_host_provider_services_all: >-
       {{
         bootwright_provider_services | default([])
@@ -15,23 +14,9 @@
         | selectattr('hostRef', 'equalto', bootwright_host_name)
         | list
       }}
-    bootwright_host_provider_services: >-
-      {{
-        (bootwright_host_provider_services_all
-          | selectattr('kind', 'equalto', 'artifacts')
-          | selectattr('realisation', 'equalto', 'http')
-          | list)
-        if bootwright_provider_service_destroy_scope == 'artifact-server'
-        else bootwright_host_provider_services_all
-      }}
+    bootwright_host_provider_services: "{{ bootwright_host_provider_services_all }}"
 
   tasks:
-    - name: Validate provider service destroy scope
-      ansible.builtin.assert:
-        that:
-          - bootwright_provider_service_destroy_scope in ['', 'artifact-server']
-        fail_msg: "unsupported provider service destroy scope {{ bootwright_provider_service_destroy_scope }}"
-
     - name: Destroy provider service roles
       ansible.builtin.include_role:
         name: "{{ bootwright_component.destroyRole }}"

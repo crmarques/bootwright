@@ -152,7 +152,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 }
 
 func buildStatusShared(state v1alpha1.State) []statusShared {
-	groups := stategraph.ResolveProviderServices(state).SharedServices()
+	groups := stategraph.ResolveHostServices(state).SharedServices()
 	out := make([]statusShared, 0, len(groups))
 	for _, g := range groups {
 		out = append(out, statusShared{

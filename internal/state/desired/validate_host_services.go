@@ -7,8 +7,8 @@ import (
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
-func validateSharedProviderServices(state v1alpha1.State) []string {
-	return stategraph.ResolveProviderServices(state).ValidateSharedServices()
+func validateSharedHostServices(state v1alpha1.State) []string {
+	return stategraph.ResolveHostServices(state).ValidateSharedServices()
 }
 
 type libvirtBMCServiceConfig struct {

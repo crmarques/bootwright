@@ -1,6 +1,6 @@
 ---
-# Provider-host preflight. Verifies the basics Ansible needs to converge
-# the provider layer: ansible transport works, sudo is available, a
+# Host preflight. Verifies the basics Ansible needs to converge
+# the provider and InfraComponent layers: ansible transport works, sudo is available, a
 # package manager is present, and (when rendered driver requirements
 # need it) /dev/kvm exists. Pulls in the controller-side external
 # reachability play first so an unreachable BMC / external proxy
@@ -8,8 +8,8 @@
 
 - import_playbook: ../layers/cluster_infra/controller_validate.yml
 
-- name: Check provider host prerequisites
-  hosts: bootwright_provider_hosts:bootwright_boot_hosts
+- name: Check host prerequisites
+  hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_boot_hosts
   gather_subset:
     - "!all"
     - min

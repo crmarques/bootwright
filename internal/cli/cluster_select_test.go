@@ -14,7 +14,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected shared service conflict, got nil")
 	}
-	if !strings.Contains(err.Error(), "--scope would narrow shared provider service") {
+	if !strings.Contains(err.Error(), "--scope would narrow shared host service") {
 		t.Fatalf("error %q does not explain scoped apply conflict", err)
 	}
 	if !strings.Contains(err.Error(), "unscoped {cluster-b}") {
@@ -23,7 +23,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 }
 
 func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds(t *testing.T) {
-	state := cliStateWithAllSharedProviderServices()
+	state := cliStateWithAllSharedHostServices()
 	for _, target := range []string{"infra", "clusters", "all"} {
 		t.Run(target, func(t *testing.T) {
 			err := validateScopedApplySharedServices(state, target, "cluster-a")
@@ -48,7 +48,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 
 func TestValidateScopedApplySharedServicesAllowsContainerClusterScope(t *testing.T) {
 	if err := validateScopedApplySharedServices(cliStateWithSharedDNS(), "container-cluster", "cluster-a"); err != nil {
-		t.Fatalf("container-cluster apply scope should not validate provider services: %v", err)
+		t.Fatalf("container-cluster apply scope should not validate host services: %v", err)
 	}
 }
 
@@ -102,7 +102,7 @@ func cliStateWithSharedDNS() v1alpha1.State {
 	}
 }
 
-func cliStateWithAllSharedProviderServices() v1alpha1.State {
+func cliStateWithAllSharedHostServices() v1alpha1.State {
 	state := cliStateWithSharedDNS()
 	state.Environments[0].Spec.ProxyFor = v1alpha1.EnvironmentProxyForSpec{
 		Bootwright:              "default",

@@ -1091,7 +1091,7 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 }
 
 func applyAllTarget() ApplyTarget {
-	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
 }
 
 func applyClustersTarget() ApplyTarget {

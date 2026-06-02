@@ -14,7 +14,8 @@ authors.
 | `bootwright_infra_components` | host-bound infra services such as artifact servers |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
 | `bootwright_storage_clusters` | managed storage apply inputs, seed hosts, cephadm files, operation files, and attachment contexts |
-| `bootwright_provider_services` | host service instances with rendered role names |
+| `bootwright_provider_services` | provider/BMC service instances with rendered role names |
+| `bootwright_infra_component_services` | InfraComponent service instances with rendered role names |
 | `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
 | `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses rendered to installer input |
@@ -213,17 +214,20 @@ bootwright_clusters:
           name: master-0
 ```
 
-## Provider Service Shape
+## Host Service Shapes
 
-Provider playbooks consume `bootwright_provider_services[]` instead of scanning
-cluster components, infra components, and hardcoding role names. Go resolves shared service
-identity as `(kind, providerName, name)` before rendering; host placement and
-ports are conflict fields, and mergeable overlays are unioned in the resolved
-graph. The renderer then emits one aggregated Ansible service instance with
-`hostRef`, `applyRole`, and `destroyRole`; the service role consumes the rest of
-the flat component fields. Mergeable fields such as HAProxy `frontends`,
-dnsmasq records, dnsmasq `additionalIngressHosts`, chrony `allowedNetworks`,
-and BMC `machines` carry per-cluster entries or graph-unioned values.
+Provider playbooks consume `bootwright_provider_services[]` for provider/BMC
+service work. InfraComponent playbooks consume
+`bootwright_infra_component_services[]` for host-bound shared services such as
+load balancers, artifact servers, proxies, name resolution, NTP, and registries.
+Go resolves shared service identity as `(kind, providerName, name)` before
+rendering; host placement and ports are conflict fields, and mergeable overlays
+are unioned in the resolved graph. The renderer then emits one aggregated
+Ansible service instance with `hostRef`, `applyRole`, and `destroyRole`; the
+service role consumes the rest of the flat component fields. Mergeable fields
+such as HAProxy `frontends`, dnsmasq records, dnsmasq
+`additionalIngressHosts`, chrony `allowedNetworks`, and BMC `machines` carry
+per-cluster entries or graph-unioned values.
 
 ```yaml
 bootwright_provider_services:
@@ -249,6 +253,33 @@ bootwright_provider_services:
       - clusterName: prod-3node
         name: master-0
         providerName: lab-libvirt-provider
+```
+
+```yaml
+bootwright_infra_component_services:
+  - kind: loadBalancer
+    providerName: InfraComponent
+    name: apps
+    componentName: apps
+    hostRef: services-host
+    hostAddress: 192.168.133.1
+    realisation: haProxy
+    applyRole: load_balancer_haproxy
+    destroyRole: load_balancer_haproxy
+    image: docker.io/library/haproxy:3.3.10
+    frontends:
+      - clusterName: prod-3node
+        name: ingress
+        vip: 192.168.133.11
+        ports:
+          - listenPort: 80
+            targetPort: 80
+          - listenPort: 443
+            targetPort: 443
+        backends:
+          - name: master-0
+            address: 192.168.133.20
+            role: master
 ```
 
 ```yaml
@@ -307,7 +338,7 @@ add it to the Go renderer first and consume the flat field in Ansible.
 Container-backed managed service components (`loadBalancer`, `proxy`,
 `nameResolution`, and `registry`) consume `component.image`; host-package
 services such as `ntp` consume package/config fields, and the `bmc_emulated`
-role consumes provider-service `bmcEmulated.*`. Layer playbooks dispatch exact
+role consumes provider BMC service `bmcEmulated.*`. Layer playbooks dispatch exact
 rendered role names (`applyRole`, `destroyRole`, `substrateApplyRole`,
 `bootApplyRole`, and `mediaPrepareRole`) rather than constructing role names
 from diagnostic labels.

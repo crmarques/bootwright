@@ -115,7 +115,7 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	}
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
-	errs = append(errs, validateSharedProviderServices(state)...)
+	errs = append(errs, validateSharedHostServices(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
 	return errs
 }

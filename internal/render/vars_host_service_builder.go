@@ -5,24 +5,24 @@ import (
 	"sort"
 )
 
-type providerServiceKey struct {
+type hostServiceKey struct {
 	kind         string
 	providerName string
 	name         string
 	hostRef      string
 }
 
-type providerServiceBuilder struct {
-	groups map[providerServiceKey]map[string]any
-	order  []providerServiceKey
+type hostServiceBuilder struct {
+	groups map[hostServiceKey]map[string]any
+	order  []hostServiceKey
 }
 
-func newProviderServiceBuilder() *providerServiceBuilder {
-	return &providerServiceBuilder{groups: map[providerServiceKey]map[string]any{}}
+func newHostServiceBuilder() *hostServiceBuilder {
+	return &hostServiceBuilder{groups: map[hostServiceKey]map[string]any{}}
 }
 
-func (b *providerServiceBuilder) Add(component map[string]any, clusterName string) {
-	k, ok := providerServiceKeyFor(component)
+func (b *hostServiceBuilder) Add(component map[string]any, clusterName string) {
+	k, ok := hostServiceKeyFor(component)
 	if !ok {
 		return
 	}
@@ -35,11 +35,11 @@ func (b *providerServiceBuilder) Add(component map[string]any, clusterName strin
 		b.order = append(b.order, k)
 		return
 	}
-	mergeProviderServiceVars(dst, component)
+	mergeHostServiceVars(dst, component)
 	addConsumingCluster(dst, clusterName)
 }
 
-func (b *providerServiceBuilder) Services() []any {
+func (b *hostServiceBuilder) Services() []any {
 	sort.SliceStable(b.order, func(i, j int) bool {
 		a, z := b.order[i], b.order[j]
 		if a.hostRef != z.hostRef {
@@ -60,8 +60,8 @@ func (b *providerServiceBuilder) Services() []any {
 	return out
 }
 
-func providerServiceKeyFor(component map[string]any) (providerServiceKey, bool) {
-	k := providerServiceKey{
+func hostServiceKeyFor(component map[string]any) (hostServiceKey, bool) {
+	k := hostServiceKey{
 		kind:         stringMapValue(component, "kind"),
 		providerName: stringMapValue(component, "providerName"),
 		name:         stringMapValue(component, "name"),
@@ -70,7 +70,7 @@ func providerServiceKeyFor(component map[string]any) (providerServiceKey, bool) 
 	return k, k.kind != "" && k.providerName != "" && k.name != "" && k.hostRef != ""
 }
 
-func mergeProviderServiceVars(dst, src map[string]any) {
+func mergeHostServiceVars(dst, src map[string]any) {
 	for _, field := range []string{
 		"hostAddress",
 		"realisation",

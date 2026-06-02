@@ -1315,7 +1315,7 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 }
 
 func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/providers/artifacts_http/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/roles/infra_components/artifacts_http/tasks/main.yml")
 	validateIdx := findAnsibleTask(t, tasks, "Validate boot artifact server settings")
 	pathsIdx := findAnsibleTask(t, tasks, "Resolve boot artifact paths")
 	packagesIdx := findAnsibleTask(t, tasks, "Install boot artifact server packages")
@@ -1344,13 +1344,13 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 		t.Fatalf("artifact server packages must include podman and openssl, got %v", packages["name"])
 	}
 
-	nginx := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-nginx.conf.j2")
+	nginx := readRepoFile(t, "ansible/roles/infra_components/artifacts_http/templates/artifacts-nginx.conf.j2")
 	for _, want := range []string{"user root;", "listen {{ listen_host }}:{{ listener.port }}", "ssl_certificate", "try_files $uri =404", "autoindex off"} {
 		if !strings.Contains(nginx, want) {
 			t.Fatalf("artifact nginx template missing %q", want)
 		}
 	}
-	tlsTemplate := readRepoFile(t, "ansible/roles/providers/artifacts_http/templates/artifacts-openssl.cnf.j2")
+	tlsTemplate := readRepoFile(t, "ansible/roles/infra_components/artifacts_http/templates/artifacts-openssl.cnf.j2")
 	for _, want := range []string{"subjectAltName", "bootwright_component.tls.dnsNames", "bootwright_component.tls.ipAddresses"} {
 		if !strings.Contains(tlsTemplate, want) {
 			t.Fatalf("artifact TLS template must render SANs; missing %q", want)
@@ -1411,10 +1411,12 @@ func TestAdapterRoleDirectoriesAreRegistered(t *testing.T) {
 	}
 }
 
-func TestProviderPlaybooksDispatchRenderedRoles(t *testing.T) {
+func TestHostServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 	for _, path := range []string{
 		"ansible/playbooks/layers/providers/apply.yml",
 		"ansible/playbooks/layers/providers/destroy.yml",
+		"ansible/playbooks/layers/infra_components/apply.yml",
+		"ansible/playbooks/layers/infra_components/destroy.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{
@@ -1444,13 +1446,13 @@ func TestProviderPlaybooksDispatchRenderedRoles(t *testing.T) {
 	}
 }
 
-func TestProviderDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
+func TestInfraComponentDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 	roles := map[string]string{
-		"ansible/roles/providers/artifacts_http/tasks/destroy.yml":        "artifacts",
-		"ansible/roles/providers/load_balancer_haproxy/tasks/destroy.yml": "load-balancer",
-		"ansible/roles/providers/dns_dnsmasq/tasks/destroy.yml":           "nameResolution",
-		"ansible/roles/providers/proxy_squid/tasks/destroy.yml":           "proxy",
-		"ansible/roles/providers/mirror_registry/tasks/destroy.yml":       "registry",
+		"ansible/roles/infra_components/artifacts_http/tasks/destroy.yml":        "artifacts",
+		"ansible/roles/infra_components/load_balancer_haproxy/tasks/destroy.yml": "load-balancer",
+		"ansible/roles/infra_components/dns_dnsmasq/tasks/destroy.yml":           "nameResolution",
+		"ansible/roles/infra_components/proxy_squid/tasks/destroy.yml":           "proxy",
+		"ansible/roles/infra_components/mirror_registry/tasks/destroy.yml":       "registry",
 	}
 	for path, kind := range roles {
 		body := readRepoFile(t, path)
@@ -1625,6 +1627,9 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 		}
 		if !strings.Contains(rolesPath, "./roles/storage") {
 			t.Fatalf("%s roles_path must include storage roles, got %q", path, rolesPath)
+		}
+		if !strings.Contains(rolesPath, "./roles/infra_components") {
+			t.Fatalf("%s roles_path must include infra component roles, got %q", path, rolesPath)
 		}
 	}
 }
@@ -2512,6 +2517,7 @@ func ansibleRoleDirExists(t *testing.T, role string) bool {
 	for _, base := range []string{
 		"ansible/roles/shared",
 		"ansible/roles/providers",
+		"ansible/roles/infra_components",
 		"ansible/roles/cluster_infra",
 		"ansible/roles/openshift",
 	} {
@@ -2531,7 +2537,8 @@ func ansibleAdapterRoleDirs(t *testing.T) []string {
 	}
 	rules := []rule{
 		{base: "ansible/roles/shared", prefixes: []string{"host_libvirt"}},
-		{base: "ansible/roles/providers", prefixes: []string{""}},
+		{base: "ansible/roles/providers", prefixes: []string{"bmc_"}},
+		{base: "ansible/roles/infra_components", prefixes: []string{""}},
 		{base: "ansible/roles/cluster_infra", prefixes: []string{"substrate_"}},
 		{base: "ansible/roles/openshift", prefixes: []string{"boot_", "media_"}},
 	}

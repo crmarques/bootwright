@@ -1,5 +1,5 @@
 ---
-- name: Apply provider services
+- name: Apply provider setup and services
   hosts: bootwright_provider_hosts
   strategy: free
   gather_subset:
