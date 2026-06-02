@@ -187,7 +187,7 @@ func TestWorkspaceUsesContextSecretDeclaration(t *testing.T) {
 						t.Fatalf("%s contains repo-local secret example %q:\n%s", f.Name, forbidden, f.Body)
 					}
 				}
-				if !strings.Contains(f.Body, "    openshift-pull-secret:\n") {
+				if !strings.Contains(f.Body, "    - openshift-pull-secret\n") {
 					t.Fatalf("%s missing context pull secret declaration:\n%s", f.Name, f.Body)
 				}
 				if strings.Contains(f.Body, "file: ../secrets/openshift-pull-secret") {

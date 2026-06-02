@@ -6,28 +6,28 @@ spec:
   baseDomain: bootwright.test
 
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key:
-      generated:
-        sshKeyPair:
-          comment: bootwright-cluster-admin
-    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    bmc-credentials:
-    proxy-credentials:
-      generated:
-        credentials:
-          username: proxy
-    mirror-registry-credentials:
-      generated:
-        credentials:
-          username: mirror
-    mirror-registry-ca:
-      generated:
-        selfSignedCertificate:
-          commonName: mirror.bootwright.test
-          dnsNames:
-            - mirror.bootwright.test
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-cluster-admin
+    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials
+    - proxy-credentials:
+        generated:
+          credentials:
+            username: proxy
+    - mirror-registry-credentials:
+        generated:
+          credentials:
+            username: mirror
+    - mirror-registry-ca:
+        generated:
+          selfSignedCertificate:
+            commonName: mirror.bootwright.test
+            dnsNames:
+              - mirror.bootwright.test
 
   installTrust:
     caBundleRefs:
@@ -80,4 +80,3 @@ spec:
   proxyFor:
     bootwright: default
     containerClusterInstall: default
-

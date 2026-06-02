@@ -206,7 +206,7 @@ func secretContextRemediation(entry secretListEntry) string {
 	case strings.HasPrefix(entry.Type, "generated:"):
 		return "run bootwright secret generate or bootwright secret set " + entry.Name
 	case entry.Type == "file" || strings.HasPrefix(entry.Type, "file:"):
-		return "create the referenced file or update Environment.spec.secrets." + entry.Name
+		return "create the referenced file or update Environment.spec.secrets entry " + entry.Name
 	case strings.Contains(entry.Type, "tls"):
 		return "run bootwright secret set " + entry.Name + " --tls-cert <path> --tls-key <path>"
 	default:

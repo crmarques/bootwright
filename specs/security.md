@@ -6,7 +6,7 @@ path, but never carries secret bytes.
 ## Secret Ownership
 
 `Environment.spec.secrets` declares every secret source used by the loaded
-state. An empty entry is context-local material written under the current
+state. A scalar list item is context-local material written under the current
 context secrets directory, `file:` points at operator-owned local material, and
 `generated:` describes material Bootwright can create under the context secrets
 directory. `Environment.spec.secretStorage.mode` defaults to `source`; `context`
@@ -102,7 +102,7 @@ Generated output boundaries are part of the safety contract:
   commands, and runs subsequent local sudo commands with `sudo -n`.
 - Internal sudo re-exec has a strict local privilege boundary. User-owned
   inputs run as the original caller: context import source reads, `secret set`
-  source reads, external `Environment.spec.secrets[].file` and `keyFile`
+  source reads, external `Environment.spec.secrets` object-item `file` and `keyFile`
   checks/reads, `~` expansion for file-sourced secrets, caller PATH tool
   discovery, and other probes that do not need protected filesystem access.
   Root is used only for protected local mutations and reads: context state

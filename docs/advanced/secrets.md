@@ -8,7 +8,7 @@ description: How secret bytes stay out of YAML and Git.
 Desired-state YAML references secret material **by name only**. Bytes
 live outside the repo. Three sources are supported per name:
 
-- Empty entry - context-local bytes written with `bootwright secret set`
+- Scalar list item - context-local bytes written with `bootwright secret set`
   under the current context secrets directory.
 - `file:` — operator-supplied bytes that already exist at a declared
   path. The path is local to the bastion.
@@ -26,30 +26,30 @@ secret.
 ```yaml
 spec:
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key:
-      generated:
-        sshKeyPair:
-          comment: bootwright-cluster-admin
-    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    bmc-credentials:
-    proxy-credentials:
-      generated:
-        credentials:
-          username: proxy
-    mirror-registry-trust-bundle:
-      generated:
-        selfSignedCertificate:
-          commonName: registry.lab.bootwright.test
-    api-serving-tls:
-      file: ../secrets/api-serving.crt
-      keyFile: ../secrets/api-serving.key
-    ingress-serving-tls:
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-cluster-admin
+    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials
+    - proxy-credentials:
+        generated:
+          credentials:
+            username: proxy
+    - mirror-registry-trust-bundle:
+        generated:
+          selfSignedCertificate:
+            commonName: registry.lab.bootwright.test
+    - api-serving-tls:
+        file: ../secrets/api-serving.crt
+        keyFile: ../secrets/api-serving.key
+    - ingress-serving-tls
 ```
 
-Every entry has **at most one** of `file:` or `generated:`. An entry
-with neither field resolves to
+Each object item has **at most one** of `file:` or `generated:`. A scalar item
+resolves to
 `/var/lib/bootwright/contexts/<context>/secrets/<name>`. TLS pair consumers
 read that file and `<name>.key`, unless `file:` and `keyFile:` point at
 operator-owned files. Generated SSH key pairs write the private key to
@@ -99,7 +99,7 @@ password file path, and the command to retrieve the password without printing
 secret bytes by default.
 
 `bootwright secret set` writes into the current context secrets
-directory, so context-local entries can be declared as empty keys.
+directory, so context-local entries can be declared as scalar list items.
 `bootwright secret generate` only materializes entries declared as `generated:`.
 `bootwright secret materialize` runs generated materialization and, when
 `secretStorage.mode: context`, copies external `file:` entries into the context

@@ -63,7 +63,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 
 	pullName := ocp.Spec.Install.PullSecretRef.Name
 	if pullName == "" && v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift {
-		return out, fmt.Errorf("%s: pullSecretRef is empty; declare Environment.spec.secrets.%s or set ContainerCluster.spec.install.pullSecretRef", ocp.Metadata.Name, v1alpha1.DefaultPullSecretName)
+		return out, fmt.Errorf("%s: pullSecretRef is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.pullSecretRef", ocp.Metadata.Name, v1alpha1.DefaultPullSecretName)
 	}
 	if pullName != "" {
 		pullPath, pullSecret, err := readSecretMaterial(pullName, env, secretsDir, secret.MaterialPrimary, "pull secret")
@@ -80,7 +80,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 
 	sshName := ocp.Spec.Install.NodeSSH.PublicMaterialRef().Name
 	if sshName == "" {
-		return out, fmt.Errorf("%s: nodeSSH public key is empty; declare Environment.spec.secrets.%s or set ContainerCluster.spec.install.nodeSSH", ocp.Metadata.Name, v1alpha1.DefaultNodeSSHKeyName)
+		return out, fmt.Errorf("%s: nodeSSH public key is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.nodeSSH", ocp.Metadata.Name, v1alpha1.DefaultNodeSSHKeyName)
 	}
 	_, sshKey, err := readSecretMaterial(sshName, env, secretsDir, secret.MaterialSSHPublic, "cluster admin public key")
 	if err != nil {

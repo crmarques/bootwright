@@ -251,11 +251,11 @@ spec:
 
 {{.Substrate.EnvArtifactServer}}
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key:
-      generated:
-        sshKeyPair:
-          comment: bootwright-cluster-admin
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-cluster-admin
 {{.EnvSecrets}}
 `
 

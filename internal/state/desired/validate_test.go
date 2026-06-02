@@ -506,15 +506,15 @@ spec:
 			name: "openshift-pull-secret-required",
 			files: map[string]string{
 				"cluster.yaml":     strings.Replace(newClusterYAML, "pullSecretRef: { name: openshift-pull-secret }", "", 1),
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    openshift-pull-secret:\n", "", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - openshift-pull-secret\n", "", 1),
 			},
 			wantSubstring: `install.pullSecretRef "openshift-pull-secret" is not declared`,
 		},
 		{
 			name: "secret-keyfile-without-file-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    provider-host-ssh: { file: ~/ssh }",
-				"    provider-host-ssh: { keyFile: ~/ssh.key }", 1)},
+				"    - provider-host-ssh:\n        file: ~/ssh",
+				"    - provider-host-ssh:\n        keyFile: ~/ssh.key", 1)},
 			wantSubstring: "spec.secrets[provider-host-ssh].keyFile requires file",
 		},
 		{
@@ -527,22 +527,22 @@ spec:
 		{
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
-				"    cluster-admin-ssh-key: { generated: { sshKeyPair: { type: rsa } } }", 1)},
+				"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+				"    - cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: rsa", 1)},
 			wantSubstring: `spec.secrets[cluster-admin-ssh-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
 		},
 		{
 			name: "generated-secret-multiple-kinds-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    bmc-credentials:\n      generated: { credentials: { username: admin } }",
-				"    bmc-credentials:\n      generated: { credentials: { username: admin }, sshKeyPair: { type: ed25519 } }", 1)},
+				"    - bmc-credentials:\n        generated:\n          credentials:\n            username: admin",
+				"    - bmc-credentials:\n        generated:\n          credentials:\n            username: admin\n          sshKeyPair:\n            type: ed25519", 1)},
 			wantSubstring: "spec.secrets[bmc-credentials].generated sets more than one generated kind",
 		},
 		{
 			name: "generated-non-ssh-key-for-ssh-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
-				"    cluster-admin-ssh-key:\n      generated: { credentials: { username: admin } }", 1)},
+				"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+				"    - cluster-admin-ssh-key:\n        generated:\n          credentials:\n            username: admin", 1)},
 			wantSubstring: `install.nodeSSH.keyPairRef "cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[cluster-admin-ssh-key].generated is not sshKeyPair`,
 		},
 		{
@@ -583,7 +583,7 @@ spec:
 		{
 			name: "api-serving-cert-names-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls:\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - secretRef: { name: api-tls }\n", 1),
@@ -593,7 +593,7 @@ spec:
 		{
 			name: "api-serving-cert-api-int-rejected",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls:\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api-int.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
@@ -603,7 +603,7 @@ spec:
 		{
 			name: "serving-cert-file-source-keyfile-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    provider-host-ssh: { file: ~/ssh }\n", "    provider-host-ssh: { file: ~/ssh }\n    api-tls: { file: ./api.crt }\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls:\n        file: ./api.crt\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
@@ -641,8 +641,8 @@ spec:
 func TestNodeSSHSplitRefsValidate(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-		"    cluster-admin-ssh-key: { file: ~/ssh.pub }",
-		"    cluster-admin-public: { file: ~/ssh.pub }\n    cluster-admin-private: { file: ~/ssh }", 1)
+		"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+		"    - cluster-admin-public:\n        file: ~/ssh.pub\n    - cluster-admin-private:\n        file: ~/ssh", 1)
 	files["cluster.yaml"] = strings.Replace(newClusterYAML,
 		"    pullSecretRef: { name: openshift-pull-secret }",
 		"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
@@ -1035,7 +1035,7 @@ metadata: { name: env }
 spec:
   baseDomain: bootwright.test
   secrets:
-    bmc-credentials:
+    - bmc-credentials
 `,
 				"hosts.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Host
@@ -2007,7 +2007,7 @@ spec:
 }
 
 func addKubeVirtKubeconfigSecret(environmentYAML string) string {
-	return strings.Replace(environmentYAML, "    bmc-credentials:\n", "    external-virt-cluster-kubeconfig:\n      file: ~/virt.kubeconfig\n    bmc-credentials:\n", 1)
+	return strings.Replace(environmentYAML, "    - bmc-credentials:\n", "    - external-virt-cluster-kubeconfig:\n        file: ~/virt.kubeconfig\n    - bmc-credentials:\n", 1)
 }
 
 func newKubeVirtCycleFiles() map[string]string {
@@ -2018,8 +2018,9 @@ metadata: { name: env }
 spec:
   baseDomain: bootwright.test
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key: { file: ~/ssh.pub }
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        file: ~/ssh.pub
 `,
 		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1"),
 		"network-b.yaml": kubeVirtCycleNetworkYAML("net-b", "192.168.141.0/24", "192.168.141.1"),
@@ -2211,10 +2212,13 @@ spec:
   baseDomain: bootwright.test
 
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key: { file: ~/ssh.pub }
-    provider-host-ssh: { file: ~/ssh }
-    vcenter-credentials: { file: ~/vcenter }
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        file: ~/ssh.pub
+    - provider-host-ssh:
+        file: ~/ssh
+    - vcenter-credentials:
+        file: ~/vcenter
 `,
 		"hosts.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Host
@@ -2409,11 +2413,15 @@ spec:
             endpoint: bmc
 
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key: { file: ~/ssh.pub }
-    provider-host-ssh: { file: ~/ssh }
-    bmc-credentials:
-      generated: { credentials: { username: admin } }
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        file: ~/ssh.pub
+    - provider-host-ssh:
+        file: ~/ssh
+    - bmc-credentials:
+        generated:
+          credentials:
+            username: admin
 `
 
 func newEnvironmentYAMLWithResources(resources ...string) string {
@@ -2441,11 +2449,15 @@ spec:
 		b.WriteByte('\n')
 	}
 	b.WriteString(`  secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key: { file: ~/ssh.pub }
-    provider-host-ssh: { file: ~/ssh }
-    bmc-credentials:
-      generated: { credentials: { username: admin } }
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        file: ~/ssh.pub
+    - provider-host-ssh:
+        file: ~/ssh
+    - bmc-credentials:
+        generated:
+          credentials:
+            username: admin
 `)
 	return b.String()
 }

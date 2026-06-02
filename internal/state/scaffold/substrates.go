@@ -8,9 +8,9 @@ var Substrates = map[Provider]Substrate{
 	ProviderEmulatedBareMetal: {
 		ProviderNameSuffix: "libvirt",
 		NetworkNameSuffix:  "bridge",
-		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    bmc-credentials:
+		EnvExtraSecrets: `    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials
 `,
 		EnvArtifactServer: `  infraComponents:
     nameResolution:
@@ -137,9 +137,9 @@ spec:
 	ProviderBareMetal: {
 		ProviderNameSuffix: "bare-metal",
 		NetworkNameSuffix:  "vlan",
-		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    bmc-credentials:
+		EnvExtraSecrets: `    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Host
@@ -251,10 +251,10 @@ spec:
 	ProviderVSphere: {
 		ProviderNameSuffix: "vsphere",
 		NetworkNameSuffix:  "portgroup",
-		EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    vcenter-credentials:
-      file: ../secrets/vcenter-credentials
+		EnvExtraSecrets: `    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - vcenter-credentials:
+        file: ../secrets/vcenter-credentials
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Host

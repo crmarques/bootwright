@@ -3,10 +3,10 @@ package scaffold
 var kubeVirtSubstrate = Substrate{
 	ProviderNameSuffix: "kubevirt",
 	NetworkNameSuffix:  "nad",
-	EnvExtraSecrets: `    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    cnv-cluster-kubeconfig:
-      file: ~/.kube/cnv-cluster.kubeconfig
+	EnvExtraSecrets: `    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - cnv-cluster-kubeconfig:
+        file: ~/.kube/cnv-cluster.kubeconfig
 `,
 	HostsYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Host

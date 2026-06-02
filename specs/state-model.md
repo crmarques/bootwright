@@ -73,27 +73,27 @@ spec:
     - clusters/container/demo/add-on-binding.yaml
 
   secrets:
-    openshift-pull-secret:
-    cluster-admin-ssh-key:
-      generated:
-        sshKeyPair:
-          comment: bootwright-cluster-admin
-    provider-host-ssh:
-      file: ~/.ssh/bootwright-ssh-key
-    bmc-credentials:
-    proxy-credentials:
-      generated:
-        credentials:
-          username: proxy
-    mirror-registry-credentials:
-    mirror-registry-ca:
-      file: ../secrets/mirror-registry-ca.crt
-    corp-root-ca:
-      file: ../secrets/corp-root-ca.crt
-    prod-api-tls:
-      file: ../secrets/prod-api-tls.crt
-      keyFile: ../secrets/prod-api-tls.key
-    prod-apps-wildcard-tls:
+    - openshift-pull-secret
+    - cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-cluster-admin
+    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials
+    - proxy-credentials:
+        generated:
+          credentials:
+            username: proxy
+    - mirror-registry-credentials
+    - mirror-registry-ca:
+        file: ../secrets/mirror-registry-ca.crt
+    - corp-root-ca:
+        file: ../secrets/corp-root-ca.crt
+    - prod-api-tls:
+        file: ../secrets/prod-api-tls.crt
+        keyFile: ../secrets/prod-api-tls.key
+    - prod-apps-wildcard-tls
 
   containerClusters:
     - prod-3node
@@ -221,11 +221,13 @@ Rules:
   `context` makes workflows resolve declared material from
   `<context>/secrets/` after `bootwright secret materialize` copies file-sourced
   entries into context storage.
-- `secrets` declares names, not bytes. An empty entry resolves to
-  `<context>/secrets/<name>` and must be populated with `bootwright secret set`
-  before the consuming workflow runs. `generated:` resolves under the context
-  secrets directory; generated credentials may be populated with either
-  `bootwright secret set` or `bootwright secret generate`.
+- `secrets` declares names, not bytes. It is a list where each item is either
+  a scalar secret name or a single-key object whose key is the secret name.
+  Scalar items resolve to `<context>/secrets/<name>` and must be populated
+  with `bootwright secret set` before the consuming workflow runs. `generated:`
+  resolves under the context secrets directory; generated credentials may be
+  populated with either `bootwright secret set` or
+  `bootwright secret generate`.
 - `generated.sshKeyPair` creates an SSH private key at
   `<context>/secrets/<name>` and the matching OpenSSH public key at
   `<context>/secrets/<name>.pub`; only `type: ed25519` is accepted.
