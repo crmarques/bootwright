@@ -13,7 +13,8 @@ state.
 | `playbooks/layers/` | Ordered layer orchestration. |
 | `roles/bastion/` | Controller-local setup. |
 | `roles/shared/` | Context and reusable host helpers. |
-| `roles/providers/` | Provider-scoped shared services. |
+| `roles/providers/` | Provider setup and BMC services. |
+| `roles/infra_components/` | Host-bound InfraComponent services. |
 | `roles/cluster_infra/` | Per-cluster substrate and network state. |
 | `roles/openshift/` | Agent installer execution, boot, wait, and destroy. |
 | `roles/storage/` | Remote storage host mutation and Ceph command execution. |

@@ -8,6 +8,7 @@ import (
 
 func TestProviderPackageTasksUseOSVars(t *testing.T) {
 	cases := []struct {
+		base    string
 		role    string
 		tasks   string
 		load    string
@@ -15,6 +16,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 		varName string
 	}{
 		{
+			base:    "providers",
 			role:    "bmc_emulated",
 			tasks:   "packages.yml",
 			load:    "Load BMC package list",
@@ -22,6 +24,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 			varName: "{{ bootwright_bmc_packages }}",
 		},
 		{
+			base:    "infra_components",
 			role:    "proxy_squid",
 			tasks:   "main.yml",
 			load:    "Load Squid package list",
@@ -29,6 +32,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 			varName: "{{ bootwright_squid_packages }}",
 		},
 		{
+			base:    "infra_components",
 			role:    "mirror_registry",
 			tasks:   "main.yml",
 			load:    "Load mirror registry package list",
@@ -36,6 +40,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 			varName: "{{ bootwright_mr_packages }}",
 		},
 		{
+			base:    "infra_components",
 			role:    "ntp_chrony",
 			tasks:   "main.yml",
 			load:    "Load chrony package list",
@@ -46,7 +51,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.role, func(t *testing.T) {
-			tasks := readAnsibleTasks(t, "ansible/roles/providers/"+tc.role+"/tasks/"+tc.tasks)
+			tasks := readAnsibleTasks(t, "ansible/roles/"+tc.base+"/"+tc.role+"/tasks/"+tc.tasks)
 			loadIdx := findAnsibleTask(t, tasks, tc.load)
 			installIdx := findAnsibleTask(t, tasks, tc.install)
 			if loadIdx >= installIdx {
@@ -65,24 +70,28 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 
 func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 	cases := []struct {
+		base       string
 		role       string
 		varName    string
 		debianWant []string
 		redHatWant []string
 	}{
 		{
+			base:       "providers",
 			role:       "bmc_emulated",
 			varName:    "bootwright_bmc_packages",
 			debianWant: []string{"apache2-utils", "python3-venv"},
 			redHatWant: []string{"httpd-tools"},
 		},
 		{
+			base:       "infra_components",
 			role:       "proxy_squid",
 			varName:    "bootwright_squid_packages",
 			debianWant: []string{"apache2-utils"},
 			redHatWant: []string{"httpd-tools"},
 		},
 		{
+			base:       "infra_components",
 			role:       "mirror_registry",
 			varName:    "bootwright_mr_packages",
 			debianWant: []string{"apache2-utils"},
@@ -92,8 +101,8 @@ func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.role, func(t *testing.T) {
-			debian := readAnsibleStringListVar(t, "ansible/roles/providers/"+tc.role+"/vars/Debian.yml", tc.varName)
-			redHat := readAnsibleStringListVar(t, "ansible/roles/providers/"+tc.role+"/vars/RedHat.yml", tc.varName)
+			debian := readAnsibleStringListVar(t, "ansible/roles/"+tc.base+"/"+tc.role+"/vars/Debian.yml", tc.varName)
+			redHat := readAnsibleStringListVar(t, "ansible/roles/"+tc.base+"/"+tc.role+"/vars/RedHat.yml", tc.varName)
 
 			assertContainsAll(t, debian, tc.debianWant)
 			assertContainsNone(t, debian, []string{"httpd-tools"})

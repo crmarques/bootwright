@@ -1,0 +1,42 @@
+---
+- name: Destroy infra component services
+  hosts: bootwright_infra_component_hosts
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+
+  vars:
+    bootwright_infra_component_service_destroy_scope: "{{ bootwright_infra_component_service_scope | default('') }}"
+    bootwright_host_infra_component_services_all: >-
+      {{
+        bootwright_infra_component_services | default([])
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_infra_component_services: >-
+      {{
+        (bootwright_host_infra_component_services_all
+          | selectattr('kind', 'equalto', 'artifacts')
+          | selectattr('realisation', 'equalto', 'http')
+          | list)
+        if bootwright_infra_component_service_destroy_scope == 'artifact-server'
+        else bootwright_host_infra_component_services_all
+      }}
+
+  tasks:
+    - name: Validate infra component service destroy scope
+      ansible.builtin.assert:
+        that:
+          - bootwright_infra_component_service_destroy_scope in ['', 'artifact-server']
+        fail_msg: "unsupported infra component service destroy scope {{ bootwright_infra_component_service_destroy_scope }}"
+
+    - name: Destroy infra component service roles
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.destroyRole }}"
+        tasks_from: destroy.yml
+      loop: "{{ bootwright_host_infra_component_services | reverse | list }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"

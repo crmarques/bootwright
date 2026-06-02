@@ -217,7 +217,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 }
 
 func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
-	groups := stategraph.ResolveProviderServices(state).SharedServices()
+	groups := stategraph.ResolveHostServices(state).SharedServices()
 	if len(groups) == 0 {
 		return
 	}

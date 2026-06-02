@@ -18,8 +18,8 @@ import (
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 	tasks := workflow.PlanApplyTasks(allScope.applyTarget(), state)
-	if len(tasks) != 5 {
-		t.Fatalf("planned %d tasks, want 5: %+v", len(tasks), tasks)
+	if len(tasks) != 6 {
+		t.Fatalf("planned %d tasks, want 6: %+v", len(tasks), tasks)
 	}
 	if tasks[0].Entry.ID != "provider.lab-host" {
 		t.Fatalf("first task = %s, want provider.lab-host", tasks[0].Entry.ID)
@@ -27,29 +27,35 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if tasks[0].Entry.Host != "lab-host" || len(tasks[0].Entry.ResourceKeys) != 1 {
 		t.Fatalf("provider host/resources = %q/%v, want lab-host with resource key", tasks[0].Entry.Host, tasks[0].Entry.ResourceKeys)
 	}
-	if tasks[1].Entry.ID != "infra.sno-libvirt.lab-host" {
-		t.Fatalf("second task = %s, want infra.sno-libvirt.lab-host", tasks[1].Entry.ID)
+	if tasks[1].Entry.ID != "infra-component.lab-host" {
+		t.Fatalf("second task = %s, want infra-component.lab-host", tasks[1].Entry.ID)
 	}
-	if len(tasks[1].Entry.Dependencies) != 1 || tasks[1].Entry.Dependencies[0] != "provider.lab-host" {
-		t.Fatalf("infra deps = %v, want provider.lab-host", tasks[1].Entry.Dependencies)
+	if tasks[1].Entry.Host != "lab-host" || len(tasks[1].Entry.ResourceKeys) != 1 {
+		t.Fatalf("infra component host/resources = %q/%v, want lab-host with resource key", tasks[1].Entry.Host, tasks[1].Entry.ResourceKeys)
 	}
-	if tasks[2].Entry.ID != "iso.sno-libvirt" {
-		t.Fatalf("third task = %s, want iso.sno-libvirt", tasks[2].Entry.ID)
+	if tasks[2].Entry.ID != "infra.sno-libvirt.lab-host" {
+		t.Fatalf("third task = %s, want infra.sno-libvirt.lab-host", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].Entry.Dependencies) != 1 || tasks[2].Entry.Dependencies[0] != "infra.sno-libvirt.lab-host" {
-		t.Fatalf("iso deps = %v, want infra.sno-libvirt.lab-host", tasks[2].Entry.Dependencies)
+	if len(tasks[2].Entry.Dependencies) != 2 || tasks[2].Entry.Dependencies[0] != "provider.lab-host" || tasks[2].Entry.Dependencies[1] != "infra-component.lab-host" {
+		t.Fatalf("infra deps = %v, want provider and infra-component services", tasks[2].Entry.Dependencies)
 	}
-	if tasks[3].Entry.ID != "boot.sno-libvirt" {
-		t.Fatalf("fourth task = %s, want boot.sno-libvirt", tasks[3].Entry.ID)
+	if tasks[3].Entry.ID != "iso.sno-libvirt" {
+		t.Fatalf("fourth task = %s, want iso.sno-libvirt", tasks[3].Entry.ID)
 	}
-	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "iso.sno-libvirt" {
-		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[3].Entry.Dependencies)
+	if len(tasks[3].Entry.Dependencies) != 1 || tasks[3].Entry.Dependencies[0] != "infra.sno-libvirt.lab-host" {
+		t.Fatalf("iso deps = %v, want infra.sno-libvirt.lab-host", tasks[3].Entry.Dependencies)
 	}
-	if tasks[4].Entry.ID != "wait.sno-libvirt" {
-		t.Fatalf("fifth task = %s, want wait.sno-libvirt", tasks[4].Entry.ID)
+	if tasks[4].Entry.ID != "boot.sno-libvirt" {
+		t.Fatalf("fifth task = %s, want boot.sno-libvirt", tasks[4].Entry.ID)
 	}
-	if len(tasks[4].Entry.Dependencies) != 1 || tasks[4].Entry.Dependencies[0] != "boot.sno-libvirt" {
-		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[4].Entry.Dependencies)
+	if len(tasks[4].Entry.Dependencies) != 1 || tasks[4].Entry.Dependencies[0] != "iso.sno-libvirt" {
+		t.Fatalf("boot deps = %v, want iso.sno-libvirt", tasks[4].Entry.Dependencies)
+	}
+	if tasks[5].Entry.ID != "wait.sno-libvirt" {
+		t.Fatalf("sixth task = %s, want wait.sno-libvirt", tasks[5].Entry.ID)
+	}
+	if len(tasks[5].Entry.Dependencies) != 1 || tasks[5].Entry.Dependencies[0] != "boot.sno-libvirt" {
+		t.Fatalf("wait deps = %v, want boot.sno-libvirt", tasks[5].Entry.Dependencies)
 	}
 }
 
@@ -538,13 +544,13 @@ rmdir "$lock_dir"
 		},
 		{
 			Entry: workflow.TaskLedgerEntry{
-				ID:           "provider.b",
-				Kind:         workflow.ApplyTaskKindProvider,
-				Label:        "provider services b",
+				ID:           "infra-component.a",
+				Kind:         workflow.ApplyTaskKindInfraComponentServices,
+				Label:        "infra component services a",
 				ResourceKeys: []string{"host:provider-01:mutating"},
 				Status:       workflow.TaskStatusPending,
 			},
-			Playbook:      "playbooks/layers/providers/apply.yml",
+			Playbook:      "playbooks/layers/infra_components/apply.yml",
 			ExtraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
 			State:         state,
 		},

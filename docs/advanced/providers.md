@@ -238,7 +238,7 @@ When adding another managed service, keep the service path orthogonal: add a
 typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
 `internal/infra/support`, add its consumer discovery to the service graph, project
 that resolved graph into Ansible vars, and place the converging role under
-`ansible/roles/providers/`.
+`ansible/roles/infra_components/`.
 
 For real BMCs, the artifact server endpoint selected by
 `artifactAccess.redfishVirtualMedia.endpointRef.name` should usually resolve

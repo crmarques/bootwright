@@ -290,7 +290,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		{
 			name: "apply infra dry-run",
 			args: []string{"apply", "infra", "--dry-run", "--ask-become-pass=false"},
-			want: []string{"Bootwright: infra apply", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Provider services", "Rendered artifacts", "Bundle"},
+			want: []string{"Bootwright: infra apply", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Provider services", "Infra component services", "Rendered artifacts", "Bundle"},
 		},
 	}
 	for _, tc := range tests {
@@ -408,10 +408,10 @@ func TestDestroyInfraArtifactServerScopeDryRunJSON(t *testing.T) {
 	if report.Playbook != infraDestroyArtifactServerPlaybook {
 		t.Fatalf("playbook = %q, want %q", report.Playbook, infraDestroyArtifactServerPlaybook)
 	}
-	if report.Limit != render.GroupProviderHosts {
-		t.Fatalf("limit = %q, want %q", report.Limit, render.GroupProviderHosts)
+	if report.Limit != render.GroupInfraComponentHosts {
+		t.Fatalf("limit = %q, want %q", report.Limit, render.GroupInfraComponentHosts)
 	}
-	if !slices.Contains(report.ExtraVars, providerServiceScopeExtraVarName+"=artifact-server") {
+	if !slices.Contains(report.ExtraVars, infraComponentServiceScopeExtraVarName+"=artifact-server") {
 		t.Fatalf("extra vars missing artifact-server scope: %#v", report.ExtraVars)
 	}
 }

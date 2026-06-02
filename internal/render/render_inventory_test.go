@@ -35,6 +35,7 @@ func TestInventoryStructure(t *testing.T) {
 	}
 	for _, group := range []string{
 		"bootwright_provider_hosts",
+		"bootwright_infra_component_hosts",
 		"bootwright_infra_hosts",
 		"bootwright_boot_hosts",
 		"bootwright_controller_hosts",
@@ -64,6 +65,13 @@ func TestInventoryStructure(t *testing.T) {
 	}
 	if len(provHosts) == 0 {
 		t.Fatal("bootwright_provider_hosts should not be empty for the 001-sno-libvirt fixture")
+	}
+	componentHosts, ok := children["bootwright_infra_component_hosts"].(map[string]any)["hosts"].(map[string]any)
+	if !ok {
+		t.Fatalf("bootwright_infra_component_hosts.hosts is not a map: %v", children["bootwright_infra_component_hosts"])
+	}
+	if len(componentHosts) == 0 {
+		t.Fatal("bootwright_infra_component_hosts should not be empty for the 001-sno-libvirt fixture")
 	}
 	allHosts := all["hosts"].(map[string]any)
 	for name, raw := range allHosts {
@@ -284,8 +292,11 @@ func TestHostGroupCountsBareMetalManagedArtifacts(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	counts := render.HostGroupCounts(state)
-	if got := counts[render.GroupProviderHosts]; got != 1 {
-		t.Errorf("%s: want 1 for bare-metal managed artifacts, got %d", render.GroupProviderHosts, got)
+	if got := counts[render.GroupProviderHosts]; got != 0 {
+		t.Errorf("%s: want 0 for bare-metal provider work, got %d", render.GroupProviderHosts, got)
+	}
+	if got := counts[render.GroupInfraComponentHosts]; got != 1 {
+		t.Errorf("%s: want 1 for bare-metal managed artifacts, got %d", render.GroupInfraComponentHosts, got)
 	}
 	if got := counts[render.GroupInfraHosts]; got != 0 {
 		t.Errorf("%s: want 0 for bare-metal substrate, got %d", render.GroupInfraHosts, got)
@@ -307,8 +318,11 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	counts := render.HostGroupCounts(state)
-	if got := counts[render.GroupProviderHosts]; got != 1 {
-		t.Errorf("%s: want 1 for bastion artifact publication only, got %d", render.GroupProviderHosts, got)
+	if got := counts[render.GroupProviderHosts]; got != 0 {
+		t.Errorf("%s: want 0 for direct bare-metal provider work, got %d", render.GroupProviderHosts, got)
+	}
+	if got := counts[render.GroupInfraComponentHosts]; got != 1 {
+		t.Errorf("%s: want 1 for bastion artifact publication only, got %d", render.GroupInfraComponentHosts, got)
 	}
 	if got := counts[render.GroupInfraHosts]; got != 0 {
 		t.Errorf("%s: want 0 for direct bare-metal machines, got %d", render.GroupInfraHosts, got)
@@ -359,8 +373,8 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 }
 
 // TestHostGroupCountsLibvirtManaged pins the symmetric case: a libvirt
-// fixture with managed services produces non-zero counts for both
-// provider and infra groups, so the workflow does not skip ansible.
+// fixture with managed services produces non-zero counts for provider,
+// infra component, and infra groups, so the workflow does not skip ansible.
 func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
@@ -368,7 +382,10 @@ func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	}
 	counts := render.HostGroupCounts(state)
 	if got := counts[render.GroupProviderHosts]; got == 0 {
-		t.Errorf("%s: want >0 for managed-services fixture, got 0", render.GroupProviderHosts)
+		t.Errorf("%s: want >0 for provider setup fixture, got 0", render.GroupProviderHosts)
+	}
+	if got := counts[render.GroupInfraComponentHosts]; got == 0 {
+		t.Errorf("%s: want >0 for managed-services fixture, got 0", render.GroupInfraComponentHosts)
 	}
 	if got := counts[render.GroupInfraHosts]; got == 0 {
 		t.Errorf("%s: want >0 for libvirt-substrate fixture, got 0", render.GroupInfraHosts)

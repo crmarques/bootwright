@@ -1571,8 +1571,8 @@ Bootwright-managed host cluster wait for the parent install and its
 `provides: [kubevirt]` add-on before provisioning child infrastructure.
 `apply container-cluster` is the focused OpenShift install and add-on recovery
 target. `apply addons` uses the installed cluster kubeconfig and `oc apply`
-directly for standalone add-on convergence. `apply all` includes provider
-services before the same cluster lifecycle graph.
+directly for standalone add-on convergence. `apply all` includes host services
+before the same cluster lifecycle graph.
 Apply terminal output is a ledger-backed fleet dashboard for both single-cluster
 and multi-cluster runs. It shows run metadata, run and cluster log paths,
 task-count progress, per-cluster lifecycle phases, running work, and concise
@@ -1583,7 +1583,7 @@ task logs, and owning cluster log.
 run even when local cluster secrets kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
 replaced the target machines; it does not wipe disks, destroy substrate
-machines, power off nodes, or remove provider services.
+machines, power off nodes, or remove host services.
 Without `--override`, `apply clusters` and `apply container-cluster` must not regenerate the agent ISO or
 reboot nodes when Bootwright can prove that the selected cluster is already
 installed for the same rendered desired inputs. Completed installs are proven by
@@ -1635,7 +1635,7 @@ activity state when present.
 removes only the generated artifact publication service used for BMC agent ISO
 fetches, including HTTPS listeners when configured.
 Filtered `apply infra --scope` and `apply all --scope` fail before rendering
-when the selected clusters share provider services with unselected clusters;
+when the selected clusters share host services with unselected clusters;
 include every consumer or run without `--scope`.
 
 Fixed storage layout:

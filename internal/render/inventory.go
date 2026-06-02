@@ -16,25 +16,27 @@ import (
 // `bootwright_infra_hosts`: libvirt uses its provider host, and KubeVirt uses
 // localhost because VM operations run through a kubeconfig. Bare-metal machines
 // are reached through BMCs, and vSphere guests remain remote by design. Hosts
-// that back managed services (LB, DNS, proxy, registry, artifacts) land
-// in `bootwright_provider_hosts`. A host that does both lives in both
-// groups. The OCP-install and agent-node layers run on localhost.
+// that back provider setup or BMC services land in `bootwright_provider_hosts`.
+// Hosts that back managed InfraComponent services (LB, DNS, proxy, registry,
+// artifacts, NTP) land in `bootwright_infra_component_hosts`. A host can live
+// in several groups. The OCP-install and agent-node layers run on localhost.
 //
 // Two groups instead of one is deliberate: the cluster_infra layer
 // playbook targets `bootwright_infra_hosts` directly and no longer
-// needs to filter hosts by hostRef in its task body. The providers
-// layer targets `bootwright_provider_hosts` for service convergence.
+// needs to filter hosts by hostRef in its task body. Provider and
+// InfraComponent layers target their own host groups for service convergence.
 func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 	return InventoryWithLocalityPolicy(state, secretsDir, locality.DefaultPolicy)
 }
 
 func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
 	infraHostSet := infraReferencedHosts(state)
-	serviceHostSet := serviceReferencedHosts(state)
+	providerHostSet := providerReferencedHosts(state)
+	infraComponentHostSet := infraComponentReferencedHosts(state)
 	bootHostSet := bootReferencedHosts(state)
 	ocpHostSet := ocpReferencedHosts(state)
 	storageHostSet := storageReferencedHosts(state)
-	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, serviceHostSet), bootHostSet), ocpHostSet)
+	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, providerHostSet), infraComponentHostSet), bootHostSet), ocpHostSet)
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 
 	var env *v1alpha1.Environment
@@ -66,13 +68,14 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 		}
 	}
 	children := map[string]any{
-		GroupProviderHosts:   map[string]any{"hosts": hostsAsEmptyMap(serviceHostSet)},
-		GroupInfraHosts:      map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
-		GroupBootHosts:       map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
-		GroupControllerHosts: map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
-		GroupOCPHosts:        map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
-		GroupAgentNodeHosts:  map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
-		GroupStorageHosts:    map[string]any{"hosts": hostsAsEmptyMap(storageHostSet)},
+		GroupProviderHosts:       map[string]any{"hosts": hostsAsEmptyMap(providerHostSet)},
+		GroupInfraComponentHosts: map[string]any{"hosts": hostsAsEmptyMap(infraComponentHostSet)},
+		GroupInfraHosts:          map[string]any{"hosts": hostsAsEmptyMap(infraHostSet)},
+		GroupBootHosts:           map[string]any{"hosts": hostsAsEmptyMap(bootHostSet)},
+		GroupControllerHosts:     map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+		GroupOCPHosts:            map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
+		GroupAgentNodeHosts:      map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
+		GroupStorageHosts:        map[string]any{"hosts": hostsAsEmptyMap(storageHostSet)},
 	}
 	for group, set := range agentNodeGroups {
 		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
@@ -90,13 +93,14 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 // invocation that would target only empty groups) don't have to
 // hardcode the strings.
 const (
-	GroupProviderHosts   = "bootwright_provider_hosts"
-	GroupInfraHosts      = "bootwright_infra_hosts"
-	GroupBootHosts       = "bootwright_boot_hosts"
-	GroupControllerHosts = "bootwright_controller_hosts"
-	GroupOCPHosts        = "bootwright_ocp_hosts"
-	GroupAgentNodeHosts  = "bootwright_agent_node_hosts"
-	GroupStorageHosts    = "bootwright_storage_hosts"
+	GroupProviderHosts       = "bootwright_provider_hosts"
+	GroupInfraComponentHosts = "bootwright_infra_component_hosts"
+	GroupInfraHosts          = "bootwright_infra_hosts"
+	GroupBootHosts           = "bootwright_boot_hosts"
+	GroupControllerHosts     = "bootwright_controller_hosts"
+	GroupOCPHosts            = "bootwright_ocp_hosts"
+	GroupAgentNodeHosts      = "bootwright_agent_node_hosts"
+	GroupStorageHosts        = "bootwright_storage_hosts"
 )
 
 // HostGroupCounts returns the number of hosts in each inventory child
@@ -107,13 +111,14 @@ const (
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	out := map[string]int{
-		GroupInfraHosts:      len(infraReferencedHosts(state)),
-		GroupProviderHosts:   len(serviceReferencedHosts(state)),
-		GroupBootHosts:       len(bootReferencedHosts(state)),
-		GroupControllerHosts: len(ocpReferencedHosts(state)),
-		GroupOCPHosts:        len(ocpReferencedHosts(state)),
-		GroupAgentNodeHosts:  len(agentNodeHostSet),
-		GroupStorageHosts:    len(storageReferencedHosts(state)),
+		GroupInfraHosts:          len(infraReferencedHosts(state)),
+		GroupProviderHosts:       len(providerReferencedHosts(state)),
+		GroupInfraComponentHosts: len(infraComponentReferencedHosts(state)),
+		GroupBootHosts:           len(bootReferencedHosts(state)),
+		GroupControllerHosts:     len(ocpReferencedHosts(state)),
+		GroupOCPHosts:            len(ocpReferencedHosts(state)),
+		GroupAgentNodeHosts:      len(agentNodeHostSet),
+		GroupStorageHosts:        len(storageReferencedHosts(state)),
 	}
 	for group, set := range agentNodeGroups {
 		out[group] = len(set)
@@ -125,13 +130,14 @@ func HostGroupMembers(state v1alpha1.State) map[string][]string {
 	ocpHosts := sortedHostSet(ocpReferencedHosts(state))
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	out := map[string][]string{
-		GroupInfraHosts:      sortedHostSet(infraReferencedHosts(state)),
-		GroupProviderHosts:   sortedHostSet(serviceReferencedHosts(state)),
-		GroupBootHosts:       sortedHostSet(bootReferencedHosts(state)),
-		GroupControllerHosts: ocpHosts,
-		GroupOCPHosts:        ocpHosts,
-		GroupAgentNodeHosts:  sortedHostSet(agentNodeHostSet),
-		GroupStorageHosts:    sortedHostSet(storageReferencedHosts(state)),
+		GroupInfraHosts:          sortedHostSet(infraReferencedHosts(state)),
+		GroupProviderHosts:       sortedHostSet(providerReferencedHosts(state)),
+		GroupInfraComponentHosts: sortedHostSet(infraComponentReferencedHosts(state)),
+		GroupBootHosts:           sortedHostSet(bootReferencedHosts(state)),
+		GroupControllerHosts:     ocpHosts,
+		GroupOCPHosts:            ocpHosts,
+		GroupAgentNodeHosts:      sortedHostSet(agentNodeHostSet),
+		GroupStorageHosts:        sortedHostSet(storageReferencedHosts(state)),
 	}
 	for group, set := range agentNodeGroups {
 		out[group] = sortedHostSet(set)
@@ -249,14 +255,41 @@ func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	return out
 }
 
-// serviceReferencedHosts returns the hosts that back rendered provider-scoped
-// service work: managed services, artifact publication, and BMC services.
-// One host can back several services; the set is unique.
-func serviceReferencedHosts(state v1alpha1.State) map[string]bool {
+func providerReferencedHosts(state v1alpha1.State) map[string]bool {
+	return mergeHostSets(providerServiceReferencedHosts(state), providerHostSetupReferencedHosts(state))
+}
+
+func providerServiceReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, service := range stategraph.ResolveProviderServices(state).Services {
-		if service.HostRef != "" {
+	for _, service := range stategraph.ResolveHostServices(state).Services {
+		if service.IsProviderService() && service.HostRef != "" {
 			out[service.HostRef] = true
+		}
+	}
+	return out
+}
+
+func infraComponentReferencedHosts(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, service := range stategraph.ResolveHostServices(state).Services {
+		if service.IsInfraComponentService() && service.HostRef != "" {
+			out[service.HostRef] = true
+		}
+	}
+	return out
+}
+
+func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, ci := range state.ClusterInfras {
+		for _, machine := range ci.Spec.Components.Machines {
+			hostRef := machineHostRef(state, machine)
+			if hostRef == "" {
+				continue
+			}
+			if len(ProviderDriver(state, machine).Roles.HostSetupRoles) > 0 {
+				out[hostRef] = true
+			}
 		}
 	}
 	return out

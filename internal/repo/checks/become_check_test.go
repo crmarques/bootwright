@@ -15,7 +15,7 @@ func TestBecomeCheckPlaybookValidatesBecome(t *testing.T) {
 		t.Fatalf("become check playbook has %d plays, want 1", len(plays))
 	}
 	play := plays[0]
-	if got, want := play["hosts"], "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_hosts:bootwright_boot_hosts') }}"; got != want {
+	if got, want := play["hosts"], "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_boot_hosts') }}"; got != want {
 		t.Fatalf("become check hosts = %v, want %q", got, want)
 	}
 	if got := play["gather_facts"]; got != false {
@@ -44,9 +44,9 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 	}{
 		{"ansible/playbooks/targets/clusters/apply.yml", "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
 		{"ansible/playbooks/targets/container-cluster/apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
-		{"ansible/playbooks/targets/infra/apply.yml", "bootwright_provider_hosts:bootwright_infra_hosts"},
-		{"ansible/playbooks/targets/infra/destroy.yml", "bootwright_provider_hosts:bootwright_infra_hosts"},
-		{"ansible/playbooks/targets/infra/destroy-artifact-server.yml", "bootwright_provider_hosts"},
+		{"ansible/playbooks/targets/infra/apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
+		{"ansible/playbooks/targets/infra/destroy.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
+		{"ansible/playbooks/targets/infra/destroy-artifact-server.yml", "bootwright_infra_component_hosts"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {

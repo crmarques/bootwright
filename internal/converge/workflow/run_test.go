@@ -304,7 +304,7 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
 		Playbook:           "playbooks/targets/infra/apply.yml",
-		Limit:              render.GroupProviderHosts + ":" + render.GroupInfraHosts,
+		Limit:              render.GroupProviderHosts + ":" + render.GroupInfraComponentHosts + ":" + render.GroupInfraHosts,
 		ArtifactsBaseName:  "infra",
 		Label:              "infra apply",
 	}, runner, reporter)
@@ -336,7 +336,7 @@ func TestLimitMatchesNoHostsTable(t *testing.T) {
 		{"empty limit", "", false},
 		{"whitespace limit", "   ", false},
 		{"ocp group has the localhost controller", render.GroupOCPHosts, false},
-		{"only empty groups", render.GroupProviderHosts + ":" + render.GroupInfraHosts, true},
+		{"only empty groups", render.GroupProviderHosts + ":" + render.GroupInfraComponentHosts + ":" + render.GroupInfraHosts, true},
 		{"unknown group", "no_such_group", true},
 		{"mix of empty and non-empty", render.GroupProviderHosts + ":" + render.GroupOCPHosts, false},
 		{"literal inventory host", "lab-host", false},

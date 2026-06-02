@@ -40,11 +40,11 @@ func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
 	}
 }
 
-func TestProviderServiceGraphIncludesSharedBMCServices(t *testing.T) {
+func TestHostServiceGraphIncludesSharedBMCServices(t *testing.T) {
 	state := sharedBMCServiceState()
-	graph := ResolveProviderServices(state)
+	graph := ResolveHostServices(state)
 
-	var bmc *ProviderService
+	var bmc *HostService
 	for i := range graph.Services {
 		if graph.Services[i].Identity.Kind == v1alpha1.ProviderServiceKindBMC {
 			bmc = &graph.Services[i]
@@ -76,7 +76,7 @@ func TestProviderServiceGraphIncludesSharedBMCServices(t *testing.T) {
 	}
 }
 
-func TestProviderServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
+func TestHostServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 	state := sharedBMCServiceState()
 	state.Hosts = append(state.Hosts, v1alpha1.Host{
 		Metadata: v1alpha1.Metadata{Name: "libvirt-host-b"},
@@ -99,7 +99,7 @@ func TestProviderServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 	state.ClusterInfras[1].Spec.Components.Machines[0].From.Profile = "libvirt-profile-b"
 
 	var hostRefs []string
-	for _, service := range ResolveProviderServices(state).Services {
+	for _, service := range ResolveHostServices(state).Services {
 		if service.Identity.Kind == v1alpha1.ProviderServiceKindBMC {
 			hostRefs = append(hostRefs, service.HostRef)
 		}
@@ -110,12 +110,12 @@ func TestProviderServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 	}
 }
 
-func TestProviderServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
+func TestHostServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 	state := sharedManagedServiceState()
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"env.example.test"}
 	state.InfraComponents[1].Spec.NameResolution.AdditionalIngressHosts = []string{"component.example.test"}
 
-	got := ResolveProviderServices(state).MergedStringField(ProviderServiceIdentity{
+	got := ResolveHostServices(state).MergedStringField(HostServiceIdentity{
 		Kind:         v1alpha1.ComponentSlotNameResolution,
 		ProviderName: v1alpha1.KindInfraComponent,
 		Name:         "name-resolution",
@@ -127,7 +127,7 @@ func TestProviderServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 }
 
 func TestSharedServicesReportsContainerClusterConsumers(t *testing.T) {
-	groups := ResolveProviderServices(sharedManagedServiceState()).SharedServices()
+	groups := ResolveHostServices(sharedManagedServiceState()).SharedServices()
 	seen := false
 	for _, group := range groups {
 		if group.Kind != v1alpha1.ComponentSlotNameResolution {

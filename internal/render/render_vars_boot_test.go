@@ -475,7 +475,7 @@ func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 		t.Errorf("agentIso.fetchUrl got %v, want configured artifact HTTP port", got)
 	}
 
-	services := vars["bootwright_provider_services"].([]any)
+	services := vars["bootwright_infra_component_services"].([]any)
 	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifacts)
 	if got := service["port"]; got != 9443 {
 		t.Errorf("artifact service port got %v, want 9443", got)
@@ -646,22 +646,26 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 	state := twoClusterLibvirtProviderServicesState(t)
 	vars := render.Vars(state)
-	services := vars["bootwright_provider_services"].([]any)
-	counts := providerServiceKindCounts(services)
+	providerServices := vars["bootwright_provider_services"].([]any)
+	infraComponentServices := vars["bootwright_infra_component_services"].([]any)
+	providerCounts := providerServiceKindCounts(providerServices)
+	infraComponentCounts := providerServiceKindCounts(infraComponentServices)
 	wants := map[string]int{
 		v1alpha1.ComponentSlotLoadBalancer:   1,
 		v1alpha1.ComponentSlotProxy:          1,
 		v1alpha1.ComponentSlotNameResolution: 1,
 		v1alpha1.ComponentSlotNTP:            1,
 		v1alpha1.ComponentSlotRegistry:       1,
-		v1alpha1.ProviderServiceKindBMC:      1,
 	}
 	for kind, want := range wants {
-		if got := counts[kind]; got != want {
-			t.Fatalf("provider service %s count got %d, want %d: %v", kind, got, want, services)
+		if got := infraComponentCounts[kind]; got != want {
+			t.Fatalf("infra component service %s count got %d, want %d: %v", kind, got, want, infraComponentServices)
 		}
 	}
-	lb := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotLoadBalancer)
+	if got := providerCounts[v1alpha1.ProviderServiceKindBMC]; got != 1 {
+		t.Fatalf("provider BMC service count got %d, want 1: %v", got, providerServices)
+	}
+	lb := firstProviderServiceByKind(t, infraComponentServices, v1alpha1.ComponentSlotLoadBalancer)
 	if _, ok := lb["clusterName"]; ok {
 		t.Fatalf("aggregated load balancer must not carry one top-level clusterName: %v", lb)
 	}
@@ -674,22 +678,22 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 	if !seenCluster["sno-libvirt"] || !seenCluster["sno-libvirt-b"] {
 		t.Fatalf("aggregated frontends did not retain per-frontend cluster ownership: %v", frontends)
 	}
-	dns := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotNameResolution)
+	dns := firstProviderServiceByKind(t, infraComponentServices, v1alpha1.ComponentSlotNameResolution)
 	if hosts := dns["additionalIngressHosts"].([]string); len(hosts) != 3 {
 		t.Fatalf("additionalIngressHosts got %v, want union from both clusters", hosts)
 	}
-	ntp := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotNTP)
+	ntp := firstProviderServiceByKind(t, infraComponentServices, v1alpha1.ComponentSlotNTP)
 	if got := ntp["applyRole"]; got != "ntp_chrony" {
 		t.Fatalf("ntp applyRole got %v", got)
 	}
 	if got := ntp["allowedNetworks"].([]string); strings.Join(got, ",") != "192.168.132.0/24" {
 		t.Fatalf("ntp allowedNetworks got %v", got)
 	}
-	registry := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotRegistry)
+	registry := firstProviderServiceByKind(t, infraComponentServices, v1alpha1.ComponentSlotRegistry)
 	if got := registry["consumingClusters"].([]string); strings.Join(got, ",") != "sno-libvirt,sno-libvirt-b" {
 		t.Fatalf("registry consumingClusters got %v", got)
 	}
-	bmc := firstProviderServiceByKind(t, services, v1alpha1.ProviderServiceKindBMC)
+	bmc := firstProviderServiceByKind(t, providerServices, v1alpha1.ProviderServiceKindBMC)
 	if got := bmc["consumingClusters"].([]string); strings.Join(got, ",") != "sno-libvirt,sno-libvirt-b" {
 		t.Fatalf("bmc consumingClusters got %v", got)
 	}
@@ -698,9 +702,9 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 func TestProviderServicesAggregateSharedArtifactServer(t *testing.T) {
 	state := twoClusterBareMetalPublicationState(t)
 	vars := render.Vars(state)
-	services := vars["bootwright_provider_services"].([]any)
+	services := vars["bootwright_infra_component_services"].([]any)
 	if got := providerServiceKindCounts(services)[v1alpha1.ComponentSlotArtifacts]; got != 1 {
-		t.Fatalf("artifact provider service count got %d, want 1: %v", got, services)
+		t.Fatalf("artifact infra component service count got %d, want 1: %v", got, services)
 	}
 	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifacts)
 	if got := service["consumingClusters"].([]string); strings.Join(got, ",") != "sno-emul-baremetal,sno-emul-baremetal-b" {
@@ -737,13 +741,13 @@ func TestBareMetalCorporateFixtureDoesNotRenderManagedProxyOrDNS(t *testing.T) {
 		}
 	}
 
-	services := vars["bootwright_provider_services"].([]any)
+	services := vars["bootwright_infra_component_services"].([]any)
 	if len(services) != 1 {
-		t.Fatalf("provider services = %v, want only artifact publication", services)
+		t.Fatalf("infra component services = %v, want only artifact publication", services)
 	}
 	service := services[0].(map[string]any)
 	if got := service["kind"]; got != v1alpha1.ComponentSlotArtifacts {
-		t.Fatalf("provider service kind got %v, want %s", got, v1alpha1.ComponentSlotArtifacts)
+		t.Fatalf("infra component service kind got %v, want %s", got, v1alpha1.ComponentSlotArtifacts)
 	}
 	if got := service["hostRef"]; got != "bastion" {
 		t.Fatalf("artifact service hostRef got %v, want bastion", got)

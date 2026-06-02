@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestProviderServicesVarsMergeSharedDNSWithoutMutatingState(t *testing.T) {
+func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing.T) {
 	state := dnsRecordsState()
 	state.ClusterInfras = append(state.ClusterInfras, state.ClusterInfras[0])
 	state.ClusterInfras[1].Metadata.Name = "infra-b"
@@ -18,9 +18,9 @@ func TestProviderServicesVarsMergeSharedDNSWithoutMutatingState(t *testing.T) {
 	state.InfraComponents[0].Spec.NameResolution.AdditionalIngressHosts = []string{"app-b.example.test", "shared.example.test"}
 
 	before := append([]string(nil), state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts...)
-	services := providerServicesVars(state)
+	services := infraComponentServicesVars(state)
 	if len(services) != 1 {
-		t.Fatalf("provider services = %d, want 1: %+v", len(services), services)
+		t.Fatalf("infra component services = %d, want 1: %+v", len(services), services)
 	}
 	service := services[0].(map[string]any)
 	got := service["additionalIngressHosts"]
@@ -33,7 +33,7 @@ func TestProviderServicesVarsMergeSharedDNSWithoutMutatingState(t *testing.T) {
 	}
 }
 
-func TestProviderServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testing.T) {
+func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testing.T) {
 	state := dnsRecordsState()
 	state.Environments[0].Spec.InfraComponents.NameResolution = append(state.Environments[0].Spec.InfraComponents.NameResolution, v1alpha1.EnvironmentNameResolutionComponent{
 		Name:                   "alternate",
@@ -58,9 +58,9 @@ func TestProviderServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testing.T) {
 	state.ContainerClusters[1].Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), state.ContainerClusters[1].Spec.Nodes...)
 	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.ClusterInfra = "infra-b"
 
-	services := providerServicesVars(state)
+	services := infraComponentServicesVars(state)
 	if len(services) != 1 {
-		t.Fatalf("provider services = %d, want 1: %+v", len(services), services)
+		t.Fatalf("infra component services = %d, want 1: %+v", len(services), services)
 	}
 	service := services[0].(map[string]any)
 	wantHosts := []string{

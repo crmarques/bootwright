@@ -32,6 +32,7 @@ var RoleRelPaths = []string{
 	filepath.Join("roles", "bastion"),
 	filepath.Join("roles", "shared"),
 	filepath.Join("roles", "providers"),
+	filepath.Join("roles", "infra_components"),
 	filepath.Join("roles", "cluster_infra"),
 	filepath.Join("roles", "openshift"),
 	filepath.Join("roles", "storage"),

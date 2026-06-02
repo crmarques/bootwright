@@ -32,14 +32,17 @@ ansible/playbooks/
 ansible/roles/
   bastion/       bastion-local setup
   shared/        context and host helper roles
-  providers/     provider-scoped shared services
+  providers/     provider setup and BMC services
+  infra_components/
+                 host-bound InfraComponent services
   cluster_infra/ per-cluster substrate and network state
   openshift/     openshift-install agent workflows
 ```
 
 Target playbooks are thin wrappers. `targets/infra/apply.yml` imports
-`layers/providers/apply.yml` and then `layers/cluster_infra/apply.yml`;
-destroy runs cluster infrastructure before provider-scoped services.
+`layers/providers/apply.yml`, `layers/infra_components/apply.yml`, and then
+`layers/cluster_infra/apply.yml`; destroy runs cluster infrastructure before
+InfraComponent services and provider services.
 `targets/clusters/apply.yml` imports preflight, cluster infrastructure, and
 OpenShift install layers. `targets/container-cluster/apply.yml` remains the
 thin OpenShift install wrapper used by the focused container-cluster target.
@@ -50,9 +53,11 @@ playbooks do not construct role names from those labels:
 
 - `component.substrateApplyRole` and `component.substrateDestroyRole`
   select per-machine substrate roles from `roles/cluster_infra/`.
-- Provider services consume `bootwright_provider_services[]`, where each
-  service carries `applyRole` and `destroyRole`. Managed services and BMC
-  services use the same dispatcher.
+- Provider/BMC services consume `bootwright_provider_services[]`, where each
+  service carries `applyRole` and `destroyRole`.
+- Managed InfraComponent services consume
+  `bootwright_infra_component_services[]`, where each service carries
+  `applyRole` and `destroyRole`.
 - `component.bootApplyRole` selects the boot driver invoked during OpenShift
   install from `roles/openshift/`.
 - `component.mediaPrepareRole`, when set, selects an optional virtual-media
@@ -88,7 +93,7 @@ substrate-specific inputs each role consumes. Roles do NOT branch on
 that branching belongs in the registry and renderer. `boot_redfish` reads
 `boot.redfish` and `boot.agentIso` whether the BMC is sushy-emulator or a
 vendor BMC; `media_libvirt` consumes the libvirt-specific virtual-media
-cleanup block; `bmc_emulated` reads provider-service `bmcEmulated.*` for
+cleanup block; `bmc_emulated` reads provider BMC service `bmcEmulated.*` for
 libvirt URI / port / vmedia / bind / auth instead of re-deriving defaults;
 `network_vips` reads each frontend's `attachment` block instead of re-querying
 the cluster's network substrate attachment. Adding a substrate-dependent fact
@@ -99,9 +104,10 @@ Layer playbooks own the host-local selection of
 runtime views. A future context-role extraction is allowed only if it preserves
 those facts and does not move provider or install decisions out of the renderer.
 
-Provider roles own provider-scoped apply and destroy logic. Cluster
-infrastructure roles own per-cluster substrate and network state. OpenShift
-roles own installer execution and BMC boot handoff only.
+Provider roles own provider setup and BMC apply/destroy logic. InfraComponent
+roles own host-bound shared services. Cluster infrastructure roles own
+per-cluster substrate and network state. OpenShift roles own installer
+execution and BMC boot handoff only.
 
 ## Consequences
 

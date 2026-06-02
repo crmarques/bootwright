@@ -16,7 +16,13 @@ var phases = map[string]Phase{
 		Name:          "provider",
 		ApplyPlaybook: "playbooks/layers/providers/apply.yml",
 		NeedsRoot:     true,
-		Description:   "converge provider services: proxy, registry, NTP, BMC, boot artifacts, and load balancers",
+		Description:   "converge provider setup and BMC services",
+	},
+	"infra-components": {
+		Name:          "infra-components",
+		ApplyPlaybook: "playbooks/layers/infra_components/apply.yml",
+		NeedsRoot:     true,
+		Description:   "converge host-bound infra components: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
 	},
 	"cluster-infra": {
 		Name:          "cluster-infra",

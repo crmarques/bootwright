@@ -24,10 +24,11 @@ The render step merges the provisioning kinds into concrete outputs:
 - storage inputs from `StorageCluster`, storage pools, CephFS, RGW, exports,
   and Data Foundation attachments
 
-Shared provider services are resolved once as a service graph. Validation,
-rendering, status, and scoped apply checks use the same service identities and
-consumer list, so a partial `apply infra --scope` cannot silently narrow a
-service another cluster still depends on.
+Shared host services are resolved once as a service graph. Provider/BMC
+services and managed `InfraComponent` services render to separate Ansible
+vars and host groups, while validation, status, and scoped apply checks use
+the same service identities and consumer list. A partial `apply infra --scope`
+cannot silently narrow a service another cluster still depends on.
 
 Bootwright uses distinct execution identities instead of treating the process
 as simply root or non-root:
@@ -37,8 +38,8 @@ as simply root or non-root:
 - context state, generated secrets, runtime installer files, workflow logs,
   managed Ansible runtime, and local package or CLI installs run as the
   protected local root state identity
-- provider and infrastructure host work connects as the rendered SSH user, then
-  uses Ansible `become` for privileged host mutation
+- provider, InfraComponent, and infrastructure host work connects as the
+  rendered SSH user, then uses Ansible `become` for privileged host mutation
 - controller-local Ansible work uses localhost inventory and `become` only for
   the tasks that intentionally mutate controller state
 

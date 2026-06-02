@@ -1,0 +1,46 @@
+---
+- name: Apply infra component services
+  hosts: bootwright_infra_component_hosts
+  strategy: free
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: host_proxy
+        tasks_from: facts
+
+  vars:
+    bootwright_host_infra_component_services: >-
+      {{
+        bootwright_infra_component_services | default([])
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+
+  tasks:
+    - name: Skip when host serves no infra component work
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_host_infra_component_services | length == 0
+
+    - name: Apply base host packages
+      ansible.builtin.import_role:
+        name: host_base
+
+    - name: Persist host proxy settings
+      ansible.builtin.import_role:
+        name: host_proxy
+
+    - name: Apply infra component service roles
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.applyRole }}"
+      loop: "{{ bootwright_host_infra_component_services }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.applyRole }}"
