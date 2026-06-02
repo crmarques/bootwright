@@ -180,6 +180,18 @@ Rules:
 - `defaults.install.nodeSSH`, when set, is copied into selected
   `ContainerCluster` install specs that omit `nodeSSH`. Omitted means
   `keyPairRef.name: cluster-admin-ssh-key`.
+- `defaults.artifactAccess`, when set, is copied into selected
+  `ClusterInfra.spec.artifactAccess` fields only for active artifact
+  consumers. Redfish virtual-media defaults apply only to cluster
+  infrastructures used by bare-metal `ContainerCluster` machines.
+  `containerClusterInstall` defaults apply only to cluster infrastructures used
+  by disconnected `ContainerCluster` installs. `serverRef` is copied only when
+  an explicit or defaulted artifact consumer endpoint exists. Explicit
+  `ClusterInfra.spec.artifactAccess` values always win.
+- `defaults` is a typed fleet-default surface. Defaults are normalized into the
+  owning resource before validation and rendering, fill omitted values only,
+  and must not contain provider inventory, machine facts, endpoint addresses,
+  or secret bytes.
 - Bootwright and OpenShift installer actions run on the bastion host where the
   CLI is invoked. Desired state does not select that execution host.
 - `infraComponents.proxies[]`, `infraComponents.nameResolution[]`,
@@ -1163,9 +1175,6 @@ spec:
     redfishVirtualMedia:
       endpointRef:
         name: bmc
-    containerClusterInstall:
-      endpointRef:
-        name: cluster
 
   networkBindings:
     - networkConfigRef:
@@ -1262,6 +1271,9 @@ Rules:
   endpoint used in BMC ISO fetch URLs.
 - `artifactAccess.containerClusterInstall.endpointRef.name` selects the
   artifact endpoint used for disconnected agent-install boot artifacts.
+- `Environment.spec.defaults.artifactAccess` can provide fleet-wide defaults
+  for omitted artifact access fields. Normalized effective state still records
+  the selected values on `ClusterInfra.spec.artifactAccess`.
 - Bare-metal Redfish virtual-media boot and disconnected agent installs derive
   generated artifact publication from `artifactAccess`.
 - For vSphere multi-NIC installs, the first adapter network must correspond to

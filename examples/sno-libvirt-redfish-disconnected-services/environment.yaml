@@ -5,6 +5,14 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
+  defaults:
+    artifactAccess:
+      serverRef:
+        name: default
+      containerClusterInstall:
+        endpointRef:
+          name: cluster
+
   secrets:
     - openshift-pull-secret
     - cluster-admin-ssh-key:

@@ -1,6 +1,9 @@
 package desiredstate
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/artifacts"
+)
 
 // Normalize applies defaults in-place. Pure transformation: no
 // diagnostics, no rejections; that work belongs to Validate.
@@ -21,6 +24,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
+	applyEnvironmentArtifactAccessDefaults(state, env)
 	for i := range state.ClusterAddons {
 		normalizeClusterAddon(&state.ClusterAddons[i])
 	}
@@ -152,6 +156,58 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 }
 
 func normalizeClusterInfra(ci *v1alpha1.ClusterInfra) {
+}
+
+type artifactAccessConsumers struct {
+	RedfishVirtualMedia     bool
+	ContainerClusterInstall bool
+}
+
+func applyEnvironmentArtifactAccessDefaults(state *v1alpha1.State, env *v1alpha1.Environment) {
+	if env == nil {
+		return
+	}
+	defaults := env.Spec.Defaults.ArtifactAccess
+	consumers := clusterInfraArtifactAccessConsumers(*state)
+	for i := range state.ClusterInfras {
+		ci := &state.ClusterInfras[i]
+		consumer := consumers[ci.Metadata.Name]
+		access := &ci.Spec.ArtifactAccess
+		if consumer.RedfishVirtualMedia && access.RedfishVirtualMedia.EndpointRef.Name == "" {
+			access.RedfishVirtualMedia = defaults.RedfishVirtualMedia
+		}
+		if consumer.ContainerClusterInstall && access.ContainerClusterInstall.EndpointRef.Name == "" {
+			access.ContainerClusterInstall = defaults.ContainerClusterInstall
+		}
+		if access.ServerRef.Name == "" && clusterArtifactAccessHasEndpoint(*access) {
+			access.ServerRef = defaults.ServerRef
+		}
+	}
+}
+
+func clusterInfraArtifactAccessConsumers(state v1alpha1.State) map[string]artifactAccessConsumers {
+	out := map[string]artifactAccessConsumers{}
+	infraIndex := indexClusterInfras(state.ClusterInfras)
+	for _, ocp := range state.ContainerClusters {
+		ci, ok, _ := resolveContainerClusterInfra(ocp, infraIndex)
+		if !ok {
+			continue
+		}
+		consumer := out[ci.Metadata.Name]
+		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
+			consumer.RedfishVirtualMedia = true
+		}
+		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
+			consumer.ContainerClusterInstall = true
+		}
+		out[ci.Metadata.Name] = consumer
+	}
+	return out
+}
+
+func clusterArtifactAccessHasEndpoint(access v1alpha1.ClusterArtifactAccess) bool {
+	return access.RedfishVirtualMedia.EndpointRef.Name != "" ||
+		access.ContainerClusterInstall.EndpointRef.Name != ""
 }
 
 func normalizeClusterAddon(extension *v1alpha1.ClusterAddon) {

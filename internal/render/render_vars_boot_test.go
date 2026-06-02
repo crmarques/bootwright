@@ -508,7 +508,14 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		Listener:    "https",
 		HostAddress: "cluster-lan",
 	})
-	state.ClusterInfras[0].Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "cluster"
+	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{}
+	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+		RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
+			EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+		},
+	}
+	desiredstate.Normalize(&state)
 
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)

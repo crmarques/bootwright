@@ -377,7 +377,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
-	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
 		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
 		ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
 			EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
@@ -420,6 +420,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		},
 	)
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+	desiredstate.Normalize(&state)
 	cfg, err := render.InstallerConfig(state, state.ContainerClusters[0])
 	if err != nil {
 		t.Fatalf("InstallerConfig: %v", err)
@@ -471,13 +472,14 @@ func TestAgentConfigUsesExternalArtifactEndpointForDisconnectedBootArtifacts(t *
 			URL:  "https://artifacts.example.test:9443/install",
 		}},
 	}}
-	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
 		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
 		ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
 			EndpointRef: v1alpha1.LocalObjectReference{Name: "install"},
 		},
 	}
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+	desiredstate.Normalize(&state)
 
 	agent, err := render.AgentConfig(state, state.ContainerClusters[0])
 	if err != nil {

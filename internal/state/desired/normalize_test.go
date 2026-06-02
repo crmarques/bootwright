@@ -66,6 +66,99 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	}
 }
 
+func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *testing.T) {
+	state := artifactAccessDefaultState()
+	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack", "server-0")}
+	state.ClusterInfras = []v1alpha1.ClusterInfra{{
+		Metadata: v1alpha1.Metadata{Name: "infra"},
+		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
+			Machines: []v1alpha1.ClusterMachineComponent{{
+				Name: "master-0",
+				From: v1alpha1.From{Provider: "rack", Name: "server-0"},
+			}},
+		}},
+	}}
+	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithInfra("cluster", "infra")}
+
+	Normalize(&state)
+
+	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	if got := access.ServerRef.Name; got != "default" {
+		t.Fatalf("serverRef.name = %q, want default", got)
+	}
+	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "bmc" {
+		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want bmc", got)
+	}
+	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
+		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want empty", got)
+	}
+}
+
+func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t *testing.T) {
+	state := artifactAccessDefaultState()
+	state.ClusterInfras = []v1alpha1.ClusterInfra{{
+		Metadata: v1alpha1.Metadata{Name: "infra"},
+		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
+			Machines: []v1alpha1.ClusterMachineComponent{{
+				Name: "master-0",
+				From: v1alpha1.From{Provider: "libvirt", Profile: "worker"},
+			}},
+		}},
+	}}
+	cluster := containerClusterWithInfra("cluster", "infra")
+	cluster.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
+	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
+
+	Normalize(&state)
+
+	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	if got := access.ServerRef.Name; got != "default" {
+		t.Fatalf("serverRef.name = %q, want default", got)
+	}
+	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "cluster" {
+		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want cluster", got)
+	}
+	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "" {
+		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want empty", got)
+	}
+}
+
+func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing.T) {
+	state := artifactAccessDefaultState()
+	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack", "server-0")}
+	state.ClusterInfras = []v1alpha1.ClusterInfra{{
+		Metadata: v1alpha1.Metadata{Name: "infra"},
+		Spec: v1alpha1.ClusterInfraSpec{
+			ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+				ServerRef: v1alpha1.LocalObjectReference{Name: "site"},
+				RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
+					EndpointRef: v1alpha1.LocalObjectReference{Name: "oob"},
+				},
+			},
+			Components: v1alpha1.ClusterComponents{
+				Machines: []v1alpha1.ClusterMachineComponent{{
+					Name: "master-0",
+					From: v1alpha1.From{Provider: "rack", Name: "server-0"},
+				}},
+			},
+		},
+	}}
+	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithInfra("cluster", "infra")}
+
+	Normalize(&state)
+
+	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	if got := access.ServerRef.Name; got != "site" {
+		t.Fatalf("serverRef.name = %q, want site", got)
+	}
+	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "oob" {
+		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want oob", got)
+	}
+	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
+		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want empty", got)
+	}
+}
+
 func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -91,6 +184,55 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	}
 	if got := env.Spec.Secrets["cluster-admin-ssh-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
 		t.Fatalf("SSHKeyPair.Type = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
+	}
+}
+
+func artifactAccessDefaultState() v1alpha1.State {
+	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				Defaults: v1alpha1.EnvironmentDefaultsSpec{
+					ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+						ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+						RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
+							EndpointRef: v1alpha1.LocalObjectReference{Name: "bmc"},
+						},
+						ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+							EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+						},
+					},
+				},
+			},
+		}},
+	}
+}
+
+func bareMetalProvider(name, machine string) v1alpha1.InfraProvider {
+	return v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.InfraProviderSpec{
+			Machines: []v1alpha1.MachineCapability{{
+				Name:      machine,
+				BareMetal: &v1alpha1.MachineBareMetalCapability{},
+			}},
+		},
+	}
+}
+
+func containerClusterWithInfra(name, infra string) v1alpha1.ContainerCluster {
+	return v1alpha1.ContainerCluster{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.ContainerClusterSpec{
+			Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname: "master-0",
+				MachineRef: v1alpha1.NodeMachineRef{
+					ClusterInfra: infra,
+					Name:         "master-0",
+				},
+			}},
+		},
 	}
 }
 

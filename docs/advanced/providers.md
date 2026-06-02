@@ -209,25 +209,22 @@ spec:
 ```
 
 ```yaml
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterInfra
 spec:
-  artifactAccess:
-    serverRef:
-      name: default
-    redfishVirtualMedia:
-      endpointRef:
-        name: bmc
-    containerClusterInstall:
-      endpointRef:
-        name: cluster
+  defaults:
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
 ```
 
 Endpoint names are endpoint selectors; `hostAddress` values resolve against the
 named addresses on the selected `hostRef`. For `redfishVirtualMedia`, use a
 BMC-routable IP address entry in most environments; many BMCs do not reliably
 resolve DNS aliases, and Bootwright uses the matched address value directly in
-the ISO URL sent to Redfish.
+the ISO URL sent to Redfish. `ClusterInfra.spec.artifactAccess` may override
+the default when one cluster needs a different artifact server or endpoint.
 Bootwright serves HTTPS listeners with a self-signed certificate generated on
 the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
 

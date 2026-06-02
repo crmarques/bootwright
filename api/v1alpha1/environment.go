@@ -35,7 +35,8 @@ type EnvironmentSpec struct {
 }
 
 type EnvironmentDefaultsSpec struct {
-	Install EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
+	Install        EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
+	ArtifactAccess ClusterArtifactAccess          `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 }
 
 type EnvironmentInstallDefaultsSpec struct {

@@ -80,7 +80,21 @@ renders must use the configured release image source rather than assuming the
 same upstream registry.
 
 Disconnected agent installs also need an artifact endpoint binding for cluster
-install boot artifacts. When `ClusterInfra.spec.artifactAccess` sets
+install boot artifacts. A fleet can declare the common binding as an
+environment default:
+
+```yaml
+spec:
+  defaults:
+    artifactAccess:
+      serverRef:
+        name: default
+      containerClusterInstall:
+        endpointRef:
+          name: cluster
+```
+
+When the effective `ClusterInfra.spec.artifactAccess` sets
 `containerClusterInstall.endpointRef.name`, Bootwright renders
 `minimalISO: true` and an endpoint-derived `bootArtifactsBaseURL` into
 `agent-config.yaml`.

@@ -28,9 +28,6 @@ spec:
     redfishVirtualMedia:
       endpointRef:
         name: bmc
-    containerClusterInstall:
-      endpointRef:
-        name: cluster
 
   components:
     machines:
