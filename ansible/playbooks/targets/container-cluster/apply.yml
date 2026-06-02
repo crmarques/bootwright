@@ -1,7 +1,0 @@
----
-- import_playbook: ../../checks/become.yml
-  vars:
-    bootwright_become_check_hosts: bootwright_ocp_hosts:bootwright_boot_hosts
-
-- import_playbook: ../../checks/preflight.yml
-- import_playbook: ../../layers/openshift/install-agent.yml

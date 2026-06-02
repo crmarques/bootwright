@@ -12,7 +12,7 @@ import (
 )
 
 // componentsVars walks every component slot on a cluster and emits the
-// per-component vars consumed by ansible/playbooks/layers/.
+// per-component vars consumed by the bootwright.core task playbooks.
 func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
 	var out []any
 	clusterName := ocp.Metadata.Name

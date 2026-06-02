@@ -1,0 +1,62 @@
+---
+- name: Apply provider setup and services
+  hosts: bootwright_provider_hosts
+  strategy: free
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.host_proxy
+        tasks_from: facts
+
+  vars:
+    bootwright_host_provider_services: >-
+      {{
+        bootwright_provider_services | default([])
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+    bootwright_host_setup_roles: >-
+      {{
+        bootwright_provider_host_setups | default([])
+        | selectattr('hostRef', 'defined')
+        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+
+  tasks:
+    - name: Skip when host serves no provider work
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_host_provider_services | length == 0
+        - bootwright_host_setup_roles | length == 0
+
+    - name: Apply base host packages
+      ansible.builtin.import_role:
+        name: bootwright.core.host_base
+
+    - name: Apply substrate host setup roles
+      ansible.builtin.include_role:
+        name: "{{ bootwright_host_setup.applyRole }}"
+      loop: "{{ bootwright_host_setup_roles }}"
+      loop_control:
+        loop_var: bootwright_host_setup
+        label: "{{ bootwright_host_setup.hostRef }}/{{ bootwright_host_setup.applyRole }}"
+
+    - name: Persist host proxy settings
+      ansible.builtin.import_role:
+        name: bootwright.core.host_proxy
+
+    - name: Apply provider service roles
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.applyRole }}"
+      loop: "{{ bootwright_host_provider_services }}"
+      loop_control:
+        loop_var: bootwright_component
+        label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.applyRole }}"

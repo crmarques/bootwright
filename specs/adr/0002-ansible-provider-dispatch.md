@@ -1,4 +1,4 @@
-# ADR 0002: Layered Ansible Bundle and Provider Dispatch
+# ADR 0002: Ansible Collection Layout and Provider Dispatch
 
 ## Status
 
@@ -15,54 +15,63 @@ desired-state API around per-entry provisioner arms
 The render layer compiles those discriminators into per-component
 Ansible vars, and the orchestration layer acts on them.
 
-The initial Ansible layout grew from the libvirt + emulated-BMC lab.
-A flat `roles/` directory made new-reader navigation harder because
-role names had to carry both layer and concern, while playbooks also
-held repeated context selection and some resource teardown logic.
+The initial Ansible layout grew from the libvirt + emulated-BMC lab. The
+top-level `providers`, `infra_components`, `cluster_infra`, `openshift`, and
+`shared` role buckets made new-reader navigation harder because the same
+directory level mixed domain layers, implementation families, and generic
+helpers. Preparing the bundle as an Ansible collection is also a better fit
+for fully qualified playbook and role names.
 
 ## Decision
 
-The Ansible bundle is organized by Bootwright layers:
+The embedded Ansible bundle owns one local collection, `bootwright.core`:
 
 ```text
-ansible/playbooks/
-  targets/       public CLI target wrappers
-  layers/        executable layer workflows
-  checks/        read-only Ansible checks
-ansible/roles/
-  bastion/       bastion-local setup
-  shared/        context and host helper roles
-  providers/     provider setup and BMC services
-  infra_components/
-                 host-bound InfraComponent services
-  cluster_infra/ per-cluster substrate and network state
-  openshift/     openshift-install agent workflows
+ansible/collections/ansible_collections/bootwright/core/
+  playbooks/
+    workflow_*.yml        public CLI target wrappers
+    task_*.yml            focused task playbooks
+    check_*.yml           read-only checks
+    tasks/                reusable playbook task files
+  roles/
+    controller_*          controller-local setup
+    host_*                host preparation and proxy helpers
+    helper_*              context, credential, and cleanup helpers
+    provider_service_*    provider-host services, including BMC services
+    infra_component_*     host-bound InfraComponent services
+    machine_substrate_*   per-cluster substrate state
+    cluster_network_*     per-cluster networking state
+    container_cluster_*   agent install, boot, media, wait, and destroy
+    storage_cluster_*     external storage convergence
+    check_* / diagnostic_* validation and diagnostics
+  plugins/filter/         collection-scoped filters
+  docs/                   variable contracts
 ```
 
-Target playbooks are thin wrappers. `targets/infra/apply.yml` imports
-`layers/providers/apply.yml`, `layers/infra_components/apply.yml`, and then
-`layers/cluster_infra/apply.yml`; destroy runs cluster infrastructure before
-InfraComponent services and provider services.
-`targets/clusters/apply.yml` imports preflight, cluster infrastructure, and
-OpenShift install layers. `targets/container-cluster/apply.yml` remains the
-thin OpenShift install wrapper used by the focused container-cluster target.
+Workflow playbooks are thin wrappers. `workflow_infra_apply.yml` imports the
+external reachability check, provider-service task playbook,
+InfraComponent-service task playbook, and machine-infra task playbook.
+Destroy runs machine infrastructure before InfraComponent services and
+provider services. `workflow_clusters_apply.yml` imports preflight, machine
+infrastructure, and container-cluster install. `workflow_container_cluster_apply.yml`
+remains the focused container-cluster wrapper.
 
 Role dispatch is computed by the Go driver registry and projected as exact
 role names in the rendered vars. Diagnostic labels stay on each machine, but
 playbooks do not construct role names from those labels:
 
 - `component.substrateApplyRole` and `component.substrateDestroyRole`
-  select per-machine substrate roles from `roles/cluster_infra/`.
+  select `bootwright.core.machine_substrate_*` roles.
 - Provider/BMC services consume `bootwright_provider_services[]`, where each
   service carries `applyRole` and `destroyRole`.
 - Managed InfraComponent services consume
   `bootwright_infra_component_services[]`, where each service carries
   `applyRole` and `destroyRole`.
 - `component.bootApplyRole` selects the boot driver invoked during OpenShift
-  install from `roles/openshift/`.
+  install from `bootwright.core.container_cluster_boot_*`.
 - `component.mediaPrepareRole`, when set, selects an optional virtual-media
-  backend hook. `boot_redfish` remains the Redfish protocol role for both
-  real BMCs and sushy-emulator.
+  backend hook. `bootwright.core.container_cluster_boot_redfish` remains the
+  Redfish protocol role for both real BMCs and sushy-emulator.
 - Generated artifact publication resolves to the artifact server selected by
   `ClusterInfra.spec.artifactAccess.serverRef`. For managed servers, the
   selected `InfraComponent` `hostRef` gates the rendered artifact service and
@@ -84,39 +93,36 @@ no-op'd the OCP boot step.
 The kind-to-role mapping lives in one Go registry (`internal/infra/support`), with
 helpers used by the renderer, CLI support checks, scaffold messaging, and repo
 guardrail tests. Every kind resolves to a real role where a role is meaningful;
-both `bmc_none` and `boot_none` exist so no-op dispatch remains explicit.
+both `bootwright.core.provider_service_bmc_none` and
+`bootwright.core.container_cluster_boot_none` exist so no-op dispatch remains
+explicit.
 
 The projected variable blocks described in
-[`ansible/VARS_CONTRACT.md`](../../ansible/VARS_CONTRACT.md) carry the
+[`vars-contract.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md) carry the
 substrate-specific inputs each role consumes. Roles do NOT branch on
 `substrateRole` / `bmcRole` / `bootRole` to vary behavior within themselves —
-that branching belongs in the registry and renderer. `boot_redfish` reads
-`boot.redfish` and `boot.agentIso` whether the BMC is sushy-emulator or a
-vendor BMC; `media_libvirt` consumes the libvirt-specific virtual-media
-cleanup block; `bmc_emulated` reads provider BMC service `bmcEmulated.*` for
-libvirt URI / port / vmedia / bind / auth instead of re-deriving defaults;
-`network_vips` reads each frontend's `attachment` block instead of re-querying
-the cluster's network substrate attachment. Adding a substrate-dependent fact
-is a renderer change, not a role conditional.
+that branching belongs in the registry and renderer. The Redfish boot role
+reads `boot.redfish` and `boot.agentIso` whether the BMC is sushy-emulator or
+a vendor BMC; the libvirt media role consumes the libvirt-specific
+virtual-media cleanup block; the emulated BMC service role reads provider BMC
+service `bmcEmulated.*` for libvirt URI, ports, bind address, and auth instead
+of re-deriving defaults. Adding a substrate-dependent fact is a renderer
+change, not a role conditional.
 
-Layer playbooks own the host-local selection of
+Task playbooks own the host-local selection of
 `bootwright_current_provider`, `bootwright_current_cluster`, and related
 runtime views. A future context-role extraction is allowed only if it preserves
 those facts and does not move provider or install decisions out of the renderer.
 
-Provider roles own provider setup and BMC apply/destroy logic. InfraComponent
-roles own host-bound shared services. Cluster infrastructure roles own
-per-cluster substrate and network state. OpenShift roles own installer
-execution and BMC boot handoff only.
-
 ## Consequences
 
 - Public CLI commands stay stable: `bootwright check/apply bastion|infra|cluster|all`.
-- Adding or removing apply support for a provider is intentionally close to a
-  role-directory operation: add or remove the relevant Ansible role directory
-  and one registry entry, then update tests. Public schema support still
-  requires the typed API arm, validation, rendering, docs, and specs.
-- The embedded bundle passes multiple role search paths to Ansible instead of
-  one flat `roles/` directory.
-- Playbooks become easier to scan because workflows are expressed by layer
-  imports and role calls, while resource details live in owning roles.
+- Adding or removing apply support for a provider remains close to a role
+  operation: add or remove the relevant collection role and one registry entry,
+  then update tests. Public schema support still requires the typed API arm,
+  validation, rendering, docs, and specs.
+- The embedded bundle passes a collection path to Ansible instead of multiple
+  role search paths and an out-of-band filter plugin path.
+- Playbooks become easier to scan because workflows are expressed by collection
+  workflow/task imports and role calls, while resource details live in owning
+  roles.

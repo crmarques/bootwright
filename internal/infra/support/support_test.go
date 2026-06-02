@@ -54,31 +54,31 @@ func TestLookupDispatchClassifiesApplySupport(t *testing.T) {
 }
 
 func TestLookupProvisionerUsesRegistry(t *testing.T) {
-	if got := LookupProfileProvisioner("libvirt"); got.Roles.SubstrateApplyRole != "substrate_libvirt" {
+	if got := LookupProfileProvisioner("libvirt"); got.Roles.SubstrateApplyRole != "bootwright.core.machine_substrate_libvirt" {
 		t.Fatalf("libvirt substrate role = %q", got.Roles.SubstrateApplyRole)
 	}
-	if got := LookupMachineProvisioner("baremetal"); got.Roles.BootApplyRole != "boot_redfish" {
+	if got := LookupMachineProvisioner("baremetal"); got.Roles.BootApplyRole != "bootwright.core.container_cluster_boot_redfish" {
 		t.Fatalf("baremetal boot role = %q", got.Roles.BootApplyRole)
 	}
 }
 
 func TestLookupServiceUsesRegistry(t *testing.T) {
 	got := LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
-	if got.ApplyRole != "dns_dnsmasq" || got.DestroyRole != "dns_dnsmasq" {
+	if got.ApplyRole != "bootwright.core.infra_component_name_resolution_dnsmasq" || got.DestroyRole != "bootwright.core.infra_component_name_resolution_dnsmasq" {
 		t.Fatalf("dnsmasq roles = %#v", got)
 	}
 	if got.DefaultPort != v1alpha1.DefaultDNSPort {
 		t.Fatalf("dnsmasq default port = %d, want %d", got.DefaultPort, v1alpha1.DefaultDNSPort)
 	}
 	ntp := LookupService(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)
-	if ntp.ApplyRole != "ntp_chrony" || ntp.DestroyRole != "ntp_chrony" {
+	if ntp.ApplyRole != "bootwright.core.infra_component_ntp_chrony" || ntp.DestroyRole != "bootwright.core.infra_component_ntp_chrony" {
 		t.Fatalf("chrony roles = %#v", ntp)
 	}
 	if ntp.DefaultPort != v1alpha1.DefaultNTPPort {
 		t.Fatalf("chrony default port = %d, want %d", ntp.DefaultPort, v1alpha1.DefaultNTPPort)
 	}
 	bmc := LookupService(v1alpha1.ProviderServiceKindBMC, "emulated")
-	if bmc.ApplyRole != "bmc_emulated" || bmc.DestroyRole != "bmc_emulated" {
+	if bmc.ApplyRole != "bootwright.core.provider_service_bmc_emulated" || bmc.DestroyRole != "bootwright.core.provider_service_bmc_emulated" {
 		t.Fatalf("bmc roles = %#v", bmc)
 	}
 }

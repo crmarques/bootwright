@@ -283,7 +283,7 @@ echo ansible-stderr-line >&2
 			Label:  "provider services",
 			Status: workflow.TaskStatusPending,
 		},
-		Playbook: "playbooks/layers/providers/apply.yml",
+		Playbook: "bootwright.core.task_provider_services_apply",
 		State:    state,
 	}
 	var stdout bytes.Buffer
@@ -358,7 +358,7 @@ exit 2
 			Label:  "provider services",
 			Status: workflow.TaskStatusPending,
 		},
-		Playbook: "playbooks/layers/providers/apply.yml",
+		Playbook: "bootwright.core.task_provider_services_apply",
 		State:    state,
 	}
 	var stdout bytes.Buffer
@@ -434,7 +434,7 @@ echo "ansible stderr ${cluster}" >&2
 				ClusterKind: workflow.ApplyClusterKindContainer,
 				Status:      workflow.TaskStatusPending,
 			},
-			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
+			Playbook:      "bootwright.core.task_container_cluster_create_agent_iso",
 			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-a"},
 			State:         state,
 		},
@@ -447,7 +447,7 @@ echo "ansible stderr ${cluster}" >&2
 				ClusterKind: workflow.ApplyClusterKindContainer,
 				Status:      workflow.TaskStatusPending,
 			},
-			Playbook:      "playbooks/layers/openshift/create-agent-iso.yml",
+			Playbook:      "bootwright.core.task_container_cluster_create_agent_iso",
 			ExtraVarPairs: []string{"bootwright_task_cluster_name=cluster-b"},
 			State:         state,
 		},
@@ -538,7 +538,7 @@ rmdir "$lock_dir"
 				ResourceKeys: []string{"host:provider-01:mutating"},
 				Status:       workflow.TaskStatusPending,
 			},
-			Playbook:      "playbooks/layers/providers/apply.yml",
+			Playbook:      "bootwright.core.task_provider_services_apply",
 			ExtraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
 			State:         state,
 		},
@@ -550,7 +550,7 @@ rmdir "$lock_dir"
 				ResourceKeys: []string{"host:provider-01:mutating"},
 				Status:       workflow.TaskStatusPending,
 			},
-			Playbook:      "playbooks/layers/infra_components/apply.yml",
+			Playbook:      "bootwright.core.task_infra_component_services_apply",
 			ExtraVarPairs: []string{"bootwright_test_lock_dir=" + lockDir},
 			State:         state,
 		},

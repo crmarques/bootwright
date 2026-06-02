@@ -1,0 +1,34 @@
+---
+- name: Apply managed Ceph storage
+  hosts: bootwright_storage_hosts
+  gather_facts: false
+  become: true
+  vars:
+    bootwright_selected_storage_cluster: >-
+      {{
+        bootwright_storage_clusters
+        | default([])
+        | selectattr('name', 'equalto', bootwright_task_storage_cluster_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  tasks:
+    - name: End hosts outside selected storage cluster
+      ansible.builtin.meta: end_host
+      when: bootwright_storage_cluster_name | default('') != bootwright_task_storage_cluster_name | default('')
+
+    - name: Validate selected storage cluster context
+      ansible.builtin.assert:
+        that:
+          - bootwright_task_storage_cluster_name | default('') | length > 0
+          - bootwright_selected_storage_cluster.name | default('') == bootwright_task_storage_cluster_name
+          - bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname
+          - bootwright_ansible_artifacts_dir | default('') | length > 0
+        fail_msg: >-
+          Storage task did not receive a rendered context for
+          {{ bootwright_task_storage_cluster_name | default('<unset>') }}.
+
+    - name: Apply Ceph storage cluster
+      ansible.builtin.include_role:
+        name: bootwright.core.storage_cluster_cephadm

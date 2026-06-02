@@ -47,25 +47,33 @@ GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
 GO_TEST_PACKAGES ?= ./...
 GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race
-ANSIBLE_ROLE_PATHS = ansible/roles/bastion:ansible/roles/shared:ansible/roles/providers:ansible/roles/infra_components:ansible/roles/cluster_infra:ansible/roles/openshift:ansible/roles/storage
-ANSIBLE_SYNTAX_FILTER_PLUGINS = $(STATE_DIR)/ansible-syntax/filter_plugins
-ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_ROLES_PATH=$(ANSIBLE_ROLE_PATHS) ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) ANSIBLE_FILTER_PLUGINS=$(ANSIBLE_SYNTAX_FILTER_PLUGINS)
+BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
+BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
+ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
-	ansible/playbooks/checks/become.yml \
-	ansible/playbooks/checks/preflight.yml \
-	ansible/playbooks/targets/all/apply.yml \
-	ansible/playbooks/targets/infra/apply.yml \
-	ansible/playbooks/targets/infra/destroy-artifact-server.yml \
-	ansible/playbooks/targets/infra/destroy.yml \
-	ansible/playbooks/layers/infra_components/apply.yml \
-	ansible/playbooks/layers/infra_components/destroy.yml \
-	ansible/playbooks/layers/openshift/create-agent-iso.yml \
-	ansible/playbooks/layers/storage/apply.yml \
-	ansible/playbooks/layers/openshift/boot-agent-machine.yml \
-	ansible/playbooks/layers/openshift/wait-agent-install.yml \
-	ansible/playbooks/targets/clusters/apply.yml \
-	ansible/playbooks/targets/clusters/destroy.yml \
-	ansible/playbooks/targets/bastion/apply-clis.yml
+	bootwright.core.check_become \
+	bootwright.core.check_preflight \
+	bootwright.core.check_external_reachability \
+	bootwright.core.workflow_all_apply \
+	bootwright.core.workflow_infra_apply \
+	bootwright.core.workflow_infra_destroy_artifact_server \
+	bootwright.core.workflow_infra_destroy \
+	bootwright.core.workflow_clusters_apply \
+	bootwright.core.workflow_clusters_destroy \
+	bootwright.core.workflow_container_cluster_apply \
+	bootwright.core.workflow_bastion_apply_tools \
+	bootwright.core.task_provider_services_apply \
+	bootwright.core.task_provider_services_destroy \
+	bootwright.core.task_infra_component_services_apply \
+	bootwright.core.task_infra_component_services_destroy \
+	bootwright.core.task_machine_infra_apply \
+	bootwright.core.task_machine_infra_destroy \
+	bootwright.core.task_container_cluster_create_agent_iso \
+	bootwright.core.task_container_cluster_boot_agent_machine \
+	bootwright.core.task_container_cluster_wait_agent_install \
+	bootwright.core.task_container_cluster_agent_install \
+	bootwright.core.task_container_cluster_agent_destroy \
+	bootwright.core.task_storage_cluster_apply
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 
@@ -200,18 +208,13 @@ staticcheck:
 
 # Filter-plugin unit tests use only stdlib unittest so the check works
 # on any Python 3 install without a venv. If pytest is installed
-# locally, `python3 -m pytest ansible/filter_plugins/` discovers the
+# locally, `python3 -m pytest $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter/` discovers the
 # same TestCase classes.
 python-test:
-	@cd ansible/filter_plugins && python3 -m unittest discover -v
+	@cd $(BOOTWRIGHT_COLLECTION_ROOT)/plugins/filter && python3 -m unittest discover -v
 	@$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 
 ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
-	@test -n "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" || { printf '%s\n' 'ANSIBLE_SYNTAX_FILTER_PLUGINS must not be empty'; exit 1; }
-	@case "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)" in */ansible-syntax/filter_plugins) ;; *) printf 'refusing to refresh unsafe ANSIBLE_SYNTAX_FILTER_PLUGINS: %s\n' "$(ANSIBLE_SYNTAX_FILTER_PLUGINS)"; exit 1;; esac
-	@rm -rf $(ANSIBLE_SYNTAX_FILTER_PLUGINS)
-	@mkdir -p $(ANSIBLE_SYNTAX_FILTER_PLUGINS)
-	@find ansible/filter_plugins -maxdepth 1 -type f -name '*.py' ! -name 'test_*.py' -exec install -m 0644 {} $(ANSIBLE_SYNTAX_FILTER_PLUGINS)/ \;
 	@for playbook in $(ANSIBLE_SYNTAX_PLAYBOOKS); do \
 		$(ANSIBLE_SYNTAX_ENV) $(ANSIBLE_PLAYBOOK) --syntax-check -i localhost, "$$playbook"; \
 	done

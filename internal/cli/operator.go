@@ -223,9 +223,7 @@ const controllerCLIInventory = "_setup-controller.yaml"
 func controllerCLIAnsibleEnv(bundleDir string) map[string]string {
 	env := map[string]string{
 		"ANSIBLE_CONFIG":           filepath.Join(bundleDir, bundle.AnsibleCfgRelPath),
-		"ANSIBLE_ROLES_PATH":       bundle.RolesPath(bundleDir),
 		"ANSIBLE_COLLECTIONS_PATH": filepath.Join(bundleDir, bundle.CollectionsRelPath),
-		"ANSIBLE_FILTER_PLUGINS":   filepath.Join(bundleDir, bundle.FilterPluginsRelPath),
 	}
 	for k, v := range ansible.SystemTempEnv() {
 		env[k] = v

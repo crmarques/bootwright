@@ -37,7 +37,7 @@ func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 	return []string{
 		s.Executable,
 		"-i", filepath.Join(s.BundleDir, localInventoryName),
-		filepath.Join(s.BundleDir, "playbooks", "targets", "bastion", "apply-clis.yml"),
+		"bootwright.core.workflow_bastion_apply_tools",
 		"-e", "bootwright_openshift_release_version=" + s.OCPReleaseVersion,
 		"-e", "bootwright_clis_install_dir=" + s.InstallDir,
 	}

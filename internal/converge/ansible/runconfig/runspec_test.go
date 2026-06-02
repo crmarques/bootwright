@@ -19,7 +19,7 @@ func TestNewRunSpecAddsArtifactsDirExtraVar(t *testing.T) {
 		ProviderStateDir:   filepath.Join(root, "provider-state"),
 		InventoryPath:      filepath.Join(root, "inventory.yaml"),
 		VarsPath:           filepath.Join(root, "vars.yaml"),
-		Playbook:           "playbooks/layers/storage/apply.yml",
+		Playbook:           "bootwright.core.task_storage_cluster_apply",
 		ArtifactsDir:       artifactsDir,
 	})
 	if err != nil {

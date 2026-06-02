@@ -22,33 +22,14 @@ var bundleArchiveFS embed.FS
 const bundleArchiveRelPath = "ansible_bundle.zip"
 
 const AnsibleCfgRelPath = "ansible.cfg"
+const CollectionsRelPath = "collections"
+
+const BootwrightCollectionRelPath = "collections/ansible_collections/bootwright/core"
 
 const bundleDigestRelPath = ".bootwright-bundle.sha256"
 const bundleVersionRelPath = ".bootwright-bundle.version"
 
 var errEmptyAnsibleBundle = errors.New("embedded ansible bundle is empty")
-
-var RoleRelPaths = []string{
-	filepath.Join("roles", "bastion"),
-	filepath.Join("roles", "shared"),
-	filepath.Join("roles", "providers"),
-	filepath.Join("roles", "infra_components"),
-	filepath.Join("roles", "cluster_infra"),
-	filepath.Join("roles", "openshift"),
-	filepath.Join("roles", "storage"),
-}
-
-func RolesPath(bundleDir string) string {
-	paths := make([]string, 0, len(RoleRelPaths))
-	for _, rel := range RoleRelPaths {
-		paths = append(paths, filepath.Join(bundleDir, rel))
-	}
-	return strings.Join(paths, string(os.PathListSeparator))
-}
-
-const CollectionsRelPath = "collections"
-
-const FilterPluginsRelPath = "filter_plugins"
 
 type AnsibleBundleResult struct {
 	Dir    string
@@ -111,6 +92,9 @@ func openAnsibleBundleArchive() (*zip.Reader, error) {
 	}
 	if findArchiveFile(archive, AnsibleCfgRelPath) == nil {
 		return nil, fmt.Errorf("%w (rebuild bootwright via 'make build'): missing %s", errEmptyAnsibleBundle, AnsibleCfgRelPath)
+	}
+	if findArchiveFile(archive, path.Join(BootwrightCollectionRelPath, "galaxy.yml")) == nil {
+		return nil, fmt.Errorf("%w (rebuild bootwright via 'make build'): missing %s", errEmptyAnsibleBundle, path.Join(BootwrightCollectionRelPath, "galaxy.yml"))
 	}
 	return archive, nil
 }
@@ -243,8 +227,9 @@ func existingBundleMatches(dest string, digest string, bundleVersion string) boo
 	}
 	for _, rel := range []string{
 		AnsibleCfgRelPath,
-		filepath.Join("playbooks", "checks", "preflight.yml"),
-		filepath.Join("playbooks", "targets", "infra", "apply.yml"),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "galaxy.yml")),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "check_preflight.yml")),
+		filepath.FromSlash(path.Join(BootwrightCollectionRelPath, "playbooks", "workflow_infra_apply.yml")),
 	} {
 		info, err := os.Stat(filepath.Join(dest, rel))
 		if err != nil || info.IsDir() {

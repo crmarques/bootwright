@@ -8,40 +8,40 @@ import (
 
 func TestProviderPackageTasksUseOSVars(t *testing.T) {
 	cases := []struct {
-		base    string
 		role    string
+		path    string
 		tasks   string
 		load    string
 		install string
 		varName string
 	}{
 		{
-			base:    "providers",
-			role:    "bmc_emulated",
-			tasks:   "packages.yml",
+			role:    "provider_service_bmc_emulated",
+			path:    "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated",
+			tasks:   "apply/packages.yml",
 			load:    "Load BMC package list",
 			install: "Install BMC packages",
 			varName: "{{ bootwright_bmc_packages }}",
 		},
 		{
-			base:    "infra_components",
-			role:    "proxy_squid",
+			role:    "infra_component_proxy_squid",
+			path:    "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_proxy_squid",
 			tasks:   "main.yml",
 			load:    "Load Squid package list",
 			install: "Install Squid packages",
 			varName: "{{ bootwright_squid_packages }}",
 		},
 		{
-			base:    "infra_components",
-			role:    "mirror_registry",
+			role:    "infra_component_registry_mirror",
+			path:    "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_registry_mirror",
 			tasks:   "main.yml",
 			load:    "Load mirror registry package list",
 			install: "Install mirror registry packages",
 			varName: "{{ bootwright_mr_packages }}",
 		},
 		{
-			base:    "infra_components",
-			role:    "ntp_chrony",
+			role:    "infra_component_ntp_chrony",
+			path:    "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_ntp_chrony",
 			tasks:   "main.yml",
 			load:    "Load chrony package list",
 			install: "Install chrony packages",
@@ -51,7 +51,7 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.role, func(t *testing.T) {
-			tasks := readAnsibleTasks(t, "ansible/roles/"+tc.base+"/"+tc.role+"/tasks/"+tc.tasks)
+			tasks := readAnsibleTasks(t, tc.path+"/tasks/"+tc.tasks)
 			loadIdx := findAnsibleTask(t, tasks, tc.load)
 			installIdx := findAnsibleTask(t, tasks, tc.install)
 			if loadIdx >= installIdx {
@@ -70,29 +70,29 @@ func TestProviderPackageTasksUseOSVars(t *testing.T) {
 
 func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 	cases := []struct {
-		base       string
 		role       string
+		path       string
 		varName    string
 		debianWant []string
 		redHatWant []string
 	}{
 		{
-			base:       "providers",
-			role:       "bmc_emulated",
+			role:       "provider_service_bmc_emulated",
+			path:       "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated",
 			varName:    "bootwright_bmc_packages",
 			debianWant: []string{"apache2-utils", "python3-venv"},
 			redHatWant: []string{"httpd-tools"},
 		},
 		{
-			base:       "infra_components",
-			role:       "proxy_squid",
+			role:       "infra_component_proxy_squid",
+			path:       "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_proxy_squid",
 			varName:    "bootwright_squid_packages",
 			debianWant: []string{"apache2-utils"},
 			redHatWant: []string{"httpd-tools"},
 		},
 		{
-			base:       "infra_components",
-			role:       "mirror_registry",
+			role:       "infra_component_registry_mirror",
+			path:       "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_registry_mirror",
 			varName:    "bootwright_mr_packages",
 			debianWant: []string{"apache2-utils"},
 			redHatWant: []string{"httpd-tools"},
@@ -101,8 +101,8 @@ func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.role, func(t *testing.T) {
-			debian := readAnsibleStringListVar(t, "ansible/roles/"+tc.base+"/"+tc.role+"/vars/Debian.yml", tc.varName)
-			redHat := readAnsibleStringListVar(t, "ansible/roles/"+tc.base+"/"+tc.role+"/vars/RedHat.yml", tc.varName)
+			debian := readAnsibleStringListVar(t, tc.path+"/vars/os/Debian.yml", tc.varName)
+			redHat := readAnsibleStringListVar(t, tc.path+"/vars/os/RedHat.yml", tc.varName)
 
 			assertContainsAll(t, debian, tc.debianWant)
 			assertContainsNone(t, debian, []string{"httpd-tools"})

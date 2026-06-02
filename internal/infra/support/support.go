@@ -46,9 +46,9 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "none", BMCRole: "none", BootRole: "none"}: {
 		Dispatch: Dispatch{SubstrateRole: "none", BMCRole: "none", BootRole: "none"},
 		Roles: RoleContract{
-			BMCApplyRole:   "bmc_none",
-			BMCDestroyRole: "bmc_none",
-			BootApplyRole:  "boot_none",
+			BMCApplyRole:   "bootwright.core.provider_service_bmc_none",
+			BMCDestroyRole: "bootwright.core.provider_service_bmc_none",
+			BootApplyRole:  "bootwright.core.container_cluster_boot_none",
 		},
 		Status:  StatusUnknown,
 		Summary: "dispatch triplet is not in Bootwright's apply support registry",
@@ -56,13 +56,13 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"}: {
 		Dispatch: Dispatch{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"},
 		Roles: RoleContract{
-			HostSetupRoles:       []string{"host_libvirt"},
-			SubstrateApplyRole:   "substrate_libvirt",
-			SubstrateDestroyRole: "substrate_libvirt",
-			BMCApplyRole:         "bmc_emulated",
-			BMCDestroyRole:       "bmc_emulated",
-			BootApplyRole:        "boot_redfish",
-			MediaPrepareRole:     "media_libvirt",
+			HostSetupRoles:       []string{"bootwright.core.host_libvirt"},
+			SubstrateApplyRole:   "bootwright.core.machine_substrate_libvirt",
+			SubstrateDestroyRole: "bootwright.core.machine_substrate_libvirt",
+			BMCApplyRole:         "bootwright.core.provider_service_bmc_emulated",
+			BMCDestroyRole:       "bootwright.core.provider_service_bmc_emulated",
+			BootApplyRole:        "bootwright.core.container_cluster_boot_redfish",
+			MediaPrepareRole:     "bootwright.core.container_cluster_media_libvirt",
 			RequiresKVM:          true,
 		},
 		Status:  StatusSupported,
@@ -71,11 +71,11 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "baremetal", BMCRole: "redfish", BootRole: "redfish"}: {
 		Dispatch: Dispatch{SubstrateRole: "baremetal", BMCRole: "redfish", BootRole: "redfish"},
 		Roles: RoleContract{
-			SubstrateApplyRole:   "substrate_baremetal",
-			SubstrateDestroyRole: "substrate_baremetal",
-			BMCApplyRole:         "bmc_redfish",
-			BMCDestroyRole:       "bmc_redfish",
-			BootApplyRole:        "boot_redfish",
+			SubstrateApplyRole:   "bootwright.core.machine_substrate_baremetal",
+			SubstrateDestroyRole: "bootwright.core.machine_substrate_baremetal",
+			BMCApplyRole:         "bootwright.core.provider_service_bmc_redfish",
+			BMCDestroyRole:       "bootwright.core.provider_service_bmc_redfish",
+			BootApplyRole:        "bootwright.core.container_cluster_boot_redfish",
 		},
 		Status:  StatusSupported,
 		Summary: "bare metal with Redfish virtual media",
@@ -83,11 +83,11 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "vsphere", BMCRole: "none", BootRole: "vsphere"}: {
 		Dispatch: Dispatch{SubstrateRole: "vsphere", BMCRole: "none", BootRole: "vsphere"},
 		Roles: RoleContract{
-			SubstrateApplyRole:   "substrate_vsphere",
-			SubstrateDestroyRole: "substrate_vsphere",
-			BMCApplyRole:         "bmc_none",
-			BMCDestroyRole:       "bmc_none",
-			BootApplyRole:        "boot_vsphere",
+			SubstrateApplyRole:   "bootwright.core.machine_substrate_vsphere",
+			SubstrateDestroyRole: "bootwright.core.machine_substrate_vsphere",
+			BMCApplyRole:         "bootwright.core.provider_service_bmc_none",
+			BMCDestroyRole:       "bootwright.core.provider_service_bmc_none",
+			BootApplyRole:        "bootwright.core.container_cluster_boot_vsphere",
 		},
 		Status:  StatusScaffold,
 		Summary: "vSphere schema and scaffold are present, but apply roles are not converged",
@@ -95,11 +95,11 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"}: {
 		Dispatch: Dispatch{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"},
 		Roles: RoleContract{
-			SubstrateApplyRole:   "substrate_kubevirt",
-			SubstrateDestroyRole: "substrate_kubevirt",
-			BMCApplyRole:         "bmc_none",
-			BMCDestroyRole:       "bmc_none",
-			BootApplyRole:        "boot_kubevirt",
+			SubstrateApplyRole:   "bootwright.core.machine_substrate_kubevirt",
+			SubstrateDestroyRole: "bootwright.core.machine_substrate_kubevirt",
+			BMCApplyRole:         "bootwright.core.provider_service_bmc_none",
+			BMCDestroyRole:       "bootwright.core.provider_service_bmc_none",
+			BootApplyRole:        "bootwright.core.container_cluster_boot_kubevirt",
 		},
 		Status:  StatusSupported,
 		Summary: "OpenShift Virtualization with KubeVirt VMs",
@@ -136,8 +136,8 @@ type ServiceImage struct {
 var serviceSupport = map[ServiceKey]ServiceSupport{
 	{Kind: v1alpha1.ProviderServiceKindBMC, Realisation: "emulated"}: {
 		Key:              ServiceKey{Kind: v1alpha1.ProviderServiceKindBMC, Realisation: "emulated"},
-		ApplyRole:        "bmc_emulated",
-		DestroyRole:      "bmc_emulated",
+		ApplyRole:        "bootwright.core.provider_service_bmc_emulated",
+		DestroyRole:      "bootwright.core.provider_service_bmc_emulated",
 		HostCapabilities: []string{v1alpha1.HostCapabilityLibvirt},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "configKey"},
 		Status:           StatusSupported,
@@ -145,8 +145,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy},
-		ApplyRole:        "load_balancer_haproxy",
-		DestroyRole:      "load_balancer_haproxy",
+		ApplyRole:        "bootwright.core.infra_component_load_balancer_haproxy",
+		DestroyRole:      "bootwright.core.infra_component_load_balancer_haproxy",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "capabilityName"},
 		Image: ServiceImage{
@@ -162,8 +162,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP},
-		ApplyRole:        "artifacts_http",
-		DestroyRole:      "artifacts_http",
+		ApplyRole:        "bootwright.core.infra_component_artifact_server_http",
+		DestroyRole:      "bootwright.core.infra_component_artifact_server_http",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "listeners", "endpoints"},
 		Image: ServiceImage{
@@ -179,8 +179,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid},
-		ApplyRole:        "proxy_squid",
-		DestroyRole:      "proxy_squid",
+		ApplyRole:        "bootwright.core.infra_component_proxy_squid",
+		DestroyRole:      "bootwright.core.infra_component_proxy_squid",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultSquidPort,
@@ -197,8 +197,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq}: {
 		Key:               ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq},
-		ApplyRole:         "dns_dnsmasq",
-		DestroyRole:       "dns_dnsmasq",
+		ApplyRole:         "bootwright.core.infra_component_name_resolution_dnsmasq",
+		DestroyRole:       "bootwright.core.infra_component_name_resolution_dnsmasq",
 		HostCapabilities:  []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:    []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		MergeStringFields: []string{"additionalIngressHosts"},
@@ -216,8 +216,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotNTP, Realisation: v1alpha1.InfraComponentTypeChrony}: {
 		Key:            ServiceKey{Kind: v1alpha1.ComponentSlotNTP, Realisation: v1alpha1.InfraComponentTypeChrony},
-		ApplyRole:      "ntp_chrony",
-		DestroyRole:    "ntp_chrony",
+		ApplyRole:      "bootwright.core.infra_component_ntp_chrony",
+		DestroyRole:    "bootwright.core.infra_component_ntp_chrony",
 		ConflictFields: []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:    v1alpha1.DefaultNTPPort,
 		Status:         StatusSupported,
@@ -225,8 +225,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 	},
 	{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry}: {
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry},
-		ApplyRole:        "mirror_registry",
-		DestroyRole:      "mirror_registry",
+		ApplyRole:        "bootwright.core.infra_component_registry_mirror",
+		DestroyRole:      "bootwright.core.infra_component_registry_mirror",
 		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
 		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultMirrorRegistryPort,

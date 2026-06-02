@@ -14,10 +14,12 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+const bootwrightCollectionRoleRoot = "ansible/collections/ansible_collections/bootwright/core/roles"
+
 func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/media_libvirt/tasks/eject.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/eject.yml")
 	task := tasks[findAnsibleTask(t, tasks, "Eject source-backed virtual media from {{ bootwright_libvirt_media_scope }} domain")]
-	script := readRepoFile(t, "ansible/roles/openshift/media_libvirt/files/eject_libvirt_media.sh")
+	script := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/files/eject_libvirt_media.sh")
 
 	if strings.Contains(script, "${#") {
 		t.Fatalf("libvirt media cleanup script uses Bash syntax that Ansible parses as a Jinja comment")
@@ -35,7 +37,7 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		}
 	}
 
-	bootRedfish := readRepoFile(t, "ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml")
+	bootRedfish := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
 	if strings.Contains(bootRedfish, "eject_libvirt_media") || strings.Contains(bootRedfish, "boot.media.libvirt") {
 		t.Fatalf("boot_redfish must dispatch media cleanup through mediaPrepareRole")
 	}
@@ -51,19 +53,19 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 }
 
 func TestClustersApplyRunsPreflightBeforeInfraAndInstall(t *testing.T) {
-	body := readRepoFile(t, "ansible/playbooks/targets/clusters/apply.yml")
-	preflight := strings.Index(body, "../../checks/preflight.yml")
-	infra := strings.Index(body, "../../layers/cluster_infra/apply.yml")
-	install := strings.Index(body, "../../layers/openshift/install-agent.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml")
+	preflight := strings.Index(body, "check_preflight.yml")
+	infra := strings.Index(body, "task_machine_infra_apply.yml")
+	install := strings.Index(body, "task_container_cluster_agent_install.yml")
 	if preflight < 0 || infra < 0 || install < 0 || preflight > infra || infra > install {
 		t.Fatalf("clusters apply must run preflight before cluster-infra and install-agent")
 	}
 }
 
 func TestContainerClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
-	body := readRepoFile(t, "ansible/playbooks/targets/container-cluster/apply.yml")
-	preflight := strings.Index(body, "../../checks/preflight.yml")
-	install := strings.Index(body, "../../layers/openshift/install-agent.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_container_cluster_apply.yml")
+	preflight := strings.Index(body, "check_preflight.yml")
+	install := strings.Index(body, "task_container_cluster_agent_install.yml")
 	if preflight < 0 || install < 0 || preflight > install {
 		t.Fatalf("container-cluster apply must run preflight before install-agent")
 	}
@@ -71,15 +73,15 @@ func TestContainerClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
 
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
-		"ansible/playbooks/checks/become.yml",
-		"ansible/playbooks/checks/preflight.yml",
-		"ansible/playbooks/layers/cluster_infra/apply.yml",
-		"ansible/playbooks/layers/openshift/boot-agent-machine.yml",
-		"ansible/playbooks/layers/openshift/create-agent-iso.yml",
-		"ansible/playbooks/layers/openshift/destroy-agent.yml",
-		"ansible/playbooks/layers/openshift/install-agent.yml",
-		"ansible/playbooks/layers/openshift/wait-agent-install.yml",
-		"ansible/playbooks/layers/providers/apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_preflight.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_create_agent_iso.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_install.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_wait_agent_install.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_apply.yml",
 	} {
 		for _, play := range readAnsiblePlays(t, path) {
 			env, _ := play["environment"].(string)
@@ -98,7 +100,7 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 }
 
 func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
-	root := filepath.Join(repoRoot(t), "ansible", "roles")
+	root := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot))
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -120,7 +122,7 @@ func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
 }
 
 func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_proxy/tasks/facts.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_proxy/tasks/facts.yml")
 	resolveTask := tasks[findAnsibleTask(t, tasks, "Resolve proxy desired state")]
 	facts, ok := resolveTask["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -164,7 +166,7 @@ func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
 }
 
 func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_proxy/tasks/persist.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_proxy/tasks/persist.yml")
 	persist := tasks[findAnsibleTask(t, tasks, "Persist proxy settings on host")]
 	if got := persist["when"]; got != "bootwright_proxy_enabled" {
 		t.Fatalf("%s when got %v, want bootwright_proxy_enabled", persist["name"], got)
@@ -206,14 +208,14 @@ func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
 
 func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 	for _, path := range []string{
-		"ansible/roles/cluster_infra/external_validate/tasks/bmc.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/eject_media.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/insert_media_attempt.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/post_boot.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml",
-		"ansible/roles/providers/bmc_emulated/tasks/sushy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/check_external_reachability/tasks/bmc.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/sushy.yml",
 	} {
 		for _, task := range readAnsibleTasks(t, path) {
 			uri, ok := task["ansible.builtin.uri"].(map[string]any)
@@ -228,7 +230,7 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 }
 
 func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
-	plays := readAnsiblePlays(t, "ansible/playbooks/layers/openshift/boot-agent-machine.yml")
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml")
 	if len(plays) != 1 {
 		t.Fatalf("boot-agent-machine play count = %d, want 1", len(plays))
 	}
@@ -256,11 +258,11 @@ func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 	if _, ok := tasks[bootIdx]["loop"]; ok {
 		t.Fatalf("boot playbook must not loop serially over nodes: %v", tasks[bootIdx])
 	}
-	assertIncludeRoleName(t, tasks[bootIdx], "install_agent")
+	assertIncludeRoleName(t, tasks[bootIdx], "bootwright.core.container_cluster_agent_install")
 }
 
 func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
 	contextIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key execution context")
 	prefixIdx := findAnsibleTask(t, tasks, "Resolve node SSH auth probe key caller command prefix")
 	checkIdx := findAnsibleTask(t, tasks, "Check node SSH auth probe key")
@@ -320,7 +322,7 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 }
 
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
-	mainTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/main.yml")
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
 	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
 	bootSequenceIdx := findAnsibleTask(t, mainTasks, "Boot node from Redfish virtual media")
@@ -347,20 +349,20 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if got := mainTasks[bootSequenceIdx]["when"]; got != "bootwright_redfish_action_effective == 'boot'" {
 		t.Fatalf("boot_redfish boot sequence must only run for boot action, got when=%v", got)
 	}
-	assertIncludeTasksFile(t, bootSequenceTasks[powerIdx], "power.yml")
-	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "post_boot.yml")
-	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "restore_certificate_verification.yml")
+	assertIncludeTasksFile(t, bootSequenceTasks[powerIdx], "boot/power.yml")
+	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "boot/post_boot.yml")
+	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "media/restore_certificate_verification.yml")
 	if len(bootSequenceAlways) != 1 {
 		t.Fatalf("boot_redfish boot sequence always block should only restore Redfish certificate settings, got %d tasks", len(bootSequenceAlways))
 	}
 
-	prepareTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml")
-	mediaTasks := readAnsibleTasks(t, "ansible/roles/openshift/media_libvirt/tasks/main.yml")
-	powerTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/power.yml")
-	insertAttemptTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/insert_media_attempt.yml")
-	ejectTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/eject_media.yml")
-	postTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/post_boot.yml")
-	restoreTasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/restore_certificate_verification.yml")
+	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
+	mediaTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
+	powerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml")
+	insertAttemptTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml")
+	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml")
+	postTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
+	restoreTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/restore_certificate_verification.yml")
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
 	probeMediaIdx := findAnsibleTask(t, prepareTasks, "Probe Redfish VirtualMedia members")
@@ -457,8 +459,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
 	assertIncludeTasksFile(t, mediaTasks[preLiveIdx], "eject.yml")
 	assertIncludeTasksFile(t, mediaTasks[preConfigIdx], "eject.yml")
-	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject_media.yml")
-	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "insert_media_attempt.yml")
+	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject.yml")
+	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_attempt.yml")
 	assertIncludeTasksApplyWhen(t, powerTasks[retryInsertIdx], "not (bootwright_redfish_vmedia_attached | bool)")
 	if got := powerTasks[retryInsertIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
 		t.Fatalf("virtual media retry loop must stop once attached, got when=%v", got)
@@ -820,7 +822,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !strings.Contains(cdAssert["fail_msg"].(string), "may continue booting from disk") {
 		t.Fatalf("CD boot assertion must explain disk-boot risk, got %v", cdAssert["fail_msg"])
 	}
-	domainXML := readRepoFile(t, "ansible/roles/cluster_infra/substrate_libvirt/templates/domain.xml.j2")
+	domainXML := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/templates/domain.xml.j2")
 	if hdIdx, cdIdx := strings.Index(domainXML, "<boot dev='hd'/>"), strings.Index(domainXML, "<boot dev='cdrom'/>"); hdIdx < 0 || cdIdx < 0 || hdIdx > cdIdx {
 		t.Fatalf("libvirt domain must keep disk-first, CD-fallback boot order")
 	}
@@ -946,7 +948,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !strings.Contains(failMsg, "bootwright_redfish_vmedia_eject_image_redacted") || strings.Contains(failMsg, "Image={{ bootwright_redfish_vmedia_eject_probe.json.Image") {
 		t.Fatalf("virtual media eject assertion must use redacted image status, got %v", failMsg)
 	}
-	defaults := readRepoFile(t, "ansible/roles/openshift/boot_redfish/defaults/main.yml")
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/defaults/main.yml")
 	for _, want := range []string{"bootwright_redfish_vmedia_eject_retries", "bootwright_redfish_vmedia_eject_delay_seconds"} {
 		if !strings.Contains(defaults, want) {
 			t.Fatalf("boot_redfish defaults missing %q", want)
@@ -955,7 +957,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 }
 
 func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/publish_target.yml")
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve agent ISO publish target")
 	validateIdx := findAnsibleTask(t, tasks, "Validate agent ISO publish target")
 	dirIdx := findAnsibleTask(t, tasks, "Resolve agent ISO staging directory")
@@ -1179,12 +1181,12 @@ func TestInstallAgentPublishesArtifactThroughDeclaredStageHost(t *testing.T) {
 }
 
 func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
-	defaults := readRepoFile(t, "ansible/roles/openshift/install_agent/defaults/main.yml")
+	defaults := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/defaults/main.yml")
 	if !strings.Contains(defaults, `bootwright_agent_iso_publish_token_placeholder: "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"`) {
 		t.Fatalf("install_agent defaults must define the publish token placeholder")
 	}
 
-	cleanupTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/cleanup_iso_target.yml")
+	cleanupTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/cleanup_target.yml")
 	resolveCleanup := cleanupTasks[findAnsibleTask(t, cleanupTasks, "Resolve staged agent ISO publish path")]
 	cleanupFact, ok := resolveCleanup["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -1194,7 +1196,7 @@ func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
 		t.Fatalf("cleanup must resolve the tokenized stage path, got %v", cleanupFact)
 	}
 
-	bootTopTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/boot_machine.yml")
+	bootTopTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/boot_machine.yml")
 	bootTasks := nestedAnsibleTasks(t, bootTopTasks[findAnsibleTask(t, bootTopTasks, "Boot selected machine when install is not already complete")], "block")
 	resolveBoot := bootTasks[findAnsibleTask(t, bootTasks, "Resolve selected machine agent ISO target")]
 	bootFact, ok := resolveBoot["ansible.builtin.set_fact"].(map[string]any)
@@ -1209,10 +1211,10 @@ func TestInstallAgentResolvesAgentISOPublishTokenPlaceholder(t *testing.T) {
 
 func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
 	for _, rel := range []string{
-		"ansible/roles/openshift/install_agent/tasks/cleanup_iso_target.yml",
-		"ansible/roles/openshift/install_agent/tasks/create_iso.yml",
-		"ansible/roles/openshift/install_agent/tasks/publish_iso_target.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/cleanup_target.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/create_iso.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/publish_target.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
 	} {
 		tasks := readAnsibleTasks(t, rel)
 		var messages []string
@@ -1236,7 +1238,7 @@ func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
 }
 
 func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml")
 	systemIdx := findAnsibleTask(t, tasks, "Refresh Redfish system metadata for declared MAC validation")
 	collectionIdx := findAnsibleTask(t, tasks, "List Redfish EthernetInterface members")
 	memberIdx := findAnsibleTask(t, tasks, "Probe Redfish EthernetInterface members")
@@ -1297,13 +1299,13 @@ func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
 
 func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 	for _, path := range []string{
-		"ansible/roles/openshift/boot_redfish/defaults/main.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/main.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/media_prepare.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/validate_macs.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/power.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/post_boot.yml",
-		"ansible/roles/openshift/boot_redfish/tasks/validate_stage.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/defaults/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/stage/validate.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{"libvirt", "eject_libvirt_media"} {
@@ -1315,7 +1317,7 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 }
 
 func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/infra_components/artifacts_http/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/tasks/main.yml")
 	validateIdx := findAnsibleTask(t, tasks, "Validate boot artifact server settings")
 	pathsIdx := findAnsibleTask(t, tasks, "Resolve boot artifact paths")
 	packagesIdx := findAnsibleTask(t, tasks, "Install boot artifact server packages")
@@ -1344,13 +1346,13 @@ func TestArtifactsHTTPServiceUsesContainerNginxWithTLS(t *testing.T) {
 		t.Fatalf("artifact server packages must include podman and openssl, got %v", packages["name"])
 	}
 
-	nginx := readRepoFile(t, "ansible/roles/infra_components/artifacts_http/templates/artifacts-nginx.conf.j2")
+	nginx := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/templates/artifacts-nginx.conf.j2")
 	for _, want := range []string{"user root;", "listen {{ listen_host }}:{{ listener.port }}", "ssl_certificate", "try_files $uri =404", "autoindex off"} {
 		if !strings.Contains(nginx, want) {
 			t.Fatalf("artifact nginx template missing %q", want)
 		}
 	}
-	tlsTemplate := readRepoFile(t, "ansible/roles/infra_components/artifacts_http/templates/artifacts-openssl.cnf.j2")
+	tlsTemplate := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/templates/artifacts-openssl.cnf.j2")
 	for _, want := range []string{"subjectAltName", "bootwright_component.tls.dnsNames", "bootwright_component.tls.ipAddresses"} {
 		if !strings.Contains(tlsTemplate, want) {
 			t.Fatalf("artifact TLS template must render SANs; missing %q", want)
@@ -1413,10 +1415,10 @@ func TestAdapterRoleDirectoriesAreRegistered(t *testing.T) {
 
 func TestHostServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 	for _, path := range []string{
-		"ansible/playbooks/layers/providers/apply.yml",
-		"ansible/playbooks/layers/providers/destroy.yml",
-		"ansible/playbooks/layers/infra_components/apply.yml",
-		"ansible/playbooks/layers/infra_components/destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_infra_component_services_destroy.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{
@@ -1448,11 +1450,11 @@ func TestHostServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 
 func TestInfraComponentDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 	roles := map[string]string{
-		"ansible/roles/infra_components/artifacts_http/tasks/destroy.yml":        "artifacts",
-		"ansible/roles/infra_components/load_balancer_haproxy/tasks/destroy.yml": "load-balancer",
-		"ansible/roles/infra_components/dns_dnsmasq/tasks/destroy.yml":           "nameResolution",
-		"ansible/roles/infra_components/proxy_squid/tasks/destroy.yml":           "proxy",
-		"ansible/roles/infra_components/mirror_registry/tasks/destroy.yml":       "registry",
+		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_artifact_server_http/tasks/destroy.yml":    "artifacts",
+		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_load_balancer_haproxy/tasks/destroy.yml":   "load-balancer",
+		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_name_resolution_dnsmasq/tasks/destroy.yml": "nameResolution",
+		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_proxy_squid/tasks/destroy.yml":             "proxy",
+		"ansible/collections/ansible_collections/bootwright/core/roles/infra_component_registry_mirror/tasks/destroy.yml":         "registry",
 	}
 	for path, kind := range roles {
 		body := readRepoFile(t, path)
@@ -1473,7 +1475,7 @@ func TestInfraComponentDestroyCleanupUsesBootwrightPodmanLabels(t *testing.T) {
 }
 
 func TestLibvirtNetworkUsesResolvedNTPIPv4Sources(t *testing.T) {
-	body := readRepoFile(t, "ansible/roles/cluster_infra/substrate_libvirt/templates/network.xml.j2")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/templates/network.xml.j2")
 	for _, want := range []string{
 		"bootwright_resolved_ntp_sources",
 		"select('match', '^[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.[0-9]+$')",
@@ -1510,7 +1512,7 @@ func TestAnsibleCorePinsStayAligned(t *testing.T) {
 }
 
 func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
-	plays := readAnsiblePlays(t, "ansible/playbooks/layers/storage/apply.yml")
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_apply.yml")
 	if len(plays) != 1 {
 		t.Fatalf("storage apply playbook has %d plays, want 1", len(plays))
 	}
@@ -1529,11 +1531,11 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 		}
 		decoded = append(decoded, item)
 	}
-	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "cephadm")
+	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "bootwright.core.storage_cluster_cephadm")
 }
 
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
-	mainTasks := readAnsibleTasks(t, "ansible/roles/storage/cephadm/tasks/main.yml")
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
 	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")
 	for _, name := range []string{
 		"Copy cephadm cluster private SSH key",
@@ -1568,7 +1570,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("storage role must clean the remote work directory, got %v", cleanup)
 	}
 
-	operationTasks := readAnsibleTasks(t, "ansible/roles/storage/cephadm/tasks/operation.yml")
+	operationTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
 	run := operationTasks[findAnsibleTask(t, operationTasks, "Run Ceph operation")]
 	command, ok := run["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -1621,23 +1623,20 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 		if !strings.Contains(args, "StrictHostKeyChecking=accept-new") {
 			t.Fatalf("%s SSH common args must accept new host keys without accepting changed keys; got %q", path, args)
 		}
-		rolesPath, ok := ansibleCfgValue(cfg, "defaults", "roles_path")
+		collectionsPath, ok := ansibleCfgValue(cfg, "defaults", "collections_path")
 		if !ok {
-			t.Fatalf("%s must explicitly configure roles_path", path)
+			t.Fatalf("%s must explicitly configure collections_path", path)
 		}
-		if !strings.Contains(rolesPath, "./roles/storage") {
-			t.Fatalf("%s roles_path must include storage roles, got %q", path, rolesPath)
-		}
-		if !strings.Contains(rolesPath, "./roles/infra_components") {
-			t.Fatalf("%s roles_path must include infra component roles, got %q", path, rolesPath)
+		if collectionsPath != "./collections" {
+			t.Fatalf("%s collections_path got %q, want ./collections", path, collectionsPath)
 		}
 	}
 }
 
 func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 	for _, path := range []string{
-		"ansible/roles/openshift/install_agent/tasks/controller_dns.yml",
-		"ansible/roles/openshift/destroy_agent/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/controller_dns.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_destroy/tasks/main.yml",
 	} {
 		body := readRepoFile(t, path)
 		for _, forbidden := range []string{"/etc/hosts", "blockinfile", "unsafe_writes"} {
@@ -1649,7 +1648,7 @@ func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 }
 
 func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
-	body := readRepoFile(t, "ansible/roles/openshift/install_agent/tasks/skip_guard.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/skip_guard.yml")
 	for _, want := range []string{
 		"not (bootwright_install_override | default(false) | bool)",
 		"bootwright_install_already_complete",
@@ -1662,7 +1661,7 @@ func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
 }
 
 func TestInstallAgentValidatesActionBeforeInputs(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/main.yml")
 	selectIdx := findAnsibleTask(t, tasks, "Select agent install action")
 	validateActionIdx := findAnsibleTask(t, tasks, "Validate selected agent install action")
 	validateInputsIdx := findAnsibleTask(t, tasks, "Validate installer inputs")
@@ -1673,7 +1672,7 @@ func TestInstallAgentValidatesActionBeforeInputs(t *testing.T) {
 }
 
 func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/validate.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/validate.yml")
 	installStat := tasks[findAnsibleTask(t, tasks, "Verify rendered install-config exists")]
 	installFail := tasks[findAnsibleTask(t, tasks, "Fail when install-config is missing")]
 	tokenStat := tasks[findAnsibleTask(t, tasks, "Verify generated agent ISO publish token exists")]
@@ -1717,7 +1716,7 @@ func TestInstallAgentSkipsConsumedInstallConfigForBootAction(t *testing.T) {
 }
 
 func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/stage_inputs.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/inputs.yml")
 	stat := tasks[findAnsibleTask(t, tasks, "Check local installer extra manifests")]
 	remove := tasks[findAnsibleTask(t, tasks, "Remove stale remote installer extra manifests")]
 	stage := tasks[findAnsibleTask(t, tasks, "Stage installer extra manifests on controller")]
@@ -1747,7 +1746,7 @@ func TestInstallAgentStagesExtraManifestsWhenPresent(t *testing.T) {
 }
 
 func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/create_iso.yml")
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/create_iso.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Create cluster agent ISO when install is not already complete")], "block")
 	localDirIdx := findAnsibleTask(t, tasks, "Create local installer artifact directory")
 	previousTokenIdx := findAnsibleTask(t, tasks, "Read previous agent ISO publish token")
@@ -1781,8 +1780,8 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 	if got := tasks[previousTokenIdx]["failed_when"]; got != false {
 		t.Fatalf("previous token read must tolerate absent state, got %v", got)
 	}
-	if got := tasks[previousCleanupIdx]["ansible.builtin.include_tasks"]; got != "cleanup_iso_target.yml" {
-		t.Fatalf("previous publish cleanup must reuse cleanup_iso_target.yml, got %v", got)
+	if got := tasks[previousCleanupIdx]["ansible.builtin.include_tasks"]; got != "../iso/cleanup_target.yml" {
+		t.Fatalf("previous publish cleanup must reuse iso/cleanup_target.yml, got %v", got)
 	}
 
 	if got := tasks[recordTokenIdx]["delegate_to"]; got != "localhost" {
@@ -1910,7 +1909,7 @@ func TestInstallAgentFetchesAgentISOWithoutBecome(t *testing.T) {
 }
 
 func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 	recordIdx := findAnsibleTask(t, tasks, "Record local kubeconfig path")
 	cleanRedfishIdx := findAnsibleTask(t, tasks, "Clean Redfish virtual media after successful install")
@@ -1924,8 +1923,8 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 	if !(recordIdx < cleanRedfishIdx && cleanRedfishIdx < findRemoteIdx && findRemoteIdx < removeRemoteIdx && removeRemoteIdx < removeBootArtifactsIdx && removeBootArtifactsIdx < findLocalIdx && findLocalIdx < removeLocalIdx && removeLocalIdx < removeRemotePathIdx && removeRemotePathIdx < removeLocalPathIdx) {
 		t.Fatalf("wait_install must fetch credentials before removing generated ISO artifacts")
 	}
-	assertIncludeRoleName(t, tasks[cleanRedfishIdx], "boot_redfish")
-	if got := tasks[cleanRedfishIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "bootApplyRole") || !strings.Contains(fmt.Sprint(got), "boot_redfish") {
+	assertIncludeRoleName(t, tasks[cleanRedfishIdx], "bootwright.core.container_cluster_boot_redfish")
+	if got := tasks[cleanRedfishIdx]["loop"]; !strings.Contains(fmt.Sprint(got), "bootApplyRole") || !strings.Contains(fmt.Sprint(got), "bootwright.core.container_cluster_boot_redfish") {
 		t.Fatalf("Redfish cleanup must loop over boot_redfish components, got %v", got)
 	}
 	cleanVars, ok := tasks[cleanRedfishIdx]["vars"].(map[string]any)
@@ -1981,14 +1980,14 @@ func TestInstallAgentCleansGeneratedISOArtifactsAfterSuccessfulWait(t *testing.T
 
 func TestInstallAgentWaitPollsPromptly(t *testing.T) {
 	var defaults map[string]any
-	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/roles/openshift/install_agent/defaults/main.yml")), &defaults); err != nil {
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/defaults/main.yml")), &defaults); err != nil {
 		t.Fatalf("decode install_agent defaults: %v", err)
 	}
 	if got := defaults["bootwright_install_wait_poll_seconds"]; got != 15 {
 		t.Fatalf("install wait poll default got %v, want 15", got)
 	}
 
-	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 	wait := tasks[findAnsibleTask(t, tasks, "Wait for agent install completion")]
 	if got := wait["async"]; got != "{{ bootwright_install_timeout_seconds }}" {
@@ -2000,7 +1999,7 @@ func TestInstallAgentWaitPollsPromptly(t *testing.T) {
 }
 
 func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/roles/openshift/install_agent/tasks/wait_install.yml")
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/wait_install.yml")
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Wait for agent install completion when install is not already complete")], "block")
 
 	ensureIdx := findAnsibleTask(t, tasks, "Create local cluster secrets directory")
@@ -2043,7 +2042,7 @@ func TestInstallAgentSavesKubeadminPasswordAsClusterSecret(t *testing.T) {
 }
 
 func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
-	body := readRepoFile(t, "ansible/roles/openshift/destroy_agent/tasks/main.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_destroy/tasks/main.yml")
 	for _, want := range []string{
 		"bootwright_cluster_installer_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer\"",
 		"bootwright_process_cleanup_pattern: \"clusters/{{ bootwright_current_cluster.name }}/runtime/installer/\"",
@@ -2056,7 +2055,7 @@ func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
 }
 
 func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_base/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_base/tasks/main.yml")
 	binaryIdx := findAnsibleTask(t, tasks, "Detect firewall-cmd binary")
 	stateIdx := findAnsibleTask(t, tasks, "Detect running firewalld daemon")
 	factIdx := findAnsibleTask(t, tasks, "Set firewalld availability fact")
@@ -2091,7 +2090,7 @@ func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
 }
 
 func TestHostBaseAllowsUnavailableRedHatReposBeforePackageInstall(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/shared/host_base/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_base/tasks/main.yml")
 	dnfStatIdx := findAnsibleTask(t, tasks, "Stat dnf.conf")
 	dnfIdx := findAnsibleTask(t, tasks, "Allow unavailable DNF repositories")
 	yumStatIdx := findAnsibleTask(t, tasks, "Stat yum.conf")
@@ -2117,7 +2116,7 @@ func TestHostBaseAllowsUnavailableRedHatReposBeforePackageInstall(t *testing.T) 
 }
 
 func TestOCPCLIsDownloadOnlyWhenClientToolsNeedInstall(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/bastion/ocp_clis/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/controller_openshift_tools/tasks/main.yml")
 	ocProbeIdx := findAnsibleTask(t, tasks, "Probe installed oc version")
 	kubectlProbeIdx := findAnsibleTask(t, tasks, "Probe installed kubectl")
 	decideIdx := findAnsibleTask(t, tasks, "Decide whether each CLI needs install (require exact version)")
@@ -2149,7 +2148,7 @@ func TestOCPCLIsDownloadOnlyWhenClientToolsNeedInstall(t *testing.T) {
 }
 
 func TestOCPCLIsRemoveStaleBinariesAndVerifyFinalVersions(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/roles/bastion/ocp_clis/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/controller_openshift_tools/tasks/main.yml")
 	downloadClientIdx := findAnsibleTask(t, tasks, "Download openshift-client tarball")
 	removeClientIdx := findAnsibleTask(t, tasks, "Remove stale oc and kubectl from install dir")
 	extractClientIdx := findAnsibleTask(t, tasks, "Extract oc and kubectl into install dir")
@@ -2326,7 +2325,7 @@ func hasHostProxyFactsImport(tasks []any) bool {
 		if !ok {
 			continue
 		}
-		if importRole["name"] == "host_proxy" && importRole["tasks_from"] == "facts" {
+		if importRole["name"] == "bootwright.core.host_proxy" && importRole["tasks_from"] == "facts" {
 			return true
 		}
 	}
@@ -2514,19 +2513,8 @@ func registeredAdapterRoles() map[string]bool {
 
 func ansibleRoleDirExists(t *testing.T, role string) bool {
 	t.Helper()
-	for _, base := range []string{
-		"ansible/roles/shared",
-		"ansible/roles/providers",
-		"ansible/roles/infra_components",
-		"ansible/roles/cluster_infra",
-		"ansible/roles/openshift",
-	} {
-		info, err := os.Stat(filepath.Join(repoRoot(t), base, role))
-		if err == nil && info.IsDir() {
-			return true
-		}
-	}
-	return false
+	info, err := os.Stat(filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot), strings.TrimPrefix(role, "bootwright.core.")))
+	return err == nil && info.IsDir()
 }
 
 func ansibleAdapterRoleDirs(t *testing.T) []string {
@@ -2536,11 +2524,11 @@ func ansibleAdapterRoleDirs(t *testing.T) []string {
 		prefixes []string
 	}
 	rules := []rule{
-		{base: "ansible/roles/shared", prefixes: []string{"host_libvirt"}},
-		{base: "ansible/roles/providers", prefixes: []string{"bmc_"}},
-		{base: "ansible/roles/infra_components", prefixes: []string{""}},
-		{base: "ansible/roles/cluster_infra", prefixes: []string{"substrate_"}},
-		{base: "ansible/roles/openshift", prefixes: []string{"boot_", "media_"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"host_libvirt"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"provider_service_bmc_"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"infra_component_"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"machine_substrate_"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"container_cluster_boot_", "container_cluster_media_"}},
 	}
 	var out []string
 	for _, r := range rules {
@@ -2554,7 +2542,7 @@ func ansibleAdapterRoleDirs(t *testing.T) []string {
 			}
 			for _, prefix := range r.prefixes {
 				if prefix == "" || strings.HasPrefix(entry.Name(), prefix) {
-					out = append(out, entry.Name())
+					out = append(out, "bootwright.core."+entry.Name())
 					break
 				}
 			}

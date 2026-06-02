@@ -1,0 +1,17 @@
+---
+- name: Install controller OpenShift CLIs
+  hosts: bootwright_controller_hosts
+  gather_facts: true
+  become: true
+  environment:
+    HTTP_PROXY: "{{ lookup('env', 'HTTP_PROXY') | default('', true) }}"
+    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default('', true) }}"
+    NO_PROXY: "{{ lookup('env', 'NO_PROXY') | default('', true) }}"
+    http_proxy: "{{ lookup('env', 'http_proxy') | default('', true) }}"
+    https_proxy: "{{ lookup('env', 'https_proxy') | default('', true) }}"
+    no_proxy: "{{ lookup('env', 'no_proxy') | default('', true) }}"
+
+  tasks:
+    - name: Install requested OpenShift CLI release
+      ansible.builtin.import_role:
+        name: bootwright.core.controller_openshift_tools

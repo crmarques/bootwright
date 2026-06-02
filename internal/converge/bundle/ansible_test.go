@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -18,27 +19,25 @@ func TestExtractAnsibleBundleEitherSucceedsOrReportsEmpty(t *testing.T) {
 		}
 		return
 	}
+	collectionRoot := filepath.FromSlash(BootwrightCollectionRelPath)
 	for _, rel := range []string{
 		AnsibleCfgRelPath,
-		filepath.Join("playbooks", "checks", "become.yml"),
-		filepath.Join("playbooks", "checks", "preflight.yml"),
-		filepath.Join("playbooks", "targets", "all", "apply.yml"),
-		filepath.Join("playbooks", "targets", "infra", "apply.yml"),
-		filepath.Join("playbooks", "targets", "infra", "destroy-artifact-server.yml"),
-		filepath.Join("playbooks", "targets", "infra", "destroy.yml"),
-		filepath.Join("playbooks", "targets", "clusters", "apply.yml"),
-		filepath.Join("playbooks", "targets", "clusters", "destroy.yml"),
-		filepath.Join("playbooks", "targets", "container-cluster", "apply.yml"),
-		filepath.Join("playbooks", "layers", "providers", "apply.yml"),
-		filepath.Join("playbooks", "layers", "cluster_infra", "apply.yml"),
+		filepath.Join(collectionRoot, "galaxy.yml"),
+		filepath.Join(collectionRoot, "playbooks", "check_become.yml"),
+		filepath.Join(collectionRoot, "playbooks", "check_preflight.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_all_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_infra_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_infra_destroy_artifact_server.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_infra_destroy.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_clusters_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_clusters_destroy.yml"),
+		filepath.Join(collectionRoot, "playbooks", "workflow_container_cluster_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "task_provider_services_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "task_machine_infra_apply.yml"),
+		filepath.Join(collectionRoot, "roles", "host_base", "tasks", "main.yml"),
 	} {
 		if _, statErr := os.Stat(filepath.Join(dest, rel)); statErr != nil {
 			t.Fatalf("expected %s in extracted bundle: %v", rel, statErr)
-		}
-	}
-	for _, rel := range RoleRelPaths {
-		if _, statErr := os.Stat(filepath.Join(dest, rel)); statErr != nil {
-			t.Fatalf("expected role search path %s in extracted bundle: %v", rel, statErr)
 		}
 	}
 	if _, statErr := os.Stat(filepath.Join(dest, "PLACEHOLDER")); statErr == nil {
@@ -112,12 +111,10 @@ func TestEnsureAnsibleBundleReextractsWhenBundleVersionChanges(t *testing.T) {
 	}
 }
 
-func TestConfiguredRoleSearchPathsExistInSource(t *testing.T) {
-	for _, rel := range RoleRelPaths {
-		path := filepath.Join("..", "..", "..", "ansible", rel)
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("expected source role search path %s: %v", path, err)
-		}
+func TestConfiguredCollectionExistsInSource(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "ansible", filepath.FromSlash(BootwrightCollectionRelPath))
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected source collection path %s: %v", path, err)
 	}
 }
 
@@ -214,10 +211,12 @@ func collectBundleFiles(t *testing.T, root string, skip func(string, bool) bool)
 
 func skipSourceBundlePath(rel string, isDir bool) bool {
 	rel = filepath.ToSlash(rel)
-	if isDir && rel == "filter_plugins/__pycache__" {
+	parts := strings.Split(rel, "/")
+	if isDir && slices.Contains(parts, "__pycache__") {
 		return true
 	}
-	return strings.HasPrefix(rel, "filter_plugins/test_") || strings.HasSuffix(rel, ".pyc")
+	name := parts[len(parts)-1]
+	return (strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py")) || strings.HasSuffix(rel, ".pyc")
 }
 
 func skipEmbeddedBundlePath(rel string, isDir bool) bool {
@@ -226,6 +225,6 @@ func skipEmbeddedBundlePath(rel string, isDir bool) bool {
 	case ".gitignore", "PLACEHOLDER", "collections/.stamp":
 		return true
 	default:
-		return rel == "collections/ansible_collections" || strings.HasPrefix(rel, "collections/ansible_collections/")
+		return strings.HasPrefix(rel, "collections/ansible_collections/") && !strings.HasPrefix(rel, BootwrightCollectionRelPath+"/")
 	}
 }

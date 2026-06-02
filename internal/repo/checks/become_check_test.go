@@ -8,7 +8,7 @@ import (
 
 func TestBecomeCheckPlaybookValidatesBecome(t *testing.T) {
 	var plays []map[string]any
-	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/playbooks/checks/become.yml")), &plays); err != nil {
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml")), &plays); err != nil {
 		t.Fatalf("decode become check playbook: %v", err)
 	}
 	if len(plays) != 1 {
@@ -42,11 +42,11 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 		path  string
 		hosts string
 	}{
-		{"ansible/playbooks/targets/clusters/apply.yml", "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
-		{"ansible/playbooks/targets/container-cluster/apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
-		{"ansible/playbooks/targets/infra/apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
-		{"ansible/playbooks/targets/infra/destroy.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
-		{"ansible/playbooks/targets/infra/destroy-artifact-server.yml", "bootwright_infra_component_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml", "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_container_cluster_apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy_artifact_server.yml", "bootwright_infra_component_hosts"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 				t.Fatalf("%s has no playbook imports", tc.path)
 			}
 			first := imports[0]
-			if got := first["import_playbook"]; got != "../../checks/become.yml" {
+			if got := first["import_playbook"]; got != "check_become.yml" {
 				t.Fatalf("%s first import = %v, want become check", tc.path, got)
 			}
 			vars, ok := first["vars"].(map[string]any)

@@ -10,7 +10,7 @@ import (
 
 const (
 	infraDestroyArtifactServerScope             = "artifact-server"
-	infraDestroyArtifactServerPlaybook          = "playbooks/targets/infra/destroy-artifact-server.yml"
+	infraDestroyArtifactServerPlaybook          = "bootwright.core.workflow_infra_destroy_artifact_server"
 	infraDestroyArtifactServerArtifactsBaseName = "infra-destroy-artifact-server"
 	infraComponentServiceScopeExtraVarName      = "bootwright_infra_component_service_scope"
 )

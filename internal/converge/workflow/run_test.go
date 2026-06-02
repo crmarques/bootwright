@@ -88,7 +88,7 @@ func TestRunDryRunDoesNotInvokeRunner(t *testing.T) {
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		Executable:         "ansible-playbook",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/checks/preflight.yml",
+		Playbook:           "bootwright.core.check_preflight",
 		ArtifactsBaseName:  "preflight-test",
 		DryRun:             true,
 		Label:              "test check",
@@ -123,7 +123,7 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/infra/apply.yml",
+		Playbook:           "bootwright.core.workflow_infra_apply",
 		ArtifactsBaseName:  "infra",
 		DryRun:             false,
 	}, runner, reporter); err != nil {
@@ -148,7 +148,7 @@ func TestRunPassesControllingTTYToRunner(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/clusters/apply.yml",
+		Playbook:           "bootwright.core.workflow_clusters_apply",
 		ArtifactsBaseName:  "clusters",
 		UseControllingTTY:  true,
 	}, runner, nil)
@@ -171,7 +171,7 @@ func TestRunPassesForksToRunner(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/clusters/apply.yml",
+		Playbook:           "bootwright.core.workflow_clusters_apply",
 		ArtifactsBaseName:  "clusters",
 		Forks:              9,
 	}, runner, nil)
@@ -194,7 +194,7 @@ func TestRunPassesBecomePasswordFileToRunner(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/clusters/apply.yml",
+		Playbook:           "bootwright.core.workflow_clusters_apply",
 		ArtifactsBaseName:  "clusters",
 		BecomePasswordFile: "/tmp/bootwright-become",
 	}, runner, nil)
@@ -217,7 +217,7 @@ func TestRunPropagatesRunnerError(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/infra/apply.yml",
+		Playbook:           "bootwright.core.workflow_infra_apply",
 		ArtifactsBaseName:  "infra",
 	}, runner, nil)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
@@ -237,7 +237,7 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/checks/preflight.yml",
+		Playbook:           "bootwright.core.check_preflight",
 		ArtifactsBaseName:  "preflight-test",
 		DryRun:             true,
 		// Label intentionally empty.
@@ -245,7 +245,7 @@ func TestRunDryRunLabelFallsBackToPlaybook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if reporter.dryRunLabel != "playbooks/checks/preflight.yml" {
+	if reporter.dryRunLabel != "bootwright.core.check_preflight" {
 		t.Fatalf("empty Label should fall back to Playbook, got %q", reporter.dryRunLabel)
 	}
 }
@@ -267,7 +267,7 @@ func TestRunRenderFailureSurfaces(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/checks/preflight.yml",
+		Playbook:           "bootwright.core.check_preflight",
 		ArtifactsBaseName:  "preflight-test",
 	}, runner, nil)
 	if err == nil {
@@ -303,7 +303,7 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 		ManagedServicesDir: "/var/lib/bootwright",
 		ProviderStateDir:   "/var/lib/bootwright/provider-state",
 		BundleDir:          t.TempDir(),
-		Playbook:           "playbooks/targets/infra/apply.yml",
+		Playbook:           "bootwright.core.workflow_infra_apply",
 		Limit:              render.GroupProviderHosts + ":" + render.GroupInfraComponentHosts + ":" + render.GroupInfraHosts,
 		ArtifactsBaseName:  "infra",
 		Label:              "infra apply",

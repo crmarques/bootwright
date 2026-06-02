@@ -1,0 +1,81 @@
+---
+- name: Resolve proxy desired state
+  ansible.builtin.set_fact:
+    bootwright_proxy_enabled: "{{ (bootwright_proxy_http | length) > 0 or (bootwright_proxy_https | length) > 0 or (bootwright_proxy_no | length) > 0 }}"
+    bootwright_proxy_has_url: "{{ (bootwright_proxy_http | length) > 0 or (bootwright_proxy_https | length) > 0 }}"
+    bootwright_proxy_credentialed_url: "{{ ((bootwright_proxy_http | length) > 0 or (bootwright_proxy_https | length) > 0) and (bootwright_proxy_credentials_ref | length) > 0 }}"
+    bootwright_proxy_authority: ""
+    bootwright_proxy_http_effective: ""
+    bootwright_proxy_https_effective: ""
+    bootwright_proxy_primary: ""
+  changed_when: false
+
+- name: Load proxy credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_credentials
+    tasks_from: load
+  vars:
+    bootwright_creds_path: "{{ bootwright_proxy_credentials_ref }}"
+    bootwright_creds_var: bootwright_proxy_credentials
+    bootwright_creds_label: "ocpInstall proxy credentialsRef {{ bootwright_proxy_credentials_ref }}"
+  when: bootwright_proxy_credentialed_url
+
+- name: Build credentialed proxy URLs
+  ansible.builtin.set_fact:
+    bootwright_proxy_authority: >-
+      {{
+        bootwright_proxy_credentials | bootwright_proxy_userinfo('ocpInstall proxy credentialsRef ' ~ bootwright_proxy_credentials_ref)
+        if (bootwright_proxy_credentials_ref | length) > 0
+        else ''
+      }}
+  no_log: "{{ bootwright_proxy_credentialed_url }}"
+  changed_when: false
+  when: bootwright_proxy_has_url
+
+- name: Select effective proxy URLs
+  ansible.builtin.set_fact:
+    bootwright_proxy_http_effective: >-
+      {{
+        bootwright_proxy_http | regex_replace('^([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/]+@)?', '\1' ~ bootwright_proxy_authority)
+        if (bootwright_proxy_http | length) > 0 else ''
+      }}
+    bootwright_proxy_https_effective: >-
+      {{
+        bootwright_proxy_https | regex_replace('^([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/]+@)?', '\1' ~ bootwright_proxy_authority)
+        if (bootwright_proxy_https | length) > 0 else ''
+      }}
+  no_log: "{{ bootwright_proxy_credentialed_url }}"
+  changed_when: false
+  when: bootwright_proxy_has_url
+
+- name: Select primary proxy URL
+  ansible.builtin.set_fact:
+    bootwright_proxy_primary: "{{ bootwright_proxy_https_effective if (bootwright_proxy_https_effective | length) > 0 else bootwright_proxy_http_effective }}"
+  no_log: "{{ bootwright_proxy_credentialed_url }}"
+  changed_when: false
+  when: bootwright_proxy_has_url
+
+# When disabled, blank the env vars explicitly (not {}) to override stale
+# HTTP(S)_PROXY exports inherited from sshd/systemd of a prior enabled run.
+- name: Build proxy environment facts
+  ansible.builtin.set_fact:
+    bootwright_proxy_env: >-
+      {{
+        {
+          'HTTP_PROXY': bootwright_proxy_http_effective,
+          'HTTPS_PROXY': bootwright_proxy_https_effective,
+          'NO_PROXY': bootwright_proxy_no,
+          'http_proxy': bootwright_proxy_http_effective,
+          'https_proxy': bootwright_proxy_https_effective,
+          'no_proxy': bootwright_proxy_no,
+        } if bootwright_proxy_enabled else {
+          'HTTP_PROXY': '',
+          'HTTPS_PROXY': '',
+          'NO_PROXY': '',
+          'http_proxy': '',
+          'https_proxy': '',
+          'no_proxy': '',
+        }
+      }}
+  no_log: "{{ bootwright_proxy_credentialed_url }}"
+  changed_when: false

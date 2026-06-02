@@ -7,6 +7,7 @@ package runconfig
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
@@ -77,11 +78,9 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	return ansible.RunSpec{
 		Executable:         cfg.Executable,
 		AnsibleCfg:         filepath.Join(cfg.BundleDir, bundle.AnsibleCfgRelPath),
-		RolesPath:          bundle.RolesPath(cfg.BundleDir),
 		CollectionsPath:    filepath.Join(cfg.BundleDir, bundle.CollectionsRelPath),
-		FilterPluginsPath:  filepath.Join(cfg.BundleDir, bundle.FilterPluginsRelPath),
 		Inventory:          cfg.InventoryPath,
-		Playbook:           filepath.Join(cfg.BundleDir, cfg.Playbook),
+		Playbook:           bundlePlaybook(cfg.BundleDir, cfg.Playbook),
 		Limit:              cfg.Limit,
 		Forks:              cfg.Forks,
 		ExtraVars:          cfg.VarsPath,
@@ -93,4 +92,11 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		BecomePasswordFile: cfg.BecomePasswordFile,
 		UseControllingTTY:  cfg.UseControllingTTY,
 	}, nil
+}
+
+func bundlePlaybook(bundleDir, playbook string) string {
+	if strings.HasSuffix(playbook, ".yml") || strings.HasSuffix(playbook, ".yaml") || strings.Contains(playbook, string(filepath.Separator)) {
+		return filepath.Join(bundleDir, playbook)
+	}
+	return playbook
 }

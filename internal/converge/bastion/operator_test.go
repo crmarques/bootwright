@@ -173,7 +173,7 @@ func TestCLIInstallSpecPlannedCommand(t *testing.T) {
 	want := []string{
 		"/venv/bin/ansible-playbook",
 		"-i", "/var/lib/bootwright/cache/ansible-bundles/version=dev/inv.ini",
-		"/var/lib/bootwright/cache/ansible-bundles/version=dev/playbooks/targets/bastion/apply-clis.yml",
+		"bootwright.core.workflow_bastion_apply_tools",
 		"-e", "bootwright_openshift_release_version=4.21.12",
 		"-e", "bootwright_clis_install_dir=/usr/local/bin",
 	}

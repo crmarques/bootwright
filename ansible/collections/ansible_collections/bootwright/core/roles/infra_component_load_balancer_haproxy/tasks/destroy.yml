@@ -1,0 +1,44 @@
+---
+- name: Remove HAProxy container
+  containers.podman.podman_container:
+    name: "bootwright-haproxy-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    state: absent
+
+- name: Reap orphan HAProxy from a leaked container instance
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_process_cleanup
+  vars:
+    bootwright_process_cleanup_podman_filters:
+      - "label=bootwright.kind=load-balancer"
+      - "label=bootwright.provider={{ bootwright_component.providerName }}"
+      - "label=bootwright.name={{ bootwright_component.name }}"
+    bootwright_process_cleanup_mark_changed: false
+
+- name: Remove load balancer state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    state: absent
+
+# The HAProxy VIP sysctl drop-in is host-wide (one file shared by every
+# bootwright HAProxy on this host). Only remove it once no bootwright
+# HAProxy container remains, so a partial-scope destroy that leaves
+# another LB in place doesn't strip net.ipv4.ip_nonlocal_bind out from
+# under it on next reboot. Running HAProxy keeps its bind regardless of
+# the live sysctl, so this is safe at run time.
+- name: List remaining bootwright HAProxy containers
+  ansible.builtin.command:
+    argv:
+      - podman
+      - ps
+      - -aq
+      - --filter
+      - name=bootwright-haproxy-
+  register: bootwright_haproxy_remaining
+  changed_when: false
+  failed_when: false
+
+- name: Remove HAProxy sysctl drop-in when no instances remain
+  ansible.builtin.file:
+    path: /etc/sysctl.d/99-bootwright-haproxy.conf
+    state: absent
+  when: (bootwright_haproxy_remaining.stdout | default('') | trim) | length == 0

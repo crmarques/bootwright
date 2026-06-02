@@ -1,0 +1,31 @@
+---
+- name: Remove boot artifact server container
+  containers.podman.podman_container:
+    name: "bootwright-artifacts-{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    state: absent
+
+- name: Reap orphan boot artifact server from a leaked container instance
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_process_cleanup
+  vars:
+    bootwright_process_cleanup_podman_filters:
+      - "label=bootwright.kind=artifacts"
+      - "label=bootwright.provider={{ bootwright_component.providerName }}"
+      - "label=bootwright.name={{ bootwright_component.name }}"
+    bootwright_process_cleanup_mark_changed: false
+
+- name: Close boot artifact ports on host firewall
+  ansible.posix.firewalld:
+    port: "{{ item.port | int }}/tcp"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_component.listeners | default([]) }}"
+  loop_control:
+    label: "{{ item.protocol }}:{{ item.port }}"
+  when: bootwright_firewalld_available | default(false)
+
+- name: Remove boot artifact state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_managed_services_dir }}/{{ bootwright_component.name }}"
+    state: absent

@@ -14,19 +14,19 @@ type Phase struct {
 var phases = map[string]Phase{
 	"provider": {
 		Name:          "provider",
-		ApplyPlaybook: "playbooks/layers/providers/apply.yml",
+		ApplyPlaybook: "bootwright.core.task_provider_services_apply",
 		NeedsRoot:     true,
 		Description:   "converge provider setup and BMC services",
 	},
 	"infra-components": {
 		Name:          "infra-components",
-		ApplyPlaybook: "playbooks/layers/infra_components/apply.yml",
+		ApplyPlaybook: "bootwright.core.task_infra_component_services_apply",
 		NeedsRoot:     true,
 		Description:   "converge host-bound infra components: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
 	},
 	"cluster-infra": {
 		Name:          "cluster-infra",
-		ApplyPlaybook: "playbooks/layers/cluster_infra/apply.yml",
+		ApplyPlaybook: "bootwright.core.task_machine_infra_apply",
 		NeedsRoot:     true,
 		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",
 	},
@@ -37,7 +37,7 @@ var phases = map[string]Phase{
 	},
 	"container-cluster": {
 		Name:          "container-cluster",
-		ApplyPlaybook: "playbooks/layers/openshift/install-agent.yml",
+		ApplyPlaybook: "bootwright.core.task_container_cluster_agent_install",
 		NeedsRoot:     true,
 		Description:   "run openshift-install agent and boot nodes through the provider boot path",
 	},

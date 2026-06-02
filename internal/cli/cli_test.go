@@ -574,7 +574,7 @@ func TestContextInitPreparesAnsibleBundle(t *testing.T) {
 	}
 	for _, rel := range []string{
 		"ansible.cfg",
-		"playbooks/checks/preflight.yml",
+		"bootwright.core.check_preflight",
 		".bootwright-bundle.version",
 		".bootwright-bundle.sha256",
 	} {

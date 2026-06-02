@@ -1,0 +1,29 @@
+---
+- name: Remove dnsmasq container
+  containers.podman.podman_container:
+    name: "{{ bootwright_dnsmasq_container_name }}"
+    state: absent
+
+- name: Reap orphan dnsmasq from a leaked container instance
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_process_cleanup
+  vars:
+    bootwright_process_cleanup_podman_filters:
+      - "label=bootwright.kind=nameResolution"
+      - "label=bootwright.provider={{ bootwright_component.providerName }}"
+      - "label=bootwright.name={{ bootwright_component.name }}"
+    bootwright_process_cleanup_mark_changed: false
+
+- name: Close DNS port on host firewall (firewalld)
+  ansible.posix.firewalld:
+    port: "53/udp"
+    state: disabled
+    permanent: true
+    immediate: true
+  when: bootwright_firewalld_available | default(false)
+  failed_when: false
+
+- name: Remove dnsmasq state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_dnsmasq_root }}"
+    state: absent

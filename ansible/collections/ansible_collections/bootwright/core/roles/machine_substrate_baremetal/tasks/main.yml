@@ -1,0 +1,59 @@
+---
+# Bare-metal "substrate" — no provisioning work happens on the
+# provider host. The cluster_infra layer runs this role per machine to
+# record the per-cluster manifest and validate the BMC credentialRef
+# exists locally. Actual BMC interaction happens in
+# bootwright.core.container_cluster_boot_redfish on the controller during the
+# install layer.
+
+- name: Resolve baremetal manifest paths
+  ansible.builtin.set_fact:
+    bootwright_baremetal_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/baremetal"
+  changed_when: false
+
+- name: Create baremetal state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_baremetal_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Validate baremetal BMC inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.bmc is mapping
+      - (bootwright_component.bmc.address | default('') | length) > 0
+    fail_msg: >-
+      Cluster {{ bootwright_current_cluster.name }} machine {{ bootwright_component.name }}
+      is missing baremetal BMC details (component.bmc.address). Verify the
+      selected InfraProvider machines[*].baremetal.bmc entry.
+
+- name: Resolve baremetal credential path
+  ansible.builtin.set_fact:
+    bootwright_baremetal_cred_path: >-
+      {{ (bootwright_secrets_dir ~ '/' ~ bootwright_component.bmc.credentialRef) if (bootwright_component.bmc.credentialRef | default('') | length) > 0 else '' }}
+  changed_when: false
+
+- name: Check baremetal BMC credential file
+  ansible.builtin.stat:
+    path: "{{ bootwright_baremetal_cred_path }}"
+  register: bootwright_baremetal_cred_stat
+  delegate_to: localhost
+  become: false
+  when: (bootwright_baremetal_cred_path | length) > 0
+
+- name: Fail when baremetal BMC credential is missing
+  ansible.builtin.fail:
+    msg: "Missing baremetal BMC credentials at {{ bootwright_baremetal_cred_path }}"
+  when:
+    - (bootwright_baremetal_cred_path | length) > 0
+    - not (bootwright_baremetal_cred_stat.stat.exists | default(false))
+
+- name: Record baremetal machine manifest
+  ansible.builtin.template:
+    src: machine-manifest.yml.j2
+    dest: "{{ bootwright_baremetal_root }}/{{ bootwright_component.name }}.yml"
+    owner: root
+    group: root
+    mode: "0644"

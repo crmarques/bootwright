@@ -1,2 +1,0 @@
----
-- import_playbook: ../../layers/openshift/destroy-agent.yml

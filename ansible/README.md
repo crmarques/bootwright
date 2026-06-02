@@ -9,21 +9,24 @@ state.
 
 | Path | Owns |
 | --- | --- |
-| `playbooks/targets/` | User-facing workflows invoked by CLI targets. |
-| `playbooks/layers/` | Ordered layer orchestration. |
-| `roles/bastion/` | Controller-local setup. |
-| `roles/shared/` | Context and reusable host helpers. |
-| `roles/providers/` | Provider setup and BMC services. |
-| `roles/infra_components/` | Host-bound InfraComponent services. |
-| `roles/cluster_infra/` | Per-cluster substrate and network state. |
-| `roles/openshift/` | Agent installer execution, boot, wait, and destroy. |
-| `roles/storage/` | Remote storage host mutation and Ceph command execution. |
+| `collections/requirements*.yml` | External collection dependency inputs and lock metadata. |
+| `collections/ansible_collections/bootwright/core/playbooks/workflow_*.yml` | User-facing workflows invoked by CLI targets. |
+| `collections/ansible_collections/bootwright/core/playbooks/task_*.yml` | Focused task playbooks invoked by the CLI task planner or workflows. |
+| `collections/ansible_collections/bootwright/core/playbooks/check_*.yml` | Read-only checks and preflight validation. |
+| `collections/ansible_collections/bootwright/core/roles/host_*` | Reusable host preparation and proxy helpers. |
+| `collections/ansible_collections/bootwright/core/roles/helper_*` | Context, credential, and cleanup helpers. |
+| `collections/ansible_collections/bootwright/core/roles/provider_service_*` | Provider-host services, including BMC services. |
+| `collections/ansible_collections/bootwright/core/roles/infra_component_*` | Host-bound InfraComponent services. |
+| `collections/ansible_collections/bootwright/core/roles/machine_substrate_*` | Per-cluster substrate and network state. |
+| `collections/ansible_collections/bootwright/core/roles/container_cluster_*` | Agent installer execution, boot, wait, media, and destroy. |
+| `collections/ansible_collections/bootwright/core/roles/storage_cluster_*` | Remote storage host mutation and Ceph command execution. |
 
 ## Role Rules
 
 - Keep roles focused on one reusable capability.
 - Split large roles into task files by concern.
 - Put long config, XML, systemd unit, and script bodies in templates.
+- Use fully qualified role names (`bootwright.core.*`) in playbooks.
 - Prefer modules to shell; command and shell tasks must declare idempotency
   through `creates`, `changed_when`, or explicit checks.
 - Mark sensitive tasks `no_log` and keep secret bytes out of rendered

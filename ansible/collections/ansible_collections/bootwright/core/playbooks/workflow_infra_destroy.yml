@@ -1,0 +1,8 @@
+---
+- import_playbook: check_become.yml
+  vars:
+    bootwright_become_check_hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts
+
+- import_playbook: task_machine_infra_destroy.yml
+- import_playbook: task_infra_component_services_destroy.yml
+- import_playbook: task_provider_services_destroy.yml

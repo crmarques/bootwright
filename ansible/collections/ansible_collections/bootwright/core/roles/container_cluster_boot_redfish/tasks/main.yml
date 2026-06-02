@@ -1,0 +1,39 @@
+---
+- name: Select Redfish boot action
+  ansible.builtin.set_fact:
+    bootwright_redfish_action_effective: "{{ bootwright_redfish_action | default('boot') }}"
+  changed_when: false
+
+- name: Validate selected Redfish boot action
+  ansible.builtin.assert:
+    that:
+      - bootwright_redfish_action_effective in ['boot', 'cleanup_media']
+    fail_msg: "Unsupported boot_redfish action {{ bootwright_redfish_action_effective }}"
+
+- name: Validate Redfish boot inputs
+  ansible.builtin.import_tasks: stage/validate.yml
+
+- name: Load Redfish credentials
+  ansible.builtin.import_tasks: stage/credentials.yml
+
+- name: Prepare Redfish virtual media
+  ansible.builtin.import_tasks: media/prepare.yml
+
+- name: Validate declared MACs against Redfish inventory
+  ansible.builtin.import_tasks: validation/macs.yml
+  when:
+    - bootwright_redfish_action_effective == 'boot'
+    - bootwright_component.boot.redfish.setBootSource | default(true) | bool
+    - (bootwright_component.interfaces | default([]) | length) > 0
+
+- name: Boot node from Redfish virtual media
+  when: bootwright_redfish_action_effective == 'boot'
+  block:
+    - name: Power node from virtual media
+      ansible.builtin.import_tasks: boot/power.yml
+
+    - name: Set post-boot Redfish boot device
+      ansible.builtin.import_tasks: boot/post_boot.yml
+  always:
+    - name: Restore Redfish certificate verification settings
+      ansible.builtin.import_tasks: media/restore_certificate_verification.yml

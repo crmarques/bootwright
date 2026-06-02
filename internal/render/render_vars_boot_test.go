@@ -184,8 +184,8 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			if got := redfish["validateCerts"]; got != tc.wantValidate {
 				t.Errorf("redfish.validateCerts got %v, want %v", got, tc.wantValidate)
 			}
-			if got := machine["bootApplyRole"]; got != "boot_redfish" {
-				t.Errorf("bootApplyRole got %v, want boot_redfish", got)
+			if got := machine["bootApplyRole"]; got != "bootwright.core.container_cluster_boot_redfish" {
+				t.Errorf("bootApplyRole got %v, want bootwright.core.container_cluster_boot_redfish", got)
 			}
 			iso, ok := boot["agentIso"].(map[string]any)
 			if !ok {
@@ -228,8 +228,8 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 			t.Errorf("boot.media.libvirt.%s got %v, want %v", k, got, want)
 		}
 	}
-	if got := machine["mediaPrepareRole"]; got != "media_libvirt" {
-		t.Fatalf("mediaPrepareRole got %v, want media_libvirt", got)
+	if got := machine["mediaPrepareRole"]; got != "bootwright.core.container_cluster_media_libvirt" {
+		t.Fatalf("mediaPrepareRole got %v, want bootwright.core.container_cluster_media_libvirt", got)
 	}
 	redfish := boot["redfish"].(map[string]any)
 	if got := redfish["setBootSource"]; got != false {
@@ -618,8 +618,8 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 		t.Fatalf("provider services missing bmc entry: %v", services)
 	}
 	wants := map[string]any{
-		"applyRole":        "bmc_emulated",
-		"destroyRole":      "bmc_emulated",
+		"applyRole":        "bootwright.core.provider_service_bmc_emulated",
+		"destroyRole":      "bootwright.core.provider_service_bmc_emulated",
 		"providerName":     "lab-libvirt-provider",
 		"hostRef":          "lab-host",
 		"configConsistent": true,
@@ -638,7 +638,7 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 		t.Fatalf("provider host setup entries = %v", setups)
 	}
 	setup := setups[0].(map[string]any)
-	if got := setup["applyRole"]; got != "host_libvirt" {
+	if got := setup["applyRole"]; got != "bootwright.core.host_libvirt" {
 		t.Fatalf("host setup applyRole got %v", got)
 	}
 }
@@ -683,7 +683,7 @@ func TestProviderServicesAggregateSharedManagedServices(t *testing.T) {
 		t.Fatalf("additionalIngressHosts got %v, want union from both clusters", hosts)
 	}
 	ntp := firstProviderServiceByKind(t, infraComponentServices, v1alpha1.ComponentSlotNTP)
-	if got := ntp["applyRole"]; got != "ntp_chrony" {
+	if got := ntp["applyRole"]; got != "bootwright.core.infra_component_ntp_chrony" {
 		t.Fatalf("ntp applyRole got %v", got)
 	}
 	if got := ntp["allowedNetworks"].([]string); strings.Join(got, ",") != "192.168.132.0/24" {

@@ -1,3 +1,7 @@
 # Resolved collection trees from `ansible-galaxy collection install -p .`
 # stay local; the source of truth is requirements.yml.
-ansible_collections/
+ansible_collections/*
+!ansible_collections/bootwright/
+ansible_collections/bootwright/*
+!ansible_collections/bootwright/core/
+!ansible_collections/bootwright/core/**

@@ -101,7 +101,7 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 			Label:  "provider services service-host",
 			Status: TaskStatusPending,
 		},
-		Playbook: "playbooks/layers/providers/apply.yml",
+		Playbook: "bootwright.core.task_provider_services_apply",
 		State:    state,
 	}
 	renderedDir := filepath.Join(dir, "rendered")
@@ -128,7 +128,7 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 	if !runner.runCalled {
 		t.Fatal("fake runner was not invoked")
 	}
-	if !strings.HasSuffix(runner.lastSpec.Playbook, "playbooks/layers/providers/apply.yml") {
+	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_provider_services_apply") {
 		t.Fatalf("playbook = %q", runner.lastSpec.Playbook)
 	}
 }
@@ -145,7 +145,7 @@ func TestRunApplyTaskGraphFailsWhenTasksCannotMakeProgress(t *testing.T) {
 			Status:       TaskStatusPending,
 			Dependencies: []string{"provider.missing"},
 		},
-		Playbook: "playbooks/layers/providers/apply.yml",
+		Playbook: "bootwright.core.task_provider_services_apply",
 		State:    state,
 	}
 	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
@@ -204,7 +204,7 @@ func TestRunApplyTaskGraphReportsLeaseHeartbeatFailure(t *testing.T) {
 			Label:  "provider services service-host",
 			Status: TaskStatusPending,
 		},
-		Playbook: "playbooks/layers/providers/apply.yml",
+		Playbook: "bootwright.core.task_provider_services_apply",
 		State:    state,
 	}
 	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
@@ -434,7 +434,7 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("runner factory calls = %d, want 1", calls)
 	}
-	if !strings.HasSuffix(runner.lastSpec.Playbook, "playbooks/layers/openshift/wait-agent-install.yml") {
+	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_container_cluster_wait_agent_install") {
 		t.Fatalf("playbook = %q, want wait-agent-install.yml", runner.lastSpec.Playbook)
 	}
 	for _, id := range []string{"iso.sno-libvirt", "boot.sno-libvirt"} {
@@ -727,7 +727,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 		t.Fatalf("storage tasks got %d, want 1", len(tasks))
 	}
 	task := tasks[0]
-	if task.Playbook != "playbooks/layers/storage/apply.yml" {
+	if task.Playbook != "bootwright.core.task_storage_cluster_apply" {
 		t.Fatalf("storage playbook = %q", task.Playbook)
 	}
 	if task.Limit != render.StorageSeedHostName("ceph") {
@@ -757,7 +757,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	if !runner.runCalled {
 		t.Fatal("storage task did not invoke Ansible runner")
 	}
-	if !strings.HasSuffix(runner.lastSpec.Playbook, "playbooks/layers/storage/apply.yml") {
+	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_storage_cluster_apply") {
 		t.Fatalf("storage playbook = %q", runner.lastSpec.Playbook)
 	}
 	if _, err := os.Stat(filepath.Join(runner.lastSpec.ArtifactsDir, "storage-result.json")); !os.IsNotExist(err) {

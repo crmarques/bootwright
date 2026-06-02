@@ -63,7 +63,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			ProviderStateDir:   ctx.ProviderStateDir,
 			Executable:         executable,
 			BundleDir:          bundle.Dir,
-			Playbook:           "playbooks/checks/preflight.yml",
+			Playbook:           "bootwright.core.check_preflight",
 			ArtifactsBaseName:  "preflight-all",
 			DryRun:             dryRun,
 			Label:              "all check",

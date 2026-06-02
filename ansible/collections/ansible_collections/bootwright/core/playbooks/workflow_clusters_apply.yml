@@ -1,0 +1,8 @@
+---
+- import_playbook: check_become.yml
+  vars:
+    bootwright_become_check_hosts: bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts
+
+- import_playbook: check_preflight.yml
+- import_playbook: task_machine_infra_apply.yml
+- import_playbook: task_container_cluster_agent_install.yml

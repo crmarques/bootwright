@@ -75,7 +75,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"docs/advanced/proxy-and-disconnected.md",
 		"specs/architecture.md",
 		"specs/state-model.md",
-		"ansible/VARS_CONTRACT.md",
+		"ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md",
 	}
 	rejected := []string{
 		"spec.bootArtifactsHttp",
@@ -107,7 +107,7 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 // stale schema fragments that otherwise surface only as runtime diagnostics.
 func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {
 	roots := []string{
-		"ansible/roles",
+		"ansible/collections/ansible_collections/bootwright/core/roles",
 	}
 	rejected := []string{
 		"machines[*].provisioner",

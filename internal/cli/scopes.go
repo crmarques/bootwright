@@ -16,8 +16,8 @@ var infraScope = scopeSpec{
 	name:              "infra",
 	short:             "Install and configure InfraProvider, InfraComponent, and ClusterInfra",
 	phaseNames:        []string{"provider", "infra-components", "cluster-infra"},
-	applyPlaybook:     "playbooks/targets/infra/apply.yml",
-	destroyPlaybook:   "playbooks/targets/infra/destroy.yml",
+	applyPlaybook:     "bootwright.core.workflow_infra_apply",
+	destroyPlaybook:   "bootwright.core.workflow_infra_destroy",
 	artifactsBaseName: "infra",
 }
 
@@ -25,7 +25,7 @@ var clustersScope = scopeSpec{
 	name:              "clusters",
 	short:             "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations",
 	phaseNames:        []string{"cluster-infra", "storage-cluster", "container-cluster", "addons"},
-	applyPlaybook:     "playbooks/targets/clusters/apply.yml",
+	applyPlaybook:     "bootwright.core.workflow_clusters_apply",
 	artifactsBaseName: "clusters",
 }
 
@@ -34,8 +34,8 @@ var containerClusterScope = scopeSpec{
 	short:             "Install and configure managed OpenShift clusters via openshift-install agent",
 	phaseNames:        []string{"container-cluster"},
 	applyPhaseNames:   []string{"container-cluster", "addons"},
-	applyPlaybook:     "playbooks/targets/container-cluster/apply.yml",
-	destroyPlaybook:   "playbooks/targets/clusters/destroy.yml",
+	applyPlaybook:     "bootwright.core.workflow_container_cluster_apply",
+	destroyPlaybook:   "bootwright.core.workflow_clusters_destroy",
 	artifactsBaseName: "container-cluster",
 }
 
@@ -57,7 +57,7 @@ var allScope = scopeSpec{
 	name:              "all",
 	short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
 	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-cluster", "container-cluster", "addons"},
-	applyPlaybook:     "playbooks/targets/all/apply.yml",
+	applyPlaybook:     "bootwright.core.workflow_all_apply",
 	artifactsBaseName: "all",
 }
 

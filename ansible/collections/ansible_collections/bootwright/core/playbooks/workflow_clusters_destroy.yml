@@ -1,0 +1,2 @@
+---
+- import_playbook: task_container_cluster_agent_destroy.yml

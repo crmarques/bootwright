@@ -237,7 +237,7 @@ examples/   Safe-to-commit desired-state examples
 api/        Versioned desired-state types
 cmd/        CLI entrypoints
 internal/   Private implementation packages
-ansible/    Embedded workflow playbooks and roles
+ansible/    Embedded `bootwright.core` Ansible collection and dependency lock
 test/       Test fixtures and end-to-end cases
 ```
 

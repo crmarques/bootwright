@@ -1,0 +1,15 @@
+---
+namespace: bootwright
+name: core
+version: 0.0.0
+readme: README.md
+authors:
+  - Bootwright maintainers
+description: Embedded Bootwright convergence playbooks, roles, and filters.
+tags:
+  - bootwright
+  - openshift
+  - infrastructure
+build_ignore:
+  - plugins/filter/test_*.py
+  - roles/*/test_plugins

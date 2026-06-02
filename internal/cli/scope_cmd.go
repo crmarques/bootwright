@@ -11,7 +11,7 @@ import (
 // Paths and Ansible --limit groups shared across scope command builders.
 // Centralised so a single edit reaches all three (check/apply/destroy).
 const (
-	preflightPlaybookPath = "playbooks/checks/preflight.yml"
+	preflightPlaybookPath = "bootwright.core.check_preflight"
 	// infraAnsibleLimit pins the inventory groups `apply infra` and
 	// `check infra` target. `bootwright_ocp_hosts` is included so
 	// bastion-side external_validate can run in every context input set,
