@@ -147,9 +147,9 @@ sudo tail -f "/var/lib/bootwright/contexts/$CASE/clusters/$CLUSTER/runtime/insta
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
-per-machine overlays in `cluster-infra.yaml` under
-`spec.components.machines[].networkConfig.addresses[]`. Then watch the agent
-or bootkube journals:
+per-machine overrides in `cluster-infra.yaml` under
+`spec.components.machines[].networkConfig.overrides.interfaces[].ipv4.address[]`.
+Then watch the agent or bootkube journals:
 
 ```bash
 sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/cluster-admin-ssh-key" core@<node-ip> \

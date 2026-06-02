@@ -177,13 +177,34 @@ func EndpointNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra, ad
 	if ip == nil {
 		return v1alpha1.NetworkConfig{}, false
 	}
-	for _, name := range ClusterConsumedNetworkConfigs(infra) {
-		network, ok := NetworkConfig(state, name)
-		if ok && NetworkConfigContainsIP(network, ip) {
+	for _, network := range ClusterNetworkConfigs(state, infra) {
+		if NetworkConfigContainsIP(network, ip) {
 			return network, true
 		}
 	}
 	return v1alpha1.NetworkConfig{}, false
+}
+
+func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInfra) []v1alpha1.NetworkConfig {
+	var out []v1alpha1.NetworkConfig
+	for _, name := range ClusterConsumedNetworkConfigs(infra) {
+		if network, ok := NetworkConfig(state, name); ok {
+			out = append(out, network)
+		}
+	}
+	for _, machine := range infra.Spec.Components.Machines {
+		if machine.NetworkConfig.Spec == nil {
+			continue
+		}
+		out = append(out, v1alpha1.NetworkConfig{
+			Metadata: v1alpha1.Metadata{Name: infra.Metadata.Name + "/" + machine.Name},
+			Spec:     *machine.NetworkConfig.Spec,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return out
 }
 
 func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInfra) []string {
@@ -257,12 +278,8 @@ func PrimaryClusterNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInf
 			}
 		}
 	}
-	for _, machine := range infra.Spec.Components.Machines {
-		if machine.NetworkConfig.Ref.Name != "" {
-			if network, ok := NetworkConfig(state, machine.NetworkConfig.Ref.Name); ok {
-				return &network
-			}
-		}
+	for _, network := range ClusterNetworkConfigs(state, infra) {
+		return &network
 	}
 	return nil
 }

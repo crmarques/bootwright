@@ -31,11 +31,13 @@ spec:
         networkConfig:
           ref:
             name: dc1-net
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.141.10
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.141.10
+                      prefix-length: 24
       - name: master-1
         from:
           provider: baremetal-provider
@@ -43,11 +45,13 @@ spec:
         networkConfig:
           ref:
             name: dc1-net
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.141.11
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.141.11
+                      prefix-length: 24
       - name: master-2
         from:
           provider: baremetal-provider
@@ -55,8 +59,10 @@ spec:
         networkConfig:
           ref:
             name: dc1-net
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.141.12
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.141.12
+                      prefix-length: 24

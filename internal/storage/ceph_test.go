@@ -114,10 +114,17 @@ func minimalStorageState() v1alpha1.State {
 				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
 					Name: "ceph-dc1-0",
 					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-						Addresses: []v1alpha1.NetworkConfigAddress{{
-							Interface: "primary",
-							IPv4:      []v1alpha1.NetworkIPAddress{{IP: "192.168.141.30"}},
-						}},
+						Spec: &v1alpha1.NetworkConfigSpec{
+							MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.141.0/24"}},
+							Template: v1alpha1.NetworkConfigTemplate{NetworkConfig: map[string]any{
+								"interfaces": []any{map[string]any{
+									"name": "primary",
+									"ipv4": map[string]any{
+										"address": []any{map[string]any{"ip": "192.168.141.30"}},
+									},
+								}},
+							}},
+						},
 					},
 				}}},
 			},

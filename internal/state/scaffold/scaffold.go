@@ -315,11 +315,13 @@ spec:
         networkConfig:
           ref:
             name: {{.NetworkID}}
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.130.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.130.20
+                      prefix-length: 24
 {{.Substrate.ClusterMachineExtras}}
         rootDeviceHints:
           deviceName: {{.BootDevice}}

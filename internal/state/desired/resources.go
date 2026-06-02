@@ -240,8 +240,10 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		for _, machine := range ci.Spec.Components.Machines {
 			require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].from.provider", ci.Metadata.Name, machine.Name),
 				v1alpha1.KindInfraProvider, machine.From.Provider)
-			require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].networkConfig.ref", ci.Metadata.Name, machine.Name),
-				v1alpha1.KindNetworkConfig, machine.NetworkConfig.Ref.Name)
+			if machine.NetworkConfig.Ref.Name != "" {
+				require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].networkConfig.ref", ci.Metadata.Name, machine.Name),
+					v1alpha1.KindNetworkConfig, machine.NetworkConfig.Ref.Name)
+			}
 		}
 	}
 	for _, ocp := range state.ContainerClusters {

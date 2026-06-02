@@ -87,7 +87,7 @@ Edit these first:
   `shared/provider.yaml`, or `infra/providers/*.yaml`.
 - Machine CIDRs and NMState templates in `networkconfig.yaml`,
   `shared/networks.yaml`, or `infra/networkconfigs/*.yaml`.
-- Endpoint definitions and per-machine IP overlays in
+- Endpoint definitions and per-machine IP overrides in
   `cluster-infra.yaml`, `clusters/<cluster>/cluster-infra.yaml`, or
   `clusters/container/<cluster>/cluster-infra.yaml`.
 - OpenShift or OKD release, install mode, and node bindings in

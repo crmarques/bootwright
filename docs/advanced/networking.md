@@ -1,6 +1,6 @@
 ---
 title: Networking
-description: NetworkConfig templates, machine overlays, endpoints, and load balancers.
+description: NetworkConfig templates, machine overrides, endpoints, and load balancers.
 ---
 
 # Networking
@@ -64,17 +64,19 @@ spec:
             table-id: 254
 ```
 
-Each cluster machine references the template and overlays only its address:
+Each cluster machine references the template and overrides only its address:
 
 ```yaml
 networkConfig:
   ref:
     name: rack1-bonded-machine
-  addresses:
-    - interface: bond0
-      ipv4:
-        - ip: 192.168.133.20
-          prefix-length: 24
+  overrides:
+    interfaces:
+      - name: bond0
+        ipv4:
+          address:
+            - ip: 192.168.133.20
+              prefix-length: 24
 ```
 
 ## Provider Attachments

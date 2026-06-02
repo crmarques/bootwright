@@ -39,11 +39,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-vlan
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.20
+                      prefix-length: 24
       - name: master-1
         from:
           provider: rack1-baremetal-provider
@@ -51,11 +53,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-vlan
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.21
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.21
+                      prefix-length: 24
       - name: master-2
         from:
           provider: rack1-baremetal-provider
@@ -63,11 +67,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-vlan
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.22
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.22
+                      prefix-length: 24
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

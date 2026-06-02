@@ -128,17 +128,11 @@ func storageMachineIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref
 			if machine.Name != ref.MachineRef.Name {
 				continue
 			}
-			for _, address := range machine.NetworkConfig.Addresses {
-				if ref.Interface != "" && address.Interface != ref.Interface {
-					continue
-				}
-				if ref.Family == "ipv6" && len(address.IPv6) > 0 {
-					return address.IPv6[0].IP
-				}
-				if ref.Family != "ipv6" && len(address.IPv4) > 0 {
-					return address.IPv4[0].IP
-				}
+			family := "ipv4"
+			if ref.Family == "ipv6" {
+				family = "ipv6"
 			}
+			return networkConfigInterfaceIP(agentNetworkConfig(state, infra, machine, ""), ref.Interface, family)
 		}
 	}
 	return ""

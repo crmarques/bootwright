@@ -783,15 +783,23 @@ Rules:
 - A given `spec.machineNetwork[].cidr` may appear in exactly one
   `NetworkConfig`; duplicates across objects are invalid.
 - `spec.template.networkConfig` renders to
-  `agent-config.yaml hosts[].networkConfig` after per-machine overlays.
+  `agent-config.yaml hosts[].networkConfig` after per-machine overrides.
 - `spec.dnsRefs[]` selects entries from
   `Environment.spec.infraComponents.nameResolution[].name`. These refs are
   Bootwright service-selection intent and must stay outside the raw NMState
   template. Resolved IPs are appended to generated
   `dns-resolver.config.server` entries.
-- Common overlays should be limited to `addresses[]`; advanced users may set a
-  full machine-level `networkConfig` override.
-- Static overlay IPs must fit at least one referenced machine network CIDR.
+- `ClusterInfra.spec.components.machines[].networkConfig` accepts either a
+  reusable `ref` plus raw NMState `overrides`, or a complete inline `spec`.
+  `ref` and `spec` are mutually exclusive.
+- When `ref` is used, `overrides` is merged into the referenced
+  `NetworkConfig.spec.template.networkConfig` by updating the declared nested
+  fields instead of replacing the whole original tree. Interface lists are
+  matched by `name` before nested attributes are merged.
+- Static per-machine IPs belong in
+  `overrides.interfaces[].ipv4.address[]` or
+  `overrides.interfaces[].ipv6.address[]`, and must fit at least one
+  referenced machine network CIDR.
 - Substrate attachments such as libvirt bridges, vSphere portgroups,
   KubeVirt NADs, and bare-metal VLANs belong to
   `InfraProvider.spec.networkAttachments[]` and are selected from
@@ -1156,11 +1164,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bonded-machine
-          addresses:
-            - interface: bond0
-              ipv4:
-                - ip: 192.168.133.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0
+                ipv4:
+                  address:
+                    - ip: 192.168.133.20
+                      prefix-length: 24
       - name: master-1
         from:
           provider: rack1-baremetal
@@ -1168,11 +1178,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bonded-machine
-          addresses:
-            - interface: bond0
-              ipv4:
-                - ip: 192.168.133.21
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0
+                ipv4:
+                  address:
+                    - ip: 192.168.133.21
+                      prefix-length: 24
       - name: master-2
         from:
           provider: rack1-baremetal
@@ -1180,11 +1192,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bonded-machine
-          addresses:
-            - interface: bond0
-              ipv4:
-                - ip: 192.168.133.22
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0
+                ipv4:
+                  address:
+                    - ip: 192.168.133.22
+                      prefix-length: 24
 
 ```
 
@@ -1198,7 +1212,7 @@ Rules:
   provisioning network" mode and is appropriate for agent installs using
   Redfish virtual media on the existing machine network.
 - `components.machines[]` selects provider machines or profiles and applies
-  per-machine network overlays.
+  per-machine network overrides.
 - `networkBindings[]` maps a logical `NetworkConfig` and selected provider to
   one `InfraProvider.spec.networkAttachments[]` entry. Bindings are unique per
   `(providerRef.name, networkConfigRef.name)` pair.
@@ -1277,8 +1291,9 @@ Bootwright renders:
   zero compute nodes.
 - `agent-config.yaml hosts[]` by matching `ContainerCluster.spec.nodes[]` to
   `ClusterInfra.spec.components.machines[]`.
-- `agent-config.yaml hosts[].networkConfig` from the referenced
-  `NetworkConfig` template plus machine overlays or full overrides.
+- `agent-config.yaml hosts[].networkConfig` from inline
+  `networkConfig.spec` definitions or referenced `NetworkConfig` templates
+  plus machine overrides.
 - `agent-config.yaml hosts[].networkConfig.dns-resolver.config.server` from
   static NMState servers plus `NetworkConfig.spec.dnsRefs[]`, de-duplicated in
   that order.
@@ -1333,7 +1348,7 @@ Validation rejects:
 - `source.componentRef.name` or `source.bindAddress` references that do not
   resolve to declared load balancer components and bind addresses.
 - Unreferenced load balancers or named bind addresses.
-- Endpoint VIPs or machine overlay IPs outside selected machine networks.
+- Endpoint VIPs or machine override IPs outside selected machine networks.
 - Bare-metal machines selected by a non-bare-metal platform.
 - vSphere platform selections backed by a non-vSphere machine profile.
 - Invalid environment proxy or registry catalog entries, unresolved managed

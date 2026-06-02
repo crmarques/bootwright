@@ -31,8 +31,10 @@ spec:
         networkConfig:
           ref:
             name: metal-net
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.160.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.160.20
+                      prefix-length: 24

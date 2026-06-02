@@ -78,18 +78,7 @@ type ClusterMachineComponent struct {
 }
 
 type ClusterMachineNetworkConfig struct {
-	Ref           LocalObjectReference   `yaml:"ref,omitempty" json:"ref,omitempty"`
-	Addresses     []NetworkConfigAddress `yaml:"addresses,omitempty" json:"addresses,omitempty"`
-	NetworkConfig map[string]any         `yaml:"networkConfig,omitempty" json:"networkConfig,omitempty"`
-}
-
-type NetworkConfigAddress struct {
-	Interface string             `yaml:"interface" json:"interface"`
-	IPv4      []NetworkIPAddress `yaml:"ipv4,omitempty" json:"ipv4,omitempty"`
-	IPv6      []NetworkIPAddress `yaml:"ipv6,omitempty" json:"ipv6,omitempty"`
-}
-
-type NetworkIPAddress struct {
-	IP           string `yaml:"ip" json:"ip"`
-	PrefixLength int    `yaml:"prefix-length" json:"prefix-length"`
+	Ref       LocalObjectReference `yaml:"ref,omitempty" json:"ref,omitempty"`
+	Overrides map[string]any       `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+	Spec      *NetworkConfigSpec   `yaml:"spec,omitempty" json:"spec,omitempty"`
 }

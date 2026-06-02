@@ -90,13 +90,87 @@ func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 		IP:   "192.168.130.53",
 	})
 	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
-	machine.NetworkConfig.NetworkConfig = map[string]any{
+	machine.NetworkConfig.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
 	}
 	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
 	want := []string{"10.0.0.2", "192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
+	}
+}
+
+func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
+	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{Name: "default"})
+	state.NetworkConfigs[0].Spec.Template.NetworkConfig["interfaces"] = []any{
+		map[string]any{
+			"name":  "primary",
+			"type":  "ethernet",
+			"state": "up",
+			"ipv4": map[string]any{
+				"enabled": true,
+				"dhcp":    false,
+			},
+			"ipv6": map[string]any{
+				"enabled": false,
+			},
+		},
+		map[string]any{
+			"name":        "secondary",
+			"type":        "ethernet",
+			"state":       "up",
+			"description": "kept",
+		},
+		map[string]any{
+			"name":  "bond0",
+			"type":  "bond",
+			"state": "up",
+			"link-aggregation": map[string]any{
+				"mode": "active-backup",
+				"port": []any{"primary", "secondary"},
+			},
+		},
+	}
+	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
+	machine.NetworkConfig.Overrides = map[string]any{
+		"interfaces": []any{map[string]any{
+			"name": "primary",
+			"ipv4": map[string]any{
+				"address": []any{map[string]any{"ip": "192.168.130.20", "prefix-length": 24}},
+			},
+		}},
+	}
+
+	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
+	interfaces := got["interfaces"].([]any)
+	if len(interfaces) != 3 {
+		t.Fatalf("interfaces got %v, want three merged interfaces", interfaces)
+	}
+	primary := interfaces[0].(map[string]any)
+	if primary["type"] != "ethernet" || primary["state"] != "up" {
+		t.Fatalf("primary base fields were not preserved: %v", primary)
+	}
+	ipv4 := primary["ipv4"].(map[string]any)
+	if ipv4["enabled"] != true || ipv4["dhcp"] != false {
+		t.Fatalf("primary ipv4 base fields were not preserved: %v", ipv4)
+	}
+	addresses := ipv4["address"].([]any)
+	address := addresses[0].(map[string]any)
+	if address["ip"] != "192.168.130.20" || address["prefix-length"] != 24 {
+		t.Fatalf("primary ipv4 address got %v", address)
+	}
+	ipv6 := primary["ipv6"].(map[string]any)
+	if ipv6["enabled"] != false {
+		t.Fatalf("primary ipv6 base fields were not preserved: %v", ipv6)
+	}
+	secondary := interfaces[1].(map[string]any)
+	if secondary["name"] != "secondary" || secondary["description"] != "kept" {
+		t.Fatalf("secondary interface was not preserved: %v", secondary)
+	}
+	bond := interfaces[2].(map[string]any)
+	aggregation := bond["link-aggregation"].(map[string]any)
+	if bond["name"] != "bond0" || aggregation["mode"] != "active-backup" {
+		t.Fatalf("bond interface was not preserved: %v", bond)
 	}
 }
 

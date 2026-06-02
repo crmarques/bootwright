@@ -15,7 +15,7 @@ Current placement:
 
 - provider physical facts belong in `InfraProvider.spec`
 - machine network templates belong in `NetworkConfig`
-- selected machines and host IP overlays belong in
+- selected machines and host IP overrides belong in
   `ClusterInfra.spec.components.machines[]`
 - cluster release belongs in `ContainerCluster.spec.distribution`, and install
   mode belongs in `ContainerCluster.spec.install.mode`
@@ -54,7 +54,7 @@ must reference the same `ClusterInfra`.
 
 ## Address Failures
 
-Endpoint VIPs and machine address overlays are checked against selected
+Endpoint VIPs and machine address overrides are checked against selected
 `NetworkConfig.spec.machineNetwork[]` CIDRs. Select the correct machine network
 through `ClusterInfra.spec.components.machines[].networkConfig.ref`, or fix
 either the CIDR template or the host-specific IP.

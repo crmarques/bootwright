@@ -51,3 +51,29 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 		t.Fatalf("machineNetworkConfig = %#v, want %#v", got, want)
 	}
 }
+
+func TestMachineNetworkConfigUsesInlineMachineSpecs(t *testing.T) {
+	state := v1alpha1.State{}
+	ci := v1alpha1.ClusterInfra{
+		Spec: v1alpha1.ClusterInfraSpec{
+			Components: v1alpha1.ClusterComponents{
+				Machines: []v1alpha1.ClusterMachineComponent{{
+					Name: "master-0",
+					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
+						Spec: &v1alpha1.NetworkConfigSpec{
+							MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.132.0/24"}},
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	got := machineNetworkConfig(state, ci)
+	want := []any{
+		map[string]any{"cidr": "192.168.132.0/24"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("machineNetworkConfig = %#v, want %#v", got, want)
+	}
+}

@@ -22,11 +22,12 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.Con
 		if hints := rootDeviceHintsConfig(machineRootDeviceHints(state, machine)); len(hints) > 0 {
 			host["rootDeviceHints"] = hints
 		}
-		if nc := agentNetworkConfig(state, ci, machine, ocp.Metadata.Name); len(nc) > 0 {
-			host["networkConfig"] = nc
+		networkConfig := agentNetworkConfig(state, ci, machine, ocp.Metadata.Name)
+		if len(networkConfig) > 0 {
+			host["networkConfig"] = networkConfig
 		}
 		if rendezvous == "" && node.Role == v1alpha1.NodeRoleMaster {
-			rendezvous = primaryIP(machine)
+			rendezvous = networkConfigPrimaryIP(networkConfig)
 		}
 		hosts = append(hosts, host)
 	}
@@ -46,18 +47,12 @@ func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineCo
 }
 
 func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
-	var out map[string]any
-	network, hasNetwork := findNetworkConfig(state, machine.NetworkConfig.Ref.Name)
-	if len(machine.NetworkConfig.NetworkConfig) > 0 {
-		out = cloneYAMLMap(machine.NetworkConfig.NetworkConfig)
-	} else if hasNetwork {
-		out = cloneYAMLMap(network.Spec.Template.NetworkConfig)
-	}
+	network, hasNetwork := machineNetworkDefinition(state, ci, machine)
+	out := machineNetworkConfigTemplate(state, ci, machine)
 	if out == nil {
 		return nil
 	}
 	renderMachineMACs(out, machineInterfaces(state, machine, clusterName))
-	renderAddressOverlays(out, machine.NetworkConfig.Addresses)
 	if hasNetwork {
 		renderDNSServers(out, resolveClusterDNSServersFromConfig(state, ci, network, out))
 	}
@@ -83,7 +78,7 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComp
 	if !ok || (provisioner != v1alpha1.ProvisionerLibvirt && provisioner != v1alpha1.ProvisionerKubeVirt) {
 		return nil
 	}
-	names := clusterMachineInterfaceNames(machine)
+	names := clusterMachineInterfaceNames(state, machine)
 	out := make([]v1alpha1.MachineInterface, 0, len(names))
 	for _, name := range names {
 		out = append(out, v1alpha1.MachineInterface{
@@ -94,16 +89,8 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComp
 	return out
 }
 
-func clusterMachineInterfaceNames(machine v1alpha1.ClusterMachineComponent) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, addr := range machine.NetworkConfig.Addresses {
-		if addr.Interface == "" || seen[addr.Interface] {
-			continue
-		}
-		seen[addr.Interface] = true
-		out = append(out, addr.Interface)
-	}
+func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) []string {
+	out := networkConfigInterfaceNames(machineNetworkConfigTemplate(state, v1alpha1.ClusterInfra{}, machine))
 	if len(out) == 0 {
 		out = append(out, "primary")
 	}
@@ -167,33 +154,6 @@ func renderMachineMACs(config map[string]any, ifaces []v1alpha1.MachineInterface
 	config["interfaces"] = interfaces
 }
 
-func renderAddressOverlays(config map[string]any, addresses []v1alpha1.NetworkConfigAddress) {
-	if len(addresses) == 0 {
-		return
-	}
-	interfaces := ensureInterfaceList(config)
-	index := interfaceIndex(interfaces)
-	for _, addr := range addresses {
-		entry := index[addr.Interface]
-		if entry == nil {
-			entry = map[string]any{
-				"name":  addr.Interface,
-				"type":  "ethernet",
-				"state": "up",
-			}
-			interfaces = append(interfaces, entry)
-			index[addr.Interface] = entry
-		}
-		if len(addr.IPv4) > 0 {
-			entry["ipv4"] = addressFamilyConfig(addr.IPv4)
-		}
-		if len(addr.IPv6) > 0 {
-			entry["ipv6"] = addressFamilyConfig(addr.IPv6)
-		}
-	}
-	config["interfaces"] = interfaces
-}
-
 func ensureInterfaceList(config map[string]any) []any {
 	if raw, ok := config["interfaces"].([]any); ok {
 		return raw
@@ -216,33 +176,6 @@ func interfaceIndex(interfaces []any) map[string]map[string]any {
 		}
 	}
 	return out
-}
-
-func addressFamilyConfig(addresses []v1alpha1.NetworkIPAddress) map[string]any {
-	rendered := make([]any, 0, len(addresses))
-	for _, address := range addresses {
-		rendered = append(rendered, map[string]any{
-			"ip":            address.IP,
-			"prefix-length": address.PrefixLength,
-		})
-	}
-	return map[string]any{
-		"enabled": true,
-		"dhcp":    false,
-		"address": rendered,
-	}
-}
-
-func primaryIP(machine v1alpha1.ClusterMachineComponent) string {
-	for _, addr := range machine.NetworkConfig.Addresses {
-		if len(addr.IPv4) > 0 {
-			return addr.IPv4[0].IP
-		}
-		if len(addr.IPv6) > 0 {
-			return addr.IPv6[0].IP
-		}
-	}
-	return ""
 }
 
 func rootDeviceHintsConfig(hints *v1alpha1.RootDeviceHints) map[string]any {

@@ -1,9 +1,12 @@
 package render
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
+)
 
 // networkingConfig fills install-config.yaml's networking block. The
-// renderer owns machineNetwork (derived from each referenced NetworkConfig);
+// renderer owns machineNetwork (derived from each selected NetworkConfig);
 // the user owns clusterNetwork / serviceNetwork (declared on
 // ContainerCluster.spec.networking).
 func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) map[string]any {
@@ -26,14 +29,15 @@ func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alph
 }
 
 func machineNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
-	names := clusterNetworkConfigNames(ci)
-	out := make([]any, 0, len(names))
-	for _, name := range names {
-		n, ok := findNetworkConfig(state, name)
-		if !ok {
-			continue
-		}
+	networks := stateview.ClusterNetworkConfigs(state, ci)
+	out := make([]any, 0, len(networks))
+	seen := map[string]bool{}
+	for _, n := range networks {
 		for _, mn := range n.Spec.MachineNetwork {
+			if seen[mn.CIDR] {
+				continue
+			}
+			seen[mn.CIDR] = true
 			out = append(out, map[string]any{"cidr": mn.CIDR})
 		}
 	}

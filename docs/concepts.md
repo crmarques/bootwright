@@ -128,16 +128,16 @@ graph.
 
 - `machineNetwork[]` renders to `install-config.yaml` when selected by a
   machine.
-- `template.networkConfig` renders to each agent host after overlays.
+- `template.networkConfig` renders to each agent host after overrides.
 
 Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
 KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
 `ClusterInfra.spec.networkBindings[]`.
 
-Most hosts reuse the same NMState template and only override addresses in
-`ClusterInfra.components.machines[].networkConfig.addresses[]`. Advanced hosts
-may provide a full machine-level `networkConfig` override.
+Most hosts reuse the same NMState template and only set static IPs in
+`ClusterInfra.components.machines[].networkConfig.overrides.interfaces[].ipv4.address[]`.
+Advanced hosts may provide a full inline `networkConfig.spec`.
 
 Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and

@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 type dnsmasqRecord struct {
@@ -55,11 +56,7 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, r
 	if refName == "" {
 		return false
 	}
-	for _, networkName := range clusterNetworkConfigNames(ci) {
-		network, ok := findNetworkConfig(state, networkName)
-		if !ok {
-			continue
-		}
+	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
 		for _, ref := range network.Spec.DNSRefs {
 			if ref == refName {
 				return true

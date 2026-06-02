@@ -33,11 +33,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bond140-machine
-          addresses:
-            - interface: bond0.140
-              ipv4:
-                - ip: 192.168.140.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0.140
+                ipv4:
+                  address:
+                    - ip: 192.168.140.20
+                      prefix-length: 24
       - name: master-1
         from:
           provider: rack1-baremetal-provider
@@ -45,11 +47,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bond140-machine
-          addresses:
-            - interface: bond0.140
-              ipv4:
-                - ip: 192.168.140.21
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0.140
+                ipv4:
+                  address:
+                    - ip: 192.168.140.21
+                      prefix-length: 24
       - name: master-2
         from:
           provider: rack1-baremetal-provider
@@ -57,11 +61,13 @@ spec:
         networkConfig:
           ref:
             name: rack1-bond140-machine
-          addresses:
-            - interface: bond0.140
-              ipv4:
-                - ip: 192.168.140.22
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: bond0.140
+                ipv4:
+                  address:
+                    - ip: 192.168.140.22
+                      prefix-length: 24
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

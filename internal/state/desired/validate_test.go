@@ -174,13 +174,61 @@ spec:
         config:
           - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: bond0.132, table-id: 254 }
 `
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "interface: primary", "interface: bond0.132", 1)
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "              - name: primary", "              - name: bond0.132", 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
 		t.Fatal("expected missing baremetal interface error, got nil")
 	}
 	want := `spec.components.machines[master-0].networkConfig.ref "cluster-net" requires baremetal interface "secondary" but InfraProvider/rack spec.machines[srv1].baremetal.interfaces does not declare it`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestClusterMachineNetworkConfigAcceptsInlineSpec(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	delete(files, "network.yaml")
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], baselineMachineNetworkConfigYAML(), inlineMachineNetworkConfigYAML(""), 1)
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
+func TestClusterMachineNetworkConfigRejectsRefAndSpec(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "          ref: { name: cluster-net }\n", "          ref: { name: cluster-net }\n"+inlineNetworkConfigSpecYAML(), 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected ref plus spec validation error, got nil")
+	}
+	want := "networkConfig must set exactly one of {ref, spec}"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestClusterMachineNetworkConfigRejectsInlineSpecOverrides(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	delete(files, "network.yaml")
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], baselineMachineNetworkConfigYAML(), inlineMachineNetworkConfigYAML(`          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - { ip: 192.168.132.20, prefix-length: 24 }
+`), 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected inline spec overrides validation error, got nil")
+	}
+	want := "networkConfig.overrides is only valid with networkConfig.ref"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -1917,10 +1965,12 @@ spec:
         from: { provider: child-kubevirt-provider, profile: child-sno }
         networkConfig:
           ref: { name: child-machine-net }
-          addresses:
-            - interface: primary
-              ipv4:
-                - { ip: 192.168.134.20, prefix-length: 24 }
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - { ip: 192.168.134.20, prefix-length: 24 }
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -2109,10 +2159,12 @@ spec:
         from: { provider: ` + provider + `, profile: cp }
         networkConfig:
           ref: { name: ` + network + ` }
-          addresses:
-            - interface: primary
-              ipv4:
-                - { ip: ` + nodeIP + `, prefix-length: 24 }
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - { ip: ` + nodeIP + `, prefix-length: 24 }
 `
 }
 
@@ -2245,10 +2297,12 @@ spec:
         from: { provider: vsphere, profile: control-plane }
         networkConfig:
           ref: { name: vsphere-net }
-          addresses:
-            - interface: ens192
-              ipv4:
-                - { ip: 192.168.133.20, prefix-length: 24 }
+          overrides:
+            interfaces:
+              - name: ens192
+                ipv4:
+                  address:
+                    - { ip: 192.168.133.20, prefix-length: 24 }
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -2459,7 +2513,47 @@ spec:
         hostAddress: bmc-lan
 `
 
-const newClusterYAML = `apiVersion: bootwright.io/v1alpha1
+func baselineMachineNetworkConfigYAML() string {
+	return `        networkConfig:
+          ref: { name: cluster-net }
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - { ip: 192.168.132.20, prefix-length: 24 }
+`
+}
+
+func inlineMachineNetworkConfigYAML(extra string) string {
+	return `        networkConfig:
+` + inlineNetworkConfigSpecYAML() + extra
+}
+
+func inlineNetworkConfigSpecYAML() string {
+	return `          spec:
+            machineNetwork:
+              - { cidr: 192.168.132.0/24 }
+            template:
+              networkConfig:
+                interfaces:
+                  - name: primary
+                    type: ethernet
+                    state: up
+                    ipv4:
+                      enabled: true
+                      dhcp: false
+                      address:
+                        - { ip: 192.168.132.20, prefix-length: 24 }
+                    ipv6:
+                      enabled: false
+                routes:
+                  config:
+                    - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: primary, table-id: 254 }
+`
+}
+
+var newClusterYAML = `apiVersion: bootwright.io/v1alpha1
 kind: ClusterInfra
 metadata: { name: sno }
 spec:
@@ -2483,12 +2577,7 @@ spec:
     machines:
       - name: master-0
         from: { provider: rack, name: srv1 }
-        networkConfig:
-          ref: { name: cluster-net }
-          addresses:
-            - interface: primary
-              ipv4:
-                - { ip: 192.168.132.20, prefix-length: 24 }
+` + baselineMachineNetworkConfigYAML() + `
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

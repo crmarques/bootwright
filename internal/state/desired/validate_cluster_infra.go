@@ -5,13 +5,13 @@ import (
 	"net"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func validateClusterInfras(state v1alpha1.State) []string {
 	var errs []string
 	providers := indexProviders(state.InfraProviders)
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
+	dnsRefs := networkConfigDNSRefs(state)
 	components := indexInfraComponents(state.InfraComponents)
 	containerInfraNames := referencedContainerClusterInfraNames(state)
 	seen := map[string]bool{}
@@ -29,7 +29,7 @@ func validateClusterInfras(state v1alpha1.State) []string {
 			errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs, containerInfraNames[ci.Metadata.Name])...)
 		}
 		errs = append(errs, validateClusterNetworkBindings(ci, providers, networkConfigs)...)
-		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs)...)
+		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs, dnsRefs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
 	}
 	return errs
@@ -286,7 +286,7 @@ func validateClusterNetworkBindings(ci v1alpha1.ClusterInfra, providers map[stri
 	return errs
 }
 
-func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
 	var errs []string
 	if len(ci.Spec.Components.Machines) == 0 {
 		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.components.machines is required (at least one machine)", ci.Metadata.Name))
@@ -305,7 +305,7 @@ func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1al
 		}
 		seen[m.Name] = true
 		errs = append(errs, validateClusterMachineFrom(prefix, ci, m, providers)...)
-		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs)...)
+		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs, dnsRefs)...)
 		errs = append(errs, validateClusterMachineNetworkBinding(prefix, ci, m, providers)...)
 		errs = append(errs, validateBareMetalMachineNetworkInterfaces(prefix, m, providers, networkConfigs)...)
 	}
@@ -375,10 +375,19 @@ func validateVSphereMultiNICNodeNetworking(prefix string, ci v1alpha1.ClusterInf
 	return nil
 }
 
-func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachineComponent, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachineComponent, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
 	var errs []string
-	if m.NetworkConfig.Ref.Name == "" {
-		errs = append(errs, fmt.Sprintf("%s.networkConfig.ref.name is required", prefix))
+	hasRef := m.NetworkConfig.Ref.Name != ""
+	hasSpec := m.NetworkConfig.Spec != nil
+	if hasRef == hasSpec {
+		errs = append(errs, fmt.Sprintf("%s.networkConfig must set exactly one of {ref, spec}", prefix))
+		return errs
+	}
+	if hasSpec {
+		if len(m.NetworkConfig.Overrides) > 0 {
+			errs = append(errs, fmt.Sprintf("%s.networkConfig.overrides is only valid with networkConfig.ref", prefix))
+		}
+		errs = append(errs, validateNetworkConfigSpec(prefix+".networkConfig.spec", *m.NetworkConfig.Spec, dnsRefs)...)
 		return errs
 	}
 	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
@@ -386,21 +395,8 @@ func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachin
 		errs = append(errs, fmt.Sprintf("%s.networkConfig.ref %q does not match any NetworkConfig", prefix, m.NetworkConfig.Ref.Name))
 		return errs
 	}
-	templateInterfaces := templateInterfaceNames(networkConfig)
-	for i, addr := range m.NetworkConfig.Addresses {
-		owner := fmt.Sprintf("%s.networkConfig.addresses[%d]", prefix, i)
-		if addr.Interface == "" {
-			errs = append(errs, fmt.Sprintf("%s.interface is required", owner))
-		} else if len(templateInterfaces) > 0 && !templateInterfaces[addr.Interface] {
-			errs = append(errs, fmt.Sprintf("%s.interface %q is not declared in NetworkConfig/%s spec.template.networkConfig.interfaces",
-				owner, addr.Interface, networkConfig.Metadata.Name))
-		}
-		for _, ipaddr := range addr.IPv4 {
-			errs = append(errs, validateOverlayAddress(owner+".ipv4", ipaddr, networkConfig)...)
-		}
-		for _, ipaddr := range addr.IPv6 {
-			errs = append(errs, validateOverlayAddress(owner+".ipv6", ipaddr, networkConfig)...)
-		}
+	if len(m.NetworkConfig.Overrides) > 0 {
+		errs = append(errs, validateNetworkConfigOverrides(prefix+".networkConfig.overrides", m.NetworkConfig.Overrides, networkConfig)...)
 	}
 	return errs
 }
@@ -465,7 +461,7 @@ func clusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkConfig
 }
 
 func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
-	if m.From.Provider == "" || m.From.Name == "" || m.From.Profile != "" || m.NetworkConfig.Ref.Name == "" {
+	if m.From.Provider == "" || m.From.Name == "" || m.From.Profile != "" {
 		return nil
 	}
 	provider, ok := providers[m.From.Provider]
@@ -476,11 +472,16 @@ func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.Cluster
 	if !ok || machine.BareMetal == nil {
 		return nil
 	}
-	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	networkConfig, ok := clusterMachineNetworkConfigForValidation(m, networkConfigs)
 	if !ok {
 		return nil
 	}
 	required := templateBareMetalInterfaceNames(networkConfig)
+	for _, name := range overrideBareMetalInterfaceNames(m.NetworkConfig.Overrides) {
+		if !containsString(required, name) {
+			required = append(required, name)
+		}
+	}
 	if len(required) == 0 {
 		return nil
 	}
@@ -491,31 +492,136 @@ func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.Cluster
 		}
 	}
 	var errs []string
+	networkConfigField := "networkConfig.spec"
+	if m.NetworkConfig.Ref.Name != "" {
+		networkConfigField = "networkConfig.ref"
+	}
 	for _, name := range required {
 		if declared[name] {
 			continue
 		}
-		errs = append(errs, fmt.Sprintf("%s.networkConfig.ref %q requires baremetal interface %q but InfraProvider/%s spec.machines[%s].baremetal.interfaces does not declare it",
-			prefix, networkConfig.Metadata.Name, name, provider.Metadata.Name, machine.Name))
+		errs = append(errs, fmt.Sprintf("%s.%s %q requires baremetal interface %q but InfraProvider/%s spec.machines[%s].baremetal.interfaces does not declare it",
+			prefix, networkConfigField, networkConfig.Metadata.Name, name, provider.Metadata.Name, machine.Name))
 	}
 	return errs
 }
 
-func validateOverlayAddress(owner string, addr v1alpha1.NetworkIPAddress, n v1alpha1.NetworkConfig) []string {
+func clusterMachineNetworkConfigForValidation(m v1alpha1.ClusterMachineComponent, networkConfigs map[string]v1alpha1.NetworkConfig) (v1alpha1.NetworkConfig, bool) {
+	if m.NetworkConfig.Spec != nil {
+		return v1alpha1.NetworkConfig{
+			Metadata: v1alpha1.Metadata{Name: "inline"},
+			Spec:     *m.NetworkConfig.Spec,
+		}, true
+	}
+	if m.NetworkConfig.Ref.Name == "" {
+		return v1alpha1.NetworkConfig{}, false
+	}
+	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	return networkConfig, ok
+}
+
+func validateNetworkConfigOverrides(owner string, config map[string]any, n v1alpha1.NetworkConfig) []string {
+	rawInterfaces, ok := config["interfaces"].([]any)
+	if !ok {
+		return nil
+	}
 	var errs []string
-	ip := net.ParseIP(addr.IP)
-	if addr.IP == "" {
-		errs = append(errs, fmt.Sprintf("%s.ip is required", owner))
-	} else if ip == nil {
-		errs = append(errs, fmt.Sprintf("%s.ip %q is not a valid IP", owner, addr.IP))
-	} else if !stateview.NetworkConfigContainsIP(n, ip) {
-		errs = append(errs, fmt.Sprintf("%s.ip %q is outside NetworkConfig/%s spec.machineNetwork", owner, addr.IP, n.Metadata.Name))
-	}
-	if addr.PrefixLength < 0 || addr.PrefixLength > 128 {
-		errs = append(errs, fmt.Sprintf("%s.prefix-length %d must be 0..128", owner, addr.PrefixLength))
-	}
-	if ip != nil && ip.To4() != nil && addr.PrefixLength > 32 {
-		errs = append(errs, fmt.Sprintf("%s.prefix-length %d must be 0..32 for IPv4", owner, addr.PrefixLength))
+	for i, raw := range rawInterfaces {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.interfaces[%d] must be an NMState interface object", owner, i))
+			continue
+		}
+		name, _ := entry["name"].(string)
+		label := fmt.Sprintf("%s.interfaces[%d]", owner, i)
+		if name != "" {
+			label = fmt.Sprintf("%s.interfaces[%s]", owner, name)
+		}
+		hasAddresses := false
+		for _, family := range []string{"ipv4", "ipv6"} {
+			addresses := networkConfigInterfaceAddresses(entry, family)
+			if len(addresses) == 0 {
+				continue
+			}
+			hasAddresses = true
+			for j, address := range addresses {
+				errs = append(errs, validateNMStateAddress(fmt.Sprintf("%s.%s.address[%d]", label, family, j), address, n)...)
+			}
+		}
+		if !hasAddresses {
+			continue
+		}
+		if name == "" {
+			errs = append(errs, fmt.Sprintf("%s.name is required when addresses are set", label))
+		}
 	}
 	return errs
+}
+
+func networkConfigInterfaceAddresses(entry map[string]any, family string) []any {
+	familyConfig, ok := entry[family].(map[string]any)
+	if !ok {
+		return nil
+	}
+	addresses, ok := familyConfig["address"].([]any)
+	if !ok {
+		return nil
+	}
+	return addresses
+}
+
+func validateNMStateAddress(owner string, raw any, n v1alpha1.NetworkConfig) []string {
+	var errs []string
+	addr, ok := raw.(map[string]any)
+	if !ok {
+		return []string{fmt.Sprintf("%s must be an NMState address object", owner)}
+	}
+	ipValue, _ := addr["ip"].(string)
+	ip := net.ParseIP(ipValue)
+	if ipValue == "" {
+		errs = append(errs, fmt.Sprintf("%s.ip is required", owner))
+	} else if ip == nil {
+		errs = append(errs, fmt.Sprintf("%s.ip %q is not a valid IP", owner, ipValue))
+	} else if !networkConfigContainsIP(n, ip) {
+		errs = append(errs, fmt.Sprintf("%s.ip %q is outside NetworkConfig/%s spec.machineNetwork", owner, ipValue, n.Metadata.Name))
+	}
+	prefixLength, ok := nmStatePrefixLength(addr["prefix-length"])
+	if !ok {
+		errs = append(errs, fmt.Sprintf("%s.prefix-length must be an integer", owner))
+		return errs
+	}
+	if prefixLength < 0 || prefixLength > 128 {
+		errs = append(errs, fmt.Sprintf("%s.prefix-length %d must be 0..128", owner, prefixLength))
+	}
+	if ip != nil && ip.To4() != nil && prefixLength > 32 {
+		errs = append(errs, fmt.Sprintf("%s.prefix-length %d must be 0..32 for IPv4", owner, prefixLength))
+	}
+	return errs
+}
+
+func nmStatePrefixLength(raw any) (int, bool) {
+	switch v := raw.(type) {
+	case nil:
+		return 0, true
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		if v != float64(int(v)) {
+			return 0, false
+		}
+		return int(v), true
+	default:
+		return 0, false
+	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

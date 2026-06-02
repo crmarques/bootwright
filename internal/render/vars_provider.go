@@ -216,35 +216,11 @@ func clusterMachineNetworkConfigVars(n v1alpha1.ClusterMachineNetworkConfig) map
 	if n.Ref.Name != "" {
 		out["ref"] = n.Ref.Name
 	}
-	if len(n.Addresses) > 0 {
-		out["addresses"] = networkConfigAddressesVars(n.Addresses)
+	if len(n.Overrides) > 0 {
+		out["overrides"] = n.Overrides
 	}
-	return out
-}
-
-func networkConfigAddressesVars(items []v1alpha1.NetworkConfigAddress) []any {
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		entry := map[string]any{"interface": item.Interface}
-		if len(item.IPv4) > 0 {
-			entry["ipv4"] = networkIPVars(item.IPv4)
-		}
-		if len(item.IPv6) > 0 {
-			entry["ipv6"] = networkIPVars(item.IPv6)
-		}
-		out = append(out, entry)
-	}
-	return out
-}
-
-func networkIPVars(items []v1alpha1.NetworkIPAddress) []any {
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		out = append(out, map[string]any{
-			"ip":            item.IP,
-			"prefixLength":  item.PrefixLength,
-			"prefix-length": item.PrefixLength,
-		})
+	if n.Spec != nil {
+		out["spec"] = n.Spec
 	}
 	return out
 }

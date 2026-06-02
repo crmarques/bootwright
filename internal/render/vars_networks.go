@@ -8,13 +8,9 @@ import (
 // clusterNetworksVars exposes the NetworkConfig templates and machine
 // network CIDRs a cluster consumes without scanning the global state.
 func clusterNetworksVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
-	names := clusterNetworkConfigNames(ci)
-	out := make([]any, 0, len(names))
-	for _, name := range names {
-		n, ok := findNetworkConfig(state, name)
-		if !ok {
-			continue
-		}
+	networks := stateview.ClusterNetworkConfigs(state, ci)
+	out := make([]any, 0, len(networks))
+	for _, n := range networks {
 		entry := map[string]any{
 			"name":           n.Metadata.Name,
 			"cidr":           firstMachineNetworkCIDR(n),
@@ -26,10 +22,6 @@ func clusterNetworksVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 		out = append(out, entry)
 	}
 	return out
-}
-
-func clusterNetworkConfigNames(ci v1alpha1.ClusterInfra) []string {
-	return stateview.ClusterConsumedNetworkConfigs(ci)
 }
 
 func networkConfigGateway(n v1alpha1.NetworkConfig) string {

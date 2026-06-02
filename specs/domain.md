@@ -35,7 +35,7 @@ Operators author desired state as sixteen YAML kinds:
 Every fact has one owner. References flow from cluster intent to cluster
 infrastructure, then to providers, infra components, and hosts. Machine MACs,
 BMC details, and substrate network attachments live in `InfraProvider`;
-artifact service endpoints live in `InfraComponent`; per-machine IP overlays
+artifact service endpoints live in `InfraComponent`; per-machine IP overrides
 and network attachment bindings live in `ClusterInfra`; cluster and service
 networks live in `ContainerCluster`.
 Post-install components do not live under `ContainerCluster.spec.install`;

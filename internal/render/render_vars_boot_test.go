@@ -2,6 +2,7 @@ package render_test
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -899,9 +900,18 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	ci := state.ClusterInfras[0]
 	ci.Metadata.Name = "sno-libvirt-b"
 	ci.Spec.Components.Machines = append([]v1alpha1.ClusterMachineComponent(nil), ci.Spec.Components.Machines...)
-	ci.Spec.Components.Machines[0].NetworkConfig.Addresses = append([]v1alpha1.NetworkConfigAddress(nil), ci.Spec.Components.Machines[0].NetworkConfig.Addresses...)
-	ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4 = append([]v1alpha1.NetworkIPAddress(nil), ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4...)
-	ci.Spec.Components.Machines[0].NetworkConfig.Addresses[0].IPv4[0].IP = "192.168.132.30"
+	ci.Spec.Components.Machines[0].NetworkConfig.Overrides = maps.Clone(ci.Spec.Components.Machines[0].NetworkConfig.Overrides)
+	interfaces := ci.Spec.Components.Machines[0].NetworkConfig.Overrides["interfaces"].([]any)
+	primary := maps.Clone(interfaces[0].(map[string]any))
+	ipv4 := maps.Clone(primary["ipv4"].(map[string]any))
+	addresses := append([]any(nil), ipv4["address"].([]any)...)
+	address := maps.Clone(addresses[0].(map[string]any))
+	address["ip"] = "192.168.132.30"
+	addresses[0] = address
+	ipv4["address"] = addresses
+	primary["ipv4"] = ipv4
+	interfaces[0] = primary
+	ci.Spec.Components.Machines[0].NetworkConfig.Overrides["interfaces"] = interfaces
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected

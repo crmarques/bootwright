@@ -42,7 +42,7 @@ user-authored API surface is sixteen kinds.
 ## Consequences
 
 - Physical facts such as BMC addresses and NIC MACs stay provider-owned.
-- Per-machine IP overlays stay cluster-infrastructure-owned.
+- Per-machine IP overrides stay cluster-infrastructure-owned.
 - Cluster release, install mode, pools, and cluster/service networks stay
   container-cluster-owned.
 - The renderer can deterministically merge objects into installer input.

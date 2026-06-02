@@ -126,8 +126,8 @@ type BMCAuth struct {
 }
 
 // MachineCapability is one explicit server (bare-metal inventory). The
-// cluster claims it via from.name and may only override the IP per
-// interface.
+// cluster claims it via from.name and supplies per-machine network overrides
+// in ClusterInfra.
 type MachineCapability struct {
 	Name      string                      `yaml:"name" json:"name"`
 	Labels    map[string]string           `yaml:"labels,omitempty" json:"labels,omitempty"`

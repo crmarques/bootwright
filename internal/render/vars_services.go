@@ -59,7 +59,7 @@ func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, compo
 			if backendRole != "" && role != backendRole {
 				continue
 			}
-			ip := machinePrimaryIP(m)
+			ip := machinePrimaryIP(state, ci, m)
 			if ip == "" {
 				continue
 			}
@@ -130,16 +130,8 @@ func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPNodeSpec) stri
 	return ""
 }
 
-func machinePrimaryIP(m v1alpha1.ClusterMachineComponent) string {
-	for _, addr := range m.NetworkConfig.Addresses {
-		if len(addr.IPv4) > 0 {
-			return addr.IPv4[0].IP
-		}
-		if len(addr.IPv6) > 0 {
-			return addr.IPv6[0].IP
-		}
-	}
-	return ""
+func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent) string {
+	return networkConfigPrimaryIP(agentNetworkConfig(state, ci, m, ""))
 }
 
 func artifactServerComponentVars(state v1alpha1.State, server artifacts.Server) map[string]any {

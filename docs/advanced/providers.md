@@ -44,7 +44,7 @@ spec:
 `disableCertificateVerification: true` is a lab posture for BMCs without
 trusted TLS. Do not treat it as the production default.
 
-The cluster selects that server and adds IP overlays in `ClusterInfra`:
+The cluster selects that server and adds IP overrides in `ClusterInfra`:
 
 ```yaml
 components:
@@ -56,11 +56,13 @@ components:
       networkConfig:
         ref:
           name: rack1-bonded-machine
-        addresses:
-          - interface: bond0
-            ipv4:
-              - ip: 192.168.133.20
-                prefix-length: 24
+        overrides:
+          interfaces:
+            - name: bond0
+              ipv4:
+                address:
+                  - ip: 192.168.133.20
+                    prefix-length: 24
 ```
 
 ## vSphere

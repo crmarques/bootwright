@@ -45,11 +45,13 @@ spec:
         networkConfig:
           ref:
             name: cluster-3n-bridge
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.20
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.20
+                      prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda
       - name: master-1
@@ -59,11 +61,13 @@ spec:
         networkConfig:
           ref:
             name: cluster-3n-bridge
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.21
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.21
+                      prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda
       - name: master-2
@@ -73,10 +77,12 @@ spec:
         networkConfig:
           ref:
             name: cluster-3n-bridge
-          addresses:
-            - interface: primary
-              ipv4:
-                - ip: 192.168.133.22
-                  prefix-length: 24
+          overrides:
+            interfaces:
+              - name: primary
+                ipv4:
+                  address:
+                    - ip: 192.168.133.22
+                      prefix-length: 24
         rootDeviceHints:
           deviceName: /dev/vda

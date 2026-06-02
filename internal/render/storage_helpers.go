@@ -65,14 +65,7 @@ func storageNodeAddress(state v1alpha1.State, cluster v1alpha1.StorageCluster, n
 		if machine.Name != node {
 			continue
 		}
-		for _, address := range machine.NetworkConfig.Addresses {
-			if len(address.IPv4) > 0 {
-				return address.IPv4[0].IP
-			}
-			if len(address.IPv6) > 0 {
-				return address.IPv6[0].IP
-			}
-		}
+		return networkConfigPrimaryIP(agentNetworkConfig(state, infra, machine, ""))
 	}
 	return ""
 }

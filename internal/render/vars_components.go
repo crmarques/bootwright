@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/infra/support"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 // componentsVars walks every component slot on a cluster and emits the
@@ -109,11 +110,7 @@ func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.Cluste
 	}
 	seen := map[string]bool{}
 	out := []selectedNameResolutionComponent{}
-	for _, networkName := range clusterNetworkConfigNames(ci) {
-		network, ok := findNetworkConfig(state, networkName)
-		if !ok {
-			continue
-		}
+	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
 		for _, ref := range network.Spec.DNSRefs {
 			entry, ok := nameResolutionEntry(env, ref)
 			if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
@@ -207,7 +204,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 		out["networkAttachment"] = attachment
 	}
 	applyMachineRoleContract(out, driver.Roles)
-	if ip := machinePrimaryIP(m); ip != "" {
+	if ip := machinePrimaryIP(state, ci, m); ip != "" {
 		out["primaryIPAddress"] = ip
 	}
 	if interfaces := machineInterfaces(state, m, clusterName); len(interfaces) > 0 {
