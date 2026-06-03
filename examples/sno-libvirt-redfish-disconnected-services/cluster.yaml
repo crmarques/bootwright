@@ -16,6 +16,9 @@ spec:
       ingress:
         name: apps
     mode: disconnected
+    nodeSSH:
+      keyPairRef:
+        name: sno-disconnected-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:
@@ -30,4 +33,3 @@ spec:
       machineRef:
         clusterInfra: sno-disconnected
         name: master-0
-

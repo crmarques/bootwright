@@ -288,6 +288,14 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 	for _, cluster := range state.StorageClusters {
 		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),
 			v1alpha1.KindClusterInfra, cluster.Spec.ClusterInfraRef.Name)
+		if cluster.Spec.Ceph != nil {
+			for i, node := range cluster.Spec.Ceph.Topology.Nodes {
+				if node.HostRef.Name != "" {
+					require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%d].hostRef", cluster.Metadata.Name, i),
+						v1alpha1.KindHost, node.HostRef.Name)
+				}
+			}
+		}
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),

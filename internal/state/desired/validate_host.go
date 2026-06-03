@@ -10,6 +10,7 @@ var validHostCapabilities = map[string]bool{
 	v1alpha1.HostCapabilityLibvirt:          true,
 	v1alpha1.HostCapabilityContainerRuntime: true,
 	v1alpha1.HostCapabilityCephAdmin:        true,
+	v1alpha1.HostCapabilityCephNode:         true,
 }
 
 func validateHosts(state v1alpha1.State) []string {
@@ -51,13 +52,16 @@ func validateHosts(state v1alpha1.State) []string {
 			if h.Spec.SSH.KeyRef.Name == "" {
 				errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.keyRef.name is required", h.Metadata.Name))
 			}
+			if h.Spec.SSH.KnownHostsRef.Name == "" {
+				errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required", h.Metadata.Name))
+			}
 		}
 		if len(h.Spec.Capabilities) == 0 {
-			errs = append(errs, fmt.Sprintf("Host/%s spec.capabilities is required (canonical: libvirt, container-runtime, ceph-admin)", h.Metadata.Name))
+			errs = append(errs, fmt.Sprintf("Host/%s spec.capabilities is required (canonical: libvirt, container-runtime, ceph-admin, ceph-node)", h.Metadata.Name))
 		}
 		for _, cap := range h.Spec.Capabilities {
 			if !validHostCapabilities[cap] {
-				errs = append(errs, fmt.Sprintf("Host/%s spec.capabilities %q is not in the canonical set {libvirt, container-runtime, ceph-admin}", h.Metadata.Name, cap))
+				errs = append(errs, fmt.Sprintf("Host/%s spec.capabilities %q is not in the canonical set {libvirt, container-runtime, ceph-admin, ceph-node}", h.Metadata.Name, cap))
 			}
 		}
 	}

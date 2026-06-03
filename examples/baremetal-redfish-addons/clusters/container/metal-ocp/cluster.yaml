@@ -15,6 +15,9 @@ spec:
         name: api-int
       ingress:
         name: apps
+    nodeSSH:
+      keyPairRef:
+        name: metal-ocp-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:
@@ -29,4 +32,3 @@ spec:
       machineRef:
         clusterInfra: metal-ocp
         name: master-0
-

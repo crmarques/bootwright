@@ -7,13 +7,14 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - sno-emul-baremetal-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
             type: ed25519
-            comment: bootwright-cluster-admin
+            comment: bootwright-sno-emul-baremetal-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
+    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:

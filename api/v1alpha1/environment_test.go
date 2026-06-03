@@ -15,10 +15,10 @@ type environmentSecretsHolder struct {
 func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
 	body := `secrets:
   - openshift-pull-secret
-  - cluster-admin-ssh-key:
+  - lab-ocp-cluster-admin-ssh-key:
       generated:
         sshKeyPair:
-          comment: bootwright-cluster-admin
+          comment: bootwright-lab-ocp-cluster-admin
   - provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
   - api-tls:
@@ -35,7 +35,7 @@ func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
 	if spec := holder.Secrets["openshift-pull-secret"]; spec.File != "" || spec.Generated != nil {
 		t.Fatalf("openshift-pull-secret = %+v, want context-local empty source", spec)
 	}
-	if got := holder.Secrets["cluster-admin-ssh-key"].Generated.SSHKeyPair.Comment; got != "bootwright-cluster-admin" {
+	if got := holder.Secrets["lab-ocp-cluster-admin-ssh-key"].Generated.SSHKeyPair.Comment; got != "bootwright-lab-ocp-cluster-admin" {
 		t.Fatalf("ssh key comment = %q", got)
 	}
 	if got := holder.Secrets["provider-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {

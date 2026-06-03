@@ -80,7 +80,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 
 	sshName := ocp.Spec.Install.NodeSSH.PublicMaterialRef().Name
 	if sshName == "" {
-		return out, fmt.Errorf("%s: nodeSSH public key is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.nodeSSH", ocp.Metadata.Name, v1alpha1.DefaultNodeSSHKeyName)
+		return out, fmt.Errorf("%s: nodeSSH public key is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.nodeSSH", ocp.Metadata.Name, v1alpha1.ClusterAdminSSHKeyName(ocp.Metadata.Name))
 	}
 	_, sshKey, err := readSecretMaterial(sshName, env, secretsDir, secret.MaterialSSHPublic, "cluster admin public key")
 	if err != nil {

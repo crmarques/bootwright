@@ -14,8 +14,6 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "nodeSSH", cluster.Spec.Ceph.Cephadm.NodeSSH)...)
-		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "clusterSSH", cluster.Spec.Ceph.Cephadm.ClusterSSH)...)
 		if ref := cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef; ref.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: ref.Name,
@@ -32,10 +30,13 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 				role:    secret.MaterialPrimary,
 			})
 		}
-	}
-	hostByName := map[string]v1alpha1.Host{}
-	for _, host := range state.Hosts {
-		hostByName[host.Metadata.Name] = host
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			host, ok := hostByName(state, node.HostRef.Name)
+			if !ok {
+				continue
+			}
+			out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Host/%s", cluster.Metadata.Name, node.Name, host.Metadata.Name), []string{"storage-cluster"}, host, true)...)
+		}
 	}
 	clusterByName := map[string]v1alpha1.StorageCluster{}
 	for _, cluster := range state.StorageClusters {
@@ -54,55 +55,65 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if ssh == nil {
 			continue
 		}
-		out = append(out, secretRefRequirement{
-			refName: ssh.KnownHostsRef.Name,
-			label:   fmt.Sprintf("StorageExport/%s externalDetails.sshExecution knownHostsRef", export.Metadata.Name),
-			phases:  []string{"addons"},
-			role:    secret.MaterialPrimary,
-		})
 		for _, ref := range ssh.HostRefs {
-			host, ok := hostByName[ref.Name]
-			if !ok || host.Spec.SSH == nil || host.Spec.SSH.KeyRef.Name == "" {
+			host, ok := hostByName(state, ref.Name)
+			if !ok {
 				continue
 			}
-			out = append(out, secretRefRequirement{
-				refName: host.Spec.SSH.KeyRef.Name,
-				label:   fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Host/%s keyRef", export.Metadata.Name, host.Metadata.Name),
-				phases:  []string{"addons"},
-				role:    secret.MaterialSSHPrivate,
-			})
+			out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Host/%s", export.Metadata.Name, host.Metadata.Name), []string{"addons"}, host, false)...)
 		}
 		if len(ssh.HostRefs) == 0 {
 			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
 			if ok && cluster.Spec.Ceph != nil {
-				reqs := storageSSHRequirements(export.Metadata.Name, "externalDetails.sshExecution nodeSSH", cluster.Spec.Ceph.Cephadm.NodeSSH)
-				for i := range reqs {
-					reqs[i].phases = []string{"addons"}
+				for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+					if node.Name != cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode {
+						continue
+					}
+					host, ok := hostByName(state, node.HostRef.Name)
+					if !ok {
+						continue
+					}
+					out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Host/%s", export.Metadata.Name, host.Metadata.Name), []string{"addons"}, host, false)...)
 				}
-				out = append(out, reqs...)
 			}
 		}
 	}
 	return out
 }
 
-func storageSSHRequirements(clusterName, field string, ssh v1alpha1.StorageSSHSpec) []secretRefRequirement {
-	var out []secretRefRequirement
-	if ssh.KeyPairRef.Name != "" {
-		out = append(out, secretRefRequirement{
-			refName: ssh.KeyPairRef.Name,
-			label:   clusterName + " " + field + " keyPairRef",
-			phases:  []string{"storage-cluster"},
-			role:    secret.MaterialSSHPublic,
-			sshPair: true,
-		})
+func hostByName(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
+	for _, host := range state.Hosts {
+		if host.Metadata.Name == name {
+			return host, true
+		}
 	}
-	if ssh.PrivateKeyRef.Name != "" {
-		out = append(out, secretRefRequirement{
-			refName: ssh.PrivateKeyRef.Name,
-			label:   clusterName + " " + field + " privateKeyRef",
-			phases:  []string{"storage-cluster"},
+	return v1alpha1.Host{}, false
+}
+
+func hostSSHSecretRequirements(label string, phases []string, host v1alpha1.Host, requirePair bool) []secretRefRequirement {
+	var out []secretRefRequirement
+	if host.Spec.SSH == nil {
+		return out
+	}
+	if host.Spec.SSH.KeyRef.Name != "" {
+		req := secretRefRequirement{
+			refName: host.Spec.SSH.KeyRef.Name,
+			label:   label + " keyRef",
+			phases:  phases,
 			role:    secret.MaterialSSHPrivate,
+		}
+		if requirePair {
+			req.role = secret.MaterialSSHPublic
+			req.sshPair = true
+		}
+		out = append(out, req)
+	}
+	if host.Spec.SSH.KnownHostsRef.Name != "" {
+		out = append(out, secretRefRequirement{
+			refName: host.Spec.SSH.KnownHostsRef.Name,
+			label:   label + " knownHostsRef",
+			phases:  phases,
+			role:    secret.MaterialPrimary,
 		})
 	}
 	return out

@@ -3,6 +3,7 @@ package render_test
 import (
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -409,11 +410,18 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	if got := seed["ansible_host"]; got != "192.168.141.30" {
 		t.Fatalf("storage seed ansible_host = %v, want 192.168.141.30", got)
 	}
-	if _, ok := seed["ansible_user"]; ok {
-		t.Fatalf("storage seed should not force ansible_user when nodeSSH.user is omitted: %v", seed)
+	if got := seed["ansible_user"]; got != "root" {
+		t.Fatalf("storage seed ansible_user = %v, want root from Host.spec.ssh.user", got)
 	}
-	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
+	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-storage-cluster-admin-ssh-key") {
 		t.Fatalf("storage seed key = %v", got)
+	}
+	commonArgs, _ := seed["ansible_ssh_common_args"].(string)
+	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-storage-known-hosts")) {
+		t.Fatalf("storage seed ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+	}
+	if strings.Contains(commonArgs, "/dev/null") {
+		t.Fatalf("storage seed ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
 	}
 	nodeName := render.StorageNodeHostName("ceph-storage", "ceph-dc1-1")
 	node := hosts[nodeName].(map[string]any)

@@ -285,8 +285,21 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
 				"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
+				"ceph-known-hosts":          {},
 				"ceph-registry-credentials": {},
 			}},
+		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.HostSpec{
+				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+				SSH: &v1alpha1.HostSSHSpec{
+					AddressName:   "ssh",
+					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+				},
+				Capabilities: []string{v1alpha1.HostCapabilityCephNode},
+			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
@@ -298,7 +311,14 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 							URL:            "registry.redhat.io",
 							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
 						},
-						NodeSSH: v1alpha1.StorageSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
+					},
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:    "ceph-0",
+							HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:    "dc1",
+							Roles:   []string{v1alpha1.StorageCephRoleMON},
+						}},
 					},
 				},
 			},
@@ -322,9 +342,22 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
 	state.Environments[0].Spec.Secrets["ceph-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Hosts = []v1alpha1.Host{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+		Spec: v1alpha1.HostSpec{
+			Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+			SSH: &v1alpha1.HostSSHSpec{
+				AddressName:   "ssh",
+				KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
+				KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+			},
+			Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
+		},
+	}}
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+			HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
 			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
 				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
 			},
@@ -369,7 +402,8 @@ func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 
 func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
+	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
@@ -393,10 +427,10 @@ func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 	if privateCheck == nil || publicCheck == nil {
 		t.Fatalf("missing generated SSH key pair checks: %+v", checks)
 	}
-	if !strings.Contains(privateCheck.Evidence, "/context/secrets/cluster-admin-ssh-key missing") {
+	if !strings.Contains(privateCheck.Evidence, "/context/secrets/"+keyName+" missing") {
 		t.Fatalf("private evidence = %q", privateCheck.Evidence)
 	}
-	if !strings.Contains(publicCheck.Evidence, "/context/secrets/cluster-admin-ssh-key.pub missing") {
+	if !strings.Contains(publicCheck.Evidence, "/context/secrets/"+keyName+".pub missing") {
 		t.Fatalf("public evidence = %q", publicCheck.Evidence)
 	}
 }

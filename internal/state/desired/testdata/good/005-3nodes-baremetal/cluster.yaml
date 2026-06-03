@@ -96,6 +96,9 @@ spec:
         name: apps
     method: agent
     mode: connected
+    nodeSSH:
+      keyPairRef:
+        name: 3-nodes-ocp-baremetal-cluster-admin-ssh-key
 
   controlPlane:
     name: master

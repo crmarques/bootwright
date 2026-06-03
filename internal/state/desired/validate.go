@@ -347,6 +347,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	for _, h := range state.Hosts {
 		if h.Spec.SSH != nil {
 			requireSSHKey(fmt.Sprintf("Host/%s spec.ssh.keyRef", h.Metadata.Name), h.Spec.SSH.KeyRef)
+			if h.Spec.SSH.KnownHostsRef.Name != "" {
+				require(fmt.Sprintf("Host/%s spec.ssh.knownHostsRef", h.Metadata.Name), h.Spec.SSH.KnownHostsRef)
+			}
 		}
 	}
 	for _, p := range state.InfraProviders {
@@ -395,8 +398,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.nodeSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.NodeSSH, requireSSHKey)
-		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.ClusterSSH, requireSSHKey)
 		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.credentialsRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef)
 		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.trustBundleRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.TrustBundleRef)
 	}
@@ -429,15 +430,6 @@ func requireNodeSSH(owner string, spec v1alpha1.NodeSSHSpec, requireSSHKey func(
 	}
 	if spec.PublicKeyRef.Name != "" {
 		requireSSHKey(owner+".publicKeyRef", spec.PublicKeyRef)
-	}
-	if spec.PrivateKeyRef.Name != "" {
-		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef)
-	}
-}
-
-func requireStorageSSH(owner string, spec v1alpha1.StorageSSHSpec, requireSSHKey func(string, v1alpha1.SecretRef)) {
-	if spec.KeyPairRef.Name != "" {
-		requireSSHKey(owner+".keyPairRef", spec.KeyPairRef)
 	}
 	if spec.PrivateKeyRef.Name != "" {
 		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef)

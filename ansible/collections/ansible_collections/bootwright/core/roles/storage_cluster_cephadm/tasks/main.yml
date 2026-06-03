@@ -18,6 +18,8 @@
     bootwright_ceph_remote_operations: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/operations.yaml"
     bootwright_ceph_remote_private_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key"
     bootwright_ceph_remote_public_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key.pub"
+    bootwright_ceph_remote_known_hosts: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/known_hosts"
+    bootwright_ceph_remote_ssh_config: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/ssh_config"
     bootwright_ceph_registry_url: "{{ bootwright_selected_storage_cluster.registry.url | default('') }}"
     bootwright_ceph_registry_credentials_path: "{{ bootwright_selected_storage_cluster.registry.credentialsPath | default('') }}"
     bootwright_ceph_registry_trust_path: "{{ bootwright_selected_storage_cluster.registry.trustBundlePath | default('') }}"
@@ -195,19 +197,35 @@
       no_log: true
       when: bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
 
+    - name: Copy cephadm cluster known hosts
+      ansible.builtin.copy:
+        src: "{{ bootwright_selected_storage_cluster.clusterSSH.knownHostsPath }}"
+        dest: "{{ bootwright_ceph_remote_known_hosts }}"
+        mode: "0600"
+      when: bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
+
+    - name: Render cephadm SSH config
+      ansible.builtin.copy:
+        content: |
+          Host *
+            User {{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}
+            IdentityFile {{ bootwright_ceph_remote_private_key }}
+            UserKnownHostsFile {{ bootwright_ceph_remote_known_hosts }}
+            StrictHostKeyChecking yes
+            BatchMode yes
+        dest: "{{ bootwright_ceph_remote_ssh_config }}"
+        mode: "0600"
+      when:
+        - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
+        - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
+
     - name: Verify cephadm seed SSH access to storage nodes
       ansible.builtin.command:
         argv:
           - ssh
-          - -i
-          - "{{ bootwright_ceph_remote_private_key }}"
-          - -o
-          - BatchMode=yes
-          - -o
-          - StrictHostKeyChecking=no
-          - -o
-          - UserKnownHostsFile=/dev/null
-          - "{{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}@{{ item.address }}"
+          - -F
+          - "{{ bootwright_ceph_remote_ssh_config }}"
+          - "{{ item.address }}"
           - "true"
       register: bootwright_ceph_seed_ssh_check
       changed_when: false
@@ -217,6 +235,7 @@
         label: "{{ item.name }}"
       when:
         - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
+        - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
         - item.address | default('') | length > 0
 
     - name: Check existing Ceph configuration
@@ -246,9 +265,7 @@
               'cephadm',
               'bootstrap',
               '--mon-ip',
-              bootwright_selected_storage_cluster.bootstrap.monIP,
-              '--apply-spec',
-              bootwright_ceph_remote_bootstrap_spec
+              bootwright_selected_storage_cluster.bootstrap.monIP
             ]
             + (
               ['--cluster-network', (bootwright_selected_storage_cluster.clusterNetworkCIDRs | join(','))]
@@ -263,6 +280,11 @@
             + (
               ['--ssh-public-key', bootwright_ceph_remote_public_key]
               if bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+              else []
+            )
+            + (
+              ['--ssh-user', bootwright_selected_storage_cluster.clusterSSH.user]
+              if bootwright_selected_storage_cluster.clusterSSH.user | default('') | length > 0
               else []
             )
             + (
@@ -285,6 +307,31 @@
       changed_when: true
       no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
       when: bootwright_ceph_conf_check.rc != 0 or bootwright_ceph_status_check.rc != 0
+
+    - name: Configure cephadm SSH trust
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - cephadm
+          - set-ssh-config
+          - -i
+          - "{{ bootwright_ceph_remote_ssh_config }}"
+      register: bootwright_ceph_ssh_config
+      changed_when: true
+      when:
+        - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
+        - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
+
+    - name: Apply Ceph host spec
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - orch
+          - apply
+          - -i
+          - "{{ bootwright_ceph_remote_bootstrap_spec }}"
+      register: bootwright_ceph_host_spec_apply
+      changed_when: true
 
     - name: Apply Ceph core service spec
       ansible.builtin.command:

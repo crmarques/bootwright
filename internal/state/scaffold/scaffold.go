@@ -253,10 +253,10 @@ spec:
 {{.Substrate.EnvArtifactServer}}
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - {{.Cluster}}-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-cluster-admin
+            comment: bootwright-{{.Cluster}}-cluster-admin
 {{.EnvSecrets}}
 `
 
@@ -346,6 +346,9 @@ spec:
         name: api-int
       ingress:
         name: apps
+    nodeSSH:
+      keyPairRef:
+        name: {{.Cluster}}-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:

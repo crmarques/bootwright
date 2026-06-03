@@ -234,9 +234,6 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 		return
 	}
 	adm := &cluster.Spec.Ceph.Cephadm
-	if adm.ClusterSSH.KeyPairRef.Name == "" && adm.ClusterSSH.PrivateKeyRef.Name == "" {
-		adm.ClusterSSH = adm.NodeSSH
-	}
 	if adm.Bootstrap.MonIP.Family == "" {
 		adm.Bootstrap.MonIP.Family = "ipv4"
 	}
@@ -318,7 +315,7 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 		defaultSSH := env.Spec.Defaults.Install.NodeSSH
 		if defaultSSH.IsZero() {
 			defaultSSH = v1alpha1.NodeSSHSpec{
-				KeyPairRef: v1alpha1.SecretRef{Name: v1alpha1.DefaultNodeSSHKeyName},
+				KeyPairRef: v1alpha1.SecretRef{Name: v1alpha1.ClusterAdminSSHKeyName(ocp.Metadata.Name)},
 			}
 		}
 		ocp.Spec.Install.NodeSSH = defaultSSH

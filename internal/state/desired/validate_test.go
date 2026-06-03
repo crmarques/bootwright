@@ -390,21 +390,21 @@ spec:
 			name: "containercluster-sshkeyref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    sshKeyRef: { name: cluster-admin-ssh-key }", 1)},
+				"    pullSecretRef: { name: openshift-pull-secret }\n    sshKeyRef: { name: sno-cluster-admin-ssh-key }", 1)},
 			wantSubstring: "field sshKeyRef not found",
 		},
 		{
 			name: "containercluster-clusteradminssh-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }", 1)},
+				"    pullSecretRef: { name: openshift-pull-secret }\n    clusterAdminSSH:\n      keyPairRef: { name: sno-cluster-admin-ssh-key }", 1)},
 			wantSubstring: "field clusterAdminSSH not found",
 		},
 		{
 			name: "environment-default-clusteradminssh-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  baseDomain: bootwright.test\n",
-				"  baseDomain: bootwright.test\n  defaults:\n    install:\n      clusterAdminSSH:\n        keyPairRef: { name: cluster-admin-ssh-key }\n", 1)},
+				"  baseDomain: bootwright.test\n  defaults:\n    install:\n      clusterAdminSSH:\n        keyPairRef: { name: sno-cluster-admin-ssh-key }\n", 1)},
 			wantSubstring: "field clusterAdminSSH not found",
 		},
 		{
@@ -584,9 +584,9 @@ spec:
 		{
 			name: "generated-ssh-key-type-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: rsa", 1)},
-			wantSubstring: `spec.secrets[cluster-admin-ssh-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
+				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+				"    - sno-cluster-admin-ssh-key:\n        generated:\n          sshKeyPair:\n            type: rsa", 1)},
+			wantSubstring: `spec.secrets[sno-cluster-admin-ssh-key].generated.sshKeyPair.type "rsa" must be "ed25519"`,
 		},
 		{
 			name: "generated-secret-multiple-kinds-rejected",
@@ -598,22 +598,22 @@ spec:
 		{
 			name: "generated-non-ssh-key-for-ssh-ref-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
-				"    - cluster-admin-ssh-key:\n        generated:\n          credentials:\n            username: admin", 1)},
-			wantSubstring: `install.nodeSSH.keyPairRef "cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[cluster-admin-ssh-key].generated is not sshKeyPair`,
+				"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+				"    - sno-cluster-admin-ssh-key:\n        generated:\n          credentials:\n            username: admin", 1)},
+			wantSubstring: `install.nodeSSH.keyPairRef "sno-cluster-admin-ssh-key" uses generated material but Environment/env spec.secrets[sno-cluster-admin-ssh-key].generated is not sshKeyPair`,
 		},
 		{
 			name: "cluster-admin-ssh-mixed-refs-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      keyPairRef: { name: cluster-admin-ssh-key }\n      publicKeyRef: { name: cluster-admin-ssh-key }", 1)},
+				"    nodeSSH:\n      keyPairRef: { name: sno-cluster-admin-ssh-key }",
+				"    nodeSSH:\n      keyPairRef: { name: sno-cluster-admin-ssh-key }\n      publicKeyRef: { name: sno-cluster-admin-ssh-key }", 1)},
 			wantSubstring: "spec.install.nodeSSH must use either keyPairRef or publicKeyRef/privateKeyRef, not both",
 		},
 		{
 			name: "cluster-admin-ssh-private-only-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"    pullSecretRef: { name: openshift-pull-secret }",
-				"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      privateKeyRef: { name: cluster-admin-ssh-key }", 1)},
+				"    nodeSSH:\n      keyPairRef: { name: sno-cluster-admin-ssh-key }",
+				"    nodeSSH:\n      privateKeyRef: { name: sno-cluster-admin-ssh-key }", 1)},
 			wantSubstring: "spec.install.nodeSSH publicKeyRef.name is required when keyPairRef.name is empty",
 		},
 		{
@@ -864,11 +864,11 @@ func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
 func TestNodeSSHSplitRefsValidate(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-		"    - cluster-admin-ssh-key:\n        file: ~/ssh.pub",
+		"    - sno-cluster-admin-ssh-key:\n        file: ~/ssh.pub",
 		"    - cluster-admin-public:\n        file: ~/ssh.pub\n    - cluster-admin-private:\n        file: ~/ssh", 1)
 	files["cluster.yaml"] = strings.Replace(newClusterYAML,
-		"    pullSecretRef: { name: openshift-pull-secret }",
-		"    pullSecretRef: { name: openshift-pull-secret }\n    nodeSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
+		"    nodeSSH:\n      keyPairRef: { name: sno-cluster-admin-ssh-key }",
+		"    nodeSSH:\n      publicKeyRef: { name: cluster-admin-public }\n      privateKeyRef: { name: cluster-admin-private }", 1)
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
 
@@ -2226,7 +2226,7 @@ spec:
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }
     nodeSSH:
-      keyPairRef: { name: cluster-admin-ssh-key }
+      keyPairRef: { name: sno-cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }
@@ -2254,7 +2254,7 @@ spec:
   baseDomain: bootwright.test
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
 `,
 		"network-a.yaml": kubeVirtCycleNetworkYAML("net-a", "192.168.140.0/24", "192.168.140.1"),
@@ -2424,7 +2424,7 @@ spec:
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }
     nodeSSH:
-      keyPairRef: { name: cluster-admin-ssh-key }
+      keyPairRef: { name: sno-cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }
@@ -2448,10 +2448,11 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
+    - provider-host-known-hosts
     - vcenter-credentials:
         file: ~/vcenter
 `,
@@ -2464,6 +2465,7 @@ spec:
   ssh:
     addressName: ssh
     keyRef: { name: provider-host-ssh }
+    knownHostsRef: { name: provider-host-known-hosts }
   capabilities: [container-runtime]
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -2560,7 +2562,7 @@ spec:
         name: apps
     pullSecretRef: { name: openshift-pull-secret }
     nodeSSH:
-      keyPairRef: { name: cluster-admin-ssh-key }
+      keyPairRef: { name: sno-cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }
@@ -2656,10 +2658,11 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
+    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:
@@ -2689,10 +2692,11 @@ spec:
 	}
 	b.WriteString(`  secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
+    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:
@@ -2714,6 +2718,7 @@ spec:
   ssh:
     addressName: ssh
     keyRef: { name: provider-host-ssh }
+    knownHostsRef: { name: provider-host-known-hosts }
   capabilities: [container-runtime]
 `
 
@@ -2871,6 +2876,8 @@ spec:
     method: agent
     mode: connected
     pullSecretRef: { name: openshift-pull-secret }
+    nodeSSH:
+      keyPairRef: { name: sno-cluster-admin-ssh-key }
   controlPlane: { name: master, replicas: 1 }
   compute:
     - { name: worker, replicas: 0 }

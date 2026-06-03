@@ -13,6 +13,8 @@ spec:
     addressName: ssh
     keyRef:
       name: provider-host-ssh
+    knownHostsRef:
+      name: provider-host-known-hosts
 
   capabilities:
     - libvirt

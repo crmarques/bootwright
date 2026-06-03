@@ -12,12 +12,13 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - metal-ocp-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-cluster-admin
+            comment: bootwright-metal-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
+    - provider-host-known-hosts
     - bmc-credentials
 
   infraComponents:

@@ -41,6 +41,7 @@ const (
 	HostCapabilityLibvirt          = "libvirt"
 	HostCapabilityContainerRuntime = "container-runtime"
 	HostCapabilityCephAdmin        = "ceph-admin"
+	HostCapabilityCephNode         = "ceph-node"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"
@@ -105,10 +106,8 @@ const (
 	InfraComponentTypeChrony         = "chrony"
 	InfraComponentTypeMirrorRegistry = "mirrorRegistry"
 
-	// Default secret names that the renderer falls back to when the
-	// ContainerCluster does not override them.
-	DefaultPullSecretName = "openshift-pull-secret"
-	DefaultNodeSSHKeyName = "cluster-admin-ssh-key"
+	DefaultPullSecretName             = "openshift-pull-secret"
+	DefaultClusterAdminSSHKeyNamePart = "cluster-admin-ssh-key"
 
 	// Default validity window for generated self-signed certificates.
 	DefaultCertificateDays = 3650
@@ -197,6 +196,10 @@ const (
 	StorageExportTypeDataFoundation                              = "data-foundation"
 	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
 )
+
+func ClusterAdminSSHKeyName(clusterName string) string {
+	return clusterName + "-" + DefaultClusterAdminSSHKeyNamePart
+}
 
 // State is the loaded fleet.
 type State struct {

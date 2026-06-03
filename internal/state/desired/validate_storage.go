@@ -21,7 +21,7 @@ func validateStorage(state v1alpha1.State) []string {
 	infras := indexClusterInfras(state.ClusterInfras)
 	hosts := indexHosts(state.Hosts)
 
-	errs = append(errs, validateStorageClusters(state.StorageClusters, infras)...)
+	errs = append(errs, validateStorageClusters(state.StorageClusters, infras, hosts)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
@@ -31,7 +31,7 @@ func validateStorage(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]v1alpha1.ClusterInfra) []string {
+func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]v1alpha1.ClusterInfra, hosts map[string]v1alpha1.Host) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, cluster := range items {
@@ -78,13 +78,13 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]
 			errs = append(errs, fmt.Sprintf("%s.clusterInfraRef.name %q does not match any ClusterInfra", prefix, cluster.Spec.ClusterInfraRef.Name))
 		}
 		if cluster.Spec.Ceph != nil {
-			errs = append(errs, validateStorageClusterCeph(cluster, infra, ok)...)
+			errs = append(errs, validateStorageClusterCeph(cluster, infra, ok, hosts)...)
 		}
 	}
 	return errs
 }
 
-func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host) []string {
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
@@ -95,7 +95,7 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, infra v1alpha1.
 	for i, cidr := range ceph.Networks.ClusterCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
-	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", ceph.Topology.Nodes, infra, infraOK)...)
+	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", ceph.Topology.Nodes, infra, infraOK, hosts)...)
 	if ceph.Topology.Stretch != nil && ceph.Topology.Stretch.Enabled {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
@@ -129,8 +129,6 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infr
 	default:
 		errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.family %q must be ipv4 or ipv6", prefix, mon.Family))
 	}
-	errs = append(errs, validateStorageSSH(prefix+".nodeSSH", adm.NodeSSH, true)...)
-	errs = append(errs, validateStorageSSH(prefix+".clusterSSH", adm.ClusterSSH, false)...)
 	errs = append(errs, validateStorageCephadmRegistry(prefix+".registry", adm.Registry)...)
 	return errs
 }
@@ -150,25 +148,15 @@ func validateStorageCephadmRegistry(prefix string, registry v1alpha1.StorageCeph
 	return errs
 }
 
-func validateStorageSSH(prefix string, ssh v1alpha1.StorageSSHSpec, required bool) []string {
-	if ssh.KeyPairRef.Name == "" && ssh.PrivateKeyRef.Name == "" {
-		if required {
-			return []string{prefix + " must set keyPairRef.name or privateKeyRef.name"}
-		}
-		return nil
-	}
-	if ssh.KeyPairRef.Name != "" && ssh.PrivateKeyRef.Name != "" {
-		return []string{prefix + " must set only one of {keyPairRef, privateKeyRef}"}
-	}
-	return nil
-}
-
-func validateStorageCephNodes(prefix string, nodes []v1alpha1.StorageCephNode, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+func validateStorageCephNodes(prefix string, nodes []v1alpha1.StorageCephNode, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host) []string {
 	var errs []string
 	if len(nodes) == 0 {
 		return []string{prefix + " is required"}
 	}
 	seen := map[string]bool{}
+	sshUser := ""
+	sshKeyRef := ""
+	sshSeen := false
 	for i, node := range nodes {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		if node.Name == "" {
@@ -180,6 +168,34 @@ func validateStorageCephNodes(prefix string, nodes []v1alpha1.StorageCephNode, i
 			seen[node.Name] = true
 			if infraOK && !clusterInfraMachineExists(infra, node.Name) {
 				errs = append(errs, fmt.Sprintf("%s.name %q is not defined on ClusterInfra/%s spec.components.machines", owner, node.Name, infra.Metadata.Name))
+			}
+		}
+		if node.HostRef.Name == "" {
+			errs = append(errs, owner+".hostRef.name is required")
+		} else {
+			host, ok := hosts[node.HostRef.Name]
+			if !ok {
+				errs = append(errs, fmt.Sprintf("%s.hostRef.name %q does not match any Host", owner, node.HostRef.Name))
+			} else {
+				if !hostHasCapability(host, v1alpha1.HostCapabilityCephNode) {
+					errs = append(errs, fmt.Sprintf("%s.hostRef.name %q must reference a Host with capability %q", owner, node.HostRef.Name, v1alpha1.HostCapabilityCephNode))
+				}
+				if host.Spec.SSH == nil {
+					errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s.hostRef", host.Metadata.Name, owner))
+				} else {
+					if host.Spec.SSH.KnownHostsRef.Name == "" {
+						errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s.hostRef", host.Metadata.Name, owner))
+					}
+					if !sshSeen {
+						sshUser = host.Spec.SSH.User
+						sshKeyRef = host.Spec.SSH.KeyRef.Name
+						sshSeen = true
+					} else if host.Spec.SSH.User != sshUser {
+						errs = append(errs, fmt.Sprintf("%s.hostRef.name %q uses ssh.user %q; all storage node Hosts in one StorageCluster must use %q", owner, node.HostRef.Name, host.Spec.SSH.User, sshUser))
+					} else if host.Spec.SSH.KeyRef.Name != sshKeyRef {
+						errs = append(errs, fmt.Sprintf("%s.hostRef.name %q uses ssh.keyRef.name %q; all storage node Hosts in one StorageCluster must use %q", owner, node.HostRef.Name, host.Spec.SSH.KeyRef.Name, sshKeyRef))
+					}
+				}
 			}
 		}
 		if node.Site == "" {
@@ -622,12 +638,12 @@ func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.
 		errs = append(errs, fmt.Sprintf("%s.fromSecret %q is not declared in Environment spec.secrets", prefix, details.FromSecret))
 	}
 	if details.SSHExecution != nil {
-		errs = append(errs, validateStorageExportSSHExecution(state, prefix+".sshExecution", cluster, details.SSHExecution, hosts)...)
+		errs = append(errs, validateStorageExportSSHExecution(prefix+".sshExecution", cluster, details.SSHExecution, hosts)...)
 	}
 	return errs
 }
 
-func validateStorageExportSSHExecution(state v1alpha1.State, prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, hosts map[string]v1alpha1.Host) []string {
+func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, hosts map[string]v1alpha1.Host) []string {
 	var errs []string
 	if storageClusterExternal(cluster) && len(spec.HostRefs) == 0 {
 		errs = append(errs, prefix+".hostRefs is required when storageClusterRef points to external Ceph")
@@ -646,11 +662,11 @@ func validateStorageExportSSHExecution(state v1alpha1.State, prefix string, clus
 		if !hostHasCapability(host, v1alpha1.HostCapabilityCephAdmin) {
 			errs = append(errs, fmt.Sprintf("%s %q must reference a Host with capability %q", owner, ref.Name, v1alpha1.HostCapabilityCephAdmin))
 		}
-	}
-	if spec.KnownHostsRef.Name == "" {
-		errs = append(errs, prefix+".knownHostsRef.name is required")
-	} else if !environmentDeclaresSecret(state, spec.KnownHostsRef.Name) {
-		errs = append(errs, fmt.Sprintf("%s.knownHostsRef.name %q is not declared in Environment spec.secrets", prefix, spec.KnownHostsRef.Name))
+		if host.Spec.SSH == nil {
+			errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s", host.Metadata.Name, owner))
+		} else if host.Spec.SSH.KnownHostsRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s", host.Metadata.Name, owner))
+		}
 	}
 	if spec.Timeout != "" {
 		if _, err := time.ParseDuration(spec.Timeout); err != nil {

@@ -27,10 +27,10 @@ secret.
 spec:
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - lab-ocp-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-cluster-admin
+            comment: bootwright-lab-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
     - bmc-credentials
@@ -57,12 +57,22 @@ operator-owned files. Generated SSH key pairs write the private key to
 references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `installTrust.caBundleRefs[].name`,
 `proxyAuthRef.name`, `secretRef.name`, `defaultCertificateRef.name`, or
-`nodeSSH.keyPairRef.name`.
+`nodeSSH.keyPairRef.name`. Durable SSH targets also reference
+`Host.spec.ssh.knownHostsRef.name` for their known_hosts material.
 
 For node SSH, use `install.nodeSSH.keyPairRef` when one
 secret owns both halves. Use `publicKeyRef` plus optional `privateKeyRef` when
 the public key authorized in `install-config.yaml` and the private key used for
-local post-install probes are stored under different secret names.
+local post-install probes are stored under different secret names. When
+`install.nodeSSH` is omitted, Bootwright uses
+`<cluster-name>-cluster-admin-ssh-key`; examples still declare and reference
+that name explicitly.
+
+For durable machines Bootwright or managed tools SSH into, put SSH connection
+material on `Host.spec.ssh`. `keyRef.name` supplies private SSH key material;
+managed Ceph node Hosts also require the public half at `<name>.pub` so
+Bootwright can pass it to cephadm. `knownHostsRef.name` supplies the
+known_hosts file used with strict host-key checking.
 
 ## Local secrets directory
 

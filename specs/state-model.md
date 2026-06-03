@@ -33,8 +33,9 @@ Ceph storage:
 - `Environment` owns fleet-wide defaults, context resource selection, secret
   sources, proxy defaults, registry mirrors, and Bootwright component image
   pins.
-- `Host` owns SSH reachability and named addresses for substrate or service
-  hosts.
+- `Host` owns SSH reachability and named addresses for durable machines
+  Bootwright or managed tools SSH into, including provider hosts, service
+  hosts, external Ceph admin hosts, and managed Ceph nodes.
 
 Post-install components are deliberately not embedded under
 `ContainerCluster.spec.install`. `ContainerCluster` remains focused on
@@ -74,12 +75,13 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - prod-3node-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-cluster-admin
+            comment: bootwright-prod-3node-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
+    - provider-host-known-hosts
     - bmc-credentials
     - proxy-credentials:
         generated:
@@ -179,7 +181,7 @@ Rules:
   Omitted means the conventional `openshift-pull-secret` secret name.
 - `defaults.install.nodeSSH`, when set, is copied into selected
   `ContainerCluster` install specs that omit `nodeSSH`. Omitted means
-  `keyPairRef.name: cluster-admin-ssh-key`.
+  `keyPairRef.name: <container-cluster-name>-cluster-admin-ssh-key`.
 - `defaults.artifactAccess`, when set, is copied into selected
   `ClusterInfra.spec.artifactAccess` fields only for active artifact
   consumers. Redfish virtual-media defaults apply only to cluster
@@ -299,6 +301,9 @@ spec:
         name: apps
     additionalTrustBundleRefs:
       - name: cluster-extra-ca
+    nodeSSH:
+      keyPairRef:
+        name: prod-3node-cluster-admin-ssh-key
     servingCertificates:
       apiServer:
         namedCertificates:
@@ -388,9 +393,10 @@ Rules:
 ## Storage
 
 The first storage implementation provisions external Ceph with `cephadm`.
-Storage nodes are modeled as machines in a storage-only `ClusterInfra`, not as
-`Host` objects. They are assumed to already run RHEL and be reachable by the
-Ansible storage layer from the bastion over SSH.
+Storage nodes are modeled as machines in a storage-only `ClusterInfra` for
+network and hardware facts, and as `Host` objects for durable SSH connection
+details. They are assumed to already run RHEL and be reachable by the Ansible
+storage layer from the bastion over SSH.
 
 Full-managed storage, where Bootwright customizes a RHEL ISO/kickstart, boots
 bare metal through BMCs, installs RHEL, and then runs the managed Ceph flow, is
@@ -432,11 +438,7 @@ spec:
           name: ceph-registry-credentials
       nodeSSH:
         keyPairRef:
-          name: ceph-node-ssh
-      clusterSSH:
-        user: root
-        keyPairRef:
-          name: cephadm-cluster-ssh
+          name: ceph-stretch-cluster-admin-ssh-key
 
     topology:
       stretch:
@@ -454,6 +456,8 @@ spec:
         ruleName: stretch-replicated
       nodes:
         - name: ceph-dc1-0
+          hostRef:
+            name: ceph-dc1-0
           site: dc1
           roles:
             - mon
@@ -476,12 +480,15 @@ Rules:
 - `StorageCluster.spec.management: external` disables Bootwright-managed Ceph
   provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
   and `StorageObjectGateway` are not declared for imported Ceph.
-- `nodeSSH` is the bastion-to-node SSH identity rendered into the Ansible
-  seed-host inventory. When `nodeSSH.user` is omitted, Bootwright does not
-  render `ansible_user`; Ansible uses the invoking SSH user or host-specific
-  SSH configuration, and privileged Ceph tasks use Ansible `become`.
-  `clusterSSH` is the SSH identity copied to the seed host and passed to
-  cephadm for ongoing cluster orchestration.
+- Each managed `StorageCluster.spec.ceph.topology.nodes[].hostRef.name`
+  references a `Host` with capability `ceph-node`. The referenced
+  `Host.spec.ssh` owns the bastion-to-node Ansible SSH identity and the SSH
+  identity copied to the seed host for cephadm orchestration. All storage-node
+  Hosts in one managed StorageCluster must use the same `ssh.user` and
+  `ssh.keyRef.name`, because cephadm bootstrap accepts one SSH user/key for
+  cluster host orchestration. Their key material must provide both private and
+  public halves so Bootwright can connect and cephadm can authorize the same
+  key. `Host.spec.ssh.knownHostsRef` is used with strict host-key checking.
 - A storage-only `ClusterInfra` can omit OpenShift API, API-int, and ingress
   endpoints. Explicit bare-metal BMC fields are required only for
   `ContainerCluster` boot targets, not for storage-only preinstalled nodes.
@@ -767,12 +774,12 @@ Rules:
   declared in `Environment.spec.secrets`. `generated` means Bootwright creates
   Data Foundation Ceph auth and assembles exporter-compatible JSON from the
   managed storage result. `sshExecution` runs the official Data Foundation
-  exporter through Ansible over SSH, requires `knownHostsRef`, becomes root
-  through Ansible `become`, writes the validated JSON into the attachment
-  Secret manifest, and does not log exporter stdout. Imported Ceph requires
-  explicit `ceph-admin` host refs. Managed and full-managed Ceph may omit host
-  refs; Bootwright uses the storage cluster's `cephadm.bootstrap.seedNode` and
-  `cephadm.nodeSSH`.
+  exporter through Ansible over SSH to each referenced Host using that Host's
+  `spec.ssh` key, user, address, and `knownHostsRef`, becomes root through
+  Ansible `become`, writes the validated JSON into the attachment Secret
+  manifest, and does not log exporter stdout. Imported Ceph requires explicit
+  `ceph-admin` host refs. Managed and full-managed Ceph may omit host refs;
+  Bootwright uses the storage cluster's `cephadm.bootstrap.seedNode` Host ref.
 - Future add-on types may include `kustomize` and `helm`; they are not
   accepted by the MVP schema.
 
@@ -863,9 +870,11 @@ Rules:
 
 ## Host
 
-`Host` owns how Bootwright reaches a machine that runs provider or service
-actions. It does not own cluster nodes; nodes are declared through
-`ContainerCluster.spec.nodes[]` and selected machines in `ClusterInfra`.
+`Host` owns how Bootwright reaches a durable machine that runs provider,
+service, external Ceph admin, or managed Ceph node actions. OpenShift install
+nodes are still declared through `ContainerCluster.spec.nodes[]` and selected
+machines in `ClusterInfra`; their installer SSH trust remains
+`ContainerCluster.spec.install.nodeSSH`.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -884,6 +893,8 @@ spec:
     user: core
     keyRef:
       name: provider-host-ssh
+    knownHostsRef:
+      name: provider-host-known-hosts
 
   capabilities:
     - libvirt
@@ -906,9 +917,14 @@ Rules:
 - `spec.ssh.keyRef.name` is required and references
   `Environment.spec.secrets`. Controller-local hosts still do not require host
   SSH key material during preflight.
+- `spec.ssh.knownHostsRef.name` is required and references
+  `Environment.spec.secrets`. Non-local durable Host SSH renders with
+  `StrictHostKeyChecking=yes` and `UserKnownHostsFile` pointing at this
+  material.
 - `spec.capabilities[]` is required. The current canonical tags are `libvirt`,
-  `container-runtime`, and `ceph-admin`; provider, service, and external Ceph
-  workflows use them to select hosts for substrate, service, or Ceph-side work.
+  `container-runtime`, `ceph-admin`, and `ceph-node`; provider, service,
+  external Ceph, and managed Ceph workflows use them to select hosts for
+  substrate, service, or Ceph-side work.
 
 ## InfraProvider
 

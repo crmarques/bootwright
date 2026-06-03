@@ -3,6 +3,7 @@ package render
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
+	"github.com/crmarques/bootwright/internal/infra/locality"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
@@ -59,21 +60,18 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
 }
 
-func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, nodeName string, env *v1alpha1.Environment, secretsDir string) map[string]any {
-	nodeSSH := cluster.Spec.Ceph.Cephadm.NodeSSH
-	entry := map[string]any{
-		"ansible_host":                      topology.NodeAddress(state, cluster, nodeName),
-		"bootwright_host_name":              storageInventoryHostName(cluster, nodeName),
-		"bootwright_storage_cluster_name":   cluster.Metadata.Name,
-		"bootwright_storage_node_name":      nodeName,
-		"bootwright_storage_seed_host_name": StorageSeedHostName(cluster.Metadata.Name),
+func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+	nodeName := node.Name
+	entry := map[string]any{}
+	if host, ok := findHost(state, node.HostRef.Name); ok && host.Spec.SSH != nil {
+		entry = hostInventoryEntry(host, env, secretsDir, localPolicy)
+	} else {
+		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
 	}
-	if user := storageSSHUser(nodeSSH); user != "" {
-		entry["ansible_user"] = user
-	}
-	if path := storageSSHPrivateKeyPath(nodeSSH, env, secretsDir); path != "" {
-		entry["ansible_ssh_private_key_file"] = path
-	}
+	entry["bootwright_host_name"] = storageInventoryHostName(cluster, nodeName)
+	entry["bootwright_storage_cluster_name"] = cluster.Metadata.Name
+	entry["bootwright_storage_node_name"] = nodeName
+	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster.Metadata.Name)
 	return entry
 }
 
@@ -83,7 +81,6 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 	for _, cluster := range managedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
 		asset := StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
-		clusterSSH := ceph.Cephadm.ClusterSSH
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
 			"seedHost":            StorageSeedHostName(cluster.Metadata.Name),
@@ -107,26 +104,34 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 		if registry := storageRegistryVars(ceph.Cephadm.Registry, env, secretsDir); len(registry) > 0 {
 			entry["registry"] = registry
 		}
-		if user := storageSSHUser(clusterSSH); user != "" {
-			entry["clusterSSH"] = map[string]any{"user": user}
-		}
-		if privatePath := storageSSHPrivateKeyPath(clusterSSH, env, secretsDir); privatePath != "" {
-			clusterVars, _ := entry["clusterSSH"].(map[string]any)
-			if clusterVars == nil {
-				clusterVars = map[string]any{}
-				entry["clusterSSH"] = clusterVars
-			}
-			clusterVars["privateKeyPath"] = privatePath
-		}
-		if publicPath := storageSSHPublicKeyPath(clusterSSH, env, secretsDir); publicPath != "" {
-			clusterVars, _ := entry["clusterSSH"].(map[string]any)
-			if clusterVars == nil {
-				clusterVars = map[string]any{}
-				entry["clusterSSH"] = clusterVars
-			}
-			clusterVars["publicKeyPath"] = publicPath
+		if clusterSSH := storageClusterSSHVars(state, cluster, env, secretsDir); len(clusterSSH) > 0 {
+			entry["clusterSSH"] = clusterSSH
 		}
 		out = append(out, entry)
+	}
+	return out
+}
+
+func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) map[string]any {
+	if len(cluster.Spec.Ceph.Topology.Nodes) == 0 {
+		return nil
+	}
+	host, ok := findHost(state, cluster.Spec.Ceph.Topology.Nodes[0].HostRef.Name)
+	if !ok || host.Spec.SSH == nil {
+		return nil
+	}
+	out := map[string]any{}
+	if host.Spec.SSH.User != "" {
+		out["user"] = host.Spec.SSH.User
+	}
+	if privatePath := secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir); privatePath != "" {
+		out["privateKeyPath"] = privatePath
+	}
+	if publicPath := secret.ResolveSSHPublicKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir); publicPath != "" {
+		out["publicKeyPath"] = publicPath
+	}
+	if knownHostsPath := secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir); knownHostsPath != "" {
+		out["knownHostsPath"] = knownHostsPath
 	}
 	return out
 }
@@ -206,23 +211,4 @@ func storageMachineIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref
 		}
 	}
 	return ""
-}
-
-func storageSSHUser(ssh v1alpha1.StorageSSHSpec) string {
-	return ssh.User
-}
-
-func storageSSHPrivateKeyPath(ssh v1alpha1.StorageSSHSpec, env *v1alpha1.Environment, secretsDir string) string {
-	name := ssh.PrivateKeyRef.Name
-	if name == "" {
-		name = ssh.KeyPairRef.Name
-	}
-	return secret.ResolveSSHPrivateKeyPath(name, env, secretsDir)
-}
-
-func storageSSHPublicKeyPath(ssh v1alpha1.StorageSSHSpec, env *v1alpha1.Environment, secretsDir string) string {
-	if ssh.KeyPairRef.Name == "" {
-		return ""
-	}
-	return secret.ResolveSSHPublicKeyPath(ssh.KeyPairRef.Name, env, secretsDir)
 }

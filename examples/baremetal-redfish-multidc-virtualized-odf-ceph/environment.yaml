@@ -12,21 +12,31 @@ spec:
 
   secrets:
     - openshift-pull-secret
-    - cluster-admin-ssh-key:
+    - dc1-metal-ocp-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-cluster-admin
+            comment: bootwright-dc1-metal-ocp-cluster-admin
+    - dc2-metal-ocp-cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-dc2-metal-ocp-cluster-admin
+    - dc1-child-ocp-cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-dc1-child-ocp-cluster-admin
+    - dc2-child-ocp-cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            comment: bootwright-dc2-child-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
+    - provider-host-known-hosts
     - bmc-credentials
-    - ceph-node-ssh:
+    - ceph-storage-cluster-admin-ssh-key:
         generated:
           sshKeyPair:
-            comment: bootwright-ceph-node
-    - cephadm-cluster-ssh:
-        generated:
-          sshKeyPair:
-            comment: bootwright-cephadm
+            comment: bootwright-ceph-storage-cluster-admin
+    - ceph-storage-known-hosts
     - ceph-registry-credentials
 
   infraComponents:

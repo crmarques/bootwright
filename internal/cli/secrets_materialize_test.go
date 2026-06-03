@@ -15,11 +15,11 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "env"},
 		Spec: v1alpha1.EnvironmentSpec{
 			Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"cluster-admin-ssh-key": {
+				"demo-cluster-admin-ssh-key": {
 					Generated: &v1alpha1.EnvironmentSecretGenerated{
 						SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{
 							Type:    v1alpha1.SSHKeyPairTypeEd25519,
-							Comment: "bootwright-cluster-admin",
+							Comment: "bootwright-demo-cluster-admin",
 						},
 					},
 				},
@@ -31,17 +31,17 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materializeSecrets: %v", err)
 	}
-	if len(results) != 1 || results[0].name != "cluster-admin-ssh-key" {
+	if len(results) != 1 || results[0].name != "demo-cluster-admin-ssh-key" {
 		t.Fatalf("results = %+v", results)
 	}
-	privatePath := filepath.Join(secretsDir, "cluster-admin-ssh-key")
+	privatePath := filepath.Join(secretsDir, "demo-cluster-admin-ssh-key")
 	publicPath := privatePath + ".pub"
 	privateBody := readTestFile(t, privatePath)
 	publicBody := readTestFile(t, publicPath)
 	if !strings.Contains(privateBody, "OPENSSH PRIVATE KEY") {
 		t.Fatalf("private key missing OpenSSH header:\n%s", privateBody)
 	}
-	if !strings.HasPrefix(publicBody, "ssh-ed25519 ") || !strings.Contains(publicBody, " bootwright-cluster-admin\n") {
+	if !strings.HasPrefix(publicBody, "ssh-ed25519 ") || !strings.Contains(publicBody, " bootwright-demo-cluster-admin\n") {
 		t.Fatalf("public key = %q", publicBody)
 	}
 	assertTestFileMode(t, privatePath, 0o600)
@@ -77,14 +77,14 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 			Spec: v1alpha1.EnvironmentSpec{
 				SecretStorage: v1alpha1.EnvironmentSecretStorageSpec{Mode: v1alpha1.SecretStorageModeContext},
 				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-admin-ssh-key": {File: privateSource},
+					"cluster-cluster-admin-ssh-key": {File: privateSource},
 				},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
 			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
-				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "cluster-admin-ssh-key"}},
+				NodeSSH: v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "cluster-cluster-admin-ssh-key"}},
 			}},
 		}},
 	}
@@ -96,14 +96,14 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two SSH key copies", results)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-ssh-key")); got != "PRIVATE\n" {
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key")); got != "PRIVATE\n" {
 		t.Fatalf("private copy = %q", got)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-ssh-key.pub")); got != "ssh-ed25519 AAAA test\n" {
+	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key.pub")); got != "ssh-ed25519 AAAA test\n" {
 		t.Fatalf("public copy = %q", got)
 	}
-	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-ssh-key"), 0o600)
-	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-admin-ssh-key.pub"), 0o600)
+	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key"), 0o600)
+	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key.pub"), 0o600)
 }
 
 func TestMaterializeCopiesSplitNodeSSHFileSources(t *testing.T) {
@@ -165,20 +165,20 @@ func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	if strings.Contains(stdout, "OPENSSH PRIVATE KEY") {
 		t.Fatalf("secret generate leaked private key:\n%s", stdout)
 	}
-	public, stderr, code := runCLI(t, "secret", "show", "--name", "cluster-admin-ssh-key", "--part", "public")
+	public, stderr, code := runCLI(t, "secret", "show", "--name", "sno-libvirt-cluster-admin-ssh-key", "--part", "public")
 	if code != 0 {
 		t.Fatalf("secret show public exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.Contains(public, " bootwright-cluster-admin\n") {
+	if !strings.HasPrefix(public, "ssh-ed25519 ") || !strings.Contains(public, " bootwright-sno-libvirt-cluster-admin\n") {
 		t.Fatalf("public part = %q", public)
 	}
-	_, stderr, code = runCLI(t, "secret", "delete", "cluster-admin-ssh-key", "--yes")
+	_, stderr, code = runCLI(t, "secret", "delete", "sno-libvirt-cluster-admin-ssh-key", "--yes")
 	if code != 0 {
 		t.Fatalf("secret delete exited %d, stderr=%q", code, stderr)
 	}
 	for _, path := range []string{
-		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key"),
-		filepath.Join(ctx.SecretsDir, "cluster-admin-ssh-key.pub"),
+		filepath.Join(ctx.SecretsDir, "sno-libvirt-cluster-admin-ssh-key"),
+		filepath.Join(ctx.SecretsDir, "sno-libvirt-cluster-admin-ssh-key.pub"),
 	} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("%s still exists after delete: %v", path, err)

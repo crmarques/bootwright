@@ -60,7 +60,8 @@ func TestVarsProjectNodeSSHPrivateKeyPath(t *testing.T) {
 	}
 	sourceDir := t.TempDir()
 	state.Environments[0].SourcePath = filepath.Join(sourceDir, "environment.yaml")
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
+	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
 		File: "keys/admin.pub",
 	}
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
@@ -76,7 +77,8 @@ func TestVarsProjectGeneratedNodeSSHPrivateKeyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets[v1alpha1.DefaultNodeSSHKeyName] = v1alpha1.EnvironmentSecretSpec{
+	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
+	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
@@ -84,7 +86,7 @@ func TestVarsProjectGeneratedNodeSSHPrivateKeyPath(t *testing.T) {
 	secretsDir := t.TempDir()
 	vars := render.VarsWithSecretsDir(state, secretsDir)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
-	want := filepath.Join(secretsDir, v1alpha1.DefaultNodeSSHKeyName)
+	want := filepath.Join(secretsDir, keyName)
 	if got := cluster["nodeSSHPrivateKeyPath"]; got != want {
 		t.Fatalf("nodeSSHPrivateKeyPath got %v, want %s", got, want)
 	}

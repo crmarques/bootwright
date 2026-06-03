@@ -15,6 +15,9 @@ spec:
         name: api-int
       ingress:
         name: apps
+    nodeSSH:
+      keyPairRef:
+        name: sno-baremetal-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:
@@ -29,4 +32,3 @@ spec:
       machineRef:
         clusterInfra: sno-baremetal
         name: master-0
-

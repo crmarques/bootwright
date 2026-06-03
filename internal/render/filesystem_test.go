@@ -153,7 +153,7 @@ func TestResolveInstallerWritesEffectiveFilesUnderClusterRuntimeDir(t *testing.T
 	if err := os.WriteFile(filepath.Join(secretsDir, "openshift-pull-secret"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(secretsDir, "cluster-admin-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(secretsDir, "sno-libvirt-cluster-admin-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(secretsDir, "proxy-credentials"), []byte("proxy:secret\n"), 0o600); err != nil {

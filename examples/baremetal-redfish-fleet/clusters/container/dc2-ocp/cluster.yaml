@@ -15,6 +15,9 @@ spec:
         name: api-int
       ingress:
         name: apps
+    nodeSSH:
+      keyPairRef:
+        name: dc2-ocp-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:
@@ -39,4 +42,3 @@ spec:
       machineRef:
         clusterInfra: dc2-ocp
         name: master-2
-

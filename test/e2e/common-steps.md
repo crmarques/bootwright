@@ -18,7 +18,7 @@ The case context input references four or five secrets through
 
 | Secret | Form | Required for |
 | --- | --- | --- |
-| `cluster-admin-ssh-key` | Context-local generated SSH key pair | OpenShift node SSH access |
+| `<cluster-name>-cluster-admin-ssh-key` | Context-local generated SSH key pair | OpenShift node SSH access |
 | `provider-host-ssh` | `~/.ssh/bootwright-ssh-key` | Bastion→host SSH |
 | `openshift-pull-secret` | Context-local, set from the pull-secret JSON | `render installer`, `apply --stage clusters` |
 | `proxy-credentials` (optional) | Context-local generated or set — see [proxy.md](proxy.md) | `apply bastion`, install-config proxy block |
@@ -152,10 +152,10 @@ per-machine overrides in `cluster-infra.yaml` under
 Then watch the agent or bootkube journals:
 
 ```bash
-sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/cluster-admin-ssh-key" core@<node-ip> \
+sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/<cluster-name>-cluster-admin-ssh-key" core@<node-ip> \
   sudo journalctl -fu assisted-service.service
 # or, after bootstrap kicks off:
-sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/cluster-admin-ssh-key" core@<node-ip> \
+sudo ssh -i "/var/lib/bootwright/contexts/$CASE/secrets/<cluster-name>-cluster-admin-ssh-key" core@<node-ip> \
   sudo journalctl -fu bootkube.service
 ```
 

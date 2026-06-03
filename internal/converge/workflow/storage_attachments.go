@@ -20,7 +20,6 @@ import (
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
-	"github.com/crmarques/bootwright/internal/storage/topology"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -129,11 +128,12 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 }
 
 type externalDetailsSSHTarget struct {
-	label         string
-	inventoryName string
-	address       string
-	user          string
-	keyPath       string
+	label          string
+	inventoryName  string
+	address        string
+	user           string
+	keyPath        string
+	knownHostsPath string
 }
 
 func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
@@ -141,14 +141,13 @@ func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.
 	if err != nil {
 		return "", err
 	}
-	knownHostsPath := secret.ResolvePath(ssh.KnownHostsRef.Name, workflowPrimaryEnvironment(state), opts.SecretsDir)
 	timeout, err := storageExportSSHTimeout(ssh.Timeout)
 	if err != nil {
 		return "", err
 	}
 	var failures []string
 	for i, target := range targets {
-		outputPath, err := runStorageExportSSHAnsible(ctx, state, export, containerCluster, opts, target, knownHostsPath, timeout, i, ssh)
+		outputPath, err := runStorageExportSSHAnsible(ctx, state, export, containerCluster, opts, target, timeout, i, ssh)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", target.label, err))
 			continue
@@ -192,11 +191,12 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 				return nil, fmt.Errorf("host/%s spec.ssh.addressName %q does not resolve", host.Metadata.Name, host.Spec.SSH.AddressName)
 			}
 			targets = append(targets, externalDetailsSSHTarget{
-				label:         "Host/" + host.Metadata.Name,
-				inventoryName: "external_details_" + strconv.Itoa(len(targets)),
-				address:       address,
-				user:          host.Spec.SSH.User,
-				keyPath:       secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir),
+				label:          "Host/" + host.Metadata.Name,
+				inventoryName:  "external_details_" + strconv.Itoa(len(targets)),
+				address:        address,
+				user:           host.Spec.SSH.User,
+				keyPath:        secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir),
+				knownHostsPath: secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir),
 			})
 		}
 		return targets, nil
@@ -204,18 +204,51 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	if cluster.Spec.Ceph == nil {
 		return nil, fmt.Errorf("StorageCluster/%s spec.ceph is required for default sshExecution target", cluster.Metadata.Name)
 	}
-	nodeSSH := cluster.Spec.Ceph.Cephadm.NodeSSH
 	seedNode := cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode
+	node, ok := storageExportSeedNode(cluster, seedNode)
+	if !ok {
+		return nil, fmt.Errorf("StorageCluster/%s seedNode %q is not listed in spec.ceph.topology.nodes", cluster.Metadata.Name, seedNode)
+	}
+	host, ok := storageExportHostByName(state, node.HostRef.Name)
+	if !ok {
+		return nil, fmt.Errorf("StorageCluster/%s seedNode %q hostRef %q does not match any Host", cluster.Metadata.Name, seedNode, node.HostRef.Name)
+	}
+	if host.Spec.SSH == nil {
+		return nil, fmt.Errorf("host/%s spec.ssh is required", host.Metadata.Name)
+	}
+	address := v1alpha1.HostSSHAddress(host)
+	if address == "" {
+		return nil, fmt.Errorf("host/%s spec.ssh.addressName %q does not resolve", host.Metadata.Name, host.Spec.SSH.AddressName)
+	}
 	return []externalDetailsSSHTarget{{
-		label:         "StorageCluster/" + cluster.Metadata.Name + " seedNode/" + seedNode,
-		inventoryName: "external_details_0",
-		address:       topology.NodeAddress(state, cluster, seedNode),
-		user:          nodeSSH.User,
-		keyPath:       storageExportSSHPrivateKeyPath(nodeSSH, env, secretsDir),
+		label:          "StorageCluster/" + cluster.Metadata.Name + " seedNode/" + seedNode,
+		inventoryName:  "external_details_0",
+		address:        address,
+		user:           host.Spec.SSH.User,
+		keyPath:        secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir),
+		knownHostsPath: secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir),
 	}}, nil
 }
 
-func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, knownHostsPath string, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
+func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		if node.Name == name {
+			return node, true
+		}
+	}
+	return v1alpha1.StorageCephNode{}, false
+}
+
+func storageExportHostByName(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
+	for _, host := range state.Hosts {
+		if host.Metadata.Name == name {
+			return host, true
+		}
+	}
+	return v1alpha1.Host{}, false
+}
+
+func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
 	runner := opts.Runner
 	if runner == nil {
 		runner = ansible.CommandRunner{}
@@ -226,7 +259,7 @@ func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, expor
 	playbookPath := filepath.Join(root, "playbook.yaml")
 	artifactsDir := filepath.Join(root, "artifacts")
 	outputPath := filepath.Join(artifactsDir, "external-cluster-details.json")
-	if err := writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath, target, knownHostsPath, outputPath, storageExportExternalDetailsExporterArgs(ssh.Config, containerCluster)); err != nil {
+	if err := writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath, target, outputPath, storageExportExternalDetailsExporterArgs(ssh.Config, containerCluster)); err != nil {
 		return "", err
 	}
 	runCtx := ctx
@@ -258,7 +291,7 @@ func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, expor
 	return outputPath, nil
 }
 
-func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath string, target externalDetailsSSHTarget, knownHostsPath, outputPath string, exporterArgs []string) error {
+func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath string, target externalDetailsSSHTarget, outputPath string, exporterArgs []string) error {
 	if err := os.MkdirAll(filepath.Dir(inventoryPath), 0o700); err != nil {
 		return fmt.Errorf("create external details Ansible directory: %w", err)
 	}
@@ -268,7 +301,7 @@ func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath str
 	inventoryHost := map[string]any{
 		"ansible_host":            target.address,
 		"bootwright_host_name":    target.label,
-		"ansible_ssh_common_args": ShellQuote([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath}),
+		"ansible_ssh_common_args": ShellQuote([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + target.knownHostsPath}),
 	}
 	if target.user != "" {
 		inventoryHost["ansible_user"] = target.user
@@ -366,14 +399,6 @@ func storageExportSSHTimeout(value string) (time.Duration, error) {
 		return 0, fmt.Errorf("parse externalDetails.sshExecution.timeout %q: %w", value, err)
 	}
 	return timeout, nil
-}
-
-func storageExportSSHPrivateKeyPath(ssh v1alpha1.StorageSSHSpec, env *v1alpha1.Environment, secretsDir string) string {
-	name := ssh.PrivateKeyRef.Name
-	if name == "" {
-		name = ssh.KeyPairRef.Name
-	}
-	return secret.ResolveSSHPrivateKeyPath(name, env, secretsDir)
 }
 
 func workflowPrimaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {

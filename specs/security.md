@@ -25,12 +25,15 @@ cluster secrets state, and `kubeconfigRef` resolves through `Environment.spec.se
 for external virtualization clusters. Desired state records only the reference
 name, never kubeconfig bytes.
 
-Storage provisioning follows the same boundary. `StorageCluster` SSH
-identities reference `Environment.spec.secrets`; `nodeSSH` is the
-bastion-to-RHEL-node identity and `clusterSSH` is the identity passed to
-cephadm for ongoing orchestration. Data Foundation external-cluster details
-render with placeholders for Ceph client secrets; generated Ceph keys are
-created or read during apply and must not be committed. Imported Ceph
+Storage provisioning follows the same boundary. Durable SSH connection
+details live on `Host.spec.ssh`; managed Ceph nodes reference Hosts with the
+`ceph-node` capability, and external Ceph exporter targets reference Hosts
+with the `ceph-admin` capability. Host `keyRef` and `knownHostsRef` values
+reference `Environment.spec.secrets`; non-local durable SSH uses strict
+host-key checking against the resolved known_hosts material. Data Foundation
+external-cluster details render with placeholders for Ceph client secrets;
+generated Ceph keys are created or read during apply and must not be
+committed. Imported Ceph
 connection JSON is declared through
 `StorageExport.spec.externalDetails.fromSecret`; normal render output uses a
 placeholder, while sensitive render and apply-time artifacts inline the secret

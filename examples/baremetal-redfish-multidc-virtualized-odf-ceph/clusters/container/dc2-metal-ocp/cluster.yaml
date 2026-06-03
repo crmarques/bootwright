@@ -15,6 +15,9 @@ spec:
         name: api-int
       ingress:
         name: apps
+    nodeSSH:
+      keyPairRef:
+        name: dc2-metal-ocp-cluster-admin-ssh-key
 
   networking:
     networkType: OVNKubernetes

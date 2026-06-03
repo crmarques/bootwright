@@ -75,6 +75,9 @@ spec:
         name: apps
     method: agent
     mode: connected
+    nodeSSH:
+      keyPairRef:
+        name: sno-libvirt-cluster-admin-ssh-key
 
   controlPlane:
     name: master

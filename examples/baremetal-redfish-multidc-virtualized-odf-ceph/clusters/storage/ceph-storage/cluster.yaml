@@ -21,13 +21,6 @@ spec:
         url: registry.redhat.io
         credentialsRef:
           name: ceph-registry-credentials
-      nodeSSH:
-        keyPairRef:
-          name: ceph-node-ssh
-      clusterSSH:
-        user: root
-        keyPairRef:
-          name: cephadm-cluster-ssh
     networks:
       publicCIDRs:
         - 192.168.141.0/24
@@ -52,6 +45,8 @@ spec:
         ruleName: stretch-replicated
       nodes:
         - name: ceph-dc1-0
+          hostRef:
+            name: ceph-dc1-0
           site: dc1
           roles:
             - mon
@@ -63,6 +58,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc1-1
+          hostRef:
+            name: ceph-dc1-1
           site: dc1
           roles:
             - mon
@@ -74,6 +71,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc1-2
+          hostRef:
+            name: ceph-dc1-2
           site: dc1
           roles:
             - osd
@@ -83,6 +82,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-0
+          hostRef:
+            name: ceph-dc2-0
           site: dc2
           roles:
             - mon
@@ -94,6 +95,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-1
+          hostRef:
+            name: ceph-dc2-1
           site: dc2
           roles:
             - mon
@@ -105,6 +108,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-2
+          hostRef:
+            name: ceph-dc2-2
           site: dc2
           roles:
             - osd
@@ -114,6 +119,8 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-arbiter
+          hostRef:
+            name: ceph-arbiter
           site: dc3
           roles:
             - mon

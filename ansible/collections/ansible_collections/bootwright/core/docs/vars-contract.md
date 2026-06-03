@@ -329,6 +329,7 @@ bootwright_storage_clusters:
       user: root
       privateKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh
       publicKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh.pub
+      knownHostsPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-known-hosts
     dataFoundationBindings:
       - cluster: prod-3node
         addon: openshift-data-foundation
@@ -341,8 +342,10 @@ The storage inventory contains one synthetic host per declared storage node in
 keeps the stable host name `storage__<cluster>` for task limiting; non-seed
 nodes render as `storage__<cluster>__<node>`. Every storage host renders
 `bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
-`ansible_host`, `ansible_user`, and `ansible_ssh_private_key_file` from
-`nodeSSH`; omitted `nodeSSH.user` defaults to `root`.
+`ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
+`ansible_ssh_common_args` from the node's referenced `Host.spec.ssh`. The
+`clusterSSH` vars are also derived from the storage-node Host SSH identity and
+are copied to the seed host for cephadm.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare

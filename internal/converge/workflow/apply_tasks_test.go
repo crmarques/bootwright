@@ -916,8 +916,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	state.StorageExports[0].Spec.Type = v1alpha1.StorageExportTypeDataFoundation
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
-			Timeout:       "30s",
+			Timeout: "30s",
 			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
 				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
 			},
@@ -984,8 +983,11 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 		t.Fatalf("key path = %v", got)
 	}
 	commonArgs, _ := host["ansible_ssh_common_args"].(string)
-	if !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-known-hosts")) {
-		t.Fatalf("ansible_ssh_common_args = %q, want known hosts ref", commonArgs)
+	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-known-hosts")) {
+		t.Fatalf("ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+	}
+	if strings.Contains(commonArgs, "/dev/null") {
+		t.Fatalf("ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
 	}
 	playbookData, err := os.ReadFile(spec.Playbook)
 	if err != nil {
@@ -1026,14 +1028,15 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"ceph-admin-ssh": {},
+				"ceph-admin-ssh":         {},
+				"ceph-admin-known-hosts": {},
 			}},
 		}},
 		Hosts: []v1alpha1.Host{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
 			Spec: v1alpha1.HostSpec{
 				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
+				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
 				Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
 			},
 		}},
@@ -1055,17 +1058,18 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
 	}
 	want := []externalDetailsSSHTarget{{
-		label:         "Host/ceph-admin-01",
-		inventoryName: "external_details_0",
-		address:       "ceph-admin.example.test",
-		user:          "ceph",
-		keyPath:       filepath.Join(secretsDir, "ceph-admin-ssh"),
+		label:          "Host/ceph-admin-01",
+		inventoryName:  "external_details_0",
+		address:        "ceph-admin.example.test",
+		user:           "ceph",
+		keyPath:        filepath.Join(secretsDir, "ceph-admin-ssh"),
+		knownHostsPath: filepath.Join(secretsDir, "ceph-admin-known-hosts"),
 	}}
 	if !reflect.DeepEqual(targets, want) {
 		t.Fatalf("targets = %#v, want %#v", targets, want)
 	}
 	root := t.TempDir()
-	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(secretsDir, "known_hosts"), filepath.Join(root, "details.json"), storageExportExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
+	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(root, "details.json"), storageExportExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
 		t.Fatalf("writeStorageExportSSHAnsibleFiles: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "inventory.yaml"))
@@ -1079,6 +1083,13 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
 	if got := host["ansible_user"]; got != "ceph" {
 		t.Fatalf("host ref ansible_user = %v, want ceph", got)
+	}
+	commonArgs, _ := host["ansible_ssh_common_args"].(string)
+	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-admin-known-hosts")) {
+		t.Fatalf("host ref ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+	}
+	if strings.Contains(commonArgs, "/dev/null") {
+		t.Fatalf("host ref ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
 	}
 }
 
@@ -1130,9 +1141,11 @@ func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
 		t.Fatalf("mkdir secrets dir: %v", err)
 	}
 	files := map[string]string{
-		"openshift-pull-secret":     `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		"cluster-admin-ssh-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
-		"proxy-credentials":         "proxy:secret\n",
+		"openshift-pull-secret":                                `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
+		"sno-libvirt-cluster-admin-ssh-key.pub":                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
+		"3-nodes-ocp-emul-baremetal-cluster-admin-ssh-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
+		"demo-cluster-admin-ssh-key.pub":                       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
+		"proxy-credentials":                                    "proxy:secret\n",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
@@ -1173,6 +1186,18 @@ func storageAttachmentPlanningState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.HostSpec{
+				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "10.10.10.10"}},
+				SSH: &v1alpha1.HostSSHSpec{
+					AddressName:   "ssh",
+					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+				},
+				Capabilities: []string{v1alpha1.HostCapabilityCephNode},
+			},
+		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
@@ -1191,13 +1216,13 @@ func storageAttachmentPlanningState() v1alpha1.State {
 							URL:            "registry.redhat.io",
 							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
 						},
-						NodeSSH: v1alpha1.StorageSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
-							Name:  "ceph-0",
-							Site:  "dc1",
-							Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
+							Name:    "ceph-0",
+							HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:    "dc1",
+							Roles:   []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
 						}},
 					},
 				},

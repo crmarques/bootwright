@@ -55,7 +55,7 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 	}
 	for _, cluster := range managedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			hosts[storageInventoryHostName(cluster, node.Name)] = storageNodeInventoryEntry(state, cluster, node.Name, env, secretsDir)
+			hosts[storageInventoryHostName(cluster, node.Name)] = storageNodeInventoryEntry(state, cluster, node, env, secretsDir, localPolicy)
 		}
 	}
 	if len(ocpHostSet) > 0 {
@@ -183,7 +183,14 @@ func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir s
 	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
+	if path := secret.ResolvePath(h.Spec.SSH.KnownHostsRef.Name, env, secretsDir); path != "" {
+		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
+	}
 	return entry
+}
+
+func sshCommonArgs(knownHostsPath string) string {
+	return shellQuoteArgs([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath})
 }
 
 func localhostInventoryEntry() map[string]any {

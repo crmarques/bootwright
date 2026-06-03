@@ -25,8 +25,9 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	if got := install.PullSecretRef.Name; got != v1alpha1.DefaultPullSecretName {
 		t.Fatalf("PullSecretRef.Name = %q, want %q", got, v1alpha1.DefaultPullSecretName)
 	}
-	if got := install.NodeSSH.KeyPairRef.Name; got != v1alpha1.DefaultNodeSSHKeyName {
-		t.Fatalf("NodeSSH.KeyPairRef.Name = %q, want %q", got, v1alpha1.DefaultNodeSSHKeyName)
+	wantSSHKey := v1alpha1.ClusterAdminSSHKeyName("cluster-a")
+	if got := install.NodeSSH.KeyPairRef.Name; got != wantSSHKey {
+		t.Fatalf("NodeSSH.KeyPairRef.Name = %q, want %q", got, wantSSHKey)
 	}
 }
 
@@ -166,7 +167,7 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 			Spec: v1alpha1.EnvironmentSpec{
 				BaseDomain: "example.test",
 				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-					"cluster-admin-ssh-key": {
+					"cluster-a-cluster-admin-ssh-key": {
 						Generated: &v1alpha1.EnvironmentSecretGenerated{
 							SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{},
 						},
@@ -182,7 +183,7 @@ func TestNormalizeDefaultsSecretStorageAndSSHKeyPairType(t *testing.T) {
 	if got := env.Spec.SecretStorage.Mode; got != v1alpha1.SecretStorageModeSource {
 		t.Fatalf("SecretStorage.Mode = %q, want %q", got, v1alpha1.SecretStorageModeSource)
 	}
-	if got := env.Spec.Secrets["cluster-admin-ssh-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
+	if got := env.Spec.Secrets["cluster-a-cluster-admin-ssh-key"].Generated.SSHKeyPair.Type; got != v1alpha1.SSHKeyPairTypeEd25519 {
 		t.Fatalf("SSHKeyPair.Type = %q, want %q", got, v1alpha1.SSHKeyPairTypeEd25519)
 	}
 }

@@ -230,26 +230,18 @@ func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		adm := cluster.Spec.Ceph.Cephadm
-		if adm.NodeSSH.KeyPairRef.Name == name || adm.ClusterSSH.KeyPairRef.Name == name {
-			return true
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			host, ok := hostByName(state, node.HostRef.Name)
+			if ok && host.Spec.SSH != nil && host.Spec.SSH.KeyRef.Name == name {
+				return true
+			}
 		}
 	}
 	return false
 }
 
 func secretConsumedAsStorageSSHPrivate(name string, state v1alpha1.State) bool {
-	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Ceph == nil {
-			continue
-		}
-		adm := cluster.Spec.Ceph.Cephadm
-		if adm.NodeSSH.KeyPairRef.Name == name || adm.NodeSSH.PrivateKeyRef.Name == name ||
-			adm.ClusterSSH.KeyPairRef.Name == name || adm.ClusterSSH.PrivateKeyRef.Name == name {
-			return true
-		}
-	}
-	return false
+	return secretConsumedAsStorageSSHPublic(name, state)
 }
 
 func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {

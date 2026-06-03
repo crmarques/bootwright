@@ -22,10 +22,8 @@ type StorageClusterCephSpec struct {
 }
 
 type StorageCephadmSpec struct {
-	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
-	Registry   StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
-	NodeSSH    StorageSSHSpec          `yaml:"nodeSSH" json:"nodeSSH"`
-	ClusterSSH StorageSSHSpec          `yaml:"clusterSSH,omitempty" json:"clusterSSH,omitempty"`
+	Bootstrap StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	Registry  StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
 type StorageCephadmRegistry struct {
@@ -48,12 +46,6 @@ type StorageMachineIPRef struct {
 type StorageMachineRef struct {
 	ClusterInfra string `yaml:"clusterInfra" json:"clusterInfra"`
 	Name         string `yaml:"name" json:"name"`
-}
-
-type StorageSSHSpec struct {
-	User          string    `yaml:"user,omitempty" json:"user,omitempty"`
-	KeyPairRef    SecretRef `yaml:"keyPairRef,omitempty" json:"keyPairRef,omitempty"`
-	PrivateKeyRef SecretRef `yaml:"privateKeyRef,omitempty" json:"privateKeyRef,omitempty"`
 }
 
 type StorageCephNetworks struct {
@@ -86,10 +78,11 @@ type StorageCephPoolReplicas struct {
 }
 
 type StorageCephNode struct {
-	Name    string   `yaml:"name" json:"name"`
-	Site    string   `yaml:"site" json:"site"`
-	Roles   []string `yaml:"roles" json:"roles"`
-	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
+	Name    string               `yaml:"name" json:"name"`
+	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	Site    string               `yaml:"site" json:"site"`
+	Roles   []string             `yaml:"roles" json:"roles"`
+	Devices []string             `yaml:"devices,omitempty" json:"devices,omitempty"`
 }
 
 type StoragePlacementPolicy struct {
@@ -229,11 +222,10 @@ type StorageExportExternalDetailsSpec struct {
 type StorageExportExternalDetailsGenerated struct{}
 
 type StorageExportExternalDetailsSSHExecution struct {
-	HostRefs      []LocalObjectReference                     `yaml:"hostRefs,omitempty" json:"hostRefs,omitempty"`
-	KnownHostsRef SecretRef                                  `yaml:"knownHostsRef" json:"knownHostsRef"`
-	Timeout       string                                     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Exporter      StorageExportExternalDetailsExporter       `yaml:"exporter" json:"exporter"`
-	Config        StorageExportExternalDetailsExporterConfig `yaml:"config" json:"config"`
+	HostRefs []LocalObjectReference                     `yaml:"hostRefs,omitempty" json:"hostRefs,omitempty"`
+	Timeout  string                                     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Exporter StorageExportExternalDetailsExporter       `yaml:"exporter" json:"exporter"`
+	Config   StorageExportExternalDetailsExporterConfig `yaml:"config" json:"config"`
 }
 
 type StorageExportExternalDetailsExporter struct {
