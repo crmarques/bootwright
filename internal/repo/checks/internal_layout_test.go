@@ -73,6 +73,18 @@ func TestOnlyEntrypointsAndTestsImportInternalCLI(t *testing.T) {
 	}
 }
 
+func TestInternalStorageDoesNotImportInternalRender(t *testing.T) {
+	renderPath := modulePath + "/internal/render"
+	for _, ref := range collectGoImports(t) {
+		if !strings.HasPrefix(ref.file, "internal/storage/") {
+			continue
+		}
+		if ref.path == renderPath || strings.HasPrefix(ref.path, renderPath+"/") {
+			t.Fatalf("%s imports %s; keep storage runtime independent from render", ref.file, ref.path)
+		}
+	}
+}
+
 type goImportRef struct {
 	file string
 	path string

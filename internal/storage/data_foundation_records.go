@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 )
 
 const dataFoundationAddonSecretRelativeDir = "addons"
@@ -27,7 +27,7 @@ func LoadDataFoundationAttachmentDetails(clustersDir, cluster, addon, input stri
 	if err != nil {
 		return "", false, fmt.Errorf("read Data Foundation storage attachment details: %w", err)
 	}
-	details, err := render.NormalizeDataFoundationExternalDetailsJSON(addon+"/"+input, path, data)
+	details, err := datafoundation.NormalizeExternalDetailsJSON(addon+"/"+input, path, data)
 	if err != nil {
 		return "", true, err
 	}
@@ -42,7 +42,7 @@ func SaveDataFoundationAttachmentDetails(clustersDir, cluster, addon, input, det
 	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("chmod Data Foundation storage attachment details directory: %w", err)
 	}
-	details, err := render.NormalizeDataFoundationExternalDetailsJSON(addon+"/"+input, path, []byte(detailsJSON))
+	details, err := datafoundation.NormalizeExternalDetailsJSON(addon+"/"+input, path, []byte(detailsJSON))
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func SaveDataFoundationAttachmentDetails(clustersDir, cluster, addon, input, det
 	return nil
 }
 
-func MissingDataFoundationSecrets(export v1alpha1.StorageExport, secrets render.DataFoundationExternalSecrets) []string {
+func MissingDataFoundationSecrets(export v1alpha1.StorageExport, secrets datafoundation.ExternalSecrets) []string {
 	var missing []string
 	addIfEmpty := func(name, value string) {
 		if strings.TrimSpace(value) == "" {

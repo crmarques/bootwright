@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -46,7 +47,7 @@ func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) err
 	}
 	resultPath := filepath.Join(spec.ArtifactsDir, "storage-result.json")
 	result := map[string]any{
-		"dataFoundation": map[string]render.DataFoundationExternalSecrets{
+		"dataFoundation": map[string]datafoundation.ExternalSecrets{
 			"demo": {
 				AdminSecret:          "admin-key",
 				FSID:                 "fsid-123",
@@ -802,7 +803,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.
 		t.Fatalf("decode manifest: %v", err)
 	}
 	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
-	if strings.Contains(detailsJSON, render.DataFoundationGeneratedAtApplyPlaceholder) {
+	if strings.Contains(detailsJSON, datafoundation.GeneratedAtApplyPlaceholder) {
 		t.Fatalf("external_cluster_details still contains placeholder: %s", detailsJSON)
 	}
 	if !strings.Contains(detailsJSON, "rbd-node-key") {

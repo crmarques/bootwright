@@ -9,7 +9,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
-	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 type CephApplyResultOptions struct {
@@ -20,7 +21,7 @@ type CephApplyResultOptions struct {
 }
 
 type cephApplyResult struct {
-	DataFoundation map[string]render.DataFoundationExternalSecrets `json:"dataFoundation,omitempty"`
+	DataFoundation map[string]datafoundation.ExternalSecrets `json:"dataFoundation,omitempty"`
 }
 
 type dataFoundationBindingContext struct {
@@ -28,11 +29,11 @@ type dataFoundationBindingContext struct {
 	Input   string
 	Cluster string
 	Export  v1alpha1.StorageExport
-	Secrets render.DataFoundationExternalSecrets
+	Secrets datafoundation.ExternalSecrets
 }
 
 func PersistCephApplyResult(opts CephApplyResultOptions) (err error) {
-	cluster, ok := storageClusterByName(opts.State, opts.StorageClusterName)
+	cluster, ok := topology.ClusterByName(opts.State, opts.StorageClusterName)
 	if !ok || cluster.Spec.Ceph == nil {
 		return fmt.Errorf("StorageCluster/%s not found", opts.StorageClusterName)
 	}
@@ -67,7 +68,7 @@ func PersistCephApplyResult(opts CephApplyResultOptions) (err error) {
 		if missing := MissingDataFoundationSecrets(binding.Export, binding.Secrets); len(missing) > 0 {
 			return fmt.Errorf("data foundation storage attachment %s/%s/%s missing generated credentials: %s", binding.Cluster, binding.Addon, binding.Input, strings.Join(missing, ", "))
 		}
-		details := render.DataFoundationExternalDetailsJSON(opts.State, cluster, binding.Export, binding.Cluster, binding.Secrets)
+		details := datafoundation.ExternalDetailsJSON(datafoundation.ExternalDetailsInputFromState(opts.State, cluster, binding.Export, binding.Cluster), binding.Secrets)
 		if err := SaveDataFoundationAttachmentDetails(opts.ClustersDir, binding.Cluster, binding.Addon, binding.Input, details); err != nil {
 			return err
 		}
@@ -97,13 +98,4 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 		})
 	}
 	return out
-}
-
-func storageClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
-	for _, cluster := range state.StorageClusters {
-		if cluster.Metadata.Name == name {
-			return cluster, true
-		}
-	}
-	return v1alpha1.StorageCluster{}, false
 }

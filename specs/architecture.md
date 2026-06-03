@@ -118,9 +118,9 @@ These boundaries are reflected in rendering:
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.
 - Storage tool inputs render to cephadm host, core service, and late service
-  specs; phased `ceph/operations.yaml`; the `bootwright_storage_clusters[]`
-  Ansible contract; and generated Data Foundation manifests for managed
-  storage.
+  specs; phased `ceph/operations.yaml` with explicit operation idempotency
+  metadata; the `bootwright_storage_clusters[]` Ansible contract; and
+  generated Data Foundation manifests for managed storage.
   Imported storage renders only Data Foundation attachment manifests. CephFS
   metadata and data pool roles are expressed by `StorageFilesystem` because the
   renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.

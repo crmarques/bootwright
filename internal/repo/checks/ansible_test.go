@@ -71,6 +71,29 @@ func TestContainerClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
 	}
 }
 
+func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
+	for _, want := range []string{
+		"bootwright_ceph_op_idempotency_kind",
+		"bootwright_ceph_op_idempotency_name",
+		"bootwright_ceph_op_idempotency_kind == 'ceph-pool'",
+		"bootwright_ceph_op_idempotency_kind == 'rgw-user'",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("storage operation runner missing explicit idempotency fragment %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		".startswith('create-",
+		"bootwright_ceph_op_command[",
+		".index('--uid')",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("storage operation runner must not infer idempotency from %q", forbidden)
+		}
+	}
+}
+
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",

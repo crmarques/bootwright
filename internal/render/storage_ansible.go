@@ -4,6 +4,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func StorageSeedHostName(clusterName string) string {
@@ -60,7 +61,7 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, nodeName string, env *v1alpha1.Environment, secretsDir string) map[string]any {
 	nodeSSH := cluster.Spec.Ceph.Cephadm.NodeSSH
 	entry := map[string]any{
-		"ansible_host":                      storageNodeAddress(state, cluster, nodeName),
+		"ansible_host":                      topology.NodeAddress(state, cluster, nodeName),
 		"ansible_user":                      storageSSHUser(nodeSSH),
 		"bootwright_host_name":              storageInventoryHostName(cluster, nodeName),
 		"bootwright_storage_cluster_name":   cluster.Metadata.Name,
@@ -133,7 +134,7 @@ func storageNodesVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 		out = append(out, map[string]any{
 			"name":          node.Name,
 			"inventoryHost": storageInventoryHostName(cluster, node.Name),
-			"address":       storageNodeAddress(state, cluster, node.Name),
+			"address":       topology.NodeAddress(state, cluster, node.Name),
 			"devices":       append([]string(nil), node.Devices...),
 		})
 	}

@@ -513,9 +513,12 @@ Rules:
   that add-on reports readiness.
 - Data Foundation exports render per-consuming-cluster Ceph auth operations in
   `ceph/operations.yaml` with capture metadata for generated RBD, CephFS,
-  healthchecker, and RGW keys. Rendered manifests carry generated-at-apply
-  placeholders for secret keys; authored examples must not contain generated
-  external-cluster secret bytes.
+  healthchecker, and RGW keys. Create-style storage operations declare
+  explicit `idempotency.kind` and `idempotency.name` fields for Ansible
+  preflight checks; the storage role must not infer skip logic from operation
+  names or positional command arguments. Rendered manifests carry
+  generated-at-apply placeholders for secret keys; authored examples must not
+  contain generated external-cluster secret bytes.
 - Imported Data Foundation attachments render a placeholder in normal output
   and inline `externalDetailsRef` secret JSON only for sensitive render output
   and apply-time task artifacts. Managed Ceph attachments read generated
@@ -1371,8 +1374,8 @@ Bootwright renders:
   boot-artifact publication.
 - Storage tool inputs from selected storage resources: cephadm host, core
   service, and late service specs; phased Ceph operations for topology, pools,
-  CephFS, RGW users, and Data Foundation keys; and external-mode manifests for
-  each selected storage attachment.
+  CephFS, RGW users, and Data Foundation keys with explicit idempotency
+  metadata; and external-mode manifests for each selected storage attachment.
 - Add-on apply plans from selected `ClusterAddonBinding` resources.
   OLM add-ons generate Namespace, OperatorGroup, Subscription, and custom
   resources. Manifest-set add-ons reference declared files and include file

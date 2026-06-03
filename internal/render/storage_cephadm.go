@@ -1,6 +1,9 @@
 package render
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
+)
 
 func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
@@ -12,10 +15,10 @@ func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 		}
 		if node.Site != "" {
 			host["location"] = map[string]any{
-				storageFailureDomain(cluster): node.Site,
+				topology.FailureDomain(cluster): node.Site,
 			}
 		}
-		if addr := storageNodeAddress(state, cluster, node.Name); addr != "" {
+		if addr := topology.NodeAddress(state, cluster, node.Name); addr != "" {
 			host["addr"] = addr
 		}
 		docs = append(docs, host)
@@ -25,15 +28,15 @@ func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 
 func cephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
-	monHosts := storageCephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
+	monHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
 	if len(monHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mon", "", monHosts, 0, nil))
 	}
-	mgrHosts := storageCephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR)
+	mgrHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMGR)
 	if len(mgrHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mgr", "", mgrHosts, 0, nil))
 	}
-	osdHosts := storageCephHostsWithRole(cluster, v1alpha1.StorageCephRoleOSD)
+	osdHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleOSD)
 	if len(osdHosts) > 0 {
 		docs = append(docs, cephadmOSDServices(cluster, osdHosts)...)
 	}
@@ -48,7 +51,7 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 		hosts := fs.Spec.CephFS.MDS.Placement.Hosts
 		if len(hosts) == 0 {
-			hosts = storageCephHostsWithRole(cluster, v1alpha1.StorageCephRoleMDS)
+			hosts = topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMDS)
 		}
 		if len(hosts) > 0 {
 			docs = append(docs, cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil))
@@ -60,16 +63,16 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 		spec := map[string]any{"rgw_frontend_port": gw.Spec.Ceph.FrontendPort}
 		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, gw.Spec.Ceph.Placement.Hosts, gw.Spec.Ceph.Placement.CountPerHost, spec))
-		publicEndpoint, _ := storageGatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef)
+		publicEndpoint, _ := topology.GatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {
-			endpoint, ok := storageGatewayEndpoint(state, gw, ingress.EndpointRef)
+			endpoint, ok := topology.GatewayEndpoint(state, gw, ingress.EndpointRef)
 			if !ok {
 				continue
 			}
 			ingressSpec := map[string]any{
 				"backend_service": "rgw." + gw.Spec.Ceph.ServiceID,
-				"virtual_ip":      cephadmVirtualIP(endpoint),
-				"frontend_port":   endpointPort(publicEndpoint, 443),
+				"virtual_ip":      topology.CephadmVirtualIP(endpoint),
+				"frontend_port":   topology.EndpointPort(publicEndpoint, 443),
 				"monitor_port":    1967,
 			}
 			if len(endpoint.InterfaceNetworks) > 0 {
@@ -108,7 +111,7 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 	var docs []any
 	explicitHosts := map[string]bool{}
 	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-		if !storageNodeHasRole(node, v1alpha1.StorageCephRoleOSD) || len(node.Devices) == 0 {
+		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || len(node.Devices) == 0 {
 			continue
 		}
 		if !hostSet[node.Name] {

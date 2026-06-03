@@ -11,6 +11,15 @@ newcomer developers to understand. Pressure-test current decisions.
 Where the existing layout is right, defend it briefly and move on.
 Where it is wrong, take a position and propose the change.
 
+This prompt's deliverable is the architecture audit and revision plan
+itself. If the surrounding collaboration mode requires a plan-only
+response, treat the audit below as that plan: do the read-only
+grounding work, review the architecture, and return the full
+Architecture Audit and Revision Plan in the required plan wrapper. Do
+not return a meta-plan that only describes how to perform this audit,
+and do not wait for a later implementation step before producing the
+review findings and proposed architecture revisions.
+
 Out of scope: line-by-line code review, formatting, isolated naming nitpicks,
 and isolated bugs. Naming is in scope when package, type, script, file,
 directory, role, workflow, or domain vocabulary hides responsibility, preserves
@@ -29,7 +38,8 @@ once you have enough:
 3. `specs/adr/*` — accepted decisions. Note which decisions are load-
    bearing for the current layout, and which are historical.
 4. Repository tree: `go list ./...`, plus the directories under
-   `internal/`, `api/`, `ansible/roles/`, `ansible/playbooks/`.
+   `internal/`, `api/`, and the embedded Ansible collection at
+   `ansible/collections/ansible_collections/bootwright/core/`.
 5. Go package inventory: package names, import direction, package
    comments when present, and the files that define public package
    responsibilities. Map packages to the desired-state pipeline before
@@ -157,7 +167,7 @@ teeth for this repo's current state.
   clusters that share two hosts and walk it.
 - *Add-on cost.* Pick a new managed service (e.g. NTP, image cache).
   Count the files an honest engineer must edit. If the count is more
-  than 5 and the steps are not orchogonal, the abstraction is wrong —
+  than 5 and the steps are not orthogonal, the abstraction is wrong —
   propose the missing seam.
 
 **On Go layout:**
@@ -192,10 +202,13 @@ teeth for this repo's current state.
 
 **On Ansible layout:**
 
-- *Role taxonomy.* `ansible/roles/{bastion, shared, providers,
-  cluster_infra, openshift}/` exists for a reason. Does every role
-  live in the layer that matches its hosts? Mis-layered roles imply
-  the taxonomy is wrong or the role is doing two jobs.
+- *Role taxonomy.* The embedded collection at
+  `ansible/collections/ansible_collections/bootwright/core/` exists for
+  a reason. Check its `playbooks/`, `roles/`, `plugins/filter/`, and
+  `docs/` layout against the accepted collection taxonomy in
+  `specs/adr/0002-ansible-provider-dispatch.md`. Does every role live
+  in the family that matches its host scope and side effects? Mis-layered
+  roles imply the taxonomy is wrong or the role is doing two jobs.
 - *Role and task names.* Do role, task, variable, template, inventory,
   and directory names reveal host scope, side effects, generated-input
   boundaries, and idempotency expectations? If a better taxonomy or
@@ -206,10 +219,10 @@ teeth for this repo's current state.
   task and use it as the example, not the rule.
 - *Idempotency.* Pick two roles you suspect are not safe to re-run
   unattended. Read the tasks. Either defend or flag.
-- *Embedded bundle.* `internal/embedded` materializes the bundle at
-  runtime. Are *all* role search paths under
-  `ANSIBLE_ROLES_PATH` reachable in a disconnected lab? When the user
-  drops an external collection in, does anything break?
+- *Embedded bundle.* `internal/converge/bundle` materializes the
+  collection bundle at runtime. Are all collection paths reachable in a
+  disconnected lab? When the user drops an external collection in, does
+  anything break?
 
 **On documentation and specs alignment:**
 
@@ -312,9 +325,12 @@ purely aesthetic grouping.
 
 ## 8. Ansible Layout Review
 
-Role taxonomy vs. hosts (`bastion` / `shared` / `providers` /
-`cluster_infra` / `openshift`), idempotency, module-vs-shell, embedded
-bundle integrity. Recommend improvements at the architecture level.
+Role taxonomy vs. hosts and side effects (`controller_*`, `host_*`,
+`helper_*`, `provider_service_*`, `infra_component_*`,
+`machine_substrate_*`, `cluster_network_*`, `container_cluster_*`,
+`storage_cluster_*`, `check_*`, and `diagnostic_*`), idempotency,
+module-vs-shell, embedded bundle integrity. Recommend improvements at
+the architecture level.
 
 ## 9. Go ↔ Ansible Integration Review
 

@@ -3,6 +3,9 @@
   ansible.builtin.set_fact:
     bootwright_ceph_op_name: "{{ bootwright_ceph_op.name | default('') }}"
     bootwright_ceph_op_capture: "{{ bootwright_ceph_op.capture | default({}) }}"
+    bootwright_ceph_op_idempotency: "{{ bootwright_ceph_op.idempotency | default({}) }}"
+    bootwright_ceph_op_idempotency_kind: "{{ bootwright_ceph_op.idempotency.kind | default('none') }}"
+    bootwright_ceph_op_idempotency_name: "{{ bootwright_ceph_op.idempotency.name | default('') }}"
     bootwright_ceph_op_command: "{{ bootwright_ceph_op.command | default([]) }}"
     bootwright_ceph_op_skip: false
     bootwright_ceph_op_output: ""
@@ -25,15 +28,14 @@
   register: bootwright_ceph_pool_list
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_op_name.startswith('create-pool-')
+  when: bootwright_ceph_op_idempotency_kind == 'ceph-pool'
 
 - name: Skip existing Ceph pool operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   when:
-    - bootwright_ceph_op_name.startswith('create-pool-')
-    - (bootwright_ceph_op_command | length) > 4
-    - bootwright_ceph_op_command[4] in ((bootwright_ceph_pool_list.stdout | default('[]')) | from_json)
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_pool_list.stdout | default('[]')) | from_json)
 
 - name: Check existing CephFS
   ansible.builtin.command:
@@ -46,15 +48,14 @@
   register: bootwright_ceph_fs_list
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_op_name.startswith('create-cephfs-')
+  when: bootwright_ceph_op_idempotency_kind == 'cephfs'
 
 - name: Skip existing CephFS operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   when:
-    - bootwright_ceph_op_name.startswith('create-cephfs-')
-    - (bootwright_ceph_op_command | length) > 3
-    - bootwright_ceph_op_command[3] in ((bootwright_ceph_fs_list.stdout | default('[]')) | from_json | map(attribute='name') | list)
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_fs_list.stdout | default('[]')) | from_json | map(attribute='name') | list)
 
 - name: Check existing CRUSH rule
   ansible.builtin.command:
@@ -69,15 +70,14 @@
   register: bootwright_ceph_crush_rules
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_op_name.startswith('create-crush-rule-')
+  when: bootwright_ceph_op_idempotency_kind == 'crush-rule'
 
 - name: Skip existing CRUSH rule operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   when:
-    - bootwright_ceph_op_name.startswith('create-crush-rule-')
-    - (bootwright_ceph_op_command | length) > 5
-    - bootwright_ceph_op_command[5] in ((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json | map(attribute='rule_name') | list)
+    - bootwright_ceph_op_idempotency_kind == 'crush-rule'
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json | map(attribute='rule_name') | list)
 
 - name: Check current stretch mode
   ansible.builtin.command:
@@ -90,28 +90,14 @@
   register: bootwright_ceph_mon_dump
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_op_name == 'enable-stretch-mode'
+  when: bootwright_ceph_op_idempotency_kind == 'stretch-mode'
 
 - name: Skip enabled stretch mode operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   when:
-    - bootwright_ceph_op_name == 'enable-stretch-mode'
+    - bootwright_ceph_op_idempotency_kind == 'stretch-mode'
     - ((bootwright_ceph_mon_dump.stdout | default('{}')) | from_json).stretch_mode | default(false) | bool
-
-- name: Locate RGW user id argument
-  ansible.builtin.set_fact:
-    bootwright_ceph_op_uid_index: "{{ bootwright_ceph_op_command.index('--uid') if '--uid' in bootwright_ceph_op_command else -1 }}"
-  when: >-
-    bootwright_ceph_op_name.startswith('create-rgw-admin-user-') or
-    bootwright_ceph_op_name.startswith('create-data-foundation-rgw-admin-user-')
-
-- name: Resolve RGW user id
-  ansible.builtin.set_fact:
-    bootwright_ceph_op_uid: "{{ bootwright_ceph_op_command[(bootwright_ceph_op_uid_index | int) + 1] }}"
-  when:
-    - bootwright_ceph_op_uid_index | default(-1) | int >= 0
-    - (bootwright_ceph_op_uid_index | int) + 1 < (bootwright_ceph_op_command | length)
 
 - name: Check existing RGW user
   ansible.builtin.command:
@@ -120,12 +106,14 @@
       - user
       - info
       - --uid
-      - "{{ bootwright_ceph_op_uid }}"
+      - "{{ bootwright_ceph_op_idempotency_name }}"
   register: bootwright_ceph_rgw_user_info
   changed_when: false
   failed_when: false
   no_log: "{{ bootwright_ceph_op_capture | length > 0 }}"
-  when: bootwright_ceph_op_uid | default('') | length > 0
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'rgw-user'
+    - bootwright_ceph_op_idempotency_name | length > 0
 
 - name: Reuse existing RGW user output
   ansible.builtin.set_fact:

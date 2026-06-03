@@ -344,6 +344,32 @@ nodes render as `storage__<cluster>__<node>`. Every storage host renders
 `ansible_host`, `ansible_user`, and `ansible_ssh_private_key_file` from
 `nodeSSH`; omitted `nodeSSH.user` defaults to `root`.
 
+`ceph.operationsPath` points to a phased operation document. Each entry has a
+stable `phase`, `name`, and `command`. Create-style operations also declare
+`idempotency.kind` and `idempotency.name`; the storage role uses those fields
+for skip checks instead of inferring resource identity from operation names or
+command positions. Entries that generate credentials declare a `capture` block,
+and Go consumes the temporary result file after Ansible completes.
+
+```yaml
+operations:
+  - phase: storage
+    name: create-pool-odf-rbd
+    command: [ceph, osd, pool, create, odf-rbd, "128"]
+    idempotency:
+      kind: ceph-pool
+      name: odf-rbd
+  - phase: data-foundation
+    name: create-data-foundation-rgw-admin-user-prod-3node
+    command: [radosgw-admin, user, create, --uid, bootwright.prod-3node.rgw-admin]
+    idempotency:
+      kind: rgw-user
+      name: bootwright.prod-3node.rgw-admin
+    capture:
+      type: rgw-user
+      cluster: prod-3node
+```
+
 ## Projection Rule
 
 Roles consume already-projected blocks. They should not rediscover provider

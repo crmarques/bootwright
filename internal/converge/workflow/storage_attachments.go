@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -62,7 +63,7 @@ func writeStorageAttachmentExternalDetails(path string, state v1alpha1.State, pl
 	attachment := render.StorageAttachment{Binding: binding, Addon: plan.Addon, Input: input}
 	externalDetailsRef := addoninputs.SecretRefValue(input.Values, "externalDetailsRef")
 	if externalDetailsRef.Name != "" {
-		detailsJSON, err := render.LoadDataFoundationExternalDetailsJSON(state, secretsDir, externalDetailsRef)
+		detailsJSON, err := datafoundation.LoadExternalDetailsJSON(state, secretsDir, externalDetailsRef)
 		if err != nil {
 			return err
 		}

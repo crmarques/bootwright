@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 )
 
 func TestPersistCephApplyResultCapturesDataFoundationAttachmentCredentials(t *testing.T) {
 	root := t.TempDir()
 	resultPath := filepath.Join(root, "storage-result.json")
 	result := map[string]any{
-		"dataFoundation": map[string]render.DataFoundationExternalSecrets{
+		"dataFoundation": map[string]datafoundation.ExternalSecrets{
 			"demo": {
 				AdminSecret:          "admin-key",
 				FSID:                 "fsid-123",
@@ -76,7 +76,7 @@ func TestPersistCephApplyResultNoopsWithoutDataFoundationBindings(t *testing.T) 
 func TestPersistCephApplyResultFailsWhenCapturedCredentialsAreMissing(t *testing.T) {
 	root := t.TempDir()
 	resultPath := filepath.Join(root, "storage-result.json")
-	writeJSON(t, resultPath, map[string]any{"dataFoundation": map[string]render.DataFoundationExternalSecrets{"demo": {FSID: "fsid-123"}}})
+	writeJSON(t, resultPath, map[string]any{"dataFoundation": map[string]datafoundation.ExternalSecrets{"demo": {FSID: "fsid-123"}}})
 
 	err := PersistCephApplyResult(CephApplyResultOptions{
 		State:              dataFoundationStorageState(),

@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 type StorageAsset struct {
@@ -84,7 +86,7 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 
 func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.State, opts storageAssetWriteOptions) error {
 	for _, asset := range assets {
-		cluster, ok := storageClusterByName(state, asset.StorageClusterName)
+		cluster, ok := topology.ClusterByName(state, asset.StorageClusterName)
 		if !ok {
 			continue
 		}
@@ -108,14 +110,14 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				continue
 			}
 			exportRef := addonInputStorageExportRef(attachment)
-			export, ok := storageExportByName(state, exportRef.Name)
+			export, ok := topology.ExportByName(state, exportRef.Name)
 			if !ok {
 				continue
 			}
 			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, attachment, attachmentAsset.ContainerClusterName)
 			externalDetailsRef := addonInputExternalDetailsRef(attachment)
 			if externalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
-				detailsJSON, err := LoadDataFoundationExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, externalDetailsRef)
+				detailsJSON, err := datafoundation.LoadExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, externalDetailsRef)
 				if err != nil {
 					return err
 				}

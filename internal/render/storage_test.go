@@ -78,15 +78,20 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	operations := readYAMLDoc(t, asset.OperationsPath)
 	ops := operations["operations"].([]any)
 	assertOperationPhase(t, ops, "create-crush-rule-stretch-replicated", "topology")
+	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-replicated", "crush-rule", "stretch-replicated")
 	assertOperationCommand(t, ops, "create-crush-rule-stretch-replicated", []string{"ceph", "osd", "crush", "rule", "create-replicated", "stretch-replicated", "default", "datacenter"})
+	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
 	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-replicated", "datacenter"})
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
+	assertOperationIdempotency(t, ops, "create-pool-odf-rbd", "ceph-pool", "odf-rbd")
+	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")
 	assertOperationCommand(t, ops, "create-cephfs-odf-cephfs", []string{"ceph", "fs", "new", "odf-cephfs", "odf-cephfs-metadata", "odf-cephfs-data"})
 	assertOperationCommand(t, ops, "set-cephfs-max-mds-odf-cephfs", []string{"ceph", "fs", "set", "odf-cephfs", "max_mds", "2"})
 	assertOperationPhase(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "data-foundation")
 	assertOperationCommand(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", []string{"ceph", "auth", "get-or-create", "client.bootwright.dc1-metal-ocp.csi-rbd-node", "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool=odf-rbd"})
 	assertOperationCapture(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "ceph-auth-key", "dc1-metal-ocp", "rbdNodeKey")
 	assertOperationPhase(t, ops, "create-rgw-admin-user-odf-rgw", "object-gateway")
+	assertOperationIdempotency(t, ops, "create-rgw-admin-user-odf-rgw", "rgw-user", "bootwright-odf-rgw-admin")
 
 	attachment := attachmentAsset(t, asset, "dc1-metal-ocp")
 	external := readYAMLDoc(t, attachment.ExternalClusterDetailsPath)
@@ -328,6 +333,22 @@ func assertOperationCapture(t *testing.T, ops []any, name, captureType, cluster,
 		capture := op["capture"].(map[string]any)
 		if capture["type"] != captureType || capture["cluster"] != cluster || capture["field"] != field {
 			t.Fatalf("operation %s capture = %#v", name, capture)
+		}
+		return
+	}
+	t.Fatalf("operation %s not found in %#v", name, ops)
+}
+
+func assertOperationIdempotency(t *testing.T, ops []any, name, kind, resourceName string) {
+	t.Helper()
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["name"] != name {
+			continue
+		}
+		idempotency := op["idempotency"].(map[string]any)
+		if idempotency["kind"] != kind || idempotency["name"] != resourceName {
+			t.Fatalf("operation %s idempotency = %#v, want %s/%s", name, idempotency, kind, resourceName)
 		}
 		return
 	}
