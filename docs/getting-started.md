@@ -309,7 +309,8 @@ The OpenShift installer inputs are written under
 inlined. Keep that directory local and remove it when you no longer need the
 files.
 Storage inputs are written under `./rendered/storage/<storage-cluster-name>/`
-and include cephadm specs, Ceph operations, and Data Foundation manifests.
+and include cephadm bootstrap, core service, and late service specs; phased
+Ceph operations; and Data Foundation manifests.
 
 ## Optional Cleanup
 

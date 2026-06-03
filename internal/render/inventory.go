@@ -36,6 +36,7 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 	bootHostSet := bootReferencedHosts(state)
 	ocpHostSet := ocpReferencedHosts(state)
 	storageHostSet := storageReferencedHosts(state)
+	storageHostGroups := storageClusterHostSets(state)
 	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, providerHostSet), infraComponentHostSet), bootHostSet), ocpHostSet)
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 
@@ -53,7 +54,9 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 		hosts[name] = hostInventoryEntry(h, env, secretsDir, localPolicy)
 	}
 	for _, cluster := range managedStorageClusters(state) {
-		hosts[StorageSeedHostName(cluster.Metadata.Name)] = storageSeedHostInventoryEntry(state, cluster, env, secretsDir)
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			hosts[storageInventoryHostName(cluster, node.Name)] = storageNodeInventoryEntry(state, cluster, node.Name, env, secretsDir)
+		}
 	}
 	if len(ocpHostSet) > 0 {
 		hosts["localhost"] = localhostInventoryEntry()
@@ -78,6 +81,9 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 		GroupStorageHosts:        map[string]any{"hosts": hostsAsEmptyMap(storageHostSet)},
 	}
 	for group, set := range agentNodeGroups {
+		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
+	}
+	for group, set := range storageHostGroups {
 		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
 	}
 	return map[string]any{
@@ -110,6 +116,7 @@ const (
 // groups contain localhost when clusters are loaded.
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
+	storageHostGroups := storageClusterHostSets(state)
 	out := map[string]int{
 		GroupInfraHosts:          len(infraReferencedHosts(state)),
 		GroupProviderHosts:       len(providerReferencedHosts(state)),
@@ -123,12 +130,16 @@ func HostGroupCounts(state v1alpha1.State) map[string]int {
 	for group, set := range agentNodeGroups {
 		out[group] = len(set)
 	}
+	for group, set := range storageHostGroups {
+		out[group] = len(set)
+	}
 	return out
 }
 
 func HostGroupMembers(state v1alpha1.State) map[string][]string {
 	ocpHosts := sortedHostSet(ocpReferencedHosts(state))
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
+	storageHostGroups := storageClusterHostSets(state)
 	out := map[string][]string{
 		GroupInfraHosts:          sortedHostSet(infraReferencedHosts(state)),
 		GroupProviderHosts:       sortedHostSet(providerReferencedHosts(state)),
@@ -140,6 +151,9 @@ func HostGroupMembers(state v1alpha1.State) map[string][]string {
 		GroupStorageHosts:        sortedHostSet(storageReferencedHosts(state)),
 	}
 	for group, set := range agentNodeGroups {
+		out[group] = sortedHostSet(set)
+	}
+	for group, set := range storageHostGroups {
 		out[group] = sortedHostSet(set)
 	}
 	return out

@@ -53,17 +53,36 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 		cephFSNode := dataFoundationClientID(containerCluster, "csi-cephfs-node")
 		cephFSProvisioner := dataFoundationClientID(containerCluster, "csi-cephfs-provisioner")
 		ops = append(ops,
-			operation("create-data-foundation-healthchecker-"+containerCluster, "ceph", "auth", "get-or-create", "client."+healthchecker, "mon", "allow r", "mgr", "allow r"),
-			operation("create-data-foundation-rbd-node-"+containerCluster, "ceph", "auth", "get-or-create", "client."+rbdNode, "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool="+df.RBDPoolRef.Name),
-			operation("create-data-foundation-rbd-provisioner-"+containerCluster, "ceph", "auth", "get-or-create", "client."+rbdProvisioner, "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool="+df.RBDPoolRef.Name),
-			operation("create-data-foundation-cephfs-node-"+containerCluster, "ceph", "auth", "get-or-create", "client."+cephFSNode, "mon", "allow r", "mgr", "allow rw", "mds", "allow rw", "osd", "allow rw tag cephfs data="+df.CephFSRef.Name),
-			operation("create-data-foundation-cephfs-provisioner-"+containerCluster, "ceph", "auth", "get-or-create", "client."+cephFSProvisioner, "mon", "allow r", "mgr", "allow rw", "mds", "allow rw", "osd", "allow rw tag cephfs data="+df.CephFSRef.Name),
+			dataFoundationCephAuthOperation(containerCluster, "healthcheckerKey", "create-data-foundation-healthchecker-"+containerCluster, "ceph", "auth", "get-or-create", "client."+healthchecker, "mon", "allow r", "mgr", "allow r"),
+			dataFoundationCephAuthOperation(containerCluster, "rbdNodeKey", "create-data-foundation-rbd-node-"+containerCluster, "ceph", "auth", "get-or-create", "client."+rbdNode, "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool="+df.RBDPoolRef.Name),
+			dataFoundationCephAuthOperation(containerCluster, "rbdProvisionerKey", "create-data-foundation-rbd-provisioner-"+containerCluster, "ceph", "auth", "get-or-create", "client."+rbdProvisioner, "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool="+df.RBDPoolRef.Name),
+			dataFoundationCephAuthOperation(containerCluster, "cephFSNodeKey", "create-data-foundation-cephfs-node-"+containerCluster, "ceph", "auth", "get-or-create", "client."+cephFSNode, "mon", "allow r", "mgr", "allow rw", "mds", "allow rw", "osd", "allow rw tag cephfs data="+df.CephFSRef.Name),
+			dataFoundationCephAuthOperation(containerCluster, "cephFSProvisionerKey", "create-data-foundation-cephfs-provisioner-"+containerCluster, "ceph", "auth", "get-or-create", "client."+cephFSProvisioner, "mon", "allow r", "mgr", "allow rw", "mds", "allow rw", "osd", "allow rw tag cephfs data="+df.CephFSRef.Name),
 		)
 		if df.ObjectGatewayRef.Name != "" {
-			ops = append(ops, operation("create-data-foundation-rgw-admin-user-"+containerCluster, "radosgw-admin", "user", "create", "--uid", dataFoundationRGWUserID(containerCluster), "--display-name", "Bootwright "+containerCluster+" Data Foundation RGW admin", "--format", "json"))
+			ops = append(ops, dataFoundationRGWOperation(containerCluster, "create-data-foundation-rgw-admin-user-"+containerCluster, "radosgw-admin", "user", "create", "--uid", dataFoundationRGWUserID(containerCluster), "--display-name", "Bootwright "+containerCluster+" Data Foundation RGW admin", "--format", "json"))
 		}
 	}
 	return ops
+}
+
+func dataFoundationCephAuthOperation(containerCluster, field, name string, command ...string) map[string]any {
+	op := operationInPhase("data-foundation", name, command...)
+	op["capture"] = map[string]any{
+		"type":    "ceph-auth-key",
+		"cluster": containerCluster,
+		"field":   field,
+	}
+	return op
+}
+
+func dataFoundationRGWOperation(containerCluster, name string, command ...string) map[string]any {
+	op := operationInPhase("data-foundation", name, command...)
+	op["capture"] = map[string]any{
+		"type":    "rgw-user",
+		"cluster": containerCluster,
+	}
+	return op
 }
 
 func dataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, attachment StorageAttachment, containerCluster string) map[string]any {

@@ -280,6 +280,45 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	}
 }
 
+func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
+				"ceph-registry-credentials": {},
+			}},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						Registry: v1alpha1.StorageCephadmRegistry{
+							URL:            "registry.redhat.io",
+							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+						},
+						NodeSSH: v1alpha1.StorageSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
+					},
+				},
+			},
+		}},
+	}
+	checks := collectPreflightChecks(state, []Phase{{Name: "storage-cluster"}}, true, "/context/secrets", "/host-state", preflightDeps{
+		lookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	for _, name := range []string{"ansible-playbook", "python3", "ssh", "scp"} {
+		assertPreflightCheckStatus(t, checks, name, "OK")
+	}
+	assertPreflightCheckStatus(t, checks, "ceph cephadm registry credentialsRef", "FAIL")
+}
+
 func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
 	secretPath := filepath.Join(t.TempDir(), "shared-ceph-external-cluster-details.json")
 	if err := os.WriteFile(secretPath, []byte("[]\n"), 0o600); err != nil {

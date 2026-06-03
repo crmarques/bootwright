@@ -7,15 +7,16 @@ import (
 )
 
 type StorageAsset struct {
-	StorageClusterName string
-	Dir                string
-	CephadmDir         string
-	CephDir            string
-	DataFoundationDir  string
-	BootstrapSpecPath  string
-	ServicesSpecPath   string
-	OperationsPath     string
-	Attachments        []StorageAttachmentAsset
+	StorageClusterName   string
+	Dir                  string
+	CephadmDir           string
+	CephDir              string
+	DataFoundationDir    string
+	BootstrapSpecPath    string
+	CoreServicesSpecPath string
+	LateServicesSpecPath string
+	OperationsPath       string
+	Attachments          []StorageAttachmentAsset
 }
 
 type StorageAttachmentAsset struct {
@@ -59,7 +60,8 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 			asset.CephadmDir = filepath.Join(dir, "cephadm")
 			asset.CephDir = filepath.Join(dir, "ceph")
 			asset.BootstrapSpecPath = filepath.Join(dir, "cephadm", "bootstrap-spec.yaml")
-			asset.ServicesSpecPath = filepath.Join(dir, "cephadm", "services.yaml")
+			asset.CoreServicesSpecPath = filepath.Join(dir, "cephadm", "core-services.yaml")
+			asset.LateServicesSpecPath = filepath.Join(dir, "cephadm", "late-services.yaml")
 			asset.OperationsPath = filepath.Join(dir, "ceph", "operations.yaml")
 		}
 		for _, attachment := range attachmentsByCluster[cluster.Metadata.Name] {
@@ -90,7 +92,10 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			if err := writeYAMLDocuments(fs, asset.BootstrapSpecPath, cephadmBootstrapSpec(state, cluster)); err != nil {
 				return err
 			}
-			if err := writeYAMLDocuments(fs, asset.ServicesSpecPath, cephadmServicesSpec(state, cluster)); err != nil {
+			if err := writeYAMLDocuments(fs, asset.CoreServicesSpecPath, cephadmCoreServicesSpec(state, cluster)); err != nil {
+				return err
+			}
+			if err := writeYAMLDocuments(fs, asset.LateServicesSpecPath, cephadmLateServicesSpec(state, cluster)); err != nil {
 				return err
 			}
 			if err := writeYAML(fs, asset.OperationsPath, cephOperations(state, cluster)); err != nil {

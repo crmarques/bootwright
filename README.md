@@ -120,7 +120,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
 | `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected machines under `components.machines[]` |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
-| `StorageCluster` | External storage cluster provisioning intent; the first implementation drives Ceph through cephadm |
+| `StorageCluster` | External storage intent: imported Ceph, or Bootwright-managed Ceph through cephadm on preinstalled RHEL nodes |
 | `StoragePlacementPolicy` | Storage placement policy such as the CRUSH rule and replicated pool defaults used by Ceph pools |
 | `StoragePool` | Ceph pool desired state, role, placement policy, and replication settings |
 | `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
@@ -142,7 +142,10 @@ External storage provisioning is also separate from `ContainerCluster`.
 `StorageCluster` uses the same lower-layer `ClusterInfra` and `InfraProvider`
 objects for machine facts, while storage-export attachments are declared as
 add-on input effects and wait for both the storage cluster and a `ClusterAddon`
-that provides `data-foundation`.
+that provides `data-foundation`. Bootwright supports imported external Ceph via
+an ODF external-cluster-details secret and managed Ceph where Ansible installs
+cephadm prerequisites on already installed RHEL storage nodes. Installing RHEL
+onto bare metal storage nodes through BMC is roadmap-only.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
 bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift

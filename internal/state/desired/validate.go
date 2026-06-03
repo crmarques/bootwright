@@ -397,6 +397,8 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.nodeSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.NodeSSH, requireSSHKey)
 		requireStorageSSH(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.clusterSSH", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.ClusterSSH, requireSSHKey)
+		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.credentialsRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef)
+		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.trustBundleRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.TrustBundleRef)
 	}
 	for _, effective := range addoninputs.EffectiveAddons(state) {
 		accepted := map[string]v1alpha1.ClusterAddonAcceptedInput{}

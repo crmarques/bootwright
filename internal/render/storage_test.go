@@ -52,14 +52,15 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 		t.Fatalf("host location datacenter = %v, want dc1", got)
 	}
 
-	services := readYAMLDocs(t, asset.ServicesSpecPath)
-	mon := serviceDoc(t, services, "mon", "")
+	coreServices := readYAMLDocs(t, asset.CoreServicesSpecPath)
+	lateServices := readYAMLDocs(t, asset.LateServicesSpecPath)
+	mon := serviceDoc(t, coreServices, "mon", "")
 	monHosts := stringSlice(t, mon["placement"].(map[string]any)["hosts"])
 	wantMons := []string{"ceph-arbiter", "ceph-dc1-0", "ceph-dc1-1", "ceph-dc2-0", "ceph-dc2-1"}
 	if !reflect.DeepEqual(monHosts, wantMons) {
 		t.Fatalf("mon hosts = %v, want %v", monHosts, wantMons)
 	}
-	ingress := serviceDoc(t, services, "ingress", "rgw.odf.dc1")
+	ingress := serviceDoc(t, lateServices, "ingress", "rgw.odf.dc1")
 	spec := ingress["spec"].(map[string]any)
 	if got := spec["backend_service"]; got != "rgw.odf" {
 		t.Fatalf("ingress backend_service = %v, want rgw.odf", got)
@@ -67,7 +68,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	if got := spec["virtual_ip"]; got != "192.168.141.80/24" {
 		t.Fatalf("ingress virtual_ip = %v, want 192.168.141.80/24", got)
 	}
-	osd := serviceDoc(t, services, "osd", "data-ceph-dc1-0")
+	osd := serviceDoc(t, coreServices, "osd", "data-ceph-dc1-0")
 	osdSpec := osd["spec"].(map[string]any)
 	dataDevices := osdSpec["data_devices"].(map[string]any)
 	if got := stringSlice(t, dataDevices["paths"]); !reflect.DeepEqual(got, []string{"/dev/sdb"}) {
@@ -76,11 +77,16 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 
 	operations := readYAMLDoc(t, asset.OperationsPath)
 	ops := operations["operations"].([]any)
+	assertOperationPhase(t, ops, "create-crush-rule-stretch-replicated", "topology")
 	assertOperationCommand(t, ops, "create-crush-rule-stretch-replicated", []string{"ceph", "osd", "crush", "rule", "create-replicated", "stretch-replicated", "default", "datacenter"})
 	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-replicated", "datacenter"})
+	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
 	assertOperationCommand(t, ops, "create-cephfs-odf-cephfs", []string{"ceph", "fs", "new", "odf-cephfs", "odf-cephfs-metadata", "odf-cephfs-data"})
 	assertOperationCommand(t, ops, "set-cephfs-max-mds-odf-cephfs", []string{"ceph", "fs", "set", "odf-cephfs", "max_mds", "2"})
+	assertOperationPhase(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "data-foundation")
 	assertOperationCommand(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", []string{"ceph", "auth", "get-or-create", "client.bootwright.dc1-metal-ocp.csi-rbd-node", "mon", "profile rbd", "mgr", "allow rw", "osd", "profile rbd pool=odf-rbd"})
+	assertOperationCapture(t, ops, "create-data-foundation-rbd-node-dc1-metal-ocp", "ceph-auth-key", "dc1-metal-ocp", "rbdNodeKey")
+	assertOperationPhase(t, ops, "create-rgw-admin-user-odf-rgw", "object-gateway")
 
 	attachment := attachmentAsset(t, asset, "dc1-metal-ocp")
 	external := readYAMLDoc(t, attachment.ExternalClusterDetailsPath)
@@ -135,6 +141,27 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := ceph["bootstrapSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/bootstrap-spec.yaml" {
 		t.Fatalf("bootstrapSpecPath = %v", got)
 	}
+	if got := ceph["coreServicesSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/core-services.yaml" {
+		t.Fatalf("coreServicesSpecPath = %v", got)
+	}
+	if got := ceph["lateServicesSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/late-services.yaml" {
+		t.Fatalf("lateServicesSpecPath = %v", got)
+	}
+	registry := cluster["registry"].(map[string]any)
+	if got := registry["url"]; got != "registry.redhat.io" {
+		t.Fatalf("registry url = %v", got)
+	}
+	if got := registry["credentialsPath"]; got != filepath.Join("/context/secrets", "ceph-registry-credentials") {
+		t.Fatalf("registry credentials path = %v", got)
+	}
+	nodes := cluster["nodes"].([]any)
+	if len(nodes) != 7 {
+		t.Fatalf("storage nodes got %d, want 7", len(nodes))
+	}
+	firstNode := nodes[0].(map[string]any)
+	if got := firstNode["inventoryHost"]; got != render.StorageSeedHostName("ceph-storage") {
+		t.Fatalf("seed inventory host = %v", got)
+	}
 	clusterSSH := cluster["clusterSSH"].(map[string]any)
 	if got := clusterSSH["privateKeyPath"]; got != filepath.Join("/context/secrets", "cephadm-cluster-ssh") {
 		t.Fatalf("cluster ssh private key = %v", got)
@@ -169,7 +196,7 @@ func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecre
 		t.Fatalf("storage assets got %d, want 1", len(normal.StorageAssets))
 	}
 	asset := normal.StorageAssets[0]
-	if asset.BootstrapSpecPath != "" || asset.ServicesSpecPath != "" || asset.OperationsPath != "" {
+	if asset.BootstrapSpecPath != "" || asset.CoreServicesSpecPath != "" || asset.LateServicesSpecPath != "" || asset.OperationsPath != "" {
 		t.Fatalf("external storage rendered managed Ceph paths: %#v", asset)
 	}
 	attachment := attachmentAsset(t, asset, "dc1-ocp")
@@ -270,6 +297,37 @@ func assertOperationCommand(t *testing.T, ops []any, name string, want []string)
 		got := stringSlice(t, op["command"])
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("operation %s command = %v, want %v", name, got, want)
+		}
+		return
+	}
+	t.Fatalf("operation %s not found in %#v", name, ops)
+}
+
+func assertOperationPhase(t *testing.T, ops []any, name, want string) {
+	t.Helper()
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["name"] != name {
+			continue
+		}
+		if got := op["phase"]; got != want {
+			t.Fatalf("operation %s phase = %v, want %s", name, got, want)
+		}
+		return
+	}
+	t.Fatalf("operation %s not found in %#v", name, ops)
+}
+
+func assertOperationCapture(t *testing.T, ops []any, name, captureType, cluster, field string) {
+	t.Helper()
+	for _, item := range ops {
+		op := item.(map[string]any)
+		if op["name"] != name {
+			continue
+		}
+		capture := op["capture"].(map[string]any)
+		if capture["type"] != captureType || capture["cluster"] != cluster || capture["field"] != field {
+			t.Fatalf("operation %s capture = %#v", name, capture)
 		}
 		return
 	}

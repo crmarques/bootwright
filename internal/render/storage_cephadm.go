@@ -23,7 +23,7 @@ func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 	return docs
 }
 
-func cephadmServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
+func cephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
 	monHosts := storageCephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON)
 	if len(monHosts) > 0 {
@@ -37,6 +37,11 @@ func cephadmServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) 
 	if len(osdHosts) > 0 {
 		docs = append(docs, cephadmOSDServices(cluster, osdHosts)...)
 	}
+	return docs
+}
+
+func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
+	var docs []any
 	for _, fs := range state.StorageFilesystems {
 		if fs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue

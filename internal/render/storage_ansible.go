@@ -10,6 +10,14 @@ func StorageSeedHostName(clusterName string) string {
 	return "storage__" + clusterName
 }
 
+func StorageNodeHostName(clusterName, nodeName string) string {
+	return "storage__" + clusterName + "__" + nodeName
+}
+
+func StorageClusterGroupName(clusterName string) string {
+	return GroupStorageHosts + "_" + inventoryGroupToken(clusterName)
+}
+
 func managedStorageClusters(state v1alpha1.State) []v1alpha1.StorageCluster {
 	var out []v1alpha1.StorageCluster
 	for _, cluster := range state.StorageClusters {
@@ -23,18 +31,40 @@ func managedStorageClusters(state v1alpha1.State) []v1alpha1.StorageCluster {
 func storageReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, cluster := range managedStorageClusters(state) {
-		out[StorageSeedHostName(cluster.Metadata.Name)] = true
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			out[storageInventoryHostName(cluster, node.Name)] = true
+		}
 	}
 	return out
 }
 
-func storageSeedHostInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) map[string]any {
+func storageClusterHostSets(state v1alpha1.State) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, cluster := range managedStorageClusters(state) {
+		set := map[string]bool{}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			set[storageInventoryHostName(cluster, node.Name)] = true
+		}
+		out[StorageClusterGroupName(cluster.Metadata.Name)] = set
+	}
+	return out
+}
+
+func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) string {
+	if cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode == nodeName {
+		return StorageSeedHostName(cluster.Metadata.Name)
+	}
+	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
+}
+
+func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, nodeName string, env *v1alpha1.Environment, secretsDir string) map[string]any {
 	nodeSSH := cluster.Spec.Ceph.Cephadm.NodeSSH
 	entry := map[string]any{
-		"ansible_host":                      storageMachineIP(state, cluster, cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP),
+		"ansible_host":                      storageNodeAddress(state, cluster, nodeName),
 		"ansible_user":                      storageSSHUser(nodeSSH),
-		"bootwright_host_name":              StorageSeedHostName(cluster.Metadata.Name),
+		"bootwright_host_name":              storageInventoryHostName(cluster, nodeName),
 		"bootwright_storage_cluster_name":   cluster.Metadata.Name,
+		"bootwright_storage_node_name":      nodeName,
 		"bootwright_storage_seed_host_name": StorageSeedHostName(cluster.Metadata.Name),
 	}
 	if path := storageSSHPrivateKeyPath(nodeSSH, env, secretsDir); path != "" {
@@ -53,19 +83,25 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
 			"seedHost":            StorageSeedHostName(cluster.Metadata.Name),
+			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,
 			"resultPath":          "{{ bootwright_ansible_artifacts_dir }}/storage-result.json",
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
+			"nodes":               storageNodesVars(state, cluster),
 			"bootstrap": map[string]any{
 				"seedNode": ceph.Cephadm.Bootstrap.SeedNode,
 				"monIP":    storageMachineIP(state, cluster, ceph.Cephadm.Bootstrap.MonIP),
 			},
 			"ceph": map[string]any{
-				"bootstrapSpecPath": asset.BootstrapSpecPath,
-				"servicesSpecPath":  asset.ServicesSpecPath,
-				"operationsPath":    asset.OperationsPath,
+				"bootstrapSpecPath":    asset.BootstrapSpecPath,
+				"coreServicesSpecPath": asset.CoreServicesSpecPath,
+				"lateServicesSpecPath": asset.LateServicesSpecPath,
+				"operationsPath":       asset.OperationsPath,
 			},
 			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
+		}
+		if registry := storageRegistryVars(ceph.Cephadm.Registry, env, secretsDir); len(registry) > 0 {
+			entry["registry"] = registry
 		}
 		if user := storageSSHUser(clusterSSH); user != "" {
 			entry["clusterSSH"] = map[string]any{"user": user}
@@ -87,6 +123,33 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 			clusterVars["publicKeyPath"] = publicPath
 		}
 		out = append(out, entry)
+	}
+	return out
+}
+
+func storageNodesVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
+	var out []any
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		out = append(out, map[string]any{
+			"name":          node.Name,
+			"inventoryHost": storageInventoryHostName(cluster, node.Name),
+			"address":       storageNodeAddress(state, cluster, node.Name),
+			"devices":       append([]string(nil), node.Devices...),
+		})
+	}
+	return out
+}
+
+func storageRegistryVars(registry v1alpha1.StorageCephadmRegistry, env *v1alpha1.Environment, secretsDir string) map[string]any {
+	out := map[string]any{}
+	if registry.URL != "" {
+		out["url"] = registry.URL
+	}
+	if registry.CredentialsRef.Name != "" {
+		out["credentialsPath"] = secret.ResolveMaterialPath(registry.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary)
+	}
+	if registry.TrustBundleRef.Name != "" {
+		out["trustBundlePath"] = secret.ResolveMaterialPath(registry.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary)
 	}
 	return out
 }

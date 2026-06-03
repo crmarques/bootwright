@@ -124,7 +124,7 @@ func selectedNeedsAnsible(selected []Phase) bool {
 		return true
 	}
 	for _, phase := range selected {
-		if phase.Name != "addons" && phase.Name != "storage-cluster" {
+		if phase.Name != "addons" {
 			return true
 		}
 	}

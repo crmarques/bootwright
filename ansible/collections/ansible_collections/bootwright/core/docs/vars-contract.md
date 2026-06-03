@@ -297,16 +297,33 @@ records. The storage role owns remote host mutation and `cephadm`, `ceph`, and
 bootwright_storage_clusters:
   - name: ceph-stretch
     seedHost: storage__ceph-stretch
+    storageGroup: bootwright_storage_hosts_ceph_stretch
     remoteWorkDir: /tmp/bootwright-storage-ceph-stretch
     resultPath: "{{ bootwright_ansible_artifacts_dir }}/storage-result.json"
     clusterNetworkCIDRs:
       - 192.168.133.0/24
+    registry:
+      url: registry.redhat.io
+      credentialsPath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-credentials
+      trustBundlePath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-ca
+    nodes:
+      - name: ceph-dc1-0
+        inventoryHost: storage__ceph-stretch
+        address: 192.168.133.30
+        devices:
+          - /dev/sdb
+      - name: ceph-dc1-1
+        inventoryHost: storage__ceph-stretch__ceph-dc1-1
+        address: 192.168.133.31
+        devices:
+          - /dev/sdb
     bootstrap:
       seedNode: ceph-dc1-0
       monIP: 192.168.133.30
     ceph:
       bootstrapSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/bootstrap-spec.yaml"
-      servicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/services.yaml"
+      coreServicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/core-services.yaml"
+      lateServicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/late-services.yaml"
       operationsPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/ceph/operations.yaml"
     clusterSSH:
       user: root
@@ -319,11 +336,13 @@ bootwright_storage_clusters:
         export: ceph
 ```
 
-The storage inventory also contains one synthetic seed host per managed storage
-cluster in `bootwright_storage_hosts`. The seed host renders
-`bootwright_storage_cluster_name`, `ansible_host`, `ansible_user`, and
-`ansible_ssh_private_key_file` from `nodeSSH`; omitted `nodeSSH.user` defaults
-to `root`.
+The storage inventory contains one synthetic host per declared storage node in
+`bootwright_storage_hosts`, plus a per-cluster storage group. The seed node
+keeps the stable host name `storage__<cluster>` for task limiting; non-seed
+nodes render as `storage__<cluster>__<node>`. Every storage host renders
+`bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
+`ansible_host`, `ansible_user`, and `ansible_ssh_private_key_file` from
+`nodeSSH`; omitted `nodeSSH.user` defaults to `root`.
 
 ## Projection Rule
 

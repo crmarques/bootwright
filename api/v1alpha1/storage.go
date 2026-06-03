@@ -23,8 +23,15 @@ type StorageClusterCephSpec struct {
 
 type StorageCephadmSpec struct {
 	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	Registry   StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
 	NodeSSH    StorageSSHSpec          `yaml:"nodeSSH" json:"nodeSSH"`
 	ClusterSSH StorageSSHSpec          `yaml:"clusterSSH,omitempty" json:"clusterSSH,omitempty"`
+}
+
+type StorageCephadmRegistry struct {
+	URL            string    `yaml:"url,omitempty" json:"url,omitempty"`
+	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
 }
 
 type StorageCephadmBootstrap struct {

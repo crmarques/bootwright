@@ -75,8 +75,11 @@ CLI is invoked. Desired state only selects substrate and service hosts.
 
 Storage actions also run from the bastion. For managed storage, Bootwright
 schedules an Ansible storage task that SSHes to the preinstalled RHEL Ceph seed
-node, runs cephadm there, and applies generated Ceph operations from the
-rendered storage tree. For imported storage,
+node, prepares every declared storage node, runs cephadm there, and applies
+generated core services, storage operations, late RGW/MDS services, and Data
+Foundation credential operations from the rendered storage tree. The managed
+Ceph declaration includes a cephadm registry URL and credential reference; it
+does not embed registry secrets in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
 `storage-export-attachment` effect, and bindings provide `exportRef` plus
@@ -84,7 +87,8 @@ Data Foundation add-on declares an `external-storage` input with a
 secret. The attachment applies later in the add-ons phase after the target
 cluster and Data Foundation add-on are ready. Managed Ceph generates those
 details during storage apply and saves them as restrictive runtime secret
-material.
+material. Installing RHEL onto bare-metal storage nodes through BMC and
+kickstart is a roadmap path, not part of the current managed storage flow.
 
 ## KubeVirt Child Clusters
 

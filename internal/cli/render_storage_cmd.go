@@ -50,7 +50,7 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 func printStorageFiles(stdout io.Writer, result render.Result) {
 	var paths []string
 	for _, asset := range result.StorageAssets {
-		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
+		paths = appendNonEmpty(paths, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
 		for _, attachment := range asset.Attachments {
 			paths = appendNonEmpty(paths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
 		}

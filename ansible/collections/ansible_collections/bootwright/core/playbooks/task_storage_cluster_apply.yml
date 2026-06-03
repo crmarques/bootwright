@@ -18,6 +18,12 @@
       ansible.builtin.meta: end_host
       when: bootwright_storage_cluster_name | default('') != bootwright_task_storage_cluster_name | default('')
 
+    - name: End selected storage non-seed hosts
+      ansible.builtin.meta: end_host
+      when:
+        - bootwright_selected_storage_cluster.seedHost | default('') | length > 0
+        - bootwright_selected_storage_cluster.seedHost | default('') != inventory_hostname
+
     - name: Validate selected storage cluster context
       ansible.builtin.assert:
         that:

@@ -13,10 +13,10 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			if !storageNodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 				continue
 			}
-			ops = append(ops, operation("set-mon-location-"+node.Name, "ceph", "mon", "set_location", node.Name, stretch.FailureDomain+"="+node.Site))
+			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", node.Name, stretch.FailureDomain+"="+node.Site))
 		}
-		ops = append(ops, operation("create-crush-rule-"+stretch.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", stretch.RuleName, "default", stretch.FailureDomain))
-		ops = append(ops, operation("enable-stretch-mode", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Node, stretch.RuleName, stretch.FailureDomain))
+		ops = append(ops, operationInPhase("topology", "create-crush-rule-"+stretch.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", stretch.RuleName, "default", stretch.FailureDomain))
+		ops = append(ops, operationInPhase("topology", "enable-stretch-mode", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Node, stretch.RuleName, stretch.FailureDomain))
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		if policy.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
@@ -29,21 +29,21 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if failureDomain == "" {
 			failureDomain = storageFailureDomain(cluster)
 		}
-		ops = append(ops, operation("create-crush-rule-"+policy.Spec.Ceph.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", policy.Spec.Ceph.RuleName, "default", failureDomain))
+		ops = append(ops, operationInPhase("topology", "create-crush-rule-"+policy.Spec.Ceph.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", policy.Spec.Ceph.RuleName, "default", failureDomain))
 	}
 	for _, pool := range state.StoragePools {
 		if pool.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		ops = append(ops, operation("create-pool-"+pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name))
+		ops = append(ops, operationInPhase("storage", "create-pool-"+pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name))
 		if rule := storagePoolCRUSHRule(state, cluster, pool); rule != "" {
-			ops = append(ops, operation("set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
+			ops = append(ops, operationInPhase("storage", "set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
 		}
 		replicas := effectivePoolReplicas(cluster, pool)
-		ops = append(ops, operation("set-pool-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "size", fmt.Sprint(replicas.Size)))
-		ops = append(ops, operation("set-pool-min-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "min_size", fmt.Sprint(replicas.MinSize)))
+		ops = append(ops, operationInPhase("storage", "set-pool-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "size", fmt.Sprint(replicas.Size)))
+		ops = append(ops, operationInPhase("storage", "set-pool-min-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "min_size", fmt.Sprint(replicas.MinSize)))
 		if app := storagePoolApplication(pool); app != "" {
-			ops = append(ops, operation("enable-pool-application-"+pool.Metadata.Name, "ceph", "osd", "pool", "application", "enable", pool.Metadata.Name, app))
+			ops = append(ops, operationInPhase("storage", "enable-pool-application-"+pool.Metadata.Name, "ceph", "osd", "pool", "application", "enable", pool.Metadata.Name, app))
 		}
 	}
 	for _, fs := range state.StorageFilesystems {
@@ -51,18 +51,18 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			continue
 		}
 		defaultData := storageFilesystemDefaultDataPool(fs)
-		ops = append(ops, operation("create-cephfs-"+fs.Metadata.Name, "ceph", "fs", "new", fs.Metadata.Name, fs.Spec.CephFS.MetadataPoolRef.Name, defaultData))
+		ops = append(ops, operationInPhase("storage", "create-cephfs-"+fs.Metadata.Name, "ceph", "fs", "new", fs.Metadata.Name, fs.Spec.CephFS.MetadataPoolRef.Name, defaultData))
 		if fs.Spec.CephFS.MDS.ActiveCount > 0 {
-			ops = append(ops, operation("set-cephfs-max-mds-"+fs.Metadata.Name, "ceph", "fs", "set", fs.Metadata.Name, "max_mds", fmt.Sprint(fs.Spec.CephFS.MDS.ActiveCount)))
+			ops = append(ops, operationInPhase("storage", "set-cephfs-max-mds-"+fs.Metadata.Name, "ceph", "fs", "set", fs.Metadata.Name, "max_mds", fmt.Sprint(fs.Spec.CephFS.MDS.ActiveCount)))
 		}
 	}
-	ops = append(ops, dataFoundationCredentialOperations(state, cluster)...)
 	for _, gw := range state.StorageObjectGateways {
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		ops = append(ops, operation("create-rgw-admin-user-"+gw.Metadata.Name, "radosgw-admin", "user", "create", "--uid", "bootwright-"+gw.Metadata.Name+"-admin", "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json"))
+		ops = append(ops, operationInPhase("object-gateway", "create-rgw-admin-user-"+gw.Metadata.Name, "radosgw-admin", "user", "create", "--uid", "bootwright-"+gw.Metadata.Name+"-admin", "--display-name", "Bootwright "+gw.Metadata.Name+" admin", "--format", "json"))
 	}
+	ops = append(ops, dataFoundationCredentialOperations(state, cluster)...)
 	return map[string]any{
 		"apiVersion": "bootwright.io/v1alpha1",
 		"kind":       "StorageOperations",
@@ -73,8 +73,9 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	}
 }
 
-func operation(name string, command ...string) map[string]any {
+func operationInPhase(phase, name string, command ...string) map[string]any {
 	return map[string]any{
+		"phase":   phase,
 		"name":    name,
 		"command": command,
 	}

@@ -62,6 +62,27 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			},
 			want: `must include at least two mds-capable hosts in data site "dc2"`,
 		},
+		{
+			name: "missing-cephadm-registry-url",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.URL = ""
+			},
+			want: "cephadm.registry.url is required",
+		},
+		{
+			name: "registry-url-embeds-credentials",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.URL = "user:password@registry.example.test"
+			},
+			want: "cephadm.registry.url must not embed credentials; use credentialsRef",
+		},
+		{
+			name: "missing-cephadm-registry-credentials",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.CredentialsRef = v1alpha1.SecretRef{}
+			},
+			want: "cephadm.registry.credentialsRef.name is required",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -260,6 +281,10 @@ func storageValidationState() v1alpha1.State {
 								Interface:  "primary",
 								Family:     "ipv4",
 							},
+						},
+						Registry: v1alpha1.StorageCephadmRegistry{
+							URL:            "registry.redhat.io",
+							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
 						},
 						NodeSSH: v1alpha1.StorageSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "node-ssh"}},
 					},

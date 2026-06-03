@@ -129,6 +129,22 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infr
 	}
 	errs = append(errs, validateStorageSSH(prefix+".nodeSSH", adm.NodeSSH, true)...)
 	errs = append(errs, validateStorageSSH(prefix+".clusterSSH", adm.ClusterSSH, false)...)
+	errs = append(errs, validateStorageCephadmRegistry(prefix+".registry", adm.Registry)...)
+	return errs
+}
+
+func validateStorageCephadmRegistry(prefix string, registry v1alpha1.StorageCephadmRegistry) []string {
+	var errs []string
+	if registry.URL == "" {
+		errs = append(errs, prefix+".url is required")
+	} else if strings.ContainsAny(registry.URL, " \t\r\n") {
+		errs = append(errs, prefix+".url must not contain whitespace")
+	} else if strings.Contains(registry.URL, "@") {
+		errs = append(errs, prefix+".url must not embed credentials; use credentialsRef")
+	}
+	if registry.CredentialsRef.Name == "" {
+		errs = append(errs, prefix+".credentialsRef.name is required")
+	}
 	return errs
 }
 

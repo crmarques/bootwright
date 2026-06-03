@@ -392,6 +392,10 @@ Storage nodes are modeled as machines in a storage-only `ClusterInfra`, not as
 `Host` objects. They are assumed to already run RHEL and be reachable by the
 Ansible storage layer from the bastion over SSH.
 
+Full-managed storage, where Bootwright customizes a RHEL ISO/kickstart, boots
+bare metal through BMCs, installs RHEL, and then runs the managed Ceph flow, is
+roadmap-only.
+
 `StorageCluster.spec.management` defaults to `managed`. `external` declares a
 previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
 Bootwright renders and applies only Data Foundation attachment manifests for
@@ -421,6 +425,10 @@ spec:
             name: ceph-dc1-0
           interface: primary
           family: ipv4
+      registry:
+        url: registry.redhat.io
+        credentialsRef:
+          name: ceph-registry-credentials
       nodeSSH:
         user: root
         keyPairRef:
@@ -461,6 +469,10 @@ Rules:
 - `StorageCluster.spec.ceph.cephadm.bootstrap.monIP` is singular because
   `cephadm bootstrap` creates the first monitor on one seed host. HA monitor
   placement is declared through the rendered cephadm service specs.
+- `StorageCluster.spec.ceph.cephadm.registry` is required for managed Ceph.
+  `url` names the image registry, `credentialsRef` points at credential
+  material, and optional `trustBundleRef` points at a registry CA bundle.
+  Registry credentials are never embedded in the URL.
 - `StorageCluster.spec.management: external` disables Bootwright-managed Ceph
   provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
   and `StorageObjectGateway` are not declared for imported Ceph.
@@ -499,10 +511,11 @@ Rules:
   `ContainerCluster`. The cluster must have a bound `ClusterAddon` that
   provides `data-foundation`; storage attachment manifests are applied after
   that add-on reports readiness.
-- Data Foundation exports render per-consuming-cluster Ceph auth operations
-  in `ceph/operations.yaml` and per-cluster external connection manifests.
-  Rendered manifests carry generated-at-apply placeholders for secret keys;
-  authored examples must not contain generated external-cluster secret bytes.
+- Data Foundation exports render per-consuming-cluster Ceph auth operations in
+  `ceph/operations.yaml` with capture metadata for generated RBD, CephFS,
+  healthchecker, and RGW keys. Rendered manifests carry generated-at-apply
+  placeholders for secret keys; authored examples must not contain generated
+  external-cluster secret bytes.
 - Imported Data Foundation attachments render a placeholder in normal output
   and inline `externalDetailsRef` secret JSON only for sensitive render output
   and apply-time task artifacts. Managed Ceph attachments read generated
@@ -514,7 +527,8 @@ apply:
 
 ```text
 storage/<storageCluster>/cephadm/bootstrap-spec.yaml
-storage/<storageCluster>/cephadm/services.yaml
+storage/<storageCluster>/cephadm/core-services.yaml
+storage/<storageCluster>/cephadm/late-services.yaml
 storage/<storageCluster>/ceph/operations.yaml
 storage/<storageCluster>/data-foundation/<cluster>/<addon>/<input>/rook-ceph-external-cluster-details.yaml
 storage/<storageCluster>/data-foundation/<cluster>/<addon>/<input>/ocs-external-storagecluster.yaml
@@ -1355,10 +1369,10 @@ Bootwright renders:
   desired state.
 - Generated artifact server components when a cluster needs agent ISO or
   boot-artifact publication.
-- Storage tool inputs from selected storage resources: cephadm host and
-  service specs, Ceph operations for stretch mode, pools, CephFS, RGW users,
-  and Data Foundation external-mode manifests for each selected storage
-  attachment.
+- Storage tool inputs from selected storage resources: cephadm host, core
+  service, and late service specs; phased Ceph operations for topology, pools,
+  CephFS, RGW users, and Data Foundation keys; and external-mode manifests for
+  each selected storage attachment.
 - Add-on apply plans from selected `ClusterAddonBinding` resources.
   OLM add-ons generate Namespace, OperatorGroup, Subscription, and custom
   resources. Manifest-set add-ons reference declared files and include file
@@ -1574,13 +1588,16 @@ happy path after `apply bastion`, `check all`, and `plan`. Phase commands
 remain available for advanced operations and recovery.
 `apply storage-cluster` renders the storage input set and runs an Ansible
 storage task against the synthetic Ceph seed host. The storage role SSHes from
-the bastion to the seed node, runs cephadm bootstrap on that node, applies
-cephadm services, executes the rendered Ceph operations, and writes only a
-temporary credential result for Go to save as the final Data Foundation
-external-cluster details record. `apply clusters` converges selected cluster
-infrastructure, managed storage clusters, OpenShift or OKD cluster installs,
-bound add-ons, and declared integrations. Independent storage and container
-cluster work may start in parallel; add-ons start after their target cluster
+the bastion to every selected preinstalled RHEL storage node for prerequisites,
+registry trust/login, cephadm SSH authorization, and OSD device checks. It then
+runs cephadm bootstrap on the seed node, applies core service specs, executes
+topology/storage operations, applies late MDS/RGW/ingress service specs,
+executes late credential operations, and writes only a temporary credential
+result for Go to save as the final Data Foundation external-cluster details
+record. `apply clusters` converges selected cluster infrastructure, managed
+storage clusters, OpenShift or OKD cluster installs, bound add-ons, and
+declared integrations. Independent storage and container cluster work may start
+in parallel; add-ons start after their target cluster
 install wait; storage-export attachment tasks start after the target install
 wait, the matching storage provisioning task when selected, and the add-on wait
 task that provides `data-foundation`. Virtualized child clusters that use a

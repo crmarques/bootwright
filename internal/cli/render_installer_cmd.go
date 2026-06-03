@@ -179,7 +179,7 @@ func printToolInputFiles(stdout io.Writer, result render.Result) {
 	}
 	var storagePaths []string
 	for _, asset := range result.StorageAssets {
-		storagePaths = appendNonEmpty(storagePaths, asset.BootstrapSpecPath, asset.ServicesSpecPath, asset.OperationsPath)
+		storagePaths = appendNonEmpty(storagePaths, asset.BootstrapSpecPath, asset.CoreServicesSpecPath, asset.OperationsPath, asset.LateServicesSpecPath)
 		for _, attachment := range asset.Attachments {
 			storagePaths = appendNonEmpty(storagePaths, attachment.ExternalClusterDetailsPath, attachment.StorageClusterPath, attachment.StorageSystemPath)
 		}
@@ -217,7 +217,8 @@ func printToolInputCommands(stdout io.Writer, result render.Result) {
 			continue
 		}
 		p.CommandLine("bootstrap ceph ["+asset.StorageClusterName+"]", []string{"cephadm", "bootstrap", "--apply-spec", asset.BootstrapSpecPath, "--mon-ip", "<derived-bootstrap-mon-ip>"})
-		p.CommandLine("apply ceph services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.ServicesSpecPath})
+		p.CommandLine("apply ceph core services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.CoreServicesSpecPath})
 		p.CommandLine("apply ceph operations ["+asset.StorageClusterName+"]", []string{"bootwright", "apply", "storage-cluster", "--scope", asset.StorageClusterName, "--yes"})
+		p.CommandLine("apply ceph late services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.LateServicesSpecPath})
 	}
 }

@@ -1536,6 +1536,28 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
+	registryLogin := mainTasks[findAnsibleTask(t, mainTasks, "Log storage nodes into cephadm registry")]
+	if got := registryLogin["no_log"]; got != true {
+		t.Fatalf("registry login must be no_log, got %v", got)
+	}
+	if _, ok := registryLogin["containers.podman.podman_login"].(map[string]any); !ok {
+		t.Fatalf("registry login must use podman_login, got %v", registryLogin)
+	}
+
+	prereqs := mainTasks[findAnsibleTask(t, mainTasks, "Install Ceph prerequisites on storage nodes")]
+	packages, ok := prereqs["ansible.builtin.package"].(map[string]any)
+	if !ok {
+		t.Fatalf("Ceph prerequisite task missing package module: %v", prereqs)
+	}
+	for _, name := range []string{"cephadm", "podman", "lvm2", "chrony", "firewalld"} {
+		if !stringListContains(packages["name"], name) {
+			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, packages["name"])
+		}
+	}
+	if got := fmt.Sprint(prereqs["delegate_to"]); !strings.Contains(got, "item.inventoryHost") {
+		t.Fatalf("Ceph prerequisites must delegate per storage node, got %v", got)
+	}
+
 	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")
 	for _, name := range []string{
 		"Copy cephadm cluster private SSH key",
@@ -1548,6 +1570,20 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 			t.Fatalf("%s must be no_log, got %v", name, got)
 		}
 	}
+	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
+	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
+	lateIdx := findAnsibleTask(t, block, "Apply Ceph late service spec")
+	lateOpsIdx := findAnsibleTask(t, block, "Run rendered Ceph late operations")
+	if !(coreIdx < topologyIdx && topologyIdx < lateIdx && lateIdx < lateOpsIdx) {
+		t.Fatalf("storage operations must be ordered core -> topology/storage -> late services -> late operations")
+	}
+	if got := fmt.Sprint(block[topologyIdx]["when"]); !strings.Contains(got, "topology") || !strings.Contains(got, "storage") {
+		t.Fatalf("topology/storage operation loop has unexpected when=%v", block[topologyIdx]["when"])
+	}
+	if got := fmt.Sprint(block[lateOpsIdx]["when"]); !strings.Contains(got, "object-gateway") || !strings.Contains(got, "data-foundation") {
+		t.Fatalf("late operation loop has unexpected when=%v", block[lateOpsIdx]["when"])
+	}
+
 	write := block[findAnsibleTask(t, block, "Write captured storage result")]
 	copyTask, ok := write["ansible.builtin.copy"].(map[string]any)
 	if !ok {

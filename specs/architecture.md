@@ -45,9 +45,11 @@ Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
 tool inputs under `storage/<storageCluster>/` and schedules an Ansible storage
 task against a synthetic seed host. The storage role reaches preinstalled RHEL
 Ceph nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed
-node, applies cephadm service specs, runs rendered Ceph operations, and writes
-a temporary credential result for Go to convert into final Data Foundation
-attachment records. Imported storage clusters skip this storage task.
+node, applies core cephadm service specs, runs topology and storage
+operations, applies late MDS/RGW/ingress service specs, runs credential capture
+operations, and writes a temporary credential result for Go to convert into
+final Data Foundation attachment records. Imported storage clusters skip this
+storage task.
 Storage-export attachment tasks run in the add-ons phase after the storage task
 when one exists and the Data Foundation-providing add-on readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
@@ -115,9 +117,10 @@ These boundaries are reflected in rendering:
 - Infra component variables are rendered from `InfraComponent` services
   referenced by endpoints, environment catalog entries, and
   `NetworkConfig.spec.dnsRefs[]`.
-- Storage tool inputs render to cephadm host/service specs,
-  `ceph/operations.yaml`, the `bootwright_storage_clusters[]` Ansible
-  contract, and generated Data Foundation manifests for managed storage.
+- Storage tool inputs render to cephadm host, core service, and late service
+  specs; phased `ceph/operations.yaml`; the `bootwright_storage_clusters[]`
+  Ansible contract; and generated Data Foundation manifests for managed
+  storage.
   Imported storage renders only Data Foundation attachment manifests. CephFS
   metadata and data pool roles are expressed by `StorageFilesystem` because the
   renderer emits `ceph fs new <fs> <metadataPool> <dataPool>`.

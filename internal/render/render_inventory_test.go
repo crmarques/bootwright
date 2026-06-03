@@ -395,7 +395,7 @@ func TestHostGroupCountsLibvirtManaged(t *testing.T) {
 	}
 }
 
-func TestStorageInventoryUsesManagedCephSeedHost(t *testing.T) {
+func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -415,13 +415,32 @@ func TestStorageInventoryUsesManagedCephSeedHost(t *testing.T) {
 	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
 		t.Fatalf("storage seed key = %v", got)
 	}
+	nodeName := render.StorageNodeHostName("ceph-storage", "ceph-dc1-1")
+	node := hosts[nodeName].(map[string]any)
+	if got := node["ansible_host"]; got != "192.168.141.31" {
+		t.Fatalf("storage node ansible_host = %v, want 192.168.141.31", got)
+	}
 	children := all["children"].(map[string]any)
 	groupHosts := children[render.GroupStorageHosts].(map[string]any)["hosts"].(map[string]any)
 	if _, ok := groupHosts[seedName]; !ok {
 		t.Fatalf("%s hosts = %v, want %s", render.GroupStorageHosts, groupHosts, seedName)
 	}
+	if _, ok := groupHosts[nodeName]; !ok {
+		t.Fatalf("%s hosts = %v, want %s", render.GroupStorageHosts, groupHosts, nodeName)
+	}
+	clusterGroup := render.StorageClusterGroupName("ceph-storage")
+	clusterHosts := children[clusterGroup].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := clusterHosts[seedName]; !ok {
+		t.Fatalf("%s hosts = %v, want %s", clusterGroup, clusterHosts, seedName)
+	}
+	if _, ok := clusterHosts[nodeName]; !ok {
+		t.Fatalf("%s hosts = %v, want %s", clusterGroup, clusterHosts, nodeName)
+	}
 	counts := render.HostGroupCounts(state)
-	if got := counts[render.GroupStorageHosts]; got != 1 {
-		t.Fatalf("%s count = %d, want 1", render.GroupStorageHosts, got)
+	if got := counts[render.GroupStorageHosts]; got != 7 {
+		t.Fatalf("%s count = %d, want 7", render.GroupStorageHosts, got)
+	}
+	if got := counts[clusterGroup]; got != 7 {
+		t.Fatalf("%s count = %d, want 7", clusterGroup, got)
 	}
 }

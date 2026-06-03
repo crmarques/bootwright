@@ -14,6 +14,22 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		}
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "nodeSSH", cluster.Spec.Ceph.Cephadm.NodeSSH)...)
 		out = append(out, storageSSHRequirements(cluster.Metadata.Name, "clusterSSH", cluster.Spec.Ceph.Cephadm.ClusterSSH)...)
+		if ref := cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef; ref.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: ref.Name,
+				label:   cluster.Metadata.Name + " cephadm registry credentialsRef",
+				phases:  []string{"storage-cluster"},
+				role:    secret.MaterialPrimary,
+			})
+		}
+		if ref := cluster.Spec.Ceph.Cephadm.Registry.TrustBundleRef; ref.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: ref.Name,
+				label:   cluster.Metadata.Name + " cephadm registry trustBundleRef",
+				phases:  []string{"storage-cluster"},
+				role:    secret.MaterialPrimary,
+			})
+		}
 	}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		ref := addoninputs.SecretRefValue(effect.Input.Values, "externalDetailsRef")

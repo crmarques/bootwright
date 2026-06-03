@@ -943,8 +943,31 @@ func storageAttachmentPlanningState() v1alpha1.State {
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
-				Type: v1alpha1.StorageClusterTypeCeph,
-				Ceph: &v1alpha1.StorageClusterCephSpec{},
+				Type:            v1alpha1.StorageClusterTypeCeph,
+				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						Bootstrap: v1alpha1.StorageCephadmBootstrap{
+							SeedNode: "ceph-0",
+							MonIP: v1alpha1.StorageMachineIPRef{
+								MachineRef: v1alpha1.StorageMachineRef{ClusterInfra: "ceph-infra", Name: "ceph-0"},
+								Interface:  "primary",
+							},
+						},
+						Registry: v1alpha1.StorageCephadmRegistry{
+							URL:            "registry.redhat.io",
+							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+						},
+						NodeSSH: v1alpha1.StorageSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ceph-node-ssh"}},
+					},
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:  "ceph-0",
+							Site:  "dc1",
+							Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
+						}},
+					},
+				},
 			},
 		}},
 		StorageExports: []v1alpha1.StorageExport{{

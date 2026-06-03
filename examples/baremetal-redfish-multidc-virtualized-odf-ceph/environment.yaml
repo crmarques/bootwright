@@ -27,6 +27,7 @@ spec:
         generated:
           sshKeyPair:
             comment: bootwright-cephadm
+    - ceph-registry-credentials
 
   infraComponents:
     artifactServers:

@@ -17,6 +17,10 @@ spec:
             clusterInfra: ceph-storage-infra
             name: ceph-dc1-0
           interface: primary
+      registry:
+        url: registry.redhat.io
+        credentialsRef:
+          name: ceph-registry-credentials
       nodeSSH:
         user: root
         keyPairRef:
