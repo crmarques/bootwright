@@ -20,6 +20,7 @@ import (
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -209,9 +210,9 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	if !ok {
 		return nil, fmt.Errorf("StorageCluster/%s seedNode %q is not listed in spec.ceph.topology.nodes", cluster.Metadata.Name, seedNode)
 	}
-	host, ok := storageExportHostByName(state, node.HostRef.Name)
+	host, ok := topology.NodeHost(state, cluster, node.Name)
 	if !ok {
-		return nil, fmt.Errorf("StorageCluster/%s seedNode %q hostRef %q does not match any Host", cluster.Metadata.Name, seedNode, node.HostRef.Name)
+		return nil, fmt.Errorf("StorageCluster/%s seedNode %q does not resolve to a host-sourced ClusterInfra node", cluster.Metadata.Name, seedNode)
 	}
 	if host.Spec.SSH == nil {
 		return nil, fmt.Errorf("host/%s spec.ssh is required", host.Metadata.Name)
@@ -237,15 +238,6 @@ func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alph
 		}
 	}
 	return v1alpha1.StorageCephNode{}, false
-}
-
-func storageExportHostByName(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
-	for _, host := range state.Hosts {
-		if host.Metadata.Name == name {
-			return host, true
-		}
-	}
-	return v1alpha1.Host{}, false
 }
 
 func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {

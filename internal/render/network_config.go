@@ -8,27 +8,27 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent) (v1alpha1.NetworkConfig, bool) {
-	if machine.NetworkConfig.Spec != nil {
+func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent) (v1alpha1.NetworkConfig, bool) {
+	if machine.Network.Spec != nil {
 		return v1alpha1.NetworkConfig{
 			Metadata: v1alpha1.Metadata{Name: fmt.Sprintf("%s/%s", ci.Metadata.Name, machine.Name)},
-			Spec:     *machine.NetworkConfig.Spec,
+			Spec:     *machine.Network.Spec,
 		}, true
 	}
-	if machine.NetworkConfig.Ref.Name != "" {
-		return findNetworkConfig(state, machine.NetworkConfig.Ref.Name)
+	if machine.Network.NetworkConfigRef.Name != "" {
+		return findNetworkConfig(state, machine.Network.NetworkConfigRef.Name)
 	}
 	return v1alpha1.NetworkConfig{}, false
 }
 
-func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent) map[string]any {
+func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent) map[string]any {
 	network, ok := machineNetworkDefinition(state, ci, machine)
 	if !ok {
 		return nil
 	}
 	out := cloneYAMLMap(network.Spec.Template.NetworkConfig)
-	if len(machine.NetworkConfig.Overrides) > 0 {
-		mergeNetworkConfigOverrides(out, machine.NetworkConfig.Overrides)
+	if len(machine.Network.Overrides) > 0 {
+		mergeNetworkConfigOverrides(out, machine.Network.Overrides)
 	}
 	return out
 }

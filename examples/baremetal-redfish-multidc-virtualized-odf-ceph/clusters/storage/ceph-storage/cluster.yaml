@@ -10,13 +10,13 @@ spec:
 
   ceph:
     cephadm:
+      addressRef:
+        name: ssh
       bootstrap:
         seedNode: ceph-dc1-0
         monIP:
-          machineRef:
-            clusterInfra: ceph-storage-infra
+          nodeRef:
             name: ceph-dc1-0
-          interface: primary
       registry:
         url: registry.redhat.io
         credentialsRef:
@@ -45,8 +45,6 @@ spec:
         ruleName: stretch-replicated
       nodes:
         - name: ceph-dc1-0
-          hostRef:
-            name: ceph-dc1-0
           site: dc1
           roles:
             - mon
@@ -58,8 +56,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc1-1
-          hostRef:
-            name: ceph-dc1-1
           site: dc1
           roles:
             - mon
@@ -71,8 +67,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc1-2
-          hostRef:
-            name: ceph-dc1-2
           site: dc1
           roles:
             - osd
@@ -82,8 +76,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-0
-          hostRef:
-            name: ceph-dc2-0
           site: dc2
           roles:
             - mon
@@ -95,8 +87,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-1
-          hostRef:
-            name: ceph-dc2-1
           site: dc2
           roles:
             - mon
@@ -108,8 +98,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-dc2-2
-          hostRef:
-            name: ceph-dc2-2
           site: dc2
           roles:
             - osd
@@ -119,8 +107,6 @@ spec:
           devices:
             - /dev/sdb
         - name: ceph-arbiter
-          hostRef:
-            name: ceph-arbiter
           site: dc3
           roles:
             - mon

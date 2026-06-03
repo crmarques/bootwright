@@ -65,10 +65,10 @@ func dnsRecordsState() v1alpha1.State {
 					"api-int":            {Address: "192.168.130.10"},
 					"apps":               {Address: "192.168.130.11"},
 				},
-				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
 					Name: "master-a",
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-						Ref: v1alpha1.LocalObjectReference{Name: "managed-net"},
+					Network: v1alpha1.ClusterNodeNetwork{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "managed-net"},
 					},
 				}}},
 			},
@@ -79,7 +79,7 @@ func dnsRecordsState() v1alpha1.State {
 				Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
 				Nodes: []v1alpha1.OCPNodeSpec{{
 					Hostname: "master-a",
-					MachineRef: v1alpha1.NodeMachineRef{
+					InfraNodeRef: v1alpha1.InfraNodeRef{
 						ClusterInfra: "infra-a",
 						Name:         "master-a",
 					},

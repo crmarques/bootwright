@@ -21,12 +21,12 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInfra, networkConfigs map[string]
 			}
 		}
 	}
-	for _, machine := range ci.Spec.Components.Machines {
-		if machine.NetworkConfig.Spec == nil {
+	for _, machine := range ci.Spec.Components.Nodes {
+		if machine.Network.Spec == nil {
 			continue
 		}
 		name := ci.Metadata.Name + "/" + machine.Name
-		for _, machineNetwork := range machine.NetworkConfig.Spec.MachineNetwork {
+		for _, machineNetwork := range machine.Network.Spec.MachineNetwork {
 			if cidrContainsIP(machineNetwork.CIDR, ip) {
 				matchedCIDRs[machineNetwork.CIDR] = name
 			}
@@ -38,6 +38,18 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInfra, networkConfigs map[string]
 	}
 	sort.Strings(matches)
 	return matches
+}
+
+func clusterInfraHasSelectedInstallNetwork(ci v1alpha1.ClusterInfra) bool {
+	if len(stateview.ClusterConsumedNetworkConfigs(ci)) > 0 {
+		return true
+	}
+	for _, node := range ci.Spec.Components.Nodes {
+		if node.Network.Spec != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func networkConfigContainsIP(networkConfig v1alpha1.NetworkConfig, ip net.IP) bool {

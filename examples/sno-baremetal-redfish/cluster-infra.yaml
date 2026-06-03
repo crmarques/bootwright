@@ -31,13 +31,15 @@ spec:
         name: bmc
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: rack1-baremetal-provider
-          name: rack1-srv1
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal-provider
+          machineRef:
+            name: rack1-srv1
+        network:
+          networkConfigRef:
             name: rack1-vlan140-machine
           overrides:
             interfaces:

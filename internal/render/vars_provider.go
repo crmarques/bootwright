@@ -211,10 +211,10 @@ func machineInterfaceVars(interfaces []v1alpha1.MachineInterface) []any {
 	return out
 }
 
-func clusterMachineNetworkConfigVars(n v1alpha1.ClusterMachineNetworkConfig) map[string]any {
+func clusterMachineNetworkConfigVars(n v1alpha1.ClusterNodeNetwork) map[string]any {
 	out := map[string]any{}
-	if n.Ref.Name != "" {
-		out["ref"] = n.Ref.Name
+	if n.NetworkConfigRef.Name != "" {
+		out["ref"] = n.NetworkConfigRef.Name
 	}
 	if len(n.Overrides) > 0 {
 		out["overrides"] = n.Overrides

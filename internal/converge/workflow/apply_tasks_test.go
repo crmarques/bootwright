@@ -900,16 +900,11 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	state.ClusterInfras = []v1alpha1.ClusterInfra{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
 		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Machines: []v1alpha1.ClusterMachineComponent{{
+			Nodes: []v1alpha1.ClusterNodeComponent{{
 				Name: "ceph-0",
-				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{Spec: &v1alpha1.NetworkConfigSpec{
-					Template: v1alpha1.NetworkConfigTemplate{NetworkConfig: map[string]any{
-						"interfaces": []any{map[string]any{
-							"name": "eth0",
-							"ipv4": map[string]any{"address": []any{map[string]any{"ip": "10.10.10.10"}}},
-						}},
-					}},
-				}},
+				Source: v1alpha1.ClusterNodeSource{
+					HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+				},
 			}},
 		}},
 	}}
@@ -1186,6 +1181,17 @@ func storageAttachmentPlanningState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+					Name: "ceph-0",
+					Source: v1alpha1.ClusterNodeSource{
+						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+					},
+				}}},
+			},
+		}},
 		Hosts: []v1alpha1.Host{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
 			Spec: v1alpha1.HostSpec{
@@ -1205,12 +1211,10 @@ func storageAttachmentPlanningState() v1alpha1.State {
 				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							SeedNode: "ceph-0",
-							MonIP: v1alpha1.StorageMachineIPRef{
-								MachineRef: v1alpha1.StorageMachineRef{ClusterInfra: "ceph-infra", Name: "ceph-0"},
-								Interface:  "primary",
-							},
+							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
 						},
 						Registry: v1alpha1.StorageCephadmRegistry{
 							URL:            "registry.redhat.io",
@@ -1219,10 +1223,9 @@ func storageAttachmentPlanningState() v1alpha1.State {
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
-							Name:    "ceph-0",
-							HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
-							Site:    "dc1",
-							Roles:   []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
+							Name:  "ceph-0",
+							Site:  "dc1",
+							Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
 						}},
 					},
 				},
@@ -1314,7 +1317,7 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 		Metadata: v1alpha1.Metadata{Name: "child-ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
 			Hostname: "master-0",
-			MachineRef: v1alpha1.NodeMachineRef{
+			InfraNodeRef: v1alpha1.InfraNodeRef{
 				ClusterInfra: "child-ocp-infra",
 				Name:         "master-0",
 			},
@@ -1328,9 +1331,9 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "child-ocp-infra"},
 			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
-					Name: "master-0",
-					From: v1alpha1.From{Provider: "child-kubevirt-provider", Profile: "sno"},
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+					Name:   "master-0",
+					Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "child-kubevirt-provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "sno"}},
 				}}},
 			},
 		}},

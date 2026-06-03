@@ -67,9 +67,9 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 			continue
 		}
 		filteredInfra = append(filteredInfra, infra)
-		for _, m := range infra.Spec.Components.Machines {
-			if m.From.Provider != "" {
-				selectedProviders[m.From.Provider] = true
+		for _, m := range infra.Spec.Components.Nodes {
+			if m.Source.ProviderRef.Name != "" {
+				selectedProviders[m.Source.ProviderRef.Name] = true
 			}
 		}
 	}
@@ -160,9 +160,9 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 			continue
 		}
 		infras = append(infras, infra)
-		for _, machine := range infra.Spec.Components.Machines {
-			if machine.From.Provider != "" {
-				selectedProviders[machine.From.Provider] = true
+		for _, machine := range infra.Spec.Components.Nodes {
+			if machine.Source.ProviderRef.Name != "" {
+				selectedProviders[machine.Source.ProviderRef.Name] = true
 			}
 		}
 	}
@@ -252,9 +252,9 @@ func filterStateToStorageClustersForApply(state v1alpha1.State, names []string) 
 			continue
 		}
 		infras = append(infras, infra)
-		for _, machine := range infra.Spec.Components.Machines {
-			if machine.From.Provider != "" {
-				selectedProviders[machine.From.Provider] = true
+		for _, machine := range infra.Spec.Components.Nodes {
+			if machine.Source.ProviderRef.Name != "" {
+				selectedProviders[machine.Source.ProviderRef.Name] = true
 			}
 		}
 	}

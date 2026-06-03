@@ -33,7 +33,7 @@ func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraCom
 // loadBalancerFrontends projects per-cluster HAProxy frontends from
 // the cluster's endpoints + machine IPs. Each frontend also carries a
 // substrate-blind attachment block consumed by network_vips.
-func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, componentName, clusterName string, machines []v1alpha1.ClusterMachineComponent, nodes map[string]v1alpha1.OCPNodeSpec) []any {
+func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInfra, componentName, clusterName string, machines []v1alpha1.ClusterNodeComponent, nodes map[string]v1alpha1.OCPNodeSpec) []any {
 	out := []any{}
 	ocp, ok := findContainerCluster(state, clusterName)
 	if !ok {
@@ -122,7 +122,7 @@ func cidrPrefix(cidr string) int {
 
 func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPNodeSpec) string {
 	for _, node := range nodes {
-		ref := node.MachineRef.Name
+		ref := node.InfraNodeRef.Name
 		if ref == machineName {
 			return node.Role
 		}
@@ -130,7 +130,7 @@ func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPNodeSpec) stri
 	return ""
 }
 
-func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent) string {
+func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent) string {
 	return networkConfigPrimaryIP(agentNetworkConfig(state, ci, m, ""))
 }
 

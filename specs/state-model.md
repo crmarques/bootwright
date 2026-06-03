@@ -326,17 +326,17 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: prod-3node-infra
         name: master-0
     - hostname: master-1
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: prod-3node-infra
         name: master-1
     - hostname: master-2
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: prod-3node-infra
         name: master-2
 ```
@@ -380,8 +380,8 @@ Rules:
 - `servingCertificates.ingress.defaultCertificateRef` renders the default
   ingress certificate Secret plus `IngressController/default`. The certificate
   must cover `*.apps.<cluster>.<baseDomain>`.
-- Every node binds to a `ClusterInfra` machine by
-  `nodes[].machineRef.clusterInfra` and `nodes[].machineRef.name`.
+- Every OpenShift node binds to a provider-sourced `ClusterInfra` node by
+  `nodes[].infraNodeRef.clusterInfra` and `nodes[].infraNodeRef.name`.
 - In v1, all nodes in one cluster must reference the same `ClusterInfra`.
 - `networking` is required. `clusterNetwork[]` and `serviceNetwork[]` must
   each contain at least one valid CIDR. Each `clusterNetwork[].hostPrefix` is
@@ -392,11 +392,12 @@ Rules:
 
 ## Storage
 
-The first storage implementation provisions external Ceph with `cephadm`.
-Storage nodes are modeled as machines in a storage-only `ClusterInfra` for
-network and hardware facts, and as `Host` objects for durable SSH connection
-details. They are assumed to already run RHEL and be reachable by the Ansible
-storage layer from the bastion over SSH.
+The first managed storage implementation provisions Ceph with `cephadm` on
+OS-installed hosts. Storage nodes are named in a storage-only `ClusterInfra`
+and each matching infra node must use `source.hostRef` to point at a `Host`.
+`Host` owns durable SSH connection details and named addresses. Storage nodes
+are assumed to already run RHEL and be reachable by the Ansible storage layer
+from the bastion over SSH.
 
 Full-managed storage, where Bootwright customizes a RHEL ISO/kickstart, boots
 bare metal through BMCs, installs RHEL, and then runs the managed Ceph flow, is
@@ -424,14 +425,15 @@ spec:
 
   ceph:
     cephadm:
+      addressRef:
+        name: public
       bootstrap:
         seedNode: ceph-dc1-0
         monIP:
-          machineRef:
-            clusterInfra: ceph-stretch-infra
+          nodeRef:
             name: ceph-dc1-0
-          interface: primary
-          family: ipv4
+          addressRef:
+            name: public
       registry:
         url: registry.redhat.io
         credentialsRef:
@@ -456,8 +458,6 @@ spec:
         ruleName: stretch-replicated
       nodes:
         - name: ceph-dc1-0
-          hostRef:
-            name: ceph-dc1-0
           site: dc1
           roles:
             - mon
@@ -471,8 +471,14 @@ spec:
 Rules:
 
 - `StorageCluster.spec.ceph.cephadm.bootstrap.monIP` is singular because
-  `cephadm bootstrap` creates the first monitor on one seed host. HA monitor
-  placement is declared through the rendered cephadm service specs.
+  `cephadm bootstrap` creates the first monitor on one seed host. `nodeRef`
+  names a `StorageCluster.spec.ceph.topology.nodes[]` entry; `addressRef`
+  names a `Host.spec.addresses[]` entry on the Host behind the matching
+  `ClusterInfra.spec.components.nodes[].source.hostRef`. When omitted,
+  `bootstrap.monIP.addressRef.name` defaults from `cephadm.addressRef.name`.
+  When `cephadm.addressRef.name` is omitted, Bootwright uses each Host's SSH
+  address for Ceph host `addr` resolution. HA monitor placement is declared
+  through the rendered cephadm service specs.
 - `StorageCluster.spec.ceph.cephadm.registry` is required for managed Ceph.
   `url` names the image registry, `credentialsRef` points at credential
   material, and optional `trustBundleRef` points at a registry CA bundle.
@@ -480,7 +486,8 @@ Rules:
 - `StorageCluster.spec.management: external` disables Bootwright-managed Ceph
   provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
   and `StorageObjectGateway` are not declared for imported Ceph.
-- Each managed `StorageCluster.spec.ceph.topology.nodes[].hostRef.name`
+- Each managed `StorageCluster.spec.ceph.topology.nodes[].name` must match a
+  `ClusterInfra.spec.components.nodes[].name` whose `source.hostRef.name`
   references a `Host` with capability `ceph-node`. The referenced
   `Host.spec.ssh` owns the bastion-to-node Ansible SSH identity and the SSH
   identity copied to the seed host for cephadm orchestration. All storage-node
@@ -852,17 +859,19 @@ Rules:
   Bootwright service-selection intent and must stay outside the raw NMState
   template. Resolved IPs are appended to generated
   `dns-resolver.config.server` entries.
-- `ClusterInfra.spec.components.machines[].networkConfig` accepts either a
-  reusable `ref` plus raw NMState `overrides`, or a complete inline `spec`.
-  `ref` and `spec` are mutually exclusive.
-- When `ref` is used, `overrides` is merged into the referenced
+- `ClusterInfra.spec.components.nodes[].network` accepts either a reusable
+  `networkConfigRef` plus raw NMState `overrides`, or a complete inline
+  `spec`. `networkConfigRef` and `spec` are mutually exclusive. `network` is
+  valid only for provider-sourced nodes.
+- When `networkConfigRef` is used, `overrides` is merged into the referenced
   `NetworkConfig.spec.template.networkConfig` by updating the declared nested
   fields instead of replacing the whole original tree. Interface lists are
   matched by `name` before nested attributes are merged.
 - Static per-machine IPs belong in
   `overrides.interfaces[].ipv4.address[]` or
   `overrides.interfaces[].ipv6.address[]`, and must fit at least one
-  referenced machine network CIDR.
+  referenced machine network CIDR. Host-sourced nodes use
+  `Host.spec.addresses[]` and never use `NetworkConfig`.
 - Substrate attachments such as libvirt bridges, vSphere portgroups,
   KubeVirt NADs, and bare-metal VLANs belong to
   `InfraProvider.spec.networkAttachments[]` and are selected from
@@ -870,10 +879,12 @@ Rules:
 
 ## Host
 
-`Host` owns how Bootwright reaches a durable machine that runs provider,
-service, external Ceph admin, or managed Ceph node actions. OpenShift install
-nodes are still declared through `ContainerCluster.spec.nodes[]` and selected
-machines in `ClusterInfra`; their installer SSH trust remains
+`Host` means an OS-installed, reachable execution target with SSH and named
+addresses. It owns how Bootwright reaches durable provider, service, external
+Ceph admin, or managed Ceph node actions. Raw or provider-owned substrate
+inventory remains under `InfraProvider.spec.machines[]`. OpenShift install
+nodes are still declared through `ContainerCluster.spec.nodes[]` and
+provider-sourced nodes in `ClusterInfra`; their installer SSH trust remains
 `ContainerCluster.spec.install.nodeSSH`.
 
 ```yaml
@@ -1238,13 +1249,15 @@ spec:
         name: rack1-vlan
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: rack1-baremetal
-          name: rack1-srv1
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal
+          machineRef:
+            name: rack1-srv1
+        network:
+          networkConfigRef:
             name: rack1-bonded-machine
           overrides:
             interfaces:
@@ -1254,11 +1267,13 @@ spec:
                     - ip: 192.168.133.20
                       prefix-length: 24
       - name: master-1
-        from:
-          provider: rack1-baremetal
-          name: rack1-srv2
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal
+          machineRef:
+            name: rack1-srv2
+        network:
+          networkConfigRef:
             name: rack1-bonded-machine
           overrides:
             interfaces:
@@ -1268,11 +1283,13 @@ spec:
                     - ip: 192.168.133.21
                       prefix-length: 24
       - name: master-2
-        from:
-          provider: rack1-baremetal
-          name: rack1-srv3
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal
+          machineRef:
+            name: rack1-srv3
+        network:
+          networkConfigRef:
             name: rack1-bonded-machine
           overrides:
             interfaces:
@@ -1286,15 +1303,22 @@ spec:
 
 Rules:
 
-- `platform.type` is required: `baremetal`, `vsphere`, `none`, or `external`.
-  This is the installer platform render mode, not the substrate type; substrate
-  ownership remains with selected `InfraProvider` machines or profiles.
+- `platform.type` is required when a `ContainerCluster` installs against the
+  `ClusterInfra`: `baremetal`, `vsphere`, `none`, or `external`. This is the
+  installer platform render mode, not the substrate type; substrate ownership
+  remains with selected `InfraProvider` machines or profiles.
 - Bare-metal `provisioningNetwork`, when set, is `disabled`, `managed`, or
   `unmanaged`. `disabled` renders OpenShift bare metal in "no dedicated
   provisioning network" mode and is appropriate for agent installs using
   Redfish virtual media on the existing machine network.
-- `components.machines[]` selects provider machines or profiles and applies
-  per-machine network overrides.
+- `components.nodes[]` is the neutral cluster-member list for OpenShift and
+  storage workflows. `source` must set exactly one of `hostRef` or
+  `providerRef`. When `providerRef` is set, exactly one of `machineRef` or
+  `profileRef` is required.
+- Provider-sourced nodes select provider machines or profiles and may apply
+  per-node install network overrides through `network`.
+- Host-sourced nodes reference OS-installed reachable `Host` targets and must
+  not set `network` or `rootDeviceHints`.
 - `networkBindings[]` maps a logical `NetworkConfig` and selected provider to
   one `InfraProvider.spec.networkAttachments[]` entry. Bindings are unique per
   `(providerRef.name, networkConfigRef.name)` pair.
@@ -1380,10 +1404,10 @@ Bootwright renders:
   matching the upstream agent installer constraint for one control-plane and
   zero compute nodes.
 - `agent-config.yaml hosts[]` by matching `ContainerCluster.spec.nodes[]` to
-  `ClusterInfra.spec.components.machines[]`.
+  provider-sourced `ClusterInfra.spec.components.nodes[]`.
 - `agent-config.yaml hosts[].networkConfig` from inline
-  `networkConfig.spec` definitions or referenced `NetworkConfig` templates
-  plus machine overrides.
+  `network.spec` definitions or referenced `NetworkConfig` templates plus
+  node overrides.
 - `agent-config.yaml hosts[].networkConfig.dns-resolver.config.server` from
   static NMState servers plus `NetworkConfig.spec.dnsRefs[]`, de-duplicated in
   that order.

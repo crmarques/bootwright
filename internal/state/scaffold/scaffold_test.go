@@ -125,7 +125,7 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		"environment.yaml":                       {"name: my-cluster"},
 		"shared/networks.yaml":                   {"name: my-cluster-bridge"},
 		"shared/provider.yaml":                   {"name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster-infra.yaml": {"name: my-cluster", "provider: my-cluster-libvirt"},
+		"clusters/my-cluster/cluster-infra.yaml": {"name: my-cluster", "providerRef:\n            name: my-cluster-libvirt"},
 		"clusters/my-cluster/cluster.yaml":       {"name: my-cluster"},
 	}
 	for _, f := range files {

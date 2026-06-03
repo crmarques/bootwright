@@ -10,6 +10,7 @@ import (
 func validateClusterInfras(state v1alpha1.State) []string {
 	var errs []string
 	providers := indexProviders(state.InfraProviders)
+	hosts := indexHosts(state.Hosts)
 	networkConfigs := indexNetworkConfigs(state.NetworkConfigs)
 	dnsRefs := networkConfigDNSRefs(state)
 	components := indexInfraComponents(state.InfraComponents)
@@ -25,13 +26,13 @@ func validateClusterInfras(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate ClusterInfra %q", ci.Metadata.Name))
 		}
 		seen[ci.Metadata.Name] = true
-		errs = append(errs, validateClusterPlatform(ci)...)
+		errs = append(errs, validateClusterPlatform(ci, containerInfraNames[ci.Metadata.Name])...)
 		if containerInfraNames[ci.Metadata.Name] || len(ci.Spec.Endpoints) > 0 {
 			errs = append(errs, validateClusterEndpoints(ci, components, networkConfigs, containerInfraNames[ci.Metadata.Name])...)
 		}
 		errs = append(errs, validateClusterArtifactAccess(ci, env, components)...)
 		errs = append(errs, validateClusterNetworkBindings(ci, providers, networkConfigs)...)
-		errs = append(errs, validateClusterMachines(ci, providers, networkConfigs, dnsRefs)...)
+		errs = append(errs, validateClusterNodes(ci, providers, hosts, networkConfigs, dnsRefs)...)
 		errs = append(errs, validateClusterServices(ci, providers)...)
 	}
 	return errs
@@ -103,12 +104,14 @@ func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string
 	return nil
 }
 
-func validateClusterPlatform(ci v1alpha1.ClusterInfra) []string {
+func validateClusterPlatform(ci v1alpha1.ClusterInfra, required bool) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterInfra/%s spec.platform", ci.Metadata.Name)
 	switch ci.Spec.Platform.Type {
 	case "":
-		errs = append(errs, fmt.Sprintf("%s.type is required", prefix))
+		if required || ci.Spec.Platform.BareMetal != nil || ci.Spec.Platform.VSphere != nil || ci.Spec.Platform.External != nil {
+			errs = append(errs, fmt.Sprintf("%s.type is required", prefix))
+		}
 	case v1alpha1.PlatformTypeBareMetal:
 		if ci.Spec.Platform.VSphere != nil || ci.Spec.Platform.External != nil {
 			errs = append(errs, fmt.Sprintf("%s.type=baremetal must not set vsphere or external", prefix))
@@ -163,8 +166,8 @@ func referencedContainerClusterInfraNames(state v1alpha1.State) map[string]bool 
 	out := map[string]bool{}
 	for _, cluster := range state.ContainerClusters {
 		for _, node := range cluster.Spec.Nodes {
-			if node.MachineRef.ClusterInfra != "" {
-				out[node.MachineRef.ClusterInfra] = true
+			if node.InfraNodeRef.ClusterInfra != "" {
+				out[node.InfraNodeRef.ClusterInfra] = true
 			}
 		}
 	}
@@ -236,6 +239,9 @@ func validateClusterEndpoint(ci v1alpha1.ClusterInfra, components map[string]v1a
 
 func validateEndpointAddressNetwork(prefix string, ci v1alpha1.ClusterInfra, networkConfigs map[string]v1alpha1.NetworkConfig, address string, ip net.IP) []string {
 	var errs []string
+	if !clusterInfraHasSelectedInstallNetwork(ci) {
+		return errs
+	}
 	matches := endpointNetworkMatches(ci, networkConfigs, ip)
 	switch len(matches) {
 	case 0:
@@ -354,73 +360,96 @@ func validateClusterNetworkBindings(ci v1alpha1.ClusterInfra, providers map[stri
 	return errs
 }
 
-func validateClusterMachines(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
+func validateClusterNodes(ci v1alpha1.ClusterInfra, providers map[string]v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
 	var errs []string
-	if len(ci.Spec.Components.Machines) == 0 {
-		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.components.machines is required (at least one machine)", ci.Metadata.Name))
-		return errs
-	}
 	seen := map[string]bool{}
-	for i, m := range ci.Spec.Components.Machines {
-		prefix := fmt.Sprintf("ClusterInfra/%s spec.components.machines[%d]", ci.Metadata.Name, i)
+	for i, m := range ci.Spec.Components.Nodes {
+		prefix := fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%d]", ci.Metadata.Name, i)
 		if m.Name == "" {
 			errs = append(errs, fmt.Sprintf("%s.name is required", prefix))
 			continue
 		}
-		prefix = fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s]", ci.Metadata.Name, m.Name)
+		prefix = fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s]", ci.Metadata.Name, m.Name)
 		if seen[m.Name] {
 			errs = append(errs, fmt.Sprintf("%s has duplicate name", prefix))
 		}
 		seen[m.Name] = true
-		errs = append(errs, validateClusterMachineFrom(prefix, ci, m, providers)...)
-		errs = append(errs, validateClusterMachineNetworkConfig(prefix, m, networkConfigs, dnsRefs)...)
-		errs = append(errs, validateClusterMachineNetworkBinding(prefix, ci, m, providers)...)
-		errs = append(errs, validateBareMetalMachineNetworkInterfaces(prefix, m, providers, networkConfigs)...)
+		sourceKind, sourceErrs := validateClusterNodeSource(prefix, ci, m, providers, hosts)
+		errs = append(errs, sourceErrs...)
+		if sourceKind == "provider" {
+			errs = append(errs, validateClusterNodeNetwork(prefix, m, networkConfigs, dnsRefs)...)
+			errs = append(errs, validateClusterNodeNetworkBinding(prefix, ci, m, providers)...)
+			errs = append(errs, validateBareMetalNodeNetworkInterfaces(prefix, m, providers, networkConfigs)...)
+		} else if sourceKind == "host" {
+			errs = append(errs, validateHostSourcedNode(prefix, m)...)
+		}
 	}
 	return errs
 }
 
-func validateClusterMachineFrom(prefix string, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider) []string {
+func validateClusterNodeSource(prefix string, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, providers map[string]v1alpha1.InfraProvider, hosts map[string]v1alpha1.Host) (string, []string) {
 	var errs []string
-	if m.From.Provider == "" {
-		errs = append(errs, fmt.Sprintf("%s.from.provider is required", prefix))
-		return errs
+	hasHost := m.Source.HostRef.Name != ""
+	hasProvider := m.Source.ProviderRef.Name != ""
+	if hasHost == hasProvider {
+		errs = append(errs, fmt.Sprintf("%s.source must set exactly one of {hostRef, providerRef}", prefix))
+		return "", errs
 	}
-	provider, ok := providers[m.From.Provider]
+	if hasHost {
+		if m.Source.MachineRef.Name != "" || m.Source.ProfileRef.Name != "" {
+			errs = append(errs, fmt.Sprintf("%s.source.hostRef must not set machineRef or profileRef", prefix))
+		}
+		if _, ok := hosts[m.Source.HostRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.source.hostRef.name %q does not match any Host", prefix, m.Source.HostRef.Name))
+		}
+		return "host", errs
+	}
+	provider, ok := providers[m.Source.ProviderRef.Name]
 	if !ok {
-		errs = append(errs, fmt.Sprintf("%s.from.provider %q does not match any InfraProvider", prefix, m.From.Provider))
-		return errs
+		errs = append(errs, fmt.Sprintf("%s.source.providerRef.name %q does not match any InfraProvider", prefix, m.Source.ProviderRef.Name))
+		return "provider", errs
 	}
-	hasProfile := m.From.Profile != ""
-	hasName := m.From.Name != ""
+	hasProfile := m.Source.ProfileRef.Name != ""
+	hasName := m.Source.MachineRef.Name != ""
 	if hasProfile == hasName {
-		errs = append(errs, fmt.Sprintf("%s.from must set exactly one of {profile, name}", prefix))
-		return errs
+		errs = append(errs, fmt.Sprintf("%s.source.providerRef must set exactly one of {machineRef, profileRef}", prefix))
+		return "provider", errs
 	}
 	if hasProfile {
-		profile, ok := lookupMachineProfile(provider, m.From.Profile)
+		profile, ok := lookupMachineProfile(provider, m.Source.ProfileRef.Name)
 		if !ok {
-			return append(errs, fmt.Sprintf("%s.from.profile %q is not defined on InfraProvider/%s spec.machineProfiles",
-				prefix, m.From.Profile, provider.Metadata.Name))
+			return "provider", append(errs, fmt.Sprintf("%s.source.profileRef.name %q is not defined on InfraProvider/%s spec.machineProfiles",
+				prefix, m.Source.ProfileRef.Name, provider.Metadata.Name))
 		}
 		profileKind := v1alpha1.ProfileProvisionerKind(profile)
 		if ci.Spec.Platform.Type == v1alpha1.PlatformTypeVSphere && profileKind != v1alpha1.ProvisionerVSphere {
-			errs = append(errs, fmt.Sprintf("%s.from.profile %q uses %q but ClusterInfra/%s spec.platform.type is %q",
-				prefix, m.From.Profile, profileKind, ci.Metadata.Name, ci.Spec.Platform.Type))
+			errs = append(errs, fmt.Sprintf("%s.source.profileRef.name %q uses %q but ClusterInfra/%s spec.platform.type is %q",
+				prefix, m.Source.ProfileRef.Name, profileKind, ci.Metadata.Name, ci.Spec.Platform.Type))
 		}
 		if ci.Spec.Platform.Type == v1alpha1.PlatformTypeVSphere && profile.VSphere != nil {
 			errs = append(errs, validateVSphereMultiNICNodeNetworking(prefix, ci, profile)...)
 		}
-		return errs
+		return "provider", errs
 	}
-	server, ok := lookupMachine(provider, m.From.Name)
+	server, ok := lookupMachine(provider, m.Source.MachineRef.Name)
 	if !ok {
-		return append(errs, fmt.Sprintf("%s.from.name %q is not defined on InfraProvider/%s spec.machines",
-			prefix, m.From.Name, provider.Metadata.Name))
+		return "provider", append(errs, fmt.Sprintf("%s.source.machineRef.name %q is not defined on InfraProvider/%s spec.machines",
+			prefix, m.Source.MachineRef.Name, provider.Metadata.Name))
 	}
 	if v1alpha1.MachineProvisionerKind(server) == v1alpha1.ProvisionerBareMetal && ci.Spec.Platform.Type != "" && ci.Spec.Platform.Type != v1alpha1.PlatformTypeBareMetal {
-		errs = append(errs, fmt.Sprintf("%s.from.name %q is baremetal but ClusterInfra/%s spec.platform.type is %q",
-			prefix, m.From.Name, ci.Metadata.Name, ci.Spec.Platform.Type))
+		errs = append(errs, fmt.Sprintf("%s.source.machineRef.name %q is baremetal but ClusterInfra/%s spec.platform.type is %q",
+			prefix, m.Source.MachineRef.Name, ci.Metadata.Name, ci.Spec.Platform.Type))
+	}
+	return "provider", errs
+}
+
+func validateHostSourcedNode(prefix string, m v1alpha1.ClusterNodeComponent) []string {
+	var errs []string
+	if m.Network.NetworkConfigRef.Name != "" || m.Network.Spec != nil || len(m.Network.Overrides) > 0 {
+		errs = append(errs, prefix+".network must be empty when source.hostRef is set")
+	}
+	if m.RootDeviceHints != nil {
+		errs = append(errs, prefix+".rootDeviceHints must be empty when source.hostRef is set")
 	}
 	return errs
 }
@@ -436,44 +465,44 @@ func validateVSphereMultiNICNodeNetworking(prefix string, ci v1alpha1.ClusterInf
 	}
 	for _, fd := range profile.VSphere.FailureDomains {
 		if len(fd.Topology.Networks) > 1 {
-			return []string{fmt.Sprintf("%s.from.profile %q declares multiple vSphere topology networks; set ClusterInfra/%s spec.platform.vsphere.nodeNetworking or InfraProvider profile nodeNetworking so machineNetwork mapping is explicit",
+			return []string{fmt.Sprintf("%s.source.profileRef.name %q declares multiple vSphere topology networks; set ClusterInfra/%s spec.platform.vsphere.nodeNetworking or InfraProvider profile nodeNetworking so machineNetwork mapping is explicit",
 				prefix, profile.Name, ci.Metadata.Name)}
 		}
 	}
 	return nil
 }
 
-func validateClusterMachineNetworkConfig(prefix string, m v1alpha1.ClusterMachineComponent, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
+func validateClusterNodeNetwork(prefix string, m v1alpha1.ClusterNodeComponent, networkConfigs map[string]v1alpha1.NetworkConfig, dnsRefs map[string]bool) []string {
 	var errs []string
-	hasRef := m.NetworkConfig.Ref.Name != ""
-	hasSpec := m.NetworkConfig.Spec != nil
+	hasRef := m.Network.NetworkConfigRef.Name != ""
+	hasSpec := m.Network.Spec != nil
 	if hasRef == hasSpec {
-		errs = append(errs, fmt.Sprintf("%s.networkConfig must set exactly one of {ref, spec}", prefix))
+		errs = append(errs, fmt.Sprintf("%s.network must set exactly one of {networkConfigRef, spec}", prefix))
 		return errs
 	}
 	if hasSpec {
-		if len(m.NetworkConfig.Overrides) > 0 {
-			errs = append(errs, fmt.Sprintf("%s.networkConfig.overrides is only valid with networkConfig.ref", prefix))
+		if len(m.Network.Overrides) > 0 {
+			errs = append(errs, fmt.Sprintf("%s.network.overrides is only valid with network.networkConfigRef", prefix))
 		}
-		errs = append(errs, validateNetworkConfigSpec(prefix+".networkConfig.spec", *m.NetworkConfig.Spec, dnsRefs)...)
+		errs = append(errs, validateNetworkConfigSpec(prefix+".network.spec", *m.Network.Spec, dnsRefs)...)
 		return errs
 	}
-	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	networkConfig, ok := networkConfigs[m.Network.NetworkConfigRef.Name]
 	if !ok {
-		errs = append(errs, fmt.Sprintf("%s.networkConfig.ref %q does not match any NetworkConfig", prefix, m.NetworkConfig.Ref.Name))
+		errs = append(errs, fmt.Sprintf("%s.network.networkConfigRef.name %q does not match any NetworkConfig", prefix, m.Network.NetworkConfigRef.Name))
 		return errs
 	}
-	if len(m.NetworkConfig.Overrides) > 0 {
-		errs = append(errs, validateNetworkConfigOverrides(prefix+".networkConfig.overrides", m.NetworkConfig.Overrides, networkConfig)...)
+	if len(m.Network.Overrides) > 0 {
+		errs = append(errs, validateNetworkConfigOverrides(prefix+".network.overrides", m.Network.Overrides, networkConfig)...)
 	}
 	return errs
 }
 
-func validateClusterMachineNetworkBinding(prefix string, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider) []string {
-	if m.From.Provider == "" || m.NetworkConfig.Ref.Name == "" {
+func validateClusterNodeNetworkBinding(prefix string, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, providers map[string]v1alpha1.InfraProvider) []string {
+	if m.Source.ProviderRef.Name == "" || m.Network.NetworkConfigRef.Name == "" {
 		return nil
 	}
-	provider, ok := providers[m.From.Provider]
+	provider, ok := providers[m.Source.ProviderRef.Name]
 	if !ok {
 		return nil
 	}
@@ -481,13 +510,13 @@ func validateClusterMachineNetworkBinding(prefix string, ci v1alpha1.ClusterInfr
 	if !ok {
 		return nil
 	}
-	binding, ok := clusterNetworkBinding(ci, m.From.Provider, m.NetworkConfig.Ref.Name)
+	binding, ok := clusterNetworkBinding(ci, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
 	if !ok {
 		if machineKind == v1alpha1.ProvisionerBareMetal {
 			return nil
 		}
-		return []string{fmt.Sprintf("%s.networkConfig.ref %q has no ClusterInfra/%s spec.networkBindings entry for InfraProvider/%s",
-			prefix, m.NetworkConfig.Ref.Name, ci.Metadata.Name, m.From.Provider)}
+		return []string{fmt.Sprintf("%s.network.networkConfigRef.name %q has no ClusterInfra/%s spec.networkBindings entry for InfraProvider/%s",
+			prefix, m.Network.NetworkConfigRef.Name, ci.Metadata.Name, m.Source.ProviderRef.Name)}
 	}
 	attachment, ok := lookupNetworkAttachment(provider, binding.AttachmentRef.Name)
 	if !ok {
@@ -495,22 +524,22 @@ func validateClusterMachineNetworkBinding(prefix string, ci v1alpha1.ClusterInfr
 	}
 	attachmentKind := v1alpha1.NetworkAttachmentKind(attachment)
 	if attachmentKind != machineKind {
-		return []string{fmt.Sprintf("%s.networkConfig.ref %q binds to InfraProvider/%s networkAttachment %q of kind %q, but machine substrate is %q",
-			prefix, m.NetworkConfig.Ref.Name, provider.Metadata.Name, attachment.Name, attachmentKind, machineKind)}
+		return []string{fmt.Sprintf("%s.network.networkConfigRef.name %q binds to InfraProvider/%s networkAttachment %q of kind %q, but node substrate is %q",
+			prefix, m.Network.NetworkConfigRef.Name, provider.Metadata.Name, attachment.Name, attachmentKind, machineKind)}
 	}
 	return nil
 }
 
-func clusterMachineProvisionerKind(m v1alpha1.ClusterMachineComponent, provider v1alpha1.InfraProvider) (string, bool) {
-	if m.From.Profile != "" {
-		profile, ok := lookupMachineProfile(provider, m.From.Profile)
+func clusterMachineProvisionerKind(m v1alpha1.ClusterNodeComponent, provider v1alpha1.InfraProvider) (string, bool) {
+	if m.Source.ProfileRef.Name != "" {
+		profile, ok := lookupMachineProfile(provider, m.Source.ProfileRef.Name)
 		if !ok {
 			return "", false
 		}
 		return v1alpha1.ProfileProvisionerKind(profile), true
 	}
-	if m.From.Name != "" {
-		machine, ok := lookupMachine(provider, m.From.Name)
+	if m.Source.MachineRef.Name != "" {
+		machine, ok := lookupMachine(provider, m.Source.MachineRef.Name)
 		if !ok {
 			return "", false
 		}
@@ -528,15 +557,15 @@ func clusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkConfig
 	return v1alpha1.ClusterNetworkBinding{}, false
 }
 
-func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.ClusterMachineComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
-	if m.From.Provider == "" || m.From.Name == "" || m.From.Profile != "" {
+func validateBareMetalNodeNetworkInterfaces(prefix string, m v1alpha1.ClusterNodeComponent, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
+	if m.Source.ProviderRef.Name == "" || m.Source.MachineRef.Name == "" || m.Source.ProfileRef.Name != "" {
 		return nil
 	}
-	provider, ok := providers[m.From.Provider]
+	provider, ok := providers[m.Source.ProviderRef.Name]
 	if !ok {
 		return nil
 	}
-	machine, ok := lookupMachine(provider, m.From.Name)
+	machine, ok := lookupMachine(provider, m.Source.MachineRef.Name)
 	if !ok || machine.BareMetal == nil {
 		return nil
 	}
@@ -545,7 +574,7 @@ func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.Cluster
 		return nil
 	}
 	required := templateBareMetalInterfaceNames(networkConfig)
-	for _, name := range overrideBareMetalInterfaceNames(m.NetworkConfig.Overrides) {
+	for _, name := range overrideBareMetalInterfaceNames(m.Network.Overrides) {
 		if !containsString(required, name) {
 			required = append(required, name)
 		}
@@ -560,9 +589,9 @@ func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.Cluster
 		}
 	}
 	var errs []string
-	networkConfigField := "networkConfig.spec"
-	if m.NetworkConfig.Ref.Name != "" {
-		networkConfigField = "networkConfig.ref"
+	networkConfigField := "network.spec"
+	if m.Network.NetworkConfigRef.Name != "" {
+		networkConfigField = "network.networkConfigRef"
 	}
 	for _, name := range required {
 		if declared[name] {
@@ -574,17 +603,17 @@ func validateBareMetalMachineNetworkInterfaces(prefix string, m v1alpha1.Cluster
 	return errs
 }
 
-func clusterMachineNetworkConfigForValidation(m v1alpha1.ClusterMachineComponent, networkConfigs map[string]v1alpha1.NetworkConfig) (v1alpha1.NetworkConfig, bool) {
-	if m.NetworkConfig.Spec != nil {
+func clusterMachineNetworkConfigForValidation(m v1alpha1.ClusterNodeComponent, networkConfigs map[string]v1alpha1.NetworkConfig) (v1alpha1.NetworkConfig, bool) {
+	if m.Network.Spec != nil {
 		return v1alpha1.NetworkConfig{
 			Metadata: v1alpha1.Metadata{Name: "inline"},
-			Spec:     *m.NetworkConfig.Spec,
+			Spec:     *m.Network.Spec,
 		}, true
 	}
-	if m.NetworkConfig.Ref.Name == "" {
+	if m.Network.NetworkConfigRef.Name == "" {
 		return v1alpha1.NetworkConfig{}, false
 	}
-	networkConfig, ok := networkConfigs[m.NetworkConfig.Ref.Name]
+	networkConfig, ok := networkConfigs[m.Network.NetworkConfigRef.Name]
 	return networkConfig, ok
 }
 

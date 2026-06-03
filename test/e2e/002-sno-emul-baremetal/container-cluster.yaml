@@ -40,6 +40,6 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: sno-emul-baremetal
         name: master-0

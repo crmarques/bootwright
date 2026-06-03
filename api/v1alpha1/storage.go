@@ -22,8 +22,9 @@ type StorageClusterCephSpec struct {
 }
 
 type StorageCephadmSpec struct {
-	Bootstrap StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
-	Registry  StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
+	AddressRef LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
+	Registry   StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
 type StorageCephadmRegistry struct {
@@ -33,19 +34,13 @@ type StorageCephadmRegistry struct {
 }
 
 type StorageCephadmBootstrap struct {
-	SeedNode string              `yaml:"seedNode" json:"seedNode"`
-	MonIP    StorageMachineIPRef `yaml:"monIP" json:"monIP"`
+	SeedNode string           `yaml:"seedNode" json:"seedNode"`
+	MonIP    StorageNodeIPRef `yaml:"monIP" json:"monIP"`
 }
 
-type StorageMachineIPRef struct {
-	MachineRef StorageMachineRef `yaml:"machineRef" json:"machineRef"`
-	Interface  string            `yaml:"interface" json:"interface"`
-	Family     string            `yaml:"family,omitempty" json:"family,omitempty"`
-}
-
-type StorageMachineRef struct {
-	ClusterInfra string `yaml:"clusterInfra" json:"clusterInfra"`
-	Name         string `yaml:"name" json:"name"`
+type StorageNodeIPRef struct {
+	NodeRef    LocalObjectReference `yaml:"nodeRef" json:"nodeRef"`
+	AddressRef LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
 }
 
 type StorageCephNetworks struct {
@@ -78,11 +73,10 @@ type StorageCephPoolReplicas struct {
 }
 
 type StorageCephNode struct {
-	Name    string               `yaml:"name" json:"name"`
-	HostRef LocalObjectReference `yaml:"hostRef" json:"hostRef"`
-	Site    string               `yaml:"site" json:"site"`
-	Roles   []string             `yaml:"roles" json:"roles"`
-	Devices []string             `yaml:"devices,omitempty" json:"devices,omitempty"`
+	Name    string   `yaml:"name" json:"name"`
+	Site    string   `yaml:"site" json:"site"`
+	Roles   []string `yaml:"roles" json:"roles"`
+	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 }
 
 type StoragePlacementPolicy struct {

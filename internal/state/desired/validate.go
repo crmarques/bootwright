@@ -90,7 +90,7 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	infraToOCP := map[string][]string{}
 	for _, ocp := range state.ContainerClusters {
 		for _, node := range ocp.Spec.Nodes {
-			name := node.MachineRef.ClusterInfra
+			name := node.InfraNodeRef.ClusterInfra
 			if name == "" {
 				continue
 			}
@@ -132,15 +132,15 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 		if !ok {
 			continue
 		}
-		for _, machine := range infra.Spec.Components.Machines {
-			if machine.From.Profile == "" {
+		for _, machine := range infra.Spec.Components.Nodes {
+			if machine.Source.ProfileRef.Name == "" {
 				continue
 			}
-			provider, ok := providers[machine.From.Provider]
+			provider, ok := providers[machine.Source.ProviderRef.Name]
 			if !ok {
 				continue
 			}
-			profile, ok := lookupMachineProfile(provider, machine.From.Profile)
+			profile, ok := lookupMachineProfile(provider, machine.Source.ProfileRef.Name)
 			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil || profile.KubeVirt.HostContainerClusterRef.Name == "" {
 				continue
 			}

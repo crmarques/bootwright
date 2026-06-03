@@ -284,7 +284,7 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 				Nodes: []v1alpha1.OCPNodeSpec{{
 					Hostname: "master-0",
 					Role:     v1alpha1.NodeRoleMaster,
-					MachineRef: v1alpha1.NodeMachineRef{
+					InfraNodeRef: v1alpha1.InfraNodeRef{
 						ClusterInfra: "infra",
 						Name:         "master-0",
 					},
@@ -723,18 +723,27 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 					"api-int":            {Address: "192.168.133.10"},
 					"apps":               {Address: "192.168.133.11"},
 				},
-				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
-					Name:          "master-0",
-					From:          v1alpha1.From{Provider: "vsphere", Profile: "control-plane"},
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{Ref: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+					Name: "master-0",
+					Source: v1alpha1.ClusterNodeSource{
+						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
+						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
+					},
+					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
 				}, {
-					Name:          "master-1",
-					From:          v1alpha1.From{Provider: "vsphere", Profile: "control-plane"},
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{Ref: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
+					Name: "master-1",
+					Source: v1alpha1.ClusterNodeSource{
+						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
+						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
+					},
+					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
 				}, {
-					Name:          "master-2",
-					From:          v1alpha1.From{Provider: "vsphere", Profile: "control-plane"},
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{Ref: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
+					Name: "master-2",
+					Source: v1alpha1.ClusterNodeSource{
+						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
+						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
+					},
+					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
 				}}},
 			},
 		}},
@@ -744,17 +753,17 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:   "master-0",
-				Role:       v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:     "master-0",
+				Role:         v1alpha1.NodeRoleMaster,
+				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
 			}, {
-				Hostname:   "master-1",
-				Role:       v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-1"},
+				Hostname:     "master-1",
+				Role:         v1alpha1.NodeRoleMaster,
+				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-1"},
 			}, {
-				Hostname:   "master-2",
-				Role:       v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-2"},
+				Hostname:     "master-2",
+				Role:         v1alpha1.NodeRoleMaster,
+				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-2"},
 			}},
 		},
 	}

@@ -30,15 +30,15 @@ func emulatedBMCListenPorts(l *v1alpha1.MachineProfileLibvirtProvisioner) (port,
 	return port, vmediaPort
 }
 
-func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
-	provider, ok := findProvider(state, m.From.Provider)
+func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, clusterName string) map[string]any {
+	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
 	isoBasename := fmt.Sprintf("agent-%s.iso", clusterName)
 
-	if m.From.Profile != "" {
-		profile, ok := findProfile(provider, m.From.Profile)
+	if m.Source.ProfileRef.Name != "" {
+		profile, ok := findProfile(provider, m.Source.ProfileRef.Name)
 		if !ok {
 			return nil
 		}
@@ -47,8 +47,8 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.
 		}
 		return emulatedBootVars(state, ci, m, profile, clusterName, isoBasename)
 	}
-	if m.From.Name != "" {
-		server, ok := findProviderMachine(provider, m.From.Name)
+	if m.Source.MachineRef.Name != "" {
+		server, ok := findProviderMachine(provider, m.Source.MachineRef.Name)
 		if !ok {
 			return nil
 		}
@@ -89,7 +89,7 @@ func machineEmulatedBMCVars(state v1alpha1.State, profile v1alpha1.MachineProfil
 	return out
 }
 
-func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, profile v1alpha1.MachineProfileCapability, clusterName, isoBasename string) map[string]any {
+func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, profile v1alpha1.MachineProfileCapability, clusterName, isoBasename string) map[string]any {
 	libvirt := profile.Libvirt
 	hostRef := libvirt.HostRef.Name
 	hostAddr := lookupHostAddress(state, hostRef)
@@ -100,7 +100,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 	}
 	systemID := ansibleUUIDv5(clusterName + "-" + m.Name)
 
-	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/bmc/%s/vmedia", m.From.Provider)
+	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
 		"redfish": map[string]any{
 			"baseUrl":       fmt.Sprintf("http://%s:%d", hostAddr, port),
@@ -163,7 +163,7 @@ func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp 
 	clusterName := ocp.Metadata.Name
 	targets := map[string]map[string]any{}
 	var keys []string
-	for _, m := range ci.Spec.Components.Machines {
+	for _, m := range ci.Spec.Components.Nodes {
 		boot := machineBootVars(state, ci, m, clusterName)
 		if boot == nil {
 			continue

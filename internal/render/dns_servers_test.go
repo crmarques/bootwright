@@ -62,7 +62,7 @@ func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Machines[0], "")
+	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Nodes[0], "")
 	want := []string{"10.0.0.1", "192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
@@ -76,7 +76,7 @@ func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
 		IP:   "192.168.130.53",
 	})
 	delete(state.NetworkConfigs[0].Spec.Template.NetworkConfig, "dns-resolver")
-	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Machines[0], "")
+	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Nodes[0], "")
 	want := []string{"192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
@@ -89,8 +89,8 @@ func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
-	machine.NetworkConfig.Overrides = map[string]any{
+	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
+	machine.Network.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
 	}
 	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
@@ -131,8 +131,8 @@ func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
 			},
 		},
 	}
-	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
-	machine.NetworkConfig.Overrides = map[string]any{
+	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
+	machine.Network.Overrides = map[string]any{
 		"interfaces": []any{map[string]any{
 			"name": "primary",
 			"ipv4": map[string]any{
@@ -192,8 +192,8 @@ func TestAgentNetworkConfigMergesPositionalMapListOverrides(t *testing.T) {
 			},
 		},
 	}
-	machine := &state.ClusterInfras[0].Spec.Components.Machines[0]
-	machine.NetworkConfig.Overrides = map[string]any{
+	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
+	machine.Network.Overrides = map[string]any{
 		"routes": map[string]any{
 			"config": []any{map[string]any{
 				"next-hop-interface": "ens65f0",
@@ -244,10 +244,10 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 		}},
 		ClusterInfras: []v1alpha1.ClusterInfra{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
-			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
 				Name: "master-0",
-				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-					Ref: v1alpha1.LocalObjectReference{Name: "lab-net"},
+				Network: v1alpha1.ClusterNodeNetwork{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "lab-net"},
 				},
 			}}}},
 		}},

@@ -32,13 +32,15 @@ spec:
         name: rack1-bond140-machine
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: rack1-baremetal-provider
-          name: rack1-srv1
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal-provider
+          machineRef:
+            name: rack1-srv1
+        network:
+          networkConfigRef:
             name: rack1-bond140-machine
           overrides:
             interfaces:
@@ -48,11 +50,13 @@ spec:
                     - ip: 192.168.140.20
                       prefix-length: 24
       - name: master-1
-        from:
-          provider: rack1-baremetal-provider
-          name: rack1-srv2
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal-provider
+          machineRef:
+            name: rack1-srv2
+        network:
+          networkConfigRef:
             name: rack1-bond140-machine
           overrides:
             interfaces:
@@ -62,11 +66,13 @@ spec:
                     - ip: 192.168.140.21
                       prefix-length: 24
       - name: master-2
-        from:
-          provider: rack1-baremetal-provider
-          name: rack1-srv3
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal-provider
+          machineRef:
+            name: rack1-srv3
+        network:
+          networkConfigRef:
             name: rack1-bond140-machine
           overrides:
             interfaces:

@@ -58,9 +58,11 @@ spec:
         # storageClassRef:
         #   name: <storage-class>       # optional override
 `,
-	ClusterMachineFrom: `        from:
-          provider: {{.ProviderID}}
-          profile: sno`,
+	ClusterMachineFrom: `        source:
+          providerRef:
+            name: {{.ProviderID}}
+          profileRef:
+            name: sno`,
 	ClusterMachineExtras: "",
 	NetworkDNSServers: `      dns-resolver:
         config:

@@ -31,11 +31,11 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 				"apps":               {Address: "192.168.140.11"},
 			},
 			Components: v1alpha1.ClusterComponents{
-				Machines: []v1alpha1.ClusterMachineComponent{
+				Nodes: []v1alpha1.ClusterNodeComponent{
 					{
 						Name: "master-0",
-						NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-							Ref: v1alpha1.LocalObjectReference{Name: "machine-net"},
+						Network: v1alpha1.ClusterNodeNetwork{
+							NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "machine-net"},
 						},
 					},
 				},
@@ -57,9 +57,9 @@ func TestMachineNetworkConfigUsesInlineMachineSpecs(t *testing.T) {
 	ci := v1alpha1.ClusterInfra{
 		Spec: v1alpha1.ClusterInfraSpec{
 			Components: v1alpha1.ClusterComponents{
-				Machines: []v1alpha1.ClusterMachineComponent{{
+				Nodes: []v1alpha1.ClusterNodeComponent{{
 					Name: "master-0",
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
+					Network: v1alpha1.ClusterNodeNetwork{
 						Spec: &v1alpha1.NetworkConfigSpec{
 							MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.132.0/24"}},
 						},

@@ -221,11 +221,11 @@ func clusterMachineNames(cluster v1alpha1.ContainerCluster) []string {
 	seen := map[string]bool{}
 	var names []string
 	for _, node := range cluster.Spec.Nodes {
-		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
+		if node.InfraNodeRef.Name == "" || seen[node.InfraNodeRef.Name] {
 			continue
 		}
-		seen[node.MachineRef.Name] = true
-		names = append(names, node.MachineRef.Name)
+		seen[node.InfraNodeRef.Name] = true
+		names = append(names, node.InfraNodeRef.Name)
 	}
 	sort.Strings(names)
 	return names
@@ -267,7 +267,7 @@ func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
-		for _, m := range ci.Spec.Components.Machines {
+		for _, m := range ci.Spec.Components.Nodes {
 			if host := machineHostRef(state, m); host != "" {
 				out[host] = true
 			}
@@ -303,7 +303,7 @@ func infraComponentReferencedHosts(state v1alpha1.State) map[string]bool {
 func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
-		for _, machine := range ci.Spec.Components.Machines {
+		for _, machine := range ci.Spec.Components.Nodes {
 			hostRef := machineHostRef(state, machine)
 			if hostRef == "" {
 				continue
@@ -319,7 +319,7 @@ func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, ci := range state.ClusterInfras {
-		for _, m := range ci.Spec.Components.Machines {
+		for _, m := range ci.Spec.Components.Nodes {
 			if host := machineHostRef(state, m); host != "" {
 				out[host] = true
 			}

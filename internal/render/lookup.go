@@ -63,13 +63,13 @@ func findClusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkNa
 	return v1alpha1.ClusterNetworkBinding{}, false
 }
 
-func findClusterMachine(ci v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterMachineComponent, bool) {
-	for _, m := range ci.Spec.Components.Machines {
+func findClusterMachine(ci v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterNodeComponent, bool) {
+	for _, m := range ci.Spec.Components.Nodes {
 		if m.Name == name {
 			return m, true
 		}
 	}
-	return v1alpha1.ClusterMachineComponent{}, false
+	return v1alpha1.ClusterNodeComponent{}, false
 }
 
 func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {

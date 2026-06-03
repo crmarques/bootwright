@@ -72,15 +72,15 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfr
 	failureDomains := []any{}
 	seenVCenters := map[string]bool{}
 	seenFailureDomains := map[string]bool{}
-	for _, machine := range ci.Spec.Components.Machines {
-		if machine.From.Profile == "" {
+	for _, machine := range ci.Spec.Components.Nodes {
+		if machine.Source.ProfileRef.Name == "" {
 			continue
 		}
-		provider, ok := findProvider(state, machine.From.Provider)
+		provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 		if !ok {
 			continue
 		}
-		profile, ok := findProfile(provider, machine.From.Profile)
+		profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
 		if !ok || profile.VSphere == nil {
 			continue
 		}
@@ -117,15 +117,15 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfr
 }
 
 func firstVSphereProfileNodeNetworking(state v1alpha1.State, ci v1alpha1.ClusterInfra) *v1alpha1.VSphereNodeNetworking {
-	for _, machine := range ci.Spec.Components.Machines {
-		if machine.From.Profile == "" {
+	for _, machine := range ci.Spec.Components.Nodes {
+		if machine.Source.ProfileRef.Name == "" {
 			continue
 		}
-		provider, ok := findProvider(state, machine.From.Provider)
+		provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 		if !ok {
 			continue
 		}
-		profile, ok := findProfile(provider, machine.From.Profile)
+		profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
 		if ok && profile.VSphere != nil && profile.VSphere.NodeNetworking != nil {
 			return profile.VSphere.NodeNetworking
 		}

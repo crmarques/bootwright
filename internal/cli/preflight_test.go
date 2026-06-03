@@ -301,10 +301,22 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 				Capabilities: []string{v1alpha1.HostCapabilityCephNode},
 			},
 		}},
+		ClusterInfras: []v1alpha1.ClusterInfra{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
+			Spec: v1alpha1.ClusterInfraSpec{
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+					Name: "ceph-0",
+					Source: v1alpha1.ClusterNodeSource{
+						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+					},
+				}}},
+			},
+		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
-				Type: v1alpha1.StorageClusterTypeCeph,
+				Type:            v1alpha1.StorageClusterTypeCeph,
+				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						Registry: v1alpha1.StorageCephadmRegistry{
@@ -314,10 +326,9 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
-							Name:    "ceph-0",
-							HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
-							Site:    "dc1",
-							Roles:   []string{v1alpha1.StorageCephRoleMON},
+							Name:  "ceph-0",
+							Site:  "dc1",
+							Roles: []string{v1alpha1.StorageCephRoleMON},
 						}},
 					},
 				},

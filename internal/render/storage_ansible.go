@@ -63,7 +63,7 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
 	nodeName := node.Name
 	entry := map[string]any{}
-	if host, ok := findHost(state, node.HostRef.Name); ok && host.Spec.SSH != nil {
+	if host, ok := topology.NodeHost(state, cluster, nodeName); ok && host.Spec.SSH != nil {
 		entry = hostInventoryEntry(host, env, secretsDir, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
@@ -91,7 +91,7 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 			"nodes":               storageNodesVars(state, cluster),
 			"bootstrap": map[string]any{
 				"seedNode": ceph.Cephadm.Bootstrap.SeedNode,
-				"monIP":    storageMachineIP(state, cluster, ceph.Cephadm.Bootstrap.MonIP),
+				"monIP":    storageNodeIP(state, cluster, ceph.Cephadm.Bootstrap.MonIP),
 			},
 			"ceph": map[string]any{
 				"bootstrapSpecPath":    asset.BootstrapSpecPath,
@@ -116,7 +116,7 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if len(cluster.Spec.Ceph.Topology.Nodes) == 0 {
 		return nil
 	}
-	host, ok := findHost(state, cluster.Spec.Ceph.Topology.Nodes[0].HostRef.Name)
+	host, ok := topology.NodeHost(state, cluster, cluster.Spec.Ceph.Topology.Nodes[0].Name)
 	if !ok || host.Spec.SSH == nil {
 		return nil
 	}
@@ -194,21 +194,10 @@ func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster stri
 	return out
 }
 
-func storageMachineIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref v1alpha1.StorageMachineIPRef) string {
-	for _, infra := range state.ClusterInfras {
-		if infra.Metadata.Name != ref.MachineRef.ClusterInfra {
-			continue
-		}
-		for _, machine := range infra.Spec.Components.Machines {
-			if machine.Name != ref.MachineRef.Name {
-				continue
-			}
-			family := "ipv4"
-			if ref.Family == "ipv6" {
-				family = "ipv6"
-			}
-			return networkConfigInterfaceIP(agentNetworkConfig(state, infra, machine, ""), ref.Interface, family)
-		}
+func storageNodeIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref v1alpha1.StorageNodeIPRef) string {
+	addressName := ref.AddressRef.Name
+	if addressName == "" {
+		addressName = cluster.Spec.Ceph.Cephadm.AddressRef.Name
 	}
-	return ""
+	return topology.NodeAddressByRef(state, cluster, ref.NodeRef.Name, addressName)
 }

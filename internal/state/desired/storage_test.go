@@ -180,22 +180,19 @@ func TestStorageAttachmentRequiresDataFoundationProvider(t *testing.T) {
 func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	state := storageValidationState()
 	cluster := &state.StorageClusters[0]
-	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.MachineRef = v1alpha1.StorageMachineRef{}
-	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.Family = ""
+	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.NodeRef = v1alpha1.LocalObjectReference{}
+	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.AddressRef = v1alpha1.LocalObjectReference{}
 	state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default = false
 	state.StorageExports[0].Spec.Type = ""
 
 	Normalize(&state)
 
 	mon := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.MonIP
-	if mon.MachineRef.ClusterInfra != state.StorageClusters[0].Spec.ClusterInfraRef.Name {
-		t.Fatalf("mon clusterInfra = %q, want cluster infra ref", mon.MachineRef.ClusterInfra)
+	if mon.NodeRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.SeedNode {
+		t.Fatalf("mon node name = %q, want seed node", mon.NodeRef.Name)
 	}
-	if mon.MachineRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.SeedNode {
-		t.Fatalf("mon machine name = %q, want seed node", mon.MachineRef.Name)
-	}
-	if mon.Family != "ipv4" {
-		t.Fatalf("mon family = %q, want ipv4", mon.Family)
+	if mon.AddressRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.AddressRef.Name {
+		t.Fatalf("mon addressRef = %q, want cephadm addressRef", mon.AddressRef.Name)
 	}
 	if !state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default {
 		t.Fatal("single CephFS data pool did not default to default=true")
@@ -330,11 +327,11 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		want string
 	}{
 		{
-			name: "missing-host-ref",
+			name: "missing-host-source",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].HostRef = v1alpha1.LocalObjectReference{}
+				state.ClusterInfras[0].Spec.Components.Nodes[0].Source.HostRef = v1alpha1.LocalObjectReference{}
 			},
-			want: "spec.ceph.topology.nodes[0].hostRef.name is required",
+			want: "spec.ceph.topology.nodes[0].name \"ceph-dc1-0\" must match a host-sourced ClusterInfra/ceph-infra spec.components.nodes entry",
 		},
 		{
 			name: "missing-host-ssh",
@@ -355,21 +352,21 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.Hosts[0].Spec.Capabilities = []string{v1alpha1.HostCapabilityLibvirt}
 			},
-			want: `must reference a Host with capability "ceph-node"`,
+			want: `resolves to Host/ceph-dc1-0 without capability "ceph-node"`,
 		},
 		{
 			name: "mixed-users",
 			edit: func(state *v1alpha1.State) {
 				state.Hosts[1].Spec.SSH.User = "ceph"
 			},
-			want: `uses ssh.user "ceph"; all storage node Hosts in one StorageCluster must use "root"`,
+			want: `with ssh.user "ceph"; all storage node Hosts in one StorageCluster must use "root"`,
 		},
 		{
 			name: "mixed-key-refs",
 			edit: func(state *v1alpha1.State) {
 				state.Hosts[1].Spec.SSH.KeyRef.Name = "other-ceph-node-ssh"
 			},
-			want: `uses ssh.keyRef.name "other-ceph-node-ssh"; all storage node Hosts in one StorageCluster must use "ceph-node-ssh"`,
+			want: `with ssh.keyRef.name "other-ceph-node-ssh"; all storage node Hosts in one StorageCluster must use "ceph-node-ssh"`,
 		},
 	}
 	for _, tc := range cases {
@@ -509,10 +506,10 @@ func storageValidationState() v1alpha1.State {
 				Endpoints: map[string]v1alpha1.Endpoint{
 					"rgw-public": {DNSName: "rgw-ceph.example.test", Port: 443, Scheme: "https"},
 				},
-				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{
-					{Name: "ceph-dc1-0"}, {Name: "ceph-dc1-1"}, {Name: "ceph-dc1-2"},
-					{Name: "ceph-dc2-0"}, {Name: "ceph-dc2-1"}, {Name: "ceph-dc2-2"},
-					{Name: "ceph-arbiter"},
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{
+					storageValidationInfraNode("ceph-dc1-0"), storageValidationInfraNode("ceph-dc1-1"), storageValidationInfraNode("ceph-dc1-2"),
+					storageValidationInfraNode("ceph-dc2-0"), storageValidationInfraNode("ceph-dc2-1"), storageValidationInfraNode("ceph-dc2-2"),
+					storageValidationInfraNode("ceph-arbiter"),
 				}},
 			},
 		}},
@@ -535,13 +532,10 @@ func storageValidationState() v1alpha1.State {
 				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							SeedNode: "ceph-dc1-0",
-							MonIP: v1alpha1.StorageMachineIPRef{
-								MachineRef: v1alpha1.StorageMachineRef{ClusterInfra: "ceph-infra", Name: "ceph-dc1-0"},
-								Interface:  "primary",
-								Family:     "ipv4",
-							},
+							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
 						},
 						Registry: v1alpha1.StorageCephadmRegistry{
 							URL:            "registry.redhat.io",
@@ -561,13 +555,13 @@ func storageValidationState() v1alpha1.State {
 							RuleName:               "stretch-replicated",
 						},
 						Nodes: []v1alpha1.StorageCephNode{
-							{Name: "ceph-dc1-0", HostRef: storageValidationHostRef("ceph-dc1-0"), Site: "dc1", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-dc1-1", HostRef: storageValidationHostRef("ceph-dc1-1"), Site: "dc1", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-dc1-2", HostRef: storageValidationHostRef("ceph-dc1-2"), Site: "dc1", Roles: []string{"osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-dc2-0", HostRef: storageValidationHostRef("ceph-dc2-0"), Site: "dc2", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-dc2-1", HostRef: storageValidationHostRef("ceph-dc2-1"), Site: "dc2", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-dc2-2", HostRef: storageValidationHostRef("ceph-dc2-2"), Site: "dc2", Roles: []string{"osd", "mds", "rgw", "ingress"}},
-							{Name: "ceph-arbiter", HostRef: storageValidationHostRef("ceph-arbiter"), Site: "dc3", Roles: []string{"mon"}},
+							{Name: "ceph-dc1-0", Site: "dc1", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-dc1-1", Site: "dc1", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-dc1-2", Site: "dc1", Roles: []string{"osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-dc2-0", Site: "dc2", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-dc2-1", Site: "dc2", Roles: []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-dc2-2", Site: "dc2", Roles: []string{"osd", "mds", "rgw", "ingress"}},
+							{Name: "ceph-arbiter", Site: "dc3", Roles: []string{"mon"}},
 						},
 					},
 				},
@@ -653,8 +647,13 @@ func storageValidationHost(name string) v1alpha1.Host {
 	}
 }
 
-func storageValidationHostRef(name string) v1alpha1.LocalObjectReference {
-	return v1alpha1.LocalObjectReference{Name: name}
+func storageValidationInfraNode(name string) v1alpha1.ClusterNodeComponent {
+	return v1alpha1.ClusterNodeComponent{
+		Name: name,
+		Source: v1alpha1.ClusterNodeSource{
+			HostRef: v1alpha1.LocalObjectReference{Name: name},
+		},
+	}
 }
 
 func externalStorageValidationState() v1alpha1.State {

@@ -374,9 +374,9 @@ func stateWithInfraHost(hostName string) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "infra"},
 			Spec: v1alpha1.ClusterInfraSpec{
 				Components: v1alpha1.ClusterComponents{
-					Machines: []v1alpha1.ClusterMachineComponent{{
-						Name: "master-0",
-						From: v1alpha1.From{Provider: "provider", Profile: "profile"},
+					Nodes: []v1alpha1.ClusterNodeComponent{{
+						Name:   "master-0",
+						Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "profile"}},
 					}},
 				},
 			},

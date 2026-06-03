@@ -30,31 +30,31 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: master-0
     - hostname: master-1
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: master-1
     - hostname: master-2
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: master-2
     - hostname: worker-0
       role: worker
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: worker-0
     - hostname: worker-1
       role: worker
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: worker-1
     - hostname: worker-2
       role: worker
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc2-child-ocp-infra
         name: worker-2

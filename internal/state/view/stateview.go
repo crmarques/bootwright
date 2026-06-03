@@ -92,7 +92,7 @@ func ClusterInfraNames(cluster v1alpha1.ContainerCluster) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, node := range cluster.Spec.Nodes {
-		ref := node.MachineRef.ClusterInfra
+		ref := node.InfraNodeRef.ClusterInfra
 		if ref == "" || seen[ref] {
 			continue
 		}
@@ -118,7 +118,7 @@ func ClusterNodesForInfra(state v1alpha1.State, infra v1alpha1.ClusterInfra) map
 	for _, cluster := range state.ContainerClusters {
 		out := map[string]v1alpha1.OCPNodeSpec{}
 		for _, node := range cluster.Spec.Nodes {
-			if node.MachineRef.ClusterInfra == infra.Metadata.Name {
+			if node.InfraNodeRef.ClusterInfra == infra.Metadata.Name {
 				out[node.Hostname] = node
 			}
 		}
@@ -192,13 +192,13 @@ func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInfra) []
 			out = append(out, network)
 		}
 	}
-	for _, machine := range infra.Spec.Components.Machines {
-		if machine.NetworkConfig.Spec == nil {
+	for _, machine := range infra.Spec.Components.Nodes {
+		if machine.Network.Spec == nil {
 			continue
 		}
 		out = append(out, v1alpha1.NetworkConfig{
 			Metadata: v1alpha1.Metadata{Name: infra.Metadata.Name + "/" + machine.Name},
-			Spec:     *machine.NetworkConfig.Spec,
+			Spec:     *machine.Network.Spec,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -209,9 +209,9 @@ func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInfra) []
 
 func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInfra) []string {
 	used := map[string]bool{}
-	for _, machine := range infra.Spec.Components.Machines {
-		if machine.NetworkConfig.Ref.Name != "" {
-			used[machine.NetworkConfig.Ref.Name] = true
+	for _, machine := range infra.Spec.Components.Nodes {
+		if machine.Network.NetworkConfigRef.Name != "" {
+			used[machine.Network.NetworkConfigRef.Name] = true
 		}
 	}
 	names := make([]string, 0, len(used))

@@ -25,13 +25,15 @@ spec:
         name: bmc
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: baremetal-provider
-          name: dc2-master-0
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: baremetal-provider
+          machineRef:
+            name: dc2-master-0
+        network:
+          networkConfigRef:
             name: dc2-net
           overrides:
             interfaces:
@@ -41,11 +43,13 @@ spec:
                     - ip: 192.168.142.20
                       prefix-length: 24
       - name: master-1
-        from:
-          provider: baremetal-provider
-          name: dc2-master-1
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: baremetal-provider
+          machineRef:
+            name: dc2-master-1
+        network:
+          networkConfigRef:
             name: dc2-net
           overrides:
             interfaces:
@@ -55,11 +59,13 @@ spec:
                     - ip: 192.168.142.21
                       prefix-length: 24
       - name: master-2
-        from:
-          provider: baremetal-provider
-          name: dc2-master-2
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: baremetal-provider
+          machineRef:
+            name: dc2-master-2
+        network:
+          networkConfigRef:
             name: dc2-net
           overrides:
             interfaces:

@@ -237,19 +237,25 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, ci := range state.ClusterInfras {
-		for _, machine := range ci.Spec.Components.Machines {
-			require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].from.provider", ci.Metadata.Name, machine.Name),
-				v1alpha1.KindInfraProvider, machine.From.Provider)
-			if machine.NetworkConfig.Ref.Name != "" {
-				require(fmt.Sprintf("ClusterInfra/%s spec.components.machines[%s].networkConfig.ref", ci.Metadata.Name, machine.Name),
-					v1alpha1.KindNetworkConfig, machine.NetworkConfig.Ref.Name)
+		for _, node := range ci.Spec.Components.Nodes {
+			if node.Source.ProviderRef.Name != "" {
+				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].source.providerRef", ci.Metadata.Name, node.Name),
+					v1alpha1.KindInfraProvider, node.Source.ProviderRef.Name)
+			}
+			if node.Source.HostRef.Name != "" {
+				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].source.hostRef", ci.Metadata.Name, node.Name),
+					v1alpha1.KindHost, node.Source.HostRef.Name)
+			}
+			if node.Network.NetworkConfigRef.Name != "" {
+				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].network.networkConfigRef", ci.Metadata.Name, node.Name),
+					v1alpha1.KindNetworkConfig, node.Network.NetworkConfigRef.Name)
 			}
 		}
 	}
 	for _, ocp := range state.ContainerClusters {
 		for i, node := range ocp.Spec.Nodes {
-			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].machineRef.clusterInfra", ocp.Metadata.Name, i),
-				v1alpha1.KindClusterInfra, node.MachineRef.ClusterInfra)
+			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].infraNodeRef.clusterInfra", ocp.Metadata.Name, i),
+				v1alpha1.KindClusterInfra, node.InfraNodeRef.ClusterInfra)
 		}
 	}
 	for _, set := range state.ClusterAddonProfiles {
@@ -288,14 +294,6 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 	for _, cluster := range state.StorageClusters {
 		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),
 			v1alpha1.KindClusterInfra, cluster.Spec.ClusterInfraRef.Name)
-		if cluster.Spec.Ceph != nil {
-			for i, node := range cluster.Spec.Ceph.Topology.Nodes {
-				if node.HostRef.Name != "" {
-					require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%d].hostRef", cluster.Metadata.Name, i),
-						v1alpha1.KindHost, node.HostRef.Name)
-				}
-			}
-		}
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),

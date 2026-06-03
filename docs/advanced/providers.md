@@ -48,13 +48,15 @@ The cluster selects that server and adds IP overrides in `ClusterInfra`:
 
 ```yaml
 components:
-  machines:
+  nodes:
     - name: master-0
-      from:
-        provider: rack1-baremetal
-        name: rack1-srv1
-      networkConfig:
-        ref:
+      source:
+        providerRef:
+          name: rack1-baremetal
+        machineRef:
+          name: rack1-srv1
+      network:
+        networkConfigRef:
           name: rack1-bonded-machine
         overrides:
           interfaces:

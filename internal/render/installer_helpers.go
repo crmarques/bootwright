@@ -171,15 +171,15 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 func clusterInfraForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (v1alpha1.ClusterInfra, error) {
 	name := ""
 	for _, node := range ocp.Spec.Nodes {
-		if node.MachineRef.ClusterInfra == "" {
+		if node.InfraNodeRef.ClusterInfra == "" {
 			continue
 		}
 		if name == "" {
-			name = node.MachineRef.ClusterInfra
+			name = node.InfraNodeRef.ClusterInfra
 			continue
 		}
-		if node.MachineRef.ClusterInfra != name {
-			return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: nodes reference multiple ClusterInfra objects (%q and %q)", ocp.Metadata.Name, name, node.MachineRef.ClusterInfra)
+		if node.InfraNodeRef.ClusterInfra != name {
+			return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: nodes reference multiple ClusterInfra objects (%q and %q)", ocp.Metadata.Name, name, node.InfraNodeRef.ClusterInfra)
 		}
 	}
 	for _, infra := range state.ClusterInfras {
@@ -187,7 +187,7 @@ func clusterInfraForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (v1
 			return infra, nil
 		}
 	}
-	return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: machineRef.clusterInfra %q not found", ocp.Metadata.Name, name)
+	return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: infraNodeRef.clusterInfra %q not found", ocp.Metadata.Name, name)
 }
 
 func installerNodeRole(role string) string {

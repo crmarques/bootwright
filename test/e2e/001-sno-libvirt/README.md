@@ -15,7 +15,7 @@ Key files:
 | `cluster-infra.yaml` | `ClusterInfra` |
 | `container-cluster.yaml` | `ContainerCluster` |
 
-The cluster node binds to `ClusterInfra.components.machines[master-0]`, which
-uses the `sno-bridge` network template and a per-host static IP overlay.
+The cluster node binds to `ClusterInfra.components.nodes[master-0]`, which
+uses the `sno-bridge` network template and a per-node static IP overlay.
 Cluster endpoints use `source.type=infraComponent` and resolve to the managed
 HAProxy `InfraComponent/load-balancer` bind addresses.

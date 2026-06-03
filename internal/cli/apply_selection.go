@@ -59,11 +59,11 @@ func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
 		if len(cluster.Spec.Nodes) == 0 {
 			continue
 		}
-		infra, ok := infras[cluster.Spec.Nodes[0].MachineRef.ClusterInfra]
+		infra, ok := infras[cluster.Spec.Nodes[0].InfraNodeRef.ClusterInfra]
 		if !ok {
 			continue
 		}
-		for _, machine := range infra.Spec.Components.Machines {
+		for _, machine := range infra.Spec.Components.Nodes {
 			profile, ok := clusterMachineProfile(providers, machine)
 			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil {
 				continue
@@ -78,13 +78,13 @@ func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
 	return out
 }
 
-func clusterMachineProfile(providers map[string]v1alpha1.InfraProvider, machine v1alpha1.ClusterMachineComponent) (v1alpha1.MachineProfileCapability, bool) {
-	provider, ok := providers[machine.From.Provider]
-	if !ok || machine.From.Profile == "" {
+func clusterMachineProfile(providers map[string]v1alpha1.InfraProvider, machine v1alpha1.ClusterNodeComponent) (v1alpha1.MachineProfileCapability, bool) {
+	provider, ok := providers[machine.Source.ProviderRef.Name]
+	if !ok || machine.Source.ProfileRef.Name == "" {
 		return v1alpha1.MachineProfileCapability{}, false
 	}
 	for _, profile := range provider.Spec.MachineProfiles {
-		if profile.Name == machine.From.Profile {
+		if profile.Name == machine.Source.ProfileRef.Name {
 			return profile, true
 		}
 	}

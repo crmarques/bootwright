@@ -184,7 +184,7 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 	sort.Strings(infraNames)
 	for _, name := range infraNames {
 		ci := infraByName[name]
-		machines := len(ci.Spec.Components.Machines)
+		machines := len(ci.Spec.Components.Nodes)
 		services := destroyManagedServices(state, ci)
 		detail := fmt.Sprintf("%d machine(s)", machines)
 		if services != "" {
@@ -359,8 +359,8 @@ func environmentUsesManagedNTP(state v1alpha1.State) bool {
 }
 
 func clusterConsumesNetwork(ci v1alpha1.ClusterInfra, networkName string) bool {
-	for _, machine := range ci.Spec.Components.Machines {
-		if machine.NetworkConfig.Ref.Name == networkName {
+	for _, machine := range ci.Spec.Components.Nodes {
+		if machine.Network.NetworkConfigRef.Name == networkName {
 			return true
 		}
 	}

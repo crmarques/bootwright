@@ -234,14 +234,11 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 		return
 	}
 	adm := &cluster.Spec.Ceph.Cephadm
-	if adm.Bootstrap.MonIP.Family == "" {
-		adm.Bootstrap.MonIP.Family = "ipv4"
+	if adm.Bootstrap.MonIP.NodeRef.Name == "" {
+		adm.Bootstrap.MonIP.NodeRef.Name = adm.Bootstrap.SeedNode
 	}
-	if adm.Bootstrap.MonIP.MachineRef.ClusterInfra == "" {
-		adm.Bootstrap.MonIP.MachineRef.ClusterInfra = cluster.Spec.ClusterInfraRef.Name
-	}
-	if adm.Bootstrap.MonIP.MachineRef.Name == "" {
-		adm.Bootstrap.MonIP.MachineRef.Name = adm.Bootstrap.SeedNode
+	if adm.Bootstrap.MonIP.AddressRef.Name == "" {
+		adm.Bootstrap.MonIP.AddressRef = adm.AddressRef
 	}
 }
 
@@ -294,8 +291,8 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	applyEnvironmentInstallDefaults(ocp, env)
 	for i := range ocp.Spec.Nodes {
 		node := &ocp.Spec.Nodes[i]
-		if node.MachineRef.Name == "" {
-			node.MachineRef.Name = node.Hostname
+		if node.InfraNodeRef.Name == "" {
+			node.InfraNodeRef.Name = node.Hostname
 		}
 	}
 }

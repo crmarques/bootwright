@@ -29,16 +29,16 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc1-ocp
         name: master-0
     - hostname: master-1
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc1-ocp
         name: master-1
     - hostname: master-2
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: dc1-ocp
         name: master-2

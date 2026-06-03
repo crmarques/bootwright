@@ -111,22 +111,19 @@ func minimalStorageState() v1alpha1.State {
 				Endpoints: map[string]v1alpha1.Endpoint{
 					"rgw-public": {DNSName: "rgw.example.test", Port: 443},
 				},
-				Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
+				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
 					Name: "ceph-dc1-0",
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-						Spec: &v1alpha1.NetworkConfigSpec{
-							MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.141.0/24"}},
-							Template: v1alpha1.NetworkConfigTemplate{NetworkConfig: map[string]any{
-								"interfaces": []any{map[string]any{
-									"name": "primary",
-									"ipv4": map[string]any{
-										"address": []any{map[string]any{"ip": "192.168.141.30"}},
-									},
-								}},
-							}},
-						},
+					Source: v1alpha1.ClusterNodeSource{
+						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"},
 					},
 				}}},
+			},
+		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-dc1-0"},
+			Spec: v1alpha1.HostSpec{
+				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "192.168.141.30"}},
+				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
 			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
@@ -136,12 +133,10 @@ func minimalStorageState() v1alpha1.State {
 				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							SeedNode: "ceph-dc1-0",
-							MonIP: v1alpha1.StorageMachineIPRef{
-								MachineRef: v1alpha1.StorageMachineRef{ClusterInfra: "ceph-infra", Name: "ceph-dc1-0"},
-								Interface:  "primary",
-							},
+							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{

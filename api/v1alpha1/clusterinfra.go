@@ -70,7 +70,7 @@ type EndpointRef struct {
 }
 
 type ClusterComponents struct {
-	Machines []ClusterMachineComponent `yaml:"machines,omitempty" json:"machines,omitempty"`
+	Nodes []ClusterNodeComponent `yaml:"nodes,omitempty" json:"nodes,omitempty"`
 }
 
 type LoadBalancerBindAddress struct {
@@ -78,18 +78,22 @@ type LoadBalancerBindAddress struct {
 	IP   string `yaml:"ip" json:"ip"`
 }
 
-// ClusterMachineComponent is one cluster machine. from.profile
-// instantiates from a provider's machineProfiles[]; from.name claims a
-// server from a provider's machines[].
-type ClusterMachineComponent struct {
-	Name            string                      `yaml:"name" json:"name"`
-	From            From                        `yaml:"from" json:"from"`
-	NetworkConfig   ClusterMachineNetworkConfig `yaml:"networkConfig,omitempty" json:"networkConfig,omitempty"`
-	RootDeviceHints *RootDeviceHints            `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
+type ClusterNodeComponent struct {
+	Name            string             `yaml:"name" json:"name"`
+	Source          ClusterNodeSource  `yaml:"source" json:"source"`
+	Network         ClusterNodeNetwork `yaml:"network,omitempty" json:"network,omitempty"`
+	RootDeviceHints *RootDeviceHints   `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
 }
 
-type ClusterMachineNetworkConfig struct {
-	Ref       LocalObjectReference `yaml:"ref,omitempty" json:"ref,omitempty"`
-	Overrides map[string]any       `yaml:"overrides,omitempty" json:"overrides,omitempty"`
-	Spec      *NetworkConfigSpec   `yaml:"spec,omitempty" json:"spec,omitempty"`
+type ClusterNodeSource struct {
+	HostRef     LocalObjectReference `yaml:"hostRef,omitempty" json:"hostRef,omitempty"`
+	ProviderRef LocalObjectReference `yaml:"providerRef,omitempty" json:"providerRef,omitempty"`
+	MachineRef  LocalObjectReference `yaml:"machineRef,omitempty" json:"machineRef,omitempty"`
+	ProfileRef  LocalObjectReference `yaml:"profileRef,omitempty" json:"profileRef,omitempty"`
+}
+
+type ClusterNodeNetwork struct {
+	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
+	Overrides        map[string]any       `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+	Spec             *NetworkConfigSpec   `yaml:"spec,omitempty" json:"spec,omitempty"`
 }

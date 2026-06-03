@@ -3,12 +3,6 @@ kind: ClusterInfra
 metadata:
   name: ceph-storage-infra
 spec:
-  platform:
-    # Installer platform render mode; substrate inventory stays in InfraProvider.
-    type: baremetal
-    baremetal:
-      provisioningNetwork: disabled
-
   endpoints:
     rgw-public:
       dnsName: rgw-ceph.bootwright.test
@@ -26,102 +20,32 @@ spec:
         - 192.168.142.0/24
 
   components:
-    machines:
+    nodes:
       - name: ceph-dc1-0
-        from:
-          provider: baremetal-provider
-          name: ceph-dc1-0
-        networkConfig:
-          ref:
-            name: dc1-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.141.30
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc1-0
       - name: ceph-dc1-1
-        from:
-          provider: baremetal-provider
-          name: ceph-dc1-1
-        networkConfig:
-          ref:
-            name: dc1-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.141.31
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc1-1
       - name: ceph-dc1-2
-        from:
-          provider: baremetal-provider
-          name: ceph-dc1-2
-        networkConfig:
-          ref:
-            name: dc1-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.141.32
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc1-2
       - name: ceph-dc2-0
-        from:
-          provider: baremetal-provider
-          name: ceph-dc2-0
-        networkConfig:
-          ref:
-            name: dc2-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.142.30
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc2-0
       - name: ceph-dc2-1
-        from:
-          provider: baremetal-provider
-          name: ceph-dc2-1
-        networkConfig:
-          ref:
-            name: dc2-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.142.31
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc2-1
       - name: ceph-dc2-2
-        from:
-          provider: baremetal-provider
-          name: ceph-dc2-2
-        networkConfig:
-          ref:
-            name: dc2-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.142.32
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-dc2-2
       - name: ceph-arbiter
-        from:
-          provider: baremetal-provider
-          name: ceph-arbiter
-        networkConfig:
-          ref:
-            name: dc3-net
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.143.30
-                      prefix-length: 24
+        source:
+          hostRef:
+            name: ceph-arbiter

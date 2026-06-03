@@ -45,8 +45,8 @@ type NetworkAttachmentBareMetal struct {
 	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
 }
 
-// MachineProfileCapability is a parameterised machine template; the
-// cluster's components.machines[*].from.profile selects one.
+// MachineProfileCapability is a parameterised machine template; provider-sourced
+// ClusterInfra nodes select one through source.profileRef.
 type MachineProfileCapability struct {
 	Name      string                             `yaml:"name" json:"name"`
 	CPU       int                                `yaml:"cpu,omitempty" json:"cpu,omitempty"`

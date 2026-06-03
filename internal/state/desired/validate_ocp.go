@@ -128,15 +128,15 @@ func resolveContainerClusterInfra(ocp v1alpha1.ContainerCluster, infraIndex map[
 	infraName := ""
 	for i, node := range ocp.Spec.Nodes {
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.nodes[%d]", ocp.Metadata.Name, i)
-		if node.MachineRef.ClusterInfra == "" {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.clusterInfra is required", prefix))
+		if node.InfraNodeRef.ClusterInfra == "" {
+			errs = append(errs, fmt.Sprintf("%s.infraNodeRef.clusterInfra is required", prefix))
 			continue
 		}
 		if infraName == "" {
-			infraName = node.MachineRef.ClusterInfra
-		} else if node.MachineRef.ClusterInfra != infraName {
+			infraName = node.InfraNodeRef.ClusterInfra
+		} else if node.InfraNodeRef.ClusterInfra != infraName {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.nodes must reference exactly one ClusterInfra in v1 (got %q and %q)",
-				ocp.Metadata.Name, infraName, node.MachineRef.ClusterInfra))
+				ocp.Metadata.Name, infraName, node.InfraNodeRef.ClusterInfra))
 		}
 	}
 	if infraName == "" {
@@ -144,7 +144,7 @@ func resolveContainerClusterInfra(ocp v1alpha1.ContainerCluster, infraIndex map[
 	}
 	ci, ok := infraIndex[infraName]
 	if !ok {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.nodes[].machineRef.clusterInfra %q does not match any ClusterInfra",
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.nodes[].infraNodeRef.clusterInfra %q does not match any ClusterInfra",
 			ocp.Metadata.Name, infraName))
 		return v1alpha1.ClusterInfra{}, false, errs
 	}
@@ -153,9 +153,9 @@ func resolveContainerClusterInfra(ocp v1alpha1.ContainerCluster, infraIndex map[
 
 func validateNodes(ocp v1alpha1.ContainerCluster, ci v1alpha1.ClusterInfra) []string {
 	var errs []string
-	machines := map[string]bool{}
-	for _, m := range ci.Spec.Components.Machines {
-		machines[m.Name] = true
+	nodes := map[string]v1alpha1.ClusterNodeComponent{}
+	for _, m := range ci.Spec.Components.Nodes {
+		nodes[m.Name] = m
 	}
 	master := 0
 	worker := 0
@@ -176,13 +176,17 @@ func validateNodes(ocp v1alpha1.ContainerCluster, ci v1alpha1.ClusterInfra) []st
 		default:
 			errs = append(errs, fmt.Sprintf("%s.role %q must be master or worker", prefix, node.Role))
 		}
-		if node.MachineRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.name is required", prefix))
+		if node.InfraNodeRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.infraNodeRef.name is required", prefix))
 			continue
 		}
-		if !machines[node.MachineRef.Name] {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.name %q is not defined on ClusterInfra/%s spec.components.machines",
-				prefix, node.MachineRef.Name, ci.Metadata.Name))
+		infraNode, ok := nodes[node.InfraNodeRef.Name]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.infraNodeRef.name %q is not defined on ClusterInfra/%s spec.components.nodes",
+				prefix, node.InfraNodeRef.Name, ci.Metadata.Name))
+		} else if infraNode.Source.ProviderRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s.infraNodeRef.name %q must reference a provider-sourced ClusterInfra node",
+				prefix, node.InfraNodeRef.Name))
 		}
 	}
 	if master == 0 {

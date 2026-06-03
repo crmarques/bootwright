@@ -1,6 +1,7 @@
 package v1alpha1
 
-// Host
+// Host is an OS-installed, addressable execution target Bootwright can reach
+// over SSH. Raw substrate inventory belongs to InfraProvider.spec.machines.
 
 type Host struct {
 	APIVersion string   `yaml:"apiVersion" json:"apiVersion"`

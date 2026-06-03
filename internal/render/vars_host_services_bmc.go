@@ -45,7 +45,7 @@ func bmcHostServiceVarsFromGraph(state v1alpha1.State, service stategraph.HostSe
 			"clusterName":  consumer.Cluster,
 			"name":         machine.Name,
 			"bmcEmulated":  bmc,
-			"providerName": machine.From.Provider,
+			"providerName": machine.Source.ProviderRef.Name,
 		})
 	}
 	if len(out["machines"].([]any)) == 0 {
@@ -54,15 +54,15 @@ func bmcHostServiceVarsFromGraph(state v1alpha1.State, service stategraph.HostSe
 	return out, true
 }
 
-func machineBMCServiceConfig(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) map[string]any {
-	if machine.From.Profile == "" {
+func machineBMCServiceConfig(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) map[string]any {
+	if machine.Source.ProfileRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.From.Provider)
+	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
-	profile, ok := findProfile(provider, machine.From.Profile)
+	profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
 	if !ok {
 		return nil
 	}

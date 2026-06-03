@@ -32,13 +32,15 @@ spec:
         name: sno-bridge
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: lab-libvirt-provider
-          profile: sno
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: lab-libvirt-provider
+          profileRef:
+            name: sno
+        network:
+          networkConfigRef:
             name: sno-bridge
           overrides:
             interfaces:

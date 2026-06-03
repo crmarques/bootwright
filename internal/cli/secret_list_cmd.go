@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 type secretListReport struct {
@@ -231,7 +232,7 @@ func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 			continue
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			host, ok := hostByName(state, node.HostRef.Name)
+			host, ok := topology.NodeHost(state, cluster, node.Name)
 			if ok && host.Spec.SSH != nil && host.Spec.SSH.KeyRef.Name == name {
 				return true
 			}

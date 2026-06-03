@@ -10,7 +10,7 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.Con
 	hosts := make([]any, 0, len(nodes))
 	rendezvous := ""
 	for _, node := range nodes {
-		machine, ok := findClusterMachine(ci, node.MachineRef.Name)
+		machine, ok := findClusterMachine(ci, node.InfraNodeRef.Name)
 		if !ok {
 			continue
 		}
@@ -34,7 +34,7 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.Con
 	return hosts, rendezvous
 }
 
-func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent, clusterName string) []any {
+func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent, clusterName string) []any {
 	interfaces := machineInterfaces(state, machine, clusterName)
 	out := make([]any, 0, len(interfaces))
 	for _, iface := range interfaces {
@@ -46,7 +46,7 @@ func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineCo
 	return out
 }
 
-func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterMachineComponent, clusterName string) map[string]any {
+func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent, clusterName string) map[string]any {
 	network, hasNetwork := machineNetworkDefinition(state, ci, machine)
 	out := machineNetworkConfigTemplate(state, ci, machine)
 	if out == nil {
@@ -62,18 +62,18 @@ func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine 
 	return out
 }
 
-func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent, clusterName string) []v1alpha1.MachineInterface {
+func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent, clusterName string) []v1alpha1.MachineInterface {
 	if interfaces := providerMachineInterfaces(state, machine); len(interfaces) > 0 {
 		return interfaces
 	}
-	if clusterName == "" || machine.From.Profile == "" {
+	if clusterName == "" || machine.Source.ProfileRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.From.Provider)
+	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
-	profile, ok := findProfile(provider, machine.From.Profile)
+	profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
 	provisioner := v1alpha1.ProfileProvisionerKind(profile)
 	if !ok || (provisioner != v1alpha1.ProvisionerLibvirt && provisioner != v1alpha1.ProvisionerKubeVirt) {
 		return nil
@@ -89,7 +89,7 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComp
 	return out
 }
 
-func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) []string {
+func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) []string {
 	out := networkConfigInterfaceNames(machineNetworkConfigTemplate(state, v1alpha1.ClusterInfra{}, machine))
 	if len(out) == 0 {
 		out = append(out, "primary")
@@ -97,33 +97,33 @@ func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.Cluster
 	return out
 }
 
-func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) []v1alpha1.MachineInterface {
-	if machine.From.Name == "" {
+func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) []v1alpha1.MachineInterface {
+	if machine.Source.MachineRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.From.Provider)
+	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
-	pm, ok := findProviderMachine(provider, machine.From.Name)
+	pm, ok := findProviderMachine(provider, machine.Source.MachineRef.Name)
 	if !ok || pm.BareMetal == nil {
 		return nil
 	}
 	return append([]v1alpha1.MachineInterface(nil), pm.BareMetal.Interfaces...)
 }
 
-func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) *v1alpha1.RootDeviceHints {
+func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) *v1alpha1.RootDeviceHints {
 	if machine.RootDeviceHints != nil {
 		return machine.RootDeviceHints
 	}
-	if machine.From.Name == "" {
+	if machine.Source.MachineRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.From.Provider)
+	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
-	pm, ok := findProviderMachine(provider, machine.From.Name)
+	pm, ok := findProviderMachine(provider, machine.Source.MachineRef.Name)
 	if !ok || pm.BareMetal == nil {
 		return nil
 	}

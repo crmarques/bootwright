@@ -311,11 +311,11 @@ spec:
 {{.Substrate.ClusterNetworkBindings}}
 
   components:
-    machines:
+    nodes:
       - name: master-0
 {{.Substrate.ClusterMachineFrom}}
-        networkConfig:
-          ref:
+        network:
+          networkConfigRef:
             name: {{.NetworkID}}
           overrides:
             interfaces:
@@ -360,7 +360,7 @@ spec:
   nodes:
     - hostname: master-0
       role: master                      # master | worker
-      machineRef:
+      infraNodeRef:
         clusterInfra: {{.Cluster}}      # ClusterInfra.metadata.name
         name: master-0
 `

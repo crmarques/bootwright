@@ -114,11 +114,11 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
 | Kind | Owns |
 | --- | --- |
 | `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
-| `Host` | Neutral named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
+| `Host` | OS-installed, reachable execution target with named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
 | `InfraProvider` | Named provider capability lists — `machineProfiles` and explicit `machines` — with names scoped per kind |
 | `InfraComponent` | Host-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
-| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected machines under `components.machines[]` |
+| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected infra nodes under `components.nodes[]` |
 | `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
 | `StorageCluster` | External storage intent: imported Ceph, or Bootwright-managed Ceph through cephadm on preinstalled RHEL nodes |
 | `StoragePlacementPolicy` | Storage placement policy such as the CRUSH rule and replicated pool defaults used by Ceph pools |

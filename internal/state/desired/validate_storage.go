@@ -88,21 +88,22 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, infra v1alpha1.
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
-	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, infra, infraOK)...)
+	requireHostSource := storageClusterManagement(cluster) == v1alpha1.StorageClusterManagementManaged
+	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, infra, infraOK, hosts, requireHostSource)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
 	}
 	for i, cidr := range ceph.Networks.ClusterCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
-	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", ceph.Topology.Nodes, infra, infraOK, hosts)...)
+	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, infra, infraOK, hosts, requireHostSource)...)
 	if ceph.Topology.Stretch != nil && ceph.Topology.Stretch.Enabled {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
 	return errs
 }
 
-func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host, requireHostSource bool) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.SeedNode == "" {
@@ -111,23 +112,20 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infr
 		errs = append(errs, fmt.Sprintf("%s.bootstrap.seedNode %q is not listed in spec.ceph.topology.nodes", prefix, adm.Bootstrap.SeedNode))
 	}
 	mon := adm.Bootstrap.MonIP
-	if mon.MachineRef.ClusterInfra == "" {
-		errs = append(errs, prefix+".bootstrap.monIP.machineRef.clusterInfra is required")
-	} else if mon.MachineRef.ClusterInfra != cluster.Spec.ClusterInfraRef.Name {
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.machineRef.clusterInfra %q must match spec.clusterInfraRef.name %q", prefix, mon.MachineRef.ClusterInfra, cluster.Spec.ClusterInfraRef.Name))
-	}
-	if mon.MachineRef.Name == "" {
-		errs = append(errs, prefix+".bootstrap.monIP.machineRef.name is required")
-	} else if infraOK && !clusterInfraMachineExists(infra, mon.MachineRef.Name) {
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.machineRef.name %q is not defined on ClusterInfra/%s", prefix, mon.MachineRef.Name, infra.Metadata.Name))
-	}
-	if mon.Interface == "" {
-		errs = append(errs, prefix+".bootstrap.monIP.interface is required")
-	}
-	switch mon.Family {
-	case "", "ipv4", "ipv6":
-	default:
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.family %q must be ipv4 or ipv6", prefix, mon.Family))
+	if mon.NodeRef.Name == "" {
+		errs = append(errs, prefix+".bootstrap.monIP.nodeRef.name is required")
+	} else {
+		if !storageCephNodeExists(cluster, mon.NodeRef.Name) {
+			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
+		}
+		if infraOK {
+			infraNode, ok := clusterInfraNodeByName(infra, mon.NodeRef.Name)
+			if !ok {
+				errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not defined on ClusterInfra/%s spec.components.nodes", prefix, mon.NodeRef.Name, infra.Metadata.Name))
+			} else if requireHostSource {
+				errs = append(errs, validateStorageNodeHostAddress(prefix+".bootstrap.monIP.addressRef.name", infraNode, mon.AddressRef.Name, hosts, adm.AddressRef.Name)...)
+			}
+		}
 	}
 	errs = append(errs, validateStorageCephadmRegistry(prefix+".registry", adm.Registry)...)
 	return errs
@@ -148,8 +146,9 @@ func validateStorageCephadmRegistry(prefix string, registry v1alpha1.StorageCeph
 	return errs
 }
 
-func validateStorageCephNodes(prefix string, nodes []v1alpha1.StorageCephNode, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host) []string {
+func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host, requireHostSource bool) []string {
 	var errs []string
+	nodes := cluster.Spec.Ceph.Topology.Nodes
 	if len(nodes) == 0 {
 		return []string{prefix + " is required"}
 	}
@@ -166,34 +165,35 @@ func validateStorageCephNodes(prefix string, nodes []v1alpha1.StorageCephNode, i
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, node.Name))
 			}
 			seen[node.Name] = true
-			if infraOK && !clusterInfraMachineExists(infra, node.Name) {
-				errs = append(errs, fmt.Sprintf("%s.name %q is not defined on ClusterInfra/%s spec.components.machines", owner, node.Name, infra.Metadata.Name))
-			}
-		}
-		if node.HostRef.Name == "" {
-			errs = append(errs, owner+".hostRef.name is required")
-		} else {
-			host, ok := hosts[node.HostRef.Name]
-			if !ok {
-				errs = append(errs, fmt.Sprintf("%s.hostRef.name %q does not match any Host", owner, node.HostRef.Name))
-			} else {
-				if !hostHasCapability(host, v1alpha1.HostCapabilityCephNode) {
-					errs = append(errs, fmt.Sprintf("%s.hostRef.name %q must reference a Host with capability %q", owner, node.HostRef.Name, v1alpha1.HostCapabilityCephNode))
-				}
-				if host.Spec.SSH == nil {
-					errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s.hostRef", host.Metadata.Name, owner))
-				} else {
-					if host.Spec.SSH.KnownHostsRef.Name == "" {
-						errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s.hostRef", host.Metadata.Name, owner))
-					}
-					if !sshSeen {
-						sshUser = host.Spec.SSH.User
-						sshKeyRef = host.Spec.SSH.KeyRef.Name
-						sshSeen = true
-					} else if host.Spec.SSH.User != sshUser {
-						errs = append(errs, fmt.Sprintf("%s.hostRef.name %q uses ssh.user %q; all storage node Hosts in one StorageCluster must use %q", owner, node.HostRef.Name, host.Spec.SSH.User, sshUser))
-					} else if host.Spec.SSH.KeyRef.Name != sshKeyRef {
-						errs = append(errs, fmt.Sprintf("%s.hostRef.name %q uses ssh.keyRef.name %q; all storage node Hosts in one StorageCluster must use %q", owner, node.HostRef.Name, host.Spec.SSH.KeyRef.Name, sshKeyRef))
+			if infraOK {
+				infraNode, ok := clusterInfraNodeByName(infra, node.Name)
+				if !ok {
+					errs = append(errs, fmt.Sprintf("%s.name %q is not defined on ClusterInfra/%s spec.components.nodes", owner, node.Name, infra.Metadata.Name))
+				} else if requireHostSource {
+					host, ok := storageInfraNodeHost(infraNode, hosts)
+					if !ok {
+						errs = append(errs, fmt.Sprintf("%s.name %q must match a host-sourced ClusterInfra/%s spec.components.nodes entry", owner, node.Name, infra.Metadata.Name))
+					} else {
+						if !hostHasCapability(host, v1alpha1.HostCapabilityCephNode) {
+							errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s without capability %q", owner, node.Name, host.Metadata.Name, v1alpha1.HostCapabilityCephNode))
+						}
+						if host.Spec.SSH == nil {
+							errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s.name", host.Metadata.Name, owner))
+						} else {
+							if host.Spec.SSH.KnownHostsRef.Name == "" {
+								errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s.name", host.Metadata.Name, owner))
+							}
+							if !sshSeen {
+								sshUser = host.Spec.SSH.User
+								sshKeyRef = host.Spec.SSH.KeyRef.Name
+								sshSeen = true
+							} else if host.Spec.SSH.User != sshUser {
+								errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s with ssh.user %q; all storage node Hosts in one StorageCluster must use %q", owner, node.Name, host.Metadata.Name, host.Spec.SSH.User, sshUser))
+							} else if host.Spec.SSH.KeyRef.Name != sshKeyRef {
+								errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s with ssh.keyRef.name %q; all storage node Hosts in one StorageCluster must use %q", owner, node.Name, host.Metadata.Name, host.Spec.SSH.KeyRef.Name, sshKeyRef))
+							}
+						}
+						errs = append(errs, validateStorageNodeHostAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef.name", cluster.Metadata.Name), infraNode, cluster.Spec.Ceph.Cephadm.AddressRef.Name, hosts, "")...)
 					}
 				}
 			}
@@ -802,17 +802,46 @@ func validateCIDR(owner, value string) []string {
 	return nil
 }
 
-func clusterInfraMachineExists(infra v1alpha1.ClusterInfra, name string) bool {
-	for _, machine := range infra.Spec.Components.Machines {
-		if machine.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 func storageClusterStretchEnabled(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil && cluster.Spec.Ceph.Topology.Stretch.Enabled
+}
+
+func clusterInfraNodeByName(infra v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterNodeComponent, bool) {
+	for _, node := range infra.Spec.Components.Nodes {
+		if node.Name == name {
+			return node, true
+		}
+	}
+	return v1alpha1.ClusterNodeComponent{}, false
+}
+
+func storageInfraNodeHost(node v1alpha1.ClusterNodeComponent, hosts map[string]v1alpha1.Host) (v1alpha1.Host, bool) {
+	if node.Source.HostRef.Name == "" {
+		return v1alpha1.Host{}, false
+	}
+	host, ok := hosts[node.Source.HostRef.Name]
+	return host, ok
+}
+
+func validateStorageNodeHostAddress(owner string, node v1alpha1.ClusterNodeComponent, addressName string, hosts map[string]v1alpha1.Host, defaultAddressName string) []string {
+	host, ok := storageInfraNodeHost(node, hosts)
+	if !ok {
+		return []string{fmt.Sprintf("%s cannot resolve because ClusterInfra node %q is not host-sourced", owner, node.Name)}
+	}
+	resolvedName := addressName
+	if resolvedName == "" {
+		resolvedName = defaultAddressName
+	}
+	if resolvedName == "" && host.Spec.SSH != nil {
+		resolvedName = host.Spec.SSH.AddressName
+	}
+	if resolvedName == "" {
+		return []string{fmt.Sprintf("%s must set addressRef.name or Host/%s spec.ssh.addressName", owner, host.Metadata.Name)}
+	}
+	if _, ok := v1alpha1.HostAddressByName(host, resolvedName); !ok {
+		return []string{fmt.Sprintf("%s %q does not resolve to Host/%s spec.addresses[].name", owner, resolvedName, host.Metadata.Name)}
+	}
+	return nil
 }
 
 func storageClusterManagement(cluster v1alpha1.StorageCluster) string {

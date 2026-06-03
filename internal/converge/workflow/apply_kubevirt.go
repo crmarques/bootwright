@@ -24,7 +24,7 @@ func kubeVirtHostClusterApplyDeps(state v1alpha1.State) (map[string][]string, er
 		if !ok {
 			continue
 		}
-		for _, machine := range infra.Spec.Components.Machines {
+		for _, machine := range infra.Spec.Components.Nodes {
 			profile, ok := machineProfileForComponent(providers, machine)
 			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil || profile.KubeVirt.HostContainerClusterRef.Name == "" {
 				continue
@@ -94,7 +94,7 @@ func kubeVirtResourceKeys(state v1alpha1.State, clusterName string) []string {
 		return nil
 	}
 	var out []string
-	for _, machine := range infra.Spec.Components.Machines {
+	for _, machine := range infra.Spec.Components.Nodes {
 		profile, ok := machineProfileForComponent(providers, machine)
 		if !ok || profile.KubeVirt == nil {
 			continue
@@ -134,7 +134,7 @@ func clusterInfraForCluster(cluster v1alpha1.ContainerCluster, infras map[string
 	if len(cluster.Spec.Nodes) == 0 {
 		return v1alpha1.ClusterInfra{}, false
 	}
-	name := cluster.Spec.Nodes[0].MachineRef.ClusterInfra
+	name := cluster.Spec.Nodes[0].InfraNodeRef.ClusterInfra
 	if name == "" {
 		return v1alpha1.ClusterInfra{}, false
 	}
@@ -142,16 +142,16 @@ func clusterInfraForCluster(cluster v1alpha1.ContainerCluster, infras map[string
 	return infra, ok
 }
 
-func machineProfileForComponent(providers map[string]v1alpha1.InfraProvider, machine v1alpha1.ClusterMachineComponent) (v1alpha1.MachineProfileCapability, bool) {
-	if machine.From.Profile == "" {
+func machineProfileForComponent(providers map[string]v1alpha1.InfraProvider, machine v1alpha1.ClusterNodeComponent) (v1alpha1.MachineProfileCapability, bool) {
+	if machine.Source.ProfileRef.Name == "" {
 		return v1alpha1.MachineProfileCapability{}, false
 	}
-	provider, ok := providers[machine.From.Provider]
+	provider, ok := providers[machine.Source.ProviderRef.Name]
 	if !ok {
 		return v1alpha1.MachineProfileCapability{}, false
 	}
 	for _, profile := range provider.Spec.MachineProfiles {
-		if profile.Name == machine.From.Profile {
+		if profile.Name == machine.Source.ProfileRef.Name {
 			return profile, true
 		}
 	}
@@ -178,8 +178,8 @@ func applyNodeBootResourceKeys(state v1alpha1.State, clusterName string, machine
 	if !ok {
 		return nil
 	}
-	machines := map[string]v1alpha1.ClusterMachineComponent{}
-	for _, machine := range infra.Spec.Components.Machines {
+	machines := map[string]v1alpha1.ClusterNodeComponent{}
+	for _, machine := range infra.Spec.Components.Nodes {
 		machines[machine.Name] = machine
 	}
 	var out []string

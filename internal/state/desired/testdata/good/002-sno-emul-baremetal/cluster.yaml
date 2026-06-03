@@ -38,13 +38,15 @@ spec:
         name: sno-vlan
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: rack1-baremetal-provider
-          name: rack1-srv1
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: rack1-baremetal-provider
+          machineRef:
+            name: rack1-srv1
+        network:
+          networkConfigRef:
             name: sno-vlan
           overrides:
             interfaces:
@@ -98,6 +100,6 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: sno-emul-baremetal
         name: master-0

@@ -240,14 +240,6 @@ type SecretRef struct {
 	Name string `yaml:"name" json:"name"`
 }
 
-// From is the per-component selector used by ClusterInfra
-// components. Exactly one of Profile or Name MUST be set.
-type From struct {
-	Provider string `yaml:"provider" json:"provider"`
-	Profile  string `yaml:"profile,omitempty" json:"profile,omitempty"`
-	Name     string `yaml:"name,omitempty" json:"name,omitempty"`
-}
-
 // Helpers
 
 func InstallMode(cluster ContainerCluster) string {

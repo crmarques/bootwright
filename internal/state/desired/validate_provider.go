@@ -351,18 +351,18 @@ func providerMachinesUsedByContainerClusters(state v1alpha1.State) map[string]ma
 	infras := indexClusterInfras(state.ClusterInfras)
 	for _, cluster := range state.ContainerClusters {
 		for _, node := range cluster.Spec.Nodes {
-			infra, ok := infras[node.MachineRef.ClusterInfra]
+			infra, ok := infras[node.InfraNodeRef.ClusterInfra]
 			if !ok {
 				continue
 			}
-			for _, machine := range infra.Spec.Components.Machines {
-				if machine.Name != node.MachineRef.Name || machine.From.Name == "" || machine.From.Provider == "" {
+			for _, machine := range infra.Spec.Components.Nodes {
+				if machine.Name != node.InfraNodeRef.Name || machine.Source.MachineRef.Name == "" || machine.Source.ProviderRef.Name == "" {
 					continue
 				}
-				if out[machine.From.Provider] == nil {
-					out[machine.From.Provider] = map[string]bool{}
+				if out[machine.Source.ProviderRef.Name] == nil {
+					out[machine.Source.ProviderRef.Name] = map[string]bool{}
 				}
-				out[machine.From.Provider][machine.From.Name] = true
+				out[machine.Source.ProviderRef.Name][machine.Source.MachineRef.Name] = true
 			}
 		}
 	}

@@ -22,16 +22,16 @@ Keep seven provisioning user-authored kinds:
 - `ContainerCluster`
 
 Provider capability lists live directly under `InfraProvider.spec`. Cluster
-infrastructure consumes those capabilities through `ClusterInfra.spec.components`.
-Machine selections live at
-`ClusterInfra.spec.components.machines[]`.
+infrastructure consumes those capabilities through
+`ClusterInfra.spec.components.nodes[]`. Each node declares its source with
+`source.providerRef` or `source.hostRef`.
 
 Reusable host-bound infra services that are not substrate inventory live under
 `InfraComponent.spec`.
 
 Reusable machine-network and NMState inputs live in `NetworkConfig`. Cluster
-nodes live in `ContainerCluster.spec.nodes[]` and each node references the
-selected cluster infrastructure machine.
+nodes live in `ContainerCluster.spec.nodes[]` and each OpenShift node
+references the selected provider-sourced infrastructure node.
 
 Post-install add-on kinds were added later as separate desired-state
 resources: `ClusterAddon`, `ClusterAddonProfile`,

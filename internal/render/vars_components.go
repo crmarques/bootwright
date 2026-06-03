@@ -17,13 +17,13 @@ func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1
 	var out []any
 	clusterName := ocp.Metadata.Name
 
-	for _, m := range ci.Spec.Components.Machines {
+	for _, m := range ci.Spec.Components.Nodes {
 		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
 	}
 	for _, component := range loadBalancerComponentsForCluster(state, ci, ocp) {
 		lb := loadBalancerComponentVars(state, component)
 		lb["clusterName"] = clusterName
-		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))
+		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Spec.Components.Nodes, clusterNodesForCI(state, ci))
 		out = append(out, lb)
 	}
 	if artifacts.ClusterNeedsPublication(state, ci, ocp) {
@@ -220,16 +220,16 @@ func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 	return out
 }
 
-func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent, clusterName string, secretsDir string) map[string]any {
+func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, clusterName string, secretsDir string) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
 		"kind":          v1alpha1.ComponentSlotMachines,
 		"name":          m.Name,
-		"providerName":  m.From.Provider,
+		"providerName":  m.Source.ProviderRef.Name,
 		"substrateRole": driver.Dispatch.SubstrateRole,
 		"bmcRole":       driver.Dispatch.BMCRole,
 		"bootRole":      driver.Dispatch.BootRole,
-		"networkConfig": clusterMachineNetworkConfigVars(m.NetworkConfig),
+		"networkConfig": clusterMachineNetworkConfigVars(m.Network),
 	}
 	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
 		out["networkAttachment"] = attachment
@@ -245,12 +245,12 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 		out["hostRef"] = hostRef
 		out["hostAddress"] = lookupHostAddress(state, hostRef)
 	}
-	if m.From.Profile != "" {
-		out["fromProfile"] = m.From.Profile
+	if m.Source.ProfileRef.Name != "" {
+		out["fromProfile"] = m.Source.ProfileRef.Name
 		// Inline the profile spec so Ansible roles do not need to
 		// resolve back across the provider list.
-		if provider, ok := findProvider(state, m.From.Provider); ok {
-			if profile, ok := findProfile(provider, m.From.Profile); ok {
+		if provider, ok := findProvider(state, m.Source.ProviderRef.Name); ok {
+			if profile, ok := findProfile(provider, m.Source.ProfileRef.Name); ok {
 				out["profile"] = map[string]any{
 					"name":      profile.Name,
 					"cpu":       profile.CPU,
@@ -290,10 +290,10 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 			}
 		}
 	}
-	if m.From.Name != "" {
-		out["fromName"] = m.From.Name
-		if provider, ok := findProvider(state, m.From.Provider); ok {
-			if server, ok := findProviderMachine(provider, m.From.Name); ok {
+	if m.Source.MachineRef.Name != "" {
+		out["fromName"] = m.Source.MachineRef.Name
+		if provider, ok := findProvider(state, m.Source.ProviderRef.Name); ok {
+			if server, ok := findProviderMachine(provider, m.Source.MachineRef.Name); ok {
 				serverVars := map[string]any{
 					"name":       server.Name,
 					"interfaces": providerInterfacesVars(server),
@@ -352,15 +352,15 @@ func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {
 	}
 }
 
-func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) string {
-	if m.From.Profile == "" {
+func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterNodeComponent) string {
+	if m.Source.ProfileRef.Name == "" {
 		return ""
 	}
-	provider, ok := findProvider(state, m.From.Provider)
+	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return ""
 	}
-	profile, ok := findProfile(provider, m.From.Profile)
+	profile, ok := findProfile(provider, m.Source.ProfileRef.Name)
 	if !ok {
 		return ""
 	}

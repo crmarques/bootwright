@@ -210,10 +210,10 @@ func nodesVars(ocp v1alpha1.ContainerCluster) map[string]any {
 	for _, node := range nodes {
 		name := node.Hostname
 		entry := map[string]any{"role": node.Role}
-		if node.MachineRef.Name != "" || node.MachineRef.ClusterInfra != "" {
-			entry["machineRef"] = map[string]any{
-				"clusterInfra": node.MachineRef.ClusterInfra,
-				"name":         node.MachineRef.Name,
+		if node.InfraNodeRef.Name != "" || node.InfraNodeRef.ClusterInfra != "" {
+			entry["infraNodeRef"] = map[string]any{
+				"clusterInfra": node.InfraNodeRef.ClusterInfra,
+				"name":         node.InfraNodeRef.Name,
 			}
 		}
 		out[name] = entry

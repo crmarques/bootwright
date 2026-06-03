@@ -21,20 +21,20 @@ import (
 // Adding apply support for a new provider is one registry entry plus the
 // matching Ansible roles. Public schema support remains owned by the API,
 // validation, and specs.
-func ProviderDriver(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) support.DispatchSupport {
-	provider, ok := findProvider(state, m.From.Provider)
+func ProviderDriver(state v1alpha1.State, m v1alpha1.ClusterNodeComponent) support.DispatchSupport {
+	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return support.LookupDispatch("none", "none", "none")
 	}
-	if m.From.Profile != "" {
-		profile, ok := findProfile(provider, m.From.Profile)
+	if m.Source.ProfileRef.Name != "" {
+		profile, ok := findProfile(provider, m.Source.ProfileRef.Name)
 		if !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
 		return support.LookupProfileProvisioner(v1alpha1.ProfileProvisionerKind(profile))
 	}
-	if m.From.Name != "" {
-		server, ok := findProviderMachine(provider, m.From.Name)
+	if m.Source.MachineRef.Name != "" {
+		server, ok := findProviderMachine(provider, m.Source.MachineRef.Name)
 		if !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
@@ -43,7 +43,7 @@ func ProviderDriver(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) su
 	return support.LookupDispatch("none", "none", "none")
 }
 
-func ProviderDispatch(state v1alpha1.State, m v1alpha1.ClusterMachineComponent) (substrate, bmc, boot string) {
+func ProviderDispatch(state v1alpha1.State, m v1alpha1.ClusterNodeComponent) (substrate, bmc, boot string) {
 	driver := ProviderDriver(state, m)
 	return driver.Dispatch.SubstrateRole, driver.Dispatch.BMCRole, driver.Dispatch.BootRole
 }

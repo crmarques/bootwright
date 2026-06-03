@@ -301,11 +301,11 @@ func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string
 		}
 		seen := map[string]bool{}
 		for _, node := range cluster.Spec.Nodes {
-			if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
+			if node.InfraNodeRef.Name == "" || seen[node.InfraNodeRef.Name] {
 				continue
 			}
-			seen[node.MachineRef.Name] = true
-			names = append(names, node.MachineRef.Name)
+			seen[node.InfraNodeRef.Name] = true
+			names = append(names, node.InfraNodeRef.Name)
 		}
 		break
 	}
@@ -320,8 +320,8 @@ func applyNodeRedfishResource(state v1alpha1.State, clusterName, machineName str
 			continue
 		}
 		for _, node := range cluster.Spec.Nodes {
-			if node.MachineRef.Name == machineName {
-				clusterInfraName = node.MachineRef.ClusterInfra
+			if node.InfraNodeRef.Name == machineName {
+				clusterInfraName = node.InfraNodeRef.ClusterInfra
 				break
 			}
 		}
@@ -331,16 +331,16 @@ func applyNodeRedfishResource(state v1alpha1.State, clusterName, machineName str
 		if infra.Metadata.Name != clusterInfraName {
 			continue
 		}
-		for _, machine := range infra.Spec.Components.Machines {
-			if machine.Name != machineName || machine.From.Name == "" {
+		for _, machine := range infra.Spec.Components.Nodes {
+			if machine.Name != machineName || machine.Source.MachineRef.Name == "" {
 				continue
 			}
 			for _, provider := range state.InfraProviders {
-				if provider.Metadata.Name != machine.From.Provider {
+				if provider.Metadata.Name != machine.Source.ProviderRef.Name {
 					continue
 				}
 				for _, providerMachine := range provider.Spec.Machines {
-					if providerMachine.Name == machine.From.Name && providerMachine.BareMetal != nil && providerMachine.BareMetal.BMC.Address != "" {
+					if providerMachine.Name == machine.Source.MachineRef.Name && providerMachine.BareMetal != nil && providerMachine.BareMetal.BMC.Address != "" {
 						return "redfish:" + providerMachine.BareMetal.BMC.Address
 					}
 				}

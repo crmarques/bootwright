@@ -30,13 +30,15 @@ spec:
         name: dc1-child-net
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-master
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-master
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:
@@ -46,11 +48,13 @@ spec:
                     - ip: 192.168.151.30
                       prefix-length: 24
       - name: master-1
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-master
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-master
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:
@@ -60,11 +64,13 @@ spec:
                     - ip: 192.168.151.31
                       prefix-length: 24
       - name: master-2
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-master
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-master
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:
@@ -74,11 +80,13 @@ spec:
                     - ip: 192.168.151.32
                       prefix-length: 24
       - name: worker-0
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-worker
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-worker
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:
@@ -88,11 +96,13 @@ spec:
                     - ip: 192.168.151.40
                       prefix-length: 24
       - name: worker-1
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-worker
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-worker
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:
@@ -102,11 +112,13 @@ spec:
                     - ip: 192.168.151.41
                       prefix-length: 24
       - name: worker-2
-        from:
-          provider: kubevirt-provider
-          profile: dc1-child-worker
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: kubevirt-provider
+          profileRef:
+            name: dc1-child-worker
+        network:
+          networkConfigRef:
             name: dc1-child-net
           overrides:
             interfaces:

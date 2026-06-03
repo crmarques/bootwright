@@ -37,13 +37,15 @@ spec:
         name: cluster-3n-bridge
 
   components:
-    machines:
+    nodes:
       - name: master-0
-        from:
-          provider: lab-libvirt-provider
-          profile: compact-control-plane
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: lab-libvirt-provider
+          profileRef:
+            name: compact-control-plane
+        network:
+          networkConfigRef:
             name: cluster-3n-bridge
           overrides:
             interfaces:
@@ -55,11 +57,13 @@ spec:
         rootDeviceHints:
           deviceName: /dev/vda
       - name: master-1
-        from:
-          provider: lab-libvirt-provider
-          profile: compact-control-plane
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: lab-libvirt-provider
+          profileRef:
+            name: compact-control-plane
+        network:
+          networkConfigRef:
             name: cluster-3n-bridge
           overrides:
             interfaces:
@@ -71,11 +75,13 @@ spec:
         rootDeviceHints:
           deviceName: /dev/vda
       - name: master-2
-        from:
-          provider: lab-libvirt-provider
-          profile: compact-control-plane
-        networkConfig:
-          ref:
+        source:
+          providerRef:
+            name: lab-libvirt-provider
+          profileRef:
+            name: compact-control-plane
+        network:
+          networkConfigRef:
             name: cluster-3n-bridge
           overrides:
             interfaces:

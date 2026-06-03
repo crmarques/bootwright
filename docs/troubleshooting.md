@@ -15,8 +15,8 @@ Current placement:
 
 - provider physical facts belong in `InfraProvider.spec`
 - machine network templates belong in `NetworkConfig`
-- selected machines and host IP overrides belong in
-  `ClusterInfra.spec.components.machines[]`
+- selected infra nodes and provider install-network overrides belong in
+  `ClusterInfra.spec.components.nodes[]`
 - cluster release belongs in `ContainerCluster.spec.distribution`, and install
   mode belongs in `ContainerCluster.spec.install.mode`
 - node bindings belong in `ContainerCluster.spec.nodes[]`
@@ -40,24 +40,25 @@ Fix the named field in the authored YAML, then rerun `bootwright check syntax`.
 ## Reference Failures
 
 Every `ContainerCluster.spec.nodes[]` entry must resolve to one selected
-machine:
+provider-sourced infra node:
 
 ```yaml
-machineRef:
+infraNodeRef:
   clusterInfra: prod-3node-infra
   name: master-0
 ```
 
 The target must exist as
-`ClusterInfra.spec.components.machines[].name`. In v1 all nodes in one cluster
-must reference the same `ClusterInfra`.
+`ClusterInfra.spec.components.nodes[].name` and must set `source.providerRef`.
+In v1 all OpenShift nodes in one cluster must reference the same
+`ClusterInfra`.
 
 ## Address Failures
 
 Endpoint VIPs and machine address overrides are checked against selected
 `NetworkConfig.spec.machineNetwork[]` CIDRs. Select the correct machine network
-through `ClusterInfra.spec.components.machines[].networkConfig.ref`, or fix
-either the CIDR template or the host-specific IP.
+through `ClusterInfra.spec.components.nodes[].network.networkConfigRef`, or
+fix either the CIDR template or the node-specific IP.
 
 A `machineNetwork[].cidr` may appear in only one `NetworkConfig`. If two
 templates use the same CIDR, split the host-specific NMState into one owning

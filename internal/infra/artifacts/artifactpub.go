@@ -149,15 +149,15 @@ func ClusterNeedsPublication(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp
 }
 
 func ClusterUsesBareMetalMachine(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
-	for _, machine := range ci.Spec.Components.Machines {
-		if machine.From.Name == "" {
+	for _, machine := range ci.Spec.Components.Nodes {
+		if machine.Source.MachineRef.Name == "" {
 			continue
 		}
-		provider, ok := stateview.Provider(state, machine.From.Provider)
+		provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 		if !ok {
 			continue
 		}
-		server, ok := stateview.Machine(provider, machine.From.Name)
+		server, ok := stateview.Machine(provider, machine.Source.MachineRef.Name)
 		if !ok || v1alpha1.MachineProvisionerKind(server) != v1alpha1.ProvisionerBareMetal {
 			continue
 		}

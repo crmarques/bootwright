@@ -205,7 +205,7 @@ bootwright_clusters:
     nodes:
       master-0:
         role: master
-        machineRef:
+        infraNodeRef:
           clusterInfra: prod-3node-infra
           name: master-0
 ```

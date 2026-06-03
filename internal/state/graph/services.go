@@ -279,7 +279,7 @@ func clusterHostServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 
 func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
 	var out []HostServiceConsumer
-	for _, machine := range infra.Spec.Components.Machines {
+	for _, machine := range infra.Spec.Components.Nodes {
 		driver := machineDriver(state, machine)
 		if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
 			continue
@@ -295,9 +295,9 @@ func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1a
 		out = append(out, newServiceConsumer(
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
-			fmt.Sprintf("ClusterInfra/%s machines[%s] provider %s", infra.Metadata.Name, machine.Name, machine.From.Provider),
+			fmt.Sprintf("ClusterInfra/%s nodes[%s] provider %s", infra.Metadata.Name, machine.Name, machine.Source.ProviderRef.Name),
 			v1alpha1.ProviderServiceKindBMC,
-			machine.From.Provider,
+			machine.Source.ProviderRef.Name,
 			driver.Dispatch.BMCRole,
 			driver.Dispatch.BMCRole,
 			map[string]string{
@@ -573,20 +573,20 @@ func clustersByInfra(state v1alpha1.State) map[string][]v1alpha1.ContainerCluste
 	return out
 }
 
-func machineDriver(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) support.DispatchSupport {
-	provider, ok := stateview.Provider(state, machine.From.Provider)
+func machineDriver(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) support.DispatchSupport {
+	provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return support.LookupDispatch("none", "none", "none")
 	}
-	if machine.From.Profile != "" {
-		profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+	if machine.Source.ProfileRef.Name != "" {
+		profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
 		if !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
 		return support.LookupProfileProvisioner(v1alpha1.ProfileProvisionerKind(profile))
 	}
-	if machine.From.Name != "" {
-		server, ok := stateview.Machine(provider, machine.From.Name)
+	if machine.Source.MachineRef.Name != "" {
+		server, ok := stateview.Machine(provider, machine.Source.MachineRef.Name)
 		if !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
@@ -595,30 +595,30 @@ func machineDriver(state v1alpha1.State, machine v1alpha1.ClusterMachineComponen
 	return support.LookupDispatch("none", "none", "none")
 }
 
-func machineHostRef(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) string {
-	if machine.From.Profile == "" {
+func machineHostRef(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) string {
+	if machine.Source.ProfileRef.Name == "" {
 		return ""
 	}
-	provider, ok := stateview.Provider(state, machine.From.Provider)
+	provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return ""
 	}
-	profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+	profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
 	if !ok || profile.Libvirt == nil {
 		return ""
 	}
 	return profile.Libvirt.HostRef.Name
 }
 
-func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterMachineComponent) string {
-	if machine.From.Profile == "" {
+func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) string {
+	if machine.Source.ProfileRef.Name == "" {
 		return ""
 	}
-	provider, ok := stateview.Provider(state, machine.From.Provider)
+	provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return ""
 	}
-	profile, ok := stateview.MachineProfile(provider, machine.From.Profile)
+	profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
 	if !ok || profile.Libvirt == nil {
 		return ""
 	}

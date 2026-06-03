@@ -29,6 +29,6 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
+      infraNodeRef:
         clusterInfra: sno-libvirt
         name: master-0

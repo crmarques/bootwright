@@ -96,7 +96,7 @@ func TestHostServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 			},
 		},
 	})
-	state.ClusterInfras[1].Spec.Components.Machines[0].From.Profile = "libvirt-profile-b"
+	state.ClusterInfras[1].Spec.Components.Nodes[0].Source.ProfileRef.Name = "libvirt-profile-b"
 
 	var hostRefs []string
 	for _, service := range ResolveHostServices(state).Services {
@@ -321,9 +321,9 @@ func bmcClusterInfra(name string) v1alpha1.ClusterInfra {
 	return v1alpha1.ClusterInfra{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ClusterInfraSpec{
-			Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
-				Name: "master-0",
-				From: v1alpha1.From{Provider: "libvirt-provider", Profile: "libvirt-profile"},
+			Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+				Name:   "master-0",
+				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "libvirt-provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "libvirt-profile"}},
 			}}},
 		},
 	}
@@ -357,11 +357,11 @@ func clusterInfra(name, machineProvider, networkName string) v1alpha1.ClusterInf
 					},
 				},
 			},
-			Components: v1alpha1.ClusterComponents{Machines: []v1alpha1.ClusterMachineComponent{{
-				Name: "master-0",
-				From: v1alpha1.From{Provider: machineProvider, Name: "node-0"},
-				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-					Ref: v1alpha1.LocalObjectReference{Name: networkName},
+			Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
+				Name:   "master-0",
+				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: machineProvider}, MachineRef: v1alpha1.LocalObjectReference{Name: "node-0"}},
+				Network: v1alpha1.ClusterNodeNetwork{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
 				},
 			}}},
 		},
@@ -381,7 +381,7 @@ func containerCluster(name, infraName string) v1alpha1.ContainerCluster {
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",
 				Role:     "master",
-				MachineRef: v1alpha1.NodeMachineRef{
+				InfraNodeRef: v1alpha1.InfraNodeRef{
 					ClusterInfra: infraName,
 					Name:         "master-0",
 				},

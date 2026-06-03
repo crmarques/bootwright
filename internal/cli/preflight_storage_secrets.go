@@ -6,6 +6,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequirement {
@@ -31,7 +32,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			})
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			host, ok := hostByName(state, node.HostRef.Name)
+			host, ok := topology.NodeHost(state, cluster, node.Name)
 			if !ok {
 				continue
 			}
@@ -69,7 +70,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 					if node.Name != cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode {
 						continue
 					}
-					host, ok := hostByName(state, node.HostRef.Name)
+					host, ok := topology.NodeHost(state, cluster, node.Name)
 					if !ok {
 						continue
 					}

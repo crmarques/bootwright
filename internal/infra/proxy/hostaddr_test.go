@@ -29,10 +29,10 @@ func clusterFacingState(hostSSH, hostClusterAddr, networkGateway string) v1alpha
 					v1alpha1.EndpointAPI: {Address: "192.168.132.10"},
 				},
 				Components: v1alpha1.ClusterComponents{
-					Machines: []v1alpha1.ClusterMachineComponent{{
+					Nodes: []v1alpha1.ClusterNodeComponent{{
 						Name: "master-0",
-						NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-							Ref: v1alpha1.LocalObjectReference{Name: "bridge-net"},
+						Network: v1alpha1.ClusterNodeNetwork{
+							NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 						},
 					}},
 				},
@@ -115,10 +115,10 @@ func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) 
 	// network via the first machine's first interface.
 	state := clusterFacingState("localhost", "", "192.168.132.1")
 	state.ClusterInfras[0].Spec.Endpoints = nil
-	state.ClusterInfras[0].Spec.Components.Machines = []v1alpha1.ClusterMachineComponent{{
+	state.ClusterInfras[0].Spec.Components.Nodes = []v1alpha1.ClusterNodeComponent{{
 		Name: "master-0",
-		NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-			Ref: v1alpha1.LocalObjectReference{Name: "bridge-net"},
+		Network: v1alpha1.ClusterNodeNetwork{
+			NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 		},
 	}}
 	got := ClusterFacingHostAddress(state, "lab-host", state.ClusterInfras[0])
@@ -146,10 +146,10 @@ func TestManagedProxyURLAutoSubstitutesLoopback(t *testing.T) {
 	state.ClusterInfras[0].Spec.Endpoints = map[string]v1alpha1.Endpoint{
 		v1alpha1.EndpointAPI: {Address: "192.168.132.10"},
 	}
-	state.ClusterInfras[0].Spec.Components.Machines = []v1alpha1.ClusterMachineComponent{{
+	state.ClusterInfras[0].Spec.Components.Nodes = []v1alpha1.ClusterNodeComponent{{
 		Name: "master-0",
-		NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-			Ref: v1alpha1.LocalObjectReference{Name: "bridge-net"},
+		Network: v1alpha1.ClusterNodeNetwork{
+			NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 		},
 	}}
 	got, err := ManagedProxyURL(state, state.ClusterInfras[0])

@@ -160,9 +160,9 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:   "master-0",
-				Role:       v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:     "master-0",
+				Role:         v1alpha1.NodeRoleMaster,
+				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
 			}},
 		},
 	}
@@ -216,9 +216,9 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 				},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:   "master-0",
-				Role:       v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:     "master-0",
+				Role:         v1alpha1.NodeRoleMaster,
+				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
 			}},
 		},
 	}
@@ -351,7 +351,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",
 				Role:     v1alpha1.NodeRoleMaster,
-				MachineRef: v1alpha1.NodeMachineRef{
+				InfraNodeRef: v1alpha1.InfraNodeRef{
 					ClusterInfra: "infra",
 					Name:         "master-0",
 				},

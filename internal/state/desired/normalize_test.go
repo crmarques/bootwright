@@ -73,9 +73,9 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *
 	state.ClusterInfras = []v1alpha1.ClusterInfra{{
 		Metadata: v1alpha1.Metadata{Name: "infra"},
 		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Machines: []v1alpha1.ClusterMachineComponent{{
-				Name: "master-0",
-				From: v1alpha1.From{Provider: "rack", Name: "server-0"},
+			Nodes: []v1alpha1.ClusterNodeComponent{{
+				Name:   "master-0",
+				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "rack"}, MachineRef: v1alpha1.LocalObjectReference{Name: "server-0"}},
 			}},
 		}},
 	}}
@@ -100,9 +100,9 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t 
 	state.ClusterInfras = []v1alpha1.ClusterInfra{{
 		Metadata: v1alpha1.Metadata{Name: "infra"},
 		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Machines: []v1alpha1.ClusterMachineComponent{{
-				Name: "master-0",
-				From: v1alpha1.From{Provider: "libvirt", Profile: "worker"},
+			Nodes: []v1alpha1.ClusterNodeComponent{{
+				Name:   "master-0",
+				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "libvirt"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "worker"}},
 			}},
 		}},
 	}}
@@ -137,9 +137,9 @@ func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing
 				},
 			},
 			Components: v1alpha1.ClusterComponents{
-				Machines: []v1alpha1.ClusterMachineComponent{{
-					Name: "master-0",
-					From: v1alpha1.From{Provider: "rack", Name: "server-0"},
+				Nodes: []v1alpha1.ClusterNodeComponent{{
+					Name:   "master-0",
+					Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "rack"}, MachineRef: v1alpha1.LocalObjectReference{Name: "server-0"}},
 				}},
 			},
 		},
@@ -228,7 +228,7 @@ func containerClusterWithInfra(name, infra string) v1alpha1.ContainerCluster {
 		Spec: v1alpha1.ContainerClusterSpec{
 			Nodes: []v1alpha1.OCPNodeSpec{{
 				Hostname: "master-0",
-				MachineRef: v1alpha1.NodeMachineRef{
+				InfraNodeRef: v1alpha1.InfraNodeRef{
 					ClusterInfra: infra,
 					Name:         "master-0",
 				},

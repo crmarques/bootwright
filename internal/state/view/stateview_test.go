@@ -44,9 +44,9 @@ func TestClusterInfraRelationships(t *testing.T) {
 	cluster := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "cluster"},
 		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
-			{Hostname: "master-0", MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra"}},
-			{Hostname: "master-1", MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "infra"}},
-			{Hostname: "other", MachineRef: v1alpha1.NodeMachineRef{ClusterInfra: "other"}},
+			{Hostname: "master-0", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra"}},
+			{Hostname: "master-1", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra"}},
+			{Hostname: "other", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "other"}},
 		}},
 	}
 	state := v1alpha1.State{
@@ -80,9 +80,9 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 				},
 			},
 			Components: v1alpha1.ClusterComponents{
-				Machines: []v1alpha1.ClusterMachineComponent{{
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-						Ref: v1alpha1.LocalObjectReference{Name: "network"},
+				Nodes: []v1alpha1.ClusterNodeComponent{{
+					Network: v1alpha1.ClusterNodeNetwork{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
 					},
 				}},
 			},
@@ -154,9 +154,9 @@ func TestHostRouteAddressFallback(t *testing.T) {
 				v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
 			},
 			Components: v1alpha1.ClusterComponents{
-				Machines: []v1alpha1.ClusterMachineComponent{{
-					NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{
-						Ref: v1alpha1.LocalObjectReference{Name: "network"},
+				Nodes: []v1alpha1.ClusterNodeComponent{{
+					Network: v1alpha1.ClusterNodeNetwork{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
 					},
 				}},
 			},

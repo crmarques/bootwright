@@ -267,7 +267,7 @@ func TestRendererUsesContainerClusterNameWhenInfraNameDiffers(t *testing.T) {
 	}
 	state.ClusterInfras[0].Metadata.Name = "infra-for-sno-libvirt"
 	for i := range state.ContainerClusters[0].Spec.Nodes {
-		state.ContainerClusters[0].Spec.Nodes[i].MachineRef.ClusterInfra = "infra-for-sno-libvirt"
+		state.ContainerClusters[0].Spec.Nodes[i].InfraNodeRef.ClusterInfra = "infra-for-sno-libvirt"
 	}
 
 	ocp := state.ContainerClusters[0]
@@ -322,7 +322,7 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	}
 	state.ClusterInfras[0].Metadata.Name = "infra-for-sno-emul-baremetal"
 	for i := range state.ContainerClusters[0].Spec.Nodes {
-		state.ContainerClusters[0].Spec.Nodes[i].MachineRef.ClusterInfra = "infra-for-sno-emul-baremetal"
+		state.ContainerClusters[0].Spec.Nodes[i].InfraNodeRef.ClusterInfra = "infra-for-sno-emul-baremetal"
 	}
 
 	vars := render.Vars(state)
@@ -955,9 +955,9 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
 	ci := state.ClusterInfras[0]
 	ci.Metadata.Name = "sno-libvirt-b"
-	ci.Spec.Components.Machines = append([]v1alpha1.ClusterMachineComponent(nil), ci.Spec.Components.Machines...)
-	ci.Spec.Components.Machines[0].NetworkConfig.Overrides = maps.Clone(ci.Spec.Components.Machines[0].NetworkConfig.Overrides)
-	interfaces := ci.Spec.Components.Machines[0].NetworkConfig.Overrides["interfaces"].([]any)
+	ci.Spec.Components.Nodes = append([]v1alpha1.ClusterNodeComponent(nil), ci.Spec.Components.Nodes...)
+	ci.Spec.Components.Nodes[0].Network.Overrides = maps.Clone(ci.Spec.Components.Nodes[0].Network.Overrides)
+	interfaces := ci.Spec.Components.Nodes[0].Network.Overrides["interfaces"].([]any)
 	primary := maps.Clone(interfaces[0].(map[string]any))
 	ipv4 := maps.Clone(primary["ipv4"].(map[string]any))
 	addresses := append([]any(nil), ipv4["address"].([]any)...)
@@ -967,13 +967,13 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	ipv4["address"] = addresses
 	primary["ipv4"] = ipv4
 	interfaces[0] = primary
-	ci.Spec.Components.Machines[0].NetworkConfig.Overrides["interfaces"] = interfaces
+	ci.Spec.Components.Nodes[0].Network.Overrides["interfaces"] = interfaces
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
 	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].MachineRef.ClusterInfra = ci.Metadata.Name
+		ocp.Spec.Nodes[i].InfraNodeRef.ClusterInfra = ci.Metadata.Name
 	}
 	state.ClusterInfras = append(state.ClusterInfras, ci)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)
@@ -992,7 +992,7 @@ func twoClusterBareMetalPublicationState(t *testing.T) v1alpha1.State {
 	ocp.Metadata.Name = "sno-emul-baremetal-b"
 	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
 	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].MachineRef.ClusterInfra = ci.Metadata.Name
+		ocp.Spec.Nodes[i].InfraNodeRef.ClusterInfra = ci.Metadata.Name
 	}
 	state.ClusterInfras = append(state.ClusterInfras, ci)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)

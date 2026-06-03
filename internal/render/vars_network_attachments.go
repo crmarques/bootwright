@@ -2,12 +2,12 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterMachineComponent) map[string]any {
-	binding, ok := findClusterNetworkBinding(ci, m.From.Provider, m.NetworkConfig.Ref.Name)
+func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent) map[string]any {
+	binding, ok := findClusterNetworkBinding(ci, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
 	if !ok {
 		return nil
 	}
-	provider, ok := findProvider(state, m.From.Provider)
+	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}

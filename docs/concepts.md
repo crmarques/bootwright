@@ -39,12 +39,12 @@ instead of compact inline maps.
 ## Reference Flow
 
 ```text
-ContainerCluster.nodes[*].machineRef
-  -> ClusterInfra.components.machines[*]
+ContainerCluster.nodes[*].infraNodeRef
+  -> ClusterInfra.components.nodes[*]
   -> InfraProvider machine or profile
   -> Host
 
-ClusterInfra machines
+Provider-sourced ClusterInfra nodes
   -> NetworkConfig
 
 Environment.infraComponents.*.componentRef
@@ -62,13 +62,14 @@ KubeVirt child InfraProvider
 ClusterAddonBinding.addons[].inputs[]
   -> StorageExport
   -> StorageCluster
-  -> ClusterInfra.components.machines[*] (managed storage only)
+  -> ClusterInfra.components.nodes[*].source.hostRef (managed storage only)
+  -> Host
   -> ClusterAddon providing data-foundation
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
-the exact cluster infrastructure machine that backs it. In v1 all nodes in one
-cluster must reference the same `ClusterInfra`.
+the exact provider-sourced cluster infrastructure node that backs it. In v1
+all OpenShift nodes in one cluster must reference the same `ClusterInfra`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
@@ -139,9 +140,10 @@ KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
 `ClusterInfra.spec.networkBindings[]`.
 
-Most hosts reuse the same NMState template and only set static IPs in
-`ClusterInfra.components.machines[].networkConfig.overrides.interfaces[].ipv4.address[]`.
-Advanced hosts may provide a full inline `networkConfig.spec`.
+Most provider-sourced nodes reuse the same NMState template and only set static
+IPs in
+`ClusterInfra.components.nodes[].network.overrides.interfaces[].ipv4.address[]`.
+Advanced provider-sourced nodes may provide a full inline `network.spec`.
 
 Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and

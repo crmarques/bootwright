@@ -183,13 +183,13 @@ spec:
 	if err == nil {
 		t.Fatal("expected missing baremetal interface error, got nil")
 	}
-	want := `spec.components.machines[master-0].networkConfig.ref "cluster-net" requires baremetal interface "secondary" but InfraProvider/rack spec.machines[srv1].baremetal.interfaces does not declare it`
+	want := `spec.components.nodes[master-0].network.networkConfigRef "cluster-net" requires baremetal interface "secondary" but InfraProvider/rack spec.machines[srv1].baremetal.interfaces does not declare it`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 
-func TestClusterMachineNetworkConfigAcceptsInlineSpec(t *testing.T) {
+func TestClusterNodeNetworkAcceptsInlineSpec(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	delete(files, "network.yaml")
@@ -200,22 +200,22 @@ func TestClusterMachineNetworkConfigAcceptsInlineSpec(t *testing.T) {
 	}
 }
 
-func TestClusterMachineNetworkConfigRejectsRefAndSpec(t *testing.T) {
+func TestClusterNodeNetworkRejectsRefAndSpec(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "          ref: { name: cluster-net }\n", "          ref: { name: cluster-net }\n"+inlineNetworkConfigSpecYAML(), 1)
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "          networkConfigRef: { name: cluster-net }\n", "          networkConfigRef: { name: cluster-net }\n"+inlineNetworkConfigSpecYAML(), 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
 		t.Fatal("expected ref plus spec validation error, got nil")
 	}
-	want := "networkConfig must set exactly one of {ref, spec}"
+	want := "network must set exactly one of {networkConfigRef, spec}"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 
-func TestClusterMachineNetworkConfigRejectsInlineSpecOverrides(t *testing.T) {
+func TestClusterNodeNetworkRejectsInlineSpecOverrides(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	delete(files, "network.yaml")
@@ -231,7 +231,7 @@ func TestClusterMachineNetworkConfigRejectsInlineSpecOverrides(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected inline spec overrides validation error, got nil")
 	}
-	want := "networkConfig.overrides is only valid with networkConfig.ref"
+	want := "network.overrides is only valid with network.networkConfigRef"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -446,7 +446,7 @@ spec:
 			name: "clusterinfra-artifacts-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster",
-				"    artifacts: { from: { provider: rack, name: default } }\n---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster", 1)},
+				"    artifacts: { source: { providerRef: { name: rack }, machineRef: { name: default } } }\n---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster", 1)},
 			wantSubstring: "field artifacts not found",
 		},
 		{
@@ -543,7 +543,7 @@ spec:
 			name: "multiple-clusterinfra-refs-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"nodes:\n    - hostname: master-0",
-				"nodes:\n    - hostname: master-x\n      role: master\n      machineRef: { clusterInfra: other, name: master-x }\n    - hostname: master-0", 1)},
+				"nodes:\n    - hostname: master-x\n      role: master\n      infraNodeRef: { clusterInfra: other, name: master-x }\n    - hostname: master-0", 1)},
 			wantSubstring: "spec.nodes must reference exactly one ClusterInfra",
 		},
 		{
@@ -557,7 +557,7 @@ spec:
 			name: "missing-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"name: master-0", "name: missing", 1)},
-			wantSubstring: `machineRef.name "master-0" is not defined`,
+			wantSubstring: `infraNodeRef.name "master-0" is not defined`,
 		},
 		{
 			name: "openshift-pull-secret-required",
@@ -1377,7 +1377,7 @@ func TestEnvironmentContainerClustersFiltersEffectiveState(t *testing.T) {
 `, 1)
 	files["cluster-b.yaml"] = strings.Replace(newClusterYAML, "name: sno", "name: unused", 2)
 	files["cluster-b.yaml"] = strings.Replace(files["cluster-b.yaml"], "clusterInfra: sno", "clusterInfra: unused", 1)
-	files["cluster-b.yaml"] = strings.Replace(files["cluster-b.yaml"], "from: { provider: rack, name: srv1 }", "from: { provider: unused-rack, name: srv1 }", 1)
+	files["cluster-b.yaml"] = strings.Replace(files["cluster-b.yaml"], "source: { providerRef: { name: rack }, machineRef: { name: srv1 } }", "source: { providerRef: { name: unused-rack }, machineRef: { name: srv1 } }", 1)
 	files["provider-b.yaml"] = strings.Replace(newProviderYAML, "name: rack", "name: unused-rack", 1)
 	writeFiles(t, dir, files)
 
@@ -1432,7 +1432,7 @@ func TestEnvironmentResourcesRequireReferencedProvider(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected omitted provider to fail")
 	}
-	want := `spec.resources excludes InfraProvider/rack required by ClusterInfra/sno spec.components.machines[master-0].from.provider; add "provider.yaml"`
+	want := `spec.resources excludes InfraProvider/rack required by ClusterInfra/sno spec.components.nodes[master-0].source.providerRef; add "provider.yaml"`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -2044,7 +2044,7 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "  networkBindings:\n    - networkConfigRef: { name: child-machine-net }\n      providerRef: { name: child-kubevirt-provider }\n      attachmentRef: { name: child-machine-net }\n", "", 1)
 			},
-			wantSubstring: `networkConfig.ref "child-machine-net" has no ClusterInfra/child-ocp-infra spec.networkBindings entry for InfraProvider/child-kubevirt-provider`,
+			wantSubstring: `network.networkConfigRef.name "child-machine-net" has no ClusterInfra/child-ocp-infra spec.networkBindings entry for InfraProvider/child-kubevirt-provider`,
 		},
 		{
 			name: "missing-network-attachment",
@@ -2058,7 +2058,7 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n", "      libvirt:\n        bridge: vbr-child\n", 1)
 			},
-			wantSubstring: `networkConfig.ref "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment "child-machine-net" of kind "libvirt", but machine substrate is "kubevirt"`,
+			wantSubstring: `network.networkConfigRef.name "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment "child-machine-net" of kind "libvirt", but node substrate is "kubevirt"`,
 		},
 		{
 			name: "network-attachment-nad-namespace-required",
@@ -2195,11 +2195,11 @@ spec:
       providerRef: { name: child-kubevirt-provider }
       attachmentRef: { name: child-machine-net }
   components:
-    machines:
+    nodes:
       - name: master-0
-        from: { provider: child-kubevirt-provider, profile: child-sno }
-        networkConfig:
-          ref: { name: child-machine-net }
+        source: { providerRef: { name: child-kubevirt-provider }, profileRef: { name: child-sno } }
+        network:
+          networkConfigRef: { name: child-machine-net }
           overrides:
             interfaces:
               - name: primary
@@ -2236,7 +2236,7 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef: { clusterInfra: child-ocp-infra, name: master-0 }
+      infraNodeRef: { clusterInfra: child-ocp-infra, name: master-0 }
 `
 	return files
 }
@@ -2390,11 +2390,11 @@ spec:
       providerRef: { name: ` + provider + ` }
       attachmentRef: { name: ` + network + ` }
   components:
-    machines:
+    nodes:
       - name: master-0
-        from: { provider: ` + provider + `, profile: cp }
-        networkConfig:
-          ref: { name: ` + network + ` }
+        source: { providerRef: { name: ` + provider + ` }, profileRef: { name: cp } }
+        network:
+          networkConfigRef: { name: ` + network + ` }
           overrides:
             interfaces:
               - name: primary
@@ -2434,7 +2434,7 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef: { clusterInfra: ` + infra + `, name: master-0 }
+      infraNodeRef: { clusterInfra: ` + infra + `, name: master-0 }
 `
 }
 
@@ -2533,11 +2533,11 @@ spec:
       providerRef: { name: vsphere }
       attachmentRef: { name: vsphere-net }
   components:
-    machines:
+    nodes:
       - name: master-0
-        from: { provider: vsphere, profile: control-plane }
-        networkConfig:
-          ref: { name: vsphere-net }
+        source: { providerRef: { name: vsphere }, profileRef: { name: control-plane } }
+        network:
+          networkConfigRef: { name: vsphere-net }
           overrides:
             interfaces:
               - name: ens192
@@ -2572,7 +2572,7 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef: { clusterInfra: vsphere-infra, name: master-0 }
+      infraNodeRef: { clusterInfra: vsphere-infra, name: master-0 }
 `,
 	}
 }
@@ -2786,8 +2786,8 @@ spec:
 `
 
 func baselineMachineNetworkConfigYAML() string {
-	return `        networkConfig:
-          ref: { name: cluster-net }
+	return `        network:
+          networkConfigRef: { name: cluster-net }
           overrides:
             interfaces:
               - name: primary
@@ -2798,7 +2798,7 @@ func baselineMachineNetworkConfigYAML() string {
 }
 
 func inlineMachineNetworkConfigYAML(extra string) string {
-	return `        networkConfig:
+	return `        network:
 ` + inlineNetworkConfigSpecYAML() + extra
 }
 
@@ -2852,9 +2852,9 @@ spec:
       endpointRef:
         name: bmc
   components:
-    machines:
+    nodes:
       - name: master-0
-        from: { provider: rack, name: srv1 }
+        source: { providerRef: { name: rack }, machineRef: { name: srv1 } }
 ` + baselineMachineNetworkConfigYAML() + `
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -2887,5 +2887,5 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef: { clusterInfra: sno, name: master-0 }
+      infraNodeRef: { clusterInfra: sno, name: master-0 }
 `

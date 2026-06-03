@@ -107,7 +107,7 @@ These boundaries are reflected in rendering:
   selected machine `NetworkConfig` references, endpoint refs, and
   `ClusterInfra.platform`.
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.nodes`,
-  `ClusterInfra.components.machines`, referenced `NetworkConfig` templates, and
+  `ClusterInfra.components.nodes`, referenced `NetworkConfig` templates, and
   provider or generated substrate MAC inventory.
 - Machine and endpoint provider variables resolve substrate network attachments from
   `ClusterInfra.networkBindings[]` to `InfraProvider.networkAttachments[]`.

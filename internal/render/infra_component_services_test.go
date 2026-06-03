@@ -13,7 +13,7 @@ func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing
 	state.ClusterInfras[1].Metadata.Name = "infra-b"
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
-	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.ClusterInfra = "infra-b"
+	state.ContainerClusters[1].Spec.Nodes[0].InfraNodeRef.ClusterInfra = "infra-b"
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"app-a.example.test", "shared.example.test"}
 	state.InfraComponents[0].Spec.NameResolution.AdditionalIngressHosts = []string{"app-b.example.test", "shared.example.test"}
 
@@ -51,12 +51,12 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 		"api-int":            {Address: "192.168.131.10"},
 		"apps":               {Address: "192.168.131.11"},
 	}
-	state.ClusterInfras[1].Spec.Components.Machines = append([]v1alpha1.ClusterMachineComponent(nil), state.ClusterInfras[1].Spec.Components.Machines...)
-	state.ClusterInfras[1].Spec.Components.Machines[0].NetworkConfig.Ref.Name = "managed-net-b"
+	state.ClusterInfras[1].Spec.Components.Nodes = append([]v1alpha1.ClusterNodeComponent(nil), state.ClusterInfras[1].Spec.Components.Nodes...)
+	state.ClusterInfras[1].Spec.Components.Nodes[0].Network.NetworkConfigRef.Name = "managed-net-b"
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
 	state.ContainerClusters[1].Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), state.ContainerClusters[1].Spec.Nodes...)
-	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.ClusterInfra = "infra-b"
+	state.ContainerClusters[1].Spec.Nodes[0].InfraNodeRef.ClusterInfra = "infra-b"
 
 	services := infraComponentServicesVars(state)
 	if len(services) != 1 {

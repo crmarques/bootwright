@@ -126,9 +126,11 @@ spec:
       - name: cluster
         hostAddress: cluster-lan
 `,
-		ClusterMachineFrom: `        from:
-          provider: {{.ProviderID}}
-          profile: sno`,
+		ClusterMachineFrom: `        source:
+          providerRef:
+            name: {{.ProviderID}}
+          profileRef:
+            name: sno`,
 		ClusterMachineExtras: "",
 		ClusterServices:      "",
 		EndpointsYAML: `    api:
@@ -247,9 +249,11 @@ spec:
         listener: https
         hostAddress: bmc-lan
 `,
-		ClusterMachineFrom: `        from:
-          provider: {{.ProviderID}}
-          name: rack1-srv1`,
+		ClusterMachineFrom: `        source:
+          providerRef:
+            name: {{.ProviderID}}
+          machineRef:
+            name: rack1-srv1`,
 		ClusterMachineExtras: "",
 		// No nameResolution component on this substrate, so the
 		// renderer will not auto-inject a DNS service IP — keep an
@@ -353,9 +357,11 @@ spec:
                 - ocp-install
         template: rhcos
 `,
-		ClusterMachineFrom: `        from:
-          provider: {{.ProviderID}}
-          profile: sno`,
+		ClusterMachineFrom: `        source:
+          providerRef:
+            name: {{.ProviderID}}
+          profileRef:
+            name: sno`,
 		ClusterMachineExtras: "",
 		// No nameResolution component on this substrate, so the
 		// renderer will not auto-inject a DNS service IP — keep an

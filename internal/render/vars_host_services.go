@@ -79,7 +79,7 @@ func loadBalancerHostServiceVars(state v1alpha1.State, service stategraph.HostSe
 		if !ok {
 			continue
 		}
-		frontends = append(frontends, loadBalancerFrontends(state, ci, component.Metadata.Name, consumer.Cluster, ci.Spec.Components.Machines, clusterNodesForCI(state, ci))...)
+		frontends = append(frontends, loadBalancerFrontends(state, ci, component.Metadata.Name, consumer.Cluster, ci.Spec.Components.Nodes, clusterNodesForCI(state, ci))...)
 	}
 	if len(frontends) > 0 {
 		out["frontends"] = frontends
@@ -289,7 +289,7 @@ func providerHostSetupsVars(state v1alpha1.State) []any {
 	seen := map[key]bool{}
 	var keys []key
 	for _, ci := range state.ClusterInfras {
-		for _, machine := range ci.Spec.Components.Machines {
+		for _, machine := range ci.Spec.Components.Nodes {
 			hostRef := machineHostRef(state, machine)
 			if hostRef == "" {
 				continue
