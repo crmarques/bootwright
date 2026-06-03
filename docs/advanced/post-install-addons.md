@@ -156,6 +156,14 @@ cluster.
 `apply --yes` and `apply --stage clusters --yes` include add-ons after the cluster
 install wait task.
 
+## OLM Channel Selection
+
+OLM add-ons may track the declared catalog channel. Set
+`olm.subscription.startingCSV` when the bootstrap input must request one
+specific CSV from that channel. Bootwright-managed component images still use
+the pinned image policy from the security spec; add-on catalog channel
+selection is authored cluster bootstrap intent.
+
 ## Records And Readiness
 
 Add-on records are stored under

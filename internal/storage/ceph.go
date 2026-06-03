@@ -80,6 +80,9 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		if export.Spec.StorageClusterRef.Name == storageCluster && export.Spec.DataFoundation != nil {
+			if cluster, ok := topology.ClusterByName(state, storageCluster); ok && !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
+				continue
+			}
 			exports[export.Metadata.Name] = export
 		}
 	}

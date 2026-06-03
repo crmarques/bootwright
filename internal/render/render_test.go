@@ -116,6 +116,9 @@ func TestAllSucceedsForCanonicalExamples(t *testing.T) {
 			continue
 		}
 		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
 			if err != nil {

@@ -4,6 +4,7 @@ metadata:
   name: dc1-ocp
 spec:
   platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: baremetal
     baremetal:
       provisioningNetwork: disabled

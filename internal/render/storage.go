@@ -115,13 +115,13 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				continue
 			}
 			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, attachment, attachmentAsset.ContainerClusterName)
-			externalDetailsRef := addonInputExternalDetailsRef(attachment)
-			if externalDetailsRef.Name != "" && opts.ExternalDetailsSecretsDir != "" {
-				detailsJSON, err := datafoundation.LoadExternalDetailsJSON(state, opts.ExternalDetailsSecretsDir, externalDetailsRef)
+			fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export)
+			if fromSecret != "" && opts.ExternalDetailsSecretsDir != "" {
+				detailsJSON, err := datafoundation.LoadExternalDetailsSecretJSON(state, opts.ExternalDetailsSecretsDir, fromSecret)
 				if err != nil {
 					return err
 				}
-				externalDetails = DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, externalDetailsRef.Name)
+				externalDetails = DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, fromSecret)
 			}
 			if err := writeYAML(fs, attachmentAsset.ExternalClusterDetailsPath, externalDetails); err != nil {
 				return err

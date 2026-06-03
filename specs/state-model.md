@@ -401,10 +401,10 @@ because that infrastructure path is not available yet.
 previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
 Bootwright renders and applies only Data Foundation attachment manifests for
 that cluster. For imported Ceph, the user declares the Data Foundation
-external-cluster-details JSON as a secret and references it from the binding
-input value `externalDetailsRef`. For managed Ceph, Bootwright generates the
-same JSON during storage provisioning and stores it as restrictive runtime
-secret material.
+external-cluster-details JSON as a secret and references it from
+`StorageExport.spec.externalDetails.fromSecret`. For managed Ceph, Bootwright
+generates the same JSON during storage provisioning and stores it as
+restrictive runtime secret material.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -431,7 +431,6 @@ spec:
         credentialsRef:
           name: ceph-registry-credentials
       nodeSSH:
-        user: root
         keyPairRef:
           name: ceph-node-ssh
       clusterSSH:
@@ -478,8 +477,11 @@ Rules:
   provisioning. `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`,
   and `StorageObjectGateway` are not declared for imported Ceph.
 - `nodeSSH` is the bastion-to-node SSH identity rendered into the Ansible
-  seed-host inventory. `clusterSSH` is the SSH identity copied to the seed host
-  and passed to cephadm for ongoing cluster orchestration.
+  seed-host inventory. When `nodeSSH.user` is omitted, Bootwright does not
+  render `ansible_user`; Ansible uses the invoking SSH user or host-specific
+  SSH configuration, and privileged Ceph tasks use Ansible `become`.
+  `clusterSSH` is the SSH identity copied to the seed host and passed to
+  cephadm for ongoing cluster orchestration.
 - A storage-only `ClusterInfra` can omit OpenShift API, API-int, and ingress
   endpoints. Explicit bare-metal BMC fields are required only for
   `ContainerCluster` boot targets, not for storage-only preinstalled nodes.
@@ -521,9 +523,9 @@ Rules:
   generated-at-apply placeholders for secret keys; authored examples must not
   contain generated external-cluster secret bytes.
 - Imported Data Foundation attachments render a placeholder in normal output
-  and inline `externalDetailsRef` secret JSON only for sensitive render output
-  and apply-time task artifacts. Managed Ceph attachments read generated
-  details from
+  and inline the `StorageExport.spec.externalDetails.fromSecret` JSON only for
+  sensitive render output and apply-time task artifacts. Managed Ceph
+  attachments read generated details from
   `clusters/<cluster>/secrets/addons/<addon>/inputs/<input>/external-cluster-details.json`.
 
 Rendered storage files are deterministic and are the same files used during
@@ -627,8 +629,6 @@ spec:
           properties:
             exportRef:
               refKind: StorageExport
-            externalDetailsRef:
-              secretRef: true
         effects:
           - type: storage-export-attachment
             provider: data-foundation
@@ -720,6 +720,11 @@ Rules:
 - `subscription.startingCSV`, when set, is rendered to
   `Subscription.spec.startingCSV` to request a specific catalog CSV while still
   declaring the channel.
+- When `subscription.startingCSV` is omitted, the add-on intentionally tracks
+  the declared catalog channel. This is accepted for bootstrap add-ons because
+  catalog selection is authored cluster intent, not a Bootwright-managed
+  component image pin. Operators that need a specific CSV must set
+  `startingCSV`.
 - `installPlanApproval` is `Automatic` or `Manual`.
 - If `operatorGroup` is set, `operatorGroup.name` is required.
 - `customResources[]` may be empty. When present, each custom resource must
@@ -752,8 +757,22 @@ Rules:
   that accepted input schema.
 - The `storage-export-attachment` effect requires `values.exportRef.name` to
   resolve to a `StorageExport` of type `data-foundation`.
-- Imported Ceph requires `values.externalDetailsRef.name`. Managed Ceph
-  rejects user-provided `externalDetailsRef`.
+- Imported Ceph requires `StorageExport.spec.externalDetails` with exactly one
+  source. `fromSecret` references declared external-cluster-details JSON.
+  `generated` is rejected for imported Ceph.
+- Managed and full-managed Ceph may omit
+  `StorageExport.spec.externalDetails`; Bootwright treats it as `generated`.
+  If set explicitly, it must still choose exactly one supported source.
+- `StorageExport.spec.externalDetails.fromSecret` names secret material
+  declared in `Environment.spec.secrets`. `generated` means Bootwright creates
+  Data Foundation Ceph auth and assembles exporter-compatible JSON from the
+  managed storage result. `sshExecution` runs the official Data Foundation
+  exporter through Ansible over SSH, requires `knownHostsRef`, becomes root
+  through Ansible `become`, writes the validated JSON into the attachment
+  Secret manifest, and does not log exporter stdout. Imported Ceph requires
+  explicit `ceph-admin` host refs. Managed and full-managed Ceph may omit host
+  refs; Bootwright uses the storage cluster's `cephadm.bootstrap.seedNode` and
+  `cephadm.nodeSSH`.
 - Future add-on types may include `kustomize` and `helm`; they are not
   accepted by the MVP schema.
 
@@ -887,9 +906,9 @@ Rules:
 - `spec.ssh.keyRef.name` is required and references
   `Environment.spec.secrets`. Controller-local hosts still do not require host
   SSH key material during preflight.
-- `spec.capabilities[]` is required. The current canonical tags are `libvirt`
-  and `container-runtime`; provider and service capabilities use them to
-  select hosts for substrate or service work.
+- `spec.capabilities[]` is required. The current canonical tags are `libvirt`,
+  `container-runtime`, and `ceph-admin`; provider, service, and external Ceph
+  workflows use them to select hosts for substrate, service, or Ceph-side work.
 
 ## InfraProvider
 
@@ -1436,10 +1455,10 @@ Validation rejects:
   dependency cycle.
 - `ClusterAddonBinding.spec.clusterRef.name` values that name missing
   clusters.
-- Imported Ceph storage-export attachment inputs without
-  `values.externalDetailsRef`.
-- Managed Ceph storage-export attachment inputs with user-provided
-  `externalDetailsRef`.
+- Imported Ceph `StorageExport` objects without
+  `spec.externalDetails.fromSecret` or another accepted source.
+- `StorageExport.spec.externalDetails` values that set multiple sources or
+  reference undeclared secrets or hosts.
 
 ## CLI Contract
 

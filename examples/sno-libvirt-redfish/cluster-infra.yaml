@@ -4,6 +4,7 @@ metadata:
   name: sno-libvirt
 spec:
   platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: baremetal
     baremetal:
       provisioningNetwork: disabled

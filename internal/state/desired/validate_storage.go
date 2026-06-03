@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
@@ -18,14 +19,15 @@ func validateStorage(state v1alpha1.State) []string {
 	gateways := indexStorageObjectGateways(state.StorageObjectGateways)
 	exports := indexStorageExports(state.StorageExports)
 	infras := indexClusterInfras(state.ClusterInfras)
+	hosts := indexHosts(state.Hosts)
 
 	errs = append(errs, validateStorageClusters(state.StorageClusters, infras)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
 	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters, infras)...)
-	errs = append(errs, validateStorageExports(state.StorageExports, clusters, pools, filesystems, gateways)...)
-	errs = append(errs, validateStorageExportAttachmentEffects(state, exports, clusters)...)
+	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, hosts)...)
+	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
 }
 
@@ -523,10 +525,10 @@ func validateStorageGatewayIngressEndpoint(prefix string, ref v1alpha1.EndpointR
 	return errs
 }
 
-func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, filesystems map[string]v1alpha1.StorageFilesystem, gateways map[string]v1alpha1.StorageObjectGateway) []string {
+func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, filesystems map[string]v1alpha1.StorageFilesystem, gateways map[string]v1alpha1.StorageObjectGateway, hosts map[string]v1alpha1.Host) []string {
 	var errs []string
 	seen := map[string]bool{}
-	for _, export := range items {
+	for _, export := range state.StorageExports {
 		if e := validateName(v1alpha1.KindStorageExport, export.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
@@ -552,6 +554,9 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 			continue
 		}
 		df := export.Spec.DataFoundation
+		if clusterOK {
+			errs = append(errs, validateStorageExportExternalDetails(state, export, cluster, hosts)...)
+		}
 		if clusterOK && storageClusterExternal(cluster) {
 			if df != nil {
 				errs = append(errs, fmt.Sprintf("%s.dataFoundation must be empty when storageClusterRef points to StorageCluster/%s with spec.management=external", prefix, cluster.Metadata.Name))
@@ -587,7 +592,106 @@ func validateStorageExports(items []v1alpha1.StorageExport, clusters map[string]
 	return errs
 }
 
-func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport, storageClusters map[string]v1alpha1.StorageCluster) []string {
+func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, hosts map[string]v1alpha1.Host) []string {
+	var errs []string
+	prefix := fmt.Sprintf("StorageExport/%s spec.externalDetails", export.Metadata.Name)
+	details := export.Spec.ExternalDetails
+	if details == nil {
+		if storageClusterExternal(cluster) {
+			return []string{prefix + " is required when storageClusterRef points to external Ceph"}
+		}
+		return nil
+	}
+	sourceCount := 0
+	if strings.TrimSpace(details.FromSecret) != "" {
+		sourceCount++
+	}
+	if details.Generated != nil {
+		sourceCount++
+	}
+	if details.SSHExecution != nil {
+		sourceCount++
+	}
+	if sourceCount != 1 {
+		errs = append(errs, prefix+" must set exactly one of fromSecret, generated, or sshExecution")
+	}
+	if storageClusterExternal(cluster) && details.Generated != nil {
+		errs = append(errs, prefix+".generated must be empty when storageClusterRef points to external Ceph")
+	}
+	if strings.TrimSpace(details.FromSecret) != "" && !environmentDeclaresSecret(state, details.FromSecret) {
+		errs = append(errs, fmt.Sprintf("%s.fromSecret %q is not declared in Environment spec.secrets", prefix, details.FromSecret))
+	}
+	if details.SSHExecution != nil {
+		errs = append(errs, validateStorageExportSSHExecution(state, prefix+".sshExecution", cluster, details.SSHExecution, hosts)...)
+	}
+	return errs
+}
+
+func validateStorageExportSSHExecution(state v1alpha1.State, prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, hosts map[string]v1alpha1.Host) []string {
+	var errs []string
+	if storageClusterExternal(cluster) && len(spec.HostRefs) == 0 {
+		errs = append(errs, prefix+".hostRefs is required when storageClusterRef points to external Ceph")
+	}
+	for i, ref := range spec.HostRefs {
+		owner := fmt.Sprintf("%s.hostRefs[%d].name", prefix, i)
+		if ref.Name == "" {
+			errs = append(errs, owner+" is required")
+			continue
+		}
+		host, ok := hosts[ref.Name]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s %q does not match any Host", owner, ref.Name))
+			continue
+		}
+		if !hostHasCapability(host, v1alpha1.HostCapabilityCephAdmin) {
+			errs = append(errs, fmt.Sprintf("%s %q must reference a Host with capability %q", owner, ref.Name, v1alpha1.HostCapabilityCephAdmin))
+		}
+	}
+	if spec.KnownHostsRef.Name == "" {
+		errs = append(errs, prefix+".knownHostsRef.name is required")
+	} else if !environmentDeclaresSecret(state, spec.KnownHostsRef.Name) {
+		errs = append(errs, fmt.Sprintf("%s.knownHostsRef.name %q is not declared in Environment spec.secrets", prefix, spec.KnownHostsRef.Name))
+	}
+	if spec.Timeout != "" {
+		if _, err := time.ParseDuration(spec.Timeout); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.timeout %q must be a Go duration such as 10m, 30m, or 1h", prefix, spec.Timeout))
+		}
+	}
+	if spec.Exporter.Source == "" {
+		errs = append(errs, prefix+".exporter.source is required")
+	} else if spec.Exporter.Source != v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon {
+		errs = append(errs, fmt.Sprintf("%s.exporter.source %q must be %q", prefix, spec.Exporter.Source, v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon))
+	}
+	if spec.Config.RBDDataPoolName == "" {
+		errs = append(errs, prefix+".config.rbdDataPoolName is required")
+	}
+	if spec.Config.Format != "" && spec.Config.Format != "json" {
+		errs = append(errs, fmt.Sprintf("%s.config.format %q must be %q when set", prefix, spec.Config.Format, "json"))
+	}
+	if spec.Config.RestrictedAuthPermission && spec.Config.ClusterName == "" {
+		errs = append(errs, prefix+".config.clusterName is required when restrictedAuthPermission is true")
+	}
+	for i, endpoint := range spec.Config.MonitoringEndpoint {
+		if strings.TrimSpace(endpoint) == "" {
+			errs = append(errs, fmt.Sprintf("%s.config.monitoringEndpoint[%d] must not be empty", prefix, i))
+		}
+	}
+	if spec.Config.MonitoringEndpointPort < 0 || spec.Config.MonitoringEndpointPort > 65535 {
+		errs = append(errs, fmt.Sprintf("%s.config.monitoringEndpointPort must be between 0 and 65535", prefix))
+	}
+	return errs
+}
+
+func environmentDeclaresSecret(state v1alpha1.State, name string) bool {
+	for _, env := range state.Environments {
+		if _, ok := env.Spec.Secrets[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport) []string {
 	var errs []string
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name)
@@ -606,20 +710,6 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 		if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
 			errs = append(errs, fmt.Sprintf("%s.values.exportRef.name %q must reference a data-foundation StorageExport", prefix, exportRef.Name))
 			continue
-		}
-		cluster, clusterOK := storageClusters[export.Spec.StorageClusterRef.Name]
-		if !clusterOK {
-			continue
-		}
-		externalDetailsRef := addoninputs.SecretRefValue(effect.Input.Values, "externalDetailsRef")
-		if storageClusterExternal(cluster) {
-			if externalDetailsRef.Name == "" {
-				errs = append(errs, prefix+".values.externalDetailsRef.name is required when exportRef points to an external StorageCluster")
-			}
-			continue
-		}
-		if externalDetailsRef.Name != "" {
-			errs = append(errs, prefix+".values.externalDetailsRef.name must be empty when exportRef points to a managed StorageCluster")
 		}
 	}
 	return errs

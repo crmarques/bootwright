@@ -148,6 +148,8 @@ func argsNeedLocalRoot(args []string) bool {
 	switch args[0] {
 	case "version", "help", "completion", "example", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
 		return false
+	case "validate":
+		return !argsHaveInputFileFlag(args[1:])
 	case "apply", "destroy":
 		if args[0] == "destroy" && len(args) == 1 {
 			return false

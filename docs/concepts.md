@@ -82,9 +82,10 @@ Ceph declaration includes a cephadm registry URL and credential reference; it
 does not embed registry secrets in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
-`storage-export-attachment` effect, and bindings provide `exportRef` plus
-`externalDetailsRef` for the operator-provided external-cluster details
-secret. The attachment applies later in the add-ons phase after the target
+`storage-export-attachment` effect, bindings provide `exportRef`, and
+`StorageExport.spec.externalDetails.fromSecret` points to the
+operator-provided external-cluster details secret. The attachment applies later
+in the add-ons phase after the target
 cluster and Data Foundation add-on are ready. Managed Ceph generates those
 details during storage apply and saves them as restrictive runtime secret
 material. Installing RHEL onto bare-metal storage nodes through BMC and

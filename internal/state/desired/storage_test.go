@@ -139,6 +139,9 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	if state.StorageExports[0].Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
 		t.Fatalf("storage export type = %q, want data-foundation", state.StorageExports[0].Spec.Type)
 	}
+	if state.StorageExports[0].Spec.ExternalDetails == nil || state.StorageExports[0].Spec.ExternalDetails.Generated == nil {
+		t.Fatalf("storage export externalDetails = %#v, want generated default", state.StorageExports[0].Spec.ExternalDetails)
+	}
 	if errs := validateStorage(state); len(errs) != 0 {
 		t.Fatalf("validateStorage returned errors after defaults: %v", errs)
 	}
@@ -183,14 +186,78 @@ func TestExternalStorageValidationAcceptsImportedDataFoundation(t *testing.T) {
 	}
 }
 
-func TestExternalStorageValidationRequiresExternalDetailsRef(t *testing.T) {
+func TestExternalStorageValidationRequiresExternalDetailsSource(t *testing.T) {
 	state := externalStorageValidationState()
-	state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0].Values = map[string]any{
-		"exportRef": map[string]any{"name": "export"},
-	}
+	state.StorageExports[0].Spec.ExternalDetails = nil
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, "values.externalDetailsRef.name is required when exportRef points to an external StorageCluster") {
-		t.Fatalf("validateStorage errors = %q, want externalDetailsRef requirement", got)
+	if !strings.Contains(got, "spec.externalDetails is required when storageClusterRef points to external Ceph") {
+		t.Fatalf("validateStorage errors = %q, want externalDetails requirement", got)
+	}
+}
+
+func TestStorageValidationAcceptsFullManagedGeneratedExternalDetailsDefault(t *testing.T) {
+	state := storageValidationState()
+	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementFullManaged
+	state.StorageExports[0].Spec.ExternalDetails = nil
+	Normalize(&state)
+	if state.StorageExports[0].Spec.ExternalDetails == nil || state.StorageExports[0].Spec.ExternalDetails.Generated == nil {
+		t.Fatalf("fullManaged externalDetails = %#v, want generated default", state.StorageExports[0].Spec.ExternalDetails)
+	}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
+	}
+}
+
+func TestExternalStorageValidationAcceptsSSHExecution(t *testing.T) {
+	state := externalStorageValidationState()
+	state.Environments[0].Spec.Secrets["ceph-admin-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Hosts = []v1alpha1.Host{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+		Spec: v1alpha1.HostSpec{
+			Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+			SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
+			Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
+		},
+	}}
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+			HostRefs:      []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"},
+			Timeout:       "10m",
+			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+			},
+			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
+				RBDDataPoolName: "rbdpool",
+			},
+		},
+	}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
+	}
+}
+
+func TestManagedStorageValidationAcceptsSSHExecutionWithoutHostRefs(t *testing.T) {
+	state := storageValidationState()
+	state.Environments = []v1alpha1.Environment{{
+		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+			"ceph-admin-known-hosts": {},
+		}},
+	}}
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"},
+			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+			},
+			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
+				RBDDataPoolName: "rbdpool",
+			},
+		},
+	}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
 	}
 }
 
@@ -222,11 +289,66 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			want: "ceph must be empty when spec.management=external",
 		},
 		{
-			name: "managed-external-details",
+			name: "external-generated-details",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementManaged
+				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{Generated: &v1alpha1.StorageExportExternalDetailsGenerated{}}
 			},
-			want: "values.externalDetailsRef.name must be empty when exportRef points to a managed StorageCluster",
+			want: "spec.externalDetails.generated must be empty when storageClusterRef points to external Ceph",
+		},
+		{
+			name: "multiple-external-details-sources",
+			edit: func(state *v1alpha1.State) {
+				state.StorageExports[0].Spec.ExternalDetails.Generated = &v1alpha1.StorageExportExternalDetailsGenerated{}
+			},
+			want: "spec.externalDetails must set exactly one of fromSecret, generated, or sshExecution",
+		},
+		{
+			name: "missing-known-hosts",
+			edit: func(state *v1alpha1.State) {
+				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+					SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+						HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+						Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+							Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+						},
+						Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+					},
+				}
+				state.Hosts = []v1alpha1.Host{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+					Spec: v1alpha1.HostSpec{
+						Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+						SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
+						Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
+					},
+				}}
+			},
+			want: "spec.externalDetails.sshExecution.knownHostsRef.name is required",
+		},
+		{
+			name: "external-ssh-host-without-ceph-admin-capability",
+			edit: func(state *v1alpha1.State) {
+				state.Environments[0].Spec.Secrets["ceph-admin-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+					SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+						HostRefs:      []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"},
+						Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+							Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+						},
+						Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+					},
+				}
+				state.Hosts = []v1alpha1.Host{{
+					Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+					Spec: v1alpha1.HostSpec{
+						Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+						SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
+						Capabilities: []string{v1alpha1.HostCapabilityLibvirt},
+					},
+				}}
+			},
+			want: `must reference a Host with capability "ceph-admin"`,
 		},
 		{
 			name: "imported-and-managed-refs",
@@ -379,7 +501,7 @@ func storageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export", "")},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
 			},
 		}},
 	}
@@ -387,6 +509,11 @@ func storageValidationState() v1alpha1.State {
 
 func externalStorageValidationState() v1alpha1.State {
 	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"shared-ceph-external-details": {},
+			}},
+		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},
@@ -402,6 +529,9 @@ func externalStorageValidationState() v1alpha1.State {
 			Spec: v1alpha1.StorageExportSpec{
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
+					FromSecret: "shared-ceph-external-details",
+				},
 			},
 		}},
 		ClusterAddons: []v1alpha1.ClusterAddon{{
@@ -419,7 +549,7 @@ func externalStorageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "odf-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export", "shared-ceph-external-details")},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
 			},
 		}},
 	}
@@ -432,8 +562,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
 			Required: []string{"exportRef"},
 			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
-				"externalDetailsRef": {SecretRef: true},
+				"exportRef": {RefKind: v1alpha1.KindStorageExport},
 			},
 		},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
@@ -443,12 +572,9 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	}}}
 }
 
-func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
 		"exportRef": map[string]any{"name": export},
-	}
-	if externalDetails != "" {
-		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

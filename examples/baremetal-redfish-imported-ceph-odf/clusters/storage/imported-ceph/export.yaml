@@ -7,3 +7,6 @@ spec:
 
   storageClusterRef:
     name: imported-ceph
+
+  externalDetails:
+    fromSecret: imported-ceph-odf-details

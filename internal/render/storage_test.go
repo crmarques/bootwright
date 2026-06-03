@@ -406,6 +406,9 @@ func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.Stat
 			Spec: v1alpha1.StorageExportSpec{
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
+					FromSecret: "shared-ceph-external-details",
+				},
 			},
 		}},
 		ClusterAddons: []v1alpha1.ClusterAddon{{
@@ -421,14 +424,14 @@ func importedDataFoundationRenderState(secretFile, envPath string) v1alpha1.Stat
 				Metadata: v1alpha1.Metadata{Name: "shared-ceph-dc1"},
 				Spec: v1alpha1.ClusterAddonBindingSpec{
 					ClusterRef: v1alpha1.LocalObjectReference{Name: "dc1-ocp"},
-					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation", "shared-ceph-external-details")},
+					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
 				},
 			},
 			{
 				Metadata: v1alpha1.Metadata{Name: "shared-ceph-dc2"},
 				Spec: v1alpha1.ClusterAddonBindingSpec{
 					ClusterRef: v1alpha1.LocalObjectReference{Name: "dc2-ocp"},
-					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation", "shared-ceph-external-details")},
+					Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
 				},
 			},
 		},
@@ -442,8 +445,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
 			Required: []string{"exportRef"},
 			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
-				"externalDetailsRef": {SecretRef: true},
+				"exportRef": {RefKind: v1alpha1.KindStorageExport},
 			},
 		},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
@@ -453,12 +455,9 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	}}}
 }
 
-func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
 		"exportRef": map[string]any{"name": export},
-	}
-	if externalDetails != "" {
-		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

@@ -18,5 +18,5 @@ spec:
           address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
 

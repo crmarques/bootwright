@@ -267,7 +267,7 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	var detailsCheck *preflightCheck
 	for i := range checks {
 		check := &checks[i]
-		if check.Name == "odf input[external-storage] externalDetailsRef" {
+		if check.Name == "StorageExport/shared-ceph-data-foundation externalDetails.fromSecret" {
 			detailsCheck = check
 			break
 		}
@@ -317,6 +317,32 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 		assertPreflightCheckStatus(t, checks, name, "OK")
 	}
 	assertPreflightCheckStatus(t, checks, "ceph cephadm registry credentialsRef", "FAIL")
+}
+
+func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
+	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
+	state.Environments[0].Spec.Secrets["ceph-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+			},
+			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+		},
+	}
+	checks := collectPreflightChecks(state, []Phase{{Name: "addons"}}, true, "/context/secrets", "/host-state", preflightDeps{
+		lookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		statPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	assertPreflightCheckStatus(t, checks, "oc", "OK")
+	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
+	assertPreflightCheckStatus(t, checks, "python3", "OK")
 }
 
 func TestSecretListReportsImportedCephExternalDetailsFile(t *testing.T) {
@@ -387,6 +413,9 @@ func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1
 			Spec: v1alpha1.StorageExportSpec{
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
+					FromSecret: "shared-ceph-external-details",
+				},
 			},
 		}},
 		ClusterAddons: []v1alpha1.ClusterAddon{{
@@ -401,7 +430,7 @@ func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1
 			Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation", "shared-ceph-external-details")},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
 			},
 		}},
 	}
@@ -414,8 +443,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
 			Required: []string{"exportRef"},
 			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
-				"externalDetailsRef": {SecretRef: true},
+				"exportRef": {RefKind: v1alpha1.KindStorageExport},
 			},
 		},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
@@ -425,12 +453,9 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	}}}
 }
 
-func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
 		"exportRef": map[string]any{"name": export},
-	}
-	if externalDetails != "" {
-		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

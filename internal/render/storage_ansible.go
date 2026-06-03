@@ -4,6 +4,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -62,11 +63,13 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	nodeSSH := cluster.Spec.Ceph.Cephadm.NodeSSH
 	entry := map[string]any{
 		"ansible_host":                      topology.NodeAddress(state, cluster, nodeName),
-		"ansible_user":                      storageSSHUser(nodeSSH),
 		"bootwright_host_name":              storageInventoryHostName(cluster, nodeName),
 		"bootwright_storage_cluster_name":   cluster.Metadata.Name,
 		"bootwright_storage_node_name":      nodeName,
 		"bootwright_storage_seed_host_name": StorageSeedHostName(cluster.Metadata.Name),
+	}
+	if user := storageSSHUser(nodeSSH); user != "" {
+		entry["ansible_user"] = user
 	}
 	if path := storageSSHPrivateKeyPath(nodeSSH, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
@@ -159,6 +162,9 @@ func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster stri
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		if export.Spec.StorageClusterRef.Name == storageCluster && export.Spec.DataFoundation != nil {
+			if cluster, ok := topology.ClusterByName(state, storageCluster); ok && !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
+				continue
+			}
 			exports[export.Metadata.Name] = export
 		}
 	}
@@ -203,10 +209,7 @@ func storageMachineIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref
 }
 
 func storageSSHUser(ssh v1alpha1.StorageSSHSpec) string {
-	if ssh.User != "" {
-		return ssh.User
-	}
-	return "root"
+	return ssh.User
 }
 
 func storageSSHPrivateKeyPath(ssh v1alpha1.StorageSSHSpec, env *v1alpha1.Environment, secretsDir string) string {

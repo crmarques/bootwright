@@ -12,6 +12,9 @@ func dataFoundationCredentialOperations(state v1alpha1.State, cluster v1alpha1.S
 	exports := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		if export.Spec.StorageClusterRef.Name == cluster.Metadata.Name && export.Spec.DataFoundation != nil {
+			if !datafoundation.ExternalDetailsSourceGenerated(export, cluster) {
+				continue
+			}
 			exports[export.Metadata.Name] = export
 		}
 	}
@@ -65,8 +68,11 @@ func dataFoundationRGWOperation(containerCluster, name string, command ...string
 }
 
 func dataFoundationExternalDetailsManifest(state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, attachment StorageAttachment, containerCluster string) map[string]any {
-	if ref := addonInputExternalDetailsRef(attachment); ref.Name != "" {
-		return DataFoundationExternalDetailsRefPlaceholderManifest(attachment, ref.Name)
+	if source := datafoundation.ExternalDetailsSourceFromSecret(export); source != "" {
+		return DataFoundationExternalDetailsRefPlaceholderManifest(attachment, source)
+	}
+	if datafoundation.ExternalDetailsSourceSSH(export) != nil {
+		return DataFoundationExternalDetailsRefPlaceholderManifest(attachment, "sshExecution")
 	}
 	return DataFoundationExternalDetailsManifest(state, cluster, export, attachment, containerCluster, datafoundation.ExternalSecrets{})
 }
@@ -119,10 +125,6 @@ func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, 
 
 func addonInputStorageExportRef(attachment StorageAttachment) v1alpha1.LocalObjectReference {
 	return addoninputs.LocalObjectReferenceValue(attachment.Input.Values, "exportRef")
-}
-
-func addonInputExternalDetailsRef(attachment StorageAttachment) v1alpha1.SecretRef {
-	return addoninputs.SecretRefValue(attachment.Input.Values, "externalDetailsRef")
 }
 
 func dataFoundationStorageClusterManifest() map[string]any {

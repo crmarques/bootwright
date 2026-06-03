@@ -40,6 +40,7 @@ const (
 	// Host canonical capability tags.
 	HostCapabilityLibvirt          = "libvirt"
 	HostCapabilityContainerRuntime = "container-runtime"
+	HostCapabilityCephAdmin        = "ceph-admin"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"
@@ -193,7 +194,8 @@ const (
 	StoragePoolRoleCephFSData     = "cephfs-data"
 	StoragePoolRoleRGW            = "rgw"
 
-	StorageExportTypeDataFoundation = "data-foundation"
+	StorageExportTypeDataFoundation                              = "data-foundation"
+	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
 )
 
 // State is the loaded fleet.

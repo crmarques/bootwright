@@ -61,6 +61,31 @@ func validateClusterAddonAccepts(extension v1alpha1.ClusterAddon) []string {
 		seen[input.Name] = true
 		errs = append(errs, validateClusterAddonInputSchema(prefix+".schema", input.Schema)...)
 		errs = append(errs, validateClusterAddonInputEffects(prefix+".effects", input.Effects)...)
+		errs = append(errs, validateDataFoundationStorageInputSchema(extension.Metadata.Name, i, input)...)
+	}
+	return errs
+}
+
+func validateDataFoundationStorageInputSchema(addon string, index int, input v1alpha1.ClusterAddonAcceptedInput) []string {
+	hasDataFoundationStorageEffect := false
+	for _, effect := range input.Effects {
+		if effect.Type == v1alpha1.ClusterAddonInputEffectStorageExportAttachment && effect.Provider == v1alpha1.ClusterAddonProvidesDataFoundation {
+			hasDataFoundationStorageEffect = true
+			break
+		}
+	}
+	if !hasDataFoundationStorageEffect {
+		return nil
+	}
+	var errs []string
+	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
+	if _, ok := input.Schema.Properties["exportRef"]; !ok {
+		errs = append(errs, prefix+".properties.exportRef is required for data-foundation storage attachment inputs")
+	}
+	for name := range input.Schema.Properties {
+		if name != "exportRef" {
+			errs = append(errs, fmt.Sprintf("%s.properties.%s is not supported for data-foundation storage attachment inputs", prefix, name))
+		}
 	}
 	return errs
 }

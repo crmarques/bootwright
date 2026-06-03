@@ -41,6 +41,13 @@ type blockingApplyRunner struct {
 	started chan struct{}
 }
 
+type externalDetailsAnsibleRunner struct {
+	runCalled  bool
+	lastSpec   ansible.RunSpec
+	outputJSON string
+	runErr     error
+}
+
 func (r *storageResultRunner) Run(ctx context.Context, spec ansible.RunSpec) error {
 	if err := r.fakeRunner.Run(ctx, spec); err != nil {
 		return err
@@ -81,6 +88,26 @@ func (r *blockingApplyRunner) Run(ctx context.Context, _ ansible.RunSpec) error 
 
 func (r *blockingApplyRunner) Command(ansible.RunSpec) []string {
 	return []string{"ansible-playbook"}
+}
+
+func (r *externalDetailsAnsibleRunner) Run(_ context.Context, spec ansible.RunSpec) error {
+	r.runCalled = true
+	r.lastSpec = spec
+	if r.runErr != nil {
+		return r.runErr
+	}
+	if err := os.MkdirAll(spec.ArtifactsDir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(spec.ArtifactsDir, "external-cluster-details.json"), []byte(r.outputJSON), 0o600)
+}
+
+func (r *externalDetailsAnsibleRunner) Command(spec ansible.RunSpec) []string {
+	executable := spec.Executable
+	if executable == "" {
+		executable = "ansible-playbook"
+	}
+	return []string{executable, "-i", spec.Inventory, spec.Playbook}
 }
 
 func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
@@ -622,6 +649,9 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 			continue
 		}
 		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
 			if err != nil {
@@ -796,12 +826,12 @@ func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.
 		t.Fatalf("SaveDataFoundationAttachmentDetails: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
-	err := writeStorageAttachmentExternalDetails(path, state, StorageAttachmentPlan{
+	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
 		Cluster: "demo",
 		Binding: state.ClusterAddonBindings[0],
 		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
 		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
-	}, clustersDir, t.TempDir())
+	}, storageAttachmentExternalDetailsOptions{ClustersDir: clustersDir, SecretsDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
 	}
@@ -836,12 +866,12 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 		}},
 	}}
 	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
-	err := writeStorageAttachmentExternalDetails(path, state, StorageAttachmentPlan{
+	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
 		Cluster: "demo",
 		Binding: state.ClusterAddonBindings[0],
 		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
 		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
-	}, t.TempDir(), t.TempDir())
+	}, storageAttachmentExternalDetailsOptions{ClustersDir: t.TempDir(), SecretsDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
 	}
@@ -856,6 +886,199 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
 	if detailsJSON != secretJSON {
 		t.Fatalf("external_cluster_details = %s, want %s", detailsJSON, secretJSON)
+	}
+}
+
+func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
+	state := storageAttachmentPlanningState()
+	state.Environments = []v1alpha1.Environment{{
+		Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+			"ceph-known-hosts": {},
+			"ceph-node-ssh":    {},
+		}},
+	}}
+	state.ClusterInfras = []v1alpha1.ClusterInfra{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
+		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
+			Machines: []v1alpha1.ClusterMachineComponent{{
+				Name: "ceph-0",
+				NetworkConfig: v1alpha1.ClusterMachineNetworkConfig{Spec: &v1alpha1.NetworkConfigSpec{
+					Template: v1alpha1.NetworkConfigTemplate{NetworkConfig: map[string]any{
+						"interfaces": []any{map[string]any{
+							"name": "eth0",
+							"ipv4": map[string]any{"address": []any{map[string]any{"ip": "10.10.10.10"}}},
+						}},
+					}},
+				}},
+			}},
+		}},
+	}}
+	state.StorageExports[0].Spec.Type = v1alpha1.StorageExportTypeDataFoundation
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+			KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+			Timeout:       "30s",
+			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+			},
+			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{
+				RBDDataPoolName:          "rbdpool",
+				MonitoringEndpoint:       []string{"10.10.10.11", "10.10.10.12"},
+				MonitoringEndpointPort:   9283,
+				ClusterName:              "ceph",
+				RestrictedAuthPermission: true,
+			},
+		},
+	}
+
+	secretsDir := t.TempDir()
+	exportedJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"ssh-fsid"}}]`
+	ansibleRunner := &externalDetailsAnsibleRunner{outputJSON: exportedJSON}
+
+	path := filepath.Join(t.TempDir(), "rook-ceph-external-cluster-details.yaml")
+	err := writeStorageAttachmentExternalDetails(context.Background(), path, state, StorageAttachmentPlan{
+		Cluster: "demo",
+		Binding: state.ClusterAddonBindings[0],
+		Addon:   state.ClusterAddonBindings[0].Spec.Addons[0],
+		Input:   state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0],
+	}, storageAttachmentExternalDetailsOptions{
+		ClustersDir:        t.TempDir(),
+		SecretsDir:         secretsDir,
+		TaskRoot:           t.TempDir(),
+		BundleDir:          "/bundle",
+		AskBecomePass:      true,
+		BecomePasswordFile: "/tmp/bootwright-become",
+		UseControllingTTY:  true,
+		Runner:             ansibleRunner,
+	})
+	if err != nil {
+		t.Fatalf("writeStorageAttachmentExternalDetails: %v", err)
+	}
+
+	if !ansibleRunner.runCalled {
+		t.Fatal("external details Ansible runner was not invoked")
+	}
+	spec := ansibleRunner.lastSpec
+	if spec.Limit != "external_details_0" {
+		t.Fatalf("Ansible limit = %q, want external_details_0", spec.Limit)
+	}
+	if !spec.AskBecomePass || spec.BecomePasswordFile != "/tmp/bootwright-become" || !spec.UseControllingTTY {
+		t.Fatalf("become options were not propagated: %+v", spec)
+	}
+	inventoryData, err := os.ReadFile(spec.Inventory)
+	if err != nil {
+		t.Fatalf("read generated inventory: %v", err)
+	}
+	var inventory map[string]any
+	if err := yaml.Unmarshal(inventoryData, &inventory); err != nil {
+		t.Fatalf("decode generated inventory: %v", err)
+	}
+	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
+	if got := host["ansible_host"]; got != "10.10.10.10" {
+		t.Fatalf("ansible_host = %v, want 10.10.10.10", got)
+	}
+	if _, ok := host["ansible_user"]; ok {
+		t.Fatalf("inventory should not force ansible_user when nodeSSH.user is omitted: %v", host)
+	}
+	if got := host["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
+		t.Fatalf("key path = %v", got)
+	}
+	commonArgs, _ := host["ansible_ssh_common_args"].(string)
+	if !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-known-hosts")) {
+		t.Fatalf("ansible_ssh_common_args = %q, want known hosts ref", commonArgs)
+	}
+	playbookData, err := os.ReadFile(spec.Playbook)
+	if err != nil {
+		t.Fatalf("read generated playbook: %v", err)
+	}
+	playbookText := string(playbookData)
+	for _, want := range []string{
+		"become: true",
+		"python3",
+		"ceph-external-cluster-details-exporter.py",
+		"--k8s-cluster-name",
+		"demo",
+		"--restricted-auth-permission",
+	} {
+		if !strings.Contains(playbookText, want) {
+			t.Fatalf("playbook missing %q:\n%s", want, playbookText)
+		}
+	}
+	if strings.Contains(playbookText, "become_user") || strings.Contains(playbookText, "sudo") {
+		t.Fatalf("playbook must rely on Ansible become without explicit sudo/user switching:\n%s", playbookText)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest map[string]any
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	detailsJSON := manifest["stringData"].(map[string]any)["external_cluster_details"].(string)
+	if detailsJSON != exportedJSON {
+		t.Fatalf("external_cluster_details = %s, want %s", detailsJSON, exportedJSON)
+	}
+}
+
+func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"ceph-admin-ssh": {},
+			}},
+		}},
+		Hosts: []v1alpha1.Host{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+			Spec: v1alpha1.HostSpec{
+				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
+				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
+				Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
+			},
+		}},
+	}
+	secretsDir := t.TempDir()
+	ssh := &v1alpha1.StorageExportExternalDetailsSSHExecution{
+		HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+		Config:   v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+	}
+
+	targets, err := storageExportSSHExternalDetailsTargets(state, v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "shared-ceph"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Type:       v1alpha1.StorageClusterTypeCeph,
+			Management: v1alpha1.StorageClusterManagementExternal,
+		},
+	}, secretsDir, ssh)
+	if err != nil {
+		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
+	}
+	want := []externalDetailsSSHTarget{{
+		label:         "Host/ceph-admin-01",
+		inventoryName: "external_details_0",
+		address:       "ceph-admin.example.test",
+		user:          "ceph",
+		keyPath:       filepath.Join(secretsDir, "ceph-admin-ssh"),
+	}}
+	if !reflect.DeepEqual(targets, want) {
+		t.Fatalf("targets = %#v, want %#v", targets, want)
+	}
+	root := t.TempDir()
+	if err := writeStorageExportSSHAnsibleFiles(filepath.Join(root, "inventory.yaml"), filepath.Join(root, "vars.yaml"), filepath.Join(root, "playbook.yaml"), targets[0], filepath.Join(secretsDir, "known_hosts"), filepath.Join(root, "details.json"), storageExportExternalDetailsExporterArgs(ssh.Config, "demo")); err != nil {
+		t.Fatalf("writeStorageExportSSHAnsibleFiles: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "inventory.yaml"))
+	if err != nil {
+		t.Fatalf("read generated inventory: %v", err)
+	}
+	var inventory map[string]any
+	if err := yaml.Unmarshal(data, &inventory); err != nil {
+		t.Fatalf("decode inventory: %v", err)
+	}
+	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
+	if got := host["ansible_user"]; got != "ceph" {
+		t.Fatalf("host ref ansible_user = %v, want ceph", got)
 	}
 }
 
@@ -998,7 +1221,7 @@ func storageAttachmentPlanningState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "ceph-binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export", "")},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("export")},
 			},
 		}},
 	}
@@ -1018,10 +1241,13 @@ func externalStorageAttachmentPlanningState() v1alpha1.State {
 		Spec: v1alpha1.StorageExportSpec{
 			Type:              v1alpha1.StorageExportTypeDataFoundation,
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+			ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
+				FromSecret: "shared-ceph-external-details",
+			},
 		},
 	}}
 	state.ClusterAddonBindings[0].Metadata.Name = "shared-ceph-binding"
-	state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0].Values = dataFoundationValues("shared-ceph-export", "shared-ceph-external-details")
+	state.ClusterAddonBindings[0].Spec.Addons[0].Inputs[0].Values = dataFoundationValues("shared-ceph-export")
 	return state
 }
 
@@ -1032,8 +1258,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
 			Required: []string{"exportRef"},
 			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
-				"exportRef":          {RefKind: v1alpha1.KindStorageExport},
-				"externalDetailsRef": {SecretRef: true},
+				"exportRef": {RefKind: v1alpha1.KindStorageExport},
 			},
 		},
 		Effects: []v1alpha1.ClusterAddonInputEffect{{
@@ -1043,24 +1268,20 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 	}}}
 }
 
-func dataFoundationBindingAddon(export, externalDetails string) v1alpha1.ClusterAddonBindingAddon {
+func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",
 		Inputs: []v1alpha1.ClusterAddonBindingInput{{
 			Name:   "external-storage",
-			Values: dataFoundationValues(export, externalDetails),
+			Values: dataFoundationValues(export),
 		}},
 	}
 }
 
-func dataFoundationValues(export, externalDetails string) map[string]any {
-	values := map[string]any{
+func dataFoundationValues(export string) map[string]any {
+	return map[string]any{
 		"exportRef": map[string]any{"name": export},
 	}
-	if externalDetails != "" {
-		values["externalDetailsRef"] = map[string]any{"name": externalDetails}
-	}
-	return values
 }
 
 func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {

@@ -18,8 +18,6 @@ spec:
           properties:
             exportRef:
               refKind: StorageExport
-            externalDetailsRef:
-              secretRef: true
         effects:
           - type: storage-export-attachment
             provider: data-foundation

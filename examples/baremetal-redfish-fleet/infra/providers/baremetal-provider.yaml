@@ -16,7 +16,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc1-master-0.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: dc1-master-1
       baremetal:
         bootMACAddress: 52:54:00:41:10:11
@@ -29,7 +29,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc1-master-1.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: dc1-master-2
       baremetal:
         bootMACAddress: 52:54:00:41:10:12
@@ -42,7 +42,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc1-master-2.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: dc2-master-0
       baremetal:
         bootMACAddress: 52:54:00:42:10:10
@@ -55,7 +55,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc2-master-0.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: dc2-master-1
       baremetal:
         bootMACAddress: 52:54:00:42:10:11
@@ -68,7 +68,7 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc2-master-1.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
     - name: dc2-master-2
       baremetal:
         bootMACAddress: 52:54:00:42:10:12
@@ -81,5 +81,5 @@ spec:
           address: redfish-virtualmedia+https://bmc-dc2-master-2.bootwright.test/redfish/v1/Systems/1
           credentialsRef:
             name: bmc-credentials
-          disableCertificateVerification: true
+          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
 

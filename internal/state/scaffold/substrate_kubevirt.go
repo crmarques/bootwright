@@ -79,6 +79,7 @@ spec:
         type: external
 `,
 	PlatformYAML: `  platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: none
 `,
 	BootDevice: "/dev/vda",

@@ -39,6 +39,9 @@ func TestCanonicalExamples(t *testing.T) {
 			continue
 		}
 		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			_, err := LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
 			if err != nil {

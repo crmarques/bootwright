@@ -29,7 +29,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		return runOneExtensionTask(ctx, stdout, stderr, runsDir, runID, opts, task)
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageAttachmentApply {
-		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task)
+		return runOneStorageAttachmentTask(ctx, stdout, stderr, runsDir, runID, opts, task, runnerFactory)
 	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")

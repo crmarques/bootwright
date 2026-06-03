@@ -22,7 +22,6 @@ spec:
         credentialsRef:
           name: ceph-registry-credentials
       nodeSSH:
-        user: root
         keyPairRef:
           name: ceph-node-ssh
       clusterSSH:

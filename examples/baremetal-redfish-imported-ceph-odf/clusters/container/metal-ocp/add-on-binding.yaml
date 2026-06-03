@@ -13,5 +13,3 @@ spec:
           values:
             exportRef:
               name: imported-ceph-odf
-            externalDetailsRef:
-              name: imported-ceph-odf-details

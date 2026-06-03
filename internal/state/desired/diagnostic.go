@@ -52,9 +52,24 @@ func Diagnostics(err error) []Diagnostic {
 	return []Diagnostic{diagnosticFromMessage(err.Error())}
 }
 
-var quotedValue = regexp.MustCompile(`"([^"]*)"`)
+var (
+	quotedValue        = regexp.MustCompile(`"([^"]*)"`)
+	unknownDecodeField = regexp.MustCompile(`field ([A-Za-z0-9_]+) not found in type v1alpha1\.([A-Za-z0-9_]+)`)
+)
+
+var ocpInstallFieldRemediation = map[string]string{
+	"baseDomain":             "set Environment.spec.baseDomain instead",
+	"imageDigestSources":     "set Environment.spec.registries.imageDigestSources instead",
+	"installConfigOverrides": "remove spec.install.installConfigOverrides; rendered installer files are generated output",
+	"agentConfigOverrides":   "remove spec.install.agentConfigOverrides; rendered installer files are generated output",
+	"sshKeyRef":              "set ContainerCluster.spec.install.nodeSSH instead",
+	"clusterAdminSSH":        "set ContainerCluster.spec.install.nodeSSH instead",
+}
 
 func diagnosticFromMessage(message string) Diagnostic {
+	if diagnostic, ok := diagnosticFromDecodeMessage(message); ok {
+		return diagnostic
+	}
 	diagnostic := Diagnostic{
 		Message:     message,
 		Rule:        message,
@@ -87,6 +102,32 @@ func diagnosticFromMessage(message string) Diagnostic {
 		diagnostic.Rule = message
 	}
 	return diagnostic
+}
+
+func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
+	match := unknownDecodeField.FindStringSubmatch(message)
+	if len(match) != 3 {
+		return Diagnostic{}, false
+	}
+	field, typeName := match[1], match[2]
+	switch typeName {
+	case "OCPInstallSpec":
+		fieldPath := "spec.install." + field
+		remediation := "remove " + fieldPath + " or move the fact to the desired-state object that owns it"
+		if known, ok := ocpInstallFieldRemediation[field]; ok {
+			remediation = known
+		}
+		return Diagnostic{
+			Object:      "ContainerCluster",
+			Field:       fieldPath,
+			Value:       field,
+			Rule:        fieldPath + " is not accepted on ContainerCluster install intent",
+			Remediation: remediation,
+			Message:     message,
+		}, true
+	default:
+		return Diagnostic{}, false
+	}
 }
 
 func splitKindField(token string) (string, string, bool) {

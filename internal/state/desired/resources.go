@@ -276,6 +276,15 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name),
 			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name)
 	}
+	for _, export := range state.StorageExports {
+		if export.Spec.ExternalDetails == nil || export.Spec.ExternalDetails.SSHExecution == nil {
+			continue
+		}
+		for i, ref := range export.Spec.ExternalDetails.SSHExecution.HostRefs {
+			require(fmt.Sprintf("StorageExport/%s spec.externalDetails.sshExecution.hostRefs[%d]", export.Metadata.Name, i),
+				v1alpha1.KindHost, ref.Name)
+		}
+	}
 	for _, cluster := range state.StorageClusters {
 		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),
 			v1alpha1.KindClusterInfra, cluster.Spec.ClusterInfraRef.Name)

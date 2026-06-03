@@ -148,6 +148,7 @@ spec:
         bindAddress: apps
 `,
 		PlatformYAML: `  platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: baremetal
     baremetal:
       provisioningNetwork: disabled
@@ -267,6 +268,7 @@ spec:
         type: external
 `,
 		PlatformYAML: `  platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: baremetal
     baremetal:
       provisioningNetwork: disabled
@@ -369,6 +371,7 @@ spec:
         type: external
 `,
 		PlatformYAML: `  platform:
+    # Installer platform render mode; substrate inventory stays in InfraProvider.
     type: vsphere
 `,
 		BootDevice: "/dev/sda",

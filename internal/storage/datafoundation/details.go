@@ -68,21 +68,44 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 	return input
 }
 
-func LoadExternalDetailsJSON(state v1alpha1.State, secretsDir string, ref v1alpha1.SecretRef) (string, error) {
-	if strings.TrimSpace(ref.Name) == "" {
-		return "", fmt.Errorf("data foundation externalDetailsRef.name is required")
+func ExternalDetailsSourceGenerated(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) bool {
+	if export.Spec.ExternalDetails == nil {
+		return cluster.Spec.Management == "" ||
+			cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged ||
+			cluster.Spec.Management == v1alpha1.StorageClusterManagementFullManaged
+	}
+	return export.Spec.ExternalDetails.Generated != nil
+}
+
+func ExternalDetailsSourceFromSecret(export v1alpha1.StorageExport) string {
+	if export.Spec.ExternalDetails == nil {
+		return ""
+	}
+	return strings.TrimSpace(export.Spec.ExternalDetails.FromSecret)
+}
+
+func ExternalDetailsSourceSSH(export v1alpha1.StorageExport) *v1alpha1.StorageExportExternalDetailsSSHExecution {
+	if export.Spec.ExternalDetails == nil {
+		return nil
+	}
+	return export.Spec.ExternalDetails.SSHExecution
+}
+
+func LoadExternalDetailsSecretJSON(state v1alpha1.State, secretsDir string, name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("data foundation externalDetails.fromSecret is required")
 	}
 	env := primaryEnvironment(state)
-	path := secret.ResolvePath(ref.Name, env, secretsDir)
+	path := secret.ResolvePath(name, env, secretsDir)
 	read := secret.ReadFile
-	if secret.MaterialPathUsesExternalSource(ref.Name, env, secret.MaterialPrimary) {
+	if secret.MaterialPathUsesExternalSource(name, env, secret.MaterialPrimary) {
 		read = secret.ReadExternalFile
 	}
 	data, err := read(path)
 	if err != nil {
-		return "", fmt.Errorf("read data foundation external details secret %q at %s: %w", ref.Name, path, err)
+		return "", fmt.Errorf("read data foundation external details secret %q at %s: %w", name, path, err)
 	}
-	return NormalizeExternalDetailsJSON(ref.Name, path, data)
+	return NormalizeExternalDetailsJSON(name, path, data)
 }
 
 func NormalizeExternalDetailsJSON(refName, path string, data []byte) (string, error) {

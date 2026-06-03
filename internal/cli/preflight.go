@@ -88,7 +88,8 @@ func (d preflightDeps) statSecretPath(path string, externalSource bool) (os.File
 
 func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, clustersDir string, deps preflightDeps) []preflightCheck {
 	var checks []preflightCheck
-	if selectedNeedsAnsible(selected) {
+	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
+	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
@@ -125,6 +126,15 @@ func selectedNeedsAnsible(selected []Phase) bool {
 	}
 	for _, phase := range selected {
 		if phase.Name != "addons" {
+			return true
+		}
+	}
+	return false
+}
+
+func stateNeedsStorageExternalDetailsSSH(state v1alpha1.State) bool {
+	for _, export := range state.StorageExports {
+		if export.Spec.ExternalDetails != nil && export.Spec.ExternalDetails.SSHExecution != nil {
 			return true
 		}
 	}

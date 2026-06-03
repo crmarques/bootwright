@@ -126,6 +126,9 @@ func TestRuntimeBundleUseNewSchemaTerms(t *testing.T) {
 				return err
 			}
 			if d.IsDir() {
+				if strings.HasPrefix(d.Name(), ".") {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			data, err := os.ReadFile(path)
@@ -354,6 +357,9 @@ func desiredStateYAMLPaths(t *testing.T, roots ...string) []string {
 				return err
 			}
 			if d.IsDir() {
+				if strings.HasPrefix(d.Name(), ".") {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if ext := filepath.Ext(path); ext != ".yaml" && ext != ".yml" {
