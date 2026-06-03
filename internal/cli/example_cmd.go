@@ -21,7 +21,6 @@ func newExampleCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(newExampleInitCmd(stdout))
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 

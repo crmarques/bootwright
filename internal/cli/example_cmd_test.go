@@ -89,7 +89,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright check all",
 		"bootwright render effective",
 		"bootwright plan",
-		"bootwright apply all --yes",
+		"bootwright apply --yes",
 		"bootwright status --watch",
 		"bootwright cluster access-info",
 	} {

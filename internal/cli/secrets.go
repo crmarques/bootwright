@@ -28,7 +28,6 @@ func newSecretCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Co
 		newSecretDeleteCmd(stdin, stdout),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 

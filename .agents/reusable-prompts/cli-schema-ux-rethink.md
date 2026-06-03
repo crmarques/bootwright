@@ -313,7 +313,7 @@ Cover:
 - validate before context mutation
 - provide or generate secret material
 - preview effective state and rendered outputs
-- apply infrastructure, storage, clusters, and add-ons
+- converge infrastructure, then clusters with storage and add-ons included
 - monitor progress and inspect logs
 - access installed clusters
 - recover from failure

@@ -27,7 +27,7 @@ The render step merges the provisioning kinds into concrete outputs:
 Shared host services are resolved once as a service graph. Provider/BMC
 services and managed `InfraComponent` services render to separate Ansible
 vars and host groups, while validation, status, and scoped apply checks use
-the same service identities and consumer list. A partial `apply infra --scope`
+the same service identities and consumer list. A partial `apply --stage infra --clusters`
 cannot silently narrow a service another cluster still depends on.
 
 Bootwright uses distinct execution identities instead of treating the process
@@ -49,23 +49,20 @@ defaults. That keeps provider swaps and release changes explicit.
 
 ## Apply Workflow
 
-`apply bastion` prepares bastion-local tools on localhost. `apply all` is the
-normal convergence target after `check all` and a dry run. Phase targets remain
-available for advanced operations and recovery:
+`apply bastion` prepares bastion-local tools on localhost. `apply --yes` is the
+normal convergence target after `check all` and a dry run. Focused recovery uses
+two stages:
 
-- `apply infra` converges provider hosts, substrate state, and managed infra
-  components.
-- `apply storage-cluster` provisions managed external Ceph on preinstalled RHEL
-  storage nodes from rendered cephadm core/late service specs and phased Ceph
-  operation files through the Ansible storage layer. Imported external Ceph
-  skips this task and only contributes Data Foundation attachment input.
-- `apply clusters` creates the agent ISO, boots each declared node as its own
-  task, waits for `openshift-install agent wait-for install-complete`, and then
-  applies bound add-ons and declared integrations.
-- `apply addons` applies declarative post-install bootstrap components to
-  already installed clusters with `oc`.
-- `apply all` runs infrastructure, storage, cluster install, and add-ons in
-  one target.
+- `apply --stage infra` converges provider hosts, substrate state, managed
+  infra components, selected machines, and managed storage-node prerequisites.
+- `apply --stage clusters` provisions selected storage clusters, creates
+  container-cluster agent ISOs, boots nodes, waits for `openshift-install agent
+  wait-for install-complete`, and then applies bound add-ons and declared
+  integrations.
+
+Omitting `--stage` runs the full graph: `infra`, then `clusters`.
+`--clusters` accepts a comma-separated mix of `ContainerCluster` and
+`StorageCluster` names.
 
 Every apply writes a current run ledger under the context state directory.
 `bootwright status` reads that ledger without contacting provider hosts, BMCs,
@@ -80,9 +77,7 @@ root-managed run, task, and cluster logs instead of streaming through the
 terminal.
 
 Post-install bootstrap components are planned as direct `oc` tasks after the
-cluster install wait task when `apply clusters` or `apply all` is selected, or
-without install dependencies when `apply addons` is selected for an already
-installed cluster.
+cluster install wait task when the `clusters` stage is selected.
 Storage attachment tasks are planned in the same add-ons phase and wait for the
 selected Data Foundation add-on readiness before applying generated
 external-mode manifests.

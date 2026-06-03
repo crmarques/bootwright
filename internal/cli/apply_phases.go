@@ -64,10 +64,15 @@ func applyClusterKind(tasks []workflow.TaskLedgerEntry) string {
 func applyClusterPhases(ledger workflow.RunLedger, cluster string, kind string, tasks []workflow.TaskLedgerEntry) []output.PhaseStatus {
 	switch kind {
 	case "StorageCluster":
+		storageInfraTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageInfra)
 		storageTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster)
+		storageInfraStatus := output.StatusOK
+		if len(storageInfraTasks) > 0 {
+			storageInfraStatus = applyPhaseStatus(storageInfraTasks, output.StatusPending)
+		}
 		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: output.StatusOK},
-			{Label: "Prepare", Status: applyPhaseStatus(storageTasks, output.StatusPending)},
+			{Label: "Infrastructure", Status: storageInfraStatus},
+			{Label: "Prepare", Status: storageInfraStatus},
 			{Label: "Provision", Status: applyPhaseStatus(storageTasks, output.StatusPending)},
 			{Label: "Publish", Status: applyPhaseStatus(applyStoragePublishTasks(ledger, cluster), output.StatusPending)},
 		}

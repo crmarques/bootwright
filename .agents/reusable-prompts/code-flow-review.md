@@ -33,7 +33,7 @@ The user should provide one or more of:
 
 - desired-state input files or directories
 - an example, fixture, or context import source
-- a command flow, such as `check`, `render`, `apply infra`, or `apply clusters`
+- a command flow, such as `check`, `render`, `apply --stage infra`, or `apply --stage clusters`
 - the expected user intent or final output to verify
 
 Always enumerate every available example directory under `examples/` and every
@@ -47,9 +47,8 @@ each example, build an inventory that lists:
 - selected container clusters, storage clusters, add-on bindings, providers,
   hosts, network configs, infra components, storage objects, and add-ons;
 - represented command flows: `check syntax`, `check all` readiness surfaces,
-  `render effective`, `render installer`, `render storage`, `apply infra`,
-  `apply storage-cluster`, `apply clusters`, `apply container-cluster`,
-  `apply addons`, `apply all`, and relevant destroy/status/access flows.
+  `render effective`, `render installer`, `render storage`, `apply --stage infra`,
+  `apply --stage clusters`, full `apply`, and relevant destroy/status/access flows.
 
 Mentally execute every represented flow from input to final side effect. Trace
 every Go package, function family, generated file, inventory group, variable,

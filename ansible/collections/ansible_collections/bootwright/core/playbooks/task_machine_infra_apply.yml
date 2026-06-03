@@ -1,7 +1,7 @@
 ---
 # Per-cluster substrate convergence. Runs once per cluster on the
 # provider host that hosts each machine substrate. Currently iterates
-# all clusters; future scoping (`--scope a,b`) is handled by the
+# all clusters; focused apply (`--clusters a,b`) is handled by the
 # renderer reducing `bootwright_clusters` to the selected entries.
 
 - name: Apply cluster infrastructure

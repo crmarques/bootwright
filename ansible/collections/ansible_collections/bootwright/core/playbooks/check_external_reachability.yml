@@ -2,7 +2,7 @@
 # Bastion-side reachability validation. Runs against bootwright_ocp_hosts so a
 # workspace with no on-host provider/infra work (e.g. test 002: bare-metal
 # cluster, every service external) still has something meaningful happen during
-# `apply infra` / `check infra`. The role probes only components Bootwright must
+# `apply --stage infra` / `check infra`. The role probes only components Bootwright must
 # reach before apply can make progress.
 
 - name: Validate external infrastructure dependencies

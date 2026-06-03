@@ -13,6 +13,14 @@ func TestStorageStretchValidationAcceptsCanonicalShape(t *testing.T) {
 	}
 }
 
+func TestStorageValidationAcceptsFullManagedManagementValue(t *testing.T) {
+	state := storageValidationState()
+	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementFullManaged
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
+	}
+}
+
 func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	cases := []struct {
 		name string

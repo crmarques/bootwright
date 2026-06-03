@@ -117,11 +117,11 @@ func ledgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 	switch ledger.Status {
 	case workflow.RunStatusRunning:
 		if activity.State == workflow.RunActivityStale {
-			return append([]string{fmt.Sprintf("bootwright apply %s --yes", ledger.Target)}, existing...)
+			return append([]string{ledgerRetryApplyCommand(ledger)}, existing...)
 		}
 		return append([]string{"bootwright status --watch"}, existing...)
 	case workflow.RunStatusFailed:
-		hints := []string{fmt.Sprintf("bootwright apply %s --yes", ledger.Target)}
+		hints := []string{ledgerRetryApplyCommand(ledger)}
 		for _, task := range ledger.FailedTasks() {
 			if task.LogPath != "" {
 				hints = append(hints, "inspect "+task.LogPath)
@@ -131,4 +131,16 @@ func ledgerNextSteps(ledger workflow.RunLedger, activity workflow.RunActivity, e
 	default:
 		return existing
 	}
+}
+
+func ledgerRetryApplyCommand(ledger workflow.RunLedger) string {
+	command := "bootwright apply"
+	switch ledger.Target {
+	case "infra", "clusters":
+		command += " --stage " + ledger.Target
+	}
+	if ledger.Scope != "" {
+		command += " --clusters " + ledger.Scope
+	}
+	return command + " --yes"
 }

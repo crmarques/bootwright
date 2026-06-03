@@ -218,7 +218,7 @@ func printToolInputCommands(stdout io.Writer, result render.Result) {
 		}
 		p.CommandLine("bootstrap ceph ["+asset.StorageClusterName+"]", []string{"cephadm", "bootstrap", "--apply-spec", asset.BootstrapSpecPath, "--mon-ip", "<derived-bootstrap-mon-ip>"})
 		p.CommandLine("apply ceph core services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.CoreServicesSpecPath})
-		p.CommandLine("apply ceph operations ["+asset.StorageClusterName+"]", []string{"bootwright", "apply", "storage-cluster", "--scope", asset.StorageClusterName, "--yes"})
+		p.CommandLine("apply ceph operations ["+asset.StorageClusterName+"]", []string{"bootwright", "apply", "--stage", "clusters", "--clusters", asset.StorageClusterName, "--yes"})
 		p.CommandLine("apply ceph late services ["+asset.StorageClusterName+"]", []string{"ceph", "orch", "apply", "-i", asset.LateServicesSpecPath})
 	}
 }

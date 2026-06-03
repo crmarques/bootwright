@@ -45,7 +45,6 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 		newClusterAccessInfoCmd(stdout),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
@@ -67,7 +66,6 @@ func newContainerClusterCmd(stdout io.Writer) *cobra.Command {
 		}),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 

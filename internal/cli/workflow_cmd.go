@@ -29,43 +29,48 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		newCheckAllCmd(stdout, stderr),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
 func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "apply <target>",
-		Short: "Apply a provisioning target",
-	}
+	cmd := newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
+		use:           "apply",
+		short:         "Apply the provisioning graph",
+		stageSelector: true,
+		commandLabel:  "apply",
+		example: `  # Preview the full graph without readiness checks
+  bootwright apply --dry-run
+
+  # Apply the full graph non-interactively
+  bootwright apply --yes
+
+  # Prepare infrastructure for selected clusters only
+  bootwright apply --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
+
+  # Install selected container and storage clusters, addons, and integrations
+  bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
+	})
 	cmd.AddCommand(
 		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
-		retargetCommand(newScopeApplyCmd(infraScope, stdin, stdout, stderr), "infra", "Converge infrastructure hosts and substrate"),
-		retargetCommand(newScopeApplyCmd(clustersScope, stdin, stdout, stderr), "clusters", "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations"),
-		retargetCommand(newScopeApplyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Install OpenShift clusters and apply addons"),
-		retargetCommand(newScopeApplyCmd(storageClusterScope, stdin, stdout, stderr), "storage-cluster", "Provision external storage clusters"),
-		retargetCommand(newScopeApplyCmd(addonsScope, stdin, stdout, stderr), "addons", "Apply post-install cluster addons"),
-		retargetCommand(newScopeApplyCmd(allScope, stdin, stdout, stderr), "all", "Apply infrastructure, storage, OpenShift clusters, and addons"),
 	)
-	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
 func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
-		use:          "plan",
-		short:        "Preview the complete provisioning plan",
-		defaultPlan:  true,
-		hideDryRun:   true,
-		hideApproval: true,
-		commandLabel: "plan",
-		action:       "plan",
+		use:           "plan",
+		short:         "Preview the provisioning graph",
+		defaultPlan:   true,
+		hideDryRun:    true,
+		hideApproval:  true,
+		stageSelector: true,
+		commandLabel:  "plan",
+		action:        "plan",
 		example: `  # Preview the full provisioning plan
   bootwright plan
 
-  # Preview only selected managed clusters
-  bootwright plan --scope managed-01
+  # Preview only infrastructure for selected clusters
+  bootwright plan --stage infra --clusters managed-01
 
   # Machine-readable output for automation
   bootwright plan --output json`,
@@ -120,7 +125,6 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		return runRenderToolInputs(c, stdout, cf, outputDir, clusterScope)
 	}
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
@@ -134,7 +138,6 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		retargetCommand(newScopeDestroyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Tear down OpenShift cluster install state"),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 

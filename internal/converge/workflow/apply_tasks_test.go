@@ -578,8 +578,7 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 	}
 
 	assertTaskDeps(t, tasks, "storage.ceph")
-	assertTaskDeps(t, tasks, "infra.demo")
-	assertTaskDeps(t, tasks, "iso.demo", "infra.demo")
+	assertTaskDeps(t, tasks, "iso.demo")
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf.apply", "wait.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf.wait", "addon.demo.odf.apply")
@@ -632,7 +631,7 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 				t.Fatalf("render.All: %v", err)
 			}
 			if _, err := PlanApplyTasksChecked(applyAllTarget(), state); err != nil {
-				t.Fatalf("PlanApplyTasksChecked apply all: %v", err)
+				t.Fatalf("PlanApplyTasksChecked full graph: %v", err)
 			}
 		})
 	}
@@ -734,7 +733,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	if task.Limit != render.StorageSeedHostName("ceph") {
 		t.Fatalf("storage limit = %q", task.Limit)
 	}
-	if !reflect.DeepEqual(task.ExtraVarPairs, []string{"bootwright_task_storage_cluster_name=ceph"}) {
+	if !reflect.DeepEqual(task.ExtraVarPairs, []string{"bootwright_task_storage_cluster_name=ceph", "bootwright_task_storage_skip_prereqs=true"}) {
 		t.Fatalf("storage extra vars = %v", task.ExtraVarPairs)
 	}
 
@@ -770,6 +769,18 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	}
 	if !strings.Contains(detailsJSON, "rbd-node-key") {
 		t.Fatalf("external details missing runtime result: %s", detailsJSON)
+	}
+}
+
+func TestEnsureApplySupportedRejectsFullManagedStorage(t *testing.T) {
+	state := storageAttachmentPlanningState()
+	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementFullManaged
+	err := EnsureApplySupported(state)
+	if err == nil {
+		t.Fatal("fullManaged storage unexpectedly supported")
+	}
+	if !strings.Contains(err.Error(), "spec.management=fullManaged is recognized but fullManaged storage infra is not available yet") {
+		t.Fatalf("fullManaged error = %q", err)
 	}
 }
 
@@ -851,7 +862,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesImportedSecret(t *testing.T) {
 func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	state := kubeVirtChildPlanningState(true)
 
-	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -861,16 +872,14 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
 
-func TestPlanApplyClustersRejectsScopedKubeVirtChildWithoutHostCluster(t *testing.T) {
+func TestPlanApplyClustersSkipsUnselectedKubeVirtHostDependencies(t *testing.T) {
 	state := kubeVirtChildPlanningState(false)
 
-	_, err := PlanApplyTasksChecked(applyClustersTarget(), state)
-	if err == nil {
-		t.Fatal("expected missing host cluster dependency error, got nil")
+	tasks, err := PlanApplyTasksChecked(applyClustersTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	if !strings.Contains(err.Error(), `include metal-ocp in --scope or apply it first`) {
-		t.Fatalf("error %q does not include scoped dependency remediation", err)
-	}
+	assertTaskDeps(t, tasks, "iso.child-ocp")
 }
 
 func loadWorkflowFixtureState(t *testing.T, name string) v1alpha1.State {
@@ -1115,11 +1124,11 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 }
 
 func applyAllTarget() ApplyTarget {
-	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInfra, ApplyPhaseStorageInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
 }
 
 func applyClustersTarget() ApplyTarget {
-	return ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseClusterInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
 }
 
 func applyContainerClusterTarget() ApplyTarget {

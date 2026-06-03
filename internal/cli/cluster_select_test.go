@@ -14,7 +14,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected shared service conflict, got nil")
 	}
-	if !strings.Contains(err.Error(), "--scope would narrow shared host service") {
+	if !strings.Contains(err.Error(), "--clusters would narrow shared host service") {
 		t.Fatalf("error %q does not explain scoped apply conflict", err)
 	}
 	if !strings.Contains(err.Error(), "unscoped {cluster-b}") {
@@ -24,7 +24,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 
 func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds(t *testing.T) {
 	state := cliStateWithAllSharedHostServices()
-	for _, target := range []string{"infra", "clusters", "all"} {
+	for _, target := range []string{"infra", "all"} {
 		t.Run(target, func(t *testing.T) {
 			err := validateScopedApplySharedServices(state, target, "cluster-a")
 			if err == nil {

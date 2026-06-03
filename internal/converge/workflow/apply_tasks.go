@@ -13,6 +13,7 @@ const (
 	ApplyTaskKindProvider               = "providerServices"
 	ApplyTaskKindInfraComponentServices = "infraComponentServices"
 	ApplyTaskKindClusterInfra           = "clusterInfra"
+	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
 	ApplyTaskKindInstallWait            = "installWait"
@@ -27,6 +28,7 @@ const (
 	ApplyPhaseProvider         = "provider"
 	ApplyPhaseInfraComponents  = "infra-components"
 	ApplyPhaseClusterInfra     = "cluster-infra"
+	ApplyPhaseStorageInfra     = "storage-infra"
 	ApplyPhaseStorageCluster   = "storage-cluster"
 	ApplyPhaseContainerCluster = "container-cluster"
 	ApplyPhaseAddons           = "addons"
@@ -41,8 +43,9 @@ const (
 )
 
 type ApplyTarget struct {
-	Name       string
-	PhaseNames []string
+	Name                string
+	PhaseNames          []string
+	StorageClusterNames []string
 }
 
 type ApplyTask struct {

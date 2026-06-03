@@ -202,7 +202,7 @@ bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
 bootwright plan
-bootwright apply all --yes
+bootwright apply --yes
 bootwright status --watch
 bootwright cluster access-info
 ```
@@ -213,22 +213,20 @@ full graph before convergence. `render effective` writes
 state before applying it. `plan` previews the full apply task graph without
 mutating provider hosts, nodes, storage clusters, or managed clusters.
 
-`apply all` is the normal end-to-end convergence path. It includes
+`apply --yes` is the normal end-to-end convergence path. It includes
 infrastructure, managed storage, OpenShift or OKD cluster install, and bound
 post-install add-ons. Storage-export input effects wait for both the storage
 task and a bound add-on with `provides: [data-foundation]`.
-For KubeVirt child clusters, `apply all` also waits for the parent cluster
+For KubeVirt child clusters, the full graph also waits for the parent cluster
 install and its `provides: [kubevirt]` add-on before creating child VM
-infrastructure. `apply infra --scope <child>` requires that parent cluster to
-already be installed and KubeVirt-ready; scoped child applies do not install the
-parent implicitly.
-Phase commands such as `apply infra`, `apply storage-cluster`, `apply clusters`,
-`apply container-cluster`, and `apply addons` are still available for advanced
-operations and recovery when you need one slice of the graph. `apply clusters`
-converges cluster infrastructure, storage clusters, OpenShift or OKD installs,
-bound add-ons, and declared integrations; independent storage and container
-cluster work starts in parallel where dependencies allow it. Running
-`apply clusters --yes` again skips cluster install tasks when the prior install
+infrastructure. Focused child applies require either an already installed and
+KubeVirt-ready parent, or both parent and child named in `--clusters`.
+Use `apply --stage infra` to prepare providers, infra services, selected
+machines, and managed storage-node prerequisites. Use `apply --stage clusters`
+to install selected container clusters, provision selected storage clusters,
+apply bound add-ons, and attach declared integrations. `--clusters` accepts a
+comma-separated mix of `ContainerCluster` and `StorageCluster` names. Running
+`apply --stage clusters --yes` again skips cluster install tasks when the prior install
 record, rendered desired-input fingerprint, and kubeconfig availability probe
 all match, then applies add-ons and integrations idempotently. If an interrupted
 apply already booted nodes, the next apply resumes at the install wait phase
@@ -261,11 +259,9 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
 | `bootwright plan --output json` | Supported | Dry-run apply plan |
-| `bootwright apply infra --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply storage-cluster --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply clusters --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright apply addons --dry-run --output json` | Supported | Dry-run add-on apply plan |
-| `bootwright apply all --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply --stage infra --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply --stage clusters --dry-run --output json` | Supported | Dry-run apply plan |
+| `bootwright apply --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright destroy container-cluster --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
@@ -343,7 +339,7 @@ This does not destroy container-cluster nodes or the rest of the infrastructure.
 
 ## Add The Cluster Kube Context
 
-After `apply all` completes, merge the generated admin kubeconfig into your
+After `apply --yes` completes, merge the generated admin kubeconfig into your
 user kubeconfig:
 
 ```text

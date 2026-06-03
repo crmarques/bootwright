@@ -23,6 +23,20 @@ func FilterStateToClusterRoots(state v1alpha1.State, containerNames, storageName
 	return mergeFilteredStates(state, parts)
 }
 
+func FilterStateToApplyClusterRoots(state v1alpha1.State, containerNames, storageNames []string) v1alpha1.State {
+	var parts []v1alpha1.State
+	if len(containerNames) > 0 {
+		parts = append(parts, FilterStateToClusters(state, containerNames))
+	}
+	if len(storageNames) > 0 {
+		parts = append(parts, filterStateToStorageClustersForApply(state, storageNames))
+	}
+	if len(parts) == 0 {
+		return state
+	}
+	return mergeFilteredStates(state, parts)
+}
+
 // FilterStateToClusters keeps selected ContainerClusters, their referenced
 // ClusterInfras, and the providers needed by those ClusterInfras.
 func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State {
@@ -169,6 +183,98 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	state.StorageExports = exports
 	state.ClusterAddonBindings = bindings
 	state = filterAddonsToClusters(state, selectedContainerClusters)
+	return state
+}
+
+func filterStateToStorageClustersForApply(state v1alpha1.State, names []string) v1alpha1.State {
+	selected := map[string]bool{}
+	for _, name := range names {
+		selected[name] = true
+	}
+	var clusters []v1alpha1.StorageCluster
+	for _, cluster := range state.StorageClusters {
+		if selected[cluster.Metadata.Name] {
+			clusters = append(clusters, cluster)
+		}
+	}
+	var policies []v1alpha1.StoragePlacementPolicy
+	for _, policy := range state.StoragePlacementPolicies {
+		if selected[policy.Spec.StorageClusterRef.Name] {
+			policies = append(policies, policy)
+		}
+	}
+	var pools []v1alpha1.StoragePool
+	for _, pool := range state.StoragePools {
+		if selected[pool.Spec.StorageClusterRef.Name] {
+			pools = append(pools, pool)
+		}
+	}
+	var filesystems []v1alpha1.StorageFilesystem
+	for _, fs := range state.StorageFilesystems {
+		if selected[fs.Spec.StorageClusterRef.Name] {
+			filesystems = append(filesystems, fs)
+		}
+	}
+	var gateways []v1alpha1.StorageObjectGateway
+	for _, gateway := range state.StorageObjectGateways {
+		if selected[gateway.Spec.StorageClusterRef.Name] {
+			gateways = append(gateways, gateway)
+		}
+	}
+	var exports []v1alpha1.StorageExport
+	selectedExports := map[string]bool{}
+	for _, export := range state.StorageExports {
+		if selected[export.Spec.StorageClusterRef.Name] {
+			exports = append(exports, export)
+			selectedExports[export.Metadata.Name] = true
+		}
+	}
+	selectedBindingClusters := map[string]bool{}
+	var bindings []v1alpha1.ClusterAddonBinding
+	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
+		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
+		if !selectedExports[exportRef.Name] {
+			continue
+		}
+		bindings = append(bindings, storageEffectBinding(effect))
+		selectedBindingClusters[effect.Binding.Spec.ClusterRef.Name] = true
+	}
+	selectedInfra := map[string]bool{}
+	for _, cluster := range clusters {
+		if cluster.Spec.ClusterInfraRef.Name != "" {
+			selectedInfra[cluster.Spec.ClusterInfraRef.Name] = true
+		}
+	}
+	var infras []v1alpha1.ClusterInfra
+	selectedProviders := map[string]bool{}
+	for _, infra := range state.ClusterInfras {
+		if !selectedInfra[infra.Metadata.Name] {
+			continue
+		}
+		infras = append(infras, infra)
+		for _, machine := range infra.Spec.Components.Machines {
+			if machine.From.Provider != "" {
+				selectedProviders[machine.From.Provider] = true
+			}
+		}
+	}
+	var providers []v1alpha1.InfraProvider
+	for _, provider := range state.InfraProviders {
+		if selectedProviders[provider.Metadata.Name] {
+			providers = append(providers, provider)
+		}
+	}
+	state.InfraProviders = providers
+	state.ClusterInfras = infras
+	state.ContainerClusters = nil
+	state.StorageClusters = clusters
+	state.StoragePlacementPolicies = policies
+	state.StoragePools = pools
+	state.StorageFilesystems = filesystems
+	state.StorageObjectGateways = gateways
+	state.StorageExports = exports
+	state.ClusterAddonBindings = bindings
+	state = filterAddonsToClusters(state, selectedBindingClusters)
 	return state
 }
 

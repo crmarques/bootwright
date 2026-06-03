@@ -12,7 +12,7 @@ import (
 // Centralised so a single edit reaches all three (check/apply/destroy).
 const (
 	preflightPlaybookPath = "bootwright.core.check_preflight"
-	// infraAnsibleLimit pins the inventory groups `apply infra` and
+	// infraAnsibleLimit pins the inventory groups `apply --stage infra` and
 	// `check infra` target. `bootwright_ocp_hosts` is included so
 	// bastion-side external_validate can run in every context input set,
 	// including bare-metal/all-external shapes like test 002 where the

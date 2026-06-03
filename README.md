@@ -32,15 +32,15 @@ bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
 bootwright plan
-bootwright apply all --yes
+bootwright apply --yes
 bootwright status --watch
 bootwright cluster access-info
 ```
 
-`apply all` is the normal convergence path. Phase commands such as
-`apply infra`, `apply storage-cluster`, `apply clusters`, and `apply addons`
-remain available for advanced operations and recovery when you need one slice
-of the graph.
+`apply` is the normal convergence path. Use `--stage infra` to prepare
+providers, infra services, and selected machines, or `--stage clusters` to
+install selected container and storage clusters, add-ons, and integrations.
+Use `--clusters <name>[,<name>...]` for focused recovery.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -177,29 +177,28 @@ bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
 bootwright plan
-bootwright apply all --yes
+bootwright apply --yes
 bootwright status --watch
 bootwright cluster access-info
 bootwright check all --dry-run
-bootwright apply infra --dry-run
-bootwright apply infra --yes
+bootwright apply --stage infra --dry-run
+bootwright apply --stage infra --yes
 bootwright render installer --scope demo-ocp
 bootwright render storage --scope ceph-stretch
 bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
-bootwright apply storage-cluster --scope ceph-stretch --yes
-bootwright apply clusters --yes
+bootwright apply --stage clusters --clusters ceph-stretch --yes
+bootwright apply --stage clusters --yes
 bootwright check addons
-bootwright apply addons --dry-run
-bootwright apply addons --yes
 bootwright status
 bootwright destroy container-cluster --yes
 bootwright destroy infra --yes
 bootwright destroy infra --scope artifact-server --yes
 ```
 
-The CLI is organized around workflow command groups. Provisioning targets are
-`bastion`, `infra`, `clusters`, `container-cluster`, `storage-cluster`,
-`addons`, and `all`. Top-level groups are `validate`, `context`, `cluster`,
+The CLI is organized around workflow command groups. `apply bastion` remains a
+separate prerequisite command. Graph apply uses `--stage infra|clusters`;
+omitting `--stage` applies the full graph. Top-level groups are `validate`,
+`context`, `cluster`,
 `example`, `print-env`, `secret`, `check`, `status`, `plan`, `render`,
 `apply`, `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
@@ -211,14 +210,11 @@ URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs
 while the terminal shows a ledger-backed fleet dashboard with log paths,
-phase status, running work, and concise failures. `bootwright apply all` is the
-normal end-to-end workflow.
-`bootwright apply clusters` provisions selected cluster infrastructure,
-storage clusters, OpenShift or OKD clusters, bound add-ons, and declared
-storage integrations as dependency-ready tasks. `bootwright apply
-container-cluster` remains available for focused OpenShift install recovery,
-and `bootwright apply addons` is available for standalone add-on convergence
-after install. Use phase commands for scoped maintenance or recovery.
+phase status, running work, and concise failures. `bootwright apply --yes` is
+the normal end-to-end workflow.
+`bootwright apply --stage clusters` provisions selected storage clusters,
+OpenShift or OKD clusters, bound add-ons, and declared storage integrations as
+dependency-ready tasks. Use `--clusters` for scoped maintenance or recovery.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

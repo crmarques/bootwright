@@ -46,6 +46,22 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 	}
 }
 
+func scopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
+	switch target {
+	case "clusters", "infra", "all":
+		if strings.TrimSpace(scope) == "" {
+			return state, nil
+		}
+		containerNames, storageNames, err := clusterRootNamesForTarget(state, scope)
+		if err != nil {
+			return state, err
+		}
+		return stategraph.FilterStateToApplyClusterRoots(state, containerNames, storageNames), nil
+	default:
+		return scopeState(state, target, scope)
+	}
+}
+
 func clusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []string, error) {
 	names, err := parseClusterScope(scope)
 	if err != nil {
@@ -119,7 +135,7 @@ func parseClusterScope(scope string) ([]string, error) {
 		names = append(names, name)
 	}
 	if len(names) == 0 {
-		return nil, fmt.Errorf("--scope must name at least one cluster")
+		return nil, fmt.Errorf("cluster selection must name at least one cluster")
 	}
 	return names, nil
 }
@@ -159,7 +175,7 @@ func formatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) er
 }
 
 func validateScopedApplySharedServices(state v1alpha1.State, target, scope string) error {
-	if strings.TrimSpace(scope) == "" || (target != "infra" && target != "clusters" && target != "all") {
+	if strings.TrimSpace(scope) == "" || (target != "infra" && target != "all") {
 		return nil
 	}
 	selectedNames, _, err := clusterRootNamesForTarget(state, scope)
@@ -178,14 +194,14 @@ func validateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
 	var b strings.Builder
-	b.WriteString("--scope would narrow shared host service(s) that other clusters still depend on:\n")
+	b.WriteString("--clusters would narrow shared host service(s) that other clusters still depend on:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
 			c.Slot, c.Provider, c.Name,
 			strings.Join(c.ScopedClusters, ", "),
 			strings.Join(c.UnscopedClusters, ", ")))
 	}
-	b.WriteString("re-run without --scope to apply every consumer, or extend --scope to include the unscoped clusters")
+	b.WriteString("re-run without --clusters to apply every consumer, or extend --clusters to include the unscoped clusters")
 	return fmt.Errorf("%s", b.String())
 }
 

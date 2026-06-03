@@ -52,7 +52,7 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]
 			continue
 		}
 		switch storageClusterManagement(cluster) {
-		case v1alpha1.StorageClusterManagementManaged:
+		case v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementFullManaged:
 			if cluster.Spec.Ceph == nil {
 				errs = append(errs, prefix+".ceph is required when spec.type=ceph")
 				continue
@@ -66,7 +66,7 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]
 			}
 			continue
 		default:
-			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", prefix, cluster.Spec.Management, v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementExternal))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s, %s}", prefix, cluster.Spec.Management, v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementExternal, v1alpha1.StorageClusterManagementFullManaged))
 			continue
 		}
 		infra, ok := infras[cluster.Spec.ClusterInfraRef.Name]

@@ -68,7 +68,6 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 		}
 		return runStatus(stdout, cf)
 	}
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 
@@ -271,7 +270,7 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 		}
 		hints = append(hints,
 			"bootwright plan",
-			"bootwright apply all --yes",
+			"bootwright apply --yes",
 			"bootwright status --watch",
 			"bootwright cluster access-info",
 		)

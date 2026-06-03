@@ -21,6 +21,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -63,7 +64,7 @@ func TestHubCommandsNotAdvertised(t *testing.T) {
 	if code == 0 {
 		t.Fatal("bootwright apply hub unexpectedly succeeded")
 	}
-	if !strings.Contains(stderr, `invalid argument "hub"`) {
+	if !strings.Contains(stderr, `unknown command "hub"`) {
 		t.Fatalf("apply hub stderr %q does not reject hub as an invalid target", stderr)
 	}
 }
@@ -71,10 +72,10 @@ func TestHubCommandsNotAdvertised(t *testing.T) {
 func TestClusterTargets(t *testing.T) {
 	for _, args := range [][]string{
 		{"check", "clusters", "--help"},
-		{"apply", "clusters", "--help"},
 		{"check", "container-cluster", "--help"},
-		{"apply", "container-cluster", "--help"},
 		{"destroy", "container-cluster", "--help"},
+		{"apply", "--help"},
+		{"apply", "bastion", "--help"},
 	} {
 		_, stderr, code := runCLI(t, args...)
 		if code != 0 {
@@ -91,8 +92,17 @@ func TestClusterTargets(t *testing.T) {
 		if code == 0 {
 			t.Fatalf("bootwright %s unexpectedly succeeded", strings.Join(args, " "))
 		}
-		if !strings.Contains(stderr, `invalid argument`) {
+		if !strings.Contains(stderr, `invalid argument`) && !strings.Contains(stderr, `unknown command`) {
 			t.Fatalf("%s stderr %q does not reject unsupported target", strings.Join(args, " "), stderr)
+		}
+	}
+	for _, target := range []string{"infra", "clusters", "container-cluster", "storage-cluster", "addons", "all"} {
+		_, stderr, code := runCLI(t, "apply", target)
+		if code == 0 {
+			t.Fatalf("bootwright apply %s unexpectedly succeeded", target)
+		}
+		if !strings.Contains(stderr, `unknown command "`+target+`"`) {
+			t.Fatalf("apply %s stderr %q does not reject removed subcommand", target, stderr)
 		}
 	}
 
@@ -106,37 +116,18 @@ func TestClusterTargets(t *testing.T) {
 }
 
 func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
-	stdout, stderr, code := runCLI(t, "apply", "all", "--help")
+	stdout, stderr, code := runCLI(t, "apply", "--help")
 	if code != 0 {
-		t.Fatalf("apply all --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --help exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Apply infrastructure, storage, OpenShift clusters, and addons") {
-		t.Fatalf("apply all help does not mention addons:\n%s", stdout)
-	}
-	if !strings.Contains(stdout, "comma-separated cluster names to apply") {
-		t.Fatalf("apply all help does not describe mixed cluster scope:\n%s", stdout)
-	}
-
-	stdout, stderr, code = runCLI(t, "apply", "clusters", "--help")
-	if code != 0 {
-		t.Fatalf("apply clusters --help exited %d, stderr=%q", code, stderr)
-	}
-	if !strings.Contains(stdout, "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations") {
-		t.Fatalf("apply clusters help does not mention lifecycle integrations:\n%s", stdout)
-	}
-
-	stdout, stderr, code = runCLI(t, "apply", "addons", "--help")
-	if code != 0 {
-		t.Fatalf("apply addons --help exited %d, stderr=%q", code, stderr)
-	}
-	for _, want := range []string{"--dry-run", "--yes", "--output"} {
+	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster", "bastion"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("apply addons help missing %q:\n%s", want, stdout)
+			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, reject := range []string{"--ansible-playbook", "--ask-become-pass", "--check", "--parallelism-per-host", "--parallelism-redfish"} {
+	for _, reject := range []string{"--scope", "--cluster ", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
-			t.Fatalf("apply addons help exposes provider-host flag %q:\n%s", reject, stdout)
+			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
 	}
 
@@ -147,6 +138,27 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	for _, want := range []string{"comma-separated StorageCluster names to check", "bootwright check storage-cluster --scope ceph-storage"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("check storage-cluster help missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
+	for _, stage := range []string{"container", "storage", "install", "addons"} {
+		_, stderr, code := runCLI(t, "apply", "--stage", stage, "--dry-run")
+		if code == 0 {
+			t.Fatalf("apply --stage %s unexpectedly succeeded", stage)
+		}
+		if !strings.Contains(stderr, "--stage must be one of infra, clusters") {
+			t.Fatalf("apply --stage %s stderr = %q", stage, stderr)
+		}
+	}
+	for _, flag := range []string{"--scope", "--cluster"} {
+		stdout, stderr, code := runCLI(t, "apply", flag, "sno-libvirt", "--dry-run")
+		if code == 0 {
+			t.Fatalf("apply %s unexpectedly succeeded", flag)
+		}
+		if !strings.Contains(stdout+stderr, "unknown flag: "+flag) {
+			t.Fatalf("apply %s did not reject old flag, stdout=%q stderr=%q", flag, stdout, stderr)
 		}
 	}
 }
@@ -288,8 +300,8 @@ func TestHumanOutputStructuredText(t *testing.T) {
 			want: []string{"Bootwright: plan", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Rendered artifacts", "Bundle"},
 		},
 		{
-			name: "apply infra dry-run",
-			args: []string{"apply", "infra", "--dry-run", "--ask-become-pass=false"},
+			name: "apply stage infra dry-run",
+			args: []string{"apply", "--stage", "infra", "--dry-run", "--ask-become-pass=false"},
 			want: []string{"Bootwright: infra apply", "Apply plan", "Bootwright prerequisites", "planned task(s)", "Provider services", "Infra component services", "Rendered artifacts", "Bundle"},
 		},
 	}
@@ -339,13 +351,14 @@ func TestFailedCheckOutputIsActionable(t *testing.T) {
 func TestScopedApplyDryRunJSON(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
-		"apply", "infra",
-		"--scope", "sno-libvirt",
+		"apply",
+		"--stage", "infra",
+		"--clusters", "sno-libvirt",
 		"--dry-run",
 		"--output", "json",
 	)
 	if code != 0 {
-		t.Fatalf("apply infra dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --stage infra dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -438,20 +451,21 @@ func TestScopedCheckDryRunJSONDoesNotPromptForBecome(t *testing.T) {
 func TestScopedApplyDryRunJSONIncludesBecomePromptForProviderHosts(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
-		"apply", "infra",
+		"apply",
+		"--stage", "infra",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=true",
 	)
 	if code != 0 {
-		t.Fatalf("apply infra dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --stage infra dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
 	if !commandContains(report.Command, "--ask-become-pass") {
-		t.Fatalf("expected apply infra command to ask for become password, got %v", report.Command)
+		t.Fatalf("expected apply --stage infra command to ask for become password, got %v", report.Command)
 	}
 }
 
@@ -536,9 +550,9 @@ func TestApplyAcceptsKubeVirtDispatchDryRun(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	_, stderr, code = runCLI(t, "apply", "infra", "--dry-run")
+	_, stderr, code = runCLI(t, "apply", "--stage", "infra", "--dry-run")
 	if code != 0 {
-		t.Fatalf("apply infra dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --stage infra dry-run exited %d, stderr=%q", code, stderr)
 	}
 }
 
@@ -550,12 +564,69 @@ func TestApplyAllScopedKubeVirtChildDryRunReportsHostDependency(t *testing.T) {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 
-	stdout, stderr, code = runCLI(t, "apply", "all", "--scope", "dc1-child-ocp", "--dry-run", "--output", "json")
+	stdout, stderr, code = runCLI(t, "apply", "--clusters", "dc1-child-ocp", "--dry-run", "--output", "json")
 	if code == 0 {
 		t.Fatalf("scoped child apply unexpectedly succeeded, stdout=%q stderr=%q", stdout, stderr)
 	}
-	if !strings.Contains(stdout+stderr, "include dc1-metal-ocp in --scope or apply it first") {
+	if !strings.Contains(stdout+stderr, "include dc1-metal-ocp in --clusters or apply it first") {
 		t.Fatalf("scoped child apply error missing host dependency remediation, stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func TestApplyKubeVirtChildOnlySelectionAcceptsReadyParent(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("nested")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := workflow.SaveClusterInstallRecord(ctx.ClustersDir, workflow.ClusterInstallRecord{
+		Cluster:     "dc1-metal-ocp",
+		Status:      workflow.ClusterInstallStatusInstalled,
+		Phase:       workflow.ClusterInstallPhaseComplete,
+		UpdatedAt:   now,
+		InstalledAt: &now,
+	}); err != nil {
+		t.Fatalf("SaveClusterInstallRecord: %v", err)
+	}
+	kubeconfig := filepath.Join(ctx.ClustersDir, "dc1-metal-ocp", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	if err := extensionrecords.SaveRecord(ctx.ClustersDir, extensionrecords.Record{
+		Cluster:   "dc1-metal-ocp",
+		Extension: "openshift-virtualization",
+		Status:    extensionrecords.RecordStatusReady,
+		Phase:     extensionrecords.RecordPhaseComplete,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("SaveRecord: %v", err)
+	}
+
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-child-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("child-only apply with ready parent exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestApplyKubeVirtParentAndChildSelectionAccepted(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code := runCLI(t, "context", "init", "nested", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,dc1-child-ocp", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("parent+child apply exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 
@@ -1308,8 +1379,8 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"check", "syntax", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"check", "syntax"}, want: true},
 		{args: []string{"check", "--help"}, want: false},
-		{args: []string{"apply"}, want: false},
-		{args: []string{"apply", "infra"}, want: true},
+		{args: []string{"apply"}, want: true},
+		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"destroy"}, want: false},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"render"}, want: false},
@@ -1349,7 +1420,6 @@ func TestLocalRootGateSkipsRootlessHelpAndCompletion(t *testing.T) {
 
 	cases := [][]string{
 		{"check"},
-		{"apply"},
 		{"destroy"},
 		{"secret"},
 		{"render"},
@@ -1377,9 +1447,9 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		want bool
 	}{
 		{args: []string{"apply", "bastion"}, want: true},
-		{args: []string{"apply", "infra"}, want: true},
-		{args: []string{"apply", "clusters"}, want: true},
-		{args: []string{"apply", "all"}, want: true},
+		{args: []string{"apply", "--stage", "infra"}, want: true},
+		{args: []string{"apply", "--stage", "clusters"}, want: true},
+		{args: []string{"apply"}, want: true},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"destroy", "container-cluster"}, want: true},
 		{args: []string{"check", "infra"}, want: false},
@@ -1511,7 +1581,7 @@ func TestEnsureLocalRootForBecomeCommandExportsPasswordFile(t *testing.T) {
 		},
 	}
 
-	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"apply", "infra", "--yes"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &bytes.Buffer{})
+	code, handled, err := ensureLocalRootForArgs(context.Background(), []string{"apply", "--stage", "infra", "--yes"}, strings.NewReader("secret\n"), &bytes.Buffer{}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("ensureLocalRootForArgs: %v", err)
 	}
@@ -1530,7 +1600,7 @@ func TestEnsureLocalRootForBecomeCommandExportsPasswordFile(t *testing.T) {
 	} else if _, err := os.Stat(got); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("inherited become password file was not cleaned up: %v", err)
 	}
-	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "apply", "infra", "--yes"}) {
+	if !reflect.DeepEqual(calls[3][commandIndex:], []string{"/usr/local/bin/bootwright", "apply", "--stage", "infra", "--yes"}) {
 		t.Fatalf("fourth sudo call = %v", calls[3])
 	}
 }
@@ -2932,12 +3002,12 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 		t.Fatalf("write sentinel install-config: %v", err)
 	}
 
-	stdout, stderr, code := runCLI(t, "apply", "container-cluster", "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--clusters", clusterName, "--yes", "--ask-become-pass=false", "--ansible-playbook", fakeAnsible)
 	if code == 0 {
-		t.Fatalf("apply container-cluster unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+		t.Fatalf("apply --stage clusters unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "different install inputs") {
-		t.Fatalf("apply container-cluster stderr missing install mismatch:\n%s", stderr)
+		t.Fatalf("apply --stage clusters stderr missing install mismatch:\n%s", stderr)
 	}
 	data, err := os.ReadFile(installConfig)
 	if err != nil {
@@ -2953,7 +3023,7 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 
 func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	initTestContext(t, "005-3nodes-baremetal")
-	stdout, stderr, code := runCLI(t, "apply", "container-cluster", "--dry-run", "--output", "json", "--ask-become-pass=true")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--clusters", "3-nodes-ocp-baremetal", "--dry-run", "--output", "json", "--ask-become-pass=true")
 	if code != 0 {
 		t.Fatalf("apply dry-run json exited %d, stderr=%q", code, stderr)
 	}
@@ -3011,19 +3081,19 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 }
 
-func TestApplyAddonsDryRunJSONPlansAddonTasks(t *testing.T) {
+func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 	initTestContextWithClusterAddon(t)
 
-	stdout, stderr, code := runCLI(t, "apply", "addons", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "apply", "--dry-run", "--output", "json")
 	if code != 0 {
-		t.Fatalf("apply addons dry-run json exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply dry-run json exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
 	}
-	if report.Target != "addons" {
-		t.Fatalf("target = %q, want addons", report.Target)
+	if report.Target != "all" {
+		t.Fatalf("target = %q, want all", report.Target)
 	}
 	if report.ApplyPlan == nil {
 		t.Fatalf("apply plan missing from report: %+v", report)
@@ -3033,6 +3103,12 @@ func TestApplyAddonsDryRunJSONPlansAddonTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
+		"provider.lab-host",
+		"infra-component.lab-host",
+		"infra.sno-libvirt.lab-host",
+		"iso.sno-libvirt",
+		"boot.sno-libvirt",
+		"wait.sno-libvirt",
 		"addon.sno-libvirt.openshift-virtualization.apply",
 		"addon.sno-libvirt.openshift-virtualization.wait",
 	}
@@ -3050,9 +3126,9 @@ func TestApplyAddonsDryRunJSONPlansAddonTasks(t *testing.T) {
 func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 	initTestContextWithClusterAddon(t)
 
-	stdout, stderr, code := runCLI(t, "apply", "clusters", "--dry-run", "--output", "json")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json")
 	if code != 0 {
-		t.Fatalf("apply clusters dry-run json exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --stage clusters dry-run json exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -3069,7 +3145,6 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
-		"infra.sno-libvirt.lab-host",
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",
@@ -3077,7 +3152,7 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 		"addon.sno-libvirt.openshift-virtualization.wait",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
-		t.Fatalf("apply clusters task IDs = %v, want %v", gotIDs, wantIDs)
+		t.Fatalf("apply --stage clusters task IDs = %v, want %v", gotIDs, wantIDs)
 	}
 	if got := report.ApplyPlan.Addons; len(got) != 1 || got[0].Cluster != "sno-libvirt" || got[0].Addon != "openshift-virtualization" {
 		t.Fatalf("addon plan = %+v, want sno-libvirt openshift-virtualization", got)
@@ -3085,16 +3160,50 @@ func TestApplyClustersDryRunJSONPlansAddonTasks(t *testing.T) {
 	if got := report.ApplyPlan.Addons[0].Resources; len(got) != 3 || got[2].Kind != "HyperConverged" {
 		t.Fatalf("addon resources = %+v, want generated OLM resources ending with HyperConverged", got)
 	}
-	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt", "infra.sno-libvirt.lab-host")
+	assertTaskDeps(t, report.ApplyPlan.Tasks, "iso.sno-libvirt")
 	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.apply", "wait.sno-libvirt")
 	assertTaskDeps(t, report.ApplyPlan.Tasks, "addon.sno-libvirt.openshift-virtualization.wait", "addon.sno-libvirt.openshift-virtualization.apply")
 }
 
+func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code := runCLI(t, "context", "init", "mixed", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "apply", "--stage", "clusters", "--clusters", "dc1-metal-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("apply mixed clusters dry-run json exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
+	}
+	if report.Target != "clusters" {
+		t.Fatalf("target = %q, want clusters", report.Target)
+	}
+	gotIDs := make([]string, 0, len(report.ApplyPlan.Tasks))
+	for _, task := range report.ApplyPlan.Tasks {
+		gotIDs = append(gotIDs, task.ID)
+	}
+	for _, want := range []string{"storage.ceph-storage", "iso.dc1-metal-ocp", "wait.dc1-metal-ocp"} {
+		if !slices.Contains(gotIDs, want) {
+			t.Fatalf("mixed apply task IDs missing %s: %v", want, gotIDs)
+		}
+	}
+	for _, reject := range []string{"storageinfra.ceph-storage", "iso.dc2-metal-ocp"} {
+		if slices.Contains(gotIDs, reject) {
+			t.Fatalf("mixed apply task IDs unexpectedly include %s: %v", reject, gotIDs)
+		}
+	}
+}
+
 func TestApplyClustersOverrideDryRunPassesInstallOverride(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "apply", "clusters", "--dry-run", "--output", "json", "--override")
+	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--override")
 	if code != 0 {
-		t.Fatalf("apply clusters override dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("apply --stage clusters override dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {

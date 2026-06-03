@@ -192,7 +192,7 @@ func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersD
 			info, err := deps.statPath(path)
 			switch {
 			case err != nil:
-				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --scope or run bootwright apply clusters --scope "+name+" --yes first"))
+				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
 			case info.IsDir():
 				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
 			default:
@@ -211,10 +211,10 @@ func kubeVirtAPIReadyCheck(name, kubeconfigPath string, deps preflightDeps) pref
 		if evidence == "" {
 			evidence = err.Error()
 		}
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply addons --scope "+name+" --yes first")
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", evidence, "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
 	}
 	if !strings.Contains(string(out), "virtualmachines.kubevirt.io") {
-		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply addons --scope "+name+" --yes first")
+		return failCheck(checkGroupInstallerTools, name+" KubeVirt API", strings.TrimSpace(string(out)), "KubeVirt child clusters need OpenShift Virtualization ready on the host cluster", "run bootwright apply --stage clusters --clusters "+name+" --yes first")
 	}
 	return okCheck(checkGroupInstallerTools, name+" KubeVirt API", "virtualmachines.kubevirt.io")
 }

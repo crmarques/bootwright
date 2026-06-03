@@ -137,23 +137,23 @@ spec:
 ## CLI Flow
 
 ```text
-bootwright apply all --yes
+bootwright apply --yes
 ```
 
-Phase commands are available when you intentionally want only the cluster or
-add-on slice, for example to converge add-ons again after the cluster is
-already installed:
+Use the `clusters` stage when you intentionally want only cluster install,
+storage provisioning, add-ons, and integrations:
 
 ```text
 bootwright check addons
-bootwright apply addons --dry-run
-bootwright apply addons --yes
+bootwright apply --stage clusters --dry-run
+bootwright apply --stage clusters --yes
 ```
 
-`apply addons --dry-run` shows the selected clusters, expanded add-on
-order, task plan, and generated resource summary without mutating the cluster.
+`apply --stage clusters --dry-run` shows the selected clusters, expanded
+add-on order, task plan, and generated resource summary without mutating the
+cluster.
 
-`apply all --yes` and `apply clusters --yes` include add-ons after the cluster
+`apply --yes` and `apply --stage clusters --yes` include add-ons after the cluster
 install wait task.
 
 ## Records And Readiness

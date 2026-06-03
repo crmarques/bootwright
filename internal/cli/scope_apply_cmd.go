@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -12,19 +13,16 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func newScopeApplyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	return newScopeApplyCmdWithOptions(scope, stdin, stdout, stderr, scopeApplyOptions{})
-}
-
 type scopeApplyOptions struct {
-	use          string
-	short        string
-	example      string
-	defaultPlan  bool
-	hideDryRun   bool
-	hideApproval bool
-	commandLabel string
-	action       string
+	use           string
+	short         string
+	example       string
+	defaultPlan   bool
+	hideDryRun    bool
+	hideApproval  bool
+	stageSelector bool
+	commandLabel  string
+	action        string
 }
 
 func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
@@ -40,6 +38,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		parallelism   int
 		perHost       int
 		redfish       int
+		stage         string
 	)
 	use := "apply"
 	if options.use != "" {
@@ -49,7 +48,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	if options.short != "" {
 		short = options.short
 	}
-	example := scopeApplyExample(scope.name, usesAnsible)
+	example := ""
 	if options.example != "" {
 		example = options.example
 	}
@@ -88,7 +87,17 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		cmd.Flags().IntVar(&perHost, "parallelism-per-host", 0, "maximum concurrent mutating tasks per provider host (0 auto safe maximum)")
 		cmd.Flags().IntVar(&redfish, "parallelism-redfish", 0, "maximum concurrent Redfish boot tasks (0 auto safe maximum)")
 	}
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
+	if options.stageSelector {
+		flags.output = outputText
+		if usesAnsible {
+			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+		}
+		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
+		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters (default full graph)")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
+	} else {
+		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
+	}
 	if options.defaultPlan {
 		if flag := cmd.Flags().Lookup("output"); flag != nil {
 			flag.Usage = "output format: text|json"
@@ -100,6 +109,16 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		}
 		if options.defaultPlan && !dryRun {
 			return failErr(2, errors.New("plan is always read-only"))
+		}
+		runScope := scope
+		runCommandLabel := commandLabel
+		if options.stageSelector {
+			var err error
+			runScope, err = applyStageScope(stage)
+			if err != nil {
+				return failErr(2, err)
+			}
+			runCommandLabel = applyStageCommandLabel(stage, action, commandLabel)
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
@@ -114,7 +133,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
-			p.Command(commandLabel)
+			p.Command(runCommandLabel)
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -123,16 +142,31 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			return failErr(1, err)
 		}
 		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + commandLabel}})
+			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
-		if err := validateScopedApplySharedServices(state, scope.name, flags.clusterScope); err != nil {
+		var selectedStorageClusters []string
+		storageSelectionActive := false
+		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
+			var err error
+			_, selectedStorageClusters, err = clusterRootNamesForTarget(state, flags.clusterScope)
+			if err != nil {
+				return failErr(1, err)
+			}
+			storageSelectionActive = true
+		}
+		if err := validateScopedApplySharedServices(state, runScope.name, flags.clusterScope); err != nil {
 			return failErr(1, err)
 		}
-		plan, err := prepareScopedApplyWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
+		if options.stageSelector {
+			if err := validateKubeVirtClusterSelection(state, runScope, flags.clusterScope, clustersDir); err != nil {
+				return failErr(1, err)
+			}
+		}
+		plan, err := prepareScopedApplyWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if scopeUsesAnsible(scope) {
+		if scopeUsesAnsible(runScope) {
 			if err := workflow.EnsureApplySupported(plan.state); err != nil {
 				return failErr(1, err)
 			}
@@ -145,7 +179,10 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,
 		}
-		applyTarget := scope.applyTarget()
+		applyTarget := runScope.applyTarget()
+		if storageSelectionActive {
+			applyTarget.StorageClusterNames = selectedStorageClusters
+		}
 		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.state)
 		if err != nil {
 			return failErr(1, err)
@@ -156,7 +193,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, action, plan.state, plan.selected, scope.applyPlaybook, plan.limit, plan.extraVarPairs, scope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.state, plan.selected, runScope.applyPlaybook, plan.limit, plan.extraVarPairs, runScope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
@@ -173,7 +210,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			}
 		}
 		if !dryRun && !plan.noRemoteWork {
-			printWorkflowStart(stdout, scope.name, plan.selected, plan.askBecomePass)
+			printWorkflowStart(stdout, runScope.name, plan.selected, plan.askBecomePass)
 		}
 		become := becomeCredential{}
 		if !dryRun && !plan.noRemoteWork && willPromptForBecomePassword(plan.askBecomePass) {
@@ -191,7 +228,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if plan.askBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		usesAnsible := scopeUsesAnsible(scope)
+		usesAnsible := scopeUsesAnsible(runScope)
 		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {
 			bundleResult, err = prepareWorkflowBundle(true)
@@ -208,23 +245,23 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
 			Executable:         flags.executable,
-			Playbook:           scope.applyPlaybook,
+			Playbook:           runScope.applyPlaybook,
 			Limit:              plan.limit,
 			Forks:              workflow.AnsibleForksForLimit(plan.state, plan.limit),
 			ExtraVarPairs:      plan.extraVarPairs,
-			ArtifactsBaseName:  scope.artifactsBaseName,
+			ArtifactsBaseName:  runScope.artifactsBaseName,
 			Check:              check,
 			AskBecomePass:      plan.askBecomePass && become.PasswordFile == "",
 			BecomePasswordFile: become.PasswordFile,
 			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
 			DryRun:             dryRun,
 			ResolveInstaller:   plan.targetsClusters,
-			Label:              commandLabel,
+			Label:              runCommandLabel,
 			InstallOverride:    override,
 		}
 		if dryRun {
-			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+scope.name+" to validate secrets, tools, and remote readiness")
-			reporter.DryRunTasks(commandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
+			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+runScope.name+" to validate secrets, tools, and remote readiness")
+			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
 			if err != nil {
@@ -281,28 +318,24 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	return cmd
 }
 
-func scopeApplyExample(scopeName string, usesAnsible bool) string {
-	if !usesAnsible {
-		return fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
-  bootwright apply %[1]s --dry-run
-
-  # Apply non-interactively (skip the confirmation prompt)
-  bootwright apply %[1]s --yes
-
-  # Apply only specific clusters
-  bootwright apply %[1]s --scope managed-01 --yes`, scopeName)
+func applyStageScope(stage string) (scopeSpec, error) {
+	switch strings.TrimSpace(stage) {
+	case "":
+		return allScope, nil
+	case "infra":
+		return infraScope, nil
+	case "clusters":
+		return clustersScope, nil
+	default:
+		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters")
 	}
-	return fmt.Sprintf(`  # Preview the plan only; readiness checks are not run
-  bootwright apply %[1]s --dry-run
+}
 
-  # Apply non-interactively (skip the confirmation prompt)
-  bootwright apply %[1]s --yes
-
-  # Apply only specific clusters
-  bootwright apply %[1]s --scope managed-01 --yes
-
-  # Apply when passwordless sudo is available on provider hosts
-  bootwright apply %[1]s --ask-become-pass=false --yes`, scopeName)
+func applyStageCommandLabel(stage, action, defaultLabel string) string {
+	if strings.TrimSpace(stage) == "" {
+		return defaultLabel
+	}
+	return strings.TrimSpace(stage) + " " + action
 }
 
 func scopeUsesAnsible(scope scopeSpec) bool {

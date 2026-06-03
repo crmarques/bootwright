@@ -20,11 +20,15 @@ func prepareScopedWorkflow(state v1alpha1.State, scope scopeSpec, clusterScope s
 }
 
 func prepareScopedApplyWorkflow(state v1alpha1.State, scope scopeSpec, clusterScope string, askBecomePass, dryRun bool) (scopedWorkflowPlan, error) {
-	return prepareScopedWorkflowWithPhases(state, scope, scope.applyPhases(), clusterScope, askBecomePass, dryRun)
+	return prepareScopedWorkflowWithPhasesAndStateFilter(state, scope, scope.applyPhases(), clusterScope, askBecomePass, dryRun, scopeStateForApply)
 }
 
 func prepareScopedWorkflowWithPhases(state v1alpha1.State, scope scopeSpec, phaseList []Phase, clusterScope string, askBecomePass, dryRun bool) (scopedWorkflowPlan, error) {
-	scopedState, err := scopeState(state, scope.name, clusterScope)
+	return prepareScopedWorkflowWithPhasesAndStateFilter(state, scope, phaseList, clusterScope, askBecomePass, dryRun, scopeState)
+}
+
+func prepareScopedWorkflowWithPhasesAndStateFilter(state v1alpha1.State, scope scopeSpec, phaseList []Phase, clusterScope string, askBecomePass, dryRun bool, filter func(v1alpha1.State, string, string) (v1alpha1.State, error)) (scopedWorkflowPlan, error) {
+	scopedState, err := filter(state, scope.name, clusterScope)
 	if err != nil {
 		return scopedWorkflowPlan{}, err
 	}

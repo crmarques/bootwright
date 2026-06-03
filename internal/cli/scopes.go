@@ -15,7 +15,7 @@ type scopeSpec struct {
 var infraScope = scopeSpec{
 	name:              "infra",
 	short:             "Install and configure InfraProvider, InfraComponent, and ClusterInfra",
-	phaseNames:        []string{"provider", "infra-components", "cluster-infra"},
+	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-infra"},
 	applyPlaybook:     "bootwright.core.workflow_infra_apply",
 	destroyPlaybook:   "bootwright.core.workflow_infra_destroy",
 	artifactsBaseName: "infra",
@@ -23,8 +23,8 @@ var infraScope = scopeSpec{
 
 var clustersScope = scopeSpec{
 	name:              "clusters",
-	short:             "Provision cluster infrastructure, storage, OpenShift clusters, addons, and integrations",
-	phaseNames:        []string{"cluster-infra", "storage-cluster", "container-cluster", "addons"},
+	short:             "Provision storage, OpenShift clusters, addons, and integrations",
+	phaseNames:        []string{"storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "bootwright.core.workflow_clusters_apply",
 	artifactsBaseName: "clusters",
 }
@@ -56,7 +56,7 @@ var addonsScope = scopeSpec{
 var allScope = scopeSpec{
 	name:              "all",
 	short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
-	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-cluster", "container-cluster", "addons"},
+	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-infra", "storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "bootwright.core.workflow_all_apply",
 	artifactsBaseName: "all",
 }

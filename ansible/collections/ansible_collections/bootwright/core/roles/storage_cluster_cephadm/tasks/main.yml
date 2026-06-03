@@ -45,6 +45,7 @@
   loop_control:
     label: "{{ item.name }}"
   delegate_to: "{{ item.inventoryHost }}"
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Start storage node services
   ansible.builtin.service:
@@ -55,6 +56,7 @@
   loop_control:
     label: "{{ item.0.name }} {{ item.1 }}"
   delegate_to: "{{ item.0.inventoryHost }}"
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Verify cephadm CLI on storage nodes
   ansible.builtin.command:
@@ -67,6 +69,7 @@
   loop_control:
     label: "{{ item.name }}"
   delegate_to: "{{ item.inventoryHost }}"
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Install cephadm registry trust on storage nodes
   ansible.builtin.copy:
@@ -80,7 +83,9 @@
   loop_control:
     label: "{{ item.name }}"
   delegate_to: "{{ item.inventoryHost }}"
-  when: bootwright_ceph_registry_trust_path | length > 0
+  when:
+    - bootwright_ceph_registry_trust_path | length > 0
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Update storage node trust stores
   ansible.builtin.command:
@@ -92,7 +97,9 @@
     loop_var: bootwright_ceph_registry_trust_item
     label: "{{ bootwright_ceph_registry_trust_item.item.name | default('<storage-node>') }}"
   delegate_to: "{{ bootwright_ceph_registry_trust_item.item.inventoryHost }}"
-  when: bootwright_ceph_registry_trust_item.changed | default(false)
+  when:
+    - bootwright_ceph_registry_trust_item.changed | default(false)
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Log storage nodes into cephadm registry
   containers.podman.podman_login:
@@ -107,6 +114,7 @@
   when:
     - bootwright_ceph_registry_url | length > 0
     - bootwright_ceph_registry_credentials is defined
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Authorize cephadm cluster SSH key on storage nodes
   ansible.posix.authorized_key:
@@ -119,7 +127,9 @@
   loop_control:
     label: "{{ item.name }}"
   delegate_to: "{{ item.inventoryHost }}"
-  when: bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+  when:
+    - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Check declared OSD devices are empty
   ansible.builtin.command:
@@ -135,6 +145,7 @@
   loop_control:
     label: "{{ item.0.name }} {{ item.1 }}"
   delegate_to: "{{ item.0.inventoryHost }}"
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Apply managed Ceph cluster through cephadm
   block:
@@ -384,3 +395,4 @@
         path: "{{ bootwright_ceph_remote_work_dir }}"
         state: absent
       when: bootwright_ceph_remote_work_dir | default('') | length > 0
+  when: not bootwright_task_storage_prereqs_only | default(false) | bool

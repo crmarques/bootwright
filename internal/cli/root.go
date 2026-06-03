@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // preserves AddCommand order in --help so workflow commands render in usage order
@@ -34,7 +32,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright check all
   bootwright render effective
   bootwright plan
-  bootwright apply all --yes
+  bootwright apply --yes
   bootwright status --watch
   bootwright cluster access-info`,
 		SilenceUsage:  true,
@@ -138,31 +136,4 @@ func requireSubcommand(cmd *cobra.Command) {
 	cmd.ValidArgs = names
 	cmd.Args = cobra.OnlyValidArgs
 	cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
-}
-
-func showSubcommandFlagsInHelp(cmd *cobra.Command) {
-	defaultHelp := cmd.HelpFunc()
-	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		defaultHelp(c, args)
-		if c != cmd {
-			return
-		}
-		merged := pflag.NewFlagSet("subcommand", pflag.ContinueOnError)
-		for _, sub := range c.Commands() {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
-			sub.LocalFlags().VisitAll(func(f *pflag.Flag) {
-				if f.Name == "help" || c.LocalFlags().Lookup(f.Name) != nil || merged.Lookup(f.Name) != nil {
-					return
-				}
-				merged.AddFlag(f)
-			})
-		}
-		usages := merged.FlagUsages()
-		if usages == "" {
-			return
-		}
-		fmt.Fprintf(c.OutOrStdout(), "\nSubcommand Flags:\n%s", usages)
-	})
 }

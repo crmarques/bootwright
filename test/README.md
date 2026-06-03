@@ -50,7 +50,7 @@ bootwright check bastion
 bootwright check infra --dry-run
 bootwright check all --dry-run
 bootwright plan
-bootwright apply all --yes
+bootwright apply --yes
 ```
 
 ## Running All Cases

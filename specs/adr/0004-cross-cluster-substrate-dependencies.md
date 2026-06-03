@@ -32,11 +32,12 @@ The initial accepted value is `kubevirt`. A child KubeVirt profile with
 `hostContainerClusterRef` is valid only when the referenced parent cluster has a bound
 add-on that provides `kubevirt`.
 
-The apply graph is responsible for cross-cluster ordering. `apply all` makes
-child infrastructure wait for the parent install wait task and the parent
-add-on readiness task. Scoped child commands do not implicitly add the
-parent cluster to scope; they report the missing dependency or require the
-parent cluster secrets kubeconfig and KubeVirt API to already exist.
+The apply graph is responsible for cross-cluster ordering. The full graph and
+explicit parent+child `--clusters` selections make child work wait for the
+parent install wait task and the parent add-on readiness task. Scoped child
+commands do not implicitly add the parent cluster to scope; they report the
+missing dependency or require local runtime records proving that the parent
+cluster install and KubeVirt add-on are already ready.
 
 ## Consequences
 

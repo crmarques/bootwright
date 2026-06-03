@@ -99,10 +99,10 @@ Bootwright-managed host cluster with `hostContainerClusterRef` or at an external
 virtualization cluster kubeconfig with `kubeconfigRef`.
 
 When `hostContainerClusterRef` is used, the host cluster must be installed and bound to
-a `ClusterAddon` with `provides: [kubevirt]`. `bootwright apply all --yes`
+a `ClusterAddon` with `provides: [kubevirt]`. `bootwright apply --yes`
 orders child VM infrastructure after the host install wait and the KubeVirt
 add-on readiness wait. Scoped child applies do not install the host
-implicitly; apply the host first or include it in the scope.
+implicitly; apply the host first or include it in `--clusters`.
 
 ## Post-Install Add-Ons
 
@@ -119,12 +119,11 @@ deterministic: referenced `profiles` expand in declared order, then direct
 first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
 `clusterRef.name`; use multiple binding resources for multiple clusters.
 
-`bootwright apply all --yes` is the normal end-to-end path and includes
+`bootwright apply --yes` is the normal end-to-end path and includes
 infrastructure, storage, cluster install, and bound post-install components.
-Use `bootwright apply clusters --yes`, `bootwright apply container-cluster --yes`,
-or `bootwright apply addons --yes` for
-advanced recovery or maintenance when you intentionally want one slice of the
-graph.
+Use `bootwright apply --stage infra --yes` or
+`bootwright apply --stage clusters --yes` for advanced recovery or maintenance
+when you intentionally want one slice of the graph.
 
 ## NMState Templates
 

@@ -29,7 +29,7 @@ same sudo error when controller DNS misses caused Bootwright to seed
 without mutating `/etc/hosts`, so the cluster install DNS preflight no longer
 uses controller-local `become`.
 
-**Remote-host symptom:** `bootwright apply infra` fails during
+**Remote-host symptom:** `bootwright apply --stage infra` fails during
 `PLAY [Apply provider services]` / `TASK [Gathering Facts]` on a provider host
 with the same sudo error.
 

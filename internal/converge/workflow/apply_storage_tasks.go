@@ -21,6 +21,9 @@ func planStorageAttachmentTasks(state v1alpha1.State, installPhasePlanned bool, 
 	}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		cluster := effect.Binding.Spec.ClusterRef.Name
+		if !stateHasContainerCluster(state, cluster) {
+			continue
+		}
 		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
 		export, ok := exportByName[exportRef.Name]
 		if !ok {

@@ -8,6 +8,11 @@ import (
 )
 
 func EnsureApplySupported(state v1alpha1.State) error {
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Management == v1alpha1.StorageClusterManagementFullManaged {
+			return fmt.Errorf("StorageCluster/%s spec.management=fullManaged is recognized but fullManaged storage infra is not available yet", cluster.Metadata.Name)
+		}
+	}
 	known := map[string]bool{}
 	for _, p := range state.InfraProviders {
 		known[p.Metadata.Name] = true

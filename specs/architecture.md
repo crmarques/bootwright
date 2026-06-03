@@ -39,25 +39,25 @@ cluster task on a remote bastion host: create the cluster agent ISO with
 as parallel node tasks, then run `openshift-install agent wait-for
 install-complete` after every node boot task has completed.
 Post-install add-on apply is scheduled after that install wait when
-`apply clusters` or `apply all` is selected, and as standalone direct `oc`
-tasks when `apply addons` is selected for an already installed cluster.
+`apply --stage clusters` or the full graph is selected.
 Storage apply is a peer phase. For managed storage, Bootwright renders Ceph
-tool inputs under `storage/<storageCluster>/` and schedules an Ansible storage
-task against a synthetic seed host. The storage role reaches preinstalled RHEL
-Ceph nodes over SSH from the bastion, launches `cephadm bootstrap` on the seed
-node, applies core cephadm service specs, runs topology and storage
-operations, applies late MDS/RGW/ingress service specs, runs credential capture
-operations, and writes a temporary credential result for Go to convert into
-final Data Foundation attachment records. Imported storage clusters skip this
-storage task.
+tool inputs under `storage/<storageCluster>/`. The `infra` stage prepares
+preinstalled RHEL Ceph nodes over SSH from the bastion. The `clusters` stage
+schedules an Ansible storage task against a synthetic seed host, launches
+`cephadm bootstrap` on the seed node, applies core cephadm service specs, runs
+topology and storage operations, applies late MDS/RGW/ingress service specs,
+runs credential capture operations, and writes a temporary credential result
+for Go to convert into final Data Foundation attachment records. Imported
+storage clusters skip this storage task.
 Storage-export attachment tasks run in the add-ons phase after the storage task
 when one exists and the Data Foundation-providing add-on readiness task.
 For KubeVirt children that reference a Bootwright-managed host cluster,
-`apply all` adds graph edges from the child infrastructure task to both
-`wait.<host-cluster>` and the host add-on wait task that provides
-`kubevirt`. Scoped child applies do not expand the scope to install the parent;
-they fail with a dependency message or require the parent kubeconfig and
-KubeVirt API to be ready before mutating child infrastructure.
+the full graph and explicit parent+child `--clusters` selections add graph
+edges from the child work to both `wait.<host-cluster>` and the host add-on
+wait task that provides `kubevirt`. Scoped child applies do not expand the
+scope to install the parent; they fail before mutation unless the parent is
+selected too or local runtime records prove the parent install and KubeVirt
+add-on are ready.
 
 Bootwright is the cross-cluster DAG orchestrator; Ansible remains the executor
 for host-level work. Provider, InfraComponent, and cluster-infrastructure

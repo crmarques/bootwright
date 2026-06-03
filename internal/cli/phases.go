@@ -30,6 +30,11 @@ var phases = map[string]Phase{
 		NeedsRoot:     true,
 		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",
 	},
+	"storage-infra": {
+		Name:        "storage-infra",
+		NeedsRoot:   true,
+		Description: "prepare managed storage nodes for later Ceph provisioning",
+	},
 	"storage-cluster": {
 		Name:        "storage-cluster",
 		NeedsRoot:   false,

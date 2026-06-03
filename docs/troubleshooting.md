@@ -93,7 +93,7 @@ continuing.
 
 ## SSH Or Artifact Fetch Failures
 
-`check infra` and `apply infra` require SSH to provider/service hosts. Validate
+`check infra` and `apply --stage infra` require SSH to provider/service hosts. Validate
 the same key and address declared on the `Host` before retrying.
 
 Real BMCs must also reach the generated artifact HTTPS endpoint used for the

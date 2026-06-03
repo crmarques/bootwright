@@ -148,7 +148,7 @@ func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
 	if check.Status == "OK" {
 		t.Fatalf("missing KubeVirt API accepted: %+v", check)
 	}
-	if !strings.Contains(check.Remediation, "bootwright apply addons --scope metal-ocp --yes") {
+	if !strings.Contains(check.Remediation, "bootwright apply --stage clusters --clusters metal-ocp --yes") {
 		t.Fatalf("remediation = %q", check.Remediation)
 	}
 }

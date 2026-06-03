@@ -75,7 +75,7 @@ func writeStorageAttachmentExternalDetails(path string, state v1alpha1.State, pl
 		return err
 	}
 	if !found {
-		return fmt.Errorf("data foundation external details for storage attachment %s/%s/%s not found; run apply storage for StorageCluster/%s first", plan.Cluster, plan.Addon.Name, input.Name, cluster.Metadata.Name)
+		return fmt.Errorf("data foundation external details for storage attachment %s/%s/%s not found; run bootwright apply --stage clusters --clusters %s --yes first", plan.Cluster, plan.Addon.Name, input.Name, cluster.Metadata.Name)
 	}
 	manifest := render.DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, "")
 	return writeStorageAttachmentExternalDetailsManifest(path, manifest)

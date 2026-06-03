@@ -1,7 +1,7 @@
 ---
 # Controller-side reachability validation for the *narrow* set of
 # operator-owned components that Bootwright itself drives during
-# `apply infra`: external Redfish BMCs (Bootwright issues virtual-media
+# `apply --stage infra`: external Redfish BMCs (Bootwright issues virtual-media
 # Inserts and power cycles against them) and external HTTP proxies
 # (Bootwright reaches the public registry / mirror through them).
 #
@@ -14,7 +14,7 @@
 # openshift-install waits for the API from the controller host.
 #
 # Skips by design:
-#   - bmcRole == 'emulated': sushy-tools is stood up by `apply infra`;
+#   - bmcRole == 'emulated': sushy-tools is stood up by `apply --stage infra`;
 #     it's not reachable yet.
 #   - managed proxy components: bootwright stands up Squid; not
 #     reachable yet.
@@ -36,7 +36,7 @@
     - bootwright_proxy is defined
     - (bootwright_proxy.http | default('') | length) > 0 or (bootwright_proxy.https | default('') | length) > 0
     # Skip when any cluster declares a managed proxy — that Squid
-    # will be stood up by `apply infra` and is not yet reachable.
+    # will be stood up by `apply --stage infra` and is not yet reachable.
     - (bootwright_clusters | default([])
        | map(attribute='components') | flatten
        | selectattr('kind', 'equalto', 'proxy')

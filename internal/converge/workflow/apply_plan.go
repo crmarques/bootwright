@@ -21,7 +21,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 	var tasks []ApplyTask
 	kubeVirtDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseClusterInfra] && phaseSet[ApplyPhaseContainerCluster] && phaseSet[ApplyPhaseAddons] {
+	if phaseSet[ApplyPhaseContainerCluster] && phaseSet[ApplyPhaseAddons] {
 		var err error
 		kubeVirtDepsByCluster, err = kubeVirtHostClusterApplyDeps(state)
 		if err != nil {
@@ -30,19 +30,22 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 	hostServiceTasks, hostServiceTaskIDs := planHostServiceTasks(state, phaseSet)
 	tasks = append(tasks, hostServiceTasks...)
-	storageDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseStorageCluster] {
+	storageInfraDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseStorageInfra] {
 		for _, cluster := range state.StorageClusters {
 			if !storageClusterManaged(cluster) {
 				continue
 			}
-			taskID := "storage." + cluster.Metadata.Name
-			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+				continue
+			}
+			taskID := "storageinfra." + cluster.Metadata.Name
+			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           taskID,
-					Kind:         ApplyTaskKindStorageCluster,
-					Label:        "storage " + cluster.Metadata.Name,
+					Kind:         ApplyTaskKindStorageInfra,
+					Label:        "storage infra " + cluster.Metadata.Name,
 					Cluster:      cluster.Metadata.Name,
 					ClusterKind:  ApplyClusterKindStorage,
 					Status:       TaskStatusPending,
@@ -51,7 +54,38 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				},
 				Playbook:      applyStoragePlaybook,
 				Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
-				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name},
+				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
+				State:         storageTaskState(state, cluster.Metadata.Name),
+			})
+		}
+	}
+	storageDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseStorageCluster] {
+		for _, cluster := range state.StorageClusters {
+			if !storageClusterManaged(cluster) {
+				continue
+			}
+			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+				continue
+			}
+			taskID := "storage." + cluster.Metadata.Name
+			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+			deps := append([]string(nil), hostServiceTaskIDs...)
+			deps = append(deps, storageInfraDepsByCluster[cluster.Metadata.Name]...)
+			tasks = append(tasks, ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindStorageCluster,
+					Label:        "storage " + cluster.Metadata.Name,
+					Cluster:      cluster.Metadata.Name,
+					ClusterKind:  ApplyClusterKindStorage,
+					Status:       TaskStatusPending,
+					Dependencies: deps,
+					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+				},
+				Playbook:      applyStoragePlaybook,
+				Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
+				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
 				State:         storageTaskState(state, cluster.Metadata.Name),
 			})
 		}
@@ -110,6 +144,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	}
 	for _, name := range clusterNames {
 		deps := append([]string(nil), infraDepsByCluster[name]...)
+		deps = append(deps, kubeVirtDepsByCluster[name]...)
 		if phaseSet[ApplyPhaseContainerCluster] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			isoTaskID := "iso." + name
@@ -194,6 +229,9 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 	}
 	var tasks []ApplyTask
 	for _, binding := range plans {
+		if !stateHasContainerCluster(state, binding.Cluster) {
+			continue
+		}
 		deps := []string{}
 		if installPhasePlanned {
 			deps = append(deps, "wait."+binding.Cluster)
@@ -241,6 +279,18 @@ func applyClusterNames(state v1alpha1.State) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func storageClusterSelectedForTarget(target ApplyTarget, name string) bool {
+	if target.StorageClusterNames == nil {
+		return true
+	}
+	for _, selected := range target.StorageClusterNames {
+		if selected == name {
+			return true
+		}
+	}
+	return false
 }
 
 func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string {

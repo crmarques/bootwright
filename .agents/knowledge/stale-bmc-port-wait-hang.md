@@ -1,6 +1,6 @@
 # Apply hangs at BMC wait-tasks: stale systemd units holding ports
 
-**Symptom:** `bootwright apply infra` or `bootwright apply all` hangs indefinitely at provider BMC/wait-tasks. Preflight reports a port already in use.
+**Symptom:** `bootwright apply --stage infra` or full `bootwright apply` hangs indefinitely at provider BMC/wait-tasks. Preflight reports a port already in use.
 
 **Root cause:** `bootwright-sushy-<name>`, `bootwright-vmedia-<name>`, and `bootwright-boot-artifacts-<name>` systemd units from a **prior provider name** (renamed or removed from the state file) are still running and holding the BMC/vmedia/boot-artifacts ports. The new provider phase tries to bind those ports and waits forever.
 

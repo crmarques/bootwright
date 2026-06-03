@@ -33,7 +33,6 @@ func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		newContextValidateCmd(stdout),
 	)
 	requireSubcommand(cmd)
-	showSubcommandFlagsInHelp(cmd)
 	return cmd
 }
 

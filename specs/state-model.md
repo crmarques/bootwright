@@ -394,7 +394,8 @@ Ansible storage layer from the bastion over SSH.
 
 Full-managed storage, where Bootwright customizes a RHEL ISO/kickstart, boots
 bare metal through BMCs, installs RHEL, and then runs the managed Ceph flow, is
-roadmap-only.
+recognized as `spec.management: fullManaged` but apply and plan fail clearly
+because that infrastructure path is not available yet.
 
 `StorageCluster.spec.management` defaults to `managed`. `external` declares a
 previously provisioned Ceph cluster and omits `clusterInfraRef` and `ceph`;
@@ -1517,29 +1518,26 @@ bootwright render installer --sensitive
 bootwright render installer --output json
 bootwright render storage --scope <storage-cluster>
 bootwright render --output-dir ./rendered --sensitive
-bootwright apply infra --dry-run
-bootwright apply infra --dry-run --output json
-bootwright apply infra --yes
-bootwright apply infra --parallelism 4 --yes
-bootwright apply infra --scope managed-01 --yes
+bootwright apply --stage infra --dry-run
+bootwright apply --stage infra --dry-run --output json
+bootwright apply --stage infra --yes
+bootwright apply --stage infra --parallelism 4 --yes
+bootwright apply --stage infra --clusters managed-01 --yes
 bootwright check clusters
 bootwright check clusters --dry-run --output json
 bootwright check addons
-bootwright apply storage-cluster --dry-run
-bootwright apply storage-cluster --yes
-bootwright apply storage-cluster --scope <storage-cluster> --yes
-bootwright apply clusters --dry-run
-bootwright apply clusters --dry-run --output json
-bootwright apply clusters --yes
-bootwright apply clusters --override --yes
-bootwright apply addons --dry-run
-bootwright apply addons --dry-run --output json
-bootwright apply addons --yes
+bootwright apply --stage clusters --dry-run
+bootwright apply --stage clusters --dry-run --output json
+bootwright apply --stage clusters --yes
+bootwright apply --stage clusters --clusters managed-01,ceph-storage --yes
+bootwright apply --stage clusters --override --yes
 bootwright plan
+bootwright plan --stage infra --clusters managed-01
+bootwright plan --stage clusters --clusters managed-01,ceph-storage
 bootwright plan --output json
-bootwright apply all --dry-run
-bootwright apply all --dry-run --output json
-bootwright apply all --yes
+bootwright apply --dry-run
+bootwright apply --dry-run --output json
+bootwright apply --yes
 bootwright status
 bootwright status --watch
 bootwright status --output json
@@ -1575,59 +1573,53 @@ Operators can tune task scheduling with `--parallelism`,
 `--parallelism-per-host`, and `--parallelism-redfish`; `0` for any of those
 flags means Bootwright uses the maximum safe automatic value. Explicit limits
 only reduce automatic concurrency; provider-host and Redfish safety locks still
-apply. `apply addons` uses direct local executors. `apply storage-cluster`
-uses the normal Ansible runner internally for storage tasks, but must not expose
-generic Ansible executable, become-password, provider-host, or Redfish flags.
-`apply <target> --dry-run` is a plan-only action preview. It does
+apply. `apply --stage clusters` uses direct local executors for add-on tasks
+and the normal Ansible runner internally for storage and install tasks.
+`apply --dry-run` is a plan-only action preview. It does
 not run host, tool, secret, BMC, or cluster readiness checks and does not
 mutate provider hosts, nodes, or clusters; operators must run
 `bootwright check <target>` for readiness.
-`apply addons --dry-run` shows add-on tasks, selected clusters,
-expanded add-on order, and generated resource summaries without mutating the
-cluster.
-`plan` is equivalent to a read-only full `apply all --dry-run` preview and is
-the primary plan command for the end-to-end path. `apply all` is the primary
-happy path after `apply bastion`, `check all`, and `plan`. Phase commands
-remain available for advanced operations and recovery.
-`apply storage-cluster` renders the storage input set and runs an Ansible
-storage task against the synthetic Ceph seed host. The storage role SSHes from
-the bastion to every selected preinstalled RHEL storage node for prerequisites,
-registry trust/login, cephadm SSH authorization, and OSD device checks. It then
-runs cephadm bootstrap on the seed node, applies core service specs, executes
-topology/storage operations, applies late MDS/RGW/ingress service specs,
-executes late credential operations, and writes only a temporary credential
-result for Go to save as the final Data Foundation external-cluster details
-record. `apply clusters` converges selected cluster infrastructure, managed
-storage clusters, OpenShift or OKD cluster installs, bound add-ons, and
-declared integrations. Independent storage and container cluster work may start
-in parallel; add-ons start after their target cluster
-install wait; storage-export attachment tasks start after the target install
-wait, the matching storage provisioning task when selected, and the add-on wait
-task that provides `data-foundation`. Virtualized child clusters that use a
-Bootwright-managed host cluster wait for the parent install and its
-`provides: [kubevirt]` add-on before provisioning child infrastructure.
-`apply container-cluster` is the focused OpenShift install and add-on recovery
-target. `apply addons` uses the installed cluster kubeconfig and `oc apply`
-directly for standalone add-on convergence. `apply all` includes host services
-before the same cluster lifecycle graph.
+`plan` is equivalent to a read-only full `apply --dry-run` preview and is the
+primary plan command for the end-to-end path. `apply --yes` is the primary
+happy path after `apply bastion`, `check all`, and `plan`.
+`apply --stage infra` prepares providers, infra components, selected machines,
+networking, VIPs, artifact publication, DNS/NTP/proxy/registry support, and
+managed storage-node prerequisites. It does not install OpenShift or OKD, run
+cephadm bootstrap, or apply add-ons. `StorageCluster.spec.management:
+fullManaged` is schema-valid, but apply and plan fail with unsupported
+full-managed storage infrastructure.
+`apply --stage clusters` installs or provisions selected `ContainerCluster` and
+`StorageCluster` resources. Container cluster work creates the agent ISO, boots
+nodes, and waits for install completion. Storage cluster work runs cephadm
+bootstrap, service application, Ceph operations, and generated Data Foundation
+export records. Bound add-ons and storage-export attachment effects run after
+their dependencies are ready. `--clusters` accepts comma-separated
+`ContainerCluster` and `StorageCluster` names; unknown names fail before
+rendering. Omitting `--stage` runs the full graph: `infra`, then `clusters`.
+Virtualized child clusters that use a Bootwright-managed host cluster wait for
+the parent install and its `provides: [kubevirt]` add-on when parent and child
+are selected together. Child-only selection is accepted only when the parent
+cluster is already installed and the KubeVirt-providing add-on has a ready
+runtime record; otherwise apply and plan fail before mutation and require the
+operator to name both parent and child in `--clusters`.
 Apply terminal output is a ledger-backed fleet dashboard for both single-cluster
 and multi-cluster runs. It shows run metadata, run and cluster log paths,
 task-count progress, per-cluster lifecycle phases, running work, and concise
 failures. Bootwright does not stream live Ansible, `oc`, SSH, SCP, Ceph, or
 installer process output to the terminal; that output stays in the run log,
 task logs, and owning cluster log.
-`bootwright apply clusters --override` forces OpenShift agent install tasks to
+`bootwright apply --stage clusters --override` forces OpenShift agent install tasks to
 run even when local cluster secrets kubeconfig state reports that the target cluster is
 already available. It is for reinstalling after the operator has reset or
 replaced the target machines; it does not wipe disks, destroy substrate
 machines, power off nodes, or remove host services.
-Without `--override`, `apply clusters` and `apply container-cluster` must not regenerate the agent ISO or
+Without `--override`, `apply --stage clusters` must not regenerate the agent ISO or
 reboot nodes when Bootwright can prove that the selected cluster is already
 installed for the same rendered desired inputs. Completed installs are proven by
 the per-cluster install record, the non-secret desired-input fingerprint, and a
 local kubeconfig probe that reports `ClusterVersion Available=True`. If the
 stored fingerprint differs from the current rendered inputs, apply must stop and
-require either `destroy container-cluster` or `apply clusters --override` after the
+require either `destroy container-cluster` or `apply --stage clusters --override` after the
 operator has reset or replaced target machines. If an interrupted run already
 booted nodes, apply resumes at `openshift-install agent wait-for
 install-complete` instead of creating a new ISO or rebooting machines. Add-on
@@ -1671,9 +1663,9 @@ activity state when present.
 `destroy infra --scope artifact-server` is a reserved destroy-only scope that
 removes only the generated artifact publication service used for BMC agent ISO
 fetches, including HTTPS listeners when configured.
-Filtered `apply infra --scope` and `apply all --scope` fail before rendering
+Filtered `apply --stage infra --clusters` and full `apply --clusters` fail before rendering
 when the selected clusters share host services with unselected clusters;
-include every consumer or run without `--scope`.
+include every consumer or run without `--clusters`.
 
 Fixed storage layout:
 

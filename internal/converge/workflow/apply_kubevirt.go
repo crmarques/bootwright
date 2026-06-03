@@ -31,8 +31,7 @@ func kubeVirtHostClusterApplyDeps(state v1alpha1.State) (map[string][]string, er
 			}
 			parent := profile.KubeVirt.HostContainerClusterRef.Name
 			if !selected[parent] {
-				return nil, fmt.Errorf("ContainerCluster/%s uses KubeVirt hostContainerClusterRef %q but the selected apply scope does not include that host cluster; include %s in --scope or apply it first",
-					cluster.Metadata.Name, parent, parent)
+				continue
 			}
 			out[cluster.Metadata.Name] = appendUniqueString(out[cluster.Metadata.Name], "wait."+parent)
 			waitTasks := provides[parent]

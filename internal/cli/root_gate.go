@@ -149,7 +149,7 @@ func argsNeedLocalRoot(args []string) bool {
 	case "version", "help", "completion", "example", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
 		return false
 	case "apply", "destroy":
-		if len(args) == 1 {
+		if args[0] == "destroy" && len(args) == 1 {
 			return false
 		}
 		return true
@@ -258,15 +258,13 @@ func contextDeleteArgsHavePurge(args []string) bool {
 }
 
 func argsMayUseBecome(args []string) bool {
+	if len(args) >= 1 && args[0] == "apply" {
+		return true
+	}
 	if len(args) < 2 {
 		return false
 	}
 	switch args[0] {
-	case "apply":
-		switch args[1] {
-		case "bastion", "infra", "clusters", "container-cluster", "all":
-			return true
-		}
 	case "destroy":
 		switch args[1] {
 		case "infra", "container-cluster":

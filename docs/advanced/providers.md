@@ -140,8 +140,10 @@ kubevirt:
 Exactly one of `hostContainerClusterRef` or `kubeconfigRef` is required. The namespace is
 required and the storage class is optional. KubeVirt machines must bind their
 selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
-and `apply all` waits for the host cluster add-on that advertises
-`provides: [kubevirt]` before creating child VMs.
+and the full apply graph waits for the host cluster add-on that advertises
+`provides: [kubevirt]` before creating child VMs. Focused applies must either
+name both parent and child in `--clusters`, or run after the parent install and
+KubeVirt add-on are ready.
 
 ```yaml
 spec:

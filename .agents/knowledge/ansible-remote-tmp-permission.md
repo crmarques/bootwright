@@ -1,6 +1,6 @@
 # Ansible Remote Tmp Permission
 
-**Symptom:** `bootwright apply infra` fails during
+**Symptom:** `bootwright apply --stage infra` fails during
 `PLAY [Apply provider services]` / `TASK [Gathering Facts]` with:
 
 ```text
