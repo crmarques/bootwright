@@ -226,7 +226,7 @@ func decodeEnvironmentSecretYAMLItem(index int, item *yaml.Node) (string, Enviro
 		}
 		valueNode := item.Content[1]
 		if valueNode.Tag == "!!null" {
-			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] must be an object, not null", index, nameNode.Value)
+			return nameNode.Value, EnvironmentSecretSpec{}, nil
 		}
 		if valueNode.Kind != yaml.MappingNode {
 			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] must be an object", index, nameNode.Value)
@@ -236,7 +236,7 @@ func decodeEnvironmentSecretYAMLItem(index int, item *yaml.Node) (string, Enviro
 			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s]: %w", index, nameNode.Value, err)
 		}
 		if environmentSecretSpecIsEmpty(spec) {
-			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] object form requires file, keyFile, or generated; use a scalar item for context-local material", index, nameNode.Value)
+			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] object form requires file, keyFile, or generated; use a scalar item or omitted/null value for context-local material", index, nameNode.Value)
 		}
 		return nameNode.Value, spec, nil
 	default:
@@ -267,7 +267,7 @@ func decodeEnvironmentSecretJSONItem(index int, item json.RawMessage) (string, E
 			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d] object key must be a non-empty secret name", index)
 		}
 		if bytes.Equal(bytes.TrimSpace(rawSpec), []byte("null")) {
-			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] must be an object, not null", index, name)
+			return name, EnvironmentSecretSpec{}, nil
 		}
 		var spec EnvironmentSecretSpec
 		decoder := json.NewDecoder(bytes.NewReader(rawSpec))
@@ -276,7 +276,7 @@ func decodeEnvironmentSecretJSONItem(index int, item json.RawMessage) (string, E
 			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s]: %w", index, name, err)
 		}
 		if environmentSecretSpecIsEmpty(spec) {
-			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] object form requires file, keyFile, or generated; use a scalar item for context-local material", index, name)
+			return "", EnvironmentSecretSpec{}, fmt.Errorf("spec.secrets[%d][%s] object form requires file, keyFile, or generated; use a scalar item or omitted/null value for context-local material", index, name)
 		}
 		return name, spec, nil
 	}

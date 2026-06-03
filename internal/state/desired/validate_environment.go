@@ -18,6 +18,7 @@ import (
 // treats either as valid.
 var ntpHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 var imageVersionTag = regexp.MustCompile(`[0-9]`)
+var imageSHA256Digest = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 
 // componentImageCatalog enumerates the (category, type) pairs that
 // Environment.spec.componentImages may pin. Adding a new pair is the
@@ -654,6 +655,10 @@ func validatePinnedImageReference(ref string) string {
 		return ""
 	}
 	if strings.Contains(ref, "@") {
+		parts := strings.Split(ref, "@")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || !imageSHA256Digest.MatchString(parts[1]) {
+			return "must pin a version tag or digest"
+		}
 		return ""
 	}
 	if slash := strings.LastIndex(ref, "/"); slash >= 0 {

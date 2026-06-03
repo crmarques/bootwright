@@ -924,6 +924,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 			},
 		},
 	}
+	state.Hosts[0].Spec.SSH.User = "operator"
 
 	secretsDir := t.TempDir()
 	exportedJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"ssh-fsid"}}]`
@@ -971,8 +972,8 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	if got := host["ansible_host"]; got != "10.10.10.10" {
 		t.Fatalf("ansible_host = %v, want 10.10.10.10", got)
 	}
-	if _, ok := host["ansible_user"]; ok {
-		t.Fatalf("inventory should not force ansible_user when nodeSSH.user is omitted: %v", host)
+	if got := host["ansible_user"]; got != "operator" {
+		t.Fatalf("ansible_user = %v, want operator", got)
 	}
 	if got := host["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-node-ssh") {
 		t.Fatalf("key path = %v", got)

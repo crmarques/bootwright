@@ -1057,8 +1057,17 @@ func TestReleaseImageRequiresPinnedReference(t *testing.T) {
 			wantSubstring: `spec.distribution.release.image "quay.io/okd/scos-release:stable" must pin a version tag or digest`,
 		},
 		{
+			name:          "malformed digest",
+			image:         "quay.io/okd/scos-release@not-a-digest",
+			wantSubstring: `spec.distribution.release.image "quay.io/okd/scos-release@not-a-digest" must pin a version tag or digest`,
+		},
+		{
 			name:  "version tag",
 			image: "quay.io/okd/scos-release:4.20.0-okd-scos.13",
+		},
+		{
+			name:  "digest",
+			image: "quay.io/okd/scos-release@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		},
 	}
 	for _, tc := range cases {
@@ -1342,6 +1351,11 @@ func TestComponentImagesRequirePinnedReference(t *testing.T) {
 			name:          "floating tag",
 			image:         "quay.io/squid:stable",
 			wantSubstring: `spec.componentImages[proxy][squid].public "quay.io/squid:stable" must pin a version tag or digest`,
+		},
+		{
+			name:          "malformed digest",
+			image:         "quay.io/squid@not-a-digest",
+			wantSubstring: `spec.componentImages[proxy][squid].public "quay.io/squid@not-a-digest" must pin a version tag or digest`,
 		},
 		{
 			name:  "version tag",

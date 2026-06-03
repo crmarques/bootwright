@@ -67,6 +67,41 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	}
 }
 
+func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
+	previous := currentHostSSHUser
+	currentHostSSHUser = func() string { return "operator" }
+	t.Cleanup(func() { currentHostSSHUser = previous })
+
+	state := v1alpha1.State{
+		Hosts: []v1alpha1.Host{
+			{
+				Metadata: v1alpha1.Metadata{Name: "defaulted"},
+				Spec: v1alpha1.HostSpec{
+					SSH: &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+				},
+			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "explicit"},
+				Spec: v1alpha1.HostSpec{
+					SSH: &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "root"},
+				},
+			},
+			{
+				Metadata: v1alpha1.Metadata{Name: "no-ssh"},
+			},
+		},
+	}
+
+	Normalize(&state)
+
+	if got := state.Hosts[0].Spec.SSH.User; got != "operator" {
+		t.Fatalf("defaulted Host SSH user = %q, want operator", got)
+	}
+	if got := state.Hosts[1].Spec.SSH.User; got != "root" {
+		t.Fatalf("explicit Host SSH user = %q, want root", got)
+	}
+}
+
 func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *testing.T) {
 	state := artifactAccessDefaultState()
 	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack", "server-0")}

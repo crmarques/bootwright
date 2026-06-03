@@ -227,7 +227,7 @@ func buildHostTrustPlan(ctx context.Context, state v1alpha1.State, store sshtrus
 	}
 	for name := range selected {
 		if !seen[name] {
-			return plan, fmt.Errorf("Host/%s does not exist", name)
+			return plan, fmt.Errorf("host/%s does not exist", name)
 		}
 	}
 	for name := range replace {
@@ -289,7 +289,7 @@ func evaluateHostTrust(ctx context.Context, host v1alpha1.Host, store sshtrust.S
 		return report, record, false, nil
 	}
 	if !replace {
-		return report, sshtrust.HostRecord{}, false, fmt.Errorf("Host/%s SSH trust changed; old %s %s, new %s %s; rerun with --replace %s after verifying the new fingerprint", host.Metadata.Name, previous.Address, previous.FingerprintSHA256, record.Address, record.FingerprintSHA256, host.Metadata.Name)
+		return report, sshtrust.HostRecord{}, false, fmt.Errorf("host/%s ssh trust changed; old %s %s, new %s %s; rerun with --replace %s after verifying the new fingerprint", host.Metadata.Name, previous.Address, previous.FingerprintSHA256, record.Address, record.FingerprintSHA256, host.Metadata.Name)
 	}
 	report.Action = "replace"
 	return report, record, true, nil

@@ -19,7 +19,7 @@
 #     --build-arg no_proxy="${no_proxy:-}" \
 #     .
 
-FROM registry.access.redhat.com/ubi9/ubi:9.7
+FROM docker.io/redhat/ubi9@sha256:e9a31af6530caffa3551f266c51a0d43b602e8f76a0dc12826dbeebceb487c92
 
 ARG UID=1000
 ARG GID=1000

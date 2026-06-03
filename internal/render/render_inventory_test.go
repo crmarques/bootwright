@@ -112,18 +112,22 @@ func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 	}
 }
 
-func TestInventoryDoesNotForceSSHUserWhenHostUserOmitted(t *testing.T) {
+func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	want := state.Hosts[0].Spec.SSH.User
+	if want == "" {
+		t.Fatal("Host.spec.ssh.user was not defaulted")
 	}
 
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
-	if _, ok := serviceHost["ansible_user"]; ok {
-		t.Fatalf("inventory forced ansible_user for omitted Host.spec.ssh.user: %v", serviceHost)
+	if got := serviceHost["ansible_user"]; got != want {
+		t.Fatalf("ansible_user = %v, want defaulted Host.spec.ssh.user %q", got, want)
 	}
 }
 

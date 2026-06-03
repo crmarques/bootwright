@@ -6,10 +6,11 @@ path, but never carries secret bytes.
 ## Secret Ownership
 
 `Environment.spec.secrets` declares every secret source used by the loaded
-state. A scalar list item is context-local material written under the current
-context secrets directory, `file:` points at operator-owned local material, and
-`generated:` describes material Bootwright can create under the context secrets
-directory. `Environment.spec.secretStorage.mode` defaults to `source`; `context`
+state. A scalar list item, or a single-key list item with an omitted/null value,
+is context-local material written under the current context secrets directory,
+`file:` points at operator-owned local material, and `generated:` describes
+material Bootwright can create under the context secrets directory.
+`Environment.spec.secretStorage.mode` defaults to `source`; `context`
 requires `bootwright secret materialize` to copy file-sourced entries into the
 context secrets directory before workflows read them. Other kinds reference
 those names with `SecretRef`.

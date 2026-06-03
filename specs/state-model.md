@@ -81,7 +81,7 @@ spec:
             comment: bootwright-prod-3node-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials
+    - bmc-credentials:
     - proxy-credentials:
         generated:
           credentials:
@@ -237,7 +237,8 @@ Rules:
   entries into context storage.
 - `secrets` declares names, not bytes. It is a list where each item is either
   a scalar secret name or a single-key object whose key is the secret name.
-  Scalar items resolve to `<context>/secrets/<name>` and must be populated
+  Scalar items and single-key object items with an omitted/null value are
+  equivalent. They resolve to `<context>/secrets/<name>` and must be populated
   with `bootwright secret set` before the consuming workflow runs. `generated:`
   resolves under the context secrets directory; generated credentials may be
   populated with either `bootwright secret set` or
@@ -918,9 +919,9 @@ Rules:
   one `Host` and may be referenced by same-host consumers.
 - `spec.ssh.addressName` references one `spec.addresses[].name` and is the
   bastion-facing SSH endpoint. When `spec.ssh.user` is omitted, Bootwright
-  does not render `ansible_user`; SSH chooses the local account or configured
-  host-specific user. Set `spec.ssh.user` only when Bootwright must force a
-  provider-host SSH login name.
+  defaults it to the user running Bootwright and renders that value for
+  non-local durable SSH. Set `spec.ssh.user` when Bootwright must use a
+  different provider-host SSH login name.
 - When the resolved SSH endpoint is `localhost`, a loopback address, the
   current controller hostname, or a local interface address, Bootwright treats
   the host as controller-local, uses Ansible local connection, and does not

@@ -1,15 +1,27 @@
 package desiredstate
 
 import (
+	"os"
+	osuser "os/user"
+	"strconv"
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
 )
+
+var currentHostSSHUser = hostSSHUserFromProcess
 
 // Normalize applies defaults in-place. Pure transformation: no
 // diagnostics, no rejections; that work belongs to Validate.
 func Normalize(state *v1alpha1.State) {
+	hostSSHUser := currentHostSSHUser()
 	for i := range state.Environments {
 		normalizeEnvironment(&state.Environments[i])
+	}
+	for i := range state.Hosts {
+		normalizeHost(&state.Hosts[i], hostSSHUser)
 	}
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
@@ -46,6 +58,27 @@ func Normalize(state *v1alpha1.State) {
 	}
 }
 
+func hostSSHUserFromProcess() string {
+	if uid, _, ok := localroot.CallerUIDGID(); ok {
+		if u, err := osuser.LookupId(strconv.FormatUint(uint64(uid), 10)); err == nil {
+			if username := strings.TrimSpace(u.Username); username != "" {
+				return username
+			}
+		}
+	}
+	if u, err := osuser.Current(); err == nil {
+		if username := strings.TrimSpace(u.Username); username != "" {
+			return username
+		}
+	}
+	for _, key := range []string{"USER", "LOGNAME"} {
+		if username := strings.TrimSpace(os.Getenv(key)); username != "" {
+			return username
+		}
+	}
+	return ""
+}
+
 func normalizeEnvironment(env *v1alpha1.Environment) {
 	if env.Spec.SecretStorage.Mode == "" {
 		env.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeSource
@@ -65,6 +98,13 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 		}
 		env.Spec.Secrets[name] = secret
 	}
+}
+
+func normalizeHost(h *v1alpha1.Host, sshUser string) {
+	if h.Spec.SSH == nil || h.Spec.SSH.User != "" || sshUser == "" {
+		return
+	}
+	h.Spec.SSH.User = sshUser
 }
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {

@@ -259,7 +259,8 @@ cli-file-size-check:
 	fi
 
 containerfile-pin-check:
-	@awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "Containerfile base image must be digest-pinned: %s\n", $$0; status = 1 } END { exit status }' $(CONTAINERFILE)
+	@files=$$(find . -type f -name Containerfile -print | sort); \
+	awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile base image must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } END { exit status }' $$files
 
 validate: build
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --yes

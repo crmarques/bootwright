@@ -21,6 +21,7 @@ func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
           comment: bootwright-lab-ocp-cluster-admin
   - provider-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
+  - bmc-credentials:
   - api-tls:
       file: ../secrets/api.crt
       keyFile: ../secrets/api.key
@@ -29,11 +30,14 @@ func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(body), &holder); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got := len(holder.Secrets); got != 4 {
-		t.Fatalf("len = %d, want 4", got)
+	if got := len(holder.Secrets); got != 5 {
+		t.Fatalf("len = %d, want 5", got)
 	}
 	if spec := holder.Secrets["openshift-pull-secret"]; spec.File != "" || spec.Generated != nil {
 		t.Fatalf("openshift-pull-secret = %+v, want context-local empty source", spec)
+	}
+	if spec := holder.Secrets["bmc-credentials"]; spec.File != "" || spec.Generated != nil {
+		t.Fatalf("bmc-credentials = %+v, want context-local empty source", spec)
 	}
 	if got := holder.Secrets["lab-ocp-cluster-admin-ssh-key"].Generated.SSHKeyPair.Comment; got != "bootwright-lab-ocp-cluster-admin" {
 		t.Fatalf("ssh key comment = %q", got)
@@ -85,11 +89,6 @@ func TestEnvironmentSecretsYAMLRejectsInvalidShapes(t *testing.T) {
 			want: "spec.secrets[0] object item must contain exactly one secret name",
 		},
 		{
-			name: "null-object-value",
-			body: "secrets:\n  - pull:\n",
-			want: "spec.secrets[0][pull] must be an object, not null",
-		},
-		{
 			name: "empty-object-value",
 			body: "secrets:\n  - pull: {}\n",
 			want: "object form requires file, keyFile, or generated",
@@ -115,10 +114,13 @@ func TestEnvironmentSecretsYAMLRejectsInvalidShapes(t *testing.T) {
 }
 
 func TestEnvironmentSecretsJSONListShape(t *testing.T) {
-	body := `{"secrets":["openshift-pull-secret",{"provider-host-ssh":{"file":"~/.ssh/bootwright-ssh-key"}}]}`
+	body := `{"secrets":["openshift-pull-secret",{"bmc-credentials":null},{"provider-host-ssh":{"file":"~/.ssh/bootwright-ssh-key"}}]}`
 	var holder environmentSecretsHolder
 	if err := json.Unmarshal([]byte(body), &holder); err != nil {
 		t.Fatalf("unmarshal: %v", err)
+	}
+	if spec := holder.Secrets["bmc-credentials"]; spec.File != "" || spec.Generated != nil {
+		t.Fatalf("bmc-credentials = %+v, want context-local empty source", spec)
 	}
 	if got := holder.Secrets["provider-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {
 		t.Fatalf("provider-host-ssh file = %q", got)

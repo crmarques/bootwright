@@ -60,7 +60,7 @@ func TestHostTrustRequiresReplaceForChangedKey(t *testing.T) {
 	if code == 0 {
 		t.Fatal("host trust accepted changed key without --replace")
 	}
-	if !strings.Contains(stderr, "SSH trust changed") {
+	if !strings.Contains(stderr, "ssh trust changed") {
 		t.Fatalf("stderr missing changed trust message: %q", stderr)
 	}
 

@@ -8,8 +8,9 @@ description: How secret bytes stay out of YAML and Git.
 Desired-state YAML references secret material **by name only**. Bytes
 live outside the repo. Three sources are supported per name:
 
-- Scalar list item - context-local bytes written with `bootwright secret set`
-  under the current context secrets directory.
+- Scalar list item, or a single-key list item with an omitted/null value -
+  context-local bytes written with `bootwright secret set` under the current
+  context secrets directory.
 - `file:` — operator-supplied bytes that already exist at a declared
   path. The path is local to the bastion.
 - `generated:` — bytes Bootwright produces via `bootwright secret
@@ -33,7 +34,7 @@ spec:
             comment: bootwright-lab-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - bmc-credentials
+    - bmc-credentials:
     - proxy-credentials:
         generated:
           credentials:
@@ -48,8 +49,8 @@ spec:
     - ingress-serving-tls
 ```
 
-Each object item has **at most one** of `file:` or `generated:`. A scalar item
-resolves to
+Each object item has **at most one** of `file:` or `generated:`. A scalar item,
+or an object item with an omitted/null value, resolves to
 `/var/lib/bootwright/contexts/<context>/secrets/<name>`. TLS pair consumers
 read that file and `<name>.key`, unless `file:` and `keyFile:` point at
 operator-owned files. Generated SSH key pairs write the private key to
@@ -98,7 +99,7 @@ individual files mode `0600`.
 | Pull secret or context-local secret | `bootwright secret set openshift-pull-secret --pull-secret ~/pull-secret.json` |
 | TLS certificate and key | `bootwright secret set ingress-serving-tls --tls-cert ./tls.crt --tls-key ./tls.key` |
 | Credentials | `bootwright secret set proxy-credentials --username proxy --password-stdin` |
-| Credentials from protected env vars | `bootwright secret set proxy-credentials --username "$PROXY_USER" --password "$PROXY_PASS"` |
+| Credentials from protected env vars | `printf '%s\n' "$PROXY_PASS" \| bootwright secret set proxy-credentials --username "$PROXY_USER" --password-stdin` |
 | Materialize every `generated:` entry | `bootwright secret generate` |
 | Generate and copy context-storage entries | `bootwright secret materialize` |
 | Inspect required material | `bootwright secret list` |
@@ -112,8 +113,9 @@ After a successful cluster install, Bootwright stores the kubeadmin password at
 password file path, and the command to retrieve the password without printing
 secret bytes by default.
 
-`bootwright secret set` writes into the current context secrets
-directory, so context-local entries can be declared as scalar list items.
+`bootwright secret set` writes into the current context secrets directory, so
+context-local entries can be declared as scalar list items or single-key list
+items with omitted/null values.
 `bootwright secret generate` only materializes entries declared as `generated:`.
 `bootwright secret materialize` runs generated materialization and, when
 `secretStorage.mode: context`, copies external `file:` entries into the context
