@@ -114,6 +114,7 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	}
 	if hasState {
 		checks = append(checks, secretRefChecks(state, secretsDir, selected, deps)...)
+		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
 	}

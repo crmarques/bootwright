@@ -341,13 +341,6 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			want: "Host/ceph-dc1-0 spec.ssh is required",
 		},
 		{
-			name: "missing-known-hosts",
-			edit: func(state *v1alpha1.State) {
-				state.Hosts[0].Spec.SSH.KnownHostsRef = v1alpha1.SecretRef{}
-			},
-			want: "Host/ceph-dc1-0 spec.ssh.knownHostsRef.name is required",
-		},
-		{
 			name: "missing-ceph-node-capability",
 			edit: func(state *v1alpha1.State) {
 				state.Hosts[0].Spec.Capabilities = []string{v1alpha1.HostCapabilityLibvirt}
@@ -421,29 +414,6 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 				state.StorageExports[0].Spec.ExternalDetails.Generated = &v1alpha1.StorageExportExternalDetailsGenerated{}
 			},
 			want: "spec.externalDetails must set exactly one of fromSecret, generated, or sshExecution",
-		},
-		{
-			name: "missing-known-hosts",
-			edit: func(state *v1alpha1.State) {
-				state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
-					SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-						HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-						Exporter: v1alpha1.StorageExportExternalDetailsExporter{
-							Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
-						},
-						Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
-					},
-				}
-				state.Hosts = []v1alpha1.Host{{
-					Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
-					Spec: v1alpha1.HostSpec{
-						Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
-						SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}},
-						Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
-					},
-				}}
-			},
-			want: "Host/ceph-admin-01 spec.ssh.knownHostsRef.name is required",
 		},
 		{
 			name: "external-ssh-host-without-ceph-admin-capability",

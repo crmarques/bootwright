@@ -29,6 +29,7 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
 )
@@ -2959,7 +2960,6 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 		filepath.Join(ctx.SecretsDir, "3-nodes-ocp-baremetal-cluster-admin-ssh-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
 		filepath.Join(ctx.SecretsDir, "bmc-credentials"):                                 "admin:password\n",
 		filepath.Join(ctx.SecretsDir, "proxy-credentials"):                               "proxy:password\n",
-		filepath.Join(ctx.SecretsDir, "provider-host-known-hosts"):                       "bastion.bootwright.test ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKnownHost\n",
 		filepath.Join(sshDir, "bootwright-ssh-key"):                                      "fake-private-key\n",
 		filepath.Join(sshDir, "bootwright-ssh-key.pub"):                                  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
 	}
@@ -2970,6 +2970,20 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
+	}
+	hostFingerprint, err := sshtrust.FingerprintSHA256(hostTrustKeyA)
+	if err != nil {
+		t.Fatalf("host trust fingerprint: %v", err)
+	}
+	if err := sshtrust.Save(sshtrust.DirForContext(ctx.BaseDir), sshtrust.Store{Hosts: []sshtrust.HostRecord{{
+		Name:              "bastion",
+		Address:           "bastion.bootwright.test",
+		KeyType:           "ssh-ed25519",
+		PublicKey:         hostTrustKeyA,
+		FingerprintSHA256: hostFingerprint,
+		KnownHostsLine:    sshtrust.KnownHostsLine("bastion.bootwright.test", "ssh-ed25519", hostTrustKeyA),
+	}}}); err != nil {
+		t.Fatalf("seed host trust: %v", err)
 	}
 	fakeBin := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(fakeBin, 0o755); err != nil {

@@ -81,7 +81,6 @@ spec:
             comment: bootwright-prod-3node-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
     - proxy-credentials:
         generated:
@@ -495,7 +494,9 @@ Rules:
   `ssh.keyRef.name`, because cephadm bootstrap accepts one SSH user/key for
   cluster host orchestration. Their key material must provide both private and
   public halves so Bootwright can connect and cephadm can authorize the same
-  key. `Host.spec.ssh.knownHostsRef` is used with strict host-key checking.
+  key. When `Host.spec.ssh.knownHostsRef` is omitted, Bootwright uses
+  context-managed SSH trust recorded by `bootwright host trust` for strict
+  host-key checking.
 - A storage-only `ClusterInfra` can omit OpenShift API, API-int, and ingress
   endpoints. Explicit bare-metal BMC fields are required only for
   `ContainerCluster` boot targets, not for storage-only preinstalled nodes.
@@ -782,11 +783,12 @@ Rules:
   Data Foundation Ceph auth and assembles exporter-compatible JSON from the
   managed storage result. `sshExecution` runs the official Data Foundation
   exporter through Ansible over SSH to each referenced Host using that Host's
-  `spec.ssh` key, user, address, and `knownHostsRef`, becomes root through
-  Ansible `become`, writes the validated JSON into the attachment Secret
-  manifest, and does not log exporter stdout. Imported Ceph requires explicit
-  `ceph-admin` host refs. Managed and full-managed Ceph may omit host refs;
-  Bootwright uses the storage cluster's `cephadm.bootstrap.seedNode` Host ref.
+  `spec.ssh` key, user, address, and explicit or context-managed SSH host
+  trust, becomes root through Ansible `become`, writes the validated JSON into
+  the attachment Secret manifest, and does not log exporter stdout. Imported
+  Ceph requires explicit `ceph-admin` host refs. Managed and full-managed Ceph
+  may omit host refs; Bootwright uses the storage cluster's
+  `cephadm.bootstrap.seedNode` Host ref.
 - Future add-on types may include `kustomize` and `helm`; they are not
   accepted by the MVP schema.
 
@@ -904,8 +906,6 @@ spec:
     user: core
     keyRef:
       name: provider-host-ssh
-    knownHostsRef:
-      name: provider-host-known-hosts
 
   capabilities:
     - libvirt
@@ -928,10 +928,13 @@ Rules:
 - `spec.ssh.keyRef.name` is required and references
   `Environment.spec.secrets`. Controller-local hosts still do not require host
   SSH key material during preflight.
-- `spec.ssh.knownHostsRef.name` is required and references
-  `Environment.spec.secrets`. Non-local durable Host SSH renders with
-  `StrictHostKeyChecking=yes` and `UserKnownHostsFile` pointing at this
-  material.
+- `spec.ssh.knownHostsRef.name` is optional. When set, it references
+  `Environment.spec.secrets` and Bootwright uses that known_hosts material.
+  When omitted on a non-local Host, `bootwright host trust` must record the
+  Host server key under the current context before check or apply workflows
+  can run. Non-local durable Host SSH always renders with
+  `StrictHostKeyChecking=yes` and `UserKnownHostsFile` pointing at the explicit
+  or context-managed known_hosts material.
 - `spec.capabilities[]` is required. The current canonical tags are `libvirt`,
   `container-runtime`, `ceph-admin`, and `ceph-node`; provider, service,
   external Ceph, and managed Ceph workflows use them to select hosts for
@@ -1530,9 +1533,9 @@ auto-switches or auto-clears a stale private current selection; `context list`
 reports it and context-backed commands block until the user chooses an existing
 context or recreates it. Controller-local actions run on localhost;
 `bootwright context validate` reports each checked aspect as `OK` or
-`MISSING`, reports missing declared secret material as `WARN`, and supports
-`--output json` for automation. `WARN` does not block structurally ready
-contexts; `MISSING` and `FAIL` remain blocking.
+`MISSING`, reports missing declared secret material and missing managed SSH
+host trust as `WARN`, and supports `--output json` for automation. `WARN` does
+not block structurally ready contexts; `MISSING` and `FAIL` remain blocking.
 
 Primary commands:
 
@@ -1548,6 +1551,11 @@ bootwright context list
 bootwright context use lab
 bootwright context current [--short]
 bootwright context delete lab --purge --yes
+bootwright host trust
+bootwright host trust --hosts provider-01,ceph-dc1-0
+bootwright host trust --replace provider-01
+bootwright host trust --dry-run
+bootwright host trust --output json
 bootwright cluster list
 bootwright cluster list --output json
 bootwright cluster access-info
@@ -1739,7 +1747,7 @@ Fixed storage layout:
   - `cache/ansible-bundles/<version-or-digest>/`
   - `contexts/<context>/`
 - Each context has `input/`, `secrets/`, `rendered/`, `runs/`,
-  `managed-services/`, `provider-state/`, and `clusters/`.
+  `managed-services/`, `provider-state/`, `trust/`, and `clusters/`.
 - Rendered reviewable output lives under `rendered/`, including
   `effective-state.yaml`, `bootwright.lock.yaml`,
   `ansible/{inventory,vars}.yaml`, and
@@ -1748,6 +1756,9 @@ Fixed storage layout:
 - Secret-inlined installer inputs and install records live under
   `clusters/<cluster>/runtime/`.
 - Generated cluster access material lives under `clusters/<cluster>/secrets/`.
+- Context-managed SSH host trust lives under `trust/ssh/`; `hosts.json`
+  records Host name, address, key type, public key, and fingerprint, while
+  `known_hosts` is the OpenSSH file used by strict host-key checking.
 - Apply ledgers, leases, task logs, run logs, and artifacts live under `runs/`;
   per-cluster apply logs live under
   `clusters/<cluster>/runs/<run>/bootwright.log`.

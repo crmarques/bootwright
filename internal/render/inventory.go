@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
@@ -183,10 +184,20 @@ func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir s
 	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
-	if path := secret.ResolvePath(h.Spec.SSH.KnownHostsRef.Name, env, secretsDir); path != "" {
+	if path := hostKnownHostsPath(h, env, secretsDir); path != "" {
 		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
 	}
 	return entry
+}
+
+func hostKnownHostsPath(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string) string {
+	if h.Spec.SSH == nil {
+		return ""
+	}
+	if h.Spec.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(h.Spec.SSH.KnownHostsRef.Name, env, secretsDir)
+	}
+	return sshtrust.KnownHostsPathForSecrets(secretsDir)
 }
 
 func sshCommonArgs(knownHostsPath string) string {

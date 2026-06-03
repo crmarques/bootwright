@@ -24,6 +24,7 @@ bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
 bootwright secret generate
 bootwright secret materialize
+bootwright host trust
 bootwright apply bastion --yes
 bootwright check all
 bootwright plan

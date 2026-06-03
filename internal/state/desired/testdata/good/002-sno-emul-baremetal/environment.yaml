@@ -14,7 +14,6 @@ spec:
             comment: bootwright-sno-emul-baremetal-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:

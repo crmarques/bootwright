@@ -29,8 +29,10 @@ Storage provisioning follows the same boundary. Durable SSH connection
 details live on `Host.spec.ssh`; managed Ceph nodes reference Hosts with the
 `ceph-node` capability, and external Ceph exporter targets reference Hosts
 with the `ceph-admin` capability. Host `keyRef` and `knownHostsRef` values
-reference `Environment.spec.secrets`; non-local durable SSH uses strict
-host-key checking against the resolved known_hosts material. Data Foundation
+reference `Environment.spec.secrets`; when `knownHostsRef` is omitted,
+Bootwright records Host server keys under context-managed SSH trust state with
+`bootwright host trust`. Non-local durable SSH uses strict host-key checking
+against explicit or context-managed known_hosts material. Data Foundation
 external-cluster details render with placeholders for Ceph client secrets;
 generated Ceph keys are created or read during apply and must not be
 committed. Imported Ceph

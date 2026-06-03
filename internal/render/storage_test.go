@@ -177,7 +177,7 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := clusterSSH["publicKeyPath"]; got != filepath.Join("/context/secrets", "ceph-storage-cluster-admin-ssh-key.pub") {
 		t.Fatalf("cluster ssh public key = %v", got)
 	}
-	if got := clusterSSH["knownHostsPath"]; got != filepath.Join("/context/secrets", "ceph-storage-known-hosts") {
+	if got := clusterSSH["knownHostsPath"]; got != filepath.Join("/context", "trust", "ssh", "known_hosts") {
 		t.Fatalf("cluster ssh known hosts = %v", got)
 	}
 	bindings := cluster["dataFoundationBindings"].([]any)

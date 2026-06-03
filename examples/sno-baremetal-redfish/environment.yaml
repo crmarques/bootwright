@@ -13,7 +13,6 @@ spec:
             comment: bootwright-sno-baremetal-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
 
   infraComponents:

@@ -21,7 +21,6 @@ spec:
             comment: bootwright-dc2-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
 
   infraComponents:

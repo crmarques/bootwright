@@ -329,7 +329,7 @@ bootwright_storage_clusters:
       user: root
       privateKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh
       publicKeyPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-cluster-ssh.pub
-      knownHostsPath: /var/lib/bootwright/contexts/lab/secrets/cephadm-known-hosts
+      knownHostsPath: /var/lib/bootwright/contexts/lab/trust/ssh/known_hosts
     dataFoundationBindings:
       - cluster: prod-3node
         addon: openshift-data-foundation

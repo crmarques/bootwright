@@ -5,7 +5,6 @@ var kubeVirtSubstrate = Substrate{
 	NetworkNameSuffix:  "nad",
 	EnvExtraSecrets: `    - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - cnv-cluster-kubeconfig:
         file: ~/.kube/cnv-cluster.kubeconfig
 `,
@@ -22,8 +21,6 @@ spec:
     addressName: ssh
     keyRef:
       name: provider-host-ssh
-    knownHostsRef:
-      name: provider-host-known-hosts
 
   capabilities:
     - container-runtime

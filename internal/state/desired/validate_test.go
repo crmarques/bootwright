@@ -51,6 +51,46 @@ func TestCanonicalExamples(t *testing.T) {
 	}
 }
 
+func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
+	t.Run("omitted", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFiles(t, dir, newBaselineFiles())
+		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+			t.Fatalf("LoadNormalizeValidate: %v", err)
+		}
+	})
+	t.Run("explicit-declared", func(t *testing.T) {
+		dir := t.TempDir()
+		files := newBaselineFiles()
+		files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
+			"    - provider-host-ssh:\n        file: ~/ssh\n",
+			"    - provider-host-ssh:\n        file: ~/ssh\n    - provider-host-known-hosts\n", 1)
+		files["hosts.yaml"] = strings.Replace(newHostsYAML,
+			"    keyRef: { name: provider-host-ssh }\n",
+			"    keyRef: { name: provider-host-ssh }\n    knownHostsRef: { name: provider-host-known-hosts }\n", 1)
+		writeFiles(t, dir, files)
+		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+			t.Fatalf("LoadNormalizeValidate: %v", err)
+		}
+	})
+	t.Run("explicit-undeclared", func(t *testing.T) {
+		dir := t.TempDir()
+		files := newBaselineFiles()
+		files["hosts.yaml"] = strings.Replace(newHostsYAML,
+			"    keyRef: { name: provider-host-ssh }\n",
+			"    keyRef: { name: provider-host-ssh }\n    knownHostsRef: { name: provider-host-known-hosts }\n", 1)
+		writeFiles(t, dir, files)
+		_, err := LoadNormalizeValidate([]string{dir})
+		if err == nil {
+			t.Fatal("expected validation error, got nil")
+		}
+		want := `Host/services-host spec.ssh.knownHostsRef "provider-host-known-hosts" is not declared`
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	})
+}
+
 func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	_, err := LoadNormalizeValidate([]string{filepath.Join("testdata/good", "005-3nodes-baremetal")})
 	if err != nil {
@@ -2452,7 +2492,6 @@ spec:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
-    - provider-host-known-hosts
     - vcenter-credentials:
         file: ~/vcenter
 `,
@@ -2465,7 +2504,6 @@ spec:
   ssh:
     addressName: ssh
     keyRef: { name: provider-host-ssh }
-    knownHostsRef: { name: provider-host-known-hosts }
   capabilities: [container-runtime]
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -2662,7 +2700,6 @@ spec:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
-    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:
@@ -2696,7 +2733,6 @@ spec:
         file: ~/ssh.pub
     - provider-host-ssh:
         file: ~/ssh
-    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:
@@ -2718,7 +2754,6 @@ spec:
   ssh:
     addressName: ssh
     keyRef: { name: provider-host-ssh }
-    knownHostsRef: { name: provider-host-known-hosts }
   capabilities: [container-runtime]
 `
 

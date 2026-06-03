@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/runtime/fs"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
@@ -197,7 +198,7 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 				address:        address,
 				user:           host.Spec.SSH.User,
 				keyPath:        secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir),
-				knownHostsPath: secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir),
+				knownHostsPath: workflowHostKnownHostsPath(host, env, secretsDir),
 			})
 		}
 		return targets, nil
@@ -227,8 +228,18 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 		address:        address,
 		user:           host.Spec.SSH.User,
 		keyPath:        secret.ResolveSSHPrivateKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir),
-		knownHostsPath: secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir),
+		knownHostsPath: workflowHostKnownHostsPath(host, env, secretsDir),
 	}}, nil
+}
+
+func workflowHostKnownHostsPath(host v1alpha1.Host, env *v1alpha1.Environment, secretsDir string) string {
+	if host.Spec.SSH == nil {
+		return ""
+	}
+	if host.Spec.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir)
+	}
+	return sshtrust.KnownHostsPathForSecrets(secretsDir)
 }
 
 func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {

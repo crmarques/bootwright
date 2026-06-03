@@ -417,8 +417,8 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 		t.Fatalf("storage seed key = %v", got)
 	}
 	commonArgs, _ := seed["ansible_ssh_common_args"].(string)
-	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-storage-known-hosts")) {
-		t.Fatalf("storage seed ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(filepath.Dir(secretsDir), "trust", "ssh", "known_hosts")) {
+		t.Fatalf("storage seed ansible_ssh_common_args = %q, want strict host key checking with managed trust", commonArgs)
 	}
 	if strings.Contains(commonArgs, "/dev/null") {
 		t.Fatalf("storage seed ansible_ssh_common_args must not discard known hosts: %q", commonArgs)

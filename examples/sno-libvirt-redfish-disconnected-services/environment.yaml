@@ -21,7 +21,6 @@ spec:
             comment: bootwright-sno-disconnected-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
     - proxy-credentials:
         generated:

@@ -26,7 +26,7 @@ type HostSSHSpec struct {
 	AddressName   string    `yaml:"addressName" json:"addressName"`
 	User          string    `yaml:"user,omitempty" json:"user,omitempty"`
 	KeyRef        SecretRef `yaml:"keyRef" json:"keyRef"`
-	KnownHostsRef SecretRef `yaml:"knownHostsRef" json:"knownHostsRef"`
+	KnownHostsRef SecretRef `yaml:"knownHostsRef,omitempty" json:"knownHostsRef,omitempty"`
 }
 
 func HostAddressByName(host Host, name string) (string, bool) {

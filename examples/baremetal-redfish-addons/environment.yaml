@@ -18,7 +18,6 @@ spec:
             comment: bootwright-metal-ocp-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
 
   infraComponents:

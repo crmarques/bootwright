@@ -52,9 +52,6 @@ func validateHosts(state v1alpha1.State) []string {
 			if h.Spec.SSH.KeyRef.Name == "" {
 				errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.keyRef.name is required", h.Metadata.Name))
 			}
-			if h.Spec.SSH.KnownHostsRef.Name == "" {
-				errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required", h.Metadata.Name))
-			}
 		}
 		if len(h.Spec.Capabilities) == 0 {
 			errs = append(errs, fmt.Sprintf("Host/%s spec.capabilities is required (canonical: libvirt, container-runtime, ceph-admin, ceph-node)", h.Metadata.Name))

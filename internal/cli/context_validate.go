@@ -160,6 +160,7 @@ func validateContextChecks(ctx contextstore.Context) []output.Check {
 	} else {
 		checks = append(checks, okContextCheck("desired state", "loads, normalizes, and validates"))
 		checks = append(checks, declaredSecretContextChecks(ctx.SecretsDir, state)...)
+		checks = append(checks, contextHostTrustChecks(ctx.BaseDir, state)...)
 		result := locality.CheckController(state, controllerLocalityPolicy)
 		if result.OK {
 			checks = append(checks, okContextCheck("bastion locality", result.Evidence))

@@ -28,6 +28,7 @@ bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret materialize
+bootwright host trust
 bootwright apply bastion --yes
 bootwright check all
 bootwright render effective
@@ -170,6 +171,7 @@ bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret materialize
+bootwright host trust
 bootwright secret list
 bootwright print-env [--sensitive]
 bootwright check syntax

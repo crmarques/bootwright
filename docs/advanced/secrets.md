@@ -57,8 +57,9 @@ operator-owned files. Generated SSH key pairs write the private key to
 references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `installTrust.caBundleRefs[].name`,
 `proxyAuthRef.name`, `secretRef.name`, `defaultCertificateRef.name`, or
-`nodeSSH.keyPairRef.name`. Durable SSH targets also reference
-`Host.spec.ssh.knownHostsRef.name` for their known_hosts material.
+`nodeSSH.keyPairRef.name`. Durable SSH targets normally use context-managed
+host trust recorded by `bootwright host trust`; `Host.spec.ssh.knownHostsRef`
+is available when an operator needs to point at explicit known_hosts material.
 
 For node SSH, use `install.nodeSSH.keyPairRef` when one
 secret owns both halves. Use `publicKeyRef` plus optional `privateKeyRef` when
@@ -71,8 +72,11 @@ that name explicitly.
 For durable machines Bootwright or managed tools SSH into, put SSH connection
 material on `Host.spec.ssh`. `keyRef.name` supplies private SSH key material;
 managed Ceph node Hosts also require the public half at `<name>.pub` so
-Bootwright can pass it to cephadm. `knownHostsRef.name` supplies the
-known_hosts file used with strict host-key checking.
+Bootwright can pass it to cephadm. Run `bootwright host trust` after importing
+or updating a context so Bootwright records each non-local Host server key
+under `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses that
+known_hosts file with strict host-key checking. Verify the displayed
+fingerprints out of band before accepting first-use trust.
 
 ## Local secrets directory
 

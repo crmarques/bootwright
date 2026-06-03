@@ -28,6 +28,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
   bootwright secret generate
   bootwright secret materialize
+  bootwright host trust
   bootwright apply bastion --yes
   bootwright check all
   bootwright render effective
@@ -55,6 +56,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 	addWorkflow(root,
 		newValidateCmd(stdout),
 		newContextCmd(stdin, stdout, stderr),
+		newHostCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
 		newContainerClusterCmd(stdout),
 		newExampleCmd(stdout),

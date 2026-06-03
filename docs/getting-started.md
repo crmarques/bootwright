@@ -120,17 +120,19 @@ Validate the edited YAML before it is imported into `/var/lib/bootwright`:
 bootwright validate -f ./my-sno-lab
 ```
 
-## 2. Verify SSH Access
+## 2. Verify SSH Inputs
 
-Bootwright uses SSH to reach provider and service hosts. Test the same key,
-user, and Host address values before importing the context:
+Bootwright uses SSH to reach provider and service hosts. Before importing the
+context, confirm the declared key, user, and Host address values are correct.
+For example, an operator can test SSH auth manually:
 
 ```text
 ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${HOST_ADDRESS}" true
 ```
 
 Use the exact address you declare in `Host.spec.addresses[]` for each provider
-or service host.
+or service host. This manual check updates the user's SSH trust state, not
+Bootwright's managed context trust.
 
 ## 3. Import A Context
 
@@ -169,6 +171,7 @@ secrets directory. Run the commands that match the names declared in
 bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pull-secret.json"
 bootwright secret generate
 bootwright secret materialize
+bootwright host trust
 bootwright secret list
 bootwright context validate
 ```

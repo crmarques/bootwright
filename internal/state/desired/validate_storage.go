@@ -180,9 +180,6 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, in
 						if host.Spec.SSH == nil {
 							errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s.name", host.Metadata.Name, owner))
 						} else {
-							if host.Spec.SSH.KnownHostsRef.Name == "" {
-								errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s.name", host.Metadata.Name, owner))
-							}
 							if !sshSeen {
 								sshUser = host.Spec.SSH.User
 								sshKeyRef = host.Spec.SSH.KeyRef.Name
@@ -664,8 +661,6 @@ func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCl
 		}
 		if host.Spec.SSH == nil {
 			errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s", host.Metadata.Name, owner))
-		} else if host.Spec.SSH.KnownHostsRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("Host/%s spec.ssh.knownHostsRef.name is required for %s", host.Metadata.Name, owner))
 		}
 	}
 	if spec.Timeout != "" {

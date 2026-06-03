@@ -10,7 +10,6 @@ var Substrates = map[Provider]Substrate{
 		NetworkNameSuffix:  "bridge",
 		EnvExtraSecrets: `    - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
 `,
 		EnvArtifactServer: `  infraComponents:
@@ -42,8 +41,6 @@ spec:
     addressName: ssh
     keyRef:
       name: provider-host-ssh          # resolves under Environment.spec.secrets
-    knownHostsRef:
-      name: provider-host-known-hosts  # resolves under Environment.spec.secrets
 
   capabilities:                        # canonical: libvirt, container-runtime
     - libvirt
@@ -165,7 +162,6 @@ spec:
 		NetworkNameSuffix:  "vlan",
 		EnvExtraSecrets: `    - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials
 `,
 		HostsYAML: `apiVersion: bootwright.io/v1alpha1
@@ -183,8 +179,6 @@ spec:
     addressName: ssh
     keyRef:
       name: provider-host-ssh
-    knownHostsRef:
-      name: provider-host-known-hosts
 
   capabilities:
     - container-runtime
@@ -290,7 +284,6 @@ spec:
 		NetworkNameSuffix:  "portgroup",
 		EnvExtraSecrets: `    - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - vcenter-credentials:
         file: ../secrets/vcenter-credentials
 `,
@@ -307,8 +300,6 @@ spec:
     addressName: ssh
     keyRef:
       name: provider-host-ssh
-    knownHostsRef:
-      name: provider-host-known-hosts
 
   capabilities:
     - container-runtime

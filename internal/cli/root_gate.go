@@ -171,6 +171,11 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		return true
+	case "host":
+		if len(args) == 1 {
+			return false
+		}
+		return true
 	case "context":
 		if len(args) < 2 {
 			return false

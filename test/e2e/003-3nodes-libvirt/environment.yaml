@@ -14,7 +14,6 @@ spec:
             comment: bootwright-3-nodes-ocp-libvirt-cluster-admin
     - provider-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
-    - provider-host-known-hosts
     - bmc-credentials:
         generated:
           credentials:

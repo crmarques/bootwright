@@ -130,7 +130,7 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if publicPath := secret.ResolveSSHPublicKeyPath(host.Spec.SSH.KeyRef.Name, env, secretsDir); publicPath != "" {
 		out["publicKeyPath"] = publicPath
 	}
-	if knownHostsPath := secret.ResolvePath(host.Spec.SSH.KnownHostsRef.Name, env, secretsDir); knownHostsPath != "" {
+	if knownHostsPath := hostKnownHostsPath(host, env, secretsDir); knownHostsPath != "" {
 		out["knownHostsPath"] = knownHostsPath
 	}
 	return out
