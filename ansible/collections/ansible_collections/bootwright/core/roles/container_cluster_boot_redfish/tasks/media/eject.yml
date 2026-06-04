@@ -18,7 +18,7 @@
 
 - name: Wait for virtual media to report ejected
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]

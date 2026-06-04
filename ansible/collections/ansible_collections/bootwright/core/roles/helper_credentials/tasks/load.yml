@@ -27,6 +27,6 @@
 
 - name: "Parse {{ bootwright_creds_label }}"
   ansible.builtin.set_fact:
-    "{{ bootwright_creds_var }}": "{{ bootwright_creds_slurp | bootwright_parse_credential(bootwright_creds_label) }}"
+    "{{ bootwright_creds_var }}": "{{ bootwright_creds_slurp | bootwright.core.bootwright_parse_credential(bootwright_creds_label) }}"
   no_log: true
   changed_when: false

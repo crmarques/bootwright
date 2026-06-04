@@ -24,7 +24,7 @@
   ansible.builtin.set_fact:
     bootwright_proxy_authority: >-
       {{
-        bootwright_proxy_credentials | bootwright_proxy_userinfo('ocpInstall proxy credentialsRef ' ~ bootwright_proxy_credentials_ref)
+        bootwright_proxy_credentials | bootwright.core.bootwright_proxy_userinfo('ocpInstall proxy credentialsRef ' ~ bootwright_proxy_credentials_ref)
         if (bootwright_proxy_credentials_ref | length) > 0
         else ''
       }}

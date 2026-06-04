@@ -1,7 +1,7 @@
 ---
 - name: Refresh Redfish system metadata for declared MAC validation
   ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -28,7 +28,7 @@
 
 - name: List Redfish EthernetInterface members
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_ethernet_interfaces_path | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_ethernet_interfaces_path | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -44,7 +44,7 @@
 
 - name: Probe Redfish EthernetInterface members
   ansible.builtin.uri:
-    url: "{{ item['@odata.id'] | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ item['@odata.id'] | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -65,7 +65,7 @@
     bootwright_redfish_mac_validation: >-
       {{
         bootwright_component.interfaces | default([])
-        | bootwright_redfish_mac_validation(
+        | bootwright.core.bootwright_redfish_mac_validation(
           (bootwright_redfish_ethernet_interface_member_probes | default({})).results | default([])
         )
       }}

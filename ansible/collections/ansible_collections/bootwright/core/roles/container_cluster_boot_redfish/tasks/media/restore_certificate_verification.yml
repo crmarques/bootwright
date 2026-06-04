@@ -1,7 +1,7 @@
 ---
 - name: Refresh virtual media metadata before restoring fetch certificate verification
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -37,7 +37,7 @@
 
 - name: Restore virtual media fetch certificate verification
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_vmedia_restore_if_match }}"
@@ -59,7 +59,7 @@
 
 - name: Refresh Redfish manager SecurityService before restoring HTTPS transfer certificate verification
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_security_service_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -96,7 +96,7 @@
 
 - name: Restore Redfish HTTPS transfer certificate verification
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_security_service_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_security_service_restore_if_match }}"

@@ -102,7 +102,7 @@
 
 - name: Refresh Redfish system metadata before disk boot override
   ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -129,7 +129,7 @@
 
 - name: Set subsequent boots to disk after live ISO boot
   ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_system_if_match }}"

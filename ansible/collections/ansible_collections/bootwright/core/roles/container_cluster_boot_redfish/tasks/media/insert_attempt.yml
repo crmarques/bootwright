@@ -23,7 +23,7 @@
 
 - name: Refresh virtual media metadata before PATCH operations
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200, 404]
@@ -53,7 +53,7 @@
 
 - name: Disable HTTPS certificate verification for virtual-media fetch
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_vmedia_if_match }}"
@@ -134,7 +134,7 @@
   ansible.builtin.set_fact:
     bootwright_redfish_insert_task_url: >-
       {{
-        bootwright_redfish_insert_task_ref | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
+        bootwright_redfish_insert_task_ref | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl)
         if (bootwright_redfish_insert_task_ref | length) > 0
         else ''
       }}
@@ -268,7 +268,7 @@
 
 - name: Probe virtual media after failed InsertMedia task
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -285,7 +285,7 @@
 
 - name: Probe virtual media after mounted InsertMedia task
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -304,7 +304,7 @@
 
 - name: Wait for virtual media to report inserted agent ISO
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -317,7 +317,7 @@
   until:
     - >-
       (bootwright_redfish_vmedia_insert_probe.json | default({}))
-      | bootwright_redfish_vmedia_attached(
+      | bootwright.core.bootwright_redfish_vmedia_attached(
         bootwright_component.boot.agentIso.fetchUrl,
         bootwright_redfish_vmedia_transfer_protocol
       )
@@ -369,7 +369,7 @@
 
 - name: Patch virtual media attachment when InsertMedia action is not reflected
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: PATCH
     headers:
       If-Match: "{{ bootwright_redfish_vmedia_patch_if_match }}"
@@ -389,7 +389,7 @@
 
 - name: Wait for virtual media to report inserted agent ISO after PATCH fallback
   ansible.builtin.uri:
-    url: "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
     return_content: true
     status_code: [200]
@@ -402,7 +402,7 @@
   until:
     - >-
       (bootwright_redfish_vmedia_patch_probe.json | default({}))
-      | bootwright_redfish_vmedia_attached(
+      | bootwright.core.bootwright_redfish_vmedia_attached(
         bootwright_component.boot.agentIso.fetchUrl,
         bootwright_redfish_vmedia_transfer_protocol
       )
@@ -480,7 +480,7 @@
     bootwright_redfish_vmedia_resource_attached: >-
       {{
         (bootwright_redfish_vmedia_probe.json | default({}))
-        | bootwright_redfish_vmedia_attached(
+        | bootwright.core.bootwright_redfish_vmedia_attached(
           bootwright_component.boot.agentIso.fetchUrl,
           bootwright_redfish_vmedia_transfer_protocol
         )
@@ -496,7 +496,7 @@
           or
           (
             (bootwright_redfish_vmedia_probe.json | default({}))
-            | bootwright_redfish_vmedia_attached(
+            | bootwright.core.bootwright_redfish_vmedia_attached(
               bootwright_component.boot.agentIso.fetchUrl,
               bootwright_redfish_vmedia_transfer_protocol
             )

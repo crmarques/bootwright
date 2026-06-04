@@ -593,7 +593,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri body", powerTasks[securityRefreshIdx]["name"])
 	}
-	if got := securityRefresh["url"]; got != "{{ bootwright_redfish_security_service_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
+	if got := securityRefresh["url"]; got != "{{ bootwright_redfish_security_service_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
 		t.Fatalf("SecurityService probe must use discovered manager SecurityService, got %v", got)
 	}
 	if got := powerTasks[securityRefreshIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "(bootwright_redfish_security_service_member | default('') | length) > 0") {
@@ -932,7 +932,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no uri task", ejectTasks[waitEjectIdx]["name"])
 	}
-	if got := waitURI["url"]; got != "{{ bootwright_redfish_vmedia_member | bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
+	if got := waitURI["url"]; got != "{{ bootwright_redfish_vmedia_member | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
 		t.Fatalf("virtual media eject wait must poll VirtualMedia member, got %v", got)
 	}
 	if got := ejectTasks[waitEjectIdx]["register"]; got != "bootwright_redfish_vmedia_eject_probe" {
@@ -1318,6 +1318,50 @@ func TestBootRedfishValidatesDeclaredMACsFromInventory(t *testing.T) {
 	if !strings.Contains(failMsg, "baremetal.interfaces") {
 		t.Fatalf("MAC failure message must point operators to baremetal.interfaces, got %v", assertBody["fail_msg"])
 	}
+}
+
+func TestBootwrightCollectionFiltersUseFQCN(t *testing.T) {
+	root := filepath.Join(repoRoot(t), "ansible", "collections", "ansible_collections", "bootwright", "core")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(path)
+		if ext != ".yml" && ext != ".yaml" && ext != ".j2" {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if idx := shortBootwrightFilterIndex(string(body)); idx >= 0 {
+			rel, _ := filepath.Rel(repoRoot(t), path)
+			t.Fatalf("%s uses short Bootwright filter name near byte %d; use bootwright.core.<filter>", filepath.ToSlash(rel), idx)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk Bootwright collection: %v", err)
+	}
+}
+
+func shortBootwrightFilterIndex(body string) int {
+	for i := 0; i < len(body); i++ {
+		if body[i] != '|' {
+			continue
+		}
+		j := i + 1
+		for j < len(body) && (body[j] == ' ' || body[j] == '\t' || body[j] == '\r' || body[j] == '\n') {
+			j++
+		}
+		if strings.HasPrefix(body[j:], "bootwright_") {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
