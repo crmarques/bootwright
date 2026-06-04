@@ -20,4 +20,4 @@ spec:
       addressRef:
         name: ssh
       keyRef:
-        name: provider-host-ssh
+        name: bastion-host-ssh

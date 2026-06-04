@@ -142,7 +142,7 @@ metadata:
 spec:
   baseDomain: example.test
   secrets:
-    - provider-host-ssh:
+    - bastion-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
 `,
 		"service-machine.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -163,7 +163,7 @@ spec:
         name: ssh
       user: core
       keyRef:
-        name: provider-host-ssh
+        name: bastion-host-ssh
 `,
 	}
 	for name, body := range files {
@@ -185,7 +185,7 @@ func hostTrustTestState() v1alpha1.State {
 			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
-					KeyRef:     v1alpha1.SecretRef{Name: "provider-host-ssh"},
+					KeyRef:     v1alpha1.SecretRef{Name: "bastion-host-ssh"},
 				},
 			},
 		},

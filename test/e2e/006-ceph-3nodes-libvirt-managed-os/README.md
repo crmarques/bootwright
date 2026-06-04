@@ -36,12 +36,24 @@ or Ansible changes.
 
 ## Prerequisites
 
-- Linux host with KVM/libvirt available to the Bootwright bastion.
-- `qemu-img`, libvirt, `sushy-tools`, `mkksiso` from `lorax`, Ansible
-  requirements, and firewall permissions expected by the libvirt fixtures.
 - A RHEL 9 x86_64 DVD ISO stored locally on the bastion.
 - Valid Red Hat registry credentials for Ceph container images.
-- An SSH key at `~/.ssh/bootwright-ssh-key` for the local provider host.
+
+Bootwright owns lab host preparation for this fixture. After
+`bootwright apply bastion --yes` and
+`bootwright apply --stage infra --clusters ceph-libvirt --yes`, the required
+libvirt tooling, `qemu-img`, `sushy-tools`, `mkksiso`, Ansible requirements,
+and firewall rules should be installed or configured by Bootwright. Missing
+host preparation is a Bootwright bug, not a manual prerequisite for this lab.
+
+Create the SSH key used for the local provider host:
+
+```bash
+mkdir -p ~/.ssh
+test -f ~/.ssh/bootwright-ssh-key || \
+  ssh-keygen -t ed25519 -N '' -C bootwright-lab -f ~/.ssh/bootwright-ssh-key
+chmod 600 ~/.ssh/bootwright-ssh-key
+```
 
 Register the RHEL ISO in the root-managed media store before applying:
 

@@ -255,7 +255,7 @@ func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.Secrets["provider-host-ssh"] = v1alpha1.EnvironmentSecretSpec{
+	state.Environments[0].Spec.Secrets["bastion-host-ssh"] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
@@ -269,7 +269,7 @@ func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
-	want := filepath.Join(secretsDir, "provider-host-ssh")
+	want := filepath.Join(secretsDir, "bastion-host-ssh")
 	if got := serviceHost["ansible_ssh_private_key_file"]; got != want {
 		t.Fatalf("ansible_ssh_private_key_file got %v, want %s", got, want)
 	}

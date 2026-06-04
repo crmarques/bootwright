@@ -63,11 +63,11 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		dir := t.TempDir()
 		files := newBaselineFiles()
 		files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
-			"    - provider-host-ssh:\n        file: ~/ssh\n",
-			"    - provider-host-ssh:\n        file: ~/ssh\n    - provider-host-known-hosts\n", 1)
+			"    - bastion-host-ssh:\n        file: ~/ssh\n",
+			"    - bastion-host-ssh:\n        file: ~/ssh\n    - bastion-host-known-hosts\n", 1)
 		files["service-machines.yaml"] = strings.Replace(newHostsYAML,
-			"      keyRef: { name: provider-host-ssh }\n",
-			"      keyRef: { name: provider-host-ssh }\n      knownHostsRef: { name: provider-host-known-hosts }\n", 1)
+			"      keyRef: { name: bastion-host-ssh }\n",
+			"      keyRef: { name: bastion-host-ssh }\n      knownHostsRef: { name: bastion-host-known-hosts }\n", 1)
 		writeFiles(t, dir, files)
 		if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
 			t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -77,14 +77,14 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		dir := t.TempDir()
 		files := newBaselineFiles()
 		files["service-machines.yaml"] = strings.Replace(newHostsYAML,
-			"      keyRef: { name: provider-host-ssh }\n",
-			"      keyRef: { name: provider-host-ssh }\n      knownHostsRef: { name: provider-host-known-hosts }\n", 1)
+			"      keyRef: { name: bastion-host-ssh }\n",
+			"      keyRef: { name: bastion-host-ssh }\n      knownHostsRef: { name: bastion-host-known-hosts }\n", 1)
 		writeFiles(t, dir, files)
 		_, err := LoadNormalizeValidate([]string{dir})
 		if err == nil {
 			t.Fatal("expected validation error, got nil")
 		}
-		want := `Machine/services-host spec.access.ssh.knownHostsRef "provider-host-known-hosts" is not declared`
+		want := `Machine/services-host spec.access.ssh.knownHostsRef "bastion-host-known-hosts" is not declared`
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not contain %q", err, want)
 		}
@@ -610,9 +610,9 @@ spec:
 		{
 			name: "secret-keyfile-without-file-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"    - provider-host-ssh:\n        file: ~/ssh",
-				"    - provider-host-ssh:\n        keyFile: ~/ssh.key", 1)},
-			wantSubstring: "spec.secrets[provider-host-ssh].keyFile requires file",
+				"    - bastion-host-ssh:\n        file: ~/ssh",
+				"    - bastion-host-ssh:\n        keyFile: ~/ssh.key", 1)},
+			wantSubstring: "spec.secrets[bastion-host-ssh].keyFile requires file",
 		},
 		{
 			name: "secretstorage-mode-rejected",
@@ -680,7 +680,7 @@ spec:
 		{
 			name: "api-serving-cert-names-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - secretRef: { name: api-tls }\n", 1),
@@ -690,7 +690,7 @@ spec:
 		{
 			name: "api-serving-cert-api-int-rejected",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api-int.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
@@ -700,7 +700,7 @@ spec:
 		{
 			name: "serving-cert-file-source-keyfile-required",
 			files: map[string]string{
-				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - provider-host-ssh:\n        file: ~/ssh\n", "    - provider-host-ssh:\n        file: ~/ssh\n    - api-tls:\n        file: ./api.crt\n", 1),
+				"environment.yaml": strings.Replace(newEnvironmentYAML, "    - bastion-host-ssh:\n        file: ~/ssh\n", "    - bastion-host-ssh:\n        file: ~/ssh\n    - api-tls:\n        file: ./api.crt\n", 1),
 				"cluster.yaml": strings.Replace(newClusterYAML,
 					"    pullSecretRef: { name: openshift-pull-secret }\n",
 					"    pullSecretRef: { name: openshift-pull-secret }\n    servingCertificates:\n      apiServer:\n        namedCertificates:\n          - names:\n              - api.sno.bootwright.test\n            secretRef: { name: api-tls }\n", 1),
@@ -1324,7 +1324,7 @@ spec:
   baseDomain: bootwright.test
   secrets:
     - bmc-credentials
-    - provider-host-ssh
+    - bastion-host-ssh
 `,
 				"service-machines.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -1337,7 +1337,7 @@ spec:
     - { name: ssh, address: 192.168.132.1 }
   access:
     ssh:
-      keyRef: { name: provider-host-ssh }
+      keyRef: { name: bastion-host-ssh }
       addressRef: { name: ssh }
 `,
 				"provider.yaml": tc.providerYAML,
@@ -2526,7 +2526,7 @@ spec:
     - openshift-pull-secret
     - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
-    - provider-host-ssh:
+    - bastion-host-ssh:
         file: ~/ssh
     - vcenter-credentials:
         file: ~/vcenter
@@ -2542,7 +2542,7 @@ spec:
     - { name: ssh, address: 192.168.133.1 }
   access:
     ssh:
-      keyRef: { name: provider-host-ssh }
+      keyRef: { name: bastion-host-ssh }
       addressRef: { name: ssh }
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
@@ -2745,7 +2745,7 @@ spec:
     - openshift-pull-secret
     - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
-    - provider-host-ssh:
+    - bastion-host-ssh:
         file: ~/ssh
     - bmc-credentials:
         generated:
@@ -2778,7 +2778,7 @@ spec:
     - openshift-pull-secret
     - sno-cluster-admin-ssh-key:
         file: ~/ssh.pub
-    - provider-host-ssh:
+    - bastion-host-ssh:
         file: ~/ssh
     - bmc-credentials:
         generated:
@@ -2802,7 +2802,7 @@ spec:
       address: 192.168.132.1
   access:
     ssh:
-      keyRef: { name: provider-host-ssh }
+      keyRef: { name: bastion-host-ssh }
       addressRef: { name: ssh }
 `
 

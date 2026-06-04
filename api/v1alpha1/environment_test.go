@@ -19,7 +19,7 @@ func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
       generated:
         sshKeyPair:
           comment: bootwright-lab-ocp-cluster-admin
-  - provider-host-ssh:
+  - bastion-host-ssh:
       file: ~/.ssh/bootwright-ssh-key
   - bmc-credentials:
   - api-tls:
@@ -42,8 +42,8 @@ func TestEnvironmentSecretsYAMLListShape(t *testing.T) {
 	if got := holder.Secrets["lab-ocp-cluster-admin-ssh-key"].Generated.SSHKeyPair.Comment; got != "bootwright-lab-ocp-cluster-admin" {
 		t.Fatalf("ssh key comment = %q", got)
 	}
-	if got := holder.Secrets["provider-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {
-		t.Fatalf("provider-host-ssh file = %q", got)
+	if got := holder.Secrets["bastion-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {
+		t.Fatalf("bastion-host-ssh file = %q", got)
 	}
 	if got := holder.Secrets["api-tls"].KeyFile; got != "../secrets/api.key" {
 		t.Fatalf("api-tls keyFile = %q", got)
@@ -114,7 +114,7 @@ func TestEnvironmentSecretsYAMLRejectsInvalidShapes(t *testing.T) {
 }
 
 func TestEnvironmentSecretsJSONListShape(t *testing.T) {
-	body := `{"secrets":["openshift-pull-secret",{"bmc-credentials":null},{"provider-host-ssh":{"file":"~/.ssh/bootwright-ssh-key"}}]}`
+	body := `{"secrets":["openshift-pull-secret",{"bmc-credentials":null},{"bastion-host-ssh":{"file":"~/.ssh/bootwright-ssh-key"}}]}`
 	var holder environmentSecretsHolder
 	if err := json.Unmarshal([]byte(body), &holder); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -122,8 +122,8 @@ func TestEnvironmentSecretsJSONListShape(t *testing.T) {
 	if spec := holder.Secrets["bmc-credentials"]; spec.File != "" || spec.Generated != nil {
 		t.Fatalf("bmc-credentials = %+v, want context-local empty source", spec)
 	}
-	if got := holder.Secrets["provider-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {
-		t.Fatalf("provider-host-ssh file = %q", got)
+	if got := holder.Secrets["bastion-host-ssh"].File; got != "~/.ssh/bootwright-ssh-key" {
+		t.Fatalf("bastion-host-ssh file = %q", got)
 	}
 	data, err := json.Marshal(holder)
 	if err != nil {

@@ -3,7 +3,7 @@ package scaffold
 var emulatedBareMetalSubstrate = Substrate{
 	ProviderNameSuffix: "libvirt",
 	NetworkNameSuffix:  "bridge",
-	EnvExtraSecrets: `    - provider-host-ssh:
+	EnvExtraSecrets: `    - bastion-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
     - bmc-credentials
 `,
@@ -44,7 +44,7 @@ spec:
       addressRef:
         name: ssh
       keyRef:
-        name: provider-host-ssh
+        name: bastion-host-ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine

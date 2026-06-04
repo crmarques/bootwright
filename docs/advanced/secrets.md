@@ -32,7 +32,7 @@ spec:
         generated:
           sshKeyPair:
             comment: bootwright-lab-ocp-cluster-admin
-    - provider-host-ssh:
+    - bastion-host-ssh:
         file: ~/.ssh/bootwright-ssh-key
     - bmc-credentials:
     - proxy-credentials:
