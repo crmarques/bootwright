@@ -4,7 +4,7 @@ metadata:
   name: artifact-server
 spec:
   artifactServer:
-    hostRef:
+    machineRef:
       name: services-host
     listeners:
       - name: https
@@ -13,4 +13,4 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        hostAddress: bmc-lan
+        machineAddress: bmc-lan

@@ -65,11 +65,11 @@ under `infra/` and cluster intent under `clusters/container/<cluster>/`:
 
 ```text
 environment.yaml                         Environment
-host.yaml or shared/hosts.yaml or infra/hosts/*.yaml
+service-machine.yaml or shared/service-machines.yaml or infra/machines/*.yaml
 provider.yaml or shared/provider.yaml or infra/providers/*.yaml
 infra-component.yaml or shared/components.yaml or infra/components/*.yaml
 networkconfig.yaml or shared/networks.yaml or infra/networkconfigs/*.yaml
-cluster-infra.yaml or clusters/<cluster>/cluster-infra.yaml or clusters/container/<cluster>/cluster-infra.yaml
+cluster-machines.yaml or clusters/<cluster>/cluster-machines.yaml or clusters/container/<cluster>/cluster-machines.yaml
 cluster.yaml or clusters/<cluster>/cluster.yaml or clusters/container/<cluster>/cluster.yaml
 add-ons/*.yaml                           optional ClusterAddon resources
 clusters/storage/<cluster>/*.yaml        optional storage resources
@@ -82,14 +82,14 @@ Edit these first:
   part of the loaded fleet.
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
   external or managed proxy, DNS, artifact, registry, or NTP services.
-- `Host.spec.addresses[]` and SSH key references for provider/service hosts.
+- `Machine.spec.os.addresses[]` and SSH key references for provider/service hosts.
 - Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`,
   `shared/provider.yaml`, or `infra/providers/*.yaml`.
 - Machine CIDRs and NMState templates in `networkconfig.yaml`,
   `shared/networks.yaml`, or `infra/networkconfigs/*.yaml`.
 - Endpoint definitions and per-machine IP overrides in
-  `cluster-infra.yaml`, `clusters/<cluster>/cluster-infra.yaml`, or
-  `clusters/container/<cluster>/cluster-infra.yaml`.
+  `cluster-machines.yaml`, `clusters/<cluster>/cluster-machines.yaml`, or
+  `clusters/container/<cluster>/cluster-machines.yaml`.
 - OpenShift or OKD release, install mode, and node bindings in
   `cluster.yaml`, `clusters/<cluster>/cluster.yaml`, or
   `clusters/container/<cluster>/cluster.yaml`.
@@ -100,7 +100,7 @@ unless the cluster intent itself changes.
 Before importing a context, confirm the out-of-band inputs exist:
 
 - The bastion host can use `sudo` for `/var/lib/bootwright`.
-- SSH from the bastion reaches every `Host` address used by provider or
+- SSH from the bastion reaches every `Machine` address used by provider or
   service actions.
 - The OpenShift pull secret is available outside the repo.
 - Generated or supplied BMC, proxy, and mirror secrets are planned in
@@ -123,14 +123,14 @@ bootwright validate -f ./my-sno-lab
 ## 2. Verify SSH Inputs
 
 Bootwright uses SSH to reach provider and service hosts. Before importing the
-context, confirm the declared key, user, and Host address values are correct.
+context, confirm the declared key, user, and Machine address values are correct.
 For example, an operator can test SSH auth manually:
 
 ```text
 ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${HOST_ADDRESS}" true
 ```
 
-Use the exact address you declare in `Host.spec.addresses[]` for each provider
+Use the exact address you declare in `Machine.spec.os.addresses[]` for each provider
 or service host. This manual check updates the user's SSH trust state, not
 Bootwright's managed context trust.
 

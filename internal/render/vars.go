@@ -10,7 +10,7 @@ import (
 // Vars produces the per-cluster Ansible variables consumed by the
 // layers under ansible/playbooks/. The contract is documented in
 // ADR-0002: each machine component carries diagnostic dispatch labels
-// plus exact rendered role names; host services carry their own
+// plus exact rendered role names; machine services carry their own
 // apply/destroy role names.
 //
 // Vars is the public entry point; the implementation is split across
@@ -25,7 +25,7 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	env := primaryEnvironment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -50,7 +50,7 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	}
 	out := map[string]any{
 		"bootwright_environment":      environmentVars(env),
-		"bootwright_hosts":            hostsVars(state),
+		"bootwright_machines":         machinesVars(state),
 		"bootwright_providers":        providersVars(state),
 		"bootwright_infra_components": infraComponentsVars(state),
 		"bootwright_clusters":         clusters,
@@ -62,8 +62,8 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	if services := infraComponentServicesVars(state); len(services) > 0 {
 		out["bootwright_infra_component_services"] = services
 	}
-	if setups := providerHostSetupsVars(state); len(setups) > 0 {
-		out["bootwright_provider_host_setups"] = setups
+	if setups := providerMachineSetupsVars(state); len(setups) > 0 {
+		out["bootwright_provider_machine_setups"] = setups
 	}
 	if storageClusters := storageClustersVars(state, secretsDir); len(storageClusters) > 0 {
 		out["bootwright_storage_clusters"] = storageClusters
@@ -157,28 +157,28 @@ func componentImagesVars(images map[string]map[string]v1alpha1.ComponentImageSpe
 	return out
 }
 
-func hostsVars(state v1alpha1.State) []any {
-	out := make([]any, 0, len(state.Hosts))
-	for _, h := range state.Hosts {
+func machinesVars(state v1alpha1.State) []any {
+	out := make([]any, 0, len(state.Machines))
+	for _, h := range state.Machines {
 		entry := map[string]any{
 			"name":         h.Metadata.Name,
-			"addresses":    hostAddressesVars(h),
-			"capabilities": h.Spec.Capabilities,
+			"addresses":    machineAddressesVars(h),
+			"capabilities": h.Spec.OS.Capabilities,
 		}
-		if h.Spec.SSH != nil {
-			entry["sshAddress"] = v1alpha1.HostSSHAddress(h)
-			entry["sshAddressName"] = h.Spec.SSH.AddressName
-			entry["sshUser"] = h.Spec.SSH.User
-			entry["sshKeyName"] = h.Spec.SSH.KeyRef.Name
+		if h.Spec.OS.SSH != nil {
+			entry["sshAddress"] = v1alpha1.MachineSSHAddress(h)
+			entry["sshAddressName"] = h.Spec.OS.SSH.AddressName
+			entry["sshUser"] = h.Spec.OS.SSH.User
+			entry["sshKeyName"] = h.Spec.OS.SSH.KeyRef.Name
 		}
 		out = append(out, entry)
 	}
 	return out
 }
 
-func hostAddressesVars(host v1alpha1.Host) []any {
-	out := make([]any, 0, len(host.Spec.Addresses))
-	for _, address := range host.Spec.Addresses {
+func machineAddressesVars(host v1alpha1.Machine) []any {
+	out := make([]any, 0, len(host.Spec.OS.Addresses))
+	for _, address := range host.Spec.OS.Addresses {
 		out = append(out, map[string]any{
 			"name":    address.Name,
 			"address": address.Address,
@@ -210,10 +210,9 @@ func nodesVars(ocp v1alpha1.ContainerCluster) map[string]any {
 	for _, node := range nodes {
 		name := node.Hostname
 		entry := map[string]any{"role": node.Role}
-		if node.InfraNodeRef.Name != "" || node.InfraNodeRef.ClusterInfra != "" {
-			entry["infraNodeRef"] = map[string]any{
-				"clusterInfra": node.InfraNodeRef.ClusterInfra,
-				"name":         node.InfraNodeRef.Name,
+		if node.MachineRef.Name != "" {
+			entry["machineRef"] = map[string]any{
+				"name": node.MachineRef.Name,
 			}
 		}
 		out[name] = entry

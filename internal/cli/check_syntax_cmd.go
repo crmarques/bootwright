@@ -117,10 +117,11 @@ type syntaxCheckReport struct {
 	Error                    string                    `json:"error,omitempty"`
 	Diagnostics              []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
 	Environments             int                       `json:"environments"`
-	Hosts                    int                       `json:"hosts"`
+	Machines                 int                       `json:"machines"`
+	MachineImages            int                       `json:"machineImages"`
+	MachineInstallProfiles   int                       `json:"machineInstallProfiles"`
 	NetworkConfigs           int                       `json:"networkConfigs"`
 	InfraProviders           int                       `json:"infraProviders"`
-	ClusterInfras            int                       `json:"clusterInfras"`
 	ContainerClusters        int                       `json:"containerClusters"`
 	StorageClusters          int                       `json:"storageClusters"`
 	StoragePlacementPolicies int                       `json:"storagePlacementPolicies"`
@@ -137,10 +138,11 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error
 	report := syntaxCheckReport{
 		OK:                       checkErr == nil,
 		Environments:             len(state.Environments),
-		Hosts:                    len(state.Hosts),
+		Machines:                 len(state.Machines),
+		MachineImages:            len(state.MachineImages),
+		MachineInstallProfiles:   len(state.MachineInstallProfiles),
 		NetworkConfigs:           len(state.NetworkConfigs),
 		InfraProviders:           len(state.InfraProviders),
-		ClusterInfras:            len(state.ClusterInfras),
 		ContainerClusters:        len(state.ContainerClusters),
 		StorageClusters:          len(state.StorageClusters),
 		StoragePlacementPolicies: len(state.StoragePlacementPolicies),
@@ -191,10 +193,11 @@ func syntaxDiagnosticChecks(err error, rerun string) []preflightCheck {
 func stateCountFields(state v1alpha1.State) []cliout.Field {
 	return []cliout.Field{
 		{Key: "Environments", Value: fmt.Sprint(len(state.Environments))},
-		{Key: "Hosts", Value: fmt.Sprint(len(state.Hosts))},
+		{Key: "Machines", Value: fmt.Sprint(len(state.Machines))},
+		{Key: "MachineImages", Value: fmt.Sprint(len(state.MachineImages))},
+		{Key: "MachineInstallProfiles", Value: fmt.Sprint(len(state.MachineInstallProfiles))},
 		{Key: "NetworkConfigs", Value: fmt.Sprint(len(state.NetworkConfigs))},
 		{Key: "InfraProviders", Value: fmt.Sprint(len(state.InfraProviders))},
-		{Key: "ClusterInfras", Value: fmt.Sprint(len(state.ClusterInfras))},
 		{Key: "ContainerClusters", Value: fmt.Sprint(len(state.ContainerClusters))},
 		{Key: "StorageClusters", Value: fmt.Sprint(len(state.StorageClusters))},
 		{Key: "StoragePlacementPolicies", Value: fmt.Sprint(len(state.StoragePlacementPolicies))},

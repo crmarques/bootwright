@@ -22,7 +22,9 @@ type ContainerClusterSpec struct {
 type OCPInstallSpec struct {
 	Method                    string                   `yaml:"method,omitempty" json:"method,omitempty"`
 	Mode                      string                   `yaml:"mode,omitempty" json:"mode,omitempty"`
-	EndpointRefs              ContainerEndpointRefs    `yaml:"endpointRefs,omitempty" json:"endpointRefs,omitempty"`
+	Platform                  InstallPlatform          `yaml:"platform,omitempty" json:"platform,omitempty"`
+	Endpoints                 map[string]Endpoint      `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	ArtifactAccess            ClusterArtifactAccess    `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 	PullSecretRef             SecretRef                `yaml:"pullSecretRef,omitempty" json:"pullSecretRef,omitempty"`
 	NodeSSH                   NodeSSHSpec              `yaml:"nodeSSH,omitempty" json:"nodeSSH,omitempty"`
 	AdditionalTrustBundleRefs []SecretRef              `yaml:"additionalTrustBundleRefs,omitempty" json:"additionalTrustBundleRefs,omitempty"`
@@ -108,12 +110,7 @@ type ContainerClusterNetworkCIDR struct {
 }
 
 type OCPNodeSpec struct {
-	Hostname     string       `yaml:"hostname" json:"hostname"`
-	Role         string       `yaml:"role" json:"role"`
-	InfraNodeRef InfraNodeRef `yaml:"infraNodeRef" json:"infraNodeRef"`
-}
-
-type InfraNodeRef struct {
-	ClusterInfra string `yaml:"clusterInfra" json:"clusterInfra"`
-	Name         string `yaml:"name" json:"name"`
+	Hostname   string               `yaml:"hostname" json:"hostname"`
+	Role       string               `yaml:"role" json:"role"`
+	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 }

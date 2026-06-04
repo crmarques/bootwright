@@ -47,8 +47,8 @@ func dnsRecordsState() v1alpha1.State {
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "dns"},
 			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-				Type:    v1alpha1.InfraComponentTypeDnsmasq,
-				HostRef: v1alpha1.LocalObjectReference{Name: "host"},
+				Type:       v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "host"},
 			}},
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
@@ -57,32 +57,39 @@ func dnsRecordsState() v1alpha1.State {
 				DNSRefs: []string{"default"},
 			},
 		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "infra-a"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Endpoints: map[string]v1alpha1.Endpoint{
-					v1alpha1.EndpointAPI: {Address: "192.168.130.10"},
-					"api-int":            {Address: "192.168.130.10"},
-					"apps":               {Address: "192.168.130.11"},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "host"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityNameResolution},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
 				},
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "master-a",
-					Network: v1alpha1.ClusterNodeNetwork{
+			},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "master-a"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode},
+				OS: v1alpha1.MachineOSSpec{
+					Mode: v1alpha1.MachineOSModeRaw,
+					Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
 						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "managed-net"},
-					},
-				}}},
+					}},
+				},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a"},
 			Spec: v1alpha1.ContainerClusterSpec{
-				Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
+				Install: v1alpha1.OCPInstallSpec{Endpoints: map[string]v1alpha1.Endpoint{
+					v1alpha1.EndpointAPI:     {Address: "192.168.130.10"},
+					v1alpha1.EndpointAPIInt:  {Address: "192.168.130.10"},
+					v1alpha1.EndpointIngress: {Address: "192.168.130.11"},
+				}},
 				Nodes: []v1alpha1.OCPNodeSpec{{
-					Hostname: "master-a",
-					InfraNodeRef: v1alpha1.InfraNodeRef{
-						ClusterInfra: "infra-a",
-						Name:         "master-a",
-					},
+					Hostname:   "master-a",
+					MachineRef: v1alpha1.LocalObjectReference{Name: "master-a"},
 				}},
 			},
 		}},
@@ -101,12 +108,4 @@ func recordPairs(raw any) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func defaultEndpointRefs() v1alpha1.ContainerEndpointRefs {
-	return v1alpha1.ContainerEndpointRefs{
-		API:     v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
-		APIInt:  v1alpha1.EndpointRef{Name: "api-int"},
-		Ingress: v1alpha1.EndpointRef{Name: "apps"},
-	}
 }

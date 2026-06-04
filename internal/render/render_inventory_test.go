@@ -112,14 +112,27 @@ func TestInventoryUsesLocalhostForControllerWork(t *testing.T) {
 	}
 }
 
+func inventoryTestMachine(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return machine, true
+		}
+	}
+	return v1alpha1.Machine{}, false
+}
+
 func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	want := state.Hosts[0].Spec.SSH.User
+	bastion, ok := inventoryTestMachine(state, "bastion")
+	if !ok || bastion.Spec.OS.SSH == nil {
+		t.Fatal("Machine/bastion spec.os.ssh was not defaulted")
+	}
+	want := bastion.Spec.OS.SSH.User
 	if want == "" {
-		t.Fatal("Host.spec.ssh.user was not defaulted")
+		t.Fatal("Machine.spec.os.ssh.user was not defaulted")
 	}
 
 	inv := render.Inventory(state, "")
@@ -127,7 +140,7 @@ func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
 	if got := serviceHost["ansible_user"]; got != want {
-		t.Fatalf("ansible_user = %v, want defaulted Host.spec.ssh.user %q", got, want)
+		t.Fatalf("ansible_user = %v, want defaulted Machine.spec.os.ssh.user %q", got, want)
 	}
 }
 
@@ -218,7 +231,11 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Hosts[0].Spec.SSH.User = "provider-admin"
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == "bastion" && state.Machines[i].Spec.OS.SSH != nil {
+			state.Machines[i].Spec.OS.SSH.User = "provider-admin"
+		}
+	}
 
 	inv := render.InventoryWithLocalityPolicy(state, "", locality.Policy{Deps: locality.Deps{
 		Hostname: func() (string, error) {
@@ -229,7 +246,7 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
 	if got := serviceHost["ansible_user"]; got != "provider-admin" {
-		t.Fatalf("ansible_user got %v, want explicit Host.spec.ssh.user", got)
+		t.Fatalf("ansible_user got %v, want explicit Machine.spec.os.ssh.user", got)
 	}
 }
 
@@ -263,23 +280,33 @@ func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Hosts = append(state.Hosts, v1alpha1.Host{
+	state.Machines = append(state.Machines, v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: "unused-host"},
-		Spec: v1alpha1.HostSpec{
-			Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "192.0.2.10"}},
-			SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-			Capabilities: []string{v1alpha1.HostCapabilityLibvirt, v1alpha1.HostCapabilityContainerRuntime},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityLibvirt, v1alpha1.MachineCapabilityContainerRuntime},
+			OS: v1alpha1.MachineOSSpec{
+				Mode:      v1alpha1.MachineOSModeExternal,
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.0.2.10"}},
+				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+			},
 		},
 	})
-	state.InfraProviders[0].Spec.MachineProfiles = append(state.InfraProviders[0].Spec.MachineProfiles, v1alpha1.MachineProfileCapability{
-		Name:    "unused-profile",
-		Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{HostRef: v1alpha1.LocalObjectReference{Name: "unused-host"}},
+	state.InfraProviders = append(state.InfraProviders, v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: "unused-provider"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerLibvirt,
+			Libvirt: &v1alpha1.InfraProviderLibvirt{
+				MachineRef:      v1alpha1.LocalObjectReference{Name: "unused-host"},
+				URI:             "qemu:///system",
+				MachineProfiles: []v1alpha1.MachineProfile{{Name: "unused-profile"}},
+			},
+		},
 	})
 	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "unused-dns"},
 		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-			Type:    v1alpha1.InfraComponentTypeDnsmasq,
-			HostRef: v1alpha1.LocalObjectReference{Name: "unused-host"},
+			Type:       v1alpha1.InfraComponentTypeDnsmasq,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "unused-host"},
 		}},
 	})
 
@@ -348,15 +375,15 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 	for _, name := range []string{
 		"localhost",
 		"bastion",
-		"3-nodes-ocp-baremetal__master-0",
-		"3-nodes-ocp-baremetal__master-1",
-		"3-nodes-ocp-baremetal__master-2",
+		"3-nodes-ocp-baremetal__rack1-srv1",
+		"3-nodes-ocp-baremetal__rack1-srv2",
+		"3-nodes-ocp-baremetal__rack1-srv3",
 	} {
 		if _, ok := hosts[name]; !ok {
 			t.Fatalf("inventory hosts = %v, want %s", hosts, name)
 		}
 	}
-	node := hosts["3-nodes-ocp-baremetal__master-0"].(map[string]any)
+	node := hosts["3-nodes-ocp-baremetal__rack1-srv1"].(map[string]any)
 	if got := node["ansible_host"]; got != "localhost" {
 		t.Fatalf("agent node ansible_host = %v, want localhost", got)
 	}
@@ -366,7 +393,7 @@ func TestBareMetalCorporateFixtureInventoriesOnlyBastionServices(t *testing.T) {
 	if got := node["bootwright_agent_node_cluster_name"]; got != "3-nodes-ocp-baremetal" {
 		t.Fatalf("agent node cluster var = %v", got)
 	}
-	if got := node["bootwright_agent_node_machine_name"]; got != "master-0" {
+	if got := node["bootwright_agent_node_machine_name"]; got != "rack1-srv1" {
 		t.Fatalf("agent node machine var = %v", got)
 	}
 	children := all["children"].(map[string]any)
@@ -415,7 +442,7 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 		t.Fatalf("storage seed ansible_host = %v, want 192.168.141.30", got)
 	}
 	if got := seed["ansible_user"]; got != "root" {
-		t.Fatalf("storage seed ansible_user = %v, want root from Host.spec.ssh.user", got)
+		t.Fatalf("storage seed ansible_user = %v, want root from Machine.spec.os.ssh.user", got)
 	}
 	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-storage-cluster-admin-ssh-key") {
 		t.Fatalf("storage seed key = %v", got)

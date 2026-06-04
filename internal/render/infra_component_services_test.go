@@ -9,11 +9,11 @@ import (
 
 func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing.T) {
 	state := dnsRecordsState()
-	state.ClusterInfras = append(state.ClusterInfras, state.ClusterInfras[0])
-	state.ClusterInfras[1].Metadata.Name = "infra-b"
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
-	state.ContainerClusters[1].Spec.Nodes[0].InfraNodeRef.ClusterInfra = "infra-b"
+	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "master-b"
+	state.Machines = append(state.Machines, state.Machines[1])
+	state.Machines[2].Metadata.Name = "master-b"
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"app-a.example.test", "shared.example.test"}
 	state.InfraComponents[0].Spec.NameResolution.AdditionalIngressHosts = []string{"app-b.example.test", "shared.example.test"}
 
@@ -44,19 +44,18 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 	state.NetworkConfigs = append(state.NetworkConfigs, state.NetworkConfigs[0])
 	state.NetworkConfigs[1].Metadata.Name = "managed-net-b"
 	state.NetworkConfigs[1].Spec.DNSRefs = []string{"alternate"}
-	state.ClusterInfras = append(state.ClusterInfras, state.ClusterInfras[0])
-	state.ClusterInfras[1].Metadata.Name = "infra-b"
-	state.ClusterInfras[1].Spec.Endpoints = map[string]v1alpha1.Endpoint{
-		v1alpha1.EndpointAPI: {Address: "192.168.131.10"},
-		"api-int":            {Address: "192.168.131.10"},
-		"apps":               {Address: "192.168.131.11"},
-	}
-	state.ClusterInfras[1].Spec.Components.Nodes = append([]v1alpha1.ClusterNodeComponent(nil), state.ClusterInfras[1].Spec.Components.Nodes...)
-	state.ClusterInfras[1].Spec.Components.Nodes[0].Network.NetworkConfigRef.Name = "managed-net-b"
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
+	state.ContainerClusters[1].Spec.Install.Endpoints = map[string]v1alpha1.Endpoint{
+		v1alpha1.EndpointAPI:     {Address: "192.168.131.10"},
+		v1alpha1.EndpointAPIInt:  {Address: "192.168.131.10"},
+		v1alpha1.EndpointIngress: {Address: "192.168.131.11"},
+	}
 	state.ContainerClusters[1].Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), state.ContainerClusters[1].Spec.Nodes...)
-	state.ContainerClusters[1].Spec.Nodes[0].InfraNodeRef.ClusterInfra = "infra-b"
+	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "master-b"
+	state.Machines = append(state.Machines, state.Machines[1])
+	state.Machines[2].Metadata.Name = "master-b"
+	state.Machines[2].Spec.OS.Install.Network.NetworkConfigRef.Name = "managed-net-b"
 
 	services := infraComponentServicesVars(state)
 	if len(services) != 1 {

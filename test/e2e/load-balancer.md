@@ -1,7 +1,7 @@
 # Load Balancer Modes
 
 Cluster endpoint ownership is declared per endpoint in
-`ClusterInfra.spec.endpoints`.
+`ContainerCluster.spec.install.endpoints`.
 
 Bootwright-provisioned load balancer:
 
@@ -21,7 +21,7 @@ metadata:
 spec:
   loadBalancer:
     type: haProxy
-    hostRef:
+    machineRef:
       name: services-host
     bindAddresses:
       - name: control-plane-ip

@@ -101,7 +101,7 @@ func installerSecretRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster, en
 		}
 	}
 	if env != nil {
-		ci, err := clusterInfraForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err == nil {
 			if eff, _, err := clusterInstallProxyInputs(state, env, ci); err == nil && eff != nil {
 				refs = append(refs, installerSecretRef{label: "proxyAuthRef", name: eff.Auth.Name})

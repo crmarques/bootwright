@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-func endpointNetworkMatches(ci v1alpha1.ClusterInfra, networkConfigs map[string]v1alpha1.NetworkConfig, ip net.IP) []string {
+func endpointNetworkMatches(ci v1alpha1.ClusterInstall, networkConfigs map[string]v1alpha1.NetworkConfig, ip net.IP) []string {
 	matchedCIDRs := map[string]string{}
 	for _, name := range stateview.ClusterConsumedNetworkConfigs(ci) {
 		networkConfig, ok := networkConfigs[name]
@@ -21,7 +21,7 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInfra, networkConfigs map[string]
 			}
 		}
 	}
-	for _, machine := range ci.Spec.Components.Nodes {
+	for _, machine := range ci.Machines {
 		if machine.Network.Spec == nil {
 			continue
 		}
@@ -40,21 +40,12 @@ func endpointNetworkMatches(ci v1alpha1.ClusterInfra, networkConfigs map[string]
 	return matches
 }
 
-func clusterInfraHasSelectedInstallNetwork(ci v1alpha1.ClusterInfra) bool {
+func clusterInstallHasSelectedInstallNetwork(ci v1alpha1.ClusterInstall) bool {
 	if len(stateview.ClusterConsumedNetworkConfigs(ci)) > 0 {
 		return true
 	}
-	for _, node := range ci.Spec.Components.Nodes {
+	for _, node := range ci.Machines {
 		if node.Network.Spec != nil {
-			return true
-		}
-	}
-	return false
-}
-
-func networkConfigContainsIP(networkConfig v1alpha1.NetworkConfig, ip net.IP) bool {
-	for _, machineNetwork := range networkConfig.Spec.MachineNetwork {
-		if cidrContainsIP(machineNetwork.CIDR, ip) {
 			return true
 		}
 	}

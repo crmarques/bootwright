@@ -9,7 +9,7 @@ mode.
 ## Requirements
 
 - Linux host with Podman.
-- A non-root user that can SSH to declared provider/service Host addresses and
+- A non-root user that can SSH to declared provider/service Machine addresses and
   escalate with `sudo`.
 - `bin/bootwright` built from this repository (`make build`).
 - An OpenShift pull secret JSON at
@@ -143,7 +143,7 @@ bootwright check bastion || true
 In an externally proxied environment, create `proxy-credentials` first as shown
 in [common-steps.md](common-steps.md), then run the bastion apply.
 
-## Tear Down — Container And Host State
+## Tear Down — Container And Machine State
 
 After the case-specific cluster destroy steps in
 [common-steps.md](common-steps.md), exit the container and on the host:

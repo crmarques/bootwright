@@ -1,6 +1,6 @@
 ---
 # External HTTP proxy probe. Picks https first (matches the order
-# host_proxy/facts.yml uses for bootwright_proxy_primary), then falls
+# machine_proxy/facts.yml uses for bootwright_proxy_primary), then falls
 # back to http. Verifies TCP reachability only — an authenticated
 # GET would also exercise outbound internet from the controller,
 # which isn't required by every workflow and would mask the actual

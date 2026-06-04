@@ -78,7 +78,7 @@ func SelectedProxy(env v1alpha1.Environment, name string) (v1alpha1.EnvironmentP
 	return v1alpha1.EnvironmentProxyComponent{}, false
 }
 
-func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInfra) (string, error) {
+func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, error) {
 	env := stateview.Environment(state)
 	if env == nil {
 		return "", nil
@@ -91,9 +91,9 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInfra) (string, er
 	if !ok || component.Spec.Proxy == nil {
 		return "", fmt.Errorf("environment/%s proxyFor.containerClusterInstall %q does not resolve to an InfraComponent proxy", env.Metadata.Name, entry.Name)
 	}
-	hostAddr := ClusterFacingHostAddress(state, component.Spec.Proxy.HostRef.Name, ci)
+	hostAddr := ClusterFacingMachineAddress(state, component.Spec.Proxy.MachineRef.Name, ci)
 	if hostAddr == "" {
-		return "", fmt.Errorf("infracomponent/%s spec.proxy.hostRef %q has no routable address: set a Host address reachable from the cluster or give the cluster's primary network a gateway", component.Metadata.Name, component.Spec.Proxy.HostRef.Name)
+		return "", fmt.Errorf("infracomponent/%s spec.proxy.machineRef %q has no routable address: set a Machine OS address reachable from the cluster or give the cluster's primary network a gateway", component.Metadata.Name, component.Spec.Proxy.MachineRef.Name)
 	}
 	port := component.Spec.Proxy.Port
 	if port == 0 {
@@ -114,8 +114,9 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 			}
 		}
 	}
-	for _, ci := range state.ClusterInfras {
-		for name := range ci.Spec.Endpoints {
+	for _, ocp := range state.ContainerClusters {
+		ci, _ := stateview.ClusterInstallForContainerCluster(state, ocp)
+		for name := range ocp.Spec.Install.Endpoints {
 			if address := stateview.EndpointAddress(state, ci, name); address != "" {
 				out = append(out, address)
 			}
@@ -139,8 +140,8 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 			out = append(out, host)
 		}
 	}
-	for _, h := range state.Hosts {
-		for _, address := range h.Spec.Addresses {
+	for _, machine := range state.Machines {
+		for _, address := range machine.Spec.OS.Addresses {
 			if address.Address != "" {
 				out = append(out, address.Address)
 			}
@@ -214,14 +215,12 @@ func noProxyCIDRs(entries []string) []netip.Prefix {
 
 func noProxyTargets(state v1alpha1.State) []string {
 	var out []string
-	for _, provider := range state.InfraProviders {
-		for _, machine := range provider.Spec.Machines {
-			if machine.BareMetal == nil {
-				continue
-			}
-			if host := hostFromAddress(machine.BareMetal.BMC.Address); host != "" {
-				out = append(out, host)
-			}
+	for _, machine := range state.Machines {
+		if machine.Spec.Substrate.BareMetal == nil {
+			continue
+		}
+		if host := hostFromAddress(machine.Spec.Substrate.BareMetal.BMC.Address); host != "" {
+			out = append(out, host)
 		}
 	}
 	return out

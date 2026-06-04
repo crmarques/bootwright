@@ -1,0 +1,191 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-master-0
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-master
+      vmName: dc1-child-ocp-infra-master-0
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.30
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-master-1
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-master
+      vmName: dc1-child-ocp-infra-master-1
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.31
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-master-2
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-master
+      vmName: dc1-child-ocp-infra-master-2
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.32
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-worker-0
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-worker
+      vmName: dc1-child-ocp-infra-worker-0
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.40
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-worker-1
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-worker
+      vmName: dc1-child-ocp-infra-worker-1
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.41
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc1-child-ocp-infra-worker-2
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: kubevirt-provider-dc1
+    kubevirt:
+      profileRef:
+        name: dc1-child-worker
+      vmName: dc1-child-ocp-infra-worker-2
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc1-child-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.151.42
+                prefix-length: 24
+        attachmentRef:
+          name: dc1-child-net

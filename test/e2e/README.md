@@ -5,11 +5,11 @@ cluster-install flows. Each case uses the current desired-state schema:
 
 ```text
 environment.yaml       Environment
-hosts.yaml             Host
+service-machines.yaml             Machine
 provider.yaml          InfraProvider
 infra-component.yaml   InfraComponent shared infra services
 networks.yaml          NetworkConfig
-cluster-infra.yaml     ClusterInfra
+cluster-machines.yaml     Machine and ContainerCluster
 container-cluster.yaml ContainerCluster
 ```
 
@@ -64,7 +64,7 @@ KVM and permission to manage libvirt on the provider host.
    ```bash
    export CASE=<case-directory>
 
-   # Host or VM bastion; run this from the repo path on the bastion.
+   # Machine or VM bastion; run this from the repo path on the bastion.
    bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
 
    # Containerized bastion alternative; the repo is mounted at /work.

@@ -4,10 +4,9 @@ metadata:
   name: artifact-server
 spec:
   artifactServer:
-    hostRef:
-      name: lab-host
     endpoints:
-      - name: cluster
-        listener: https
-        hostAddress: cluster-lan
-
+    - name: cluster
+      listener: https
+      machineAddress: cluster-lan
+    machineRef:
+      name: lab-host

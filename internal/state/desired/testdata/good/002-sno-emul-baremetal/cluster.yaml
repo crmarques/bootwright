@@ -1,62 +1,45 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterInfra
+kind: Machine
 metadata:
-  name: sno-emul-baremetal
+  name: rack1-srv1
 spec:
-  platform:
-    type: baremetal
-    baremetal:
-      provisioningNetwork: disabled
+  capabilities:
+    - openshift-node
 
-  endpoints:
-    api:
-      address: 192.168.132.10
-      source:
-        type: external
-    api-int:
-      address: 192.168.132.10
-      source:
-        type: external
-    apps:
-      address: 192.168.132.11
-      source:
-        type: external
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:32:11:10
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:32:11:10
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
 
-  artifactAccess:
-    serverRef:
-      name: default
-    redfishVirtualMedia:
-      endpointRef:
-        name: bmc
-
-  networkBindings:
-    - networkConfigRef:
-        name: sno-vlan
-      providerRef:
-        name: rack1-baremetal-provider
-      attachmentRef:
-        name: sno-vlan
-
-  components:
-    nodes:
-      - name: master-0
-        source:
-          providerRef:
-            name: rack1-baremetal-provider
-          machineRef:
-            name: rack1-srv1
-        network:
-          networkConfigRef:
-            name: sno-vlan
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.132.20
-                      prefix-length: 24
-        rootDeviceHints:
-          deviceName: /dev/vda
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: sno-vlan
+        attachmentRef:
+          name: sno-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.132.20
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -69,13 +52,29 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
       api:
-        name: api
-      apiInt:
-        name: api-int
+        address: 192.168.132.10
+        source:
+          type: external
+      api-int:
+        address: 192.168.132.10
+        source:
+          type: external
       ingress:
-        name: apps
+        address: 192.168.132.11
+        source:
+          type: external
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
     method: agent
     mode: connected
     nodeSSH:
@@ -100,6 +99,5 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      infraNodeRef:
-        clusterInfra: sno-emul-baremetal
-        name: master-0
+      machineRef:
+        name: rack1-srv1

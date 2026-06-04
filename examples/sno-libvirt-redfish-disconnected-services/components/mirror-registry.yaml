@@ -5,6 +5,5 @@ metadata:
 spec:
   registry:
     type: mirrorRegistry
-    hostRef:
+    machineRef:
       name: lab-host
-

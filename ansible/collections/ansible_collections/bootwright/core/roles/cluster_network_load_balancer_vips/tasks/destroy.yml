@@ -8,8 +8,8 @@
       {{
         bootwright_current_cluster.components
         | selectattr('kind', 'equalto', 'loadBalancer')
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
   changed_when: false

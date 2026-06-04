@@ -16,10 +16,26 @@ func indexProviders(providers []v1alpha1.InfraProvider) map[string]v1alpha1.Infr
 	return out
 }
 
-func indexHosts(hosts []v1alpha1.Host) map[string]v1alpha1.Host {
-	out := make(map[string]v1alpha1.Host, len(hosts))
-	for _, h := range hosts {
-		out[h.Metadata.Name] = h
+func indexMachines(machines []v1alpha1.Machine) map[string]v1alpha1.Machine {
+	out := make(map[string]v1alpha1.Machine, len(machines))
+	for _, m := range machines {
+		out[m.Metadata.Name] = m
+	}
+	return out
+}
+
+func indexMachineImages(items []v1alpha1.MachineImage) map[string]v1alpha1.MachineImage {
+	out := make(map[string]v1alpha1.MachineImage, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
+	}
+	return out
+}
+
+func indexMachineInstallProfiles(items []v1alpha1.MachineInstallProfile) map[string]v1alpha1.MachineInstallProfile {
+	out := make(map[string]v1alpha1.MachineInstallProfile, len(items))
+	for _, item := range items {
+		out[item.Metadata.Name] = item
 	}
 	return out
 }
@@ -39,14 +55,6 @@ func lookupNetworkAttachment(provider v1alpha1.InfraProvider, name string) (v1al
 		}
 	}
 	return v1alpha1.NetworkAttachmentCapability{}, false
-}
-
-func indexClusterInfras(items []v1alpha1.ClusterInfra) map[string]v1alpha1.ClusterInfra {
-	out := make(map[string]v1alpha1.ClusterInfra, len(items))
-	for _, ci := range items {
-		out[ci.Metadata.Name] = ci
-	}
-	return out
 }
 
 func indexInfraComponents(items []v1alpha1.InfraComponent) map[string]v1alpha1.InfraComponent {
@@ -129,14 +137,10 @@ func indexStorageExports(items []v1alpha1.StorageExport) map[string]v1alpha1.Sto
 	return out
 }
 
-func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
+func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile, bool) {
 	return stateview.MachineProfile(p, name)
 }
 
-func lookupMachine(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapability, bool) {
-	return stateview.Machine(p, name)
-}
-
-func hostHasCapability(h v1alpha1.Host, want string) bool {
-	return stateview.HostHasCapability(h, want)
+func machineHasCapability(m v1alpha1.Machine, want string) bool {
+	return stateview.MachineHasCapability(m, want)
 }

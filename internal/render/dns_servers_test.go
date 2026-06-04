@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func TestResolveClusterDNSServersAppendsDNSRefs(t *testing.T) {
@@ -13,7 +14,8 @@ func TestResolveClusterDNSServersAppendsDNSRefs(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	got := resolveClusterDNSServers(state, state.ClusterInfras[0], state.NetworkConfigs[0])
+	ci := dnsRefInfra(state)
+	got := resolveClusterDNSServers(state, ci, state.NetworkConfigs[0])
 	want := []string{"10.0.0.1", "192.168.130.53"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -30,12 +32,13 @@ func TestResolveClusterDNSServersResolvesManagedBindAddress(t *testing.T) {
 		Metadata: v1alpha1.Metadata{Name: "dns"},
 		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
 			Type:        v1alpha1.InfraComponentTypeDnsmasq,
-			HostRef:     v1alpha1.LocalObjectReference{Name: "host"},
+			MachineRef:  v1alpha1.LocalObjectReference{Name: "host"},
 			BindAddress: "192.168.130.53",
 			Port:        53,
 		}},
 	}}
-	got := resolveClusterDNSServers(state, state.ClusterInfras[0], state.NetworkConfigs[0])
+	ci := dnsRefInfra(state)
+	got := resolveClusterDNSServers(state, ci, state.NetworkConfigs[0])
 	want := []string{"10.0.0.1", "192.168.130.53"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -49,7 +52,8 @@ func TestResolveClusterDNSServersDeduplicates(t *testing.T) {
 		IP:   "10.0.0.1",
 	})
 	state.NetworkConfigs[0].Spec.Template.NetworkConfig["dns-resolver"].(map[string]any)["config"].(map[string]any)["server"] = []any{"10.0.0.1", "10.0.0.1"}
-	got := resolveClusterDNSServers(state, state.ClusterInfras[0], state.NetworkConfigs[0])
+	ci := dnsRefInfra(state)
+	got := resolveClusterDNSServers(state, ci, state.NetworkConfigs[0])
 	want := []string{"10.0.0.1"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -62,7 +66,8 @@ func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Nodes[0], "")
+	ci := dnsRefInfra(state)
+	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"10.0.0.1", "192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
@@ -76,7 +81,8 @@ func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
 		IP:   "192.168.130.53",
 	})
 	delete(state.NetworkConfigs[0].Spec.Template.NetworkConfig, "dns-resolver")
-	got := agentNetworkConfig(state, state.ClusterInfras[0], state.ClusterInfras[0].Spec.Components.Nodes[0], "")
+	ci := dnsRefInfra(state)
+	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
@@ -89,11 +95,11 @@ func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
-	machine.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
 	}
-	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
+	ci := dnsRefInfra(state)
+	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"10.0.0.2", "192.168.130.53"}
 	if servers := networkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
@@ -131,8 +137,7 @@ func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
 			},
 		},
 	}
-	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
-	machine.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
 		"interfaces": []any{map[string]any{
 			"name": "primary",
 			"ipv4": map[string]any{
@@ -141,7 +146,8 @@ func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
 		}},
 	}
 
-	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
+	ci := dnsRefInfra(state)
+	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
 	interfaces := got["interfaces"].([]any)
 	if len(interfaces) != 3 {
 		t.Fatalf("interfaces got %v, want three merged interfaces", interfaces)
@@ -192,8 +198,7 @@ func TestAgentNetworkConfigMergesPositionalMapListOverrides(t *testing.T) {
 			},
 		},
 	}
-	machine := &state.ClusterInfras[0].Spec.Components.Nodes[0]
-	machine.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
 		"routes": map[string]any{
 			"config": []any{map[string]any{
 				"next-hop-interface": "ens65f0",
@@ -201,7 +206,8 @@ func TestAgentNetworkConfigMergesPositionalMapListOverrides(t *testing.T) {
 		},
 	}
 
-	got := agentNetworkConfig(state, state.ClusterInfras[0], *machine, "")
+	ci := dnsRefInfra(state)
+	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
 	routes := got["routes"].(map[string]any)["config"].([]any)
 	if len(routes) != 2 {
 		t.Fatalf("routes got %v, want two merged routes", routes)
@@ -242,14 +248,28 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 				},
 			},
 		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "c1"},
-			Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name: "master-0",
-				Network: v1alpha1.ClusterNodeNetwork{
-					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "lab-net"},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "master-0"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Mode: v1alpha1.MachineOSModeRaw,
+					Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "lab-net"},
+					}},
 				},
-			}}}},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "c1"},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname:   "master-0",
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
+			}}},
 		}},
 	}
+}
+
+func dnsRefInfra(state v1alpha1.State) v1alpha1.ClusterInstall {
+	ci, _ := stateview.ClusterInstallForContainerCluster(state, state.ContainerClusters[0])
+	return ci
 }

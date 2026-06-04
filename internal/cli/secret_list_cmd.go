@@ -232,8 +232,8 @@ func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 			continue
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			host, ok := topology.NodeHost(state, cluster, node.Name)
-			if ok && host.Spec.SSH != nil && host.Spec.SSH.KeyRef.Name == name {
+			machine, ok := topology.NodeMachine(state, cluster, node.Name)
+			if ok && machine.Spec.OS.SSH != nil && machine.Spec.OS.SSH.KeyRef.Name == name {
 				return true
 			}
 		}
@@ -246,8 +246,8 @@ func secretConsumedAsStorageSSHPrivate(name string, state v1alpha1.State) bool {
 }
 
 func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {
-	for _, host := range state.Hosts {
-		if host.Spec.SSH != nil && host.Spec.SSH.KeyRef.Name == name {
+	for _, machine := range state.Machines {
+		if machine.Spec.OS.SSH != nil && machine.Spec.OS.SSH.KeyRef.Name == name {
 			return true
 		}
 	}

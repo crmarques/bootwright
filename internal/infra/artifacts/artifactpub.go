@@ -19,8 +19,8 @@ type ResolvedEndpoint struct {
 	Host     string
 }
 
-func Select(state v1alpha1.State, ci v1alpha1.ClusterInfra) (Server, bool) {
-	return SelectByName(state, ci.Spec.ArtifactAccess.ServerRef.Name)
+func Select(state v1alpha1.State, ci v1alpha1.ClusterInstall) (Server, bool) {
+	return SelectByName(state, ci.ArtifactAccess.ServerRef.Name)
 }
 
 func SelectByName(state v1alpha1.State, name string) (Server, bool) {
@@ -54,18 +54,20 @@ func artifactServerEntry(entries []v1alpha1.EnvironmentArtifactServerComponent, 
 	return v1alpha1.EnvironmentArtifactServerComponent{}, false
 }
 
-func ConsumerEndpointName(ci v1alpha1.ClusterInfra, consumer string) string {
+func ConsumerEndpointName(ci v1alpha1.ClusterInstall, consumer string) string {
 	switch consumer {
 	case v1alpha1.ArtifactConsumerRedfishVirtualMedia:
-		return ci.Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name
+		return ci.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name
 	case v1alpha1.ArtifactConsumerContainerClusterInstall:
-		return ci.Spec.ArtifactAccess.ContainerClusterInstall.EndpointRef.Name
+		return ci.ArtifactAccess.ContainerClusterInstall.EndpointRef.Name
+	case v1alpha1.ArtifactConsumerMachineBoot:
+		return ci.ArtifactAccess.MachineBoot.EndpointRef.Name
 	default:
 		return ""
 	}
 }
 
-func ResolveConsumerEndpoint(state v1alpha1.State, ci v1alpha1.ClusterInfra, consumer string) (Server, string, bool) {
+func ResolveConsumerEndpoint(state v1alpha1.State, ci v1alpha1.ClusterInstall, consumer string) (Server, string, bool) {
 	endpointName := ConsumerEndpointName(ci, consumer)
 	if endpointName == "" {
 		return Server{}, "", false
@@ -89,7 +91,7 @@ func ResolveEndpoint(state v1alpha1.State, server Server, name string) (Resolved
 	if !ok {
 		return ResolvedEndpoint{}, false
 	}
-	host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.HostAddress)
+	host, ok := stateview.NamedMachineAddress(state, server.Config.MachineRef.Name, endpoint.MachineAddress)
 	if !ok || host == "" {
 		return ResolvedEndpoint{}, false
 	}
@@ -141,24 +143,20 @@ func Listener(server Server, name string) (v1alpha1.ArtifactServerListener, bool
 	return v1alpha1.ArtifactServerListener{}, false
 }
 
-func ClusterNeedsPublication(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) bool {
+func ClusterNeedsPublication(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) bool {
 	if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 		return true
 	}
 	return ClusterUsesBareMetalMachine(state, ci)
 }
 
-func ClusterUsesBareMetalMachine(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
-	for _, machine := range ci.Spec.Components.Nodes {
+func ClusterUsesBareMetalMachine(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
+	for _, machine := range ci.Machines {
 		if machine.Source.MachineRef.Name == "" {
 			continue
 		}
-		provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
-		if !ok {
-			continue
-		}
-		server, ok := stateview.Machine(provider, machine.Source.MachineRef.Name)
-		if !ok || v1alpha1.MachineProvisionerKind(server) != v1alpha1.ProvisionerBareMetal {
+		server, ok := stateview.Machine(state, machine.Source.MachineRef.Name)
+		if !ok || v1alpha1.MachineSubstrateKind(server) != v1alpha1.ProvisionerBareMetal {
 			continue
 		}
 		return true
@@ -180,7 +178,7 @@ func EndpointHosts(state v1alpha1.State, server Server) []string {
 		out = append(out, host)
 	}
 	for _, endpoint := range server.Config.Endpoints {
-		if host, ok := stateview.NamedHostAddress(state, server.Config.HostRef.Name, endpoint.HostAddress); ok {
+		if host, ok := stateview.NamedMachineAddress(state, server.Config.MachineRef.Name, endpoint.MachineAddress); ok {
 			add(host)
 		}
 	}

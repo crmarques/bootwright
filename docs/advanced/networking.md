@@ -11,7 +11,7 @@ description: NetworkConfig templates, machine overrides, endpoints, and load bal
 - `template.networkConfig`, rendered into `agent-config.yaml`
 
 Substrate network surfaces live on
-`InfraProvider.spec.networkAttachments[]`. `ClusterInfra.spec.networkBindings[]`
+`InfraProvider.spec.networkAttachments[]`. `Machine.spec.os.install.network.attachmentRef`
 maps a logical `NetworkConfig` to the selected provider attachment.
 
 ## Bonded Bare-Metal Template
@@ -110,7 +110,7 @@ networkBindings:
 
 ## Endpoints
 
-Cluster endpoints live in `ClusterInfra.spec.endpoints` as named endpoint
+Cluster endpoints live in `ContainerCluster.spec.install.endpoints` as named endpoint
 objects. Consumers bind to those names explicitly; OpenShift install uses
 `ContainerCluster.spec.install.endpointRefs`, while storage gateways use
 gateway endpoint refs.
@@ -143,7 +143,7 @@ metadata:
 spec:
   loadBalancer:
     type: haProxy
-    hostRef:
+    machineRef:
       name: lab-host
     bindAddresses:
       - name: apps-ip

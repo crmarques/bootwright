@@ -78,7 +78,7 @@ func applyClusterPhases(ledger workflow.RunLedger, cluster string, kind string, 
 		}
 	case "ContainerCluster":
 		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterInfra), output.StatusPending)},
+			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterInstall), output.StatusPending)},
 			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot), output.StatusPending)},
 			{Label: "Install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindInstallWait), output.StatusPending)},
 			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddonApply, workflow.ApplyTaskKindClusterAddonWait, workflow.ApplyTaskKindStorageAttachmentApply), output.StatusPending)},

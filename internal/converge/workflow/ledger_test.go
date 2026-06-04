@@ -190,7 +190,7 @@ func TestRunLedgerBlocksDependents(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	ledger := NewRunLedger("run-1", "all", "", ConcurrencyLimits{}, []TaskLedgerEntry{
 		{ID: "provider", Kind: "providerServices", Label: "provider"},
-		{ID: "infra.cluster-a", Kind: "clusterInfra", Label: "infra", Dependencies: []string{"provider"}},
+		{ID: "infra.cluster-a", Kind: "clusterInstall", Label: "infra", Dependencies: []string{"provider"}},
 		{ID: "install.cluster-a", Kind: "clusterInstall", Label: "install", Dependencies: []string{"infra.cluster-a"}},
 	}, now)
 

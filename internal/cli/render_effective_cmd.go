@@ -60,10 +60,11 @@ type renderEffectiveReport struct {
 
 type stateObjectCounts struct {
 	Environments             int `json:"environments"`
-	Hosts                    int `json:"hosts"`
+	Machines                 int `json:"machines"`
+	MachineImages            int `json:"machineImages"`
+	MachineInstallProfiles   int `json:"machineInstallProfiles"`
 	NetworkConfigs           int `json:"networkConfigs"`
 	InfraProviders           int `json:"infraProviders"`
-	ClusterInfras            int `json:"clusterInfras"`
 	ContainerClusters        int `json:"containerClusters"`
 	StorageClusters          int `json:"storageClusters"`
 	StoragePlacementPolicies int `json:"storagePlacementPolicies"`
@@ -79,10 +80,11 @@ type stateObjectCounts struct {
 func stateCountsReport(stateCounted v1alpha1.State) stateObjectCounts {
 	return stateObjectCounts{
 		Environments:             len(stateCounted.Environments),
-		Hosts:                    len(stateCounted.Hosts),
+		Machines:                 len(stateCounted.Machines),
+		MachineImages:            len(stateCounted.MachineImages),
+		MachineInstallProfiles:   len(stateCounted.MachineInstallProfiles),
 		NetworkConfigs:           len(stateCounted.NetworkConfigs),
 		InfraProviders:           len(stateCounted.InfraProviders),
-		ClusterInfras:            len(stateCounted.ClusterInfras),
 		ContainerClusters:        len(stateCounted.ContainerClusters),
 		StorageClusters:          len(stateCounted.StorageClusters),
 		StoragePlacementPolicies: len(stateCounted.StoragePlacementPolicies),

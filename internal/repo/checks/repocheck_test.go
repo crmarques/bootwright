@@ -19,12 +19,13 @@ import (
 func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	required := []string{
-		"sixteen kinds",
-		"`Host`",
+		"seventeen kinds",
+		"`Machine`",
+		"`MachineImage`",
+		"`MachineInstallProfile`",
 		"`NetworkConfig`",
 		"`InfraProvider`",
 		"`InfraComponent`",
-		"`ClusterInfra`",
 		"`ContainerCluster`",
 		"`StorageCluster`",
 		"`StoragePlacementPolicy`",
@@ -47,7 +48,9 @@ func TestREADMEDescribesDesiredStateModel(t *testing.T) {
 		"six kinds",
 		"seven kinds",
 		"ten kinds",
-		"seventeen kinds",
+		"sixteen kinds",
+		"`Host`",
+		"`ClusterInfra`",
 		"`StorageClusterBinding`",
 		"`HostPool`",
 		"providerRefs",
@@ -92,6 +95,12 @@ func TestCurrentDefinitionDocsUseNewSchemaTerms(t *testing.T) {
 		"`spec.installMode`",
 		"`spec.ssh.address`",
 		"isoFrom",
+		"`Host`",
+		"`ClusterInfra`",
+		"kind: Host",
+		"kind: ClusterInfra",
+		"clusterInfra",
+		"hostRef",
 	}
 	for _, path := range files {
 		data := readRepoFile(t, path)
@@ -419,12 +428,8 @@ func assertNoRetiredDesiredStateFields(t *testing.T, name, body string) {
 		kind, _ := doc["kind"].(string)
 		spec, _ := doc["spec"].(map[string]any)
 		switch kind {
-		case "Host":
-			rejectMapKey(t, name, kind, "spec.serviceAddresses", spec, "serviceAddresses")
-			rejectMapKey(t, name, kind, "spec.serviceAddressNames", spec, "serviceAddressNames")
-			if ssh, ok := spec["ssh"].(map[string]any); ok {
-				rejectMapKey(t, name, kind, "spec.ssh.address", ssh, "address")
-			}
+		case "Host", "ClusterInfra":
+			t.Fatalf("%s uses retired kind %s", name, kind)
 		case "ContainerCluster":
 			rejectMapKey(t, name, kind, "spec.installMode", spec, "installMode")
 			if install, ok := spec["install"].(map[string]any); ok {

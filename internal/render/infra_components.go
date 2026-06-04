@@ -66,7 +66,7 @@ func resolvedNTPSourceAddress(state v1alpha1.State, entry v1alpha1.EnvironmentNT
 			return ""
 		}
 		ntp := component.Spec.NTP
-		address := managedServiceEndpointAddress(state, ntp.HostRef.Name, ntp.Endpoints, entry.Endpoint)
+		address := managedServiceEndpointAddress(state, ntp.MachineRef.Name, ntp.Endpoints, entry.Endpoint)
 		if address != "" {
 			return address
 		}
@@ -82,12 +82,12 @@ func ntpBindAddressUsable(address string) bool {
 	return ip != nil && !ip.IsUnspecified()
 }
 
-func managedServiceEndpointAddress(state v1alpha1.State, hostRef string, endpoints []v1alpha1.ServiceEndpoint, endpointName string) string {
+func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endpoints []v1alpha1.ServiceEndpoint, endpointName string) string {
 	if endpointName != "" {
 		for _, endpoint := range endpoints {
 			if endpoint.Name == endpointName {
-				if host, ok := stateview.NamedHostAddress(state, hostRef, endpoint.HostAddress); ok {
-					return host
+				if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoint.MachineAddress); ok {
+					return address
 				}
 				return ""
 			}
@@ -95,14 +95,14 @@ func managedServiceEndpointAddress(state v1alpha1.State, hostRef string, endpoin
 		return ""
 	}
 	if len(endpoints) == 1 {
-		if host, ok := stateview.NamedHostAddress(state, hostRef, endpoints[0].HostAddress); ok {
-			return host
+		if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoints[0].MachineAddress); ok {
+			return address
 		}
 	}
 	return ""
 }
 
-func resolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig, entry v1alpha1.EnvironmentNameResolutionComponent) string {
+func resolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig, entry v1alpha1.EnvironmentNameResolutionComponent) string {
 	switch entry.Type {
 	case v1alpha1.EnvironmentComponentExternal:
 		return entry.IP
@@ -115,7 +115,7 @@ func resolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInfra, ne
 		if ip := v1alpha1.DNSServiceIP(dns.BindAddress, network); ip != "" {
 			return ip
 		}
-		address := managedServiceEndpointAddress(state, dns.HostRef.Name, dns.Endpoints, entry.Endpoint)
+		address := managedServiceEndpointAddress(state, dns.MachineRef.Name, dns.Endpoints, entry.Endpoint)
 		if address == "" {
 			return ""
 		}

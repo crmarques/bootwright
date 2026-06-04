@@ -33,27 +33,23 @@ func NodeAddress(state v1alpha1.State, cluster v1alpha1.StorageCluster, node str
 }
 
 func NodeAddressByRef(state v1alpha1.State, cluster v1alpha1.StorageCluster, node string, addressName string) string {
-	host, ok := NodeHost(state, cluster, node)
+	machine, ok := NodeMachine(state, cluster, node)
 	if !ok {
 		return ""
 	}
-	if addressName == "" && host.Spec.SSH != nil {
-		addressName = host.Spec.SSH.AddressName
+	if addressName == "" && machine.Spec.OS.SSH != nil {
+		addressName = machine.Spec.OS.SSH.AddressName
 	}
-	address, _ := v1alpha1.HostAddressByName(host, addressName)
+	address, _ := v1alpha1.MachineAddressByName(machine, addressName)
 	return address
 }
 
-func NodeHost(state v1alpha1.State, cluster v1alpha1.StorageCluster, node string) (v1alpha1.Host, bool) {
-	infra, ok := ClusterInfraByName(state, cluster.Spec.ClusterInfraRef.Name)
-	if !ok {
-		return v1alpha1.Host{}, false
+func NodeMachine(state v1alpha1.State, cluster v1alpha1.StorageCluster, node string) (v1alpha1.Machine, bool) {
+	cephNode, ok := CephNodeByName(cluster, node)
+	if !ok || cephNode.MachineRef.Name == "" {
+		return v1alpha1.Machine{}, false
 	}
-	infraNode, ok := ClusterInfraNodeByName(infra, node)
-	if !ok || infraNode.Source.HostRef.Name == "" {
-		return v1alpha1.Host{}, false
-	}
-	return HostByName(state, infraNode.Source.HostRef.Name)
+	return MachineByName(state, cephNode.MachineRef.Name)
 }
 
 func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
@@ -125,23 +121,12 @@ func GatewayByName(state v1alpha1.State, name string) (v1alpha1.StorageObjectGat
 }
 
 func GatewayEndpoint(state v1alpha1.State, gateway v1alpha1.StorageObjectGateway, ref v1alpha1.EndpointRef) (v1alpha1.Endpoint, bool) {
-	cluster, ok := ClusterByName(state, gateway.Spec.StorageClusterRef.Name)
-	if !ok {
-		return v1alpha1.Endpoint{}, false
+	for _, cluster := range state.ContainerClusters {
+		if endpoint, ok := cluster.Spec.Install.Endpoints[ref.Name]; ok {
+			return endpoint, true
+		}
 	}
-	infra, ok := ClusterInfraByName(state, cluster.Spec.ClusterInfraRef.Name)
-	if !ok {
-		return v1alpha1.Endpoint{}, false
-	}
-	endpoint, ok := infra.Spec.Endpoints[ref.Name]
-	return endpoint, ok
-}
-
-func EndpointPort(endpoint v1alpha1.Endpoint, defaultPort int) int {
-	if endpoint.Port != 0 {
-		return endpoint.Port
-	}
-	return defaultPort
+	return v1alpha1.Endpoint{}, false
 }
 
 func CephadmVirtualIP(endpoint v1alpha1.Endpoint) string {
@@ -151,29 +136,30 @@ func CephadmVirtualIP(endpoint v1alpha1.Endpoint) string {
 	return endpoint.Address
 }
 
-func ClusterInfraByName(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, bool) {
-	for _, infra := range state.ClusterInfras {
-		if infra.Metadata.Name == name {
-			return infra, true
-		}
+func EndpointPort(endpoint v1alpha1.Endpoint, defaultPort int) int {
+	if endpoint.Port != 0 {
+		return endpoint.Port
 	}
-	return v1alpha1.ClusterInfra{}, false
+	return defaultPort
 }
 
-func ClusterInfraNodeByName(infra v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterNodeComponent, bool) {
-	for _, node := range infra.Spec.Components.Nodes {
+func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
+	if cluster.Spec.Ceph == nil {
+		return v1alpha1.StorageCephNode{}, false
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.Name == name {
 			return node, true
 		}
 	}
-	return v1alpha1.ClusterNodeComponent{}, false
+	return v1alpha1.StorageCephNode{}, false
 }
 
-func HostByName(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
-	for _, host := range state.Hosts {
-		if host.Metadata.Name == name {
-			return host, true
+func MachineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return machine, true
 		}
 	}
-	return v1alpha1.Host{}, false
+	return v1alpha1.Machine{}, false
 }

@@ -22,9 +22,9 @@ import (
 // artifacts, NTP) land in `bootwright_infra_component_hosts`. A host can live
 // in several groups. The OCP-install and agent-node layers run on localhost.
 //
-// Two groups instead of one is deliberate: the cluster_infra layer
+// Two groups instead of one is deliberate: the machine-infra layer
 // playbook targets `bootwright_infra_hosts` directly and no longer
-// needs to filter hosts by hostRef in its task body. Provider and
+// needs to filter hosts by machineRef in its task body. Provider and
 // InfraComponent layers target their own host groups for service convergence.
 func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
 	return InventoryWithLocalityPolicy(state, secretsDir, locality.DefaultPolicy)
@@ -48,11 +48,11 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 
 	hosts := map[string]any{}
 	for _, name := range sortedHostSet(allHostSet) {
-		h, ok := findHost(state, name)
-		if !ok || h.Spec.SSH == nil {
+		h, ok := findMachine(state, name)
+		if !ok || h.Spec.OS.SSH == nil {
 			continue
 		}
-		hosts[name] = hostInventoryEntry(h, env, secretsDir, localPolicy)
+		hosts[name] = machineInventoryEntry(h, env, secretsDir, localPolicy)
 	}
 	for _, cluster := range managedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
@@ -60,12 +60,12 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 		}
 	}
 	if len(ocpHostSet) > 0 {
-		hosts["localhost"] = localhostInventoryEntry()
+		hosts["localhost"] = localmachineInventoryEntry()
 	}
 	for _, cluster := range state.ContainerClusters {
 		for _, machineName := range clusterMachineNames(cluster) {
 			hostName := AgentNodeHostName(cluster.Metadata.Name, machineName)
-			entry := localhostInventoryEntry()
+			entry := localmachineInventoryEntry()
 			entry["bootwright_agent_node_cluster_name"] = cluster.Metadata.Name
 			entry["bootwright_agent_node_machine_name"] = machineName
 			hosts[hostName] = entry
@@ -168,34 +168,34 @@ func AgentNodeHostName(clusterName, machineName string) string {
 	return clusterName + "__" + machineName
 }
 
-func hostInventoryEntry(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
-	sshAddress := v1alpha1.HostSSHAddress(h)
+func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+	sshAddress := v1alpha1.MachineSSHAddress(h)
 	entry := map[string]any{
 		"ansible_host":         sshAddress,
 		"bootwright_host_name": h.Metadata.Name,
 	}
-	if locality.IsControllerLocalHost(h, localPolicy) {
+	if locality.IsControllerLocalMachine(h, localPolicy) {
 		entry["ansible_connection"] = "local"
 		return entry
 	}
-	if h.Spec.SSH.User != "" {
-		entry["ansible_user"] = h.Spec.SSH.User
+	if h.Spec.OS.SSH.User != "" {
+		entry["ansible_user"] = h.Spec.OS.SSH.User
 	}
-	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.SSH.KeyRef.Name, env, secretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.OS.SSH.KeyRef.Name, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
-	if path := hostKnownHostsPath(h, env, secretsDir); path != "" {
+	if path := machineKnownHostsPath(h, env, secretsDir); path != "" {
 		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
 	}
 	return entry
 }
 
-func hostKnownHostsPath(h v1alpha1.Host, env *v1alpha1.Environment, secretsDir string) string {
-	if h.Spec.SSH == nil {
+func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string) string {
+	if h.Spec.OS.SSH == nil {
 		return ""
 	}
-	if h.Spec.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(h.Spec.SSH.KnownHostsRef.Name, env, secretsDir)
+	if h.Spec.OS.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(h.Spec.OS.SSH.KnownHostsRef.Name, env, secretsDir)
 	}
 	return sshtrust.KnownHostsPathForSecrets(secretsDir)
 }
@@ -204,7 +204,7 @@ func sshCommonArgs(knownHostsPath string) string {
 	return shellQuoteArgs([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownHostsPath})
 }
 
-func localhostInventoryEntry() map[string]any {
+func localmachineInventoryEntry() map[string]any {
 	return map[string]any{
 		"ansible_connection":   "local",
 		"ansible_host":         "localhost",
@@ -232,11 +232,11 @@ func clusterMachineNames(cluster v1alpha1.ContainerCluster) []string {
 	seen := map[string]bool{}
 	var names []string
 	for _, node := range cluster.Spec.Nodes {
-		if node.InfraNodeRef.Name == "" || seen[node.InfraNodeRef.Name] {
+		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 			continue
 		}
-		seen[node.InfraNodeRef.Name] = true
-		names = append(names, node.InfraNodeRef.Name)
+		seen[node.MachineRef.Name] = true
+		names = append(names, node.MachineRef.Name)
 	}
 	sort.Strings(names)
 	return names
@@ -277,8 +277,12 @@ func ocpReferencedHosts(state v1alpha1.State) map[string]bool {
 // against a kubeconfig, so they contribute localhost.
 func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, ci := range state.ClusterInfras {
-		for _, m := range ci.Spec.Components.Nodes {
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
+		for _, m := range ci.Machines {
 			if host := machineHostRef(state, m); host != "" {
 				out[host] = true
 			}
@@ -293,9 +297,9 @@ func providerReferencedHosts(state v1alpha1.State) map[string]bool {
 
 func providerServiceReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, service := range stategraph.ResolveHostServices(state).Services {
-		if service.IsProviderService() && service.HostRef != "" {
-			out[service.HostRef] = true
+	for _, service := range stategraph.ResolveMachineServices(state).Services {
+		if service.IsProviderService() && service.MachineRef != "" {
+			out[service.MachineRef] = true
 		}
 	}
 	return out
@@ -303,9 +307,9 @@ func providerServiceReferencedHosts(state v1alpha1.State) map[string]bool {
 
 func infraComponentReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, service := range stategraph.ResolveHostServices(state).Services {
-		if service.IsInfraComponentService() && service.HostRef != "" {
-			out[service.HostRef] = true
+	for _, service := range stategraph.ResolveMachineServices(state).Services {
+		if service.IsInfraComponentService() && service.MachineRef != "" {
+			out[service.MachineRef] = true
 		}
 	}
 	return out
@@ -313,14 +317,18 @@ func infraComponentReferencedHosts(state v1alpha1.State) map[string]bool {
 
 func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, ci := range state.ClusterInfras {
-		for _, machine := range ci.Spec.Components.Nodes {
-			hostRef := machineHostRef(state, machine)
-			if hostRef == "" {
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			machineRef := machineHostRef(state, machine)
+			if machineRef == "" {
 				continue
 			}
-			if len(ProviderDriver(state, machine).Roles.HostSetupRoles) > 0 {
-				out[hostRef] = true
+			if len(ProviderDriver(state, machine).Roles.MachineSetupRoles) > 0 {
+				out[machineRef] = true
 			}
 		}
 	}
@@ -329,21 +337,24 @@ func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 
 func bootReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
-	for _, ci := range state.ClusterInfras {
-		for _, m := range ci.Spec.Components.Nodes {
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
+		for _, m := range ci.Machines {
 			if host := machineHostRef(state, m); host != "" {
 				out[host] = true
 			}
 		}
-		ocp, ok := clusterForCI(state, ci)
-		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
+		if !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
 		server, ok := artifacts.Select(state, ci)
 		if !ok || server.Config == nil {
 			continue
 		}
-		if host := server.Config.HostRef.Name; host != "" {
+		if host := server.Config.MachineRef.Name; host != "" {
 			out[host] = true
 		}
 	}

@@ -5,10 +5,10 @@ emulated service hosts.
 
 Physical facts such as boot MAC, interface MAC, BMC address, and root-device
 hints live in `provider.yaml`. The selected cluster machine and static IP live
-in `cluster-infra.yaml`. `infra-component.yaml` declares the artifact service
+in `cluster-machines.yaml`. `infra-component.yaml` declares the artifact service
 used for Redfish virtual-media boot.
 
-The desired state uses `ClusterInfra.spec.platform.type: baremetal` with
+The desired state uses `ContainerCluster.spec.install.platform.type: baremetal` with
 `provisioningNetwork: disabled` to describe the machine-control path. Because
 this is a single-node cluster, the rendered installer input uses
 `platform.none`.

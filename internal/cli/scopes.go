@@ -14,8 +14,8 @@ type scopeSpec struct {
 
 var infraScope = scopeSpec{
 	name:              "infra",
-	short:             "Install and configure InfraProvider, InfraComponent, and ClusterInfra",
-	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-infra"},
+	short:             "Install and configure InfraProvider, InfraComponent, and ClusterInstall",
+	phaseNames:        []string{"provider", "infra-components", "machine-infra", "storage-infra"},
 	applyPlaybook:     "bootwright.core.workflow_infra_apply",
 	destroyPlaybook:   "bootwright.core.workflow_infra_destroy",
 	artifactsBaseName: "infra",
@@ -56,7 +56,7 @@ var addonsScope = scopeSpec{
 var allScope = scopeSpec{
 	name:              "all",
 	short:             "Apply infrastructure, storage, OpenShift clusters, and addons",
-	phaseNames:        []string{"provider", "infra-components", "cluster-infra", "storage-infra", "storage-cluster", "container-cluster", "addons"},
+	phaseNames:        []string{"provider", "infra-components", "machine-infra", "storage-infra", "storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "bootwright.core.workflow_all_apply",
 	artifactsBaseName: "all",
 }

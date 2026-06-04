@@ -52,14 +52,13 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		Cluster:    clusterName,
 		ProviderID: clusterName + "-" + s.ProviderNameSuffix,
 		NetworkID:  clusterName + "-" + s.NetworkNameSuffix,
-		BootDevice: s.BootDevice,
 	}
 	resolved, err := resolveSubstrateFragments(s, data)
 	if err != nil {
 		return nil, fmt.Errorf("resolve substrate fragments for %q: %w", kind, err)
 	}
 	data.Substrate = resolved
-	data.HostsYAML = resolved.HostsYAML
+	data.MachinesYAML = resolved.MachinesYAML
 	data.EnvSecrets = resolved.EnvExtraSecrets
 
 	files := []File{}
@@ -76,12 +75,80 @@ func Workspace(clusterName string, kind Provider) ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render %s: %w", t.name, err)
 		}
+		body = formatDesiredStateYAML(body)
 		if t.optional && strings.TrimSpace(body) == "" {
 			continue
 		}
 		files = append(files, File{Name: name, Body: body})
 	}
 	return files, nil
+}
+
+func formatDesiredStateYAML(body string) string {
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	var expanded []string
+	for _, line := range lines {
+		expanded = append(expanded, expandFlowEmptyMaps(line)...)
+	}
+
+	var out []string
+	inSpec := false
+	seenChild := false
+	prevBlank := false
+	for _, line := range expanded {
+		switch {
+		case line == "spec:":
+			inSpec = true
+			seenChild = false
+			prevBlank = false
+			out = append(out, line)
+			continue
+		case inSpec && strings.TrimSpace(line) == "---":
+			inSpec = false
+			seenChild = false
+			prevBlank = false
+		case inSpec && line != "" && !strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "#"):
+			inSpec = false
+			seenChild = false
+		}
+		if inSpec && isDirectSpecChildLine(line) {
+			if seenChild && !prevBlank {
+				out = append(out, "")
+				prevBlank = true
+			}
+			seenChild = true
+		}
+		out = append(out, line)
+		prevBlank = line == ""
+	}
+	return strings.Join(out, "\n") + "\n"
+}
+
+func expandFlowEmptyMaps(line string) []string {
+	trimmed := strings.TrimLeft(line, " ")
+	indent := line[:len(line)-len(trimmed)]
+	if trimmed != "bareMetal: {}" {
+		return []string{line}
+	}
+	if len(indent) == 2 {
+		return []string{
+			indent + "bareMetal:",
+			indent + "  boot:",
+			indent + "    method: external",
+		}
+	}
+	return []string{
+		indent + "bareMetal:",
+		indent + "  vlan: 0",
+	}
+}
+
+func isDirectSpecChildLine(line string) bool {
+	if !strings.HasPrefix(line, "  ") || len(line) < 3 {
+		return false
+	}
+	rest := line[2:]
+	return rest[0] != ' ' && rest[0] != '#' && strings.Contains(rest, ":")
 }
 
 // resolveSubstrateFragments returns a copy of s with every string
@@ -111,7 +178,7 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.EnvArtifactServer, err = render("EnvArtifactServer", s.EnvArtifactServer); err != nil {
 		return s, err
 	}
-	if s.HostsYAML, err = render("HostsYAML", s.HostsYAML); err != nil {
+	if s.MachinesYAML, err = render("MachinesYAML", s.MachinesYAML); err != nil {
 		return s, err
 	}
 	if s.ProviderNetworkAttachments, err = render("ProviderNetworkAttachments", s.ProviderNetworkAttachments); err != nil {
@@ -123,19 +190,7 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.ProviderCapabilities, err = render("ProviderCapabilities", s.ProviderCapabilities); err != nil {
 		return s, err
 	}
-	if s.ClusterNetworkBindings, err = render("ClusterNetworkBindings", s.ClusterNetworkBindings); err != nil {
-		return s, err
-	}
 	if s.InfraComponentYAML, err = render("InfraComponentYAML", s.InfraComponentYAML); err != nil {
-		return s, err
-	}
-	if s.ClusterMachineFrom, err = render("ClusterMachineFrom", s.ClusterMachineFrom); err != nil {
-		return s, err
-	}
-	if s.ClusterMachineExtras, err = render("ClusterMachineExtras", s.ClusterMachineExtras); err != nil {
-		return s, err
-	}
-	if s.ClusterServices, err = render("ClusterServices", s.ClusterServices); err != nil {
 		return s, err
 	}
 	if s.EndpointsYAML, err = render("EndpointsYAML", s.EndpointsYAML); err != nil {
@@ -187,30 +242,24 @@ type Substrate struct {
 	NetworkNameSuffix          string
 	EnvExtraSecrets            string
 	EnvArtifactServer          string
-	HostsYAML                  string
+	MachinesYAML               string
 	NetworkDNSServers          string
 	NetworkDNSRefs             string
 	ProviderCapabilities       string
 	ProviderNetworkAttachments string
 	InfraComponentYAML         string
-	ClusterNetworkBindings     string
 	ClusterArtifactAccess      string
-	ClusterMachineFrom         string
-	ClusterMachineExtras       string
-	ClusterServices            string
 	EndpointsYAML              string
 	PlatformYAML               string
-	BootDevice                 string
 }
 
 type templateData struct {
-	Cluster    string
-	ProviderID string
-	NetworkID  string
-	Substrate  Substrate
-	HostsYAML  string
-	EnvSecrets string
-	BootDevice string
+	Cluster      string
+	ProviderID   string
+	NetworkID    string
+	Substrate    Substrate
+	MachinesYAML string
+	EnvSecrets   string
 }
 
 type namedTemplate struct {
@@ -221,11 +270,10 @@ type namedTemplate struct {
 
 var allTemplates = []namedTemplate{
 	{name: "environment.yaml", tmpl: mustTmpl("env", environmentTmpl)},
-	{name: "shared/hosts.yaml", tmpl: mustTmpl("hosts", hostsTmpl)},
+	{name: "shared/machines.yaml", tmpl: mustTmpl("machines", machinesTmpl)},
 	{name: "shared/networks.yaml", tmpl: mustTmpl("networks", networksTmpl)},
 	{name: "shared/provider.yaml", tmpl: mustTmpl("provider", providerTmpl)},
 	{name: "shared/infra-component.yaml", tmpl: mustTmpl("infracomponent", infraComponentTmpl), optional: true},
-	{name: "clusters/{{.Cluster}}/cluster-infra.yaml", tmpl: mustTmpl("clusterinfra", clusterInfraTmpl)},
 	{name: "clusters/{{.Cluster}}/cluster.yaml", tmpl: mustTmpl("containercluster", containerClusterTmpl)},
 }
 
@@ -260,7 +308,7 @@ spec:
 {{.EnvSecrets}}
 `
 
-const hostsTmpl = `{{.HostsYAML}}`
+const machinesTmpl = `{{.MachinesYAML}}`
 
 const networksTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -290,44 +338,9 @@ spec:
             table-id: 254
 `
 
-const providerTmpl = `apiVersion: bootwright.io/v1alpha1
-kind: InfraProvider
-metadata:
-  name: {{.ProviderID}}
-spec:
-{{.Substrate.ProviderCapabilities}}{{.Substrate.ProviderNetworkAttachments}}`
+const providerTmpl = `{{.Substrate.ProviderCapabilities}}{{.Substrate.ProviderNetworkAttachments}}`
 
 const infraComponentTmpl = `{{.Substrate.InfraComponentYAML}}`
-
-const clusterInfraTmpl = `apiVersion: bootwright.io/v1alpha1
-kind: ClusterInfra
-metadata:
-  name: {{.Cluster}}
-spec:
-{{.Substrate.PlatformYAML}}
-  endpoints:
-{{.Substrate.EndpointsYAML}}
-{{.Substrate.ClusterArtifactAccess}}
-{{.Substrate.ClusterNetworkBindings}}
-
-  components:
-    nodes:
-      - name: master-0
-{{.Substrate.ClusterMachineFrom}}
-        network:
-          networkConfigRef:
-            name: {{.NetworkID}}
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.130.20
-                      prefix-length: 24
-{{.Substrate.ClusterMachineExtras}}
-        rootDeviceHints:
-          deviceName: {{.BootDevice}}
-{{.Substrate.ClusterServices}}`
 
 const containerClusterTmpl = `apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -339,13 +352,10 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
-      api:
-        name: api
-      apiInt:
-        name: api-int
-      ingress:
-        name: apps
+{{.Substrate.PlatformYAML}}
+    endpoints:
+{{.Substrate.EndpointsYAML}}
+{{.Substrate.ClusterArtifactAccess}}
     nodeSSH:
       keyPairRef:
         name: {{.Cluster}}-cluster-admin-ssh-key
@@ -360,7 +370,6 @@ spec:
   nodes:
     - hostname: master-0
       role: master                      # master | worker
-      infraNodeRef:
-        clusterInfra: {{.Cluster}}      # ClusterInfra.metadata.name
-        name: master-0
+      machineRef:
+        name: {{.Cluster}}-master-0
 `

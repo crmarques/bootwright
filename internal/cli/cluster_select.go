@@ -159,11 +159,11 @@ func validateClusterNames(state v1alpha1.State, names []string) error {
 }
 
 // formatDestroyScopeConflicts builds an actionable error message that
-// lists every shared host service and names the unscoped clusters
+// lists every shared machine service and names the unscoped clusters
 // that would break if the destroy proceeded.
 func formatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
 	var b strings.Builder
-	b.WriteString("--scope would destroy shared host service(s) that other clusters still depend on:\n")
+	b.WriteString("--scope would destroy shared machine service(s) that other clusters still depend on:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
 			c.Slot, c.Provider, c.Name,
@@ -194,7 +194,7 @@ func validateScopedApplySharedServices(state v1alpha1.State, target, scope strin
 
 func formatApplyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
 	var b strings.Builder
-	b.WriteString("--clusters would narrow shared host service(s) that other clusters still depend on:\n")
+	b.WriteString("--clusters would narrow shared machine service(s) that other clusters still depend on:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
 			c.Slot, c.Provider, c.Name,

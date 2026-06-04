@@ -6,21 +6,15 @@ Accepted
 
 ## Context
 
-[ADR 0001](0001-capability-map-and-components.md) fixes the
-desired-state API around per-entry provisioner arms
-(`InfraProvider.spec.machineProfiles[*].libvirt`,
-`InfraProvider.spec.machineProfiles[*].vsphere`,
-`InfraProvider.spec.machineProfiles[*].kubevirt`, and
-`machines[*].baremetal`).
-The render layer compiles those discriminators into per-component
-Ansible vars, and the orchestration layer acts on them.
+The desired-state API models every substrate node as a `Machine`.
+Provider-specific details live under the machine substrate arm and provider
+profile data. The render layer compiles those discriminators into
+per-component Ansible vars, and the orchestration layer acts on them.
 
 The initial Ansible layout grew from the libvirt + emulated-BMC lab. The
-top-level `providers`, `infra_components`, `cluster_infra`, `openshift`, and
-`shared` role buckets made new-reader navigation harder because the same
-directory level mixed domain layers, implementation families, and generic
-helpers. Preparing the bundle as an Ansible collection is also a better fit
-for fully qualified playbook and role names.
+top-level role buckets mixed domain layers, implementation families, and
+generic helpers. Preparing the bundle as an Ansible collection is also a
+better fit for fully qualified playbook and role names.
 
 ## Decision
 
@@ -35,10 +29,12 @@ ansible/collections/ansible_collections/bootwright/core/
     tasks/                reusable playbook task files
   roles/
     controller_*          controller-local setup
-    host_*                host preparation and proxy helpers
+    machine_base          base packages for service-bearing machines
+    machine_proxy         proxy facts and persisted proxy settings
+    machine_setup_*       substrate setup on provider machines
     helper_*              context, credential, and cleanup helpers
-    provider_service_*    provider-host services, including BMC services
-    infra_component_*     host-bound InfraComponent services
+    provider_service_*    provider services, including BMC services
+    infra_component_*     machine-bound InfraComponent services
     machine_substrate_*   per-cluster substrate state
     cluster_network_*     per-cluster networking state
     container_cluster_*   agent install, boot, media, wait, and destroy
@@ -73,12 +69,12 @@ playbooks do not construct role names from those labels:
   backend hook. `bootwright.core.container_cluster_boot_redfish` remains the
   Redfish protocol role for both real BMCs and sushy-emulator.
 - Generated artifact publication resolves to the artifact server selected by
-  `ClusterInfra.spec.artifactAccess.serverRef`. For managed servers, the
-  selected `InfraComponent` `hostRef` gates the rendered artifact service and
-  limits it to that host. The component declares listeners, endpoints, and
-  optional bind address. Bare-metal Redfish machines and disconnected agent
-  installs bind BMC-specific and cluster-install endpoints through
-  `ClusterInfra.spec.artifactAccess`.
+  `ContainerCluster.spec.install.artifactAccess.serverRef`. For managed
+  servers, the selected `InfraComponent` `machineRef` gates the rendered
+  artifact service and limits it to that machine. The component declares
+  listeners, endpoints, and optional bind address. Bare-metal Redfish machines
+  and disconnected agent installs bind BMC-specific and cluster-install
+  endpoints through `ContainerCluster.spec.install.artifactAccess`.
 
 `bmcRole` and `bootRole` are independent. BMC-driven substrates use a
 matched pair because the boot path runs through the BMC service

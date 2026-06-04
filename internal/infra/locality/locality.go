@@ -39,8 +39,8 @@ func CheckController(_ v1alpha1.State, _ Policy) Result {
 	return Result{OK: true, Evidence: "bastion actions run on localhost"}
 }
 
-func IsControllerLocalHost(host v1alpha1.Host, policy Policy) bool {
-	return IsControllerLocalAddress(v1alpha1.HostSSHAddress(host), policy)
+func IsControllerLocalMachine(machine v1alpha1.Machine, policy Policy) bool {
+	return IsControllerLocalAddress(v1alpha1.MachineSSHAddress(machine), policy)
 }
 
 func IsControllerLocalAddress(address string, policy Policy) bool {

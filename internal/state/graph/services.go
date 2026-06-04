@@ -11,41 +11,41 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-type HostServiceIdentity struct {
+type MachineServiceIdentity struct {
 	Kind         string
 	ProviderName string
 	Name         string
 }
 
-type HostServiceConsumer struct {
+type MachineServiceConsumer struct {
 	Cluster           string
-	ClusterInfra      string
+	ClusterInstall    string
 	Owner             string
 	Fields            map[string]string
 	MergeStringFields map[string][]string
 }
 
-type HostService struct {
-	Identity           HostServiceIdentity
-	HostRef            string
+type MachineService struct {
+	Identity           MachineServiceIdentity
+	MachineRef         string
 	Fields             map[string]string
-	Consumers          []HostServiceConsumer
+	Consumers          []MachineServiceConsumer
 	MergedStringFields map[string][]string
 }
 
-type HostServiceGraph struct {
-	Services []HostService
+type MachineServiceGraph struct {
+	Services []MachineService
 }
 
-func (s HostService) ConsumerClusters() []string {
+func (s MachineService) ConsumerClusters() []string {
 	return serviceConsumerClusters(s.Consumers)
 }
 
-func (s HostService) IsProviderService() bool {
+func (s MachineService) IsProviderService() bool {
 	return s.Identity.Kind == v1alpha1.ProviderServiceKindBMC
 }
 
-func (s HostService) IsInfraComponentService() bool {
+func (s MachineService) IsInfraComponentService() bool {
 	return !s.IsProviderService()
 }
 
@@ -53,7 +53,7 @@ type SharedServiceGroup struct {
 	Kind              string   `yaml:"kind" json:"kind"`
 	ProviderName      string   `yaml:"providerName" json:"providerName"`
 	CapabilityName    string   `yaml:"capabilityName" json:"capabilityName"`
-	HostRef           string   `yaml:"hostRef,omitempty" json:"hostRef,omitempty"`
+	MachineRef        string   `yaml:"machineRef,omitempty" json:"machineRef,omitempty"`
 	ConsumingClusters []string `yaml:"consumingClusters" json:"consumingClusters"`
 }
 
@@ -65,12 +65,12 @@ type DestroyScopeConflict struct {
 	UnscopedClusters []string
 }
 
-func ResolveHostServices(state v1alpha1.State) HostServiceGraph {
-	entries := hostServiceConsumers(state)
-	grouped := map[hostServiceGroupKey]*HostService{}
-	var order []hostServiceGroupKey
+func ResolveMachineServices(state v1alpha1.State) MachineServiceGraph {
+	entries := machineServiceConsumers(state)
+	grouped := map[machineServiceGroupKey]*MachineService{}
+	var order []machineServiceGroupKey
 	for _, entry := range entries {
-		id := HostServiceIdentity{
+		id := MachineServiceIdentity{
 			Kind:         entry.Fields["kind"],
 			ProviderName: entry.Fields["providerName"],
 			Name:         entry.Fields["name"],
@@ -78,12 +78,12 @@ func ResolveHostServices(state v1alpha1.State) HostServiceGraph {
 		if id.Kind == "" || id.ProviderName == "" || id.Name == "" {
 			continue
 		}
-		key := hostServiceGroupingKey(id, entry.Fields["hostRef"])
+		key := machineServiceGroupingKey(id, entry.Fields["machineRef"])
 		service, ok := grouped[key]
 		if !ok {
-			service = &HostService{
+			service = &MachineService{
 				Identity:           id,
-				HostRef:            entry.Fields["hostRef"],
+				MachineRef:         entry.Fields["machineRef"],
 				Fields:             cloneStringMap(entry.Fields),
 				MergedStringFields: map[string][]string{},
 			}
@@ -104,9 +104,9 @@ func ResolveHostServices(state v1alpha1.State) HostServiceGraph {
 		if a.Name != b.Name {
 			return a.Name < b.Name
 		}
-		return order[i].HostRef < order[j].HostRef
+		return order[i].MachineRef < order[j].MachineRef
 	})
-	out := make([]HostService, 0, len(order))
+	out := make([]MachineService, 0, len(order))
 	for _, key := range order {
 		service := grouped[key]
 		sort.SliceStable(service.Consumers, func(i, j int) bool {
@@ -117,23 +117,23 @@ func ResolveHostServices(state v1alpha1.State) HostServiceGraph {
 		})
 		out = append(out, *service)
 	}
-	return HostServiceGraph{Services: out}
+	return MachineServiceGraph{Services: out}
 }
 
-type hostServiceGroupKey struct {
-	Identity HostServiceIdentity
-	HostRef  string
+type machineServiceGroupKey struct {
+	Identity   MachineServiceIdentity
+	MachineRef string
 }
 
-func hostServiceGroupingKey(id HostServiceIdentity, hostRef string) hostServiceGroupKey {
-	key := hostServiceGroupKey{Identity: id}
+func machineServiceGroupingKey(id MachineServiceIdentity, machineRef string) machineServiceGroupKey {
+	key := machineServiceGroupKey{Identity: id}
 	if id.Kind == v1alpha1.ProviderServiceKindBMC {
-		key.HostRef = hostRef
+		key.MachineRef = machineRef
 	}
 	return key
 }
 
-func (g HostServiceGraph) ValidateSharedServices() []string {
+func (g MachineServiceGraph) ValidateSharedServices() []string {
 	var errs []string
 	for _, service := range g.Services {
 		if len(service.Consumers) < 2 {
@@ -149,7 +149,7 @@ func (g HostServiceGraph) ValidateSharedServices() []string {
 					continue
 				}
 				errs = append(errs, fmt.Sprintf(
-					"shared host service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
+					"shared machine service %s %s/%s has conflicting %s: %s uses %q, %s uses %q",
 					service.Identity.Kind,
 					service.Identity.ProviderName,
 					service.Identity.Name,
@@ -165,7 +165,7 @@ func (g HostServiceGraph) ValidateSharedServices() []string {
 	return errs
 }
 
-func (g HostServiceGraph) SharedServices() []SharedServiceGroup {
+func (g MachineServiceGraph) SharedServices() []SharedServiceGroup {
 	out := make([]SharedServiceGroup, 0)
 	for _, service := range g.Services {
 		clusters := serviceConsumerClusters(service.Consumers)
@@ -176,14 +176,14 @@ func (g HostServiceGraph) SharedServices() []SharedServiceGroup {
 			Kind:              service.Identity.Kind,
 			ProviderName:      service.Identity.ProviderName,
 			CapabilityName:    service.Identity.Name,
-			HostRef:           service.HostRef,
+			MachineRef:        service.MachineRef,
 			ConsumingClusters: clusters,
 		})
 	}
 	return out
 }
 
-func (g HostServiceGraph) ScopeConflicts(selected []string) []DestroyScopeConflict {
+func (g MachineServiceGraph) ScopeConflicts(selected []string) []DestroyScopeConflict {
 	selectedSet := map[string]bool{}
 	for _, name := range selected {
 		selectedSet[name] = true
@@ -221,7 +221,7 @@ func (g HostServiceGraph) ScopeConflicts(selected []string) []DestroyScopeConfli
 	return conflicts
 }
 
-func (g HostServiceGraph) MergedStringField(id HostServiceIdentity, field string) []string {
+func (g MachineServiceGraph) MergedStringField(id MachineServiceIdentity, field string) []string {
 	for _, service := range g.Services {
 		if service.Identity != id {
 			continue
@@ -232,22 +232,20 @@ func (g HostServiceGraph) MergedStringField(id HostServiceIdentity, field string
 }
 
 func SharedDestroyConflicts(state v1alpha1.State, selected []string) []DestroyScopeConflict {
-	return ResolveHostServices(state).ScopeConflicts(selected)
+	return ResolveMachineServices(state).ScopeConflicts(selected)
 }
 
-func hostServiceConsumers(state v1alpha1.State) []HostServiceConsumer {
-	infraToClusters := clustersByInfra(state)
-	var out []HostServiceConsumer
-	for _, infra := range state.ClusterInfras {
-		for _, cluster := range infraToClusters[infra.Metadata.Name] {
-			out = append(out, clusterHostServiceConsumers(state, infra, cluster)...)
-		}
+func machineServiceConsumers(state v1alpha1.State) []MachineServiceConsumer {
+	var out []MachineServiceConsumer
+	for _, cluster := range state.ContainerClusters {
+		infra, _ := stateview.ClusterInstallForContainerCluster(state, cluster)
+		out = append(out, clusterMachineServiceConsumers(state, infra, cluster)...)
 	}
 	return out
 }
 
-func clusterHostServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
-	var out []HostServiceConsumer
+func clusterMachineServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
+	var out []MachineServiceConsumer
 	out = append(out, loadBalancerConsumers(state, infra, cluster)...)
 	out = append(out, bmcConsumers(state, infra, cluster)...)
 	out = append(out, selectedManagedProxyConsumers(state, infra, cluster)...)
@@ -265,7 +263,7 @@ func clusterHostServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 				server.Component.Metadata.Name,
 				v1alpha1.ArtifactServerProtocolHTTP,
 				map[string]string{
-					"hostRef":     server.Config.HostRef.Name,
+					"machineRef":  server.Config.MachineRef.Name,
 					"bindAddress": server.Config.BindAddress,
 					"listeners":   artifactListenersKey(server.Config.Listeners),
 					"endpoints":   artifactEndpointsKey(server.Config.Endpoints),
@@ -277,15 +275,15 @@ func clusterHostServiceConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 	return out
 }
 
-func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
-	var out []HostServiceConsumer
-	for _, machine := range infra.Spec.Components.Nodes {
+func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
+	var out []MachineServiceConsumer
+	for _, machine := range infra.Machines {
 		driver := machineDriver(state, machine)
 		if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
 			continue
 		}
-		hostRef := machineHostRef(state, machine)
-		if hostRef == "" {
+		machineRef := serviceMachineRef(state, machine)
+		if machineRef == "" {
 			continue
 		}
 		configKey := machineBMCConfigKey(state, machine)
@@ -295,13 +293,13 @@ func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1a
 		out = append(out, newServiceConsumer(
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
-			fmt.Sprintf("ClusterInfra/%s nodes[%s] provider %s", infra.Metadata.Name, machine.Name, machine.Source.ProviderRef.Name),
+			fmt.Sprintf("ClusterInstall/%s nodes[%s] provider %s", infra.Metadata.Name, machine.Name, machine.Source.ProviderRef.Name),
 			v1alpha1.ProviderServiceKindBMC,
 			machine.Source.ProviderRef.Name,
 			driver.Dispatch.BMCRole,
 			driver.Dispatch.BMCRole,
 			map[string]string{
-				"hostRef":     hostRef,
+				"machineRef":  machineRef,
 				"bmcRole":     driver.Dispatch.BMCRole,
 				"configKey":   configKey,
 				"machineName": machine.Name,
@@ -312,15 +310,11 @@ func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1a
 	return out
 }
 
-func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	seen := map[string]bool{}
-	var out []HostServiceConsumer
-	for _, ref := range []v1alpha1.EndpointRef{
-		cluster.Spec.Install.EndpointRefs.API,
-		cluster.Spec.Install.EndpointRefs.APIInt,
-		cluster.Spec.Install.EndpointRefs.Ingress,
-	} {
-		endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	var out []MachineServiceConsumer
+	for _, endpointName := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+		endpoint, ok := infra.Endpoints[endpointName]
 		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent || endpoint.Source.ComponentRef.Name == "" {
 			continue
 		}
@@ -337,19 +331,19 @@ func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cl
 		out = append(out, newServiceConsumer(
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
-			fmt.Sprintf("ClusterInfra/%s endpoint source InfraComponent/%s", infra.Metadata.Name, component.Metadata.Name),
+			fmt.Sprintf("ClusterInstall/%s endpoint source InfraComponent/%s", infra.Metadata.Name, component.Metadata.Name),
 			v1alpha1.ComponentSlotLoadBalancer,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeHAProxy,
-			map[string]string{"hostRef": lb.HostRef.Name, "capabilityName": component.Metadata.Name},
+			map[string]string{"machineRef": lb.MachineRef.Name, "capabilityName": component.Metadata.Name},
 			nil,
 		))
 	}
 	return out
 }
 
-func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
@@ -362,7 +356,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 			}
 		}
 	}
-	var out []HostServiceConsumer
+	var out []MachineServiceConsumer
 	for componentName, entry := range entries {
 		component, ok := stateview.InfraComponent(state, componentName)
 		if !ok || component.Spec.Proxy == nil {
@@ -377,20 +371,20 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeSquid,
-			map[string]string{"hostRef": proxy.HostRef.Name, "entryName": entry.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid, proxy.Port))},
+			map[string]string{"machineRef": proxy.MachineRef.Name, "entryName": entry.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid, proxy.Port))},
 			nil,
 		))
 	}
 	return out
 }
 
-func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
 	}
 	refs := networkDNSRefs(state, infra)
-	var out []HostServiceConsumer
+	var out []MachineServiceConsumer
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
 		if !refs[entry.Name] || entry.Type != v1alpha1.EnvironmentComponentManaged {
 			continue
@@ -410,14 +404,14 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeDnsmasq,
-			map[string]string{"hostRef": dns.HostRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
+			map[string]string{"machineRef": dns.MachineRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
 			map[string][]string{"additionalIngressHosts": mergedHosts},
 		))
 	}
 	return out
 }
 
-func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
@@ -428,7 +422,7 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 			entries[entry.ComponentRef.Name] = entry
 		}
 	}
-	var out []HostServiceConsumer
+	var out []MachineServiceConsumer
 	for componentName, entry := range entries {
 		component, ok := stateview.InfraComponent(state, componentName)
 		if !ok || component.Spec.NTP == nil {
@@ -443,14 +437,14 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterInf
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeChrony,
-			map[string]string{"hostRef": ntp.HostRef.Name, "entryName": entry.Name, "bindAddress": ntp.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, ntp.Port))},
+			map[string]string{"machineRef": ntp.MachineRef.Name, "entryName": entry.Name, "bindAddress": ntp.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, ntp.Port))},
 			nil,
 		))
 	}
 	return out
 }
 
-func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.ClusterInfra, cluster v1alpha1.ContainerCluster) []HostServiceConsumer {
+func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	if v1alpha1.InstallMode(cluster) != v1alpha1.InstallModeDisconnected {
 		return nil
 	}
@@ -467,7 +461,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		return nil
 	}
 	registry := component.Spec.Registry
-	return []HostServiceConsumer{newServiceConsumer(
+	return []MachineServiceConsumer{newServiceConsumer(
 		cluster.Metadata.Name,
 		infra.Metadata.Name,
 		fmt.Sprintf("Environment/%s infraComponents.registries[%s]", env.Metadata.Name, entry.Name),
@@ -475,7 +469,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		v1alpha1.KindInfraComponent,
 		component.Metadata.Name,
 		v1alpha1.InfraComponentTypeMirrorRegistry,
-		map[string]string{"hostRef": registry.HostRef.Name, "entryName": entry.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry, registry.Port))},
+		map[string]string{"machineRef": registry.MachineRef.Name, "entryName": entry.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry, registry.Port))},
 		nil,
 	)}
 }
@@ -499,7 +493,7 @@ func servicePort(kind, realisation string, configured int) int {
 	return support.LookupService(kind, realisation).DefaultPort
 }
 
-func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInfra) map[string]bool {
+func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]bool {
 	out := map[string]bool{}
 	for _, name := range stateview.ClusterConsumedNetworkConfigs(infra) {
 		network, ok := stateview.NetworkConfig(state, name)
@@ -525,13 +519,13 @@ func artifactListenersKey(listeners []v1alpha1.ArtifactServerListener) string {
 func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 	parts := make([]string, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.Listener, endpoint.HostAddress))
+		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.Listener, endpoint.MachineAddress))
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")
 }
 
-func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) HostServiceConsumer {
+func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) MachineServiceConsumer {
 	driver := support.LookupService(kind, realisation)
 	out := cloneStringMap(fields)
 	out["kind"] = kind
@@ -540,9 +534,9 @@ func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation
 	out["realisation"] = realisation
 	out["applyRole"] = driver.ApplyRole
 	out["destroyRole"] = driver.DestroyRole
-	return HostServiceConsumer{
+	return MachineServiceConsumer{
 		Cluster:           cluster,
-		ClusterInfra:      infra,
+		ClusterInstall:    infra,
 		Owner:             owner,
 		Fields:            out,
 		MergeStringFields: supportedMergeStringFields(kind, realisation, merge),
@@ -563,39 +557,28 @@ func supportedMergeStringFields(kind, realisation string, merge map[string][]str
 	return out
 }
 
-func clustersByInfra(state v1alpha1.State) map[string][]v1alpha1.ContainerCluster {
-	out := map[string][]v1alpha1.ContainerCluster{}
-	for _, cluster := range state.ContainerClusters {
-		for _, name := range stateview.ClusterInfraNames(cluster) {
-			out[name] = append(out[name], cluster)
-		}
-	}
-	return out
-}
-
-func machineDriver(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) support.DispatchSupport {
+func machineDriver(state v1alpha1.State, machine v1alpha1.InstallMachine) support.DispatchSupport {
 	provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 	if !ok {
 		return support.LookupDispatch("none", "none", "none")
 	}
 	if machine.Source.ProfileRef.Name != "" {
-		profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
-		if !ok {
+		if _, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name); !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
-		return support.LookupProfileProvisioner(v1alpha1.ProfileProvisionerKind(profile))
+		return support.LookupProfileProvisioner(provider.Spec.Type)
 	}
 	if machine.Source.MachineRef.Name != "" {
-		server, ok := stateview.Machine(provider, machine.Source.MachineRef.Name)
+		server, ok := stateview.Machine(state, machine.Source.MachineRef.Name)
 		if !ok {
 			return support.LookupDispatch("none", "none", "none")
 		}
-		return support.LookupMachineProvisioner(v1alpha1.MachineProvisionerKind(server))
+		return support.LookupMachineProvisioner(v1alpha1.MachineSubstrateKind(server))
 	}
 	return support.LookupDispatch("none", "none", "none")
 }
 
-func machineHostRef(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) string {
+func serviceMachineRef(state v1alpha1.State, machine v1alpha1.InstallMachine) string {
 	if machine.Source.ProfileRef.Name == "" {
 		return ""
 	}
@@ -603,14 +586,13 @@ func machineHostRef(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent)
 	if !ok {
 		return ""
 	}
-	profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
-	if !ok || profile.Libvirt == nil {
+	if provider.Spec.Type != v1alpha1.ProvisionerLibvirt || provider.Spec.Libvirt == nil {
 		return ""
 	}
-	return profile.Libvirt.HostRef.Name
+	return provider.Spec.Libvirt.MachineRef.Name
 }
 
-func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) string {
+func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.InstallMachine) string {
 	if machine.Source.ProfileRef.Name == "" {
 		return ""
 	}
@@ -618,11 +600,10 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterNodeCompo
 	if !ok {
 		return ""
 	}
-	profile, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name)
-	if !ok || profile.Libvirt == nil {
+	if provider.Spec.Type != v1alpha1.ProvisionerLibvirt || provider.Spec.Libvirt == nil {
 		return ""
 	}
-	libvirt := profile.Libvirt
+	libvirt := provider.Spec.Libvirt
 	protocol := v1alpha1.DefaultBMCProtocol
 	bindAddress := v1alpha1.DefaultBMCBindAddress
 	port := v1alpha1.DefaultBMCEmulationStartPort
@@ -650,7 +631,7 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.ClusterNodeCompo
 	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialRef)
 }
 
-func serviceConsumerClusters(consumers []HostServiceConsumer) []string {
+func serviceConsumerClusters(consumers []MachineServiceConsumer) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, consumer := range consumers {

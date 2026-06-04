@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: bastion
+spec:
+  capabilities:
+    - container-runtime
+    - artifact-server
+
+  os:
+    mode: external
+    addresses:
+      - name: ssh
+        address: bastion.bootwright.test
+      - name: lab-lan
+        address: 192.168.150.5
+    ssh:
+      addressName: ssh
+      keyRef:
+        name: provider-host-ssh

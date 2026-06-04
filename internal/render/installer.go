@@ -91,7 +91,7 @@ func InstallerConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[s
 // openshift-install. ResolveInstaller calls this; the placeholder
 // render path calls InstallerConfig.
 func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secrets InstallerSecrets) (map[string]any, error) {
-	ci, err := clusterInfraForOCP(state, ocp)
+	ci, err := clusterInstallForOCP(state, ocp)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 // installer. minimalISO + bootArtifactsBaseURL are auto-added in
 // disconnected mode when an environment artifact server is available.
 func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
-	ci, err := clusterInfraForOCP(state, ocp)
+	ci, err := clusterInstallForOCP(state, ocp)
 	if err != nil {
 		return nil, err
 	}

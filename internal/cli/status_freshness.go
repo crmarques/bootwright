@@ -58,8 +58,14 @@ func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
 	for i := range state.Environments {
 		state.Environments[i].SourcePath = ""
 	}
-	for i := range state.Hosts {
-		state.Hosts[i].SourcePath = ""
+	for i := range state.Machines {
+		state.Machines[i].SourcePath = ""
+	}
+	for i := range state.MachineImages {
+		state.MachineImages[i].SourcePath = ""
+	}
+	for i := range state.MachineInstallProfiles {
+		state.MachineInstallProfiles[i].SourcePath = ""
 	}
 	for i := range state.NetworkConfigs {
 		state.NetworkConfigs[i].SourcePath = ""
@@ -69,9 +75,6 @@ func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
 	}
 	for i := range state.InfraComponents {
 		state.InfraComponents[i].SourcePath = ""
-	}
-	for i := range state.ClusterInfras {
-		state.ClusterInfras[i].SourcePath = ""
 	}
 	for i := range state.ContainerClusters {
 		state.ContainerClusters[i].SourcePath = ""

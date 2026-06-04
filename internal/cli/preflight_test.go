@@ -104,13 +104,16 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 	}
 	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
 		Metadata: v1alpha1.Metadata{Name: "child-provider"},
-		Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
-			Name: "sno",
-			KubeVirt: &v1alpha1.MachineProfileKubeVirtProvisioner{
-				HostContainerClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-				Namespace:               "bootwright-child-ocp",
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerKubeVirt,
+			KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+				MachineProfiles: []v1alpha1.MachineProfile{{
+					Name: "sno",
+				}},
 			},
-		}}},
+		},
 	}}}
 	deps := preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
@@ -126,7 +129,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		uid: func() int { return 1000 },
 	}
 
-	checks := collectPreflightChecks(state, []Phase{{Name: "cluster-infra"}}, true, "/context/secrets", clustersDir, deps)
+	checks := collectPreflightChecks(state, []Phase{{Name: "machine-infra"}}, true, "/context/secrets", clustersDir, deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
@@ -289,34 +292,25 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 				"ceph-registry-credentials": {},
 			}},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
-				SSH: &v1alpha1.HostSSHSpec{
-					AddressName:   "ssh",
-					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
-					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
-				},
-				Capabilities: []string{v1alpha1.HostCapabilityCephNode},
-			},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "ceph-0",
-					Source: v1alpha1.ClusterNodeSource{
-						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+					SSH: &v1alpha1.MachineSSHSpec{
+						AddressName:   "ssh",
+						KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 					},
-				}}},
+				},
 			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
-				Type:            v1alpha1.StorageClusterTypeCeph,
-				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
+				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						Registry: v1alpha1.StorageCephadmRegistry{
@@ -326,9 +320,10 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
-							Name:  "ceph-0",
-							Site:  "dc1",
-							Roles: []string{v1alpha1.StorageCephRoleMON},
+							Name:       "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:       "dc1",
+							Roles:      []string{v1alpha1.StorageCephRoleMON},
 						}},
 					},
 				},
@@ -354,21 +349,24 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
 	state.Environments[0].Spec.Secrets["ceph-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
-	state.Hosts = []v1alpha1.Host{{
+	state.Machines = []v1alpha1.Machine{{
 		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
-		Spec: v1alpha1.HostSpec{
-			Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
-			SSH: &v1alpha1.HostSSHSpec{
-				AddressName:   "ssh",
-				KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
-				KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
+			OS: v1alpha1.MachineOSSpec{
+				Mode:      v1alpha1.MachineOSModeExternal,
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+				SSH: &v1alpha1.MachineSSHSpec{
+					AddressName:   "ssh",
+					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
+					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+				},
 			},
-			Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
 		},
 	}}
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
-			HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+			MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
 			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
 				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
 			},
@@ -524,9 +522,9 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	}})
 
 	for _, check := range checks {
-		if check.Name == "host bastion keyRef" {
+		if check.Name == "machine bastion keyRef" {
 			if check.Status == "OK" {
-				t.Fatalf("host SSH key check unexpectedly passed: %+v", check)
+				t.Fatalf("machine SSH key check unexpectedly passed: %+v", check)
 			}
 			return
 		}
@@ -543,8 +541,8 @@ func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
 	})
 
 	for _, check := range checks {
-		if check.Name == "host services-host keyRef" {
-			t.Fatalf("loopback host SSH key should not be required: %+v", checks)
+		if check.Name == "machine services-host keyRef" {
+			t.Fatalf("loopback machine SSH key should not be required: %+v", checks)
 		}
 	}
 }
@@ -562,8 +560,8 @@ func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
 	}})
 
 	for _, check := range checks {
-		if check.Name == "host bastion keyRef" {
-			t.Fatalf("controller-local host SSH key should not be required: %+v", checks)
+		if check.Name == "machine bastion keyRef" {
+			t.Fatalf("controller-local machine SSH key should not be required: %+v", checks)
 		}
 	}
 }

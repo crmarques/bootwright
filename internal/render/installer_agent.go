@@ -5,12 +5,12 @@ import "github.com/crmarques/bootwright/api/v1alpha1"
 // agentHosts renders agent-config.yaml's hosts[] block and picks the
 // rendezvous IP. The rendezvous host is the first master node in sorted
 // hostname order.
-func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) ([]any, string) {
+func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) ([]any, string) {
 	nodes := sortedNodes(ocp.Spec.Nodes)
 	hosts := make([]any, 0, len(nodes))
 	rendezvous := ""
 	for _, node := range nodes {
-		machine, ok := findClusterMachine(ci, node.InfraNodeRef.Name)
+		machine, ok := findClusterMachine(ci, node.MachineRef.Name)
 		if !ok {
 			continue
 		}
@@ -34,7 +34,7 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.Con
 	return hosts, rendezvous
 }
 
-func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent, clusterName string) []any {
+func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, clusterName string) []any {
 	interfaces := machineInterfaces(state, machine, clusterName)
 	out := make([]any, 0, len(interfaces))
 	for _, iface := range interfaces {
@@ -46,7 +46,7 @@ func agentHostInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeCompo
 	return out
 }
 
-func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent, clusterName string) map[string]any {
+func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, machine v1alpha1.InstallMachine, clusterName string) map[string]any {
 	network, hasNetwork := machineNetworkDefinition(state, ci, machine)
 	out := machineNetworkConfigTemplate(state, ci, machine)
 	if out == nil {
@@ -62,7 +62,7 @@ func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine 
 	return out
 }
 
-func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent, clusterName string) []v1alpha1.MachineInterface {
+func machineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, clusterName string) []v1alpha1.MachineInterface {
 	if interfaces := providerMachineInterfaces(state, machine); len(interfaces) > 0 {
 		return interfaces
 	}
@@ -73,9 +73,10 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeCompone
 	if !ok {
 		return nil
 	}
-	profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
-	provisioner := v1alpha1.ProfileProvisionerKind(profile)
-	if !ok || (provisioner != v1alpha1.ProvisionerLibvirt && provisioner != v1alpha1.ProvisionerKubeVirt) {
+	if _, ok := findProfile(provider, machine.Source.ProfileRef.Name); !ok {
+		return nil
+	}
+	if provider.Spec.Type != v1alpha1.ProvisionerLibvirt && provider.Spec.Type != v1alpha1.ProvisionerKubeVirt {
 		return nil
 	}
 	names := clusterMachineInterfaceNames(state, machine)
@@ -89,45 +90,37 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeCompone
 	return out
 }
 
-func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) []string {
-	out := networkConfigInterfaceNames(machineNetworkConfigTemplate(state, v1alpha1.ClusterInfra{}, machine))
+func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.InstallMachine) []string {
+	out := networkConfigInterfaceNames(machineNetworkConfigTemplate(state, v1alpha1.ClusterInstall{}, machine))
 	if len(out) == 0 {
 		out = append(out, "primary")
 	}
 	return out
 }
 
-func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) []v1alpha1.MachineInterface {
+func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine) []v1alpha1.MachineInterface {
 	if machine.Source.MachineRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
-	if !ok {
+	pm, ok := findProviderMachine(state, machine.Source.MachineRef.Name)
+	if !ok || pm.Spec.Substrate.BareMetal == nil {
 		return nil
 	}
-	pm, ok := findProviderMachine(provider, machine.Source.MachineRef.Name)
-	if !ok || pm.BareMetal == nil {
-		return nil
-	}
-	return append([]v1alpha1.MachineInterface(nil), pm.BareMetal.Interfaces...)
+	return append([]v1alpha1.MachineInterface(nil), pm.Spec.Substrate.BareMetal.Interfaces...)
 }
 
-func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.ClusterNodeComponent) *v1alpha1.RootDeviceHints {
+func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.InstallMachine) *v1alpha1.RootDeviceHints {
 	if machine.RootDeviceHints != nil {
 		return machine.RootDeviceHints
 	}
 	if machine.Source.MachineRef.Name == "" {
 		return nil
 	}
-	provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
-	if !ok {
+	pm, ok := findProviderMachine(state, machine.Source.MachineRef.Name)
+	if !ok || pm.Spec.Substrate.BareMetal == nil {
 		return nil
 	}
-	pm, ok := findProviderMachine(provider, machine.Source.MachineRef.Name)
-	if !ok || pm.BareMetal == nil {
-		return nil
-	}
-	return pm.BareMetal.RootDeviceHints
+	return pm.Spec.Substrate.BareMetal.RootDeviceHints
 }
 
 func renderMachineMACs(config map[string]any, ifaces []v1alpha1.MachineInterface) {

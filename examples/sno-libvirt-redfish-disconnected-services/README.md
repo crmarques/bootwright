@@ -7,11 +7,11 @@ managed NTP, trust material, and installer artifact publication.
 
 - `environment.yaml`: base domain, generated or file-sourced secrets, proxy,
   mirror registry, trust, NTP, and artifact defaults.
-- `host.yaml`: controller/service host addresses and SSH key reference.
+- `service-machine.yaml`: controller/service host addresses and SSH key reference.
 - `provider.yaml`: libvirt URI, VM sizing, BMC emulation credentials, and
   bridge name.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
-- `cluster-infra.yaml`: API/app VIPs, per-machine IP, and platform render mode.
+- `cluster-machines.yaml`: API/app VIPs, per-machine IP, and platform render mode.
 - `cluster.yaml`: OpenShift release, disconnected mode, install endpoints,
   networking, and node binding.
 - `components/*.yaml`: managed artifact, mirror registry, and NTP service

@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func printApplySummary(w io.Writer, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
@@ -155,11 +156,11 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime")})
 	}
 	p.List(items)
-	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove host services; run destroy infra for that")
+	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove machine services; run destroy infra for that")
 }
 
 func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
-	if len(state.ClusterInfras) == 0 && len(state.ContainerClusters) == 0 {
+	if len(state.Machines) == 0 && len(state.ContainerClusters) == 0 {
 		return
 	}
 	p := output.NewContinuation(w)
@@ -175,22 +176,19 @@ func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "substrate"})
 	}
 
-	infraNames := make([]string, 0, len(state.ClusterInfras))
-	infraByName := map[string]v1alpha1.ClusterInfra{}
-	for _, ci := range state.ClusterInfras {
-		infraNames = append(infraNames, ci.Metadata.Name)
-		infraByName[ci.Metadata.Name] = ci
-	}
-	sort.Strings(infraNames)
-	for _, name := range infraNames {
-		ci := infraByName[name]
-		machines := len(ci.Spec.Components.Nodes)
+	for _, name := range clusters {
+		cluster, ok := containerClusterByName(state, name)
+		if !ok {
+			continue
+		}
+		ci, _ := stateview.ClusterInstallForContainerCluster(state, cluster)
+		machines := len(ci.Machines)
 		services := destroyManagedServices(state, ci)
 		detail := fmt.Sprintf("%d machine(s)", machines)
 		if services != "" {
 			detail += "; managed " + services
 		}
-		items = append(items, output.Item{Label: "infra " + name, Detail: detail})
+		items = append(items, output.Item{Label: "cluster " + name + " infra", Detail: detail})
 	}
 	p.List(items)
 }
@@ -212,21 +210,21 @@ func printDestroyArtifactServerPreview(w io.Writer, state v1alpha1.State) {
 		usage := consumers[name]
 		items = append(items, output.Item{
 			Label:  "artifact-server " + name,
-			Detail: "host " + usage.hostRef + "; BMC ISO fetches for " + strings.Join(usage.clusters, ", "),
+			Detail: "machine " + usage.machineRef + "; BMC ISO fetches for " + strings.Join(usage.clusters, ", "),
 		})
 	}
 	p.List(items)
 }
 
 type artifactServerDestroyUsage struct {
-	hostRef  string
-	clusters []string
+	machineRef string
+	clusters   []string
 }
 
 func artifactServerClusterConsumers(state v1alpha1.State) map[string]artifactServerDestroyUsage {
 	out := map[string]artifactServerDestroyUsage{}
-	for _, ci := range state.ClusterInfras {
-		ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)
+	for _, ocp := range state.ContainerClusters {
+		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
@@ -235,7 +233,7 @@ func artifactServerClusterConsumers(state v1alpha1.State) map[string]artifactSer
 			continue
 		}
 		usage := out[server.Component.Metadata.Name]
-		usage.hostRef = server.Config.HostRef.Name
+		usage.machineRef = server.Config.MachineRef.Name
 		usage.clusters = append(usage.clusters, ocp.Metadata.Name)
 		out[server.Component.Metadata.Name] = usage
 	}
@@ -246,7 +244,16 @@ func artifactServerClusterConsumers(state v1alpha1.State) map[string]artifactSer
 	return out
 }
 
-func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) string {
+func containerClusterByName(state v1alpha1.State, name string) (v1alpha1.ContainerCluster, bool) {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == name {
+			return cluster, true
+		}
+	}
+	return v1alpha1.ContainerCluster{}, false
+}
+
+func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInstall) string {
 	var parts []string
 	if clusterUsesLoadBalancerComponent(ci) {
 		parts = append(parts, "loadBalancers")
@@ -263,7 +270,7 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 	if clusterUsesManagedRegistry(state, ci) {
 		parts = append(parts, "registry")
 	}
-	if ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name); ok && artifacts.ClusterNeedsPublication(state, ci, ocp) {
+	if ocp, ok := stategraph.SelectedClusterForInstall(state.ContainerClusters, ci.Metadata.Name); ok && artifacts.ClusterNeedsPublication(state, ci, ocp) {
 		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
 			parts = append(parts, "artifacts")
 		}
@@ -271,8 +278,8 @@ func destroyManagedServices(state v1alpha1.State, ci v1alpha1.ClusterInfra) stri
 	return strings.Join(parts, ", ")
 }
 
-func clusterUsesLoadBalancerComponent(ci v1alpha1.ClusterInfra) bool {
-	for _, endpoint := range ci.Spec.Endpoints {
+func clusterUsesLoadBalancerComponent(ci v1alpha1.ClusterInstall) bool {
+	for _, endpoint := range ci.Endpoints {
 		if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent && endpoint.Source.ComponentRef.Name != "" {
 			return true
 		}
@@ -287,7 +294,7 @@ func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
 	return &state.Environments[0]
 }
 
-func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
+func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
 	env := primaryEnvironment(state)
 	if env == nil {
 		return false
@@ -311,8 +318,8 @@ func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterI
 	return false
 }
 
-func clusterUsesManagedRegistry(state v1alpha1.State, ci v1alpha1.ClusterInfra) bool {
-	ocp, ok := stategraph.SelectedClusterForInfra(state.ContainerClusters, ci.Metadata.Name)
+func clusterUsesManagedRegistry(state v1alpha1.State, ci v1alpha1.ClusterInstall) bool {
+	ocp, ok := stategraph.SelectedClusterForInstall(state.ContainerClusters, ci.Metadata.Name)
 	if !ok || v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
 		return false
 	}
@@ -358,8 +365,8 @@ func environmentUsesManagedNTP(state v1alpha1.State) bool {
 	return false
 }
 
-func clusterConsumesNetwork(ci v1alpha1.ClusterInfra, networkName string) bool {
-	for _, machine := range ci.Spec.Components.Nodes {
+func clusterConsumesNetwork(ci v1alpha1.ClusterInstall, networkName string) bool {
+	for _, machine := range ci.Machines {
 		if machine.Network.NetworkConfigRef.Name == networkName {
 			return true
 		}

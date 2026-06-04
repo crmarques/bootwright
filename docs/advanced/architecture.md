@@ -15,12 +15,12 @@ load YAML -> normalize -> validate -> render -> apply/status
 The render step merges the provisioning kinds into concrete outputs:
 
 - `install-config.yaml` from `ContainerCluster`, `Environment`,
-  `NetworkConfig`, and `ClusterInfra.platform`
+  `NetworkConfig`, and `ContainerCluster.spec.install.platform`
 - `agent-config.yaml` from `ContainerCluster.nodes`,
-  `ClusterInfra.components.nodes`, `NetworkConfig` templates, and provider
+  `Machine`, `NetworkConfig` templates, and provider
   MAC inventory
-- provider variables from `InfraProvider`, `InfraComponent`, `Host`, and
-  `ClusterInfra.components`
+- provider variables from `InfraProvider`, `InfraComponent`, `Machine`, and
+  `Machine and ContainerCluster.components`
 - storage inputs from `StorageCluster`, storage pools, CephFS, RGW, exports,
   and Data Foundation attachments
 

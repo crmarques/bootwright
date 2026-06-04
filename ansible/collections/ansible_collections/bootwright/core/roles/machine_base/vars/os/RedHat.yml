@@ -1,0 +1,6 @@
+---
+bootwright_machine_base_packages:
+  - python3
+  - python3-pip
+  - tar
+  - gzip

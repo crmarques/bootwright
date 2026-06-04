@@ -221,9 +221,9 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 		t.Fatalf("boot missing media.libvirt control: %v", boot)
 	}
 	wants := map[string]any{
-		"hostRef": "lab-host",
-		"uri":     "qemu:///system",
-		"domain":  "sno-libvirt-master-0",
+		"machineRef": "lab-host",
+		"uri":        "qemu:///system",
+		"domain":     "sno-libvirt-master-0",
 	}
 	for k, want := range wants {
 		if got := libvirt[k]; got != want {
@@ -265,11 +265,6 @@ func TestRendererUsesContainerClusterNameWhenInfraNameDiffers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.ClusterInfras[0].Metadata.Name = "infra-for-sno-libvirt"
-	for i := range state.ContainerClusters[0].Spec.Nodes {
-		state.ContainerClusters[0].Spec.Nodes[i].InfraNodeRef.ClusterInfra = "infra-for-sno-libvirt"
-	}
-
 	ocp := state.ContainerClusters[0]
 	cfg, err := render.InstallerConfig(state, ocp)
 	if err != nil {
@@ -320,11 +315,6 @@ func TestBareMetalArtifactPathUsesContainerClusterName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.ClusterInfras[0].Metadata.Name = "infra-for-sno-emul-baremetal"
-	for i := range state.ContainerClusters[0].Spec.Nodes {
-		state.ContainerClusters[0].Spec.Nodes[i].InfraNodeRef.ClusterInfra = "infra-for-sno-emul-baremetal"
-	}
-
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	machine := firstMachineComponent(t, cluster)
@@ -496,21 +486,21 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	for i := range state.Hosts {
-		if state.Hosts[i].Metadata.Name != "services-host" {
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name != "services-host" {
 			continue
 		}
-		state.Hosts[i].Spec.Addresses = append(state.Hosts[i].Spec.Addresses, v1alpha1.HostAddress{
+		state.Machines[i].Spec.OS.Addresses = append(state.Machines[i].Spec.OS.Addresses, v1alpha1.MachineAddress{
 			Name:    "cluster-lan",
 			Address: "192.168.132.9",
 		})
 	}
 	state.InfraComponents[0].Spec.ArtifactServer.Endpoints = append(state.InfraComponents[0].Spec.ArtifactServer.Endpoints, v1alpha1.ArtifactServerEndpoint{
-		Name:        "cluster",
-		Listener:    "https",
-		HostAddress: "cluster-lan",
+		Name:           "cluster",
+		Listener:       "https",
+		MachineAddress: "cluster-lan",
 	})
-	state.ClusterInfras[0].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{}
+	state.ContainerClusters[0].Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{}
 	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
 		ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
 		RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
@@ -542,7 +532,7 @@ func TestBareMetalArtifactFetchURLUsesExternalArtifactEndpoint(t *testing.T) {
 			URL:  "https://artifacts.example.test:9443/vmedia",
 		}},
 	}}
-	state.ClusterInfras[0].Spec.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "bmc"
+	state.ContainerClusters[0].Spec.Install.ArtifactAccess.RedfishVirtualMedia.EndpointRef.Name = "bmc"
 
 	vars := render.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
@@ -630,7 +620,7 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 		"applyRole":        "bootwright.core.provider_service_bmc_emulated",
 		"destroyRole":      "bootwright.core.provider_service_bmc_emulated",
 		"providerName":     "lab-libvirt-provider",
-		"hostRef":          "lab-host",
+		"machineRef":       "lab-host",
 		"configConsistent": true,
 	}
 	for k, want := range wants {
@@ -642,12 +632,12 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 	if got := be["libvirtURI"]; got != "qemu:///system" {
 		t.Fatalf("bmcEmulated.libvirtURI got %v", got)
 	}
-	setups := vars["bootwright_provider_host_setups"].([]any)
+	setups := vars["bootwright_provider_machine_setups"].([]any)
 	if len(setups) != 1 {
 		t.Fatalf("provider host setup entries = %v", setups)
 	}
 	setup := setups[0].(map[string]any)
-	if got := setup["applyRole"]; got != "bootwright.core.host_libvirt" {
+	if got := setup["applyRole"]; got != "bootwright.core.machine_setup_libvirt" {
 		t.Fatalf("host setup applyRole got %v", got)
 	}
 }
@@ -722,7 +712,7 @@ func TestProviderServicesAggregateSharedArtifactServer(t *testing.T) {
 	for k, want := range map[string]any{
 		"providerName": v1alpha1.KindInfraComponent,
 		"name":         "artifact-server",
-		"hostRef":      "services-host",
+		"machineRef":   "services-host",
 		"realisation":  "http",
 	} {
 		if got := service[k]; got != want {
@@ -758,8 +748,8 @@ func TestBareMetalCorporateFixtureDoesNotRenderManagedProxyOrDNS(t *testing.T) {
 	if got := service["kind"]; got != v1alpha1.ComponentSlotArtifacts {
 		t.Fatalf("infra component service kind got %v, want %s", got, v1alpha1.ComponentSlotArtifacts)
 	}
-	if got := service["hostRef"]; got != "bastion" {
-		t.Fatalf("artifact service hostRef got %v, want bastion", got)
+	if got := service["machineRef"]; got != "bastion" {
+		t.Fatalf("artifact service machineRef got %v, want bastion", got)
 	}
 	if got := service["port"]; got != v1alpha1.DefaultArtifactsHTTPPort {
 		t.Fatalf("artifact service port got %v, want %d", got, v1alpha1.DefaultArtifactsHTTPPort)
@@ -946,18 +936,17 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "registry"},
 		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-			Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
-			HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
-			Port:    v1alpha1.DefaultMirrorRegistryPort,
+			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+			Port:       v1alpha1.DefaultMirrorRegistryPort,
 		}},
 	})
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
-	ci := state.ClusterInfras[0]
-	ci.Metadata.Name = "sno-libvirt-b"
-	ci.Spec.Components.Nodes = append([]v1alpha1.ClusterNodeComponent(nil), ci.Spec.Components.Nodes...)
-	ci.Spec.Components.Nodes[0].Network.Overrides = maps.Clone(ci.Spec.Components.Nodes[0].Network.Overrides)
-	interfaces := ci.Spec.Components.Nodes[0].Network.Overrides["interfaces"].([]any)
+	machine := machineByName(t, state, state.ContainerClusters[0].Spec.Nodes[0].MachineRef.Name)
+	machine.Metadata.Name = "sno-libvirt-b-master-0"
+	machine.Spec.OS.Install.Network.Overrides = maps.Clone(machine.Spec.OS.Install.Network.Overrides)
+	interfaces := machine.Spec.OS.Install.Network.Overrides["interfaces"].([]any)
 	primary := maps.Clone(interfaces[0].(map[string]any))
 	ipv4 := maps.Clone(primary["ipv4"].(map[string]any))
 	addresses := append([]any(nil), ipv4["address"].([]any)...)
@@ -967,15 +956,15 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	ipv4["address"] = addresses
 	primary["ipv4"] = ipv4
 	interfaces[0] = primary
-	ci.Spec.Components.Nodes[0].Network.Overrides["interfaces"] = interfaces
+	machine.Spec.OS.Install.Network.Overrides["interfaces"] = interfaces
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
 	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].InfraNodeRef.ClusterInfra = ci.Metadata.Name
+		ocp.Spec.Nodes[i].MachineRef.Name = machine.Metadata.Name
 	}
-	state.ClusterInfras = append(state.ClusterInfras, ci)
+	state.Machines = append(state.Machines, machine)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)
 	return state
 }
@@ -986,15 +975,15 @@ func twoClusterBareMetalPublicationState(t *testing.T) v1alpha1.State {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	ci := state.ClusterInfras[0]
-	ci.Metadata.Name = "sno-emul-baremetal-b"
+	machine := state.Machines[0]
+	machine.Metadata.Name = "sno-emul-baremetal-b-master-0"
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-emul-baremetal-b"
 	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
 	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].InfraNodeRef.ClusterInfra = ci.Metadata.Name
+		ocp.Spec.Nodes[i].MachineRef.Name = machine.Metadata.Name
 	}
-	state.ClusterInfras = append(state.ClusterInfras, ci)
+	state.Machines = append(state.Machines, machine)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)
 	return state
 }

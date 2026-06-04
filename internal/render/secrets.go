@@ -128,7 +128,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	if env == nil {
 		return out, nil
 	}
-	ci, err := clusterInfraForOCP(state, ocp)
+	ci, err := clusterInstallForOCP(state, ocp)
 	if err != nil {
 		return out, err
 	}

@@ -1,58 +1,73 @@
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
-  name: kubevirt-provider
+  name: kubevirt-provider-dc1
 spec:
-  machineProfiles:
+  type: kubevirt
+
+  networkAttachments:
+
+  - name: dc1-child-net
+    kubevirt:
+      nadRef:
+        name: dc1-child-net
+        namespace: bootwright-dc1-child-ocp
+
+  - name: dc2-child-net
+    kubevirt:
+      nadRef:
+        name: dc2-child-net
+        namespace: bootwright-dc2-child-ocp
+
+  kubevirt:
+    namespace: bootwright-dc1-child-ocp
+    storageClassRef:
+      name: ocs-storagecluster-ceph-rbd
+    hostClusterRef:
+      name: dc1-metal-ocp
+    machineProfiles:
     - name: dc1-child-master
       cpu: 8
       memoryMiB: 16384
       diskGiB: 120
-      kubevirt:
-        hostContainerClusterRef:
-          name: dc1-metal-ocp
-        namespace: bootwright-dc1-child-ocp
-        storageClassRef:
-          name: ocs-storagecluster-ceph-rbd
     - name: dc1-child-worker
       cpu: 8
       memoryMiB: 16384
       diskGiB: 120
-      kubevirt:
-        hostContainerClusterRef:
-          name: dc1-metal-ocp
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: kubevirt-provider-dc2
+spec:
+  type: kubevirt
+
+  networkAttachments:
+
+  - name: dc1-child-net
+    kubevirt:
+      nadRef:
+        name: dc1-child-net
         namespace: bootwright-dc1-child-ocp
-        storageClassRef:
-          name: ocs-storagecluster-ceph-rbd
+
+  - name: dc2-child-net
+    kubevirt:
+      nadRef:
+        name: dc2-child-net
+        namespace: bootwright-dc2-child-ocp
+
+  kubevirt:
+    namespace: bootwright-dc2-child-ocp
+    storageClassRef:
+      name: ocs-storagecluster-ceph-rbd
+    hostClusterRef:
+      name: dc2-metal-ocp
+    machineProfiles:
     - name: dc2-child-master
       cpu: 8
       memoryMiB: 16384
       diskGiB: 120
-      kubevirt:
-        hostContainerClusterRef:
-          name: dc2-metal-ocp
-        namespace: bootwright-dc2-child-ocp
-        storageClassRef:
-          name: ocs-storagecluster-ceph-rbd
     - name: dc2-child-worker
       cpu: 8
       memoryMiB: 16384
       diskGiB: 120
-      kubevirt:
-        hostContainerClusterRef:
-          name: dc2-metal-ocp
-        namespace: bootwright-dc2-child-ocp
-        storageClassRef:
-          name: ocs-storagecluster-ceph-rbd
-
-  networkAttachments:
-    - name: dc1-child-net
-      kubevirt:
-        nadRef:
-          name: dc1-child-net
-          namespace: bootwright-dc1-child-ocp
-    - name: dc2-child-net
-      kubevirt:
-        nadRef:
-          name: dc2-child-net
-          namespace: bootwright-dc2-child-ocp

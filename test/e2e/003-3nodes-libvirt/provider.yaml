@@ -3,21 +3,23 @@ kind: InfraProvider
 metadata:
   name: lab-libvirt-provider
 spec:
-  machineProfiles:
-    - name: compact-control-plane
-      cpu: 4
-      memoryMiB: 16384
-      diskGiB: 120
-      libvirt:
-        hostRef:
-          name: lab-host
-        uri: qemu:///system
-        bmcEmulationDefaults:
-          enabled: true
-          protocol: redfish
-          auth:
-            credentialRef:
-              name: bmc-credentials
+  type: libvirt
+
+  libvirt:
+    machineRef:
+      name: lab-host
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      auth:
+        credentialRef:
+          name: bmc-credentials
+    machineProfiles:
+      - name: compact-control-plane
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 120
 
   networkAttachments:
     - name: cluster-3n-bridge

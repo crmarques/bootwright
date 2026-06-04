@@ -12,7 +12,7 @@ import (
 const emulatedVmediaOffset = 1
 const agentISOPublishTokenExpr = "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"
 
-func emulatedBMCListenPorts(l *v1alpha1.MachineProfileLibvirtProvisioner) (port, vmediaPort int) {
+func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vmediaPort int) {
 	port = v1alpha1.DefaultBMCEmulationStartPort
 	vmediaPort = port + emulatedVmediaOffset
 	if l == nil || l.BMCEmulationDefaults == nil {
@@ -30,7 +30,7 @@ func emulatedBMCListenPorts(l *v1alpha1.MachineProfileLibvirtProvisioner) (port,
 	return port, vmediaPort
 }
 
-func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, clusterName string) map[string]any {
+func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
 	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
@@ -38,21 +38,20 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.
 	isoBasename := fmt.Sprintf("agent-%s.iso", clusterName)
 
 	if m.Source.ProfileRef.Name != "" {
-		profile, ok := findProfile(provider, m.Source.ProfileRef.Name)
-		if !ok {
+		if _, ok := findProfile(provider, m.Source.ProfileRef.Name); !ok {
 			return nil
 		}
-		if profile.Libvirt == nil {
+		if provider.Spec.Type != v1alpha1.ProvisionerLibvirt || provider.Spec.Libvirt == nil {
 			return nil
 		}
-		return emulatedBootVars(state, ci, m, profile, clusterName, isoBasename)
+		return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
 	}
 	if m.Source.MachineRef.Name != "" {
-		server, ok := findProviderMachine(provider, m.Source.MachineRef.Name)
+		server, ok := findProviderMachine(state, m.Source.MachineRef.Name)
 		if !ok {
 			return nil
 		}
-		if server.BareMetal == nil {
+		if server.Spec.Substrate.BareMetal == nil {
 			return nil
 		}
 		return baremetalBootVars(state, ci, server, isoBasename)
@@ -60,8 +59,7 @@ func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.
 	return nil
 }
 
-func machineEmulatedBMCVars(state v1alpha1.State, profile v1alpha1.MachineProfileCapability) map[string]any {
-	l := profile.Libvirt
+func machineEmulatedBMCVars(state v1alpha1.State, l *v1alpha1.InfraProviderLibvirt) map[string]any {
 	if l == nil {
 		return nil
 	}
@@ -89,10 +87,9 @@ func machineEmulatedBMCVars(state v1alpha1.State, profile v1alpha1.MachineProfil
 	return out
 }
 
-func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, profile v1alpha1.MachineProfileCapability, clusterName, isoBasename string) map[string]any {
-	libvirt := profile.Libvirt
-	hostRef := libvirt.HostRef.Name
-	hostAddr := lookupHostAddress(state, hostRef)
+func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, libvirt *v1alpha1.InfraProviderLibvirt, clusterName, isoBasename string) map[string]any {
+	machineRef := libvirt.MachineRef.Name
+	hostAddr := lookupMachineAddress(state, machineRef)
 	port, vmediaPort := emulatedBMCListenPorts(libvirt)
 	credRef := ""
 	if d := libvirt.BMCEmulationDefaults; d != nil && d.Auth != nil {
@@ -110,22 +107,22 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInfra, m v1alpha1.
 			"setBootSource": false,
 		},
 		"agentIso": map[string]any{
-			"stageHost": hostRef,
+			"stageHost": machineRef,
 			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
 			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vmediaPort, agentISOPublishTokenExpr, isoBasename),
 		},
 		"media": map[string]any{
 			"libvirt": map[string]any{
-				"hostRef": hostRef,
-				"uri":     libvirt.URI,
-				"domain":  fmt.Sprintf("%s-%s", clusterName, m.Name),
+				"machineRef": machineRef,
+				"uri":        libvirt.URI,
+				"domain":     fmt.Sprintf("%s-%s", clusterName, m.Name),
 			},
 		},
 	}
 }
 
-func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server v1alpha1.MachineCapability, isoBasename string) map[string]any {
-	bmc := server.BareMetal.BMC
+func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server v1alpha1.Machine, isoBasename string) map[string]any {
+	bmc := server.Spec.Substrate.BareMetal.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
 	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
 
@@ -145,7 +142,7 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, server v1
 	}
 }
 
-func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, isoBasename string) (stageHost, stagePath, fetchURL string) {
+func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInstall, isoBasename string) (stageHost, stagePath, fetchURL string) {
 	server, endpoint, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia)
 	if !ok {
 		return "", "", ""
@@ -154,16 +151,16 @@ func baremetalAgentISOTarget(state v1alpha1.State, ci v1alpha1.ClusterInfra, iso
 	if fetchURL == "" || server.Config == nil {
 		return "", "", fetchURL
 	}
-	hostRef := server.Config.HostRef.Name
+	machineRef := server.Config.MachineRef.Name
 	stagePath = fmt.Sprintf("{{ bootwright_managed_services_dir }}/%s/public/%s/%s", server.Component.Metadata.Name, agentISOPublishTokenExpr, isoBasename)
-	return hostRef, stagePath, fetchURL
+	return machineRef, stagePath, fetchURL
 }
 
-func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) []any {
+func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []any {
 	clusterName := ocp.Metadata.Name
 	targets := map[string]map[string]any{}
 	var keys []string
-	for _, m := range ci.Spec.Components.Nodes {
+	for _, m := range ci.Machines {
 		boot := machineBootVars(state, ci, m, clusterName)
 		if boot == nil {
 			continue

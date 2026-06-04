@@ -2,8 +2,8 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent) map[string]any {
-	binding, ok := findClusterNetworkBinding(ci, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
+func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine) map[string]any {
+	binding, ok := findMachineNetworkBinding(ci, m.Source.ProviderRef.Name, m.Network.NetworkConfigRef.Name)
 	if !ok {
 		return nil
 	}
@@ -18,9 +18,9 @@ func clusterMachineNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.Clust
 	return networkAttachmentVars(attachment)
 }
 
-func clusterNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, networkName string) map[string]any {
+func clusterNetworkAttachmentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, networkName string) map[string]any {
 	var first map[string]any
-	for _, binding := range ci.Spec.NetworkBindings {
+	for _, binding := range ci.NetworkBindings {
 		if binding.NetworkConfigRef.Name != networkName {
 			continue
 		}

@@ -1,61 +1,35 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterInfra
+kind: Machine
 metadata:
-  name: sno-libvirt
+  name: master-0
 spec:
-  platform:
-    type: baremetal
-    baremetal:
-      provisioningNetwork: disabled
+  capabilities:
+    - openshift-node
 
-  endpoints:
-    api:
-      source:
-        type: infraComponent
-        componentRef:
-          name: load-balancer
-        bindAddress: control-plane
-    api-int:
-      source:
-        type: infraComponent
-        componentRef:
-          name: load-balancer
-        bindAddress: control-plane
-    apps:
-      source:
-        type: infraComponent
-        componentRef:
-          name: load-balancer
-        bindAddress: apps
+  substrate:
+    providerRef:
+      name: lab-libvirt-provider
+    libvirt:
+      profileRef:
+        name: sno
 
-  networkBindings:
-    - networkConfigRef:
-        name: sno-bridge
-      providerRef:
-        name: lab-libvirt-provider
-      attachmentRef:
-        name: sno-bridge
-
-  components:
-    nodes:
-      - name: master-0
-        source:
-          providerRef:
-            name: lab-libvirt-provider
-          profileRef:
-            name: sno
-        network:
-          networkConfigRef:
-            name: sno-bridge
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.132.20
-                      prefix-length: 24
-        rootDeviceHints:
-          deviceName: /dev/vda
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: sno-bridge
+        attachmentRef:
+          name: sno-bridge
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.132.20
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -68,13 +42,29 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
       api:
-        name: api
-      apiInt:
-        name: api-int
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: control-plane
+      api-int:
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: control-plane
       ingress:
-        name: apps
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: apps
     method: agent
     mode: connected
     nodeSSH:
@@ -99,6 +89,5 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      infraNodeRef:
-        clusterInfra: sno-libvirt
+      machineRef:
         name: master-0

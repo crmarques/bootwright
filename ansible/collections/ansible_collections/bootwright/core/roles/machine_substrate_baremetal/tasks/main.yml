@@ -1,6 +1,6 @@
 ---
 # Bare-metal "substrate" — no provisioning work happens on the
-# provider host. The cluster_infra layer runs this role per machine to
+# provider machine. The machine-infra layer runs this role per machine to
 # record the per-cluster manifest and validate the BMC credentialRef
 # exists locally. Actual BMC interaction happens in
 # bootwright.core.container_cluster_boot_redfish on the controller during the

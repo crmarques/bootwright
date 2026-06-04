@@ -9,7 +9,7 @@ checks, and a manifest-set add-on.
   server catalog.
 - `infra/`: service host, bare-metal provider, artifact server, and network
   definitions.
-- `clusters/container/metal-ocp/cluster-infra.yaml`: VIPs, artifact endpoint,
+- `clusters/container/metal-ocp/cluster-machines.yaml`: VIPs, artifact endpoint,
   machine selection, and platform render mode.
 - `clusters/container/metal-ocp/cluster.yaml`: release, cluster networking, and
   node bindings.

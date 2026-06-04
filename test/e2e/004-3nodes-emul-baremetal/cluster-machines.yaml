@@ -1,0 +1,128 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv1
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:10
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:10
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.20
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv2
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:11
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:11
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.21
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv3
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:12
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:12
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.22
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda

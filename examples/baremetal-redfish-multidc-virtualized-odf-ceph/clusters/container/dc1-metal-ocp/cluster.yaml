@@ -8,38 +8,67 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
-      api:
-        name: api
-      apiInt:
-        name: api-int
-      ingress:
-        name: apps
     nodeSSH:
       keyPairRef:
         name: dc1-metal-ocp-cluster-admin-ssh-key
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
+      api:
+        address: 192.168.141.20
+        source:
+          type: external
+      api-int:
+        address: 192.168.141.20
+        source:
+          type: external
+      ingress:
+        address: 192.168.141.21
+        source:
+          type: external
+      rgw-public:
+        dnsName: rgw-ceph.bootwright.test
+        scheme: https
+        port: 443
+        source:
+          type: external
+      rgw-dc1:
+        address: 192.168.141.80
+        prefixLength: 24
+        interfaceNetworks:
+        - 192.168.141.0/24
+        source:
+          type: cephadm
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
 
   networking:
     networkType: OVNKubernetes
     clusterNetwork:
-      - cidr: 10.128.0.0/14
-        hostPrefix: 23
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
     serviceNetwork:
-      - 172.30.0.0/16
+    - 172.30.0.0/16
 
   nodes:
-    - hostname: master-0
-      role: master
-      infraNodeRef:
-        clusterInfra: dc1-metal-ocp-infra
-        name: master-0
-    - hostname: master-1
-      role: master
-      infraNodeRef:
-        clusterInfra: dc1-metal-ocp-infra
-        name: master-1
-    - hostname: master-2
-      role: master
-      infraNodeRef:
-        clusterInfra: dc1-metal-ocp-infra
-        name: master-2
+
+  - hostname: master-0
+    role: master
+    machineRef:
+      name: dc1-metal-master-0
+
+  - hostname: master-1
+    role: master
+    machineRef:
+      name: dc1-metal-master-1
+
+  - hostname: master-2
+    role: master
+    machineRef:
+      name: dc1-metal-master-2

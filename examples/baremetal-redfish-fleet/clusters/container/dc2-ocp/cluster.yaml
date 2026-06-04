@@ -8,37 +8,47 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
-      api:
-        name: api
-      apiInt:
-        name: api-int
-      ingress:
-        name: apps
     nodeSSH:
       keyPairRef:
         name: dc2-ocp-cluster-admin-ssh-key
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
+      api:
+        address: 192.168.142.10
+      api-int:
+        address: 192.168.142.10
+      ingress:
+        address: 192.168.142.11
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
 
   networking:
     clusterNetwork:
-      - cidr: 10.132.0.0/14
-        hostPrefix: 23
+    - cidr: 10.132.0.0/14
+      hostPrefix: 23
     serviceNetwork:
-      - 172.31.0.0/16
+    - 172.31.0.0/16
 
   nodes:
-    - hostname: master-0
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-ocp
-        name: master-0
-    - hostname: master-1
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-ocp
-        name: master-1
-    - hostname: master-2
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-ocp
-        name: master-2
+
+  - hostname: master-0
+    role: master
+    machineRef:
+      name: dc2-master-0
+
+  - hostname: master-1
+    role: master
+    machineRef:
+      name: dc2-master-1
+
+  - hostname: master-2
+    role: master
+    machineRef:
+      name: dc2-master-2

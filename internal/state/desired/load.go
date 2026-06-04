@@ -87,11 +87,12 @@ func loadFiles(files []string) (v1alpha1.State, error) {
 		}
 	}
 	if len(state.Environments) == 0 &&
-		len(state.Hosts) == 0 &&
+		len(state.Machines) == 0 &&
+		len(state.MachineImages) == 0 &&
+		len(state.MachineInstallProfiles) == 0 &&
 		len(state.NetworkConfigs) == 0 &&
 		len(state.InfraProviders) == 0 &&
 		len(state.InfraComponents) == 0 &&
-		len(state.ClusterInfras) == 0 &&
 		len(state.ContainerClusters) == 0 &&
 		len(state.StorageClusters) == 0 &&
 		len(state.StoragePlacementPolicies) == 0 &&
@@ -236,13 +237,27 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.Environments = append(state.Environments, item)
-		case v1alpha1.KindHost:
-			var item v1alpha1.Host
+		case v1alpha1.KindMachine:
+			var item v1alpha1.Machine
 			if err := decodeKnown(node, &item); err != nil {
 				return fmt.Errorf("decode %s document %d: %w", path, index, err)
 			}
 			item.SourcePath = path
-			state.Hosts = append(state.Hosts, item)
+			state.Machines = append(state.Machines, item)
+		case v1alpha1.KindMachineImage:
+			var item v1alpha1.MachineImage
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.MachineImages = append(state.MachineImages, item)
+		case v1alpha1.KindMachineInstallProfile:
+			var item v1alpha1.MachineInstallProfile
+			if err := decodeKnown(node, &item); err != nil {
+				return fmt.Errorf("decode %s document %d: %w", path, index, err)
+			}
+			item.SourcePath = path
+			state.MachineInstallProfiles = append(state.MachineInstallProfiles, item)
 		case v1alpha1.KindNetworkConfig:
 			var item v1alpha1.NetworkConfig
 			if err := decodeKnown(node, &item); err != nil {
@@ -264,13 +279,6 @@ func loadFile(path string, state *v1alpha1.State) error {
 			}
 			item.SourcePath = path
 			state.InfraComponents = append(state.InfraComponents, item)
-		case v1alpha1.KindClusterInfra:
-			var item v1alpha1.ClusterInfra
-			if err := decodeKnown(node, &item); err != nil {
-				return fmt.Errorf("decode %s document %d: %w", path, index, err)
-			}
-			item.SourcePath = path
-			state.ClusterInfras = append(state.ClusterInfras, item)
 		case v1alpha1.KindContainerCluster:
 			var item v1alpha1.ContainerCluster
 			if err := decodeKnown(node, &item); err != nil {
@@ -393,11 +401,23 @@ func sortState(state *v1alpha1.State) {
 		}
 		return state.Environments[i].Metadata.Name < state.Environments[j].Metadata.Name
 	}))
-	sort.SliceStable(state.Hosts, sortByName(func(i, j int) bool {
-		if state.Hosts[i].Metadata.Name == state.Hosts[j].Metadata.Name {
-			return state.Hosts[i].SourcePath < state.Hosts[j].SourcePath
+	sort.SliceStable(state.Machines, sortByName(func(i, j int) bool {
+		if state.Machines[i].Metadata.Name == state.Machines[j].Metadata.Name {
+			return state.Machines[i].SourcePath < state.Machines[j].SourcePath
 		}
-		return state.Hosts[i].Metadata.Name < state.Hosts[j].Metadata.Name
+		return state.Machines[i].Metadata.Name < state.Machines[j].Metadata.Name
+	}))
+	sort.SliceStable(state.MachineImages, sortByName(func(i, j int) bool {
+		if state.MachineImages[i].Metadata.Name == state.MachineImages[j].Metadata.Name {
+			return state.MachineImages[i].SourcePath < state.MachineImages[j].SourcePath
+		}
+		return state.MachineImages[i].Metadata.Name < state.MachineImages[j].Metadata.Name
+	}))
+	sort.SliceStable(state.MachineInstallProfiles, sortByName(func(i, j int) bool {
+		if state.MachineInstallProfiles[i].Metadata.Name == state.MachineInstallProfiles[j].Metadata.Name {
+			return state.MachineInstallProfiles[i].SourcePath < state.MachineInstallProfiles[j].SourcePath
+		}
+		return state.MachineInstallProfiles[i].Metadata.Name < state.MachineInstallProfiles[j].Metadata.Name
 	}))
 	sort.SliceStable(state.NetworkConfigs, sortByName(func(i, j int) bool {
 		if state.NetworkConfigs[i].Metadata.Name == state.NetworkConfigs[j].Metadata.Name {
@@ -416,12 +436,6 @@ func sortState(state *v1alpha1.State) {
 			return state.InfraComponents[i].SourcePath < state.InfraComponents[j].SourcePath
 		}
 		return state.InfraComponents[i].Metadata.Name < state.InfraComponents[j].Metadata.Name
-	}))
-	sort.SliceStable(state.ClusterInfras, sortByName(func(i, j int) bool {
-		if state.ClusterInfras[i].Metadata.Name == state.ClusterInfras[j].Metadata.Name {
-			return state.ClusterInfras[i].SourcePath < state.ClusterInfras[j].SourcePath
-		}
-		return state.ClusterInfras[i].Metadata.Name < state.ClusterInfras[j].Metadata.Name
 	}))
 	sort.SliceStable(state.ContainerClusters, sortByName(func(i, j int) bool {
 		if state.ContainerClusters[i].Metadata.Name == state.ContainerClusters[j].Metadata.Name {

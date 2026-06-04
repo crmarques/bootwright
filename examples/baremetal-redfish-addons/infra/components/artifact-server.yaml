@@ -4,13 +4,12 @@ metadata:
   name: artifact-server
 spec:
   artifactServer:
-    hostRef:
+    machineRef:
       name: bastion
     endpoints:
       - name: bmc
         listener: https
-        hostAddress: lab-lan
+        machineAddress: lab-lan
       - name: cluster
         listener: https
-        hostAddress: lab-lan
-
+        machineAddress: lab-lan

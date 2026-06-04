@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 // Validate is the single entry point. Every rule in
@@ -17,11 +18,10 @@ import (
 func Validate(state v1alpha1.State) error {
 	var errs []string
 	errs = append(errs, validateEnvironments(state)...)
-	errs = append(errs, validateHosts(state)...)
+	errs = append(errs, validateMachines(state)...)
 	errs = append(errs, validateNetworkConfigs(state)...)
 	errs = append(errs, validateProviders(state)...)
 	errs = append(errs, validateInfraComponents(state)...)
-	errs = append(errs, validateClusterInfras(state)...)
 	errs = append(errs, validateContainerClusters(state)...)
 	errs = append(errs, validateClusterAddons(state)...)
 	errs = append(errs, validateClusterAddonProfiles(state)...)
@@ -82,76 +82,46 @@ func validateName(kind, name string) string {
 }
 
 // validateCrossLayer enforces the few rules that span multiple kinds:
-// one ContainerCluster owner per ClusterInfra in v1, the proxy /
+// one ContainerCluster owner per ClusterInstall in v1, the proxy /
 // registry single-source-of-truth rule, and the disconnected-install
 // requirement.
 func validateCrossLayer(state v1alpha1.State) []string {
 	var errs []string
-	infraToOCP := map[string][]string{}
-	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Nodes {
-			name := node.InfraNodeRef.ClusterInfra
-			if name == "" {
-				continue
-			}
-			owners := infraToOCP[name]
-			found := false
-			for _, owner := range owners {
-				if owner == ocp.Metadata.Name {
-					found = true
-					break
-				}
-			}
-			if !found {
-				infraToOCP[name] = append(infraToOCP[name], ocp.Metadata.Name)
-			}
-		}
-	}
-	for _, ci := range state.ClusterInfras {
-		owners := infraToOCP[ci.Metadata.Name]
-		if len(owners) > 1 {
-			errs = append(errs, fmt.Sprintf("ClusterInfra/%s is referenced by multiple ContainerClusters: %s", ci.Metadata.Name, strings.Join(owners, ", ")))
-		}
-	}
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
-	errs = append(errs, validateSharedHostServices(state)...)
+	errs = append(errs, validateSharedMachineServices(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
 	return errs
 }
 
 func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 	providers := indexProviders(state.InfraProviders)
-	infras := indexClusterInfras(state.ClusterInfras)
+	machines := indexMachines(state.Machines)
 	clusters := indexContainerClusters(state.ContainerClusters)
 	provided := providedClusterCapabilities(state)
 	deps := map[string][]string{}
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
-		infra, ok, _ := resolveContainerClusterInfra(ocp, infras)
-		if !ok {
-			continue
-		}
-		for _, machine := range infra.Spec.Components.Nodes {
-			if machine.Source.ProfileRef.Name == "" {
-				continue
-			}
-			provider, ok := providers[machine.Source.ProviderRef.Name]
+		for _, node := range ocp.Spec.Nodes {
+			machine, ok := machines[node.MachineRef.Name]
 			if !ok {
 				continue
 			}
-			profile, ok := lookupMachineProfile(provider, machine.Source.ProfileRef.Name)
-			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil || profile.KubeVirt.HostContainerClusterRef.Name == "" {
+			if machine.Spec.Substrate.KubeVirt == nil {
 				continue
 			}
-			parent := profile.KubeVirt.HostContainerClusterRef.Name
+			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+			if !ok || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
+				continue
+			}
+			parent := provider.Spec.KubeVirt.HostClusterRef.Name
 			deps[ocp.Metadata.Name] = appendUnique(deps[ocp.Metadata.Name], parent)
 			if _, ok := clusters[parent]; !ok {
 				continue
 			}
 			if !provided[parent][v1alpha1.ClusterAddonProvidesKubeVirt] {
-				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.hostContainerClusterRef.name %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q to ContainerCluster/%s",
-					provider.Metadata.Name, profile.Name, parent, v1alpha1.ClusterAddonProvidesKubeVirt, parent))
+				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.kubevirt.hostClusterRef.name %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q to ContainerCluster/%s",
+					provider.Metadata.Name, parent, v1alpha1.ClusterAddonProvidesKubeVirt, parent))
 			}
 		}
 	}
@@ -179,7 +149,7 @@ func validateClusterDependencyCycles(deps map[string][]string) []string {
 		}
 		if visiting[name] {
 			cycle := append(stack, name)
-			errs = append(errs, fmt.Sprintf("KubeVirt hostContainerClusterRef creates ContainerCluster dependency cycle: %s", strings.Join(cycle, " -> ")))
+			errs = append(errs, fmt.Sprintf("KubeVirt hostClusterRef creates ContainerCluster dependency cycle: %s", strings.Join(cycle, " -> ")))
 			return
 		}
 		visiting[name] = true
@@ -248,11 +218,10 @@ func selectedManagedRegistry(env *v1alpha1.Environment) *v1alpha1.EnvironmentReg
 }
 
 func validateArtifactServerRequirements(state v1alpha1.State) []string {
-	infraIndex := indexClusterInfras(state.ClusterInfras)
 	env := primaryEnvironment(&state)
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
-		ci, ok, _ := resolveContainerClusterInfra(ocp, infraIndex)
+		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 		if !ok || !artifacts.ClusterNeedsPublication(state, ci, ocp) {
 			continue
 		}
@@ -261,20 +230,20 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set Environment.spec.infraComponents.artifactServers", prefix))
 			continue
 		}
-		if ci.Spec.ArtifactAccess.ServerRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set ClusterInfra/%s spec.artifactAccess.serverRef.name", prefix, ci.Metadata.Name))
+		if ci.ArtifactAccess.ServerRef.Name == "" {
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set spec.install.artifactAccess.serverRef.name", prefix))
 			continue
 		}
 		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall); !ok {
-				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires ClusterInfra/%s spec.artifactAccess.containerClusterInstall.endpointRef.name to resolve on the selected artifact server",
-					prefix, ci.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires spec.install.artifactAccess.containerClusterInstall.endpointRef.name to resolve on the selected artifact server",
+					prefix))
 			}
 		}
 		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
-				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires ClusterInfra/%s spec.artifactAccess.redfishVirtualMedia.endpointRef.name to resolve on the selected artifact server",
-					prefix, ci.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires spec.install.artifactAccess.redfishVirtualMedia.endpointRef.name to resolve on the selected artifact server",
+					prefix))
 			}
 		}
 	}
@@ -344,37 +313,53 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
 		require(owner+".trustBundleRef", registries.Mirror.TrustBundleRef)
 	}
-	for _, h := range state.Hosts {
-		if h.Spec.SSH != nil {
-			requireSSHKey(fmt.Sprintf("Host/%s spec.ssh.keyRef", h.Metadata.Name), h.Spec.SSH.KeyRef)
-			if h.Spec.SSH.KnownHostsRef.Name != "" {
-				require(fmt.Sprintf("Host/%s spec.ssh.knownHostsRef", h.Metadata.Name), h.Spec.SSH.KnownHostsRef)
+	for _, machine := range state.Machines {
+		if machine.Spec.OS.SSH != nil {
+			requireSSHKey(fmt.Sprintf("Machine/%s spec.os.ssh.keyRef", machine.Metadata.Name), machine.Spec.OS.SSH.KeyRef)
+			if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
+				require(fmt.Sprintf("Machine/%s spec.os.ssh.knownHostsRef", machine.Metadata.Name), machine.Spec.OS.SSH.KnownHostsRef)
+			}
+		}
+		if machine.Spec.Substrate.BareMetal != nil {
+			require(fmt.Sprintf("Machine/%s spec.substrate.bareMetal.bmc.credentialsRef", machine.Metadata.Name), machine.Spec.Substrate.BareMetal.BMC.CredentialsRef)
+		}
+	}
+	for _, image := range state.MachineImages {
+		for i, ref := range image.Spec.TrustRefs {
+			require(fmt.Sprintf("MachineImage/%s spec.trustRefs[%d]", image.Metadata.Name, i), ref)
+		}
+		for i, ref := range image.Spec.HeadersRefs {
+			require(fmt.Sprintf("MachineImage/%s spec.headersRefs[%d]", image.Metadata.Name, i), ref)
+		}
+	}
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Spec.Installer.Anaconda == nil {
+			continue
+		}
+		for i, repo := range profile.Spec.Installer.Anaconda.Repositories {
+			if strings.HasPrefix(repo.BaseURL, "bootwright-secret-ref:") {
+				require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.repositories[%d].baseURL", profile.Metadata.Name, i), v1alpha1.SecretRef{Name: strings.TrimPrefix(repo.BaseURL, "bootwright-secret-ref:")})
 			}
 		}
 	}
 	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			if mp.Libvirt != nil && mp.Libvirt.BMCEmulationDefaults != nil &&
-				mp.Libvirt.BMCEmulationDefaults.Auth != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].libvirt.bmcEmulationDefaults.auth.credentialRef",
-					p.Metadata.Name, mp.Name), mp.Libvirt.BMCEmulationDefaults.Auth.CredentialRef)
-			}
-			if mp.VSphere != nil {
-				for i, vc := range mp.VSphere.VCenters {
-					require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].vsphere.vcenters[%d].credentialsRef",
-						p.Metadata.Name, mp.Name, i), vc.CredentialsRef)
-				}
-			}
-			if mp.KubeVirt != nil && mp.KubeVirt.KubeconfigRef != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].kubevirt.kubeconfigRef",
-					p.Metadata.Name, mp.Name), *mp.KubeVirt.KubeconfigRef)
+		if p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil && p.Spec.Libvirt.BMCEmulationDefaults.Auth != nil {
+			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialRef",
+				p.Metadata.Name), p.Spec.Libvirt.BMCEmulationDefaults.Auth.CredentialRef)
+		}
+		if p.Spec.BareMetal != nil && p.Spec.BareMetal.Defaults.BMC != nil {
+			require(fmt.Sprintf("InfraProvider/%s spec.bareMetal.defaults.bmc.credentialsRef",
+				p.Metadata.Name), p.Spec.BareMetal.Defaults.BMC.CredentialsRef)
+		}
+		if p.Spec.VSphere != nil {
+			for i, vc := range p.Spec.VSphere.VCenters {
+				require(fmt.Sprintf("InfraProvider/%s spec.vsphere.vcenters[%d].credentialsRef",
+					p.Metadata.Name, i), vc.CredentialsRef)
 			}
 		}
-		for _, m := range p.Spec.Machines {
-			if m.BareMetal != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.machines[%s].baremetal.bmc.credentialsRef",
-					p.Metadata.Name, m.Name), m.BareMetal.BMC.CredentialsRef)
-			}
+		if p.Spec.KubeVirt != nil && p.Spec.KubeVirt.KubeconfigRef != nil {
+			require(fmt.Sprintf("InfraProvider/%s spec.kubevirt.kubeconfigRef",
+				p.Metadata.Name), *p.Spec.KubeVirt.KubeconfigRef)
 		}
 	}
 	for _, ocp := range state.ContainerClusters {

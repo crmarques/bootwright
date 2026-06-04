@@ -1,0 +1,119 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc2-metal-master-0
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: baremetal-provider
+    bareMetal:
+      bootMACAddress: '52:54:00:42:10:00'
+      interfaces:
+      - name: primary
+        macAddress: '52:54:00:42:10:00'
+      rootDeviceHints:
+        deviceName: /dev/sda
+      bmc:
+        address: redfish-virtualmedia+https://bmc-dc2-metal-master-0.bootwright.test/redfish/v1/Systems/1
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc2-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.142.10
+                prefix-length: 24
+        attachmentRef:
+          name: dc2-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc2-metal-master-1
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: baremetal-provider
+    bareMetal:
+      bootMACAddress: '52:54:00:42:10:01'
+      interfaces:
+      - name: primary
+        macAddress: '52:54:00:42:10:01'
+      rootDeviceHints:
+        deviceName: /dev/sda
+      bmc:
+        address: redfish-virtualmedia+https://bmc-dc2-metal-master-1.bootwright.test/redfish/v1/Systems/1
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc2-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.142.11
+                prefix-length: 24
+        attachmentRef:
+          name: dc2-net
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: dc2-metal-master-2
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: baremetal-provider
+    bareMetal:
+      bootMACAddress: '52:54:00:42:10:02'
+      interfaces:
+      - name: primary
+        macAddress: '52:54:00:42:10:02'
+      rootDeviceHints:
+        deviceName: /dev/sda
+      bmc:
+        address: redfish-virtualmedia+https://bmc-dc2-metal-master-2.bootwright.test/redfish/v1/Systems/1
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: dc2-net
+        overrides:
+          interfaces:
+          - name: primary
+            ipv4:
+              address:
+              - ip: 192.168.142.12
+                prefix-length: 24
+        attachmentRef:
+          name: dc2-net

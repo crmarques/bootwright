@@ -21,7 +21,7 @@ type Dispatch struct {
 }
 
 type RoleContract struct {
-	HostSetupRoles       []string
+	MachineSetupRoles    []string
 	SubstrateApplyRole   string
 	SubstrateDestroyRole string
 	BMCApplyRole         string
@@ -56,7 +56,7 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"}: {
 		Dispatch: Dispatch{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"},
 		Roles: RoleContract{
-			HostSetupRoles:       []string{"bootwright.core.host_libvirt"},
+			MachineSetupRoles:    []string{"bootwright.core.machine_setup_libvirt"},
 			SubstrateApplyRole:   "bootwright.core.machine_substrate_libvirt",
 			SubstrateDestroyRole: "bootwright.core.machine_substrate_libvirt",
 			BMCApplyRole:         "bootwright.core.provider_service_bmc_emulated",
@@ -138,8 +138,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:              ServiceKey{Kind: v1alpha1.ProviderServiceKindBMC, Realisation: "emulated"},
 		ApplyRole:        "bootwright.core.provider_service_bmc_emulated",
 		DestroyRole:      "bootwright.core.provider_service_bmc_emulated",
-		HostCapabilities: []string{v1alpha1.HostCapabilityLibvirt},
-		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "configKey"},
+		HostCapabilities: []string{v1alpha1.MachineCapabilityLibvirt},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "configKey"},
 		Status:           StatusSupported,
 		Summary:          "libvirt-hosted emulated Redfish BMC",
 	},
@@ -147,8 +147,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy},
 		ApplyRole:        "bootwright.core.infra_component_load_balancer_haproxy",
 		DestroyRole:      "bootwright.core.infra_component_load_balancer_haproxy",
-		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "capabilityName"},
+		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "capabilityName"},
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryLoadBalancer,
 			Type:       v1alpha1.ComponentImageTypeHAProxy,
@@ -164,8 +164,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP},
 		ApplyRole:        "bootwright.core.infra_component_artifact_server_http",
 		DestroyRole:      "bootwright.core.infra_component_artifact_server_http",
-		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "listeners", "endpoints"},
+		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "listeners", "endpoints"},
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryArtifacts,
 			Type:       v1alpha1.ComponentImageTypeArtifactsHTTP,
@@ -181,8 +181,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid},
 		ApplyRole:        "bootwright.core.infra_component_proxy_squid",
 		DestroyRole:      "bootwright.core.infra_component_proxy_squid",
-		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultSquidPort,
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryProxy,
@@ -199,8 +199,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:               ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq},
 		ApplyRole:         "bootwright.core.infra_component_name_resolution_dnsmasq",
 		DestroyRole:       "bootwright.core.infra_component_name_resolution_dnsmasq",
-		HostCapabilities:  []string{v1alpha1.HostCapabilityContainerRuntime},
-		ConflictFields:    []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		HostCapabilities:  []string{v1alpha1.MachineCapabilityContainerRuntime},
+		ConflictFields:    []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		MergeStringFields: []string{"additionalIngressHosts"},
 		DefaultPort:       v1alpha1.DefaultDNSPort,
 		Image: ServiceImage{
@@ -218,7 +218,7 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:            ServiceKey{Kind: v1alpha1.ComponentSlotNTP, Realisation: v1alpha1.InfraComponentTypeChrony},
 		ApplyRole:      "bootwright.core.infra_component_ntp_chrony",
 		DestroyRole:    "bootwright.core.infra_component_ntp_chrony",
-		ConflictFields: []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		ConflictFields: []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:    v1alpha1.DefaultNTPPort,
 		Status:         StatusSupported,
 		Summary:        "chrony managed NTP service",
@@ -227,8 +227,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry},
 		ApplyRole:        "bootwright.core.infra_component_registry_mirror",
 		DestroyRole:      "bootwright.core.infra_component_registry_mirror",
-		HostCapabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-		ConflictFields:   []string{"hostRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
+		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultMirrorRegistryPort,
 		Image: ServiceImage{
 			Category:   v1alpha1.ComponentImageCategoryRegistry,
@@ -300,7 +300,7 @@ func ServiceHostCapabilities(kind, realisation string) []string {
 func ServiceConflictFields(kind, realisation string) []string {
 	fields := LookupService(kind, realisation).ConflictFields
 	if len(fields) == 0 {
-		return []string{"hostRef", "realisation", "applyRole", "destroyRole"}
+		return []string{"machineRef", "realisation", "applyRole", "destroyRole"}
 	}
 	return append([]string(nil), fields...)
 }

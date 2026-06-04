@@ -5,11 +5,12 @@ import (
 	"net"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/support"
 )
 
 func validateInfraComponents(state v1alpha1.State) []string {
 	var errs []string
-	hosts := indexHosts(state.Hosts)
+	machines := indexMachines(state.Machines)
 	seen := map[string]bool{}
 	for _, component := range state.InfraComponents {
 		if e := validateName(v1alpha1.KindInfraComponent, component.Metadata.Name); e != "" {
@@ -20,12 +21,12 @@ func validateInfraComponents(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate InfraComponent %q", component.Metadata.Name))
 		}
 		seen[component.Metadata.Name] = true
-		errs = append(errs, validateInfraComponentSpec(component, hosts)...)
+		errs = append(errs, validateInfraComponentSpec(component, machines)...)
 	}
 	return errs
 }
 
-func validateInfraComponentSpec(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateInfraComponentSpec(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	prefix := fmt.Sprintf("InfraComponent/%s spec", component.Metadata.Name)
 	set := 0
 	if component.Spec.ArtifactServer != nil {
@@ -51,37 +52,35 @@ func validateInfraComponentSpec(component v1alpha1.InfraComponent, hosts map[str
 	}
 	var errs []string
 	if component.Spec.ArtifactServer != nil {
-		errs = append(errs, validateArtifactServerComponent(component, hosts)...)
+		errs = append(errs, validateArtifactServerComponent(component, machines)...)
 	}
 	if component.Spec.LoadBalancer != nil {
-		errs = append(errs, validateLoadBalancerComponent(component, hosts)...)
+		errs = append(errs, validateLoadBalancerComponent(component, machines)...)
 	}
 	if component.Spec.Proxy != nil {
-		errs = append(errs, validateProxyComponent(component, hosts)...)
+		errs = append(errs, validateProxyComponent(component, machines)...)
 	}
 	if component.Spec.NameResolution != nil {
-		errs = append(errs, validateNameResolutionComponent(component, hosts)...)
+		errs = append(errs, validateNameResolutionComponent(component, machines)...)
 	}
 	if component.Spec.NTP != nil {
-		errs = append(errs, validateNTPComponent(component, hosts)...)
+		errs = append(errs, validateNTPComponent(component, machines)...)
 	}
 	if component.Spec.Registry != nil {
-		errs = append(errs, validateRegistryComponent(component, hosts)...)
+		errs = append(errs, validateRegistryComponent(component, machines)...)
 	}
 	return errs
 }
 
-func validateArtifactServerComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateArtifactServerComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	server := component.Spec.ArtifactServer
 	prefix := fmt.Sprintf("InfraComponent/%s spec.artifactServer", component.Metadata.Name)
 	var errs []string
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", server.HostRef, hosts, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)...)
-	if server.BindAddress != "" && net.ParseIP(server.BindAddress) == nil {
-		errs = append(errs, fmt.Sprintf("%s.bindAddress %q is not a valid IP address", prefix, server.BindAddress))
-	}
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", server.MachineRef, machines, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)...)
+	errs = append(errs, validateServiceParams(prefix, server.BindAddress, 0)...)
 	errs = append(errs, validateArtifactServerListeners(prefix, server.Listeners)...)
-	if host, ok := hosts[server.HostRef.Name]; ok {
-		errs = append(errs, validateArtifactServerEndpoints(prefix, server.Listeners, server.Endpoints, host)...)
+	if machine, ok := machines[server.MachineRef.Name]; ok {
+		errs = append(errs, validateArtifactServerEndpoints(prefix, server.Listeners, server.Endpoints, machine)...)
 	}
 	return errs
 }
@@ -126,7 +125,7 @@ func validateArtifactServerListeners(prefix string, listeners []v1alpha1.Artifac
 	return errs
 }
 
-func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.ArtifactServerListener, endpoints []v1alpha1.ArtifactServerEndpoint, host v1alpha1.Host) []string {
+func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.ArtifactServerListener, endpoints []v1alpha1.ArtifactServerEndpoint, machine v1alpha1.Machine) []string {
 	var errs []string
 	listenerNames := map[string]bool{}
 	for _, listener := range listeners {
@@ -148,68 +147,68 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 		} else if !listenerNames[endpoint.Listener] {
 			errs = append(errs, fmt.Sprintf("%s.listener %q does not match any %s.listeners[].name", owner, endpoint.Listener, prefix))
 		}
-		if endpoint.HostAddress == "" {
-			errs = append(errs, owner+".hostAddress is required")
-		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.HostAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.hostAddress %q does not resolve to Host/%s spec.addresses[].name", owner, endpoint.HostAddress, host.Metadata.Name))
+		if endpoint.MachineAddress == "" {
+			errs = append(errs, owner+".machineAddress is required")
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
+			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.os.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
 		}
 	}
 	return errs
 }
 
-func validateLoadBalancerComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateLoadBalancerComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	lb := component.Spec.LoadBalancer
 	prefix := fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name)
 	var errs []string
 	if lb.Type != v1alpha1.InfraComponentTypeHAProxy {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, lb.Type, v1alpha1.InfraComponentTypeHAProxy))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", lb.HostRef, hosts, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", lb.MachineRef, machines, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)...)
 	errs = append(errs, validateLoadBalancerBindAddresses(prefix, lb.BindAddresses, nil)...)
 	return errs
 }
 
-func validateProxyComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateProxyComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	proxy := component.Spec.Proxy
 	prefix := fmt.Sprintf("InfraComponent/%s spec.proxy", component.Metadata.Name)
 	var errs []string
 	if proxy.Type != v1alpha1.InfraComponentTypeSquid {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, proxy.Type, v1alpha1.InfraComponentTypeSquid))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", proxy.HostRef, hosts, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", proxy.MachineRef, machines, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)...)
 	errs = append(errs, validateServiceParams(prefix, proxy.BindAddress, proxy.Port)...)
-	if host, ok := hosts[proxy.HostRef.Name]; ok {
-		errs = append(errs, validateServiceEndpoints(prefix, proxy.Endpoints, host)...)
+	if machine, ok := machines[proxy.MachineRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, proxy.Endpoints, machine)...)
 	}
 	return errs
 }
 
-func validateNameResolutionComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateNameResolutionComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	dns := component.Spec.NameResolution
 	prefix := fmt.Sprintf("InfraComponent/%s spec.nameResolution", component.Metadata.Name)
 	var errs []string
 	if dns.Type != v1alpha1.InfraComponentTypeDnsmasq {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, dns.Type, v1alpha1.InfraComponentTypeDnsmasq))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", dns.HostRef, hosts, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", dns.MachineRef, machines, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)...)
 	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
-	if host, ok := hosts[dns.HostRef.Name]; ok {
-		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, host)...)
+	if machine, ok := machines[dns.MachineRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, machine)...)
 	}
 	return errs
 }
 
-func validateNTPComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateNTPComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	ntp := component.Spec.NTP
 	prefix := fmt.Sprintf("InfraComponent/%s spec.ntp", component.Metadata.Name)
 	var errs []string
 	if ntp.Type != v1alpha1.InfraComponentTypeChrony {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, ntp.Type, v1alpha1.InfraComponentTypeChrony))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", ntp.HostRef, hosts, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", ntp.MachineRef, machines, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)...)
 	errs = append(errs, validateServiceParams(prefix, ntp.BindAddress, ntp.Port)...)
-	if host, ok := hosts[ntp.HostRef.Name]; ok {
-		errs = append(errs, validateServiceEndpoints(prefix, ntp.Endpoints, host)...)
+	if machine, ok := machines[ntp.MachineRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, ntp.Endpoints, machine)...)
 	}
 	for i, source := range ntp.UpstreamSources {
 		errs = append(errs, validateNTPAddress(fmt.Sprintf("%s.upstreamSources[%d]", prefix, i), source)...)
@@ -217,22 +216,48 @@ func validateNTPComponent(component v1alpha1.InfraComponent, hosts map[string]v1
 	return errs
 }
 
-func validateRegistryComponent(component v1alpha1.InfraComponent, hosts map[string]v1alpha1.Host) []string {
+func validateRegistryComponent(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	registry := component.Spec.Registry
 	prefix := fmt.Sprintf("InfraComponent/%s spec.registry", component.Metadata.Name)
 	var errs []string
 	if registry.Type != v1alpha1.InfraComponentTypeMirrorRegistry {
 		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, registry.Type, v1alpha1.InfraComponentTypeMirrorRegistry))
 	}
-	errs = append(errs, validateServiceHostRef(prefix+".hostRef", registry.HostRef, hosts, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", registry.MachineRef, machines, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)...)
 	errs = append(errs, validateServiceParams(prefix, registry.BindAddress, registry.Port)...)
-	if host, ok := hosts[registry.HostRef.Name]; ok {
-		errs = append(errs, validateServiceEndpoints(prefix, registry.Endpoints, host)...)
+	if machine, ok := machines[registry.MachineRef.Name]; ok {
+		errs = append(errs, validateServiceEndpoints(prefix, registry.Endpoints, machine)...)
 	}
 	return errs
 }
 
-func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoint, host v1alpha1.Host) []string {
+func validateServiceMachineRef(owner string, ref v1alpha1.LocalObjectReference, machines map[string]v1alpha1.Machine, kind, realisation string) []string {
+	var errs []string
+	capabilities := support.ServiceHostCapabilities(kind, realisation)
+	if len(capabilities) == 0 {
+		return validateMachineRefCapability(owner, ref, machines, "")
+	}
+	for _, capability := range capabilities {
+		errs = append(errs, validateMachineRefCapability(owner, ref, machines, capability)...)
+	}
+	return errs
+}
+
+func validateMachineRefCapability(owner string, ref v1alpha1.LocalObjectReference, machines map[string]v1alpha1.Machine, want string) []string {
+	if ref.Name == "" {
+		return []string{owner + ".name is required"}
+	}
+	machine, ok := machines[ref.Name]
+	if !ok {
+		return []string{fmt.Sprintf("%s %q does not match any Machine", owner, ref.Name)}
+	}
+	if want != "" && !machineHasCapability(machine, want) {
+		return []string{fmt.Sprintf("%s %q lacks capability %q (Machine.spec.capabilities or spec.os.capabilities)", owner, ref.Name, want)}
+	}
+	return nil
+}
+
+func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoint, machine v1alpha1.Machine) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for i, endpoint := range endpoints {
@@ -245,11 +270,22 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.HostAddress == "" {
-			errs = append(errs, owner+".hostAddress is required")
-		} else if _, ok := v1alpha1.HostAddressByName(host, endpoint.HostAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.hostAddress %q does not resolve to Host/%s spec.addresses[].name", owner, endpoint.HostAddress, host.Metadata.Name))
+		if endpoint.MachineAddress == "" {
+			errs = append(errs, owner+".machineAddress is required")
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
+			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.os.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
 		}
+	}
+	return errs
+}
+
+func validateServiceParams(prefix, bindAddress string, port int) []string {
+	var errs []string
+	if bindAddress != "" && net.ParseIP(bindAddress) == nil {
+		errs = append(errs, fmt.Sprintf("%s.bindAddress %q is not a valid IP address", prefix, bindAddress))
+	}
+	if port < 0 || port > 65535 {
+		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, port))
 	}
 	return errs
 }

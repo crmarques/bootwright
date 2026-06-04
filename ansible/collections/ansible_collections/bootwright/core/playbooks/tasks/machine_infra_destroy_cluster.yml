@@ -17,8 +17,8 @@
       {{
         bootwright_current_cluster.components
         | selectattr('kind', 'equalto', 'machines')
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
   changed_when: false
@@ -28,7 +28,7 @@
     name: bootwright.core.cluster_network_load_balancer_vips
     tasks_from: destroy.yml
   when:
-    - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('hostRef', 'equalto', bootwright_host_name) | list | length > 0
+    - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('machineRef', 'equalto', bootwright_host_name) | list | length > 0
 
 - name: Destroy substrate per machine
   ansible.builtin.include_role:

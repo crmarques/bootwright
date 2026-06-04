@@ -1,4 +1,4 @@
-# Bastion Setup (VM Or Host)
+# Bastion Setup (VM Or Machine)
 
 Run `bootwright` directly on a Linux VM or physical host. For the
 non-root-container alternative, see
@@ -9,7 +9,7 @@ points here when the operator chooses the host-bastion mode.
 
 The bastion is a Linux machine you SSH into and run `bootwright` from. It must
 be able to reach every provider and service host the case declares over SSH.
-Use the declared `Host.spec.ssh.addressName` addresses for those hosts.
+Use the declared `Machine.spec.os.ssh.addressName` addresses for those hosts.
 
 - A non-root user with `sudo`.
 - `bin/bootwright` available in `$PATH`.
@@ -60,7 +60,7 @@ ssh -i ~/.ssh/bootwright-ssh-key -o StrictHostKeyChecking=accept-new \
 ```
 
 When the bastion is also the provider host in a reference case, use the address
-that the case declares for that Host:
+that the case declares for that Machine:
 
 ```bash
 touch ~/.ssh/authorized_keys
@@ -74,9 +74,9 @@ ssh -i ~/.ssh/bootwright-ssh-key -o StrictHostKeyChecking=accept-new "$USER"@loc
 
 The e2e README's context step imports the per-kind YAML files from
 `test/e2e/<case>/` (typically `environment.yaml`,
-`hosts.yaml`, `networks.yaml`, `provider.yaml`, optional
+`service-machines.yaml`, `networks.yaml`, `provider.yaml`, optional
 `infra-component.yaml`,
-`cluster-infra.yaml`, `container-cluster.yaml`).
+`cluster-machines.yaml`, `container-cluster.yaml`).
 Put the repo on the bastion so they exist there, then export
 the context from that location. Either clone the repo:
 

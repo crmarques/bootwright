@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent) (v1alpha1.NetworkConfig, bool) {
+func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInstall, machine v1alpha1.InstallMachine) (v1alpha1.NetworkConfig, bool) {
 	if machine.Network.Spec != nil {
 		return v1alpha1.NetworkConfig{
 			Metadata: v1alpha1.Metadata{Name: fmt.Sprintf("%s/%s", ci.Metadata.Name, machine.Name)},
@@ -21,7 +21,7 @@ func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInfra, ma
 	return v1alpha1.NetworkConfig{}, false
 }
 
-func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInfra, machine v1alpha1.ClusterNodeComponent) map[string]any {
+func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInstall, machine v1alpha1.InstallMachine) map[string]any {
 	network, ok := machineNetworkDefinition(state, ci, machine)
 	if !ok {
 		return nil

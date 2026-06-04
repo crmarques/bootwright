@@ -1,92 +1,131 @@
 apiVersion: bootwright.io/v1alpha1
-kind: ClusterInfra
+kind: Machine
 metadata:
-  name: 3-nodes-ocp-emul-baremetal
+  name: rack1-srv1
 spec:
-  platform:
-    type: baremetal
-    baremetal:
-      provisioningNetwork: disabled
+  capabilities:
+    - openshift-node
 
-  endpoints:
-    api:
-      address: 192.168.133.10
-      source:
-        type: external
-    api-int:
-      address: 192.168.133.10
-      source:
-        type: external
-    apps:
-      address: 192.168.133.11
-      source:
-        type: external
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:10
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:10
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
 
-  artifactAccess:
-    serverRef:
-      name: default
-    redfishVirtualMedia:
-      endpointRef:
-        name: bmc
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.20
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv2
+spec:
+  capabilities:
+    - openshift-node
 
-  networkBindings:
-    - networkConfigRef:
-        name: rack1-vlan
-      providerRef:
-        name: rack1-baremetal-provider
-      attachmentRef:
-        name: rack1-vlan
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:11
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:11
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
 
-  components:
-    nodes:
-      - name: master-0
-        source:
-          providerRef:
-            name: rack1-baremetal-provider
-          machineRef:
-            name: rack1-srv1
-        network:
-          networkConfigRef:
-            name: rack1-vlan
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.133.20
-                      prefix-length: 24
-      - name: master-1
-        source:
-          providerRef:
-            name: rack1-baremetal-provider
-          machineRef:
-            name: rack1-srv2
-        network:
-          networkConfigRef:
-            name: rack1-vlan
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.133.21
-                      prefix-length: 24
-      - name: master-2
-        source:
-          providerRef:
-            name: rack1-baremetal-provider
-          machineRef:
-            name: rack1-srv3
-        network:
-          networkConfigRef:
-            name: rack1-vlan
-          overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - ip: 192.168.133.22
-                      prefix-length: 24
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.21
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv3
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 52:54:00:33:11:12
+      interfaces:
+        - name: primary
+          macAddress: 52:54:00:33:11:12
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bmc:
+        address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
+        protocol: redfish
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan
+        attachmentRef:
+          name: rack1-vlan
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.133.22
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -99,13 +138,29 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
       api:
-        name: api
-      apiInt:
-        name: api-int
+        address: 192.168.133.10
+        source:
+          type: external
+      api-int:
+        address: 192.168.133.10
+        source:
+          type: external
       ingress:
-        name: apps
+        address: 192.168.133.11
+        source:
+          type: external
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
     method: agent
     mode: connected
     nodeSSH:
@@ -130,16 +185,13 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      infraNodeRef:
-        clusterInfra: 3-nodes-ocp-emul-baremetal
-        name: master-0
+      machineRef:
+        name: rack1-srv1
     - hostname: master-1
       role: master
-      infraNodeRef:
-        clusterInfra: 3-nodes-ocp-emul-baremetal
-        name: master-1
+      machineRef:
+        name: rack1-srv2
     - hostname: master-2
       role: master
-      infraNodeRef:
-        clusterInfra: 3-nodes-ocp-emul-baremetal
-        name: master-2
+      machineRef:
+        name: rack1-srv3

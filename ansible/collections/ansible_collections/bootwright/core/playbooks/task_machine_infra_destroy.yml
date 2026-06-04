@@ -1,7 +1,7 @@
 ---
 - name: Destroy cluster infrastructure
-  # Mirror cluster_infra/apply.yml: target the renderer-emitted group of
-  # hosts that back a cluster machine substrate. Using
+  # Mirror machine_infra/apply.yml: target the renderer-emitted group of
+  # machines that back a cluster substrate. Using
   # bootwright_provider_hosts here would silently skip libvirt-only hosts
   # that don't also back a provider-scoped service.
   hosts: bootwright_infra_hosts
@@ -16,8 +16,8 @@
         bootwright_clusters | default([])
         | map(attribute='components') | flatten
         | selectattr('kind', 'equalto', 'machines')
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
     bootwright_host_clusters: >-

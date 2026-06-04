@@ -190,7 +190,7 @@ func TestCheckSyntaxJSON(t *testing.T) {
 	if !report.OK {
 		t.Fatalf("expected ok report, got %+v", report)
 	}
-	if report.ContainerClusters != 1 || report.ClusterInfras != 1 || report.InfraProviders != 1 {
+	if report.ContainerClusters != 1 || report.Machines == 0 || report.InfraProviders != 1 {
 		t.Fatalf("unexpected object counts: %+v", report)
 	}
 	for _, reject := range []string{"Bootwright:", "[OK]", "Summary"} {
@@ -808,9 +808,9 @@ func TestContextInitYesAcceptsUnselectedInvalidFilesWithResourceSelection(t *tes
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	addFixtureResourceSelection(t, replacement)
 	if err := os.WriteFile(filepath.Join(replacement, "unselected.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: Host
+kind: Machine
 metadata:
-  name: spare-host
+  name: spare-machine
 spec:
   retiredField: true
 `), 0o600); err != nil {
@@ -931,9 +931,9 @@ func TestContextUpdateAcceptsUnselectedInvalidFilesWithResourceSelection(t *test
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	addFixtureResourceSelection(t, replacement)
 	if err := os.WriteFile(filepath.Join(replacement, "unselected.yaml"), []byte(`apiVersion: bootwright.io/v1alpha1
-kind: Host
+kind: Machine
 metadata:
-  name: spare-host
+  name: spare-machine
 spec:
   addresses:
     - name: ssh
@@ -2248,11 +2248,11 @@ func addFixtureResourceSelection(t *testing.T, dir string) {
 	replaceInFile(t, filepath.Join(dir, "environment.yaml"), "  baseDomain: bootwright.test\n\n", `  baseDomain: bootwright.test
 
   resources:
-    - hosts.yaml
+    - service-machines.yaml
     - networks.yaml
     - provider.yaml
     - infra-component.yaml
-    - cluster-infra.yaml
+    - cluster-machines.yaml
     - container-cluster.yaml
 
 `)

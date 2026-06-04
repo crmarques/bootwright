@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func validateClusterServices(v1alpha1.ClusterInfra, map[string]v1alpha1.InfraProvider) []string {
+func validateClusterServices(v1alpha1.ClusterInstall, map[string]v1alpha1.InfraProvider) []string {
 	return nil
 }
 
@@ -38,22 +38,16 @@ func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalan
 	if len(binds) == 1 || referenced == nil {
 		return errs
 	}
+	for ref := range referenced {
+		if !seen[ref] {
+			errs = append(errs, fmt.Sprintf("%s source.bindAddress %q does not match any bindAddresses[].name", prefix, ref))
+		}
+	}
 	for _, bind := range binds {
 		if bind.Name != "" && !referenced[bind.Name] {
 			errs = append(errs, fmt.Sprintf("%s.bindAddresses[%s] is not referenced by any endpoint source.bindAddress",
 				prefix, bind.Name))
 		}
-	}
-	return errs
-}
-
-func validateServiceParams(prefix, bindAddress string, port int) []string {
-	var errs []string
-	if bindAddress != "" && net.ParseIP(bindAddress) == nil {
-		errs = append(errs, fmt.Sprintf("%s.bindAddress %q is not a valid IP address", prefix, bindAddress))
-	}
-	if port < 0 || port > 65535 {
-		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, port))
 	}
 	return errs
 }

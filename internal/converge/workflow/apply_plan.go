@@ -28,8 +28,8 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			return nil, err
 		}
 	}
-	hostServiceTasks, hostServiceTaskIDs := planHostServiceTasks(state, phaseSet)
-	tasks = append(tasks, hostServiceTasks...)
+	machineServiceTasks, machineServiceTaskIDs := planMachineServiceTasks(state, phaseSet)
+	tasks = append(tasks, machineServiceTasks...)
 	storageInfraDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseStorageInfra] {
 		for _, cluster := range state.StorageClusters {
@@ -49,7 +49,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Cluster:      cluster.Metadata.Name,
 					ClusterKind:  ApplyClusterKindStorage,
 					Status:       TaskStatusPending,
-					Dependencies: append([]string(nil), hostServiceTaskIDs...),
+					Dependencies: append([]string(nil), machineServiceTaskIDs...),
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
 				Playbook:      applyStoragePlaybook,
@@ -70,7 +70,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}
 			taskID := "storage." + cluster.Metadata.Name
 			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
-			deps := append([]string(nil), hostServiceTaskIDs...)
+			deps := append([]string(nil), machineServiceTaskIDs...)
 			deps = append(deps, storageInfraDepsByCluster[cluster.Metadata.Name]...)
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
@@ -93,10 +93,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	infraDepsByCluster := map[string][]string{}
 	clusterNames := applyClusterNames(state)
 	for _, name := range clusterNames {
-		if phaseSet[ApplyPhaseClusterInfra] {
+		if phaseSet[ApplyPhaseClusterInstall] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
-			deps := append([]string(nil), hostServiceTaskIDs...)
+			deps := append([]string(nil), machineServiceTaskIDs...)
 			deps = append(deps, kubeVirtDepsByCluster[name]...)
 			resourceKeys := kubeVirtResourceKeys(state, name)
 			if len(infraHosts) == 0 {
@@ -105,7 +105,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         ApplyTaskKindClusterInfra,
+						Kind:         ApplyTaskKindClusterInstall,
 						Label:        "infra " + name,
 						Cluster:      name,
 						ClusterKind:  ApplyClusterKindContainer,
@@ -113,7 +113,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Dependencies: deps,
 						ResourceKeys: resourceKeys,
 					},
-					Playbook: applyClusterInfraPlaybook,
+					Playbook: applyClusterInstallPlaybook,
 					Limit:    render.GroupInfraHosts,
 					State:    clusterState,
 				})
@@ -125,7 +125,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         ApplyTaskKindClusterInfra,
+						Kind:         ApplyTaskKindClusterInstall,
 						Label:        "infra " + name + " on " + host,
 						Cluster:      name,
 						ClusterKind:  ApplyClusterKindContainer,
@@ -134,7 +134,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Status:       TaskStatusPending,
 						Dependencies: deps,
 					},
-					Playbook: applyClusterInfraPlaybook,
+					Playbook: applyClusterInstallPlaybook,
 					Limit:    host,
 					Forks:    1,
 					State:    clusterState,
@@ -301,11 +301,11 @@ func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string
 		}
 		seen := map[string]bool{}
 		for _, node := range cluster.Spec.Nodes {
-			if node.InfraNodeRef.Name == "" || seen[node.InfraNodeRef.Name] {
+			if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 				continue
 			}
-			seen[node.InfraNodeRef.Name] = true
-			names = append(names, node.InfraNodeRef.Name)
+			seen[node.MachineRef.Name] = true
+			names = append(names, node.MachineRef.Name)
 		}
 		break
 	}
@@ -314,37 +314,12 @@ func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string
 }
 
 func applyNodeRedfishResource(state v1alpha1.State, clusterName, machineName string) string {
-	clusterInfraName := ""
-	for _, cluster := range state.ContainerClusters {
-		if cluster.Metadata.Name != clusterName {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name != machineName || machine.Spec.Substrate.BareMetal == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Nodes {
-			if node.InfraNodeRef.Name == machineName {
-				clusterInfraName = node.InfraNodeRef.ClusterInfra
-				break
-			}
-		}
-		break
-	}
-	for _, infra := range state.ClusterInfras {
-		if infra.Metadata.Name != clusterInfraName {
-			continue
-		}
-		for _, machine := range infra.Spec.Components.Nodes {
-			if machine.Name != machineName || machine.Source.MachineRef.Name == "" {
-				continue
-			}
-			for _, provider := range state.InfraProviders {
-				if provider.Metadata.Name != machine.Source.ProviderRef.Name {
-					continue
-				}
-				for _, providerMachine := range provider.Spec.Machines {
-					if providerMachine.Name == machine.Source.MachineRef.Name && providerMachine.BareMetal != nil && providerMachine.BareMetal.BMC.Address != "" {
-						return "redfish:" + providerMachine.BareMetal.BMC.Address
-					}
-				}
-			}
+		if machine.Spec.Substrate.BareMetal.BMC.Address != "" {
+			return "redfish:" + machine.Spec.Substrate.BareMetal.BMC.Address
 		}
 	}
 	return "redfish:" + clusterName + "/" + machineName

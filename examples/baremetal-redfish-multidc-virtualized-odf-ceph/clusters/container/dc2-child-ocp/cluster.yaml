@@ -8,53 +8,61 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
-      api:
-        name: api
-      apiInt:
-        name: api-int
-      ingress:
-        name: apps
     nodeSSH:
       keyPairRef:
         name: dc2-child-ocp-cluster-admin-ssh-key
+    platform:
+      type: none
+    endpoints:
+      api:
+        address: 192.168.152.20
+        source:
+          type: external
+      api-int:
+        address: 192.168.152.20
+        source:
+          type: external
+      ingress:
+        address: 192.168.152.21
+        source:
+          type: external
 
   networking:
     networkType: OVNKubernetes
     clusterNetwork:
-      - cidr: 10.140.0.0/14
-        hostPrefix: 23
+    - cidr: 10.140.0.0/14
+      hostPrefix: 23
     serviceNetwork:
-      - 172.33.0.0/16
+    - 172.33.0.0/16
 
   nodes:
-    - hostname: master-0
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: master-0
-    - hostname: master-1
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: master-1
-    - hostname: master-2
-      role: master
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: master-2
-    - hostname: worker-0
-      role: worker
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: worker-0
-    - hostname: worker-1
-      role: worker
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: worker-1
-    - hostname: worker-2
-      role: worker
-      infraNodeRef:
-        clusterInfra: dc2-child-ocp-infra
-        name: worker-2
+
+  - hostname: master-0
+    role: master
+    machineRef:
+      name: dc2-child-ocp-infra-master-0
+
+  - hostname: master-1
+    role: master
+    machineRef:
+      name: dc2-child-ocp-infra-master-1
+
+  - hostname: master-2
+    role: master
+    machineRef:
+      name: dc2-child-ocp-infra-master-2
+
+  - hostname: worker-0
+    role: worker
+    machineRef:
+      name: dc2-child-ocp-infra-worker-0
+
+  - hostname: worker-1
+    role: worker
+    machineRef:
+      name: dc2-child-ocp-infra-worker-1
+
+  - hostname: worker-2
+    role: worker
+    machineRef:
+      name: dc2-child-ocp-infra-worker-2

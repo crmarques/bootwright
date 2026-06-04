@@ -17,7 +17,7 @@ Defaulted fields are intentionally present with short comments so authors can se
   shared service catalog entries.
 - `infra/`: provider hosts, bare-metal and KubeVirt providers, network
   attachments, artifact services, and network templates.
-- `clusters/container/*/cluster-infra.yaml`: VIPs, artifact endpoints, machine
+- `clusters/container/*/cluster-machines.yaml`: VIPs, artifact endpoints, machine
   selections, KubeVirt network bindings, and platform render mode.
 - `clusters/container/*/cluster.yaml`: OpenShift release, networking, and node
   bindings for parent and child clusters.

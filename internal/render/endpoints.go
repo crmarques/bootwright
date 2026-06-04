@@ -14,26 +14,26 @@ var standardEndpointNames = []string{
 func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string {
 	switch role {
 	case v1alpha1.EndpointAPI:
-		return ocp.Spec.Install.EndpointRefs.API.Name
+		return role
 	case v1alpha1.EndpointAPIInt:
-		return ocp.Spec.Install.EndpointRefs.APIInt.Name
+		return role
 	case v1alpha1.EndpointIngress:
-		return ocp.Spec.Install.EndpointRefs.Ingress.Name
+		return role
 	default:
 		return ""
 	}
 }
 
-func containerEndpoint(ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, role string) (v1alpha1.Endpoint, bool) {
+func containerEndpoint(ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, role string) (v1alpha1.Endpoint, bool) {
 	name := containerEndpointRefName(ocp, role)
 	if name == "" {
 		return v1alpha1.Endpoint{}, false
 	}
-	endpoint, ok := ci.Spec.Endpoints[name]
+	endpoint, ok := ci.Endpoints[name]
 	return endpoint, ok
 }
 
-func containerEndpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, role string) string {
+func containerEndpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, role string) string {
 	return endpointAddress(state, ci, containerEndpointRefName(ocp, role))
 }
 
@@ -44,10 +44,10 @@ func endpointSourceType(endpoint v1alpha1.Endpoint, defaultType string) string {
 	return defaultType
 }
 
-func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInfra, name string) string {
+func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInstall, name string) string {
 	return stateview.EndpointAddress(state, ci, name)
 }
 
-func endpointNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, address string) (v1alpha1.NetworkConfig, bool) {
+func endpointNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, address string) (v1alpha1.NetworkConfig, bool) {
 	return stateview.EndpointNetworkConfig(state, ci, address)
 }

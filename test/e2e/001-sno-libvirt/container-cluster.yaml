@@ -9,13 +9,29 @@ spec:
       version: 4.21.15
 
   install:
-    endpointRefs:
+    platform:
+      type: bareMetal
+      baremetal:
+        provisioningNetwork: disabled
+    endpoints:
       api:
-        name: api
-      apiInt:
-        name: api-int
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: control-plane
+      api-int:
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: control-plane
       ingress:
-        name: apps
+        source:
+          type: infraComponent
+          componentRef:
+            name: load-balancer
+          bindAddress: apps
     method: agent
     mode: connected
     nodeSSH:
@@ -40,6 +56,5 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      infraNodeRef:
-        clusterInfra: sno-libvirt
+      machineRef:
         name: master-0

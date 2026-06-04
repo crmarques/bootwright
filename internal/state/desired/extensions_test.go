@@ -540,21 +540,21 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 		{
 			name: "binding-requires-extension",
 			resources: []string{
-				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding.yaml",
+				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding.yaml",
 			},
 			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addons[0]; add "extension.yaml"`,
 		},
 		{
 			name: "binding-requires-set",
 			resources: []string{
-				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
+				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
 			},
 			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.addonProfiles[0]; add "set.yaml"`,
 		},
 		{
 			name: "set-requires-extension",
 			resources: []string{
-				"hosts.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "set.yaml",
+				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "set.yaml",
 			},
 			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonProfile/virtualization-platform spec.addons[0]; add "extension.yaml"`,
 		},

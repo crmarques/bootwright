@@ -9,7 +9,7 @@ import (
 // renderer owns machineNetwork (derived from each selected NetworkConfig);
 // the user owns clusterNetwork / serviceNetwork (declared on
 // ContainerCluster.spec.networking).
-func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) map[string]any {
+func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) map[string]any {
 	result := map[string]any{
 		"machineNetwork": machineNetworkConfig(state, ci),
 	}
@@ -28,7 +28,7 @@ func networkingConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alph
 	return result
 }
 
-func machineNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
+func machineNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
 	networks := stateview.ClusterNetworkConfigs(state, ci)
 	out := make([]any, 0, len(networks))
 	seen := map[string]bool{}

@@ -18,7 +18,7 @@ type InfraComponentSpec struct {
 }
 
 type ArtifactServerComponent struct {
-	HostRef     LocalObjectReference     `yaml:"hostRef" json:"hostRef"`
+	MachineRef  LocalObjectReference     `yaml:"machineRef" json:"machineRef"`
 	BindAddress string                   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Listeners   []ArtifactServerListener `yaml:"listeners,omitempty" json:"listeners,omitempty"`
 	Endpoints   []ArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
@@ -31,20 +31,20 @@ type ArtifactServerListener struct {
 }
 
 type ArtifactServerEndpoint struct {
-	Name        string `yaml:"name" json:"name"`
-	Listener    string `yaml:"listener" json:"listener"`
-	HostAddress string `yaml:"hostAddress" json:"hostAddress"`
+	Name           string `yaml:"name" json:"name"`
+	Listener       string `yaml:"listener" json:"listener"`
+	MachineAddress string `yaml:"machineAddress" json:"machineAddress"`
 }
 
 type LoadBalancerComponent struct {
 	Type          string                    `yaml:"type" json:"type"`
-	HostRef       LocalObjectReference      `yaml:"hostRef" json:"hostRef"`
+	MachineRef    LocalObjectReference      `yaml:"machineRef" json:"machineRef"`
 	BindAddresses []LoadBalancerBindAddress `yaml:"bindAddresses,omitempty" json:"bindAddresses,omitempty"`
 }
 
 type ProxyComponent struct {
 	Type        string               `yaml:"type" json:"type"`
-	HostRef     LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	MachineRef  LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	BindAddress string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Port        int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints   []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
@@ -52,7 +52,7 @@ type ProxyComponent struct {
 
 type NameResolutionComponent struct {
 	Type                   string               `yaml:"type" json:"type"`
-	HostRef                LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	MachineRef             LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	BindAddress            string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Port                   int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints              []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
@@ -61,7 +61,7 @@ type NameResolutionComponent struct {
 
 type NTPComponent struct {
 	Type            string               `yaml:"type" json:"type"`
-	HostRef         LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	MachineRef      LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	BindAddress     string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Port            int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints       []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
@@ -70,13 +70,13 @@ type NTPComponent struct {
 
 type RegistryComponent struct {
 	Type        string               `yaml:"type" json:"type"`
-	HostRef     LocalObjectReference `yaml:"hostRef" json:"hostRef"`
+	MachineRef  LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	BindAddress string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Port        int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints   []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 }
 
 type ServiceEndpoint struct {
-	Name        string `yaml:"name" json:"name"`
-	HostAddress string `yaml:"hostAddress" json:"hostAddress"`
+	Name           string `yaml:"name" json:"name"`
+	MachineAddress string `yaml:"machineAddress" json:"machineAddress"`
 }

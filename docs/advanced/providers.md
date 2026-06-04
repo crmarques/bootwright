@@ -44,7 +44,7 @@ spec:
 `disableCertificateVerification: true` is a lab posture for BMCs without
 trusted TLS. Do not treat it as the production default.
 
-The cluster selects that server and adds IP overrides in `ClusterInfra`:
+The cluster selects that server and adds IP overrides in `Machine and ContainerCluster`:
 
 ```yaml
 components:
@@ -120,14 +120,14 @@ spec:
       memoryMiB: 16384
       diskGiB: 120
       kubevirt:
-        hostContainerClusterRef:
+        hostClusterRef:
           name: metal-ocp
         namespace: bootwright-child-ocp
         storageClassRef:
           name: lvms-vg1
 ```
 
-Use `hostContainerClusterRef` when the virtualization host is another Bootwright
+Use `hostClusterRef` when the virtualization host is another Bootwright
 `ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that host
 cluster; do not put kubeconfig bytes in desired state. Use `kubeconfigRef`
 when the host cluster is external:
@@ -139,7 +139,7 @@ kubevirt:
   namespace: bootwright-child-ocp
 ```
 
-Exactly one of `hostContainerClusterRef` or `kubeconfigRef` is required. The namespace is
+Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace is
 required and the storage class is optional. KubeVirt machines must bind their
 selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
 and the full apply graph waits for the host cluster add-on that advertises
@@ -159,7 +159,7 @@ spec:
 
 ## Services
 
-Host-bound shared services are declared as `InfraComponent` objects:
+Machine-bound shared services are declared as `InfraComponent` objects:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -169,7 +169,7 @@ metadata:
 spec:
   proxy:
     type: squid
-    hostRef:
+    machineRef:
       name: services-host
     port: 3128
 ```
@@ -185,7 +185,7 @@ metadata:
   name: artifact-server
 spec:
   artifactServer:
-    hostRef:
+    machineRef:
       name: services-host
     listeners:
       - name: https
@@ -194,10 +194,10 @@ spec:
     endpoints:
       - name: bmc
         listener: https
-        hostAddress: lab-lan
+        machineAddress: lab-lan
       - name: cluster
         listener: https
-        hostAddress: lab-lan
+        machineAddress: lab-lan
 ```
 
 ```yaml
@@ -223,11 +223,11 @@ spec:
           name: bmc
 ```
 
-Endpoint names are endpoint selectors; `hostAddress` values resolve against the
-named addresses on the selected `hostRef`. For `redfishVirtualMedia`, use a
+Endpoint names are endpoint selectors; `machineAddress` values resolve against the
+named addresses on the selected `machineRef`. For `redfishVirtualMedia`, use a
 BMC-routable IP address entry in most environments; many BMCs do not reliably
 resolve DNS aliases, and Bootwright uses the matched address value directly in
-the ISO URL sent to Redfish. `ClusterInfra.spec.artifactAccess` may override
+the ISO URL sent to Redfish. `ContainerCluster.spec.install.artifactAccess` may override
 the default when one cluster needs a different artifact server or endpoint.
 Bootwright serves HTTPS listeners with a self-signed certificate generated on
 the host. Omit `listeners` to use the default HTTPS listener on port `8443`.

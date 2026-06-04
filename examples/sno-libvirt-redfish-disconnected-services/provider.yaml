@@ -3,22 +3,25 @@ kind: InfraProvider
 metadata:
   name: lab-libvirt-provider
 spec:
-  machineProfiles:
+  type: libvirt
+
+  networkAttachments:
+
+  - name: sno-bridge
+    libvirt:
+      bridge: vbr-cb-sno-disc
+
+  libvirt:
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      auth:
+        credentialRef:
+          name: bmc-credentials
+    machineRef:
+      name: lab-host
+    machineProfiles:
     - name: sno
       cpu: 8
       memoryMiB: 16384
       diskGiB: 120
-      libvirt:
-        hostRef:
-          name: lab-host
-        uri: qemu:///system
-        bmcEmulationDefaults:
-          enabled: true
-          auth:
-            credentialRef:
-              name: bmc-credentials
-
-  networkAttachments:
-    - name: sno-bridge
-      libvirt:
-        bridge: vbr-cb-sno-disc

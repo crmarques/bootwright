@@ -3,18 +3,22 @@ kind: InfraProvider
 metadata:
   name: baremetal-provider
 spec:
-  machines:
-    - name: metal-master-0
-      baremetal:
-        bootMACAddress: 52:54:00:60:10:10
-        interfaces:
-          - name: primary
-            macAddress: 52:54:00:60:10:10
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-metal-master-0.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
+  type: baremetal
 
+  bareMetal:
+    boot:
+      method: external
+
+  networkAttachments:
+
+  - name: dc1-net
+    bareMetal:
+      vlan: 0
+
+  - name: dc2-net
+    bareMetal:
+      vlan: 0
+
+  - name: metal-net
+    bareMetal:
+      vlan: 0

@@ -58,7 +58,7 @@ func TestClustersApplyRunsPreflightBeforeInfraAndInstall(t *testing.T) {
 	infra := strings.Index(body, "task_machine_infra_apply.yml")
 	install := strings.Index(body, "task_container_cluster_agent_install.yml")
 	if preflight < 0 || infra < 0 || install < 0 || preflight > infra || infra > install {
-		t.Fatalf("clusters apply must run preflight before cluster-infra and install-agent")
+		t.Fatalf("clusters apply must run preflight before machine-infra and install-agent")
 	}
 }
 
@@ -116,7 +116,7 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 				t.Fatalf("%s play %q uses bootwright_proxy_env without pre_tasks", path, play["name"])
 			}
 			if !hasHostProxyFactsImport(preTasks) {
-				t.Fatalf("%s play %q must import host_proxy facts before proxied tasks", path, play["name"])
+				t.Fatalf("%s play %q must import machine_proxy facts before proxied tasks", path, play["name"])
 			}
 		}
 	}
@@ -145,7 +145,7 @@ func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
 }
 
 func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_proxy/tasks/facts.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_proxy/tasks/facts.yml")
 	resolveTask := tasks[findAnsibleTask(t, tasks, "Resolve proxy desired state")]
 	facts, ok := resolveTask["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -189,7 +189,7 @@ func TestHostProxyFactsHonorNoProxyOnlyConfiguration(t *testing.T) {
 }
 
 func TestHostProxyPersistenceKeepsNoProxyOnlyConfiguration(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_proxy/tasks/persist.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_proxy/tasks/persist.yml")
 	persist := tasks[findAnsibleTask(t, tasks, "Persist proxy settings on host")]
 	if got := persist["when"]; got != "bootwright_proxy_enabled" {
 		t.Fatalf("%s when got %v, want bootwright_proxy_enabled", persist["name"], got)
@@ -1436,7 +1436,7 @@ func TestAdapterRoleDirectoriesAreRegistered(t *testing.T) {
 	}
 }
 
-func TestHostServicePlaybooksDispatchRenderedRoles(t *testing.T) {
+func TestMachineServicePlaybooksDispatchRenderedRoles(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_apply.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_provider_services_destroy.yml",
@@ -2114,12 +2114,12 @@ func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
 }
 
 func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_base/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_base/tasks/main.yml")
 	binaryIdx := findAnsibleTask(t, tasks, "Detect firewall-cmd binary")
 	stateIdx := findAnsibleTask(t, tasks, "Detect running firewalld daemon")
 	factIdx := findAnsibleTask(t, tasks, "Set firewalld availability fact")
 	if !(binaryIdx < stateIdx && stateIdx < factIdx) {
-		t.Fatalf("host_base must detect firewall-cmd before probing daemon state and setting the availability fact")
+		t.Fatalf("machine_base must detect firewall-cmd before probing daemon state and setting the availability fact")
 	}
 
 	command, ok := tasks[stateIdx]["ansible.builtin.command"].(string)
@@ -2149,14 +2149,14 @@ func TestHostBaseFirewalldAvailabilityRequiresRunningDaemon(t *testing.T) {
 }
 
 func TestHostBaseAllowsUnavailableRedHatReposBeforePackageInstall(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/host_base/tasks/main.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_base/tasks/main.yml")
 	dnfStatIdx := findAnsibleTask(t, tasks, "Stat dnf.conf")
 	dnfIdx := findAnsibleTask(t, tasks, "Allow unavailable DNF repositories")
 	yumStatIdx := findAnsibleTask(t, tasks, "Stat yum.conf")
 	yumIdx := findAnsibleTask(t, tasks, "Allow unavailable YUM repositories")
 	installIdx := findAnsibleTask(t, tasks, "Install base host packages")
 	if !(dnfStatIdx < dnfIdx && dnfIdx < installIdx && yumStatIdx < yumIdx && yumIdx < installIdx) {
-		t.Fatalf("host_base must allow unavailable Red Hat repos before installing packages")
+		t.Fatalf("machine_base must allow unavailable Red Hat repos before installing packages")
 	}
 
 	for _, idx := range []int{dnfIdx, yumIdx} {
@@ -2384,7 +2384,7 @@ func hasHostProxyFactsImport(tasks []any) bool {
 		if !ok {
 			continue
 		}
-		if importRole["name"] == "bootwright.core.host_proxy" && importRole["tasks_from"] == "facts" {
+		if importRole["name"] == "bootwright.core.machine_proxy" && importRole["tasks_from"] == "facts" {
 			return true
 		}
 	}
@@ -2553,7 +2553,7 @@ func registeredAdapterRoles() map[string]bool {
 		}
 	}
 	for _, entry := range support.Entries() {
-		for _, role := range entry.Roles.HostSetupRoles {
+		for _, role := range entry.Roles.MachineSetupRoles {
 			add(role)
 		}
 		add(entry.Roles.SubstrateApplyRole)
@@ -2583,7 +2583,7 @@ func ansibleAdapterRoleDirs(t *testing.T) []string {
 		prefixes []string
 	}
 	rules := []rule{
-		{base: bootwrightCollectionRoleRoot, prefixes: []string{"host_libvirt"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"machine_setup_libvirt"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"provider_service_bmc_"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"infra_component_"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"machine_substrate_"}},

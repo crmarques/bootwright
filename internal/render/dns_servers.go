@@ -2,11 +2,11 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func resolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig) []string {
+func resolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig) []string {
 	return resolveClusterDNSServersFromConfig(state, ci, network, network.Spec.Template.NetworkConfig)
 }
 
-func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra, network v1alpha1.NetworkConfig, config map[string]any) []string {
+func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig, config map[string]any) []string {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, server := range networkConfigDNSServers(config) {

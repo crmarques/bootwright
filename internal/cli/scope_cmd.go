@@ -50,7 +50,7 @@ func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommo
 	if allowClusterScope {
 		scopeUsage := "comma-separated " + targetKind + " names to " + scopeAction
 		if targetKind == "ContainerCluster" {
-			scopeUsage += " (restricts the matching ClusterInfra/Provider sets)"
+			scopeUsage += " (restricts the matching ClusterInstall/Provider sets)"
 		}
 		cmd.Flags().StringVar(&f.clusterScope, "scope", "", scopeUsage)
 	}

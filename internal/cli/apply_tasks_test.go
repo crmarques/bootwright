@@ -144,7 +144,7 @@ func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) 
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	now := time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC)
 	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "infra.cluster-a", Kind: workflow.ApplyTaskKindClusterInfra, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
+		{ID: "infra.cluster-a", Kind: workflow.ApplyTaskKindClusterInstall, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
 		{ID: "iso.cluster-a", Kind: workflow.ApplyTaskKindClusterISO, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusOK},
 		{ID: "boot.cluster-a", Kind: workflow.ApplyTaskKindNodeBoot, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusRunning},
 		{ID: "wait.cluster-a", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "cluster-a", ClusterKind: workflow.ApplyClusterKindContainer, Status: workflow.TaskStatusPending},

@@ -15,11 +15,12 @@ const (
 	APIVersion = "bootwright.io/v1alpha1"
 
 	KindEnvironment            = "Environment"
-	KindHost                   = "Host"
+	KindMachine                = "Machine"
+	KindMachineImage           = "MachineImage"
+	KindMachineInstallProfile  = "MachineInstallProfile"
 	KindNetworkConfig          = "NetworkConfig"
 	KindInfraProvider          = "InfraProvider"
 	KindInfraComponent         = "InfraComponent"
-	KindClusterInfra           = "ClusterInfra"
 	KindContainerCluster       = "ContainerCluster"
 	KindStorageCluster         = "StorageCluster"
 	KindStoragePlacementPolicy = "StoragePlacementPolicy"
@@ -37,11 +38,25 @@ const (
 	ProvisionerKubeVirt  = "kubevirt"
 	ProvisionerBareMetal = "baremetal"
 
-	// Host canonical capability tags.
-	HostCapabilityLibvirt          = "libvirt"
-	HostCapabilityContainerRuntime = "container-runtime"
-	HostCapabilityCephAdmin        = "ceph-admin"
-	HostCapabilityCephNode         = "ceph-node"
+	// Machine canonical capability tags.
+	MachineCapabilityOpenShiftNode    = "openshift-node"
+	MachineCapabilityLibvirt          = "libvirt"
+	MachineCapabilityContainerRuntime = "container-runtime"
+	MachineCapabilityArtifactServer   = "artifact-server"
+	MachineCapabilityLoadBalancer     = "load-balancer"
+	MachineCapabilityProxy            = "proxy"
+	MachineCapabilityNameResolution   = "name-resolution"
+	MachineCapabilityNTP              = "ntp"
+	MachineCapabilityRegistry         = "registry"
+	MachineCapabilityCephAdmin        = "ceph-admin"
+	MachineCapabilityCephNode         = "ceph-node"
+	MachineOSModeRaw                  = "raw"
+	MachineOSModeExternal             = "external"
+	MachineOSModeManaged              = "managed"
+	MachineInstallProfileTypeAnaconda = "anaconda"
+	MachineImageTypeISO               = "iso"
+	MachineInstallHostnameMachineName = "machineName"
+	MachineInstallRootDeviceSubstrate = "substrateRootDeviceHints"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"
@@ -59,7 +74,7 @@ const (
 	NodeRoleWorker = "worker"
 
 	// Installer platform render types.
-	PlatformTypeBareMetal = "baremetal"
+	PlatformTypeBareMetal = "bareMetal"
 	PlatformTypeVSphere   = "vsphere"
 	PlatformTypeNone      = "none"
 	PlatformTypeExternal  = "external"
@@ -70,7 +85,7 @@ const (
 
 	// Standard endpoint slot names.
 	EndpointAPI     = "api"
-	EndpointAPIInt  = "apiInt"
+	EndpointAPIInt  = "api-int"
 	EndpointIngress = "ingress"
 
 	EndpointSourceOpenShift      = "openshift"
@@ -78,7 +93,7 @@ const (
 	EndpointSourceExternal       = "external"
 	EndpointSourceInfraComponent = "infraComponent"
 
-	// Standard component slot names (consume side, in ClusterInfra.spec.components).
+	// Standard component slot names.
 	ComponentSlotMachines       = "machines"
 	ComponentSlotLoadBalancer   = "loadBalancer"
 	ComponentSlotArtifacts      = "artifacts"
@@ -139,6 +154,7 @@ const (
 	ArtifactServerProtocolHTTP              = "http"
 	ArtifactServerProtocolHTTPS             = "https"
 	ArtifactConsumerRedfishVirtualMedia     = "redfishVirtualMedia"
+	ArtifactConsumerMachineBoot             = "machineBoot"
 	ArtifactConsumerContainerClusterInstall = "containerClusterInstall"
 
 	// Component image catalog — closed set of (category, type) pairs that
@@ -174,9 +190,8 @@ const (
 
 	StorageClusterTypeCeph = "ceph"
 
-	StorageClusterManagementManaged     = "managed"
-	StorageClusterManagementExternal    = "external"
-	StorageClusterManagementFullManaged = "fullManaged"
+	StorageClusterManagementManaged  = "managed"
+	StorageClusterManagementExternal = "external"
 
 	StorageCephRoleMON     = "mon"
 	StorageCephRoleMGR     = "mgr"
@@ -204,11 +219,12 @@ func ClusterAdminSSHKeyName(clusterName string) string {
 // State is the loaded fleet.
 type State struct {
 	Environments             []Environment            `yaml:"environments,omitempty" json:"environments,omitempty"`
-	Hosts                    []Host                   `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	Machines                 []Machine                `yaml:"machines,omitempty" json:"machines,omitempty"`
+	MachineImages            []MachineImage           `yaml:"machineImages,omitempty" json:"machineImages,omitempty"`
+	MachineInstallProfiles   []MachineInstallProfile  `yaml:"machineInstallProfiles,omitempty" json:"machineInstallProfiles,omitempty"`
 	NetworkConfigs           []NetworkConfig          `yaml:"networkConfigs,omitempty" json:"networkConfigs,omitempty"`
 	InfraProviders           []InfraProvider          `yaml:"infraProviders,omitempty" json:"infraProviders,omitempty"`
 	InfraComponents          []InfraComponent         `yaml:"infraComponents,omitempty" json:"infraComponents,omitempty"`
-	ClusterInfras            []ClusterInfra           `yaml:"clusterInfras,omitempty" json:"clusterInfras,omitempty"`
 	ContainerClusters        []ContainerCluster       `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters          []StorageCluster         `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
 	StoragePlacementPolicies []StoragePlacementPolicy `yaml:"storagePlacementPolicies,omitempty" json:"storagePlacementPolicies,omitempty"`
@@ -227,7 +243,8 @@ type TypeMeta struct {
 }
 
 type Metadata struct {
-	Name string `yaml:"name" json:"name"`
+	Name   string            `yaml:"name" json:"name"`
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
 // LocalObjectReference names a single sibling object in the loaded state.
@@ -348,31 +365,6 @@ func StandardEndpointBackendRole(endpoint string) string {
 	default:
 		return ""
 	}
-}
-
-// ProfileProvisionerKind returns the substrate name the profile
-// instantiates against (libvirt / vsphere / kubevirt), or "" when no arm
-// is set.
-func ProfileProvisionerKind(p MachineProfileCapability) string {
-	switch {
-	case p.Libvirt != nil:
-		return ProvisionerLibvirt
-	case p.VSphere != nil:
-		return ProvisionerVSphere
-	case p.KubeVirt != nil:
-		return ProvisionerKubeVirt
-	default:
-		return ""
-	}
-}
-
-// MachineProvisionerKind returns the substrate name the explicit server
-// runs on. Currently always `baremetal` for the only defined arm.
-func MachineProvisionerKind(m MachineCapability) string {
-	if m.BareMetal != nil {
-		return ProvisionerBareMetal
-	}
-	return ""
 }
 
 func DNSServiceIP(bind string, network NetworkConfig) string {

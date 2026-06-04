@@ -106,7 +106,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: entry.Connection.Auth.ProxyAuthRef.Name,
 				label:   fmt.Sprintf("proxy %s proxyAuthRef", entry.Name),
-				phases:  []string{"provider", "cluster-infra"},
+				phases:  []string{"provider", "machine-infra"},
 			})
 		}
 		if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil && registries.Mirror.CredentialsRef.Name != "" {
@@ -125,54 +125,52 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		}
 	}
 
-	for _, h := range state.Hosts {
-		if h.Spec.SSH == nil || h.Spec.SSH.KeyRef.Name == "" {
+	for _, machine := range state.Machines {
+		if machine.Spec.OS.SSH == nil || machine.Spec.OS.SSH.KeyRef.Name == "" {
 			continue
 		}
-		if locality.IsControllerLocalHost(h, localPolicy) {
+		if locality.IsControllerLocalMachine(machine, localPolicy) {
 			continue
 		}
-		out = append(out, hostSSHSecretRequirements(fmt.Sprintf("host %s", h.Metadata.Name), []string{"provider", "cluster-infra", "container-cluster"}, h, false)...)
+		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"provider", "machine-infra", "container-cluster"}, machine, false)...)
 	}
 	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			if l := mp.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialRef.Name != "" {
-				out = append(out, secretRefRequirement{
-					refName: l.BMCEmulationDefaults.Auth.CredentialRef.Name,
-					label:   fmt.Sprintf("provider %s machineProfiles[%s] bmcEmulationDefaults credentialRef", p.Metadata.Name, mp.Name),
-					phases:  []string{"provider", "container-cluster"},
-				})
-			}
-			if v := mp.VSphere; v != nil {
-				for i, vc := range v.VCenters {
-					if vc.CredentialsRef.Name == "" {
-						continue
-					}
-					out = append(out, secretRefRequirement{
-						refName: vc.CredentialsRef.Name,
-						label:   fmt.Sprintf("provider %s machineProfiles[%s] vsphere vcenters[%d] credentialsRef", p.Metadata.Name, mp.Name, i),
-						phases:  []string{"provider"},
-					})
-				}
-			}
-			if k := mp.KubeVirt; k != nil && k.KubeconfigRef != nil && k.KubeconfigRef.Name != "" {
-				out = append(out, secretRefRequirement{
-					refName: k.KubeconfigRef.Name,
-					label:   fmt.Sprintf("provider %s machineProfiles[%s] kubevirt kubeconfigRef", p.Metadata.Name, mp.Name),
-					phases:  []string{"cluster-infra", "container-cluster"},
-				})
-			}
-		}
-		for _, m := range p.Spec.Machines {
-			if m.BareMetal == nil || m.BareMetal.BMC.CredentialsRef.Name == "" {
-				continue
-			}
+		if l := p.Spec.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: m.BareMetal.BMC.CredentialsRef.Name,
-				label:   fmt.Sprintf("provider %s machines[%s] baremetal bmc credentialsRef", p.Metadata.Name, m.Name),
+				refName: l.BMCEmulationDefaults.Auth.CredentialRef.Name,
+				label:   fmt.Sprintf("provider %s libvirt bmcEmulationDefaults credentialRef", p.Metadata.Name),
 				phases:  []string{"provider", "container-cluster"},
 			})
 		}
+		if v := p.Spec.VSphere; v != nil {
+			for i, vc := range v.VCenters {
+				if vc.CredentialsRef.Name == "" {
+					continue
+				}
+				out = append(out, secretRefRequirement{
+					refName: vc.CredentialsRef.Name,
+					label:   fmt.Sprintf("provider %s vsphere vcenters[%d] credentialsRef", p.Metadata.Name, i),
+					phases:  []string{"provider"},
+				})
+			}
+		}
+		if k := p.Spec.KubeVirt; k != nil && k.KubeconfigRef != nil && k.KubeconfigRef.Name != "" {
+			out = append(out, secretRefRequirement{
+				refName: k.KubeconfigRef.Name,
+				label:   fmt.Sprintf("provider %s kubevirt kubeconfigRef", p.Metadata.Name),
+				phases:  []string{"machine-infra", "container-cluster"},
+			})
+		}
+	}
+	for _, machine := range state.Machines {
+		if machine.Spec.Substrate.BareMetal == nil || machine.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name == "" {
+			continue
+		}
+		out = append(out, secretRefRequirement{
+			refName: machine.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name,
+			label:   fmt.Sprintf("machine %s bareMetal bmc credentialsRef", machine.Metadata.Name),
+			phases:  []string{"provider", "container-cluster"},
+		})
 	}
 
 	for _, cluster := range state.ContainerClusters {

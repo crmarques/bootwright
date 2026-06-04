@@ -1,12 +1,12 @@
 ---
 # Converges one libvirt machine substrate for `bootwright_component`,
-# called once per machine by the cluster_infra layer playbook. The
+# called once per machine by the machine-infra layer playbook. The
 # libvirt network setup is idempotent and re-runs cheaply for each
 # machine in the same cluster.
 
 - name: Ensure libvirt host packages and service
   ansible.builtin.import_role:
-    name: bootwright.core.host_libvirt
+    name: bootwright.core.machine_setup_libvirt
 
 - name: Resolve cluster libvirt network from the machine network config
   ansible.builtin.set_fact:

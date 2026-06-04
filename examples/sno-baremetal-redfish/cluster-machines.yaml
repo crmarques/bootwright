@@ -1,0 +1,41 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rack1-srv1
+spec:
+  capabilities:
+  - openshift-node
+
+  substrate:
+    providerRef:
+      name: rack1-baremetal-provider
+    bareMetal:
+      bootMACAddress: 00:25:90:5a:10:01
+      interfaces:
+      - name: eno1
+        macAddress: 00:25:90:5a:10:01
+      - name: eno2
+        macAddress: 00:25:90:5a:10:02
+      rootDeviceHints:
+        deviceName: /dev/sda
+      bmc:
+        address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: rack1-vlan140-machine
+        overrides:
+          interfaces:
+          - name: eno1
+            ipv4:
+              address:
+              - ip: 192.168.140.20
+                prefix-length: 24
+        attachmentRef:
+          name: rack1-vlan140-machine

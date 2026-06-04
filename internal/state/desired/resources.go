@@ -207,55 +207,65 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			env.Metadata.Name, kind, name, owner, relativeResourcePath(env.SourcePath, path)))
 	}
 	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			if mp.Libvirt != nil {
-				require(fmt.Sprintf("InfraProvider/%s spec.machineProfiles[%s].libvirt.hostRef", p.Metadata.Name, mp.Name),
-					v1alpha1.KindHost, mp.Libvirt.HostRef.Name)
+		if p.Spec.Libvirt != nil {
+			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.machineRef", p.Metadata.Name),
+				v1alpha1.KindMachine, p.Spec.Libvirt.MachineRef.Name)
+		}
+		for _, profile := range providerProfiles(p) {
+			if profile.FailureDomainRef.Name != "" && p.Spec.Type == v1alpha1.ProvisionerVSphere {
+				require(fmt.Sprintf("InfraProvider/%s spec.%s.machineProfiles[%s].failureDomainRef", p.Metadata.Name, p.Spec.Type, profile.Name),
+					v1alpha1.KindInfraProvider, p.Metadata.Name)
 			}
+		}
+	}
+	for _, image := range state.MachineInstallProfiles {
+		if image.Spec.Installer.Anaconda != nil {
+			require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.imageRef", image.Metadata.Name),
+				v1alpha1.KindMachineImage, image.Spec.Installer.Anaconda.ImageRef.Name)
+		}
+	}
+	for _, machine := range state.Machines {
+		require(fmt.Sprintf("Machine/%s spec.substrate.providerRef", machine.Metadata.Name),
+			v1alpha1.KindInfraProvider, machine.Spec.Substrate.ProviderRef.Name)
+		if machine.Spec.OS.Install.ProfileRef.Name != "" {
+			require(fmt.Sprintf("Machine/%s spec.os.install.profileRef", machine.Metadata.Name),
+				v1alpha1.KindMachineInstallProfile, machine.Spec.OS.Install.ProfileRef.Name)
+		}
+		if machine.Spec.OS.Install.Network.NetworkConfigRef.Name != "" {
+			require(fmt.Sprintf("Machine/%s spec.os.install.network.networkConfigRef", machine.Metadata.Name),
+				v1alpha1.KindNetworkConfig, machine.Spec.OS.Install.Network.NetworkConfigRef.Name)
 		}
 	}
 	for _, component := range state.InfraComponents {
 		if server := component.Spec.ArtifactServer; server != nil {
-			require(fmt.Sprintf("InfraComponent/%s spec.artifactServer.hostRef", component.Metadata.Name),
-				v1alpha1.KindHost, server.HostRef.Name)
+			require(fmt.Sprintf("InfraComponent/%s spec.artifactServer.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, server.MachineRef.Name)
 		}
 		if lb := component.Spec.LoadBalancer; lb != nil {
-			require(fmt.Sprintf("InfraComponent/%s spec.loadBalancer.hostRef", component.Metadata.Name),
-				v1alpha1.KindHost, lb.HostRef.Name)
+			require(fmt.Sprintf("InfraComponent/%s spec.loadBalancer.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, lb.MachineRef.Name)
 		}
 		if proxy := component.Spec.Proxy; proxy != nil {
-			require(fmt.Sprintf("InfraComponent/%s spec.proxy.hostRef", component.Metadata.Name),
-				v1alpha1.KindHost, proxy.HostRef.Name)
+			require(fmt.Sprintf("InfraComponent/%s spec.proxy.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, proxy.MachineRef.Name)
 		}
 		if dns := component.Spec.NameResolution; dns != nil {
-			require(fmt.Sprintf("InfraComponent/%s spec.nameResolution.hostRef", component.Metadata.Name),
-				v1alpha1.KindHost, dns.HostRef.Name)
+			require(fmt.Sprintf("InfraComponent/%s spec.nameResolution.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, dns.MachineRef.Name)
 		}
 		if registry := component.Spec.Registry; registry != nil {
-			require(fmt.Sprintf("InfraComponent/%s spec.registry.hostRef", component.Metadata.Name),
-				v1alpha1.KindHost, registry.HostRef.Name)
+			require(fmt.Sprintf("InfraComponent/%s spec.registry.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, registry.MachineRef.Name)
 		}
-	}
-	for _, ci := range state.ClusterInfras {
-		for _, node := range ci.Spec.Components.Nodes {
-			if node.Source.ProviderRef.Name != "" {
-				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].source.providerRef", ci.Metadata.Name, node.Name),
-					v1alpha1.KindInfraProvider, node.Source.ProviderRef.Name)
-			}
-			if node.Source.HostRef.Name != "" {
-				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].source.hostRef", ci.Metadata.Name, node.Name),
-					v1alpha1.KindHost, node.Source.HostRef.Name)
-			}
-			if node.Network.NetworkConfigRef.Name != "" {
-				require(fmt.Sprintf("ClusterInfra/%s spec.components.nodes[%s].network.networkConfigRef", ci.Metadata.Name, node.Name),
-					v1alpha1.KindNetworkConfig, node.Network.NetworkConfigRef.Name)
-			}
+		if ntp := component.Spec.NTP; ntp != nil {
+			require(fmt.Sprintf("InfraComponent/%s spec.ntp.machineRef", component.Metadata.Name),
+				v1alpha1.KindMachine, ntp.MachineRef.Name)
 		}
 	}
 	for _, ocp := range state.ContainerClusters {
 		for i, node := range ocp.Spec.Nodes {
-			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].infraNodeRef.clusterInfra", ocp.Metadata.Name, i),
-				v1alpha1.KindClusterInfra, node.InfraNodeRef.ClusterInfra)
+			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].machineRef", ocp.Metadata.Name, i),
+				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
 	}
 	for _, set := range state.ClusterAddonProfiles {
@@ -286,14 +296,19 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		if export.Spec.ExternalDetails == nil || export.Spec.ExternalDetails.SSHExecution == nil {
 			continue
 		}
-		for i, ref := range export.Spec.ExternalDetails.SSHExecution.HostRefs {
-			require(fmt.Sprintf("StorageExport/%s spec.externalDetails.sshExecution.hostRefs[%d]", export.Metadata.Name, i),
-				v1alpha1.KindHost, ref.Name)
+		for i, ref := range export.Spec.ExternalDetails.SSHExecution.MachineRefs {
+			require(fmt.Sprintf("StorageExport/%s spec.externalDetails.sshExecution.machineRefs[%d]", export.Metadata.Name, i),
+				v1alpha1.KindMachine, ref.Name)
 		}
 	}
 	for _, cluster := range state.StorageClusters {
-		require(fmt.Sprintf("StorageCluster/%s spec.clusterInfraRef", cluster.Metadata.Name),
-			v1alpha1.KindClusterInfra, cluster.Spec.ClusterInfraRef.Name)
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for i, node := range cluster.Spec.Ceph.Topology.Nodes {
+			require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%d].machineRef", cluster.Metadata.Name, i),
+				v1alpha1.KindMachine, node.MachineRef.Name)
+		}
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		require(fmt.Sprintf("StoragePlacementPolicy/%s spec.storageClusterRef", policy.Metadata.Name),
@@ -365,8 +380,14 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	for _, env := range state.Environments {
 		out[resourceKey{kind: v1alpha1.KindEnvironment, name: env.Metadata.Name}] = true
 	}
-	for _, h := range state.Hosts {
-		out[resourceKey{kind: v1alpha1.KindHost, name: h.Metadata.Name}] = true
+	for _, machine := range state.Machines {
+		out[resourceKey{kind: v1alpha1.KindMachine, name: machine.Metadata.Name}] = true
+	}
+	for _, image := range state.MachineImages {
+		out[resourceKey{kind: v1alpha1.KindMachineImage, name: image.Metadata.Name}] = true
+	}
+	for _, profile := range state.MachineInstallProfiles {
+		out[resourceKey{kind: v1alpha1.KindMachineInstallProfile, name: profile.Metadata.Name}] = true
 	}
 	for _, n := range state.NetworkConfigs {
 		out[resourceKey{kind: v1alpha1.KindNetworkConfig, name: n.Metadata.Name}] = true
@@ -376,9 +397,6 @@ func selectedResourceKeys(state v1alpha1.State) map[resourceKey]bool {
 	}
 	for _, c := range state.InfraComponents {
 		out[resourceKey{kind: v1alpha1.KindInfraComponent, name: c.Metadata.Name}] = true
-	}
-	for _, ci := range state.ClusterInfras {
-		out[resourceKey{kind: v1alpha1.KindClusterInfra, name: ci.Metadata.Name}] = true
 	}
 	for _, ocp := range state.ContainerClusters {
 		out[resourceKey{kind: v1alpha1.KindContainerCluster, name: ocp.Metadata.Name}] = true
@@ -460,11 +478,12 @@ func scanResourceInventoryFile(file string, out map[resourceKey]string) {
 func knownResourceKind(kind string) bool {
 	switch kind {
 	case v1alpha1.KindEnvironment,
-		v1alpha1.KindHost,
+		v1alpha1.KindMachine,
+		v1alpha1.KindMachineImage,
+		v1alpha1.KindMachineInstallProfile,
 		v1alpha1.KindNetworkConfig,
 		v1alpha1.KindInfraProvider,
 		v1alpha1.KindInfraComponent,
-		v1alpha1.KindClusterInfra,
 		v1alpha1.KindContainerCluster,
 		v1alpha1.KindStorageCluster,
 		v1alpha1.KindStoragePlacementPolicy,

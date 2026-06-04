@@ -5,10 +5,9 @@ metadata:
 spec:
   nameResolution:
     type: dnsmasq
-    hostRef:
-      name: lab-host
     bindAddress: 192.168.132.1
     additionalIngressHosts:
-      - console-openshift-console.apps.sno-libvirt.bootwright.test
-      - oauth-openshift.apps.sno-libvirt.bootwright.test
-
+    - console-openshift-console.apps.sno-libvirt.bootwright.test
+    - oauth-openshift.apps.sno-libvirt.bootwright.test
+    machineRef:
+      name: lab-host

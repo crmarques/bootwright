@@ -3,173 +3,22 @@ kind: InfraProvider
 metadata:
   name: baremetal-provider
 spec:
-  machines:
-    - name: dc1-metal-master-0
-      baremetal:
-        bootMACAddress: "52:54:00:41:10:00"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:10:00"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc1-metal-master-0.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: dc1-metal-master-1
-      baremetal:
-        bootMACAddress: "52:54:00:41:10:01"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:10:01"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc1-metal-master-1.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: dc1-metal-master-2
-      baremetal:
-        bootMACAddress: "52:54:00:41:10:02"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:10:02"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc1-metal-master-2.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: dc2-metal-master-0
-      baremetal:
-        bootMACAddress: "52:54:00:42:10:00"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:10:00"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc2-metal-master-0.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: dc2-metal-master-1
-      baremetal:
-        bootMACAddress: "52:54:00:42:10:01"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:10:01"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc2-metal-master-1.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: dc2-metal-master-2
-      baremetal:
-        bootMACAddress: "52:54:00:42:10:02"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:10:02"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-dc2-metal-master-2.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc1-0
-      baremetal:
-        bootMACAddress: "52:54:00:41:30:00"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:30:00"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc1-0.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc1-1
-      baremetal:
-        bootMACAddress: "52:54:00:41:30:01"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:30:01"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc1-1.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc1-2
-      baremetal:
-        bootMACAddress: "52:54:00:41:30:02"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:41:30:02"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc1-2.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc2-0
-      baremetal:
-        bootMACAddress: "52:54:00:42:30:00"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:30:00"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc2-0.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc2-1
-      baremetal:
-        bootMACAddress: "52:54:00:42:30:01"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:30:01"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc2-1.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-dc2-2
-      baremetal:
-        bootMACAddress: "52:54:00:42:30:02"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:42:30:02"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-dc2-2.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
-    - name: ceph-arbiter
-      baremetal:
-        bootMACAddress: "52:54:00:43:30:00"
-        interfaces:
-          - name: primary
-            macAddress: "52:54:00:43:30:00"
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc-ceph-arbiter.bootwright.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true  # lab-only; use trusted BMC TLS in production
+  type: baremetal
+
+  bareMetal:
+    boot:
+      method: external
+
+  networkAttachments:
+
+  - name: dc1-net
+    bareMetal:
+      vlan: 0
+
+  - name: dc2-net
+    bareMetal:
+      vlan: 0
+
+  - name: metal-net
+    bareMetal:
+      vlan: 0

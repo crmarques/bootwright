@@ -52,12 +52,12 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 // downstream init.go's `os.WriteFile` directory layout doesn't drift.
 func TestWorkspaceProducesScaffoldFiles(t *testing.T) {
 	defaultNames := []string{
-		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/cluster.yaml",
+		"environment.yaml", "shared/machines.yaml", "shared/networks.yaml", "shared/provider.yaml",
+		"clusters/cluster-a/cluster.yaml",
 	}
 	namesWithArtifacts := []string{
-		"environment.yaml", "shared/hosts.yaml", "shared/networks.yaml", "shared/provider.yaml",
-		"shared/infra-component.yaml", "clusters/cluster-a/cluster-infra.yaml", "clusters/cluster-a/cluster.yaml",
+		"environment.yaml", "shared/machines.yaml", "shared/networks.yaml", "shared/provider.yaml",
+		"shared/infra-component.yaml", "clusters/cluster-a/cluster.yaml",
 	}
 	for _, p := range scaffold.KnownProviders() {
 		t.Run(p, func(t *testing.T) {
@@ -122,11 +122,11 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectations := map[string][]string{
-		"environment.yaml":                       {"name: my-cluster"},
-		"shared/networks.yaml":                   {"name: my-cluster-bridge"},
-		"shared/provider.yaml":                   {"name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster-infra.yaml": {"name: my-cluster", "providerRef:\n            name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster.yaml":       {"name: my-cluster"},
+		"environment.yaml":                 {"name: my-cluster"},
+		"shared/machines.yaml":             {"name: my-cluster-master-0", "providerRef:\n      name: my-cluster-libvirt"},
+		"shared/networks.yaml":             {"name: my-cluster-bridge"},
+		"shared/provider.yaml":             {"name: my-cluster-libvirt"},
+		"clusters/my-cluster/cluster.yaml": {"name: my-cluster", "machineRef:\n        name: my-cluster-master-0"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]
@@ -230,7 +230,7 @@ func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 func TestSubstratesCarryDistinctNetworkAttachments(t *testing.T) {
 	want := map[scaffold.Provider]string{
 		scaffold.ProviderEmulatedBareMetal: "libvirt:",
-		scaffold.ProviderBareMetal:         "baremetal:",
+		scaffold.ProviderBareMetal:         "bareMetal:",
 		scaffold.ProviderVSphere:           "vsphere:",
 		scaffold.ProviderKubeVirt:          "kubevirt:",
 	}
@@ -240,8 +240,8 @@ func TestSubstratesCarryDistinctNetworkAttachments(t *testing.T) {
 			if !ok {
 				t.Fatalf("substrate %q missing", p)
 			}
-			if !strings.Contains(s.ProviderNetworkAttachments, fragment) {
-				t.Errorf("%s network attachment should mention %q, got: %s", p, fragment, s.ProviderNetworkAttachments)
+			if !strings.Contains(s.ProviderCapabilities, fragment) {
+				t.Errorf("%s network attachment should mention %q, got: %s", p, fragment, s.ProviderCapabilities)
 			}
 		})
 	}

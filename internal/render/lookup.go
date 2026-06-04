@@ -17,8 +17,8 @@ func findNetworkConfig(state v1alpha1.State, name string) (v1alpha1.NetworkConfi
 	return stateview.NetworkConfig(state, name)
 }
 
-func findHost(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
-	return stateview.Host(state, name)
+func findMachine(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	return stateview.Machine(state, name)
 }
 
 func findContainerCluster(state v1alpha1.State, name string) (v1alpha1.ContainerCluster, bool) {
@@ -30,19 +30,19 @@ func findContainerCluster(state v1alpha1.State, name string) (v1alpha1.Container
 	return v1alpha1.ContainerCluster{}, false
 }
 
-func lookupHostAddress(state v1alpha1.State, name string) string {
-	if h, ok := findHost(state, name); ok && h.Spec.SSH != nil {
-		return v1alpha1.HostSSHAddress(h)
+func lookupMachineAddress(state v1alpha1.State, name string) string {
+	if m, ok := findMachine(state, name); ok && m.Spec.OS.SSH != nil {
+		return v1alpha1.MachineSSHAddress(m)
 	}
 	return ""
 }
 
-func findProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
+func findProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile, bool) {
 	return stateview.MachineProfile(p, name)
 }
 
-func findProviderMachine(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapability, bool) {
-	return stateview.Machine(p, name)
+func findProviderMachine(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	return stateview.Machine(state, name)
 }
 
 func findNetworkAttachment(p v1alpha1.InfraProvider, name string) (v1alpha1.NetworkAttachmentCapability, bool) {
@@ -54,22 +54,22 @@ func findNetworkAttachment(p v1alpha1.InfraProvider, name string) (v1alpha1.Netw
 	return v1alpha1.NetworkAttachmentCapability{}, false
 }
 
-func findClusterNetworkBinding(ci v1alpha1.ClusterInfra, providerName, networkName string) (v1alpha1.ClusterNetworkBinding, bool) {
-	for _, binding := range ci.Spec.NetworkBindings {
+func findMachineNetworkBinding(ci v1alpha1.ClusterInstall, providerName, networkName string) (v1alpha1.MachineNetworkBinding, bool) {
+	for _, binding := range ci.NetworkBindings {
 		if binding.ProviderRef.Name == providerName && binding.NetworkConfigRef.Name == networkName {
 			return binding, true
 		}
 	}
-	return v1alpha1.ClusterNetworkBinding{}, false
+	return v1alpha1.MachineNetworkBinding{}, false
 }
 
-func findClusterMachine(ci v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterNodeComponent, bool) {
-	for _, m := range ci.Spec.Components.Nodes {
+func findClusterMachine(ci v1alpha1.ClusterInstall, name string) (v1alpha1.InstallMachine, bool) {
+	for _, m := range ci.Machines {
 		if m.Name == name {
 			return m, true
 		}
 	}
-	return v1alpha1.ClusterNodeComponent{}, false
+	return v1alpha1.InstallMachine{}, false
 }
 
 func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
@@ -85,12 +85,8 @@ func sortedNodes(nodes []v1alpha1.OCPNodeSpec) []v1alpha1.OCPNodeSpec {
 }
 
 // clusterNodesForCI returns the ContainerCluster.spec.nodes map for the
-// ContainerCluster bound to this ClusterInfra, or nil when no binding
+// ContainerCluster bound to this ClusterInstall, or nil when no binding
 // exists.
-func clusterNodesForCI(state v1alpha1.State, ci v1alpha1.ClusterInfra) map[string]v1alpha1.OCPNodeSpec {
-	return stateview.ClusterNodesForInfra(state, ci)
-}
-
-func clusterForCI(state v1alpha1.State, ci v1alpha1.ClusterInfra) (v1alpha1.ContainerCluster, bool) {
-	return stateview.ClusterForInfra(state, ci)
+func clusterNodesForCI(state v1alpha1.State, ci v1alpha1.ClusterInstall) map[string]v1alpha1.OCPNodeSpec {
+	return stateview.ClusterNodesForInstall(state, ci)
 }

@@ -20,11 +20,11 @@ instead of compact inline maps.
 | Kind | Ownership boundary |
 | --- | --- |
 | `Environment` | Fleet-wide defaults, selected resource files, cluster selection, service access catalog, secret sources, mirrors, component images |
-| `Host` | SSH access to a machine that can run substrate or service actions |
+| `Machine` | SSH access to a machine that can run substrate or service actions |
 | `InfraProvider` | Capability inventory: bare-metal machines and virtual machine profiles |
-| `InfraComponent` | Host-bound shared infra services and routable endpoints |
+| `InfraComponent` | Machine-bound shared infra services and routable endpoints |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
-| `ClusterInfra` | Platform render mode, endpoints, and selected machines |
+| `Machine and ContainerCluster` | Platform render mode, endpoints, and selected machines |
 | `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
 | `StorageCluster` | External storage intent, either Bootwright-managed Ceph through cephadm or imported Ceph |
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
@@ -40,16 +40,16 @@ instead of compact inline maps.
 
 ```text
 ContainerCluster.nodes[*].infraNodeRef
-  -> ClusterInfra.components.nodes[*]
+  -> ContainerCluster.spec.nodes[*].machineRef
   -> InfraProvider machine or profile
-  -> Host
+  -> Machine
 
-Provider-sourced ClusterInfra nodes
+Provider-sourced Machine and ContainerCluster nodes
   -> NetworkConfig
 
 Environment.infraComponents.*.componentRef
   -> InfraComponent service
-  -> Host
+  -> Machine
 
 ClusterAddonBinding
   -> ClusterAddonProfile
@@ -62,14 +62,14 @@ KubeVirt child InfraProvider
 ClusterAddonBinding.addons[].inputs[]
   -> StorageExport
   -> StorageCluster
-  -> ClusterInfra.components.nodes[*].source.hostRef (managed storage only)
-  -> Host
+  -> Machine (managed storage only)
+  -> Machine
   -> ClusterAddon providing data-foundation
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
 the exact provider-sourced cluster infrastructure node that backs it. In v1
-all OpenShift nodes in one cluster must reference the same `ClusterInfra`.
+all OpenShift nodes in one cluster must reference the same `Machine and ContainerCluster`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
@@ -95,12 +95,12 @@ kickstart is a roadmap path, not part of the current managed storage flow.
 ## KubeVirt Child Clusters
 
 A virtualized child OpenShift cluster is still declared as its own
-`ContainerCluster`. The child `ClusterInfra` selects a KubeVirt
+`ContainerCluster`. The child `Machine and ContainerCluster` selects a KubeVirt
 `InfraProvider` machine profile, and that profile points either at a
-Bootwright-managed host cluster with `hostContainerClusterRef` or at an external
+Bootwright-managed host cluster with `hostClusterRef` or at an external
 virtualization cluster kubeconfig with `kubeconfigRef`.
 
-When `hostContainerClusterRef` is used, the host cluster must be installed and bound to
+When `hostClusterRef` is used, the host cluster must be installed and bound to
 a `ClusterAddon` with `provides: [kubevirt]`. `bootwright apply --yes`
 orders child VM infrastructure after the host install wait and the KubeVirt
 add-on readiness wait. Scoped child applies do not install the host
@@ -138,18 +138,18 @@ when you intentionally want one slice of the graph.
 Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
 KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
-`ClusterInfra.spec.networkBindings[]`.
+`Machine.spec.os.install.network.attachmentRef`.
 
 Most provider-sourced nodes reuse the same NMState template and only set static
 IPs in
-`ClusterInfra.components.nodes[].network.overrides.interfaces[].ipv4.address[]`.
+`Machine.network.overrides.interfaces[].ipv4.address[]`.
 Advanced provider-sourced nodes may provide a full inline `network.spec`.
 
 Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and
 matching NMState interfaces.
 
-Endpoint definitions stay on `ClusterInfra.spec.endpoints`. Consumers bind to
+Endpoint definitions stay on `ContainerCluster.spec.install.endpoints`. Consumers bind to
 endpoint names explicitly, such as `ContainerCluster.spec.install.endpointRefs`
 or `StorageObjectGateway` endpoint refs. Effective VIPs must land inside one
 selected machine-network CIDR.
@@ -172,7 +172,7 @@ OKD does not require a Red Hat pull secret by default.
 
 ## Platform Mode
 
-`ClusterInfra.spec.platform.type` decides installer platform rendering. It is
+`ContainerCluster.spec.install.platform.type` decides installer platform rendering. It is
 not the substrate type; `InfraProvider` owns whether the backing machines come
 from libvirt, bare metal, vSphere, or another substrate.
 
@@ -186,12 +186,12 @@ or `unmanaged`. `disabled` uses the existing machine network, which is the
 normal Redfish virtual-media agent-install mode.
 
 For single-node clusters, Bootwright renders installer `platform.none` unless
-`platform.type: external` is selected. The authored `ClusterInfra` still owns
+`platform.type: external` is selected. The authored `Machine and ContainerCluster` still owns
 the selected machines, endpoints, and managed components.
 
 ## Managed Components
 
-Host-bound shared services live in `InfraComponent` objects. `ClusterInfra`
+Machine-bound shared services live in `InfraComponent` objects. `Machine and ContainerCluster`
 references load balancers from endpoints, `Environment` selects proxy,
 artifact, and registry access, and `NetworkConfig.spec.dnsRefs[]`
 selects environment name-resolution entries.
@@ -201,13 +201,13 @@ selects environment name-resolution entries.
 | Proxy for Bootwright and cluster install traffic | `Environment.spec.infraComponents.proxies[]` plus `proxyFor` | External connection in `Environment`, or managed `InfraComponent.spec.proxy` |
 | Name resolution for installer host networking | `NetworkConfig.spec.dnsRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
 | NTP sources for agent installs | `Environment.spec.infraComponents.ntpSources[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
-| Artifact publication for Redfish media and disconnected install files | `ClusterInfra.spec.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
+| Artifact publication for Redfish media and disconnected install files | `ContainerCluster.spec.install.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
 | Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
-| Load balancer VIPs | `ClusterInfra.spec.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, cephadm, or operator-owned external addresses |
+| Load balancer VIPs | `ContainerCluster.spec.install.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, cephadm, or operator-owned external addresses |
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a
 host, listeners, and named endpoints.
-`ClusterInfra.spec.artifactAccess` binds each consumer path, such as Redfish
+`ContainerCluster.spec.install.artifactAccess` binds each consumer path, such as Redfish
 virtual media or disconnected cluster install, to the endpoint that component
 can reach.

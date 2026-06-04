@@ -13,17 +13,17 @@ import (
 
 // componentsVars walks every component slot on a cluster and emits the
 // per-component vars consumed by the bootwright.core task playbooks.
-func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
+func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
 	var out []any
 	clusterName := ocp.Metadata.Name
 
-	for _, m := range ci.Spec.Components.Nodes {
+	for _, m := range ci.Machines {
 		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
 	}
 	for _, component := range loadBalancerComponentsForCluster(state, ci, ocp) {
 		lb := loadBalancerComponentVars(state, component)
 		lb["clusterName"] = clusterName
-		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Spec.Components.Nodes, clusterNodesForCI(state, ci))
+		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Machines, clusterNodesForCI(state, ci))
 		out = append(out, lb)
 	}
 	if artifacts.ClusterNeedsPublication(state, ci, ocp) {
@@ -66,7 +66,7 @@ type selectedRegistryComponent struct {
 	component v1alpha1.InfraComponent
 }
 
-func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) []v1alpha1.InfraComponent {
+func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []v1alpha1.InfraComponent {
 	seen := map[string]bool{}
 	out := []v1alpha1.InfraComponent{}
 	for _, role := range standardEndpointNames {
@@ -111,7 +111,7 @@ func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
 	return out
 }
 
-func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInfra) []selectedNameResolutionComponent {
+func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInstall) []selectedNameResolutionComponent {
 	env := primaryEnvironment(state)
 	if env == nil {
 		return nil
@@ -175,15 +175,15 @@ func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerClu
 	return selectedRegistryComponent{entry: entry, component: component}, true
 }
 
-func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
-	out := make([]any, 0, len(ci.Spec.Endpoints))
-	names := make([]string, 0, len(ci.Spec.Endpoints))
-	for name := range ci.Spec.Endpoints {
+func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
+	out := make([]any, 0, len(ci.Endpoints))
+	names := make([]string, 0, len(ci.Endpoints))
+	for name := range ci.Endpoints {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		e := ci.Spec.Endpoints[name]
+		e := ci.Endpoints[name]
 		entry := map[string]any{
 			"name": name,
 		}
@@ -220,7 +220,7 @@ func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInfra) []any {
 	return out
 }
 
-func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1alpha1.ClusterNodeComponent, clusterName string, secretsDir string) map[string]any {
+func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, secretsDir string) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
 		"kind":          v1alpha1.ComponentSlotMachines,
@@ -234,6 +234,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
 		out["networkAttachment"] = attachment
 	}
+	if machine, ok := stateview.Machine(state, m.Name); ok && len(machine.Metadata.Labels) > 0 {
+		out["labels"] = machine.Metadata.Labels
+	}
 	applyMachineRoleContract(out, driver.Roles)
 	if ip := machinePrimaryIP(state, ci, m); ip != "" {
 		out["primaryIPAddress"] = ip
@@ -241,9 +244,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 	if interfaces := machineInterfaces(state, m, clusterName); len(interfaces) > 0 {
 		out["interfaces"] = machineInterfaceVars(interfaces)
 	}
-	if hostRef := machineHostRef(state, m); hostRef != "" {
-		out["hostRef"] = hostRef
-		out["hostAddress"] = lookupHostAddress(state, hostRef)
+	if machineRef := machineHostRef(state, m); machineRef != "" {
+		out["machineRef"] = machineRef
+		out["machineAddress"] = lookupMachineAddress(state, machineRef)
 	}
 	if m.Source.ProfileRef.Name != "" {
 		out["fromProfile"] = m.Source.ProfileRef.Name
@@ -257,25 +260,32 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 					"memoryMiB": profile.MemoryMiB,
 					"diskGiB":   profile.DiskGiB,
 				}
-				if l := profile.Libvirt; l != nil {
-					out["libvirt"] = map[string]any{
-						"hostRef": l.HostRef.Name,
-						"uri":     l.URI,
+				switch provider.Spec.Type {
+				case v1alpha1.ProvisionerLibvirt:
+					l := provider.Spec.Libvirt
+					if l == nil {
+						break
 					}
-					if be := machineEmulatedBMCVars(state, profile); be != nil && driver.Dispatch.BMCRole == "emulated" {
+					out["libvirt"] = map[string]any{
+						"machineRef": l.MachineRef.Name,
+						"uri":        l.URI,
+					}
+					if be := machineEmulatedBMCVars(state, l); be != nil && driver.Dispatch.BMCRole == "emulated" {
 						out["bmcEmulated"] = be
 					}
-				}
-				if profile.VSphere != nil {
-					out["vsphere"] = machineProfileProvisionerVars(profile)
-				}
-				if k := profile.KubeVirt; k != nil {
+				case v1alpha1.ProvisionerVSphere:
+					out["vsphere"] = machineProfileProvisionerVars(provider, profile)
+				case v1alpha1.ProvisionerKubeVirt:
+					k := provider.Spec.KubeVirt
+					if k == nil {
+						break
+					}
 					out["kubevirt"] = map[string]any{
 						"namespace": k.Namespace,
 					}
-					if k.HostContainerClusterRef != nil {
-						out["kubevirt"].(map[string]any)["hostContainerClusterRef"] = k.HostContainerClusterRef.Name
-						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostContainerClusterRef.Name + "/secrets/kubeconfig"
+					if k.HostClusterRef != nil {
+						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
+						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
 					}
 					if k.KubeconfigRef != nil {
 						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name
@@ -292,22 +302,22 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 	}
 	if m.Source.MachineRef.Name != "" {
 		out["fromName"] = m.Source.MachineRef.Name
-		if provider, ok := findProvider(state, m.Source.ProviderRef.Name); ok {
-			if server, ok := findProviderMachine(provider, m.Source.MachineRef.Name); ok {
+		if _, ok := findProvider(state, m.Source.ProviderRef.Name); ok {
+			if server, ok := findProviderMachine(state, m.Source.MachineRef.Name); ok {
 				serverVars := map[string]any{
-					"name":       server.Name,
+					"name":       server.Metadata.Name,
 					"interfaces": providerInterfacesVars(server),
 				}
-				if len(server.Labels) > 0 {
-					serverVars["labels"] = server.Labels
+				if len(server.Metadata.Labels) > 0 {
+					serverVars["labels"] = server.Metadata.Labels
 				}
 				out["server"] = serverVars
-				if server.BareMetal != nil {
+				if server.Spec.Substrate.BareMetal != nil {
 					out["bmc"] = map[string]any{
-						"address":                        server.BareMetal.BMC.Address,
-						"protocol":                       server.BareMetal.BMC.Protocol,
-						"credentialsRef":                 server.BareMetal.BMC.CredentialsRef.Name,
-						"disableCertificateVerification": server.BareMetal.BMC.DisableCertificateVerification,
+						"address":                        server.Spec.Substrate.BareMetal.BMC.Address,
+						"protocol":                       server.Spec.Substrate.BareMetal.BMC.Protocol,
+						"credentialsRef":                 server.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name,
+						"disableCertificateVerification": server.Spec.Substrate.BareMetal.BMC.DisableCertificateVerification,
 					}
 				}
 			}
@@ -326,8 +336,8 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInfra, m v1al
 }
 
 func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {
-	if len(roles.HostSetupRoles) > 0 {
-		out["hostSetupRoles"] = stringSliceAny(roles.HostSetupRoles)
+	if len(roles.MachineSetupRoles) > 0 {
+		out["machineSetupRoles"] = stringSliceAny(roles.MachineSetupRoles)
 	}
 	if roles.SubstrateApplyRole != "" {
 		out["substrateApplyRole"] = roles.SubstrateApplyRole
@@ -352,7 +362,7 @@ func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {
 	}
 }
 
-func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterNodeComponent) string {
+func machineHostRef(state v1alpha1.State, m v1alpha1.InstallMachine) string {
 	if m.Source.ProfileRef.Name == "" {
 		return ""
 	}
@@ -360,14 +370,13 @@ func machineHostRef(state v1alpha1.State, m v1alpha1.ClusterNodeComponent) strin
 	if !ok {
 		return ""
 	}
-	profile, ok := findProfile(provider, m.Source.ProfileRef.Name)
-	if !ok {
+	if _, ok := findProfile(provider, m.Source.ProfileRef.Name); !ok {
 		return ""
 	}
-	if profile.Libvirt != nil {
-		return profile.Libvirt.HostRef.Name
+	if provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil {
+		return provider.Spec.Libvirt.MachineRef.Name
 	}
-	if profile.KubeVirt != nil {
+	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
 		return "localhost"
 	}
 	return ""

@@ -20,14 +20,14 @@
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:
-        name: bootwright.core.host_proxy
+        name: bootwright.core.machine_proxy
         tasks_from: facts
 
     - name: Assert rendered vars contract
       ansible.builtin.assert:
         that:
           - bootwright_environment is mapping
-          - bootwright_hosts is iterable
+          - bootwright_machines is iterable
           - bootwright_providers is iterable
           - bootwright_clusters is iterable
         fail_msg: >-
@@ -45,8 +45,8 @@
         | selectattr('kind', 'equalto', 'machines')
         | selectattr('requiresKVM', 'defined')
         | selectattr('requiresKVM', 'equalto', true)
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
     bootwright_host_storage_nodes: >-

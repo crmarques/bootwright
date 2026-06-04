@@ -7,12 +7,12 @@ provider services and directory resource selection.
 
 - `environment.yaml`: base domain, `resources`, secret names, and artifact
   server catalog.
-- `infra/hosts/*.yaml`: service/provider host addresses and SSH key reference.
+- `infra/machines/*.yaml`: service/provider host addresses and SSH key reference.
 - `infra/providers/*.yaml`: hardware MACs, BMC Redfish URLs, root devices, and
   BMC credential reference.
 - `infra/networkconfigs/*.yaml`: per-site machine CIDRs, resolvers, routes, and
   NMState interfaces.
-- `clusters/container/*/cluster-infra.yaml`: per-cluster VIPs, artifact
+- `clusters/container/*/cluster-machines.yaml`: per-cluster VIPs, artifact
   endpoint, machine selections, and platform render mode.
 - `clusters/container/*/cluster.yaml`: release, cluster networking, and node
   bindings.

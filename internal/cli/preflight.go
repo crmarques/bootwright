@@ -95,7 +95,7 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
 		)
 	}
-	if phaseInScope("cluster-infra", selected, hasState) && stateNeedsKubeVirt(state) {
+	if phaseInScope("machine-infra", selected, hasState) && stateNeedsKubeVirt(state) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
 	if phaseInScope("container-cluster", selected, hasState) {
@@ -164,11 +164,9 @@ func anyPhaseInScope(names []string, selected []Phase) bool {
 }
 
 func stateNeedsKubeVirt(state v1alpha1.State) bool {
-	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			if mp.KubeVirt != nil {
-				return true
-			}
+	for _, machine := range state.Machines {
+		if machine.Spec.Substrate.KubeVirt != nil {
+			return true
 		}
 	}
 	return false
@@ -184,32 +182,30 @@ func stateHasManagedStorageClusters(state v1alpha1.State) bool {
 }
 
 func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps preflightDeps) []preflightCheck {
-	if !anyPhaseInScope([]string{"cluster-infra", "container-cluster"}, selected) {
+	if !anyPhaseInScope([]string{"machine-infra", "container-cluster"}, selected) {
 		return nil
 	}
 	seen := map[string]bool{}
 	var checks []preflightCheck
 	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			if mp.KubeVirt == nil || mp.KubeVirt.HostContainerClusterRef == nil || mp.KubeVirt.HostContainerClusterRef.Name == "" {
-				continue
-			}
-			name := mp.KubeVirt.HostContainerClusterRef.Name
-			if seen[name] {
-				continue
-			}
-			seen[name] = true
-			path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
-			info, err := deps.statPath(path)
-			switch {
-			case err != nil:
-				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
-			case info.IsDir():
-				checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
-			default:
-				checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
-				checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
-			}
+		if p.Spec.KubeVirt == nil || p.Spec.KubeVirt.HostClusterRef == nil || p.Spec.KubeVirt.HostClusterRef.Name == "" {
+			continue
+		}
+		name := p.Spec.KubeVirt.HostClusterRef.Name
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		path := filepath.Join(clustersDir, name, "secrets", "kubeconfig")
+		info, err := deps.statPath(path)
+		switch {
+		case err != nil:
+			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" missing", "KubeVirt child clusters need the host cluster kubeconfig", "include "+name+" in --clusters or run bootwright apply --stage clusters --clusters "+name+" --yes first"))
+		case info.IsDir():
+			checks = append(checks, failCheck(checkGroupInstallerTools, name+" kubeconfig", path+" is a directory", "KubeVirt child clusters need the host cluster kubeconfig file", "replace "+path+" with the host cluster kubeconfig"))
+		default:
+			checks = append(checks, okCheck(checkGroupInstallerTools, name+" kubeconfig", path))
+			checks = append(checks, kubeVirtAPIReadyCheck(name, path, deps))
 		}
 	}
 	return checks

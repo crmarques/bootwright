@@ -18,20 +18,19 @@ func validateStorage(state v1alpha1.State) []string {
 	filesystems := indexStorageFilesystems(state.StorageFilesystems)
 	gateways := indexStorageObjectGateways(state.StorageObjectGateways)
 	exports := indexStorageExports(state.StorageExports)
-	infras := indexClusterInfras(state.ClusterInfras)
-	hosts := indexHosts(state.Hosts)
+	machines := indexMachines(state.Machines)
 
-	errs = append(errs, validateStorageClusters(state.StorageClusters, infras, hosts)...)
+	errs = append(errs, validateStorageClusters(state.StorageClusters, machines)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
-	errs = append(errs, validateStorageObjectGateways(state.StorageObjectGateways, clusters, infras)...)
-	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, hosts)...)
+	errs = append(errs, validateStorageObjectGateways(state, state.StorageObjectGateways, clusters)...)
+	errs = append(errs, validateStorageExports(state, clusters, pools, filesystems, gateways, machines)...)
 	errs = append(errs, validateStorageExportAttachmentEffects(state, exports)...)
 	return errs
 }
 
-func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]v1alpha1.ClusterInfra, hosts map[string]v1alpha1.Host) []string {
+func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, cluster := range items {
@@ -54,56 +53,46 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, infras map[string]
 			continue
 		}
 		switch storageClusterManagement(cluster) {
-		case v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementFullManaged:
+		case v1alpha1.StorageClusterManagementManaged:
 			if cluster.Spec.Ceph == nil {
 				errs = append(errs, prefix+".ceph is required when spec.type=ceph")
 				continue
 			}
 		case v1alpha1.StorageClusterManagementExternal:
-			if cluster.Spec.ClusterInfraRef.Name != "" {
-				errs = append(errs, prefix+".clusterInfraRef.name must be empty when spec.management=external")
-			}
 			if cluster.Spec.Ceph != nil {
 				errs = append(errs, prefix+".ceph must be empty when spec.management=external")
 			}
 			continue
 		default:
-			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s, %s}", prefix, cluster.Spec.Management, v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementExternal, v1alpha1.StorageClusterManagementFullManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", prefix, cluster.Spec.Management, v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementExternal))
 			continue
 		}
-		infra, ok := infras[cluster.Spec.ClusterInfraRef.Name]
-		if cluster.Spec.ClusterInfraRef.Name == "" {
-			errs = append(errs, prefix+".clusterInfraRef.name is required")
-		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s.clusterInfraRef.name %q does not match any ClusterInfra", prefix, cluster.Spec.ClusterInfraRef.Name))
-		}
 		if cluster.Spec.Ceph != nil {
-			errs = append(errs, validateStorageClusterCeph(cluster, infra, ok, hosts)...)
+			errs = append(errs, validateStorageClusterCeph(cluster, machines)...)
 		}
 	}
 	return errs
 }
 
-func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host) []string {
+func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
-	requireHostSource := storageClusterManagement(cluster) == v1alpha1.StorageClusterManagementManaged
-	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, infra, infraOK, hosts, requireHostSource)...)
+	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
 	}
 	for i, cidr := range ceph.Networks.ClusterCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
-	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, infra, infraOK, hosts, requireHostSource)...)
+	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, machines)...)
 	if ceph.Topology.Stretch != nil && ceph.Topology.Stretch.Enabled {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
 	return errs
 }
 
-func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host, requireHostSource bool) []string {
+func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.SeedNode == "" {
@@ -118,14 +107,7 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, infr
 		if !storageCephNodeExists(cluster, mon.NodeRef.Name) {
 			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
 		}
-		if infraOK {
-			infraNode, ok := clusterInfraNodeByName(infra, mon.NodeRef.Name)
-			if !ok {
-				errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not defined on ClusterInfra/%s spec.components.nodes", prefix, mon.NodeRef.Name, infra.Metadata.Name))
-			} else if requireHostSource {
-				errs = append(errs, validateStorageNodeHostAddress(prefix+".bootstrap.monIP.addressRef.name", infraNode, mon.AddressRef.Name, hosts, adm.AddressRef.Name)...)
-			}
-		}
+		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.monIP.addressRef.name", cluster, mon.NodeRef.Name, mon.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
 	errs = append(errs, validateStorageCephadmRegistry(prefix+".registry", adm.Registry)...)
 	return errs
@@ -146,7 +128,7 @@ func validateStorageCephadmRegistry(prefix string, registry v1alpha1.StorageCeph
 	return errs
 }
 
-func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, infra v1alpha1.ClusterInfra, infraOK bool, hosts map[string]v1alpha1.Host, requireHostSource bool) []string {
+func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	nodes := cluster.Spec.Ceph.Topology.Nodes
 	if len(nodes) == 0 {
@@ -165,34 +147,31 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, in
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, node.Name))
 			}
 			seen[node.Name] = true
-			if infraOK {
-				infraNode, ok := clusterInfraNodeByName(infra, node.Name)
-				if !ok {
-					errs = append(errs, fmt.Sprintf("%s.name %q is not defined on ClusterInfra/%s spec.components.nodes", owner, node.Name, infra.Metadata.Name))
-				} else if requireHostSource {
-					host, ok := storageInfraNodeHost(infraNode, hosts)
-					if !ok {
-						errs = append(errs, fmt.Sprintf("%s.name %q must match a host-sourced ClusterInfra/%s spec.components.nodes entry", owner, node.Name, infra.Metadata.Name))
-					} else {
-						if !hostHasCapability(host, v1alpha1.HostCapabilityCephNode) {
-							errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s without capability %q", owner, node.Name, host.Metadata.Name, v1alpha1.HostCapabilityCephNode))
-						}
-						if host.Spec.SSH == nil {
-							errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s.name", host.Metadata.Name, owner))
-						} else {
-							if !sshSeen {
-								sshUser = host.Spec.SSH.User
-								sshKeyRef = host.Spec.SSH.KeyRef.Name
-								sshSeen = true
-							} else if host.Spec.SSH.User != sshUser {
-								errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s with ssh.user %q; all storage node Hosts in one StorageCluster must use %q", owner, node.Name, host.Metadata.Name, host.Spec.SSH.User, sshUser))
-							} else if host.Spec.SSH.KeyRef.Name != sshKeyRef {
-								errs = append(errs, fmt.Sprintf("%s.name %q resolves to Host/%s with ssh.keyRef.name %q; all storage node Hosts in one StorageCluster must use %q", owner, node.Name, host.Metadata.Name, host.Spec.SSH.KeyRef.Name, sshKeyRef))
-							}
-						}
-						errs = append(errs, validateStorageNodeHostAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef.name", cluster.Metadata.Name), infraNode, cluster.Spec.Ceph.Cephadm.AddressRef.Name, hosts, "")...)
+		}
+		if node.MachineRef.Name == "" {
+			errs = append(errs, owner+".machineRef.name is required")
+		} else {
+			machine, ok := machines[node.MachineRef.Name]
+			if !ok {
+				errs = append(errs, fmt.Sprintf("%s.machineRef.name %q does not match any Machine", owner, node.MachineRef.Name))
+			} else {
+				if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephNode) {
+					errs = append(errs, fmt.Sprintf("%s.machineRef.name %q lacks capability %q", owner, node.MachineRef.Name, v1alpha1.MachineCapabilityCephNode))
+				}
+				if machine.Spec.OS.SSH == nil {
+					errs = append(errs, fmt.Sprintf("Machine/%s spec.os.ssh is required for %s.machineRef.name", machine.Metadata.Name, owner))
+				} else {
+					if !sshSeen {
+						sshUser = machine.Spec.OS.SSH.User
+						sshKeyRef = machine.Spec.OS.SSH.KeyRef.Name
+						sshSeen = true
+					} else if machine.Spec.OS.SSH.User != sshUser {
+						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.OS.SSH.User, sshUser))
+					} else if machine.Spec.OS.SSH.KeyRef.Name != sshKeyRef {
+						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.keyRef.name %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.OS.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
+				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef.name", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
 			}
 		}
 		if node.Site == "" {
@@ -427,7 +406,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 	return errs
 }
 
-func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster, infras map[string]v1alpha1.ClusterInfra) []string {
+func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.StorageObjectGateway, clusters map[string]v1alpha1.StorageCluster) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, gw := range items {
@@ -454,8 +433,7 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 		if gw.Spec.Ceph.FrontendPort < 0 || gw.Spec.Ceph.FrontendPort > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.ceph.frontendPort %d out of range", prefix, gw.Spec.Ceph.FrontendPort))
 		}
-		infra, infraOK := storageGatewayClusterInfra(cluster, ok, infras)
-		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".publicEndpointRef", gw, infra, infraOK)...)
+		errs = append(errs, validateStorageGatewayPublicEndpoint(state, prefix+".publicEndpointRef", gw)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", gw.Spec.Ceph.Placement.Hosts, cluster, v1alpha1.StorageCephRoleRGW)...)
@@ -470,7 +448,7 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, ingress.Name))
 			}
 			ingressNames[ingress.Name] = true
-			errs = append(errs, validateStorageGatewayIngressEndpoint(owner+".endpointRef", ingress.EndpointRef, gw, infra, infraOK)...)
+			errs = append(errs, validateStorageGatewayIngressEndpoint(state, owner+".endpointRef", ingress.EndpointRef, gw)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
 			ingressHosts = append(ingressHosts, ingress.Placement.Hosts...)
 		}
@@ -481,25 +459,14 @@ func validateStorageObjectGateways(items []v1alpha1.StorageObjectGateway, cluste
 	return errs
 }
 
-func storageGatewayClusterInfra(cluster v1alpha1.StorageCluster, clusterOK bool, infras map[string]v1alpha1.ClusterInfra) (v1alpha1.ClusterInfra, bool) {
-	if !clusterOK {
-		return v1alpha1.ClusterInfra{}, false
-	}
-	infra, ok := infras[cluster.Spec.ClusterInfraRef.Name]
-	return infra, ok
-}
-
-func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObjectGateway, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+func validateStorageGatewayPublicEndpoint(state v1alpha1.State, prefix string, gw v1alpha1.StorageObjectGateway) []string {
 	ref := gw.Spec.PublicEndpointRef
 	if ref.Name == "" {
 		return []string{prefix + ".name is required"}
 	}
-	if !infraOK {
-		return nil
-	}
-	endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	endpoint, ok := storageEndpointByName(state, ref.Name)
 	if !ok {
-		return []string{fmt.Sprintf("%s.name %q does not match any ClusterInfra/%s spec.endpoints entry", prefix, ref.Name, infra.Metadata.Name)}
+		return []string{fmt.Sprintf("%s.name %q does not match any ContainerCluster spec.install.endpoints entry", prefix, ref.Name)}
 	}
 	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceExternal)
 	if source != v1alpha1.EndpointSourceExternal {
@@ -507,21 +474,18 @@ func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObje
 			prefix, ref.Name, source, v1alpha1.EndpointSourceExternal)}
 	}
 	if endpoint.DNSName == "" {
-		return []string{fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.dnsName is required for StorageObjectGateway/%s publicEndpointRef", infra.Metadata.Name, ref.Name, gw.Metadata.Name)}
+		return []string{fmt.Sprintf("%s.name %q requires an endpoint with dnsName for StorageObjectGateway/%s publicEndpointRef", prefix, ref.Name, gw.Metadata.Name)}
 	}
 	return nil
 }
 
-func validateStorageGatewayIngressEndpoint(prefix string, ref v1alpha1.EndpointRef, gw v1alpha1.StorageObjectGateway, infra v1alpha1.ClusterInfra, infraOK bool) []string {
+func validateStorageGatewayIngressEndpoint(state v1alpha1.State, prefix string, ref v1alpha1.EndpointRef, gw v1alpha1.StorageObjectGateway) []string {
 	if ref.Name == "" {
 		return []string{prefix + ".name is required"}
 	}
-	if !infraOK {
-		return nil
-	}
-	endpoint, ok := infra.Spec.Endpoints[ref.Name]
+	endpoint, ok := storageEndpointByName(state, ref.Name)
 	if !ok {
-		return []string{fmt.Sprintf("%s.name %q does not match any ClusterInfra/%s spec.endpoints entry", prefix, ref.Name, infra.Metadata.Name)}
+		return []string{fmt.Sprintf("%s.name %q does not match any ContainerCluster spec.install.endpoints entry", prefix, ref.Name)}
 	}
 	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceCephadm)
 	if source != v1alpha1.EndpointSourceCephadm {
@@ -530,15 +494,24 @@ func validateStorageGatewayIngressEndpoint(prefix string, ref v1alpha1.EndpointR
 	}
 	var errs []string
 	if endpoint.Address == "" {
-		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.address is required for StorageObjectGateway/%s ingress", infra.Metadata.Name, ref.Name, gw.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("%s.name %q requires an endpoint address for StorageObjectGateway/%s ingress", prefix, ref.Name, gw.Metadata.Name))
 	}
 	if endpoint.PrefixLength == 0 {
-		errs = append(errs, fmt.Sprintf("ClusterInfra/%s spec.endpoints.%s.prefixLength is required for StorageObjectGateway/%s ingress", infra.Metadata.Name, ref.Name, gw.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("%s.name %q requires endpoint prefixLength for StorageObjectGateway/%s ingress", prefix, ref.Name, gw.Metadata.Name))
 	}
 	return errs
 }
 
-func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, filesystems map[string]v1alpha1.StorageFilesystem, gateways map[string]v1alpha1.StorageObjectGateway, hosts map[string]v1alpha1.Host) []string {
+func storageEndpointByName(state v1alpha1.State, name string) (v1alpha1.Endpoint, bool) {
+	for _, cluster := range state.ContainerClusters {
+		if endpoint, ok := cluster.Spec.Install.Endpoints[name]; ok {
+			return endpoint, true
+		}
+	}
+	return v1alpha1.Endpoint{}, false
+}
+
+func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.StorageCluster, pools map[string]v1alpha1.StoragePool, filesystems map[string]v1alpha1.StorageFilesystem, gateways map[string]v1alpha1.StorageObjectGateway, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, export := range state.StorageExports {
@@ -568,7 +541,7 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 		}
 		df := export.Spec.DataFoundation
 		if clusterOK {
-			errs = append(errs, validateStorageExportExternalDetails(state, export, cluster, hosts)...)
+			errs = append(errs, validateStorageExportExternalDetails(state, export, cluster, machines)...)
 		}
 		if clusterOK && storageClusterExternal(cluster) {
 			if df != nil {
@@ -605,7 +578,7 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 	return errs
 }
 
-func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, hosts map[string]v1alpha1.Host) []string {
+func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	prefix := fmt.Sprintf("StorageExport/%s spec.externalDetails", export.Metadata.Name)
 	details := export.Spec.ExternalDetails
@@ -635,32 +608,32 @@ func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.
 		errs = append(errs, fmt.Sprintf("%s.fromSecret %q is not declared in Environment spec.secrets", prefix, details.FromSecret))
 	}
 	if details.SSHExecution != nil {
-		errs = append(errs, validateStorageExportSSHExecution(prefix+".sshExecution", cluster, details.SSHExecution, hosts)...)
+		errs = append(errs, validateStorageExportSSHExecution(prefix+".sshExecution", cluster, details.SSHExecution, machines)...)
 	}
 	return errs
 }
 
-func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, hosts map[string]v1alpha1.Host) []string {
+func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCluster, spec *v1alpha1.StorageExportExternalDetailsSSHExecution, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
-	if storageClusterExternal(cluster) && len(spec.HostRefs) == 0 {
-		errs = append(errs, prefix+".hostRefs is required when storageClusterRef points to external Ceph")
+	if storageClusterExternal(cluster) && len(spec.MachineRefs) == 0 {
+		errs = append(errs, prefix+".machineRefs is required when storageClusterRef points to external Ceph")
 	}
-	for i, ref := range spec.HostRefs {
-		owner := fmt.Sprintf("%s.hostRefs[%d].name", prefix, i)
+	for i, ref := range spec.MachineRefs {
+		owner := fmt.Sprintf("%s.machineRefs[%d].name", prefix, i)
 		if ref.Name == "" {
 			errs = append(errs, owner+" is required")
 			continue
 		}
-		host, ok := hosts[ref.Name]
+		machine, ok := machines[ref.Name]
 		if !ok {
-			errs = append(errs, fmt.Sprintf("%s %q does not match any Host", owner, ref.Name))
+			errs = append(errs, fmt.Sprintf("%s %q does not match any Machine", owner, ref.Name))
 			continue
 		}
-		if !hostHasCapability(host, v1alpha1.HostCapabilityCephAdmin) {
-			errs = append(errs, fmt.Sprintf("%s %q must reference a Host with capability %q", owner, ref.Name, v1alpha1.HostCapabilityCephAdmin))
+		if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephAdmin) {
+			errs = append(errs, fmt.Sprintf("%s %q must reference a Machine with capability %q", owner, ref.Name, v1alpha1.MachineCapabilityCephAdmin))
 		}
-		if host.Spec.SSH == nil {
-			errs = append(errs, fmt.Sprintf("Host/%s spec.ssh is required for %s", host.Metadata.Name, owner))
+		if machine.Spec.OS.SSH == nil {
+			errs = append(errs, fmt.Sprintf("Machine/%s spec.os.ssh is required for %s", machine.Metadata.Name, owner))
 		}
 	}
 	if spec.Timeout != "" {
@@ -801,40 +774,27 @@ func storageClusterStretchEnabled(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil && cluster.Spec.Ceph.Topology.Stretch.Enabled
 }
 
-func clusterInfraNodeByName(infra v1alpha1.ClusterInfra, name string) (v1alpha1.ClusterNodeComponent, bool) {
-	for _, node := range infra.Spec.Components.Nodes {
-		if node.Name == name {
-			return node, true
-		}
-	}
-	return v1alpha1.ClusterNodeComponent{}, false
-}
-
-func storageInfraNodeHost(node v1alpha1.ClusterNodeComponent, hosts map[string]v1alpha1.Host) (v1alpha1.Host, bool) {
-	if node.Source.HostRef.Name == "" {
-		return v1alpha1.Host{}, false
-	}
-	host, ok := hosts[node.Source.HostRef.Name]
-	return host, ok
-}
-
-func validateStorageNodeHostAddress(owner string, node v1alpha1.ClusterNodeComponent, addressName string, hosts map[string]v1alpha1.Host, defaultAddressName string) []string {
-	host, ok := storageInfraNodeHost(node, hosts)
+func validateStorageNodeMachineAddress(owner string, cluster v1alpha1.StorageCluster, nodeName string, addressName string, machines map[string]v1alpha1.Machine, defaultAddressName string) []string {
+	node, ok := storageCephNodeByName(cluster, nodeName)
 	if !ok {
-		return []string{fmt.Sprintf("%s cannot resolve because ClusterInfra node %q is not host-sourced", owner, node.Name)}
+		return nil
+	}
+	machine, ok := machines[node.MachineRef.Name]
+	if !ok {
+		return nil
 	}
 	resolvedName := addressName
 	if resolvedName == "" {
 		resolvedName = defaultAddressName
 	}
-	if resolvedName == "" && host.Spec.SSH != nil {
-		resolvedName = host.Spec.SSH.AddressName
+	if resolvedName == "" && machine.Spec.OS.SSH != nil {
+		resolvedName = machine.Spec.OS.SSH.AddressName
 	}
 	if resolvedName == "" {
-		return []string{fmt.Sprintf("%s must set addressRef.name or Host/%s spec.ssh.addressName", owner, host.Metadata.Name)}
+		return []string{fmt.Sprintf("%s must set addressRef.name or Machine/%s spec.os.ssh.addressName", owner, machine.Metadata.Name)}
 	}
-	if _, ok := v1alpha1.HostAddressByName(host, resolvedName); !ok {
-		return []string{fmt.Sprintf("%s %q does not resolve to Host/%s spec.addresses[].name", owner, resolvedName, host.Metadata.Name)}
+	if _, ok := v1alpha1.MachineAddressByName(machine, resolvedName); !ok {
+		return []string{fmt.Sprintf("%s %q does not resolve to Machine/%s spec.os.addresses[].name", owner, resolvedName, machine.Metadata.Name)}
 	}
 	return nil
 }

@@ -2,21 +2,21 @@ package render
 
 import "github.com/crmarques/bootwright/api/v1alpha1"
 
-func clusterPlatformKind(ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) string {
-	if isSingleNodeCluster(ocp) && ci.Spec.Platform.Type != v1alpha1.PlatformTypeExternal {
+func clusterPlatformKind(ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) string {
+	if isSingleNodeCluster(ocp) && ci.Platform.Type != v1alpha1.PlatformTypeExternal {
 		return v1alpha1.PlatformTypeNone
 	}
-	if ci.Spec.Platform.Type == "" {
+	if ci.Platform.Type == "" {
 		return v1alpha1.PlatformTypeNone
 	}
-	return ci.Spec.Platform.Type
+	return ci.Platform.Type
 }
 
 func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Nodes) == 1 && ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
 }
 
-func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) map[string]any {
+func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) map[string]any {
 	apiVIPs, ingressVIPs := vipsFromEndpoints(state, ci, ocp)
 	userManaged := !allContainerEndpointsOpenShift(ci, ocp)
 	switch kind {
@@ -28,8 +28,8 @@ func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra,
 		for key, value := range vSphereProviderPlatformConfig(state, ci) {
 			out[key] = value
 		}
-		if ci.Spec.Platform.VSphere != nil && ci.Spec.Platform.VSphere.NodeNetworking != nil {
-			out["nodeNetworking"] = vSphereNodeNetworkingConfig(ci.Spec.Platform.VSphere.NodeNetworking)
+		if ci.Platform.VSphere != nil && ci.Platform.VSphere.NodeNetworking != nil {
+			out["nodeNetworking"] = vSphereNodeNetworkingConfig(ci.Platform.VSphere.NodeNetworking)
 		}
 		return map[string]any{"vsphere": out}
 	case v1alpha1.PlatformTypeBareMetal:
@@ -37,16 +37,16 @@ func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInfra,
 			"apiVIPs":     apiVIPs,
 			"ingressVIPs": ingressVIPs,
 		}
-		if ci.Spec.Platform.BareMetal != nil && ci.Spec.Platform.BareMetal.ProvisioningNetwork != "" {
-			out["provisioningNetwork"] = installerProvisioningNetwork(ci.Spec.Platform.BareMetal.ProvisioningNetwork)
+		if ci.Platform.BareMetal != nil && ci.Platform.BareMetal.ProvisioningNetwork != "" {
+			out["provisioningNetwork"] = installerProvisioningNetwork(ci.Platform.BareMetal.ProvisioningNetwork)
 		}
 		if userManaged {
 			out["loadBalancer"] = map[string]any{"type": "UserManaged"}
 		}
 		return map[string]any{"baremetal": out}
 	case v1alpha1.PlatformTypeExternal:
-		if ci.Spec.Platform.External != nil {
-			return map[string]any{"external": cloneYAMLMap(ci.Spec.Platform.External)}
+		if ci.Platform.External != nil {
+			return map[string]any{"external": cloneYAMLMap(ci.Platform.External)}
 		}
 		return map[string]any{"external": map[string]any{}}
 	default:
@@ -67,24 +67,23 @@ func installerProvisioningNetwork(value string) string {
 	}
 }
 
-func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfra) map[string]any {
+func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall) map[string]any {
 	vcenters := []any{}
 	failureDomains := []any{}
 	seenVCenters := map[string]bool{}
 	seenFailureDomains := map[string]bool{}
-	for _, machine := range ci.Spec.Components.Nodes {
+	for _, machine := range ci.Machines {
 		if machine.Source.ProfileRef.Name == "" {
 			continue
 		}
 		provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
-		if !ok {
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerVSphere || provider.Spec.VSphere == nil {
 			continue
 		}
-		profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
-		if !ok || profile.VSphere == nil {
+		if _, ok := findProfile(provider, machine.Source.ProfileRef.Name); !ok {
 			continue
 		}
-		for _, vc := range profile.VSphere.VCenters {
+		for _, vc := range provider.Spec.VSphere.VCenters {
 			key := vc.Server
 			if seenVCenters[key] {
 				continue
@@ -92,7 +91,7 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfr
 			seenVCenters[key] = true
 			vcenters = append(vcenters, vSphereVCenterConfig(vc))
 		}
-		for _, fd := range profile.VSphere.FailureDomains {
+		for _, fd := range provider.Spec.VSphere.FailureDomains {
 			key := fd.Name
 			if seenFailureDomains[key] {
 				continue
@@ -108,7 +107,7 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfr
 	if len(failureDomains) > 0 {
 		out["failureDomains"] = failureDomains
 	}
-	if ci.Spec.Platform.VSphere == nil || ci.Spec.Platform.VSphere.NodeNetworking == nil {
+	if ci.Platform.VSphere == nil || ci.Platform.VSphere.NodeNetworking == nil {
 		if nn := firstVSphereProfileNodeNetworking(state, ci); nn != nil {
 			out["nodeNetworking"] = vSphereNodeNetworkingConfig(nn)
 		}
@@ -116,18 +115,20 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInfr
 	return out
 }
 
-func firstVSphereProfileNodeNetworking(state v1alpha1.State, ci v1alpha1.ClusterInfra) *v1alpha1.VSphereNodeNetworking {
-	for _, machine := range ci.Spec.Components.Nodes {
+func firstVSphereProfileNodeNetworking(state v1alpha1.State, ci v1alpha1.ClusterInstall) *v1alpha1.VSphereNodeNetworking {
+	for _, machine := range ci.Machines {
 		if machine.Source.ProfileRef.Name == "" {
 			continue
 		}
 		provider, ok := findProvider(state, machine.Source.ProviderRef.Name)
-		if !ok {
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerVSphere || provider.Spec.VSphere == nil {
 			continue
 		}
-		profile, ok := findProfile(provider, machine.Source.ProfileRef.Name)
-		if ok && profile.VSphere != nil && profile.VSphere.NodeNetworking != nil {
-			return profile.VSphere.NodeNetworking
+		if _, ok := findProfile(provider, machine.Source.ProfileRef.Name); !ok {
+			continue
+		}
+		if provider.Spec.VSphere.NodeNetworking != nil {
+			return provider.Spec.VSphere.NodeNetworking
 		}
 	}
 	return nil
@@ -214,7 +215,7 @@ func vSphereNetworkSubnetConfig(n *v1alpha1.VSphereNetworkSubnet) map[string]any
 	return out
 }
 
-func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) (api []any, ingress []any) {
+func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) (api []any, ingress []any) {
 	if vip := containerEndpointAddress(state, ci, ocp, v1alpha1.EndpointAPI); vip != "" {
 		api = append(api, vip)
 	}
@@ -230,7 +231,7 @@ func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alp
 	return api, ingress
 }
 
-func allContainerEndpointsOpenShift(ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster) bool {
+func allContainerEndpointsOpenShift(ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) bool {
 	for _, name := range standardEndpointNames {
 		endpoint, ok := containerEndpoint(ci, ocp, name)
 		if !ok || endpointSourceType(endpoint, v1alpha1.EndpointSourceOpenShift) != v1alpha1.EndpointSourceOpenShift {

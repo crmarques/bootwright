@@ -12,17 +12,22 @@ func TestProviderCapabilityLookups(t *testing.T) {
 	provider := v1alpha1.InfraProvider{
 		Metadata: v1alpha1.Metadata{Name: "provider"},
 		Spec: v1alpha1.InfraProviderSpec{
-			MachineProfiles: []v1alpha1.MachineProfileCapability{{Name: "profile"}},
-			Machines:        []v1alpha1.MachineCapability{{Name: "server"}},
+			Type: v1alpha1.ProvisionerLibvirt,
+			Libvirt: &v1alpha1.InfraProviderLibvirt{
+				MachineRef:      v1alpha1.LocalObjectReference{Name: "server"},
+				URI:             "qemu:///system",
+				MachineProfiles: []v1alpha1.MachineProfile{{Name: "profile"}},
+			},
 		},
 	}
+	machine := v1alpha1.Machine{Metadata: v1alpha1.Metadata{Name: "server"}}
 	component := v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "lb"},
 		Spec: v1alpha1.InfraComponentSpec{
 			LoadBalancer: &v1alpha1.LoadBalancerComponent{Type: v1alpha1.InfraComponentTypeHAProxy},
 		},
 	}
-	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{provider}, InfraComponents: []v1alpha1.InfraComponent{component}}
+	state := v1alpha1.State{Machines: []v1alpha1.Machine{machine}, InfraProviders: []v1alpha1.InfraProvider{provider}, InfraComponents: []v1alpha1.InfraComponent{component}}
 
 	gotProvider, ok := Provider(state, "provider")
 	if !ok || gotProvider.Metadata.Name != "provider" {
@@ -31,7 +36,7 @@ func TestProviderCapabilityLookups(t *testing.T) {
 	if profile, ok := MachineProfile(gotProvider, "profile"); !ok || profile.Name != "profile" {
 		t.Fatalf("MachineProfile lookup failed: %v %+v", ok, profile)
 	}
-	if machine, ok := Machine(gotProvider, "server"); !ok || machine.Name != "server" {
+	if machine, ok := Machine(state, "server"); !ok || machine.Metadata.Name != "server" {
 		t.Fatalf("Machine lookup failed: %v %+v", ok, machine)
 	}
 	if gotComponent, ok := InfraComponent(state, "lb"); !ok || gotComponent.Metadata.Name != "lb" {
@@ -39,54 +44,55 @@ func TestProviderCapabilityLookups(t *testing.T) {
 	}
 }
 
-func TestClusterInfraRelationships(t *testing.T) {
-	infra := v1alpha1.ClusterInfra{Metadata: v1alpha1.Metadata{Name: "infra"}}
+func TestClusterInstallRelationships(t *testing.T) {
 	cluster := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "cluster"},
 		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{
-			{Hostname: "master-0", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra"}},
-			{Hostname: "master-1", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra"}},
-			{Hostname: "other", InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "other"}},
+			{Hostname: "master-0", MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"}},
+			{Hostname: "master-1", MachineRef: v1alpha1.LocalObjectReference{Name: "master-1"}},
 		}},
 	}
 	state := v1alpha1.State{
-		ClusterInfras:     []v1alpha1.ClusterInfra{infra},
+		Machines: []v1alpha1.Machine{
+			{Metadata: v1alpha1.Metadata{Name: "master-0"}},
+			{Metadata: v1alpha1.Metadata{Name: "master-1"}},
+		},
 		ContainerClusters: []v1alpha1.ContainerCluster{cluster},
 	}
+	infra, ok := ClusterInstallForContainerCluster(state, cluster)
+	if !ok {
+		t.Fatal("ClusterInstallForContainerCluster returned false")
+	}
 
-	if got, ok := ClusterForInfra(state, infra); !ok || got.Metadata.Name != "cluster" {
-		t.Fatalf("ClusterForInfra failed: %v %+v", ok, got)
+	if got, ok := ClusterForInstall(state, infra); !ok || got.Metadata.Name != "cluster" {
+		t.Fatalf("ClusterForInstall failed: %v %+v", ok, got)
 	}
-	names := ClusterInfraNames(cluster)
-	if !reflect.DeepEqual(names, []string{"infra", "other"}) {
-		t.Fatalf("ClusterInfraNames = %v", names)
+	names := ClusterInstallNames(cluster)
+	if !reflect.DeepEqual(names, []string{"cluster"}) {
+		t.Fatalf("ClusterInstallNames = %v", names)
 	}
-	nodes := ClusterNodesForInfra(state, infra)
+	nodes := ClusterNodesForInstall(state, infra)
 	if len(nodes) != 2 || nodes["master-0"].Hostname != "master-0" || nodes["master-1"].Hostname != "master-1" {
-		t.Fatalf("ClusterNodesForInfra = %+v", nodes)
+		t.Fatalf("ClusterNodesForInstall = %+v", nodes)
 	}
 }
 
 func TestEndpointAddressAndNetworkMatching(t *testing.T) {
-	infra := v1alpha1.ClusterInfra{
-		Spec: v1alpha1.ClusterInfraSpec{
-			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI: {
-					Source: v1alpha1.EndpointSource{
-						Type:         v1alpha1.EndpointSourceInfraComponent,
-						ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"},
-						BindAddress:  "api",
-					},
+	infra := v1alpha1.ClusterInstall{
+		Endpoints: map[string]v1alpha1.Endpoint{
+			v1alpha1.EndpointAPI: {
+				Source: v1alpha1.EndpointSource{
+					Type:         v1alpha1.EndpointSourceInfraComponent,
+					ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"},
+					BindAddress:  "api",
 				},
 			},
-			Components: v1alpha1.ClusterComponents{
-				Nodes: []v1alpha1.ClusterNodeComponent{{
-					Network: v1alpha1.ClusterNodeNetwork{
-						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
-					},
-				}},
-			},
 		},
+		Machines: []v1alpha1.InstallMachine{{
+			Network: v1alpha1.MachineNetwork{
+				NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
+			},
+		}},
 	}
 	network := v1alpha1.NetworkConfig{
 		Metadata: v1alpha1.Metadata{Name: "network"},
@@ -123,14 +129,17 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 
 func TestHostRouteAddressFallback(t *testing.T) {
 	state := v1alpha1.State{
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "provider"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{
-					{Name: "ssh", Address: "127.0.0.1"},
-					{Name: "lan", Address: "192.168.133.2"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Mode: v1alpha1.MachineOSModeExternal,
+					SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Addresses: []v1alpha1.MachineAddress{
+						{Name: "ssh", Address: "127.0.0.1"},
+						{Name: "lan", Address: "192.168.133.2"},
+					},
 				},
-				SSH: &v1alpha1.HostSSHSpec{AddressName: "ssh"},
 			},
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
@@ -148,26 +157,22 @@ func TestHostRouteAddressFallback(t *testing.T) {
 			},
 		}},
 	}
-	infra := v1alpha1.ClusterInfra{
-		Spec: v1alpha1.ClusterInfraSpec{
-			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
-			},
-			Components: v1alpha1.ClusterComponents{
-				Nodes: []v1alpha1.ClusterNodeComponent{{
-					Network: v1alpha1.ClusterNodeNetwork{
-						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
-					},
-				}},
-			},
+	infra := v1alpha1.ClusterInstall{
+		Endpoints: map[string]v1alpha1.Endpoint{
+			v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
 		},
+		Machines: []v1alpha1.InstallMachine{{
+			Network: v1alpha1.MachineNetwork{
+				NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
+			},
+		}},
 	}
 
-	if got := HostRouteAddress(state, "provider", "lan", infra); got != "192.168.133.2" {
-		t.Fatalf("named HostRouteAddress = %q", got)
+	if got := MachineRouteAddress(state, "provider", "lan", infra); got != "192.168.133.2" {
+		t.Fatalf("named MachineRouteAddress = %q", got)
 	}
-	if got := HostRouteAddress(state, "provider", "", infra); got != "192.168.133.1" {
-		t.Fatalf("fallback HostRouteAddress = %q", got)
+	if got := MachineRouteAddress(state, "provider", "", infra); got != "192.168.133.1" {
+		t.Fatalf("fallback MachineRouteAddress = %q", got)
 	}
 }
 

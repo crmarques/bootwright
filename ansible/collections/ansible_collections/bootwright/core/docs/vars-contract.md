@@ -9,14 +9,14 @@ authors.
 | Fact | Shape |
 | --- | --- |
 | `bootwright_environment` | environment defaults, proxy selections, mirror, component image declarations |
-| `bootwright_hosts` | host SSH endpoints and capability tags |
+| `bootwright_machines` | machine SSH endpoints and capability tags |
 | `bootwright_providers` | provider capability inventory |
-| `bootwright_infra_components` | host-bound infra services such as artifact servers |
+| `bootwright_infra_components` | machine-bound infra services such as artifact servers |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
 | `bootwright_storage_clusters` | managed storage apply inputs, seed hosts, cephadm files, operation files, and attachment contexts |
 | `bootwright_provider_services` | provider/BMC service instances with rendered role names |
 | `bootwright_infra_component_services` | InfraComponent service instances with rendered role names |
-| `bootwright_provider_host_setups` | provider-host setup roles selected by machine drivers |
+| `bootwright_provider_machine_setups` | provider-machine setup roles selected by machine drivers |
 | `bootwright_proxy` | effective proxy settings |
 | `bootwright_resolved_ntp_sources` | resolved external and managed NTP addresses rendered to installer input |
 
@@ -94,14 +94,14 @@ bootwright_clusters:
         bmcDestroyRole: bootwright.core.provider_service_bmc_emulated
         bootApplyRole: bootwright.core.container_cluster_boot_redfish
         mediaPrepareRole: bootwright.core.container_cluster_media_libvirt
-        hostSetupRoles:
+        machineSetupRoles:
+          - bootwright.core.machine_setup_libvirt
         networkAttachment:
           kind: libvirt | vsphere | kubevirt | baremetal
           libvirt: { bridge }
           vsphere: { portgroup }
           kubevirt: { nad }
           baremetal: { vlan }
-          - bootwright.core.host_libvirt
         requiresKVM: true
         networkConfig:
           ref: rack1-bonded-machine
@@ -131,11 +131,11 @@ bootwright_clusters:
           credentialRef: bmc-credentials
           sushyToolsVersion: 2.1.0
       - kind: loadBalancer
-        name: apps              # ClusterInfra component name
+        name: apps              # rendered component name
         providerName: lab-provider
         capabilityName: default # InfraProvider capability name
-        hostRef: services-host
-        hostAddress: 192.168.133.1
+        machineRef: services-host
+        machineAddress: 192.168.133.1
         realisation: haProxy
         applyRole: bootwright.core.infra_component_load_balancer_haproxy
         destroyRole: bootwright.core.infra_component_load_balancer_haproxy
@@ -153,8 +153,8 @@ bootwright_clusters:
         name: artifact-server
         componentName: artifact-server
         providerName: InfraComponent
-        hostRef: services-host
-        hostAddress: 192.168.133.1
+        machineRef: services-host
+        machineAddress: 192.168.133.1
         realisation: http
         applyRole: bootwright.core.infra_component_artifact_server_http
         destroyRole: bootwright.core.infra_component_artifact_server_http
@@ -164,8 +164,8 @@ bootwright_clusters:
         listeners:
           - { name: https, protocol: https, port: 8443 }
         endpoints:
-          - { name: bmc, listener: https, hostAddress: lab-lan }
-          - { name: cluster, listener: https, hostAddress: cluster-lan }
+          - { name: bmc, listener: https, machineAddress: lab-lan }
+          - { name: cluster, listener: https, machineAddress: cluster-lan }
         url: https://192.168.133.1:8443/
         tls:
           commonName: 192.168.133.1
@@ -174,8 +174,8 @@ bootwright_clusters:
       - kind: nameResolution
         name: default
         providerName: lab-provider
-        hostRef: services-host
-        hostAddress: 192.168.133.1
+        machineRef: services-host
+        machineAddress: 192.168.133.1
         realisation: dnsmasq
         applyRole: bootwright.core.infra_component_name_resolution_dnsmasq
         destroyRole: bootwright.core.infra_component_name_resolution_dnsmasq
@@ -191,8 +191,8 @@ bootwright_clusters:
         name: ntp-server
         componentName: ntp-server
         providerName: InfraComponent
-        hostRef: services-host
-        hostAddress: 192.168.133.1
+        machineRef: services-host
+        machineAddress: 192.168.133.1
         realisation: chrony
         applyRole: bootwright.core.infra_component_ntp_chrony
         destroyRole: bootwright.core.infra_component_ntp_chrony
@@ -205,21 +205,20 @@ bootwright_clusters:
     nodes:
       master-0:
         role: master
-        infraNodeRef:
-          clusterInfra: prod-3node-infra
+        machineRef:
           name: master-0
 ```
 
-## Host Service Shapes
+## Machine Service Shapes
 
 Provider playbooks consume `bootwright_provider_services[]` for provider/BMC
 service work. InfraComponent playbooks consume
-`bootwright_infra_component_services[]` for host-bound shared services such as
+`bootwright_infra_component_services[]` for machine-bound shared services such as
 load balancers, artifact servers, proxies, name resolution, NTP, and registries.
 Go resolves shared service identity as `(kind, providerName, name)` before
-rendering; host placement and ports are conflict fields, and mergeable overlays
+rendering; machine placement and ports are conflict fields, and mergeable overlays
 are unioned in the resolved graph. The renderer then emits one aggregated
-Ansible service instance with `hostRef`, `applyRole`, and `destroyRole`; the
+Ansible service instance with `machineRef`, `applyRole`, and `destroyRole`; the
 service role consumes the rest of the flat component fields. Mergeable fields
 such as HAProxy `frontends`, dnsmasq records, dnsmasq
 `additionalIngressHosts`, chrony `allowedNetworks`, and BMC `machines` carry
@@ -230,8 +229,8 @@ bootwright_provider_services:
   - kind: bmc
     providerName: lab-libvirt-provider
     name: emulated
-    hostRef: lab-host
-    hostAddress: 192.168.133.1
+    machineRef: lab-host
+    machineAddress: 192.168.133.1
     realisation: emulated
     bmcRole: emulated
     applyRole: bootwright.core.provider_service_bmc_emulated
@@ -257,8 +256,8 @@ bootwright_infra_component_services:
     providerName: InfraComponent
     name: apps
     componentName: apps
-    hostRef: services-host
-    hostAddress: 192.168.133.1
+    machineRef: services-host
+    machineAddress: 192.168.133.1
     realisation: haProxy
     applyRole: bootwright.core.infra_component_load_balancer_haproxy
     destroyRole: bootwright.core.infra_component_load_balancer_haproxy
@@ -279,10 +278,10 @@ bootwright_infra_component_services:
 ```
 
 ```yaml
-bootwright_provider_host_setups:
-  - hostRef: lab-host
-    hostAddress: 192.168.133.1
-    applyRole: bootwright.core.host_libvirt
+bootwright_provider_machine_setups:
+  - machineRef: lab-host
+    machineAddress: 192.168.133.1
+    applyRole: bootwright.core.machine_setup_libvirt
 ```
 
 ## Managed Storage Shape
@@ -343,8 +342,8 @@ keeps the stable host name `storage__<cluster>` for task limiting; non-seed
 nodes render as `storage__<cluster>__<node>`. Every storage host renders
 `bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
 `ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
-`ansible_ssh_common_args` from the node's referenced `Host.spec.ssh`. The
-`clusterSSH` vars are also derived from the storage-node Host SSH identity and
+`ansible_ssh_common_args` from the node's referenced `Machine.spec.os.ssh`. The
+`clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
@@ -396,7 +395,7 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
 | `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage task |
 | `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
-| `bootwright_agent_node_machine_name` | ClusterInfra machine component name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
+| `bootwright_agent_node_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_install_override` | Optional boolean from `bootwright apply cluster --override`; when true the install role ignores prior local kubeconfig availability |
 | `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 

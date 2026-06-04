@@ -715,7 +715,7 @@ func TestExternalStorageExamplesPlanDataFoundationAttachmentsWithoutCephTask(t *
 	}
 }
 
-func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInfra(t *testing.T) {
+func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInstall(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -802,18 +802,6 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	}
 }
 
-func TestEnsureApplySupportedRejectsFullManagedStorage(t *testing.T) {
-	state := storageAttachmentPlanningState()
-	state.StorageClusters[0].Spec.Management = v1alpha1.StorageClusterManagementFullManaged
-	err := EnsureApplySupported(state)
-	if err == nil {
-		t.Fatal("fullManaged storage unexpectedly supported")
-	}
-	if !strings.Contains(err.Error(), "spec.management=fullManaged is recognized but fullManaged storage infra is not available yet") {
-		t.Fatalf("fullManaged error = %q", err)
-	}
-}
-
 func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.T) {
 	state := storageAttachmentPlanningState()
 	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
@@ -897,17 +885,6 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 			"ceph-node-ssh":    {},
 		}},
 	}}
-	state.ClusterInfras = []v1alpha1.ClusterInfra{{
-		Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name: "ceph-0",
-				Source: v1alpha1.ClusterNodeSource{
-					HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
-				},
-			}},
-		}},
-	}}
 	state.StorageExports[0].Spec.Type = v1alpha1.StorageExportTypeDataFoundation
 	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
@@ -924,7 +901,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 			},
 		},
 	}
-	state.Hosts[0].Spec.SSH.User = "operator"
+	state.Machines[0].Spec.OS.SSH.User = "operator"
 
 	secretsDir := t.TempDir()
 	exportedJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"ssh-fsid"}}]`
@@ -980,7 +957,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	}
 	commonArgs, _ := host["ansible_ssh_common_args"].(string)
 	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-known-hosts")) {
-		t.Fatalf("ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+		t.Fatalf("ansible_ssh_common_args = %q, want strict host key checking with Machine knownHostsRef", commonArgs)
 	}
 	if strings.Contains(commonArgs, "/dev/null") {
 		t.Fatalf("ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
@@ -1020,7 +997,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 	}
 }
 
-func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
+func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
@@ -1028,19 +1005,22 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 				"ceph-admin-known-hosts": {},
 			}},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
-			Spec: v1alpha1.HostSpec{
-				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
-				Capabilities: []string{v1alpha1.HostCapabilityCephAdmin},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
+				},
 			},
 		}},
 	}
 	secretsDir := t.TempDir()
 	ssh := &v1alpha1.StorageExportExternalDetailsSSHExecution{
-		HostRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
-		Config:   v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+		MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+		Config:      v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
 	}
 
 	targets, err := storageExportSSHExternalDetailsTargets(state, v1alpha1.StorageCluster{
@@ -1054,7 +1034,7 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
 	}
 	want := []externalDetailsSSHTarget{{
-		label:          "Host/ceph-admin-01",
+		label:          "Machine/ceph-admin-01",
 		inventoryName:  "external_details_0",
 		address:        "ceph-admin.example.test",
 		user:           "ceph",
@@ -1078,14 +1058,14 @@ func TestStorageExportSSHExternalDetailsTargetsUseHostRefs(t *testing.T) {
 	}
 	host := inventory["all"].(map[string]any)["hosts"].(map[string]any)["external_details_0"].(map[string]any)
 	if got := host["ansible_user"]; got != "ceph" {
-		t.Fatalf("host ref ansible_user = %v, want ceph", got)
+		t.Fatalf("machine ref ansible_user = %v, want ceph", got)
 	}
 	commonArgs, _ := host["ansible_ssh_common_args"].(string)
 	if !strings.Contains(commonArgs, "StrictHostKeyChecking=yes") || !strings.Contains(commonArgs, "UserKnownHostsFile="+filepath.Join(secretsDir, "ceph-admin-known-hosts")) {
-		t.Fatalf("host ref ansible_ssh_common_args = %q, want strict host key checking with Host knownHostsRef", commonArgs)
+		t.Fatalf("machine ref ansible_ssh_common_args = %q, want strict host key checking with Machine knownHostsRef", commonArgs)
 	}
 	if strings.Contains(commonArgs, "/dev/null") {
-		t.Fatalf("host ref ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
+		t.Fatalf("machine ref ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
 	}
 }
 
@@ -1182,34 +1162,25 @@ func storageAttachmentPlanningState() v1alpha1.State {
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "demo"},
 		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "ceph-0",
-					Source: v1alpha1.ClusterNodeSource{
-						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
-					},
-				}}},
-			},
-		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "10.10.10.10"}},
-				SSH: &v1alpha1.HostSSHSpec{
-					AddressName:   "ssh",
-					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
-					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.10.10.10"}},
+					SSH: &v1alpha1.MachineSSHSpec{
+						AddressName:   "ssh",
+						KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+					},
 				},
-				Capabilities: []string{v1alpha1.HostCapabilityCephNode},
 			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
-				Type:            v1alpha1.StorageClusterTypeCeph,
-				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
+				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
@@ -1224,9 +1195,10 @@ func storageAttachmentPlanningState() v1alpha1.State {
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
-							Name:  "ceph-0",
-							Site:  "dc1",
-							Roles: []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
+							Name:       "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:       "dc1",
+							Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
 						}},
 					},
 				},
@@ -1317,11 +1289,8 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 	clusters := []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "child-ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
-			Hostname: "master-0",
-			InfraNodeRef: v1alpha1.InfraNodeRef{
-				ClusterInfra: "child-ocp-infra",
-				Name:         "master-0",
-			},
+			Hostname:   "master-0",
+			MachineRef: v1alpha1.LocalObjectReference{Name: "child-master-0"},
 		}}},
 	}}
 	if includeParent {
@@ -1329,24 +1298,30 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 	}
 	return v1alpha1.State{
 		ContainerClusters: clusters,
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "child-ocp-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name:   "master-0",
-					Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "child-kubevirt-provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "sno"}},
-				}}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "child-master-0"},
+			Spec: v1alpha1.MachineSpec{
+				Substrate: v1alpha1.MachineSubstrate{
+					ProviderRef: v1alpha1.LocalObjectReference{Name: "child-kubevirt-provider"},
+					KubeVirt: &v1alpha1.MachineProfiledSubstrate{
+						ProfileRef: v1alpha1.LocalObjectReference{Name: "sno"},
+					},
+				},
+				OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
 			},
 		}},
 		InfraProviders: []v1alpha1.InfraProvider{{
 			Metadata: v1alpha1.Metadata{Name: "child-kubevirt-provider"},
-			Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
-				Name: "sno",
-				KubeVirt: &v1alpha1.MachineProfileKubeVirtProvisioner{
-					HostContainerClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-					Namespace:               "bootwright-child-ocp",
+			Spec: v1alpha1.InfraProviderSpec{
+				Type: v1alpha1.ProvisionerKubeVirt,
+				KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+					HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+					Namespace:      "bootwright-child-ocp",
+					MachineProfiles: []v1alpha1.MachineProfile{{
+						Name: "sno",
+					}},
 				},
-			}}},
+			},
 		}},
 		ClusterAddons: []v1alpha1.ClusterAddon{{
 			Metadata: v1alpha1.Metadata{Name: "openshift-virtualization"},
@@ -1374,7 +1349,7 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 }
 
 func applyAllTarget() ApplyTarget {
-	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInfra, ApplyPhaseStorageInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInstall, ApplyPhaseStorageInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
 }
 
 func applyClustersTarget() ApplyTarget {

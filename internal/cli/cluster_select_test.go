@@ -14,7 +14,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected shared service conflict, got nil")
 	}
-	if !strings.Contains(err.Error(), "--clusters would narrow shared host service") {
+	if !strings.Contains(err.Error(), "--clusters would narrow shared machine service") {
 		t.Fatalf("error %q does not explain scoped apply conflict", err)
 	}
 	if !strings.Contains(err.Error(), "unscoped {cluster-b}") {
@@ -23,7 +23,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraScope(t *testing.T) {
 }
 
 func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds(t *testing.T) {
-	state := cliStateWithAllSharedHostServices()
+	state := cliStateWithAllSharedMachineServices()
 	for _, target := range []string{"infra", "all"} {
 		t.Run(target, func(t *testing.T) {
 			err := validateScopedApplySharedServices(state, target, "cluster-a")
@@ -48,7 +48,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 
 func TestValidateScopedApplySharedServicesAllowsContainerClusterScope(t *testing.T) {
 	if err := validateScopedApplySharedServices(cliStateWithSharedDNS(), "container-cluster", "cluster-a"); err != nil {
-		t.Fatalf("container-cluster apply scope should not validate host services: %v", err)
+		t.Fatalf("container-cluster apply scope should not validate machine services: %v", err)
 	}
 }
 
@@ -73,36 +73,28 @@ func cliStateWithSharedDNS() v1alpha1.State {
 				},
 			},
 		}},
-		Hosts: []v1alpha1.Host{{
-			Metadata: v1alpha1.Metadata{Name: "service-host"},
-			Spec: v1alpha1.HostSpec{
-				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.5"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-			},
-		}},
+		Machines: []v1alpha1.Machine{
+			cliServiceMachine(),
+			cliRawMachine("cluster-a-master-0", "machines-a", "net-a"),
+			cliRawMachine("cluster-b-master-0", "machines-b", "net-b"),
+		},
 		NetworkConfigs: []v1alpha1.NetworkConfig{
 			cliNetworkConfig("net-a"),
 			cliNetworkConfig("net-b"),
 		},
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "machines-a"},
-		}, {
-			Metadata: v1alpha1.Metadata{Name: "machines-b"},
-		}},
-		InfraComponents: []v1alpha1.InfraComponent{cliNameResolutionComponent()},
-		ClusterInfras: []v1alpha1.ClusterInfra{
-			cliClusterInfra("infra-a", "machines-a", "net-a", false),
-			cliClusterInfra("infra-b", "machines-b", "net-b", false),
+		InfraProviders: []v1alpha1.InfraProvider{
+			cliBareMetalProvider("machines-a"),
+			cliBareMetalProvider("machines-b"),
 		},
+		InfraComponents: []v1alpha1.InfraComponent{cliNameResolutionComponent()},
 		ContainerClusters: []v1alpha1.ContainerCluster{
-			cliContainerCluster("cluster-a", "infra-a"),
-			cliContainerCluster("cluster-b", "infra-b"),
+			cliContainerCluster("cluster-a", "cluster-a-master-0"),
+			cliContainerCluster("cluster-b", "cluster-b-master-0"),
 		},
 	}
 }
 
-func cliStateWithAllSharedHostServices() v1alpha1.State {
+func cliStateWithAllSharedMachineServices() v1alpha1.State {
 	state := cliStateWithSharedDNS()
 	state.Environments[0].Spec.ProxyFor = v1alpha1.EnvironmentProxyForSpec{
 		Bootwright:              "default",
@@ -118,8 +110,8 @@ func cliStateWithAllSharedHostServices() v1alpha1.State {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
-	for i := range state.ClusterInfras {
-		state.ClusterInfras[i].Spec.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+	for i := range state.ContainerClusters {
+		state.ContainerClusters[i].Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
 			ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
 			ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
 				EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
@@ -143,8 +135,8 @@ func cliStateWithAllSharedHostServices() v1alpha1.State {
 		cliRegistryComponent(),
 		cliArtifactServerComponent(),
 	)
-	for i := range state.ClusterInfras {
-		state.ClusterInfras[i].Spec.Endpoints = map[string]v1alpha1.Endpoint{
+	for i := range state.ContainerClusters {
+		state.ContainerClusters[i].Spec.Install.Endpoints = map[string]v1alpha1.Endpoint{
 			v1alpha1.EndpointAPI: {
 				Source: v1alpha1.EndpointSource{
 					Type:         v1alpha1.EndpointSourceInfraComponent,
@@ -169,21 +161,81 @@ func cliNetworkConfig(name string) v1alpha1.NetworkConfig {
 	}
 }
 
+func cliServiceMachine() v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "service-host"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{
+				v1alpha1.MachineCapabilityContainerRuntime,
+				v1alpha1.MachineCapabilityArtifactServer,
+				v1alpha1.MachineCapabilityLoadBalancer,
+				v1alpha1.MachineCapabilityNameResolution,
+				v1alpha1.MachineCapabilityNTP,
+				v1alpha1.MachineCapabilityProxy,
+				v1alpha1.MachineCapabilityRegistry,
+			},
+			OS: v1alpha1.MachineOSSpec{
+				Mode:      v1alpha1.MachineOSModeExternal,
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				SSH: &v1alpha1.MachineSSHSpec{
+					AddressName: "ssh",
+				},
+			},
+		},
+	}
+}
+
+func cliRawMachine(name, providerName, networkName string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode},
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: providerName},
+				BareMetal: &v1alpha1.MachineBareMetalSubstrate{
+					Interfaces: []v1alpha1.MachineInterface{{
+						Name:       "primary",
+						MACAddress: "52:54:00:00:00:01",
+					}},
+				},
+			},
+			OS: v1alpha1.MachineOSSpec{
+				Mode: v1alpha1.MachineOSModeRaw,
+				Install: v1alpha1.MachineOSInstallSpec{
+					Network: v1alpha1.MachineNetwork{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
+					},
+				},
+			},
+		},
+	}
+}
+
+func cliBareMetalProvider(name string) v1alpha1.InfraProvider {
+	return v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type:      v1alpha1.ProvisionerBareMetal,
+			BareMetal: &v1alpha1.InfraProviderBareMetal{},
+		},
+	}
+}
+
 func cliArtifactServerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "artifact-server"},
 		Spec: v1alpha1.InfraComponentSpec{
 			ArtifactServer: &v1alpha1.ArtifactServerComponent{
-				HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+				MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
 				Listeners: []v1alpha1.ArtifactServerListener{{
 					Name:     "https",
 					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
 					Port:     v1alpha1.DefaultArtifactsHTTPPort,
 				}},
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
-					Name:        "cluster",
-					Listener:    "https",
-					HostAddress: "ssh",
+					Name:           "cluster",
+					Listener:       "https",
+					MachineAddress: "ssh",
 				}},
 			},
 		},
@@ -194,8 +246,8 @@ func cliLoadBalancerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "load-balancer"},
 		Spec: v1alpha1.InfraComponentSpec{LoadBalancer: &v1alpha1.LoadBalancerComponent{
-			Type:    v1alpha1.InfraComponentTypeHAProxy,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Type:       v1alpha1.InfraComponentTypeHAProxy,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
 				Name: "api",
 				IP:   "10.0.0.10",
@@ -209,7 +261,7 @@ func cliNameResolutionComponent() v1alpha1.InfraComponent {
 		Metadata: v1alpha1.Metadata{Name: "name-resolution"},
 		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
 			Type:        v1alpha1.InfraComponentTypeDnsmasq,
-			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultDNSPort,
 		}},
@@ -221,7 +273,7 @@ func cliNTPComponent() v1alpha1.InfraComponent {
 		Metadata: v1alpha1.Metadata{Name: "ntp-server"},
 		Spec: v1alpha1.InfraComponentSpec{NTP: &v1alpha1.NTPComponent{
 			Type:        v1alpha1.InfraComponentTypeChrony,
-			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultNTPPort,
 		}},
@@ -232,9 +284,9 @@ func cliProxyComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "proxy"},
 		Spec: v1alpha1.InfraComponentSpec{Proxy: &v1alpha1.ProxyComponent{
-			Type:    v1alpha1.InfraComponentTypeSquid,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:    v1alpha1.DefaultSquidPort,
+			Type:       v1alpha1.InfraComponentTypeSquid,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:       v1alpha1.DefaultSquidPort,
 		}},
 	}
 }
@@ -243,55 +295,21 @@ func cliRegistryComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "registry"},
 		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-			Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:    v1alpha1.DefaultMirrorRegistryPort,
+			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:       v1alpha1.DefaultMirrorRegistryPort,
 		}},
 	}
 }
 
-func cliClusterInfra(name, machineProvider, networkName string, withEndpoints bool) v1alpha1.ClusterInfra {
-	endpoints := map[string]v1alpha1.Endpoint{}
-	if withEndpoints {
-		endpoints[v1alpha1.EndpointAPI] = v1alpha1.Endpoint{
-			Source: v1alpha1.EndpointSource{
-				Type:         v1alpha1.EndpointSourceInfraComponent,
-				ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
-				BindAddress:  "api",
-			},
-		}
-	}
-	return v1alpha1.ClusterInfra{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ClusterInfraSpec{
-			Endpoints: endpoints,
-			Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name:   "master-0",
-				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: machineProvider}, MachineRef: v1alpha1.LocalObjectReference{Name: "node-0"}},
-				Network: v1alpha1.ClusterNodeNetwork{
-					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
-				},
-			}}},
-		},
-	}
-}
-
-func cliContainerCluster(name, infraName string) v1alpha1.ContainerCluster {
+func cliContainerCluster(name, machineName string) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Install: v1alpha1.OCPInstallSpec{
-				EndpointRefs: v1alpha1.ContainerEndpointRefs{
-					API: v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
-				},
-			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname: "master-0",
-				Role:     "master",
-				InfraNodeRef: v1alpha1.InfraNodeRef{
-					ClusterInfra: infraName,
-					Name:         "master-0",
-				},
+				Hostname:   "master-0",
+				Role:       "master",
+				MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
 			}},
 		},
 	}

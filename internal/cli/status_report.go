@@ -14,11 +14,9 @@ import (
 )
 
 type statusReport struct {
-	Context  statusContext   `json:"context"`
-	Desired  statusDesired   `json:"desired"`
-	Clusters []statusCluster `json:"clusters"`
-	// Shared lists infra component services that two or more clusters
-	// reference. Each entry maps to one Ansible-converged host instance.
+	Context          statusContext           `json:"context"`
+	Desired          statusDesired           `json:"desired"`
+	Clusters         []statusCluster         `json:"clusters"`
 	Shared           []statusShared          `json:"shared"`
 	Secrets          []secretListEntry       `json:"secrets"`
 	NextSteps        []string                `json:"nextSteps"`
@@ -30,7 +28,7 @@ type statusShared struct {
 	Kind              string   `json:"kind"`
 	ProviderName      string   `json:"providerName"`
 	CapabilityName    string   `json:"capabilityName"`
-	HostRef           string   `json:"hostRef,omitempty"`
+	MachineRef        string   `json:"machineRef,omitempty"`
 	ConsumingClusters []string `json:"consumingClusters"`
 }
 
@@ -52,19 +50,20 @@ type statusApplyRunActivity struct {
 }
 
 type statusDesired struct {
-	Source               string `json:"source"`
-	Loaded               bool   `json:"loaded"`
-	LoadError            string `json:"loadError,omitempty"`
-	Environments         int    `json:"environments"`
-	InfraProviders       int    `json:"infraProviders"`
-	Hosts                int    `json:"hosts"`
-	ClusterInfras        int    `json:"clusterInfras"`
-	ContainerClusters    int    `json:"containerClusters"`
-	StorageClusters      int    `json:"storageClusters"`
-	StoragePools         int    `json:"storagePools"`
-	ClusterAddons        int    `json:"clusterAddons"`
-	ClusterAddonProfiles int    `json:"clusterAddonProfiles"`
-	ClusterAddonBindings int    `json:"clusterAddonBindings"`
+	Source                 string `json:"source"`
+	Loaded                 bool   `json:"loaded"`
+	LoadError              string `json:"loadError,omitempty"`
+	Environments           int    `json:"environments"`
+	Machines               int    `json:"machines"`
+	MachineImages          int    `json:"machineImages"`
+	MachineInstallProfiles int    `json:"machineInstallProfiles"`
+	InfraProviders         int    `json:"infraProviders"`
+	ContainerClusters      int    `json:"containerClusters"`
+	StorageClusters        int    `json:"storageClusters"`
+	StoragePools           int    `json:"storagePools"`
+	ClusterAddons          int    `json:"clusterAddons"`
+	ClusterAddonProfiles   int    `json:"clusterAddonProfiles"`
+	ClusterAddonBindings   int    `json:"clusterAddonBindings"`
 }
 
 type statusCluster struct {
@@ -127,9 +126,10 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 	}
 	if stateLoaded {
 		report.Desired.Environments = len(state.Environments)
+		report.Desired.Machines = len(state.Machines)
+		report.Desired.MachineImages = len(state.MachineImages)
+		report.Desired.MachineInstallProfiles = len(state.MachineInstallProfiles)
 		report.Desired.InfraProviders = len(state.InfraProviders)
-		report.Desired.Hosts = len(state.Hosts)
-		report.Desired.ClusterInfras = len(state.ClusterInfras)
 		report.Desired.ContainerClusters = len(state.ContainerClusters)
 		report.Desired.StorageClusters = len(state.StorageClusters)
 		report.Desired.StoragePools = len(state.StoragePools)
@@ -152,14 +152,14 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 }
 
 func buildStatusShared(state v1alpha1.State) []statusShared {
-	groups := stategraph.ResolveHostServices(state).SharedServices()
+	groups := stategraph.ResolveMachineServices(state).SharedServices()
 	out := make([]statusShared, 0, len(groups))
 	for _, g := range groups {
 		out = append(out, statusShared{
 			Kind:              g.Kind,
 			ProviderName:      g.ProviderName,
 			CapabilityName:    g.CapabilityName,
-			HostRef:           g.HostRef,
+			MachineRef:        g.MachineRef,
 			ConsumingClusters: g.ConsumingClusters,
 		})
 	}

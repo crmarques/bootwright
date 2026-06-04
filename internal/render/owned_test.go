@@ -39,16 +39,16 @@ var conditionalInstallConfigKeys = map[string]string{
 
 var conditionalInstallConfigPaths = map[string]string{
 	"networking.networkType":                 "set only when ContainerCluster.spec.networking.networkType is declared",
-	"platform.baremetal.apiVIPs":             "set only when ClusterInfra.spec.platform.type renders baremetal",
-	"platform.baremetal.ingressVIPs":         "set only when ClusterInfra.spec.platform.type renders baremetal",
-	"platform.baremetal.loadBalancer":        "set only when ClusterInfra.spec.platform.type renders baremetal",
-	"platform.baremetal.provisioningNetwork": "set only when ClusterInfra.spec.platform.type renders baremetal",
-	"platform.external":                      "set only when ClusterInfra.spec.platform.type renders external",
-	"platform.vsphere.apiVIPs":               "set only when ClusterInfra.spec.platform.type renders vsphere",
-	"platform.vsphere.ingressVIPs":           "set only when ClusterInfra.spec.platform.type renders vsphere",
-	"platform.vsphere.vcenters":              "set only when ClusterInfra.spec.platform.type renders vsphere",
-	"platform.vsphere.failureDomains":        "set only when ClusterInfra.spec.platform.type renders vsphere",
-	"platform.vsphere.nodeNetworking":        "set only when ClusterInfra.spec.platform.type renders vsphere with node networking",
+	"platform.baremetal.apiVIPs":             "set only when ClusterInstall.spec.platform.type renders baremetal",
+	"platform.baremetal.ingressVIPs":         "set only when ClusterInstall.spec.platform.type renders baremetal",
+	"platform.baremetal.loadBalancer":        "set only when ClusterInstall.spec.platform.type renders baremetal",
+	"platform.baremetal.provisioningNetwork": "set only when ClusterInstall.spec.platform.type renders baremetal",
+	"platform.external":                      "set only when ClusterInstall.spec.platform.type renders external",
+	"platform.vsphere.apiVIPs":               "set only when ClusterInstall.spec.platform.type renders vsphere",
+	"platform.vsphere.ingressVIPs":           "set only when ClusterInstall.spec.platform.type renders vsphere",
+	"platform.vsphere.vcenters":              "set only when ClusterInstall.spec.platform.type renders vsphere",
+	"platform.vsphere.failureDomains":        "set only when ClusterInstall.spec.platform.type renders vsphere",
+	"platform.vsphere.nodeNetworking":        "set only when ClusterInstall.spec.platform.type renders vsphere with node networking",
 }
 
 // alwaysOwnedAgentConfigKeys are the agent-config keys Bootwright

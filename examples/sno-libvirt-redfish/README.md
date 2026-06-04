@@ -6,11 +6,11 @@ emulated Redfish BMC.
 ## Edit First
 
 - `environment.yaml`: base domain, secret names, and managed DNS selection.
-- `host.yaml`: controller/libvirt host addresses and SSH key reference.
+- `service-machine.yaml`: controller/libvirt host addresses and SSH key reference.
 - `provider.yaml`: libvirt URI, VM sizing, BMC emulation credentials, and
   bridge name.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
-- `cluster-infra.yaml`: API/app VIPs, per-machine IP, and platform render mode.
+- `cluster-machines.yaml`: API/app VIPs, per-machine IP, and platform render mode.
 - `cluster.yaml`: OpenShift release, install endpoints, networking, and node
   binding.
 

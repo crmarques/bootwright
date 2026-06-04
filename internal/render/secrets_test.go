@@ -150,7 +150,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 				},
 			},
 		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{Metadata: v1alpha1.Metadata{Name: "infra"}}},
+		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
 	}
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
@@ -160,9 +160,9 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:     "master-0",
-				Role:         v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}},
 		},
 	}
@@ -203,7 +203,7 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 				},
 			},
 		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{Metadata: v1alpha1.Metadata{Name: "infra"}}},
+		Machines: []v1alpha1.Machine{installerNodeMachine("master-0")},
 	}
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
@@ -216,9 +216,9 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 				},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:     "master-0",
-				Role:         v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}},
 		},
 	}
@@ -229,6 +229,15 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 	}
 	if secrets.SSHKey != "ssh-ed25519 AAAA public" {
 		t.Fatalf("SSHKey = %q", secrets.SSHKey)
+	}
+}
+
+func installerNodeMachine(name string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+		},
 	}
 }
 
@@ -320,24 +329,24 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 				},
 			},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "registry-host"},
-			Spec: v1alpha1.HostSpec{
-				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "registry.lab"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime, v1alpha1.MachineCapabilityRegistry},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "registry.lab"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				},
 			},
-		}},
+		}, installerNodeMachine("master-0")},
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "registry"},
 			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-				Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
-				HostRef: v1alpha1.LocalObjectReference{Name: "registry-host"},
-				Port:    5000,
+				Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "registry-host"},
+				Port:       5000,
 			}},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "infra"},
 		}},
 	}
 	ocp := v1alpha1.ContainerCluster{
@@ -349,12 +358,9 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname: "master-0",
-				Role:     v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{
-					ClusterInfra: "infra",
-					Name:         "master-0",
-				},
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}},
 		},
 	}

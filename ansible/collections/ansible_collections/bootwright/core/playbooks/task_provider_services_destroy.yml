@@ -7,21 +7,21 @@
   become: true
 
   vars:
-    bootwright_host_provider_services_all: >-
+    bootwright_machine_provider_services_all: >-
       {{
         bootwright_provider_services | default([])
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
-    bootwright_host_provider_services: "{{ bootwright_host_provider_services_all }}"
+    bootwright_machine_provider_services: "{{ bootwright_machine_provider_services_all }}"
 
   tasks:
     - name: Destroy provider service roles
       ansible.builtin.include_role:
         name: "{{ bootwright_component.destroyRole }}"
         tasks_from: destroy.yml
-      loop: "{{ bootwright_host_provider_services | reverse | list }}"
+      loop: "{{ bootwright_machine_provider_services | reverse | list }}"
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"

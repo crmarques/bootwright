@@ -54,21 +54,21 @@ func (f *fakeRunner) Command(spec ansible.RunSpec) []string {
 }
 
 // minimalState is the smallest state that satisfies render.All without
-// triggering provider-closure validation in the installer renderer. It has
-// no ContainerClusters (so no installer renders) and an empty ClusterInfra list
-// (so the per-cluster vars loop is a no-op). Sufficient for exercising the
-// dispatch / dry-run / runner-execution paths of workflow.Run.
+// triggering provider-closure validation in the installer renderer.
 func minimalState() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 			Spec:     v1alpha1.EnvironmentSpec{BaseDomain: "example.test"},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "bastion"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "bastion.example.test"}},
-				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "bastion.example.test"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				},
 			},
 		}},
 	}
@@ -327,7 +327,7 @@ func TestRunSkipsAnsibleWhenLimitMatchesNoHosts(t *testing.T) {
 // inventory is in play). Limits naming any non-empty group ⇒ false.
 // Limits naming only empty/unknown groups ⇒ true.
 func TestLimitMatchesNoHostsTable(t *testing.T) {
-	state := minimalState() // no Hosts, no ClusterInfras
+	state := minimalState()
 	tests := []struct {
 		name  string
 		limit string
@@ -359,24 +359,44 @@ func stateWithInfraHost(hostName string) v1alpha1.State {
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
 		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: hostName},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityLibvirt},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: hostName}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				},
+			},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "master-0"},
+			Spec: v1alpha1.MachineSpec{
+				Substrate: v1alpha1.MachineSubstrate{
+					ProviderRef: v1alpha1.LocalObjectReference{Name: "provider"},
+					Libvirt: &v1alpha1.MachineProfiledSubstrate{
+						ProfileRef: v1alpha1.LocalObjectReference{Name: "profile"},
+					},
+				},
+				OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster"},
+			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+				Hostname:   "master-0",
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
+			}}},
+		}},
 		InfraProviders: []v1alpha1.InfraProvider{{
 			Metadata: v1alpha1.Metadata{Name: "provider"},
 			Spec: v1alpha1.InfraProviderSpec{
-				MachineProfiles: []v1alpha1.MachineProfileCapability{{
-					Name: "profile",
-					Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
-						HostRef: v1alpha1.LocalObjectReference{Name: hostName},
-					},
-				}},
-			},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Components: v1alpha1.ClusterComponents{
-					Nodes: []v1alpha1.ClusterNodeComponent{{
-						Name:   "master-0",
-						Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "profile"}},
+				Type: v1alpha1.ProvisionerLibvirt,
+				Libvirt: &v1alpha1.InfraProviderLibvirt{
+					MachineRef: v1alpha1.LocalObjectReference{Name: hostName},
+					URI:        "qemu:///system",
+					MachineProfiles: []v1alpha1.MachineProfile{{
+						Name: "profile",
 					}},
 				},
 			},

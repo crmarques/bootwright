@@ -1,7 +1,5 @@
 package v1alpha1
 
-// InfraProvider
-
 type InfraProvider struct {
 	APIVersion string            `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string            `yaml:"kind" json:"kind"`
@@ -11,9 +9,66 @@ type InfraProvider struct {
 }
 
 type InfraProviderSpec struct {
-	MachineProfiles    []MachineProfileCapability    `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
-	Machines           []MachineCapability           `yaml:"machines,omitempty" json:"machines,omitempty"`
+	Type               string                        `yaml:"type" json:"type"`
+	Libvirt            *InfraProviderLibvirt         `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
+	BareMetal          *InfraProviderBareMetal       `yaml:"bareMetal,omitempty" json:"bareMetal,omitempty"`
+	VSphere            *InfraProviderVSphere         `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
+	KubeVirt           *InfraProviderKubeVirt        `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+	ArtifactAccess     ProviderArtifactAccess        `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
 	NetworkAttachments []NetworkAttachmentCapability `yaml:"networkAttachments,omitempty" json:"networkAttachments,omitempty"`
+}
+
+type ProviderArtifactAccess struct {
+	ServerRef           LocalObjectReference       `yaml:"serverRef,omitempty" json:"serverRef,omitempty"`
+	RedfishVirtualMedia ClusterArtifactEndpointRef `yaml:"redfishVirtualMedia,omitempty" json:"redfishVirtualMedia,omitempty"`
+	MachineBoot         ClusterArtifactEndpointRef `yaml:"machineBoot,omitempty" json:"machineBoot,omitempty"`
+	OSInstall           ClusterArtifactEndpointRef `yaml:"osInstall,omitempty" json:"osInstall,omitempty"`
+}
+
+type InfraProviderLibvirt struct {
+	MachineRef           LocalObjectReference  `yaml:"machineRef" json:"machineRef"`
+	URI                  string                `yaml:"uri" json:"uri"`
+	BMCEmulationDefaults *BMCEmulationDefaults `yaml:"bmcEmulationDefaults,omitempty" json:"bmcEmulationDefaults,omitempty"`
+	MachineProfiles      []MachineProfile      `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+}
+
+type InfraProviderBareMetal struct {
+	Boot     BareMetalBootSpec     `yaml:"boot,omitempty" json:"boot,omitempty"`
+	Defaults BareMetalDefaultsSpec `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+}
+
+type BareMetalBootSpec struct {
+	Method string `yaml:"method,omitempty" json:"method,omitempty"`
+}
+
+type BareMetalDefaultsSpec struct {
+	BMC *BMCDefaults `yaml:"bmc,omitempty" json:"bmc,omitempty"`
+}
+
+type BMCDefaults struct {
+	CredentialsRef                 SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
+}
+
+type InfraProviderVSphere struct {
+	VCenters        []VSphereVCenter       `yaml:"vcenters,omitempty" json:"vcenters,omitempty"`
+	FailureDomains  []VSphereFailureDomain `yaml:"failureDomains,omitempty" json:"failureDomains,omitempty"`
+	NodeNetworking  *VSphereNodeNetworking `yaml:"nodeNetworking,omitempty" json:"nodeNetworking,omitempty"`
+	MachineProfiles []MachineProfile       `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+}
+
+type InfraProviderKubeVirt struct {
+	HostClusterRef  *LocalObjectReference `yaml:"hostClusterRef,omitempty" json:"hostClusterRef,omitempty"`
+	KubeconfigRef   *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
+	Namespace       string                `yaml:"namespace" json:"namespace"`
+	StorageClassRef *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
+	Requires        KubeVirtRequires      `yaml:"requires,omitempty" json:"requires,omitempty"`
+	MachineProfiles []MachineProfile      `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+}
+
+type KubeVirtRequires struct {
+	Provides        []string             `yaml:"provides,omitempty" json:"provides,omitempty"`
+	AddonBindingRef LocalObjectReference `yaml:"addonBindingRef,omitempty" json:"addonBindingRef,omitempty"`
 }
 
 type NetworkAttachmentCapability struct {
@@ -21,7 +76,7 @@ type NetworkAttachmentCapability struct {
 	Libvirt   *NetworkAttachmentLibvirt   `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 	VSphere   *NetworkAttachmentVSphere   `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
 	KubeVirt  *NetworkAttachmentKubeVirt  `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
-	BareMetal *NetworkAttachmentBareMetal `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
+	BareMetal *NetworkAttachmentBareMetal `yaml:"bareMetal,omitempty" json:"bareMetal,omitempty"`
 }
 
 type NetworkAttachmentLibvirt struct {
@@ -45,29 +100,19 @@ type NetworkAttachmentBareMetal struct {
 	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
 }
 
-// MachineProfileCapability is a parameterised machine template; provider-sourced
-// ClusterInfra nodes select one through source.profileRef.
-type MachineProfileCapability struct {
-	Name      string                             `yaml:"name" json:"name"`
-	CPU       int                                `yaml:"cpu,omitempty" json:"cpu,omitempty"`
-	MemoryMiB int                                `yaml:"memoryMiB,omitempty" json:"memoryMiB,omitempty"`
-	DiskGiB   int                                `yaml:"diskGiB,omitempty" json:"diskGiB,omitempty"`
-	Libvirt   *MachineProfileLibvirtProvisioner  `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
-	VSphere   *MachineProfileVSphereProvisioner  `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
-	KubeVirt  *MachineProfileKubeVirtProvisioner `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+type MachineProfile struct {
+	Name             string               `yaml:"name" json:"name"`
+	CPU              int                  `yaml:"cpu,omitempty" json:"cpu,omitempty"`
+	MemoryMiB        int                  `yaml:"memoryMiB,omitempty" json:"memoryMiB,omitempty"`
+	DiskGiB          int                  `yaml:"diskGiB,omitempty" json:"diskGiB,omitempty"`
+	Template         string               `yaml:"template,omitempty" json:"template,omitempty"`
+	FailureDomainRef LocalObjectReference `yaml:"failureDomainRef,omitempty" json:"failureDomainRef,omitempty"`
+	DataDisks        []MachineProfileDisk `yaml:"dataDisks,omitempty" json:"dataDisks,omitempty"`
 }
 
-type MachineProfileLibvirtProvisioner struct {
-	HostRef              LocalObjectReference  `yaml:"hostRef" json:"hostRef"`
-	URI                  string                `yaml:"uri" json:"uri"`
-	BMCEmulationDefaults *BMCEmulationDefaults `yaml:"bmcEmulationDefaults,omitempty" json:"bmcEmulationDefaults,omitempty"`
-}
-
-type MachineProfileVSphereProvisioner struct {
-	VCenters       []VSphereVCenter       `yaml:"vcenters,omitempty" json:"vcenters,omitempty"`
-	FailureDomains []VSphereFailureDomain `yaml:"failureDomains,omitempty" json:"failureDomains,omitempty"`
-	NodeNetworking *VSphereNodeNetworking `yaml:"nodeNetworking,omitempty" json:"nodeNetworking,omitempty"`
-	Template       string                 `yaml:"template,omitempty" json:"template,omitempty"`
+type MachineProfileDisk struct {
+	Name    string `yaml:"name" json:"name"`
+	SizeGiB int    `yaml:"sizeGiB" json:"sizeGiB"`
 }
 
 type VSphereVCenter struct {
@@ -103,13 +148,6 @@ type VSphereNetworkSubnet struct {
 	NetworkSubnetCIDR []string `yaml:"networkSubnetCidr,omitempty" json:"networkSubnetCidr,omitempty"`
 }
 
-type MachineProfileKubeVirtProvisioner struct {
-	HostContainerClusterRef *LocalObjectReference `yaml:"hostContainerClusterRef,omitempty" json:"hostContainerClusterRef,omitempty"`
-	KubeconfigRef           *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
-	Namespace               string                `yaml:"namespace" json:"namespace"`
-	StorageClassRef         *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
-}
-
 type BMCEmulationDefaults struct {
 	Enabled                        *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Protocol                       string   `yaml:"protocol,omitempty" json:"protocol,omitempty"`
@@ -123,45 +161,6 @@ type BMCEmulationDefaults struct {
 
 type BMCAuth struct {
 	CredentialRef SecretRef `yaml:"credentialRef" json:"credentialRef"`
-}
-
-// MachineCapability is one explicit server (bare-metal inventory). The
-// cluster claims it via from.name and supplies per-machine network overrides
-// in ClusterInfra.
-type MachineCapability struct {
-	Name      string                      `yaml:"name" json:"name"`
-	Labels    map[string]string           `yaml:"labels,omitempty" json:"labels,omitempty"`
-	BareMetal *MachineBareMetalCapability `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
-}
-
-type MachineBareMetalCapability struct {
-	BootMACAddress  string             `yaml:"bootMACAddress,omitempty" json:"bootMACAddress,omitempty"`
-	Interfaces      []MachineInterface `yaml:"interfaces,omitempty" json:"interfaces,omitempty"`
-	RootDeviceHints *RootDeviceHints   `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
-	BMC             BMCSpec            `yaml:"bmc" json:"bmc"`
-}
-
-type MachineInterface struct {
-	Name       string `yaml:"name" json:"name"`
-	MACAddress string `yaml:"macAddress" json:"macAddress"`
-}
-
-type BMCSpec struct {
-	Address                        string    `yaml:"address" json:"address"`
-	Protocol                       string    `yaml:"protocol,omitempty" json:"protocol,omitempty"`
-	CredentialsRef                 SecretRef `yaml:"credentialsRef" json:"credentialsRef"`
-	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
-}
-
-type RootDeviceHints struct {
-	DeviceName       string `yaml:"deviceName,omitempty" json:"deviceName,omitempty"`
-	HCTL             string `yaml:"hctl,omitempty" json:"hctl,omitempty"`
-	Model            string `yaml:"model,omitempty" json:"model,omitempty"`
-	Vendor           string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
-	SerialNumber     string `yaml:"serialNumber,omitempty" json:"serialNumber,omitempty"`
-	MinSizeGigabytes int    `yaml:"minSizeGigabytes,omitempty" json:"minSizeGigabytes,omitempty"`
-	WWN              string `yaml:"wwn,omitempty" json:"wwn,omitempty"`
-	Rotational       *bool  `yaml:"rotational,omitempty" json:"rotational,omitempty"`
 }
 
 func NetworkAttachmentKind(attachment NetworkAttachmentCapability) string {

@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 // installerProxyConfig builds the install-config.yaml proxy block from
@@ -50,7 +51,7 @@ func pickURL(declared, derived, withCreds string) string {
 	return derived
 }
 
-func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, ci v1alpha1.ClusterInfra) (*proxy.Effective, string, error) {
+func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, ci v1alpha1.ClusterInstall) (*proxy.Effective, string, error) {
 	if env == nil {
 		return nil, "", nil
 	}
@@ -65,7 +66,7 @@ func clusterInstallProxyInputs(state v1alpha1.State, env *v1alpha1.Environment, 
 	return eff, managedURL, nil
 }
 
-func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, env *v1alpha1.Environment) string {
+func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInstall, env *v1alpha1.Environment) string {
 	if env != nil && env.Spec.Registries != nil && env.Spec.Registries.Mirror != nil {
 		if u := strings.TrimRight(env.Spec.Registries.Mirror.URL, "/"); u != "" {
 			return u
@@ -86,7 +87,7 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, 
 		return ""
 	}
 	registry := component.Spec.Registry
-	host := proxy.ClusterFacingHostAddress(state, registry.HostRef.Name, ci)
+	host := proxy.ClusterFacingMachineAddress(state, registry.MachineRef.Name, ci)
 	if host == "" {
 		return ""
 	}
@@ -97,7 +98,7 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInfra, 
 	return fmt.Sprintf("%s:%d", host, port)
 }
 
-func installerImageDigestSources(state v1alpha1.State, ci v1alpha1.ClusterInfra, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []v1alpha1.ImageDigestSource {
+func installerImageDigestSources(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, env *v1alpha1.Environment) []v1alpha1.ImageDigestSource {
 	var out []v1alpha1.ImageDigestSource
 	if env != nil && env.Spec.Registries != nil {
 		out = append(out, env.Spec.Registries.ImageDigestSources...)
@@ -150,7 +151,7 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
 		return nil
 	}
-	ci, err := clusterInfraForOCP(state, ocp)
+	ci, err := clusterInstallForOCP(state, ocp)
 	if err != nil {
 		return nil
 	}
@@ -168,26 +169,12 @@ func disconnectedBootArtifactsConfig(state v1alpha1.State, ocp v1alpha1.Containe
 	}
 }
 
-func clusterInfraForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (v1alpha1.ClusterInfra, error) {
-	name := ""
-	for _, node := range ocp.Spec.Nodes {
-		if node.InfraNodeRef.ClusterInfra == "" {
-			continue
-		}
-		if name == "" {
-			name = node.InfraNodeRef.ClusterInfra
-			continue
-		}
-		if node.InfraNodeRef.ClusterInfra != name {
-			return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: nodes reference multiple ClusterInfra objects (%q and %q)", ocp.Metadata.Name, name, node.InfraNodeRef.ClusterInfra)
-		}
+func clusterInstallForOCP(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (v1alpha1.ClusterInstall, error) {
+	ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
+	if ok {
+		return ci, nil
 	}
-	for _, infra := range state.ClusterInfras {
-		if infra.Metadata.Name == name {
-			return infra, nil
-		}
-	}
-	return v1alpha1.ClusterInfra{}, fmt.Errorf("%s: infraNodeRef.clusterInfra %q not found", ocp.Metadata.Name, name)
+	return v1alpha1.ClusterInstall{}, fmt.Errorf("%s: no machines or install infrastructure declared", ocp.Metadata.Name)
 }
 
 func installerNodeRole(role string) string {

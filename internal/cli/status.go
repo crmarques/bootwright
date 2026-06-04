@@ -216,17 +216,17 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 }
 
 func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
-	groups := stategraph.ResolveHostServices(state).SharedServices()
+	groups := stategraph.ResolveMachineServices(state).SharedServices()
 	if len(groups) == 0 {
 		return
 	}
 	p.Section("Shared services")
 	for _, g := range groups {
-		host := g.HostRef
-		if host == "" {
-			host = "<unresolved>"
+		machine := g.MachineRef
+		if machine == "" {
+			machine = "<unresolved>"
 		}
-		detail := fmt.Sprintf("on %s, used by %s", host, joinNames(g.ConsumingClusters))
+		detail := fmt.Sprintf("on %s, used by %s", machine, joinNames(g.ConsumingClusters))
 		if g.Kind == v1alpha1.ComponentSlotArtifacts {
 			detail += " (environment artifact server)"
 		}
@@ -364,5 +364,5 @@ func installerInstallConfigPath(clustersDir, clusterName string) string {
 }
 
 func hasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.InfraProviders)+len(s.Hosts)+len(s.ClusterInfras)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
+	return len(s.Environments)+len(s.Machines)+len(s.MachineImages)+len(s.MachineInstallProfiles)+len(s.InfraProviders)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
 }

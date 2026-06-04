@@ -16,7 +16,7 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	hostRecords := []dnsmasqRecord{}
 	domainRecords := []dnsmasqRecord{}
 	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil || !clusterUsesNameResolution(state, ci, entryName) {
 			continue
 		}
@@ -52,7 +52,7 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
 }
 
-func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInfra, refName string) bool {
+func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall, refName string) bool {
 	if refName == "" {
 		return false
 	}

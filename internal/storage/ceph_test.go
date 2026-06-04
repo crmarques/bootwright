@@ -105,32 +105,29 @@ func writeJSON(t *testing.T, path string, value any) {
 
 func minimalStorageState() v1alpha1.State {
 	return v1alpha1.State{
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "ceph-infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Endpoints: map[string]v1alpha1.Endpoint{
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "demo"},
+			Spec: v1alpha1.ContainerClusterSpec{
+				Install: v1alpha1.OCPInstallSpec{Endpoints: map[string]v1alpha1.Endpoint{
 					"rgw-public": {DNSName: "rgw.example.test", Port: 443},
-				},
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "ceph-dc1-0",
-					Source: v1alpha1.ClusterNodeSource{
-						HostRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"},
-					},
-				}}},
+				}},
 			},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-dc1-0"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "192.168.141.30"}},
-				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.168.141.30"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				},
 			},
 		}},
 		StorageClusters: []v1alpha1.StorageCluster{{
 			Metadata: v1alpha1.Metadata{Name: "ceph"},
 			Spec: v1alpha1.StorageClusterSpec{
-				Type:            v1alpha1.StorageClusterTypeCeph,
-				ClusterInfraRef: v1alpha1.LocalObjectReference{Name: "ceph-infra"},
+				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
@@ -140,9 +137,10 @@ func minimalStorageState() v1alpha1.State {
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
-						Name:  "ceph-dc1-0",
-						Site:  "dc1",
-						Roles: []string{v1alpha1.StorageCephRoleMON},
+						Name:       "ceph-dc1-0",
+						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"},
+						Site:       "dc1",
+						Roles:      []string{v1alpha1.StorageCephRoleMON},
 					}}},
 				},
 			},
@@ -152,9 +150,6 @@ func minimalStorageState() v1alpha1.State {
 
 func dataFoundationStorageState() v1alpha1.State {
 	state := minimalStorageState()
-	state.ContainerClusters = []v1alpha1.ContainerCluster{{
-		Metadata: v1alpha1.Metadata{Name: "demo"},
-	}}
 	state.StorageFilesystems = []v1alpha1.StorageFilesystem{{
 		Metadata: v1alpha1.Metadata{Name: "cephfs"},
 		Spec: v1alpha1.StorageFilesystemSpec{

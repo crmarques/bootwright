@@ -1,0 +1,132 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc1-0
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.141.30
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc1-1
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.141.31
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc1-2
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.141.32
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc2-0
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.142.30
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc2-1
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.142.31
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-dc2-2
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.142.32
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-arbiter
+spec:
+  capabilities:
+  - ceph-node
+
+  os:
+    mode: external
+    addresses:
+    - name: ssh
+      address: 192.168.143.30
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-storage-cluster-admin-ssh-key

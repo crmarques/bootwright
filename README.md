@@ -110,18 +110,19 @@ bootwright version
 
 ## Desired-State Contract
 
-User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
+User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds:
 
 | Kind | Owns |
 | --- | --- |
 | `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
-| `Host` | OS-installed, reachable execution target with named addresses, SSH endpoint selection, and generic capability tags (`libvirt`, `container-runtime`); referenced by providers and infra components |
-| `InfraProvider` | Named provider capability lists — `machineProfiles` and explicit `machines` — with names scoped per kind |
-| `InfraComponent` | Host-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
+| `Machine` | Raw, Bootwright-managed, or externally installed machine desired state: substrate binding, OS mode, install network, named addresses, SSH, and capabilities |
+| `MachineImage` | Bootwright-managed OS install media such as trusted base ISOs |
+| `MachineInstallProfile` | Bootwright-managed OS installation profile, installer type, repositories, storage, SSH, packages, and service customizations |
+| `InfraProvider` | Provider capability, substrate profiles, provider connection facts, and network attachments |
+| `InfraComponent` | Machine-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |
-| `ClusterInfra` | One cluster's wiring: platform render mode, endpoints, and selected infra nodes under `components.nodes[]` |
-| `ContainerCluster` | Provider-neutral OpenShift or OKD intent: distribution, release, install mode, cluster networking, pools, and node-to-machine binding |
-| `StorageCluster` | External storage intent: imported Ceph, or Bootwright-managed Ceph through cephadm on preinstalled RHEL nodes |
+| `ContainerCluster` | OpenShift or OKD intent: distribution, release, install mode, platform render mode, endpoints, artifact access, cluster networking, pools, and node-to-machine binding |
+| `StorageCluster` | External storage intent: imported Ceph, or Bootwright-managed Ceph through cephadm on OS-ready or Bootwright-installed nodes |
 | `StoragePlacementPolicy` | Storage placement policy such as the CRUSH rule and replicated pool defaults used by Ceph pools |
 | `StoragePool` | Ceph pool desired state, role, placement policy, and replication settings |
 | `StorageFilesystem` | CephFS desired state, including distinct metadata and data pools plus MDS placement |
@@ -131,22 +132,21 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and sixteen kinds:
 | `ClusterAddonProfile` | An ordered reusable group of add-ons and nested profiles |
 | `ClusterAddonBinding` | One installed cluster's post-install bootstrap set: add-ons, profiles, and binding-scoped add-on inputs |
 
-`ContainerCluster` stays provider-neutral. Swapping from libvirt with
-Redfish emulation to real bare metal edits the substrate-owned objects:
-`InfraProvider`, `InfraComponent`, `NetworkConfig`, and the cluster
-infrastructure machine bindings.
+`ContainerCluster` owns install intent while machines own substrate and OS
+facts. Swapping from libvirt with Redfish emulation to real bare metal edits
+`Machine`, `InfraProvider`, `InfraComponent`, and `NetworkConfig` objects
+without reintroducing a separate machine-infrastructure resource.
 Post-install components intentionally stay outside
 `ContainerCluster.spec.install`; they are separate desired-state resources
 selected by `Environment`, bound to clusters, and applied after cluster
 installation.
 External storage provisioning is also separate from `ContainerCluster`.
-`StorageCluster` uses the same lower-layer `ClusterInfra` and `InfraProvider`
+`StorageCluster` uses the same lower-layer `Machine` and `InfraProvider`
 objects for machine facts, while storage-export attachments are declared as
 add-on input effects and wait for both the storage cluster and a `ClusterAddon`
 that provides `data-foundation`. Bootwright supports imported external Ceph via
 an ODF external-cluster-details secret and managed Ceph where Ansible installs
-cephadm prerequisites on already installed RHEL storage nodes. Installing RHEL
-onto bare metal storage nodes through BMC is roadmap-only.
+cephadm prerequisites on ready or Bootwright-installed storage nodes.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
 bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift

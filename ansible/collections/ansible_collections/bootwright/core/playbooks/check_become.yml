@@ -8,7 +8,7 @@
   pre_tasks:
     - name: Resolve proxy environment
       ansible.builtin.import_role:
-        name: bootwright.core.host_proxy
+        name: bootwright.core.machine_proxy
         tasks_from: facts
 
   tasks:

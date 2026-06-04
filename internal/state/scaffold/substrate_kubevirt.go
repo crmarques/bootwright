@@ -3,86 +3,80 @@ package scaffold
 var kubeVirtSubstrate = Substrate{
 	ProviderNameSuffix: "kubevirt",
 	NetworkNameSuffix:  "nad",
-	EnvExtraSecrets: `    - provider-host-ssh:
-        file: ~/.ssh/bootwright-ssh-key
-    - cnv-cluster-kubeconfig:
+	EnvExtraSecrets: `    - cnv-cluster-kubeconfig:
         file: ~/.kube/cnv-cluster.kubeconfig
 `,
-	HostsYAML: `apiVersion: bootwright.io/v1alpha1
-kind: Host
+	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
+kind: Machine
 metadata:
-  name: bastion
+  name: {{.Cluster}}-master-0
 spec:
-  addresses:
-    - name: ssh
-      address: bastion.example.test       # change to the bastion host's address
-
-  ssh:
-    addressName: ssh
-    keyRef:
-      name: provider-host-ssh
-
   capabilities:
-    - container-runtime
+    - openshift-node
+  substrate:
+    providerRef:
+      name: {{.ProviderID}}
+    kubevirt:
+      profileRef:
+        name: sno
+      vmName: {{.Cluster}}-master-0
+  os:
+    mode: raw
+    install:
+      network:
+        networkConfigRef:
+          name: {{.NetworkID}}
+        attachmentRef:
+          name: {{.NetworkID}}
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.130.20
+                    prefix-length: 24
 `,
-	ProviderNetworkAttachments: `
+	ProviderCapabilities: `apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: {{.ProviderID}}
+spec:
+  type: kubevirt
+  kubevirt:
+    kubeconfigRef:
+      name: cnv-cluster-kubeconfig
+    namespace: bootwright-vms
+    machineProfiles:
+      - name: sno
+        cpu: 8
+        memoryMiB: 22528
+        diskGiB: 120
   networkAttachments:
     - name: {{.NetworkID}}
       kubevirt:
         nadRef:
-          name: ocp-install             # NetworkAttachmentDefinition on the host cluster
+          name: ocp-install
           namespace: bootwright-vms
-
 `,
-	ClusterNetworkBindings: `
-  networkBindings:
-    - networkConfigRef:
-        name: {{.NetworkID}}
-      providerRef:
-        name: {{.ProviderID}}
-      attachmentRef:
-        name: {{.NetworkID}}
-`,
-	ProviderCapabilities: `  machineProfiles:
-    - name: sno
-      cpu: 8
-      memoryMiB: 22528
-      diskGiB: 120
-      kubevirt:
-        kubeconfigRef:
-          name: cnv-cluster-kubeconfig
-        namespace: bootwright-vms
-        # storageClassRef:
-        #   name: <storage-class>       # optional override
-`,
-	ClusterMachineFrom: `        source:
-          providerRef:
-            name: {{.ProviderID}}
-          profileRef:
-            name: sno`,
-	ClusterMachineExtras: "",
 	NetworkDNSServers: `      dns-resolver:
         config:
           server:
             - 192.168.130.1
 `,
-	ClusterServices: "",
-	EndpointsYAML: `    api:
-      address: 192.168.130.10
-      source:
-        type: external
-    api-int:
-      address: 192.168.130.10
-      source:
-        type: external
-    apps:
-      address: 192.168.130.11
-      source:
-        type: external
+	EndpointsYAML: `      api:
+        address: 192.168.130.10
+        source:
+          type: external
+      api-int:
+        address: 192.168.130.10
+        source:
+          type: external
+      ingress:
+        address: 192.168.130.11
+        source:
+          type: external
 `,
-	PlatformYAML: `  platform:
-    # Installer platform render mode; substrate inventory stays in InfraProvider.
-    type: none
+	PlatformYAML: `    platform:
+      type: none
 `,
-	BootDevice: "/dev/vda",
 }

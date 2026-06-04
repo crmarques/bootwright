@@ -32,11 +32,11 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			})
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			host, ok := topology.NodeHost(state, cluster, node.Name)
+			machine, ok := topology.NodeMachine(state, cluster, node.Name)
 			if !ok {
 				continue
 			}
-			out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Host/%s", cluster.Metadata.Name, node.Name, host.Metadata.Name), []string{"storage-cluster"}, host, true)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"storage-cluster"}, machine, true)...)
 		}
 	}
 	clusterByName := map[string]v1alpha1.StorageCluster{}
@@ -56,25 +56,25 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if ssh == nil {
 			continue
 		}
-		for _, ref := range ssh.HostRefs {
-			host, ok := hostByName(state, ref.Name)
+		for _, ref := range ssh.MachineRefs {
+			machine, ok := machineByName(state, ref.Name)
 			if !ok {
 				continue
 			}
-			out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Host/%s", export.Metadata.Name, host.Metadata.Name), []string{"addons"}, host, false)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false)...)
 		}
-		if len(ssh.HostRefs) == 0 {
+		if len(ssh.MachineRefs) == 0 {
 			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
 			if ok && cluster.Spec.Ceph != nil {
 				for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 					if node.Name != cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode {
 						continue
 					}
-					host, ok := topology.NodeHost(state, cluster, node.Name)
+					machine, ok := topology.NodeMachine(state, cluster, node.Name)
 					if !ok {
 						continue
 					}
-					out = append(out, hostSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Host/%s", export.Metadata.Name, host.Metadata.Name), []string{"addons"}, host, false)...)
+					out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageExport/%s externalDetails.sshExecution seed Machine/%s", export.Metadata.Name, machine.Metadata.Name), []string{"addons"}, machine, false)...)
 				}
 			}
 		}
@@ -82,23 +82,23 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 	return out
 }
 
-func hostByName(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
-	for _, host := range state.Hosts {
-		if host.Metadata.Name == name {
-			return host, true
+func machineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return machine, true
 		}
 	}
-	return v1alpha1.Host{}, false
+	return v1alpha1.Machine{}, false
 }
 
-func hostSSHSecretRequirements(label string, phases []string, host v1alpha1.Host, requirePair bool) []secretRefRequirement {
+func machineSSHSecretRequirements(label string, phases []string, machine v1alpha1.Machine, requirePair bool) []secretRefRequirement {
 	var out []secretRefRequirement
-	if host.Spec.SSH == nil {
+	if machine.Spec.OS.SSH == nil {
 		return out
 	}
-	if host.Spec.SSH.KeyRef.Name != "" {
+	if machine.Spec.OS.SSH.KeyRef.Name != "" {
 		req := secretRefRequirement{
-			refName: host.Spec.SSH.KeyRef.Name,
+			refName: machine.Spec.OS.SSH.KeyRef.Name,
 			label:   label + " keyRef",
 			phases:  phases,
 			role:    secret.MaterialSSHPrivate,
@@ -109,9 +109,9 @@ func hostSSHSecretRequirements(label string, phases []string, host v1alpha1.Host
 		}
 		out = append(out, req)
 	}
-	if host.Spec.SSH.KnownHostsRef.Name != "" {
+	if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
 		out = append(out, secretRefRequirement{
-			refName: host.Spec.SSH.KnownHostsRef.Name,
+			refName: machine.Spec.OS.SSH.KnownHostsRef.Name,
 			label:   label + " knownHostsRef",
 			phases:  phases,
 			role:    secret.MaterialPrimary,

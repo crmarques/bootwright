@@ -28,12 +28,15 @@ func containerClusterByName(t *testing.T, state v1alpha1.State, name string) v1a
 	return v1alpha1.ContainerCluster{}
 }
 
-func defaultEndpointRefs() v1alpha1.ContainerEndpointRefs {
-	return v1alpha1.ContainerEndpointRefs{
-		API:     v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
-		APIInt:  v1alpha1.EndpointRef{Name: "api-int"},
-		Ingress: v1alpha1.EndpointRef{Name: "apps"},
+func machineByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.Machine {
+	t.Helper()
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return machine
+		}
 	}
+	t.Fatalf("Machine/%s not found", name)
+	return v1alpha1.Machine{}
 }
 
 func componentByKind(t *testing.T, cluster map[string]any, kind string) map[string]any {

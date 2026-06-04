@@ -22,10 +22,10 @@ var phases = map[string]Phase{
 		Name:          "infra-components",
 		ApplyPlaybook: "bootwright.core.task_infra_component_services_apply",
 		NeedsRoot:     true,
-		Description:   "converge host-bound infra components: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
+		Description:   "converge machine-bound infra components: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
 	},
-	"cluster-infra": {
-		Name:          "cluster-infra",
+	"machine-infra": {
+		Name:          "machine-infra",
 		ApplyPlaybook: "bootwright.core.task_machine_infra_apply",
 		NeedsRoot:     true,
 		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",

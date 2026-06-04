@@ -1,6 +1,9 @@
 package render
 
-import "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/state/view"
+)
 
 func providersVars(state v1alpha1.State) []any {
 	out := make([]any, 0, len(state.InfraProviders))
@@ -14,34 +17,21 @@ func providersVars(state v1alpha1.State) []any {
 }
 
 func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
-	out := map[string]any{}
-	if len(p.Spec.MachineProfiles) > 0 {
-		profiles := make([]any, 0, len(p.Spec.MachineProfiles))
-		for _, mp := range p.Spec.MachineProfiles {
-			profiles = append(profiles, map[string]any{
-				"name":        mp.Name,
-				"cpu":         mp.CPU,
-				"memoryMiB":   mp.MemoryMiB,
-				"diskGiB":     mp.DiskGiB,
-				"provisioner": machineProfileProvisionerVars(mp),
-			})
-		}
+	out := map[string]any{"type": p.Spec.Type}
+	if profiles := machineProfilesVars(p); len(profiles) > 0 {
 		out["machineProfiles"] = profiles
 	}
-	if len(p.Spec.Machines) > 0 {
-		machines := make([]any, 0, len(p.Spec.Machines))
-		for _, m := range p.Spec.Machines {
-			entry := map[string]any{
-				"name":        m.Name,
-				"interfaces":  providerInterfacesVars(m),
-				"provisioner": machineProvisionerVars(m),
-			}
-			if len(m.Labels) > 0 {
-				entry["labels"] = m.Labels
-			}
-			machines = append(machines, entry)
-		}
-		out["machines"] = machines
+	if p.Spec.Libvirt != nil {
+		out["libvirt"] = libvirtProviderVars(p.Spec.Libvirt)
+	}
+	if p.Spec.BareMetal != nil {
+		out["bareMetal"] = bareMetalProviderVars(p.Spec.BareMetal)
+	}
+	if p.Spec.VSphere != nil {
+		out["vsphere"] = vSphereProviderVars(p.Spec.VSphere)
+	}
+	if p.Spec.KubeVirt != nil {
+		out["kubevirt"] = kubeVirtProviderVars(p.Spec.KubeVirt)
 	}
 	if len(p.Spec.NetworkAttachments) > 0 {
 		attachments := make([]any, 0, len(p.Spec.NetworkAttachments))
@@ -55,51 +45,93 @@ func providerCapabilityVars(p v1alpha1.InfraProvider) map[string]any {
 	return out
 }
 
-func machineProfileProvisionerVars(p v1alpha1.MachineProfileCapability) map[string]any {
-	switch {
-	case p.Libvirt != nil:
-		out := map[string]any{
-			"kind":    v1alpha1.ProvisionerLibvirt,
-			"hostRef": p.Libvirt.HostRef.Name,
-			"uri":     p.Libvirt.URI,
-		}
-		if d := p.Libvirt.BMCEmulationDefaults; d != nil {
-			out["bmcEmulationDefaults"] = bmcEmulationDefaultsVars(d)
-		}
-		return out
-	case p.VSphere != nil:
-		out := map[string]any{"kind": v1alpha1.ProvisionerVSphere}
-		if len(p.VSphere.VCenters) > 0 {
-			out["vcenters"] = vSphereVCentersVars(p.VSphere.VCenters)
-		}
-		if len(p.VSphere.FailureDomains) > 0 {
-			out["failureDomains"] = vSphereFailureDomainsVars(p.VSphere.FailureDomains)
-		}
-		if p.VSphere.NodeNetworking != nil {
-			out["nodeNetworking"] = vSphereNodeNetworkingConfig(p.VSphere.NodeNetworking)
-		}
-		if p.VSphere.Template != "" {
-			out["template"] = p.VSphere.Template
-		}
-		return out
-	case p.KubeVirt != nil:
-		out := map[string]any{
-			"kind":      v1alpha1.ProvisionerKubeVirt,
-			"namespace": p.KubeVirt.Namespace,
-		}
-		if p.KubeVirt.HostContainerClusterRef != nil {
-			out["hostContainerClusterRef"] = p.KubeVirt.HostContainerClusterRef.Name
-		}
-		if p.KubeVirt.KubeconfigRef != nil {
-			out["kubeconfigRef"] = p.KubeVirt.KubeconfigRef.Name
-		}
-		if p.KubeVirt.StorageClassRef != nil {
-			out["storageClassRef"] = p.KubeVirt.StorageClassRef.Name
-		}
-		return out
-	default:
-		return map[string]any{}
+func machineProfilesVars(provider v1alpha1.InfraProvider) []any {
+	profiles := stateview.ProviderMachineProfiles(provider)
+	out := make([]any, 0, len(profiles))
+	for _, profile := range profiles {
+		out = append(out, map[string]any{
+			"name":             profile.Name,
+			"cpu":              profile.CPU,
+			"memoryMiB":        profile.MemoryMiB,
+			"diskGiB":          profile.DiskGiB,
+			"template":         profile.Template,
+			"failureDomainRef": profile.FailureDomainRef.Name,
+			"dataDisks":        machineProfileDisksVars(profile.DataDisks),
+		})
 	}
+	return out
+}
+
+func machineProfileDisksVars(disks []v1alpha1.MachineProfileDisk) []any {
+	out := make([]any, 0, len(disks))
+	for _, disk := range disks {
+		out = append(out, map[string]any{"name": disk.Name, "sizeGiB": disk.SizeGiB})
+	}
+	return out
+}
+
+func machineProfileProvisionerVars(provider v1alpha1.InfraProvider, profile v1alpha1.MachineProfile) map[string]any {
+	out := map[string]any{"kind": provider.Spec.Type}
+	if profile.Template != "" {
+		out["template"] = profile.Template
+	}
+	if profile.FailureDomainRef.Name != "" {
+		out["failureDomainRef"] = profile.FailureDomainRef.Name
+	}
+	return out
+}
+
+func libvirtProviderVars(l *v1alpha1.InfraProviderLibvirt) map[string]any {
+	out := map[string]any{
+		"machineRef": l.MachineRef.Name,
+		"uri":        l.URI,
+	}
+	if d := l.BMCEmulationDefaults; d != nil {
+		out["bmcEmulationDefaults"] = bmcEmulationDefaultsVars(d)
+	}
+	return out
+}
+
+func bareMetalProviderVars(b *v1alpha1.InfraProviderBareMetal) map[string]any {
+	out := map[string]any{}
+	if b.Boot.Method != "" {
+		out["boot"] = map[string]any{"method": b.Boot.Method}
+	}
+	if b.Defaults.BMC != nil {
+		out["defaults"] = map[string]any{"bmc": map[string]any{
+			"credentialsRef":                 b.Defaults.BMC.CredentialsRef.Name,
+			"disableCertificateVerification": b.Defaults.BMC.DisableCertificateVerification,
+		}}
+	}
+	return out
+}
+
+func vSphereProviderVars(v *v1alpha1.InfraProviderVSphere) map[string]any {
+	out := map[string]any{}
+	if len(v.VCenters) > 0 {
+		out["vcenters"] = vSphereVCentersVars(v.VCenters)
+	}
+	if len(v.FailureDomains) > 0 {
+		out["failureDomains"] = vSphereFailureDomainsVars(v.FailureDomains)
+	}
+	if v.NodeNetworking != nil {
+		out["nodeNetworking"] = vSphereNodeNetworkingConfig(v.NodeNetworking)
+	}
+	return out
+}
+
+func kubeVirtProviderVars(k *v1alpha1.InfraProviderKubeVirt) map[string]any {
+	out := map[string]any{"namespace": k.Namespace}
+	if k.HostClusterRef != nil {
+		out["hostClusterRef"] = k.HostClusterRef.Name
+	}
+	if k.KubeconfigRef != nil {
+		out["kubeconfigRef"] = k.KubeconfigRef.Name
+	}
+	if k.StorageClassRef != nil {
+		out["storageClassRef"] = k.StorageClassRef.Name
+	}
+	return out
 }
 
 func vSphereVCentersVars(items []v1alpha1.VSphereVCenter) []any {
@@ -172,32 +204,11 @@ func bmcEmulationDefaultsVars(d *v1alpha1.BMCEmulationDefaults) map[string]any {
 	return out
 }
 
-func machineProvisionerVars(m v1alpha1.MachineCapability) map[string]any {
-	if m.BareMetal == nil {
-		return map[string]any{}
-	}
-	bmc := m.BareMetal.BMC
-	out := map[string]any{
-		"kind":           v1alpha1.ProvisionerBareMetal,
-		"bootMACAddress": m.BareMetal.BootMACAddress,
-		"bmc": map[string]any{
-			"address":                        bmc.Address,
-			"protocol":                       bmc.Protocol,
-			"credentialsRef":                 bmc.CredentialsRef.Name,
-			"disableCertificateVerification": bmc.DisableCertificateVerification,
-		},
-	}
-	if m.BareMetal.RootDeviceHints != nil {
-		out["rootDeviceHints"] = rootDeviceHintsConfig(m.BareMetal.RootDeviceHints)
-	}
-	return out
-}
-
-func providerInterfacesVars(m v1alpha1.MachineCapability) []any {
-	if m.BareMetal == nil {
+func providerInterfacesVars(m v1alpha1.Machine) []any {
+	if m.Spec.Substrate.BareMetal == nil {
 		return nil
 	}
-	return machineInterfaceVars(m.BareMetal.Interfaces)
+	return machineInterfaceVars(m.Spec.Substrate.BareMetal.Interfaces)
 }
 
 func machineInterfaceVars(interfaces []v1alpha1.MachineInterface) []any {
@@ -211,7 +222,7 @@ func machineInterfaceVars(interfaces []v1alpha1.MachineInterface) []any {
 	return out
 }
 
-func clusterMachineNetworkConfigVars(n v1alpha1.ClusterNodeNetwork) map[string]any {
+func clusterMachineNetworkConfigVars(n v1alpha1.MachineNetwork) map[string]any {
 	out := map[string]any{}
 	if n.NetworkConfigRef.Name != "" {
 		out["ref"] = n.NetworkConfigRef.Name

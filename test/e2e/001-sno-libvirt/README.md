@@ -8,14 +8,14 @@ Key files:
 | File | Kind |
 | --- | --- |
 | `environment.yaml` | `Environment` |
-| `hosts.yaml` | `Host` |
+| `service-machines.yaml` | `Machine` |
 | `provider.yaml` | `InfraProvider` |
 | `infra-component.yaml` | `InfraComponent` |
 | `networks.yaml` | `NetworkConfig` |
-| `cluster-infra.yaml` | `ClusterInfra` |
+| `cluster-machines.yaml` | `Machine and ContainerCluster` |
 | `container-cluster.yaml` | `ContainerCluster` |
 
-The cluster node binds to `ClusterInfra.components.nodes[master-0]`, which
+The cluster node binds to `Machine[master-0]`, which
 uses the `sno-bridge` network template and a per-node static IP overlay.
 Cluster endpoints use `source.type=infraComponent` and resolve to the managed
 HAProxy `InfraComponent/load-balancer` bind addresses.

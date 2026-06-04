@@ -126,7 +126,7 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		Short: "Update desired-state input files for an existing context",
 		Args:  cobra.ExactArgs(1),
 		Example: `  bootwright context update lab -f ./input
-  bootwright context update lab -f ./environment.yaml -f ./hosts.yaml`,
+  bootwright context update lab -f ./environment.yaml -f ./service-machines.yaml`,
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

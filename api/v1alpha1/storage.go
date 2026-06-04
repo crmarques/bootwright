@@ -9,10 +9,9 @@ type StorageCluster struct {
 }
 
 type StorageClusterSpec struct {
-	Type            string                  `yaml:"type" json:"type"`
-	Management      string                  `yaml:"management,omitempty" json:"management,omitempty"`
-	ClusterInfraRef LocalObjectReference    `yaml:"clusterInfraRef" json:"clusterInfraRef"`
-	Ceph            *StorageClusterCephSpec `yaml:"ceph,omitempty" json:"ceph,omitempty"`
+	Type       string                  `yaml:"type" json:"type"`
+	Management string                  `yaml:"management,omitempty" json:"management,omitempty"`
+	Ceph       *StorageClusterCephSpec `yaml:"ceph,omitempty" json:"ceph,omitempty"`
 }
 
 type StorageClusterCephSpec struct {
@@ -73,10 +72,11 @@ type StorageCephPoolReplicas struct {
 }
 
 type StorageCephNode struct {
-	Name    string   `yaml:"name" json:"name"`
-	Site    string   `yaml:"site" json:"site"`
-	Roles   []string `yaml:"roles" json:"roles"`
-	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
+	Name       string               `yaml:"name" json:"name"`
+	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
+	Site       string               `yaml:"site" json:"site"`
+	Roles      []string             `yaml:"roles" json:"roles"`
+	Devices    []string             `yaml:"devices,omitempty" json:"devices,omitempty"`
 }
 
 type StoragePlacementPolicy struct {
@@ -216,10 +216,10 @@ type StorageExportExternalDetailsSpec struct {
 type StorageExportExternalDetailsGenerated struct{}
 
 type StorageExportExternalDetailsSSHExecution struct {
-	HostRefs []LocalObjectReference                     `yaml:"hostRefs,omitempty" json:"hostRefs,omitempty"`
-	Timeout  string                                     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Exporter StorageExportExternalDetailsExporter       `yaml:"exporter" json:"exporter"`
-	Config   StorageExportExternalDetailsExporterConfig `yaml:"config" json:"config"`
+	MachineRefs []LocalObjectReference                     `yaml:"machineRefs,omitempty" json:"machineRefs,omitempty"`
+	Timeout     string                                     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Exporter    StorageExportExternalDetailsExporter       `yaml:"exporter" json:"exporter"`
+	Config      StorageExportExternalDetailsExporterConfig `yaml:"config" json:"config"`
 }
 
 type StorageExportExternalDetailsExporter struct {

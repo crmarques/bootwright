@@ -4,6 +4,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/support"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 // Lookup date constants are freshness stamps on the pinned versions below.
@@ -93,16 +94,19 @@ func openshiftInstallVersions(state v1alpha1.State) []string {
 
 func usesSushyTools(state v1alpha1.State) bool {
 	for _, p := range state.InfraProviders {
-		for _, mp := range p.Spec.MachineProfiles {
-			l := mp.Libvirt
-			if l == nil || l.BMCEmulationDefaults == nil {
-				continue
-			}
-			d := l.BMCEmulationDefaults
-			enabled := d.Enabled == nil || *d.Enabled
-			if enabled && (d.Emulator == "" || d.Emulator == v1alpha1.DefaultBMCEmulator) {
-				return true
-			}
+		if p.Spec.Type != v1alpha1.ProvisionerLibvirt || p.Spec.Libvirt == nil {
+			continue
+		}
+		if len(stateview.ProviderMachineProfiles(p)) == 0 {
+			continue
+		}
+		d := p.Spec.Libvirt.BMCEmulationDefaults
+		if d == nil {
+			return true
+		}
+		enabled := d.Enabled == nil || *d.Enabled
+		if enabled && (d.Emulator == "" || d.Emulator == v1alpha1.DefaultBMCEmulator) {
+			return true
 		}
 	}
 	return false
@@ -110,7 +114,7 @@ func usesSushyTools(state v1alpha1.State) bool {
 
 func usesManagedHAProxy(state v1alpha1.State) bool {
 	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}
@@ -135,7 +139,11 @@ func usesManagedProxy(state v1alpha1.State) bool {
 }
 
 func usesManagedDNS(state v1alpha1.State) bool {
-	for _, ci := range state.ClusterInfras {
+	for _, ocp := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, ocp)
+		if err != nil {
+			continue
+		}
 		if len(nameResolutionComponentsForCluster(state, ci)) > 0 {
 			return true
 		}
@@ -145,7 +153,7 @@ func usesManagedDNS(state v1alpha1.State) bool {
 
 func usesManagedArtifacts(state v1alpha1.State) bool {
 	for _, ocp := range state.ContainerClusters {
-		ci, err := clusterInfraForOCP(state, ocp)
+		ci, err := clusterInstallForOCP(state, ocp)
 		if err != nil {
 			continue
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 var currentHostSSHUser = hostSSHUserFromProcess
@@ -20,17 +21,14 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.Environments {
 		normalizeEnvironment(&state.Environments[i])
 	}
-	for i := range state.Hosts {
-		normalizeHost(&state.Hosts[i], hostSSHUser)
+	for i := range state.Machines {
+		normalizeMachine(&state.Machines[i], hostSSHUser)
 	}
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
 	}
 	for i := range state.InfraComponents {
 		normalizeInfraComponent(&state.InfraComponents[i])
-	}
-	for i := range state.ClusterInfras {
-		normalizeClusterInfra(&state.ClusterInfras[i])
 	}
 	env := primaryEnvironment(state)
 	for i := range state.ContainerClusters {
@@ -100,25 +98,18 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 	}
 }
 
-func normalizeHost(h *v1alpha1.Host, sshUser string) {
-	if h.Spec.SSH == nil || h.Spec.SSH.User != "" || sshUser == "" {
-		return
+func normalizeMachine(m *v1alpha1.Machine, sshUser string) {
+	if m.Spec.OS.SSH != nil && m.Spec.OS.SSH.User == "" && sshUser != "" {
+		m.Spec.OS.SSH.User = sshUser
 	}
-	h.Spec.SSH.User = sshUser
+	if m.Spec.Substrate.BareMetal != nil {
+		normalizeBMC(&m.Spec.Substrate.BareMetal.BMC)
+	}
 }
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {
-	for i := range p.Spec.MachineProfiles {
-		mp := &p.Spec.MachineProfiles[i]
-		if mp.Libvirt != nil && mp.Libvirt.BMCEmulationDefaults != nil {
-			normalizeBMCEmulationDefaults(mp.Libvirt.BMCEmulationDefaults)
-		}
-	}
-	for i := range p.Spec.Machines {
-		m := &p.Spec.Machines[i]
-		if m.BareMetal != nil {
-			normalizeBMC(&m.BareMetal.BMC)
-		}
+	if p.Spec.Type == v1alpha1.ProvisionerLibvirt && p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil {
+		normalizeBMCEmulationDefaults(p.Spec.Libvirt.BMCEmulationDefaults)
 	}
 }
 
@@ -196,24 +187,16 @@ func normalizeBMC(b *v1alpha1.BMCSpec) {
 	}
 }
 
-func normalizeClusterInfra(ci *v1alpha1.ClusterInfra) {
-}
-
-type artifactAccessConsumers struct {
-	RedfishVirtualMedia     bool
-	ContainerClusterInstall bool
-}
-
 func applyEnvironmentArtifactAccessDefaults(state *v1alpha1.State, env *v1alpha1.Environment) {
 	if env == nil {
 		return
 	}
 	defaults := env.Spec.Defaults.ArtifactAccess
-	consumers := clusterInfraArtifactAccessConsumers(*state)
-	for i := range state.ClusterInfras {
-		ci := &state.ClusterInfras[i]
-		consumer := consumers[ci.Metadata.Name]
-		access := &ci.Spec.ArtifactAccess
+	consumers := clusterInstallArtifactAccessConsumers(*state)
+	for i := range state.ContainerClusters {
+		cluster := &state.ContainerClusters[i]
+		consumer := consumers[cluster.Metadata.Name]
+		access := &cluster.Spec.Install.ArtifactAccess
 		if consumer.RedfishVirtualMedia && access.RedfishVirtualMedia.EndpointRef.Name == "" {
 			access.RedfishVirtualMedia = defaults.RedfishVirtualMedia
 		}
@@ -226,22 +209,26 @@ func applyEnvironmentArtifactAccessDefaults(state *v1alpha1.State, env *v1alpha1
 	}
 }
 
-func clusterInfraArtifactAccessConsumers(state v1alpha1.State) map[string]artifactAccessConsumers {
+type artifactAccessConsumers struct {
+	RedfishVirtualMedia     bool
+	ContainerClusterInstall bool
+}
+
+func clusterInstallArtifactAccessConsumers(state v1alpha1.State) map[string]artifactAccessConsumers {
 	out := map[string]artifactAccessConsumers{}
-	infraIndex := indexClusterInfras(state.ClusterInfras)
 	for _, ocp := range state.ContainerClusters {
-		ci, ok, _ := resolveContainerClusterInfra(ocp, infraIndex)
+		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 		if !ok {
 			continue
 		}
-		consumer := out[ci.Metadata.Name]
+		consumer := out[ocp.Metadata.Name]
 		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
 			consumer.RedfishVirtualMedia = true
 		}
 		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 			consumer.ContainerClusterInstall = true
 		}
-		out[ci.Metadata.Name] = consumer
+		out[ocp.Metadata.Name] = consumer
 	}
 	return out
 }
@@ -309,7 +296,7 @@ func normalizeStorageExport(export *v1alpha1.StorageExport, clusters map[string]
 		return
 	}
 	switch storageClusterManagement(cluster) {
-	case v1alpha1.StorageClusterManagementManaged, v1alpha1.StorageClusterManagementFullManaged:
+	case v1alpha1.StorageClusterManagementManaged:
 		if export.Spec.ExternalDetails == nil {
 			export.Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
 				Generated: &v1alpha1.StorageExportExternalDetailsGenerated{},
@@ -331,8 +318,8 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	applyEnvironmentInstallDefaults(ocp, env)
 	for i := range ocp.Spec.Nodes {
 		node := &ocp.Spec.Nodes[i]
-		if node.InfraNodeRef.Name == "" {
-			node.InfraNodeRef.Name = node.Hostname
+		if node.MachineRef.Name == "" {
+			node.MachineRef.Name = node.Hostname
 		}
 	}
 }

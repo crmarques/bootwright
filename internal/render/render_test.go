@@ -140,8 +140,8 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	child := clustersByName(t, vars)["dc1-child-ocp"]
 	machine := firstMachineComponent(t, child)
 	kubevirt := machine["kubevirt"].(map[string]any)
-	if got := kubevirt["hostContainerClusterRef"]; got != "dc1-metal-ocp" {
-		t.Fatalf("hostContainerClusterRef = %v, want dc1-metal-ocp", got)
+	if got := kubevirt["hostClusterRef"]; got != "dc1-metal-ocp" {
+		t.Fatalf("hostClusterRef = %v, want dc1-metal-ocp", got)
 	}
 	if got := kubevirt["namespace"]; got != "bootwright-dc1-child-ocp" {
 		t.Fatalf("namespace = %v, want bootwright-dc1-child-ocp", got)
@@ -182,54 +182,26 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if bytes.Contains(effective, []byte("apiVersion: v1\nkind: Config")) {
 		t.Fatalf("effective state contains kubeconfig-looking bytes")
 	}
-	if !bytes.Contains(effective, []byte("hostContainerClusterRef")) {
-		t.Fatalf("effective state should preserve the non-secret hostContainerClusterRef")
+	if !bytes.Contains(effective, []byte("hostClusterRef")) {
+		t.Fatalf("effective state should preserve the non-secret hostClusterRef")
 	}
 }
 
 func TestProviderMachineLabelsRenderToVars(t *testing.T) {
-	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "002-sno-emul-baremetal")})
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	var providerIndex int
-	foundProviderMachine := false
-	for i := range state.InfraProviders {
-		if len(state.InfraProviders[i].Spec.Machines) == 0 {
-			continue
-		}
-		providerIndex = i
-		foundProviderMachine = true
-		break
-	}
-	if !foundProviderMachine {
-		t.Fatal("fixture has no provider machines")
-	}
-	state.InfraProviders[providerIndex].Spec.Machines[0].Labels = map[string]string{
-		"datacenter": "dc1",
+	for i := range state.Machines {
+		state.Machines[i].Metadata.Labels = map[string]string{"datacenter": "dc1"}
 	}
 
 	vars := render.VarsWithSecretsDir(state, t.TempDir())
-	var machine map[string]any
-	for _, raw := range vars["bootwright_providers"].([]any) {
-		provider := raw.(map[string]any)
-		capabilities := provider["capabilities"].(map[string]any)
-		machines, ok := capabilities["machines"].([]any)
-		if !ok || len(machines) == 0 {
-			continue
-		}
-		machine = machines[0].(map[string]any)
-		break
-	}
-	if machine == nil {
-		t.Fatal("vars have no provider machines")
-	}
-	if got := machine["labels"].(map[string]string)["datacenter"]; got != "dc1" {
-		t.Fatalf("provider machine label got %q, want dc1", got)
-	}
-
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	component := firstMachineComponent(t, cluster)
+	if got := component["labels"].(map[string]string)["datacenter"]; got != "dc1" {
+		t.Fatalf("machine label got %q, want dc1", got)
+	}
 	server := component["server"].(map[string]any)
 	if got := server["labels"].(map[string]string)["datacenter"]; got != "dc1" {
 		t.Fatalf("component server label got %q, want dc1", got)
@@ -254,25 +226,25 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 				},
 			},
 		}},
-		Hosts: []v1alpha1.Host{{
+		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "controller"},
-			Spec: v1alpha1.HostSpec{
-				Addresses: []v1alpha1.HostAddress{{Name: "ssh", Address: "127.0.0.1"}},
-				SSH:       &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Mode:      v1alpha1.MachineOSModeExternal,
+					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "127.0.0.1"}},
+					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				},
 			},
-		}},
+		}, installerTestMachine("master-0")},
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "proxy"},
 			Spec: v1alpha1.InfraComponentSpec{
 				Proxy: &v1alpha1.ProxyComponent{
-					Type:    v1alpha1.InfraComponentTypeSquid,
-					HostRef: v1alpha1.LocalObjectReference{Name: "controller"},
-					Port:    3128,
+					Type:       v1alpha1.InfraComponentTypeSquid,
+					MachineRef: v1alpha1.LocalObjectReference{Name: "controller"},
+					Port:       3128,
 				},
 			},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "infra"},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
@@ -282,12 +254,9 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 					NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh-key"}},
 				},
 				Nodes: []v1alpha1.OCPNodeSpec{{
-					Hostname: "master-0",
-					Role:     v1alpha1.NodeRoleMaster,
-					InfraNodeRef: v1alpha1.InfraNodeRef{
-						ClusterInfra: "infra",
-						Name:         "master-0",
-					},
+					Hostname:   "master-0",
+					Role:       v1alpha1.NodeRoleMaster,
+					MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 				}},
 			},
 		}},
@@ -299,6 +268,33 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "has no routable address") {
 		t.Fatalf("InstallerConfig error = %q, want routable address failure", err)
+	}
+}
+
+func installerTestMachine(name string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+		},
+	}
+}
+
+func vsphereTestMachine(name string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
+				VSphere:     &v1alpha1.MachineProfiledSubstrate{ProfileRef: v1alpha1.LocalObjectReference{Name: "control-plane"}},
+			},
+			OS: v1alpha1.MachineOSSpec{
+				Mode: v1alpha1.MachineOSModeRaw,
+				Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"},
+				}},
+			},
+		},
 	}
 }
 
@@ -391,34 +387,34 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		Type:         v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
-	for i := range state.Hosts {
-		if state.Hosts[i].Metadata.Name == "lab-host" {
-			state.Hosts[i].Spec.Addresses[1].Address = "192.168.132.99"
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == "lab-host" {
+			state.Machines[i].Spec.OS.Addresses[1].Address = "192.168.132.99"
 		}
 	}
 	state.InfraComponents = append(state.InfraComponents,
 		v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "artifact-server"},
 			Spec: v1alpha1.InfraComponentSpec{ArtifactServer: &v1alpha1.ArtifactServerComponent{
-				HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
 				Listeners: []v1alpha1.ArtifactServerListener{{
 					Name:     "https",
 					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
 					Port:     9443,
 				}},
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
-					Name:        "cluster",
-					Listener:    "https",
-					HostAddress: "cluster-lan",
+					Name:           "cluster",
+					Listener:       "https",
+					MachineAddress: "cluster-lan",
 				}},
 			}},
 		},
 		v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "registry"},
 			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-				Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
-				HostRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
-				Port:    5000,
+				Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				Port:       5000,
 			}},
 		},
 	)
@@ -551,7 +547,7 @@ func TestInstallerConfigRendersProvisioningNetworkForBareMetal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	gotState := state.ClusterInfras[0].Spec.Platform.BareMetal.ProvisioningNetwork
+	gotState := state.ContainerClusters[0].Spec.Install.Platform.BareMetal.ProvisioningNetwork
 	if gotState != v1alpha1.ProvisioningNetworkDisabled {
 		t.Fatalf("desired-state provisioningNetwork got %q, want %q", gotState, v1alpha1.ProvisioningNetworkDisabled)
 	}
@@ -684,86 +680,67 @@ func TestInstallerConfigRendersVSphereProviderPlatform(t *testing.T) {
 		InfraProviders: []v1alpha1.InfraProvider{{
 			Metadata: v1alpha1.Metadata{Name: "vsphere"},
 			Spec: v1alpha1.InfraProviderSpec{
-				MachineProfiles: []v1alpha1.MachineProfileCapability{{
-					Name: "control-plane",
-					VSphere: &v1alpha1.MachineProfileVSphereProvisioner{
-						VCenters: []v1alpha1.VSphereVCenter{{
-							Server:         "vcenter.example.test",
-							Port:           443,
-							Datacenters:    []string{"dc1"},
-							CredentialsRef: v1alpha1.SecretRef{Name: "vcenter-credentials"},
-						}},
-						FailureDomains: []v1alpha1.VSphereFailureDomain{{
-							Name:   "dc1-zone-a",
-							Region: "dc1",
-							Zone:   "zone-a",
-							Server: "vcenter.example.test",
-							Topology: v1alpha1.VSphereFailureTopology{
-								Datacenter:     "dc1",
-								ComputeCluster: "/dc1/host/cluster1",
-								Datastore:      "/dc1/datastore/datastore1",
-								Folder:         "/dc1/vm/bootwright",
-								ResourcePool:   "/dc1/host/cluster1/Resources/bootwright",
-								Networks:       []string{"VM_Network_1"},
-							},
-						}},
-						NodeNetworking: &v1alpha1.VSphereNodeNetworking{
-							External: &v1alpha1.VSphereNetworkSubnet{NetworkSubnetCIDR: []string{"192.168.133.0/24"}},
+				Type: v1alpha1.ProvisionerVSphere,
+				VSphere: &v1alpha1.InfraProviderVSphere{
+					VCenters: []v1alpha1.VSphereVCenter{{
+						Server:         "vcenter.example.test",
+						Port:           443,
+						Datacenters:    []string{"dc1"},
+						CredentialsRef: v1alpha1.SecretRef{Name: "vcenter-credentials"},
+					}},
+					FailureDomains: []v1alpha1.VSphereFailureDomain{{
+						Name:   "dc1-zone-a",
+						Region: "dc1",
+						Zone:   "zone-a",
+						Server: "vcenter.example.test",
+						Topology: v1alpha1.VSphereFailureTopology{
+							Datacenter:     "dc1",
+							ComputeCluster: "/dc1/host/cluster1",
+							Datastore:      "/dc1/datastore/datastore1",
+							Folder:         "/dc1/vm/bootwright",
+							ResourcePool:   "/dc1/host/cluster1/Resources/bootwright",
+							Networks:       []string{"VM_Network_1"},
 						},
+					}},
+					NodeNetworking: &v1alpha1.VSphereNodeNetworking{
+						External: &v1alpha1.VSphereNetworkSubnet{NetworkSubnetCIDR: []string{"192.168.133.0/24"}},
 					},
-				}},
-			},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{{
-			Metadata: v1alpha1.Metadata{Name: "infra"},
-			Spec: v1alpha1.ClusterInfraSpec{
-				Platform: v1alpha1.ClusterInfraPlatform{Type: v1alpha1.PlatformTypeVSphere},
-				Endpoints: map[string]v1alpha1.Endpoint{
-					v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
-					"api-int":            {Address: "192.168.133.10"},
-					"apps":               {Address: "192.168.133.11"},
+					MachineProfiles: []v1alpha1.MachineProfile{{
+						Name:             "control-plane",
+						FailureDomainRef: v1alpha1.LocalObjectReference{Name: "dc1-zone-a"},
+					}},
 				},
-				Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "master-0",
-					Source: v1alpha1.ClusterNodeSource{
-						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
-						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
-					},
-					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
-				}, {
-					Name: "master-1",
-					Source: v1alpha1.ClusterNodeSource{
-						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
-						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
-					},
-					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
-				}, {
-					Name: "master-2",
-					Source: v1alpha1.ClusterNodeSource{
-						ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
-						ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
-					},
-					Network: v1alpha1.ClusterNodeNetwork{NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"}},
-				}}},
 			},
 		}},
+		Machines: []v1alpha1.Machine{
+			vsphereTestMachine("master-0"),
+			vsphereTestMachine("master-1"),
+			vsphereTestMachine("master-2"),
+		},
 	}
 	ocp := v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: "ocp"},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Install: v1alpha1.OCPInstallSpec{EndpointRefs: defaultEndpointRefs()},
+			Install: v1alpha1.OCPInstallSpec{
+				Platform: v1alpha1.InstallPlatform{Type: v1alpha1.PlatformTypeVSphere},
+				Endpoints: map[string]v1alpha1.Endpoint{
+					v1alpha1.EndpointAPI:     {Address: "192.168.133.10"},
+					v1alpha1.EndpointAPIInt:  {Address: "192.168.133.10"},
+					v1alpha1.EndpointIngress: {Address: "192.168.133.11"},
+				},
+			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname:     "master-0",
-				Role:         v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-0"},
+				Hostname:   "master-0",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}, {
-				Hostname:     "master-1",
-				Role:         v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-1"},
+				Hostname:   "master-1",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-1"},
 			}, {
-				Hostname:     "master-2",
-				Role:         v1alpha1.NodeRoleMaster,
-				InfraNodeRef: v1alpha1.InfraNodeRef{ClusterInfra: "infra", Name: "master-2"},
+				Hostname:   "master-2",
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "master-2"},
 			}},
 		},
 	}

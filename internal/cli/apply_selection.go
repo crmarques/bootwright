@@ -10,6 +10,7 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 func validateKubeVirtClusterSelection(state v1alpha1.State, scope scopeSpec, clusters string, clustersDir string) error {
@@ -38,7 +39,7 @@ func validateKubeVirtClusterSelection(state v1alpha1.State, scope scopeSpec, clu
 				return err
 			}
 			if !ready {
-				return fmt.Errorf("ContainerCluster/%s uses KubeVirt hostContainerClusterRef %q but the host cluster is not installed and KubeVirt-ready; include %s in --clusters or apply it first", child, parent, parent)
+				return fmt.Errorf("ContainerCluster/%s uses KubeVirt hostClusterRef %q but the host cluster is not installed and KubeVirt-ready; include %s in --clusters or apply it first", child, parent, parent)
 			}
 		}
 	}
@@ -46,29 +47,18 @@ func validateKubeVirtClusterSelection(state v1alpha1.State, scope scopeSpec, clu
 }
 
 func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
-	providers := map[string]v1alpha1.InfraProvider{}
-	for _, provider := range state.InfraProviders {
-		providers[provider.Metadata.Name] = provider
-	}
-	infras := map[string]v1alpha1.ClusterInfra{}
-	for _, infra := range state.ClusterInfras {
-		infras[infra.Metadata.Name] = infra
-	}
 	out := map[string][]string{}
 	for _, cluster := range state.ContainerClusters {
-		if len(cluster.Spec.Nodes) == 0 {
-			continue
-		}
-		infra, ok := infras[cluster.Spec.Nodes[0].InfraNodeRef.ClusterInfra]
-		if !ok {
-			continue
-		}
-		for _, machine := range infra.Spec.Components.Nodes {
-			profile, ok := clusterMachineProfile(providers, machine)
-			if !ok || profile.KubeVirt == nil || profile.KubeVirt.HostContainerClusterRef == nil {
+		for _, node := range cluster.Spec.Nodes {
+			machine, ok := stateview.Machine(state, node.MachineRef.Name)
+			if !ok || machine.Spec.Substrate.KubeVirt == nil {
 				continue
 			}
-			parent := profile.KubeVirt.HostContainerClusterRef.Name
+			provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+			if !ok || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
+				continue
+			}
+			parent := provider.Spec.KubeVirt.HostClusterRef.Name
 			if parent == "" {
 				continue
 			}
@@ -76,19 +66,6 @@ func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
 		}
 	}
 	return out
-}
-
-func clusterMachineProfile(providers map[string]v1alpha1.InfraProvider, machine v1alpha1.ClusterNodeComponent) (v1alpha1.MachineProfileCapability, bool) {
-	provider, ok := providers[machine.Source.ProviderRef.Name]
-	if !ok || machine.Source.ProfileRef.Name == "" {
-		return v1alpha1.MachineProfileCapability{}, false
-	}
-	for _, profile := range provider.Spec.MachineProfiles {
-		if profile.Name == machine.Source.ProfileRef.Name {
-			return profile, true
-		}
-	}
-	return v1alpha1.MachineProfileCapability{}, false
 }
 
 func kubeVirtParentReady(state v1alpha1.State, clustersDir string, parent string) (bool, error) {

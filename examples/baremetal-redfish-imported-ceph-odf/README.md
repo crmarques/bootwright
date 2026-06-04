@@ -9,7 +9,7 @@ Data Foundation external mode.
   catalog, and the imported Ceph external-details secret reference.
 - `infra/`: service host, bare-metal provider, artifact server, and network
   definitions.
-- `clusters/container/metal-ocp/cluster-infra.yaml`: VIPs, artifact endpoint,
+- `clusters/container/metal-ocp/cluster-machines.yaml`: VIPs, artifact endpoint,
   machine selection, and platform render mode.
 - `clusters/container/metal-ocp/cluster.yaml`: release, cluster networking, and
   node bindings.

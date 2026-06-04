@@ -24,20 +24,16 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 			},
 		},
 	}
-	ci := v1alpha1.ClusterInfra{
-		Spec: v1alpha1.ClusterInfraSpec{
-			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI: {Address: "192.168.140.10"},
-				"apps":               {Address: "192.168.140.11"},
-			},
-			Components: v1alpha1.ClusterComponents{
-				Nodes: []v1alpha1.ClusterNodeComponent{
-					{
-						Name: "master-0",
-						Network: v1alpha1.ClusterNodeNetwork{
-							NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "machine-net"},
-						},
-					},
+	ci := v1alpha1.ClusterInstall{
+		Endpoints: map[string]v1alpha1.Endpoint{
+			v1alpha1.EndpointAPI: {Address: "192.168.140.10"},
+			"apps":               {Address: "192.168.140.11"},
+		},
+		Machines: []v1alpha1.InstallMachine{
+			{
+				Name: "master-0",
+				Network: v1alpha1.MachineNetwork{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "machine-net"},
 				},
 			},
 		},
@@ -54,19 +50,15 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 
 func TestMachineNetworkConfigUsesInlineMachineSpecs(t *testing.T) {
 	state := v1alpha1.State{}
-	ci := v1alpha1.ClusterInfra{
-		Spec: v1alpha1.ClusterInfraSpec{
-			Components: v1alpha1.ClusterComponents{
-				Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name: "master-0",
-					Network: v1alpha1.ClusterNodeNetwork{
-						Spec: &v1alpha1.NetworkConfigSpec{
-							MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.132.0/24"}},
-						},
-					},
-				}},
+	ci := v1alpha1.ClusterInstall{
+		Machines: []v1alpha1.InstallMachine{{
+			Name: "master-0",
+			Network: v1alpha1.MachineNetwork{
+				Spec: &v1alpha1.NetworkConfigSpec{
+					MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.132.0/24"}},
+				},
 			},
-		},
+		}},
 	}
 
 	got := machineNetworkConfig(state, ci)

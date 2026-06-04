@@ -13,7 +13,7 @@ outside Bootwright scope.
 
 Bootwright keeps these components out of `ContainerCluster.spec.install`.
 Cluster provisioning remains the responsibility of `ContainerCluster`,
-`ClusterInfra`, and provider-owned resources. Add-ons are separate
+`Machine and ContainerCluster`, and provider-owned resources. Add-ons are separate
 desired-state objects selected by `Environment`, bound to clusters, and applied
 after the target cluster is installed and reachable.
 

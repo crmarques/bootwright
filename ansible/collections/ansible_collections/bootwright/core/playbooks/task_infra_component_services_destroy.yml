@@ -11,8 +11,8 @@
     bootwright_host_infra_component_services_all: >-
       {{
         bootwright_infra_component_services | default([])
-        | selectattr('hostRef', 'defined')
-        | selectattr('hostRef', 'equalto', bootwright_host_name)
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
         | list
       }}
     bootwright_host_infra_component_services: >-

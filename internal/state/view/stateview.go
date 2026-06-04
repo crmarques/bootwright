@@ -25,13 +25,13 @@ func Provider(state v1alpha1.State, name string) (v1alpha1.InfraProvider, bool) 
 	return v1alpha1.InfraProvider{}, false
 }
 
-func Host(state v1alpha1.State, name string) (v1alpha1.Host, bool) {
-	for _, host := range state.Hosts {
-		if host.Metadata.Name == name {
-			return host, true
+func Machine(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
+	for _, machine := range state.Machines {
+		if machine.Metadata.Name == name {
+			return machine, true
 		}
 	}
-	return v1alpha1.Host{}, false
+	return v1alpha1.Machine{}, false
 }
 
 func NetworkConfig(state v1alpha1.State, name string) (v1alpha1.NetworkConfig, bool) {
@@ -43,15 +43,6 @@ func NetworkConfig(state v1alpha1.State, name string) (v1alpha1.NetworkConfig, b
 	return v1alpha1.NetworkConfig{}, false
 }
 
-func ClusterInfra(state v1alpha1.State, name string) (v1alpha1.ClusterInfra, bool) {
-	for _, infra := range state.ClusterInfras {
-		if infra.Metadata.Name == name {
-			return infra, true
-		}
-	}
-	return v1alpha1.ClusterInfra{}, false
-}
-
 func InfraComponent(state v1alpha1.State, name string) (v1alpha1.InfraComponent, bool) {
 	for _, component := range state.InfraComponents {
 		if component.Metadata.Name == name {
@@ -61,76 +52,119 @@ func InfraComponent(state v1alpha1.State, name string) (v1alpha1.InfraComponent,
 	return v1alpha1.InfraComponent{}, false
 }
 
-func MachineProfile(provider v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfileCapability, bool) {
-	for _, profile := range provider.Spec.MachineProfiles {
+func MachineProfile(provider v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile, bool) {
+	for _, profile := range ProviderMachineProfiles(provider) {
 		if profile.Name == name {
 			return profile, true
 		}
 	}
-	return v1alpha1.MachineProfileCapability{}, false
+	return v1alpha1.MachineProfile{}, false
 }
 
-func Machine(provider v1alpha1.InfraProvider, name string) (v1alpha1.MachineCapability, bool) {
-	for _, machine := range provider.Spec.Machines {
-		if machine.Name == name {
-			return machine, true
+func ProviderMachineProfiles(provider v1alpha1.InfraProvider) []v1alpha1.MachineProfile {
+	switch provider.Spec.Type {
+	case v1alpha1.ProvisionerLibvirt:
+		if provider.Spec.Libvirt != nil {
+			return provider.Spec.Libvirt.MachineProfiles
 		}
-	}
-	return v1alpha1.MachineCapability{}, false
-}
-
-func HostHasCapability(host v1alpha1.Host, want string) bool {
-	for _, capability := range host.Spec.Capabilities {
-		if capability == want {
-			return true
+	case v1alpha1.ProvisionerVSphere:
+		if provider.Spec.VSphere != nil {
+			return provider.Spec.VSphere.MachineProfiles
 		}
-	}
-	return false
-}
-
-func ClusterInfraNames(cluster v1alpha1.ContainerCluster) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, node := range cluster.Spec.Nodes {
-		ref := node.InfraNodeRef.ClusterInfra
-		if ref == "" || seen[ref] {
-			continue
-		}
-		seen[ref] = true
-		out = append(out, ref)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func ClusterForInfra(state v1alpha1.State, infra v1alpha1.ClusterInfra) (v1alpha1.ContainerCluster, bool) {
-	for _, cluster := range state.ContainerClusters {
-		for _, ref := range ClusterInfraNames(cluster) {
-			if ref == infra.Metadata.Name {
-				return cluster, true
-			}
-		}
-	}
-	return v1alpha1.ContainerCluster{}, false
-}
-
-func ClusterNodesForInfra(state v1alpha1.State, infra v1alpha1.ClusterInfra) map[string]v1alpha1.OCPNodeSpec {
-	for _, cluster := range state.ContainerClusters {
-		out := map[string]v1alpha1.OCPNodeSpec{}
-		for _, node := range cluster.Spec.Nodes {
-			if node.InfraNodeRef.ClusterInfra == infra.Metadata.Name {
-				out[node.Hostname] = node
-			}
-		}
-		if len(out) > 0 {
-			return out
+	case v1alpha1.ProvisionerKubeVirt:
+		if provider.Spec.KubeVirt != nil {
+			return provider.Spec.KubeVirt.MachineProfiles
 		}
 	}
 	return nil
 }
 
-func EndpointAddress(state v1alpha1.State, infra v1alpha1.ClusterInfra, name string) string {
-	endpoint, ok := infra.Spec.Endpoints[name]
+func MachineHasCapability(machine v1alpha1.Machine, want string) bool {
+	return v1alpha1.MachineHasCapability(machine, want)
+}
+
+func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.ContainerCluster) (v1alpha1.ClusterInstall, bool) {
+	nodes := make([]v1alpha1.InstallMachine, 0, len(cluster.Spec.Nodes))
+	networkBindings := make([]v1alpha1.MachineNetworkBinding, 0, len(cluster.Spec.Nodes))
+	for _, node := range cluster.Spec.Nodes {
+		machine, ok := Machine(state, node.MachineRef.Name)
+		if !ok {
+			continue
+		}
+		nodes = append(nodes, clusterNodeFromMachine(machine))
+		network := machine.Spec.OS.Install.Network
+		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
+			networkBindings = append(networkBindings, v1alpha1.MachineNetworkBinding{
+				NetworkConfigRef: network.NetworkConfigRef,
+				ProviderRef:      machine.Spec.Substrate.ProviderRef,
+				AttachmentRef:    network.AttachmentRef,
+			})
+		}
+	}
+	return v1alpha1.ClusterInstall{
+		Metadata:        v1alpha1.Metadata{Name: cluster.Metadata.Name},
+		Platform:        cluster.Spec.Install.Platform,
+		Endpoints:       cluster.Spec.Install.Endpoints,
+		ArtifactAccess:  cluster.Spec.Install.ArtifactAccess,
+		NetworkBindings: networkBindings,
+		Machines:        nodes,
+	}, len(nodes) > 0 || len(cluster.Spec.Install.Endpoints) > 0 || cluster.Spec.Install.Platform.Type != ""
+}
+
+func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
+	network := machine.Spec.OS.Install.Network
+	node := v1alpha1.InstallMachine{
+		Name: machine.Metadata.Name,
+		Source: v1alpha1.InstallMachineSource{
+			ProviderRef: machine.Spec.Substrate.ProviderRef,
+		},
+		Network:         v1alpha1.MachineNetwork(network),
+		RootDeviceHints: machine.Spec.OS.Install.RootDeviceHints,
+	}
+	switch v1alpha1.MachineSubstrateKind(machine) {
+	case v1alpha1.ProvisionerBareMetal:
+		node.Source.MachineRef.Name = machine.Metadata.Name
+		if node.RootDeviceHints == nil && machine.Spec.Substrate.BareMetal != nil {
+			node.RootDeviceHints = machine.Spec.Substrate.BareMetal.RootDeviceHints
+		}
+	case v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerVSphere, v1alpha1.ProvisionerKubeVirt:
+		node.Source.ProfileRef = v1alpha1.MachineProfileRef(machine)
+	}
+	return node
+}
+
+func ClusterInstallNames(cluster v1alpha1.ContainerCluster) []string {
+	if len(cluster.Spec.Nodes) == 0 {
+		return nil
+	}
+	return []string{cluster.Metadata.Name}
+}
+
+func ClusterForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) (v1alpha1.ContainerCluster, bool) {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name == infra.Metadata.Name {
+			return cluster, true
+		}
+	}
+	return v1alpha1.ContainerCluster{}, false
+}
+
+func ClusterNodesForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]v1alpha1.OCPNodeSpec {
+	for _, cluster := range state.ContainerClusters {
+		if cluster.Metadata.Name != infra.Metadata.Name {
+			continue
+		}
+		out := map[string]v1alpha1.OCPNodeSpec{}
+		for _, node := range cluster.Spec.Nodes {
+			out[node.Hostname] = node
+		}
+		return out
+	}
+	return nil
+}
+
+func EndpointAddress(state v1alpha1.State, infra v1alpha1.ClusterInstall, name string) string {
+	endpoint, ok := infra.Endpoints[name]
 	if !ok {
 		return ""
 	}
@@ -172,7 +206,7 @@ func NetworkConfigContainsIP(network v1alpha1.NetworkConfig, ip net.IP) bool {
 	return false
 }
 
-func EndpointNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra, address string) (v1alpha1.NetworkConfig, bool) {
+func EndpointNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInstall, address string) (v1alpha1.NetworkConfig, bool) {
 	ip := net.ParseIP(address)
 	if ip == nil {
 		return v1alpha1.NetworkConfig{}, false
@@ -185,14 +219,14 @@ func EndpointNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra, ad
 	return v1alpha1.NetworkConfig{}, false
 }
 
-func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInfra) []v1alpha1.NetworkConfig {
+func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInstall) []v1alpha1.NetworkConfig {
 	var out []v1alpha1.NetworkConfig
 	for _, name := range ClusterConsumedNetworkConfigs(infra) {
 		if network, ok := NetworkConfig(state, name); ok {
 			out = append(out, network)
 		}
 	}
-	for _, machine := range infra.Spec.Components.Nodes {
+	for _, machine := range infra.Machines {
 		if machine.Network.Spec == nil {
 			continue
 		}
@@ -207,9 +241,9 @@ func ClusterNetworkConfigs(state v1alpha1.State, infra v1alpha1.ClusterInfra) []
 	return out
 }
 
-func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInfra) []string {
+func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInstall) []string {
 	used := map[string]bool{}
-	for _, machine := range infra.Spec.Components.Nodes {
+	for _, machine := range infra.Machines {
 		if machine.Network.NetworkConfigRef.Name != "" {
 			used[machine.Network.NetworkConfigRef.Name] = true
 		}
@@ -222,34 +256,30 @@ func ClusterConsumedNetworkConfigs(infra v1alpha1.ClusterInfra) []string {
 	return names
 }
 
-func ClusterFacingHostAddress(state v1alpha1.State, hostName string, infra v1alpha1.ClusterInfra) string {
-	return HostRouteAddress(state, hostName, "", infra)
-}
-
-func HostRouteAddress(state v1alpha1.State, hostName, addressName string, infra v1alpha1.ClusterInfra) string {
+func MachineRouteAddress(state v1alpha1.State, machineName, addressName string, infra v1alpha1.ClusterInstall) string {
 	if addressName != "" {
-		if address, ok := NamedHostAddress(state, hostName, addressName); ok {
+		if address, ok := NamedMachineAddress(state, machineName, addressName); ok {
 			return address
 		}
 		return ""
 	}
-	return fallbackHostRouteAddress(state, hostName, infra)
+	return fallbackMachineRouteAddress(state, machineName, infra)
 }
 
-func NamedHostAddress(state v1alpha1.State, hostName, addressName string) (string, bool) {
-	host, ok := Host(state, hostName)
+func NamedMachineAddress(state v1alpha1.State, machineName, addressName string) (string, bool) {
+	machine, ok := Machine(state, machineName)
 	if !ok {
 		return "", false
 	}
-	return v1alpha1.HostAddressByName(host, addressName)
+	return v1alpha1.MachineAddressByName(machine, addressName)
 }
 
-func fallbackHostRouteAddress(state v1alpha1.State, hostName string, infra v1alpha1.ClusterInfra) string {
-	host, ok := Host(state, hostName)
+func fallbackMachineRouteAddress(state v1alpha1.State, machineName string, infra v1alpha1.ClusterInstall) string {
+	machine, ok := Machine(state, machineName)
 	if !ok {
 		return ""
 	}
-	if address := v1alpha1.HostSSHAddress(host); address != "" && !IsLoopbackAlias(address) {
+	if address := v1alpha1.MachineSSHAddress(machine); address != "" && !IsLoopbackAlias(address) {
 		return address
 	}
 	if gateway := PrimaryNetworkGateway(state, infra); gateway != "" {
@@ -258,16 +288,16 @@ func fallbackHostRouteAddress(state v1alpha1.State, hostName string, infra v1alp
 	return ""
 }
 
-func PrimaryNetworkGateway(state v1alpha1.State, infra v1alpha1.ClusterInfra) string {
+func PrimaryNetworkGateway(state v1alpha1.State, infra v1alpha1.ClusterInstall) string {
 	if network := PrimaryClusterNetworkConfig(state, infra); network != nil {
 		return GatewayFromNetworkConfig(*network)
 	}
 	return ""
 }
 
-func PrimaryClusterNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInfra) *v1alpha1.NetworkConfig {
-	names := make([]string, 0, len(infra.Spec.Endpoints))
-	for name := range infra.Spec.Endpoints {
+func PrimaryClusterNetworkConfig(state v1alpha1.State, infra v1alpha1.ClusterInstall) *v1alpha1.NetworkConfig {
+	names := make([]string, 0, len(infra.Endpoints))
+	for name := range infra.Endpoints {
 		names = append(names, name)
 	}
 	sort.Strings(names)

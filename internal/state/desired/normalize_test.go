@@ -73,17 +73,23 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 	t.Cleanup(func() { currentHostSSHUser = previous })
 
 	state := v1alpha1.State{
-		Hosts: []v1alpha1.Host{
+		Machines: []v1alpha1.Machine{
 			{
 				Metadata: v1alpha1.Metadata{Name: "defaulted"},
-				Spec: v1alpha1.HostSpec{
-					SSH: &v1alpha1.HostSSHSpec{AddressName: "ssh"},
+				Spec: v1alpha1.MachineSpec{
+					OS: v1alpha1.MachineOSSpec{
+						Mode: v1alpha1.MachineOSModeExternal,
+						SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					},
 				},
 			},
 			{
 				Metadata: v1alpha1.Metadata{Name: "explicit"},
-				Spec: v1alpha1.HostSpec{
-					SSH: &v1alpha1.HostSSHSpec{AddressName: "ssh", User: "root"},
+				Spec: v1alpha1.MachineSpec{
+					OS: v1alpha1.MachineOSSpec{
+						Mode: v1alpha1.MachineOSModeExternal,
+						SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh", User: "root"},
+					},
 				},
 			},
 			{
@@ -94,31 +100,23 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.Hosts[0].Spec.SSH.User; got != "operator" {
-		t.Fatalf("defaulted Host SSH user = %q, want operator", got)
+	if got := state.Machines[0].Spec.OS.SSH.User; got != "operator" {
+		t.Fatalf("defaulted Machine SSH user = %q, want operator", got)
 	}
-	if got := state.Hosts[1].Spec.SSH.User; got != "root" {
-		t.Fatalf("explicit Host SSH user = %q, want root", got)
+	if got := state.Machines[1].Spec.OS.SSH.User; got != "root" {
+		t.Fatalf("explicit Machine SSH user = %q, want root", got)
 	}
 }
 
 func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *testing.T) {
 	state := artifactAccessDefaultState()
-	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack", "server-0")}
-	state.ClusterInfras = []v1alpha1.ClusterInfra{{
-		Metadata: v1alpha1.Metadata{Name: "infra"},
-		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name:   "master-0",
-				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "rack"}, MachineRef: v1alpha1.LocalObjectReference{Name: "server-0"}},
-			}},
-		}},
-	}}
-	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithInfra("cluster", "infra")}
+	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack")}
+	state.Machines = []v1alpha1.Machine{bareMetalMachine("server-0", "rack")}
+	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithMachine("cluster", "server-0")}
 
 	Normalize(&state)
 
-	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "default" {
 		t.Fatalf("serverRef.name = %q, want default", got)
 	}
@@ -132,22 +130,14 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *
 
 func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t *testing.T) {
 	state := artifactAccessDefaultState()
-	state.ClusterInfras = []v1alpha1.ClusterInfra{{
-		Metadata: v1alpha1.Metadata{Name: "infra"},
-		Spec: v1alpha1.ClusterInfraSpec{Components: v1alpha1.ClusterComponents{
-			Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name:   "master-0",
-				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "libvirt"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "worker"}},
-			}},
-		}},
-	}}
-	cluster := containerClusterWithInfra("cluster", "infra")
+	state.Machines = []v1alpha1.Machine{profiledMachine("server-0", "libvirt", v1alpha1.ProvisionerLibvirt)}
+	cluster := containerClusterWithMachine("cluster", "server-0")
 	cluster.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
 
 	Normalize(&state)
 
-	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "default" {
 		t.Fatalf("serverRef.name = %q, want default", got)
 	}
@@ -161,29 +151,20 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t 
 
 func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing.T) {
 	state := artifactAccessDefaultState()
-	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack", "server-0")}
-	state.ClusterInfras = []v1alpha1.ClusterInfra{{
-		Metadata: v1alpha1.Metadata{Name: "infra"},
-		Spec: v1alpha1.ClusterInfraSpec{
-			ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-				ServerRef: v1alpha1.LocalObjectReference{Name: "site"},
-				RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
-					EndpointRef: v1alpha1.LocalObjectReference{Name: "oob"},
-				},
-			},
-			Components: v1alpha1.ClusterComponents{
-				Nodes: []v1alpha1.ClusterNodeComponent{{
-					Name:   "master-0",
-					Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "rack"}, MachineRef: v1alpha1.LocalObjectReference{Name: "server-0"}},
-				}},
-			},
+	state.InfraProviders = []v1alpha1.InfraProvider{bareMetalProvider("rack")}
+	state.Machines = []v1alpha1.Machine{bareMetalMachine("server-0", "rack")}
+	cluster := containerClusterWithMachine("cluster", "server-0")
+	cluster.Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
+		ServerRef: v1alpha1.LocalObjectReference{Name: "site"},
+		RedfishVirtualMedia: v1alpha1.ClusterArtifactEndpointRef{
+			EndpointRef: v1alpha1.LocalObjectReference{Name: "oob"},
 		},
-	}}
-	state.ContainerClusters = []v1alpha1.ContainerCluster{containerClusterWithInfra("cluster", "infra")}
+	}
+	state.ContainerClusters = []v1alpha1.ContainerCluster{cluster}
 
 	Normalize(&state)
 
-	access := state.ClusterInfras[0].Spec.ArtifactAccess
+	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "site" {
 		t.Fatalf("serverRef.name = %q, want site", got)
 	}
@@ -245,28 +226,55 @@ func artifactAccessDefaultState() v1alpha1.State {
 	}
 }
 
-func bareMetalProvider(name, machine string) v1alpha1.InfraProvider {
+func bareMetalProvider(name string) v1alpha1.InfraProvider {
 	return v1alpha1.InfraProvider{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.InfraProviderSpec{
-			Machines: []v1alpha1.MachineCapability{{
-				Name:      machine,
-				BareMetal: &v1alpha1.MachineBareMetalCapability{},
-			}},
+			Type:      v1alpha1.ProvisionerBareMetal,
+			BareMetal: &v1alpha1.InfraProviderBareMetal{},
 		},
 	}
 }
 
-func containerClusterWithInfra(name, infra string) v1alpha1.ContainerCluster {
+func bareMetalMachine(name, provider string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
+				BareMetal:   &v1alpha1.MachineBareMetalSubstrate{},
+			},
+			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+		},
+	}
+}
+
+func profiledMachine(name, provider, providerType string) v1alpha1.Machine {
+	machine := v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
+			},
+			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+		},
+	}
+	if providerType == v1alpha1.ProvisionerLibvirt {
+		machine.Spec.Substrate.Libvirt = &v1alpha1.MachineProfiledSubstrate{
+			ProfileRef: v1alpha1.LocalObjectReference{Name: "worker"},
+		}
+	}
+	return machine
+}
+
+func containerClusterWithMachine(name, machine string) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname: "master-0",
-				InfraNodeRef: v1alpha1.InfraNodeRef{
-					ClusterInfra: infra,
-					Name:         "master-0",
-				},
+				Hostname:   "master-0",
+				Role:       "master",
+				MachineRef: v1alpha1.LocalObjectReference{Name: machine},
 			}},
 		},
 	}
@@ -278,8 +286,8 @@ func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "proxy"},
 			Spec: v1alpha1.InfraComponentSpec{
 				Proxy: &v1alpha1.ProxyComponent{
-					Type:    v1alpha1.InfraComponentTypeSquid,
-					HostRef: v1alpha1.LocalObjectReference{Name: "services-host"},
+					Type:       v1alpha1.InfraComponentTypeSquid,
+					MachineRef: v1alpha1.LocalObjectReference{Name: "services-host"},
 				},
 			},
 		}},
@@ -301,7 +309,7 @@ func TestNormalizeDefaultsArtifactServerListener(t *testing.T) {
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Spec: v1alpha1.InfraComponentSpec{
 				ArtifactServer: &v1alpha1.ArtifactServerComponent{
-					HostRef: v1alpha1.LocalObjectReference{Name: "services-host"},
+					MachineRef: v1alpha1.LocalObjectReference{Name: "services-host"},
 				},
 			},
 		}},
@@ -325,19 +333,17 @@ func TestNormalizeDefaultsBMCEmulationPorts(t *testing.T) {
 	state := v1alpha1.State{
 		InfraProviders: []v1alpha1.InfraProvider{{
 			Spec: v1alpha1.InfraProviderSpec{
-				MachineProfiles: []v1alpha1.MachineProfileCapability{{
-					Name: "sno",
-					Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
-						BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{},
-					},
-				}},
+				Type: v1alpha1.ProvisionerLibvirt,
+				Libvirt: &v1alpha1.InfraProviderLibvirt{
+					BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{},
+				},
 			},
 		}},
 	}
 
 	Normalize(&state)
 
-	d := state.InfraProviders[0].Spec.MachineProfiles[0].Libvirt.BMCEmulationDefaults
+	d := state.InfraProviders[0].Spec.Libvirt.BMCEmulationDefaults
 	if got := d.Port; got != v1alpha1.DefaultBMCEmulationStartPort {
 		t.Fatalf("BMC emulator port = %d, want %d", got, v1alpha1.DefaultBMCEmulationStartPort)
 	}

@@ -40,11 +40,11 @@ func TestSharedDestroyConflictsDetectsManagedInfraComponents(t *testing.T) {
 	}
 }
 
-func TestHostServiceGraphIncludesSharedBMCServices(t *testing.T) {
+func TestMachineServiceGraphIncludesSharedBMCServices(t *testing.T) {
 	state := sharedBMCServiceState()
-	graph := ResolveHostServices(state)
+	graph := ResolveMachineServices(state)
 
-	var bmc *HostService
+	var bmc *MachineService
 	for i := range graph.Services {
 		if graph.Services[i].Identity.Kind == v1alpha1.ProviderServiceKindBMC {
 			bmc = &graph.Services[i]
@@ -57,8 +57,8 @@ func TestHostServiceGraphIncludesSharedBMCServices(t *testing.T) {
 	if bmc.Identity.ProviderName != "libvirt-provider" || bmc.Identity.Name != "emulated" {
 		t.Fatalf("BMC identity = %#v", bmc.Identity)
 	}
-	if bmc.HostRef != "libvirt-host" {
-		t.Fatalf("BMC hostRef = %q, want libvirt-host", bmc.HostRef)
+	if bmc.MachineRef != "libvirt-host" {
+		t.Fatalf("BMC machineRef = %q, want libvirt-host", bmc.MachineRef)
 	}
 	if got := bmc.ConsumerClusters(); !reflect.DeepEqual(got, []string{"cluster-a", "cluster-b"}) {
 		t.Fatalf("BMC consumers = %v", got)
@@ -76,46 +76,35 @@ func TestHostServiceGraphIncludesSharedBMCServices(t *testing.T) {
 	}
 }
 
-func TestHostServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
+func TestMachineServiceGraphKeepsBMCServicesPerHost(t *testing.T) {
 	state := sharedBMCServiceState()
-	state.Hosts = append(state.Hosts, v1alpha1.Host{
-		Metadata: v1alpha1.Metadata{Name: "libvirt-host-b"},
-		Spec: v1alpha1.HostSpec{
-			Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.7"}},
-			SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-			Capabilities: []string{v1alpha1.HostCapabilityLibvirt},
-		},
-	})
-	state.InfraProviders[0].Spec.MachineProfiles = append(state.InfraProviders[0].Spec.MachineProfiles, v1alpha1.MachineProfileCapability{
-		Name: "libvirt-profile-b",
-		Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
-			HostRef: v1alpha1.LocalObjectReference{Name: "libvirt-host-b"},
-			URI:     "qemu:///system",
-			BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
-				Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
-			},
-		},
-	})
-	state.ClusterInfras[1].Spec.Components.Nodes[0].Source.ProfileRef.Name = "libvirt-profile-b"
+	for i := range state.Machines {
+		if state.Machines[i].Metadata.Name == "cluster-b-master-0" {
+			state.Machines[i] = libvirtNodeMachine("cluster-b-master-0", "libvirt-provider-b")
+		}
+	}
+	state.Machines = append(state.Machines, libvirtHostMachine("libvirt-host-b", "10.0.0.7"))
+	state.InfraProviders = append(state.InfraProviders, libvirtProvider("libvirt-provider-b", "libvirt-host-b"))
+	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "cluster-b-master-0"
 
-	var hostRefs []string
-	for _, service := range ResolveHostServices(state).Services {
+	var machineRefs []string
+	for _, service := range ResolveMachineServices(state).Services {
 		if service.Identity.Kind == v1alpha1.ProviderServiceKindBMC {
-			hostRefs = append(hostRefs, service.HostRef)
+			machineRefs = append(machineRefs, service.MachineRef)
 		}
 	}
 	want := []string{"libvirt-host", "libvirt-host-b"}
-	if !reflect.DeepEqual(hostRefs, want) {
-		t.Fatalf("BMC hostRefs = %v, want %v", hostRefs, want)
+	if !reflect.DeepEqual(machineRefs, want) {
+		t.Fatalf("BMC machineRefs = %v, want %v", machineRefs, want)
 	}
 }
 
-func TestHostServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
+func TestMachineServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 	state := sharedManagedServiceState()
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"env.example.test"}
 	state.InfraComponents[1].Spec.NameResolution.AdditionalIngressHosts = []string{"component.example.test"}
 
-	got := ResolveHostServices(state).MergedStringField(HostServiceIdentity{
+	got := ResolveMachineServices(state).MergedStringField(MachineServiceIdentity{
 		Kind:         v1alpha1.ComponentSlotNameResolution,
 		ProviderName: v1alpha1.KindInfraComponent,
 		Name:         "name-resolution",
@@ -127,7 +116,7 @@ func TestHostServiceGraphMergesAdditionalIngressHosts(t *testing.T) {
 }
 
 func TestSharedServicesReportsContainerClusterConsumers(t *testing.T) {
-	groups := ResolveHostServices(sharedManagedServiceState()).SharedServices()
+	groups := ResolveMachineServices(sharedManagedServiceState()).SharedServices()
 	seen := false
 	for _, group := range groups {
 		if group.Kind != v1alpha1.ComponentSlotNameResolution {
@@ -151,8 +140,8 @@ func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 	if got := namesOfClusters(filtered.ContainerClusters); !reflect.DeepEqual(got, []string{"cluster-a"}) {
 		t.Fatalf("clusters = %#v", got)
 	}
-	if got := namesOfInfras(filtered.ClusterInfras); !reflect.DeepEqual(got, []string{"infra-a"}) {
-		t.Fatalf("infras = %#v", got)
+	if got := namesOfMachines(filtered.Machines); !reflect.DeepEqual(got, []string{"service-host", "cluster-a-master-0"}) {
+		t.Fatalf("machines = %#v", got)
 	}
 	if got := namesOfProviders(filtered.InfraProviders); !reflect.DeepEqual(got, []string{"machines-a"}) {
 		t.Fatalf("providers = %#v", got)
@@ -251,18 +240,15 @@ func sharedManagedServiceState() v1alpha1.State {
 				},
 			},
 		}},
-		Hosts: []v1alpha1.Host{{
-			Metadata: v1alpha1.Metadata{Name: "service-host"},
-			Spec: v1alpha1.HostSpec{
-				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.5"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-				Capabilities: []string{v1alpha1.HostCapabilityContainerRuntime},
-			},
-		}},
+		Machines: []v1alpha1.Machine{
+			serviceMachine(),
+			rawMachine("cluster-a-master-0", "machines-a", "net-a"),
+			rawMachine("cluster-b-master-0", "machines-b", "net-b"),
+		},
 		NetworkConfigs: []v1alpha1.NetworkConfig{networkConfig("net-a"), networkConfig("net-b")},
 		InfraProviders: []v1alpha1.InfraProvider{
-			{Metadata: v1alpha1.Metadata{Name: "machines-a"}},
-			{Metadata: v1alpha1.Metadata{Name: "machines-b"}},
+			bareMetalProvider("machines-a"),
+			bareMetalProvider("machines-b"),
 		},
 		InfraComponents: []v1alpha1.InfraComponent{
 			loadBalancerComponent(),
@@ -272,59 +258,68 @@ func sharedManagedServiceState() v1alpha1.State {
 			registryComponent(),
 			artifactServerComponent(),
 		},
-		ClusterInfras: []v1alpha1.ClusterInfra{
-			clusterInfra("infra-a", "machines-a", "net-a"),
-			clusterInfra("infra-b", "machines-b", "net-b"),
-		},
 		ContainerClusters: []v1alpha1.ContainerCluster{
-			containerCluster("cluster-a", "infra-a"),
-			containerCluster("cluster-b", "infra-b"),
+			containerCluster("cluster-a", "cluster-a-master-0"),
+			containerCluster("cluster-b", "cluster-b-master-0"),
 		},
 	}
 }
 
 func sharedBMCServiceState() v1alpha1.State {
 	return v1alpha1.State{
-		Hosts: []v1alpha1.Host{{
-			Metadata: v1alpha1.Metadata{Name: "libvirt-host"},
-			Spec: v1alpha1.HostSpec{
-				Addresses:    []v1alpha1.HostAddress{{Name: "ssh", Address: "10.0.0.6"}},
-				SSH:          &v1alpha1.HostSSHSpec{AddressName: "ssh"},
-				Capabilities: []string{v1alpha1.HostCapabilityLibvirt},
-			},
-		}},
-		InfraProviders: []v1alpha1.InfraProvider{{
-			Metadata: v1alpha1.Metadata{Name: "libvirt-provider"},
-			Spec: v1alpha1.InfraProviderSpec{MachineProfiles: []v1alpha1.MachineProfileCapability{{
-				Name: "libvirt-profile",
-				Libvirt: &v1alpha1.MachineProfileLibvirtProvisioner{
-					HostRef: v1alpha1.LocalObjectReference{Name: "libvirt-host"},
-					URI:     "qemu:///system",
-					BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
-						Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
-					},
-				},
-			}}},
-		}},
-		ClusterInfras: []v1alpha1.ClusterInfra{
-			bmcClusterInfra("infra-a"),
-			bmcClusterInfra("infra-b"),
+		Machines: []v1alpha1.Machine{
+			libvirtHostMachine("libvirt-host", "10.0.0.6"),
+			libvirtNodeMachine("cluster-a-master-0", "libvirt-provider"),
+			libvirtNodeMachine("cluster-b-master-0", "libvirt-provider"),
 		},
+		InfraProviders: []v1alpha1.InfraProvider{libvirtProvider("libvirt-provider", "libvirt-host")},
 		ContainerClusters: []v1alpha1.ContainerCluster{
-			containerCluster("cluster-a", "infra-a"),
-			containerCluster("cluster-b", "infra-b"),
+			containerCluster("cluster-a", "cluster-a-master-0"),
+			containerCluster("cluster-b", "cluster-b-master-0"),
 		},
 	}
 }
 
-func bmcClusterInfra(name string) v1alpha1.ClusterInfra {
-	return v1alpha1.ClusterInfra{
+func libvirtHostMachine(name, address string) v1alpha1.Machine {
+	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ClusterInfraSpec{
-			Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name:   "master-0",
-				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: "libvirt-provider"}, ProfileRef: v1alpha1.LocalObjectReference{Name: "libvirt-profile"}},
-			}}},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityLibvirt},
+			OS: v1alpha1.MachineOSSpec{
+				Mode:      v1alpha1.MachineOSModeExternal,
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: address}},
+				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+			},
+		},
+	}
+}
+
+func libvirtNodeMachine(name, provider string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
+				Libvirt:     &v1alpha1.MachineProfiledSubstrate{ProfileRef: v1alpha1.LocalObjectReference{Name: "libvirt-profile"}},
+			},
+			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+		},
+	}
+}
+
+func libvirtProvider(name, machine string) v1alpha1.InfraProvider {
+	return v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerLibvirt,
+			Libvirt: &v1alpha1.InfraProviderLibvirt{
+				MachineRef: v1alpha1.LocalObjectReference{Name: machine},
+				URI:        "qemu:///system",
+				BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
+					Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
+				},
+				MachineProfiles: []v1alpha1.MachineProfile{{Name: "libvirt-profile"}},
+			},
 		},
 	}
 }
@@ -338,53 +333,84 @@ func networkConfig(name string) v1alpha1.NetworkConfig {
 	}
 }
 
-func clusterInfra(name, machineProvider, networkName string) v1alpha1.ClusterInfra {
-	return v1alpha1.ClusterInfra{
-		Metadata: v1alpha1.Metadata{Name: name},
-		Spec: v1alpha1.ClusterInfraSpec{
-			ArtifactAccess: v1alpha1.ClusterArtifactAccess{
-				ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
-				ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
-					EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
-				},
+func serviceMachine() v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "service-host"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{
+				v1alpha1.MachineCapabilityContainerRuntime,
+				v1alpha1.MachineCapabilityLoadBalancer,
+				v1alpha1.MachineCapabilityNameResolution,
+				v1alpha1.MachineCapabilityNTP,
+				v1alpha1.MachineCapabilityProxy,
+				v1alpha1.MachineCapabilityRegistry,
+				v1alpha1.MachineCapabilityArtifactServer,
 			},
-			Endpoints: map[string]v1alpha1.Endpoint{
-				v1alpha1.EndpointAPI: {
-					Source: v1alpha1.EndpointSource{
-						Type:         v1alpha1.EndpointSourceInfraComponent,
-						ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
-						BindAddress:  "api",
-					},
-				},
+			OS: v1alpha1.MachineOSSpec{
+				Mode:      v1alpha1.MachineOSModeExternal,
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
 			},
-			Components: v1alpha1.ClusterComponents{Nodes: []v1alpha1.ClusterNodeComponent{{
-				Name:   "master-0",
-				Source: v1alpha1.ClusterNodeSource{ProviderRef: v1alpha1.LocalObjectReference{Name: machineProvider}, MachineRef: v1alpha1.LocalObjectReference{Name: "node-0"}},
-				Network: v1alpha1.ClusterNodeNetwork{
-					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
-				},
-			}}},
 		},
 	}
 }
 
-func containerCluster(name, infraName string) v1alpha1.ContainerCluster {
+func rawMachine(name, provider, networkName string) v1alpha1.Machine {
+	return v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.MachineSpec{
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
+				BareMetal: &v1alpha1.MachineBareMetalSubstrate{
+					Interfaces: []v1alpha1.MachineInterface{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
+				},
+			},
+			OS: v1alpha1.MachineOSSpec{
+				Mode: v1alpha1.MachineOSModeRaw,
+				Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
+				}},
+			},
+		},
+	}
+}
+
+func bareMetalProvider(name string) v1alpha1.InfraProvider {
+	return v1alpha1.InfraProvider{
+		Metadata: v1alpha1.Metadata{Name: name},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type:      v1alpha1.ProvisionerBareMetal,
+			BareMetal: &v1alpha1.InfraProviderBareMetal{},
+		},
+	}
+}
+
+func containerCluster(name, machineName string) v1alpha1.ContainerCluster {
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
 			Install: v1alpha1.OCPInstallSpec{
 				Mode: v1alpha1.InstallModeDisconnected,
-				EndpointRefs: v1alpha1.ContainerEndpointRefs{
-					API: v1alpha1.EndpointRef{Name: v1alpha1.EndpointAPI},
+				ArtifactAccess: v1alpha1.ClusterArtifactAccess{
+					ServerRef: v1alpha1.LocalObjectReference{Name: "default"},
+					ContainerClusterInstall: v1alpha1.ClusterArtifactEndpointRef{
+						EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"},
+					},
+				},
+				Endpoints: map[string]v1alpha1.Endpoint{
+					v1alpha1.EndpointAPI: {
+						Source: v1alpha1.EndpointSource{
+							Type:         v1alpha1.EndpointSourceInfraComponent,
+							ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
+							BindAddress:  "api",
+						},
+					},
 				},
 			},
 			Nodes: []v1alpha1.OCPNodeSpec{{
-				Hostname: "master-0",
-				Role:     "master",
-				InfraNodeRef: v1alpha1.InfraNodeRef{
-					ClusterInfra: infraName,
-					Name:         "master-0",
-				},
+				Hostname:   "master-0",
+				Role:       "master",
+				MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
 			}},
 		},
 	}
@@ -394,8 +420,8 @@ func loadBalancerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "load-balancer"},
 		Spec: v1alpha1.InfraComponentSpec{LoadBalancer: &v1alpha1.LoadBalancerComponent{
-			Type:    v1alpha1.InfraComponentTypeHAProxy,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Type:       v1alpha1.InfraComponentTypeHAProxy,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
 				Name: "api",
 				IP:   "10.0.0.10",
@@ -409,7 +435,7 @@ func nameResolutionComponent() v1alpha1.InfraComponent {
 		Metadata: v1alpha1.Metadata{Name: "name-resolution"},
 		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
 			Type:        v1alpha1.InfraComponentTypeDnsmasq,
-			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultDNSPort,
 		}},
@@ -421,7 +447,7 @@ func ntpComponent() v1alpha1.InfraComponent {
 		Metadata: v1alpha1.Metadata{Name: "ntp-server"},
 		Spec: v1alpha1.InfraComponentSpec{NTP: &v1alpha1.NTPComponent{
 			Type:        v1alpha1.InfraComponentTypeChrony,
-			HostRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
 			BindAddress: "10.0.0.5",
 			Port:        v1alpha1.DefaultNTPPort,
 		}},
@@ -432,9 +458,9 @@ func proxyComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "proxy"},
 		Spec: v1alpha1.InfraComponentSpec{Proxy: &v1alpha1.ProxyComponent{
-			Type:    v1alpha1.InfraComponentTypeSquid,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:    v1alpha1.DefaultSquidPort,
+			Type:       v1alpha1.InfraComponentTypeSquid,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:       v1alpha1.DefaultSquidPort,
 		}},
 	}
 }
@@ -443,9 +469,9 @@ func registryComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "registry"},
 		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-			Type:    v1alpha1.InfraComponentTypeMirrorRegistry,
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:    v1alpha1.DefaultMirrorRegistryPort,
+			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			Port:       v1alpha1.DefaultMirrorRegistryPort,
 		}},
 	}
 }
@@ -454,16 +480,16 @@ func artifactServerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "artifact-server"},
 		Spec: v1alpha1.InfraComponentSpec{ArtifactServer: &v1alpha1.ArtifactServerComponent{
-			HostRef: v1alpha1.LocalObjectReference{Name: "service-host"},
+			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
 			Listeners: []v1alpha1.ArtifactServerListener{{
 				Name:     "https",
 				Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
 				Port:     v1alpha1.DefaultArtifactsHTTPPort,
 			}},
 			Endpoints: []v1alpha1.ArtifactServerEndpoint{{
-				Name:        "cluster",
-				Listener:    "https",
-				HostAddress: "ssh",
+				Name:           "cluster",
+				Listener:       "https",
+				MachineAddress: "ssh",
 			}},
 		}},
 	}
@@ -477,10 +503,10 @@ func namesOfClusters(clusters []v1alpha1.ContainerCluster) []string {
 	return out
 }
 
-func namesOfInfras(infras []v1alpha1.ClusterInfra) []string {
-	out := make([]string, 0, len(infras))
-	for _, infra := range infras {
-		out = append(out, infra.Metadata.Name)
+func namesOfMachines(machines []v1alpha1.Machine) []string {
+	out := make([]string, 0, len(machines))
+	for _, machine := range machines {
+		out = append(out, machine.Metadata.Name)
 	}
 	return out
 }

@@ -16,7 +16,7 @@ Current placement:
 - provider physical facts belong in `InfraProvider.spec`
 - machine network templates belong in `NetworkConfig`
 - selected infra nodes and provider install-network overrides belong in
-  `ClusterInfra.spec.components.nodes[]`
+  `Machine and ContainerCluster.spec.components.nodes[]`
 - cluster release belongs in `ContainerCluster.spec.distribution`, and install
   mode belongs in `ContainerCluster.spec.install.mode`
 - node bindings belong in `ContainerCluster.spec.nodes[]`
@@ -44,20 +44,20 @@ provider-sourced infra node:
 
 ```yaml
 infraNodeRef:
-  clusterInfra: prod-3node-infra
+  machineRef: prod-3node-infra
   name: master-0
 ```
 
 The target must exist as
-`ClusterInfra.spec.components.nodes[].name` and must set `source.providerRef`.
+`Machine and ContainerCluster.spec.components.nodes[].name` and must set `source.providerRef`.
 In v1 all OpenShift nodes in one cluster must reference the same
-`ClusterInfra`.
+`Machine and ContainerCluster`.
 
 ## Address Failures
 
 Endpoint VIPs and machine address overrides are checked against selected
 `NetworkConfig.spec.machineNetwork[]` CIDRs. Select the correct machine network
-through `ClusterInfra.spec.components.nodes[].network.networkConfigRef`, or
+through `Machine and ContainerCluster.spec.components.nodes[].network.networkConfigRef`, or
 fix either the CIDR template or the node-specific IP.
 
 A `machineNetwork[].cidr` may appear in only one `NetworkConfig`. If two
@@ -95,13 +95,13 @@ continuing.
 ## SSH Or Artifact Fetch Failures
 
 `check infra` and `apply --stage infra` require SSH to provider/service hosts. Validate
-the same key and address declared on the `Host` before retrying.
+the same key and address declared on the `Machine` before retrying.
 
 Real BMCs must also reach the generated artifact HTTPS endpoint used for the
 agent ISO. If Redfish virtual media insert fails after the bastion can download
 the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
-`ClusterInfra.spec.artifactAccess.redfishVirtualMedia.endpointRef.name`.
+`ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef.name`.
 
 ## Context Input Looks Stale
 

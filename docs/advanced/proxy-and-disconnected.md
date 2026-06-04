@@ -94,7 +94,7 @@ spec:
           name: cluster
 ```
 
-When the effective `ClusterInfra.spec.artifactAccess` sets
+When the effective `ContainerCluster.spec.install.artifactAccess` sets
 `containerClusterInstall.endpointRef.name`, Bootwright renders
 `minimalISO: true` and an endpoint-derived `bootArtifactsBaseURL` into
 `agent-config.yaml`.

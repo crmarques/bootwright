@@ -12,7 +12,7 @@ import (
 const (
 	ApplyTaskKindProvider               = "providerServices"
 	ApplyTaskKindInfraComponentServices = "infraComponentServices"
-	ApplyTaskKindClusterInfra           = "clusterInfra"
+	ApplyTaskKindClusterInstall         = "clusterInstall"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
@@ -27,7 +27,7 @@ const (
 
 	ApplyPhaseProvider         = "provider"
 	ApplyPhaseInfraComponents  = "infra-components"
-	ApplyPhaseClusterInfra     = "cluster-infra"
+	ApplyPhaseClusterInstall   = "machine-infra"
 	ApplyPhaseStorageInfra     = "storage-infra"
 	ApplyPhaseStorageCluster   = "storage-cluster"
 	ApplyPhaseContainerCluster = "container-cluster"
@@ -35,7 +35,7 @@ const (
 
 	applyProviderPlaybook        = "bootwright.core.task_provider_services_apply"
 	applyInfraComponentsPlaybook = "bootwright.core.task_infra_component_services_apply"
-	applyClusterInfraPlaybook    = "bootwright.core.task_machine_infra_apply"
+	applyClusterInstallPlaybook  = "bootwright.core.task_machine_infra_apply"
 	applyCreateISOPlaybook       = "bootwright.core.task_container_cluster_create_agent_iso"
 	applyBootMachinePlaybook     = "bootwright.core.task_container_cluster_boot_agent_machine"
 	applyWaitInstallPlaybook     = "bootwright.core.task_container_cluster_wait_agent_install"

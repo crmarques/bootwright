@@ -81,7 +81,7 @@ machine infrastructure, the managed load balancer (see
 machine-control integration (Redfish for bare metal or libvirt with emulated
 Redfish), and
 managed Squid (see [proxy.md](proxy.md)) when declared. The case's
-`provider.yaml` capabilities and `cluster-infra.yaml`'s
+`provider.yaml` capabilities and `cluster-machines.yaml`'s
 `components.<X>.from` references together decide which of these
 apply.
 
@@ -147,7 +147,7 @@ sudo tail -f "/var/lib/bootwright/contexts/$CASE/clusters/$CLUSTER/runtime/insta
 ```
 
 For node-side visibility, SSH to a booted control plane. The node IPs are the
-per-machine overrides in `cluster-infra.yaml` under
+per-machine overrides in `cluster-machines.yaml` under
 `spec.components.nodes[].network.overrides.interfaces[].ipv4.address[]`.
 Then watch the agent or bootkube journals:
 
