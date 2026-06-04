@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 func TestValidatePullSecret(t *testing.T) {
@@ -126,15 +127,9 @@ func TestReadUserPassFileMissingFile(t *testing.T) {
 
 func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 	secretsDir := t.TempDir()
-	for name, content := range map[string]string{
-		"pull":    `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		"ssh":     "PRIVATE\n",
-		"ssh.pub": "ssh-ed25519 AAAA generated\n",
-	} {
-		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
+	writeEncryptedSecret(t, secretsDir, "pull", secretstore.MaterialPrimary, `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`)
+	writeEncryptedSecret(t, secretsDir, "ssh", secretstore.MaterialSSHPrivate, "PRIVATE\n")
+	writeEncryptedSecret(t, secretsDir, "ssh", secretstore.MaterialSSHPublic, "ssh-ed25519 AAAA generated\n")
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -178,9 +173,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 
 func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 	secretsDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(secretsDir, "pull"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
-		t.Fatalf("write pull: %v", err)
-	}
+	writeEncryptedSecret(t, secretsDir, "pull", secretstore.MaterialPrimary, `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`)
 	sourceDir := t.TempDir()
 	for name, content := range map[string]string{
 		"admin.pub": "ssh-ed25519 AAAA public\n",
@@ -296,22 +289,14 @@ func TestMergeMirrorAuthRejectsEmptyRegistryURL(t *testing.T) {
 
 func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 	secretsDir := t.TempDir()
-	for name, content := range map[string]string{
-		"pull":         `{"auths":{"quay.io":{"auth":"ZXhpc3Q="}}}`,
-		"ssh":          "ssh-rsa AAAA test\n",
-		"mirror-creds": "mirror-user:mirror-pass\n",
-	} {
-		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
+	writeEncryptedSecret(t, secretsDir, "pull", secretstore.MaterialPrimary, `{"auths":{"quay.io":{"auth":"ZXhpc3Q="}}}`)
+	writeEncryptedSecret(t, secretsDir, "ssh", secretstore.MaterialSSHPublic, "ssh-rsa AAAA test\n")
+	writeEncryptedSecret(t, secretsDir, "mirror-creds", secretstore.MaterialPrimary, "mirror-user:mirror-pass\n")
 	mirrorTrust, err := fastTestCertificatePEM("registry.lab")
 	if err != nil {
 		t.Fatalf("generate mirror trust: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(secretsDir, "mirror-trust"), mirrorTrust, 0o600); err != nil {
-		t.Fatalf("write mirror trust: %v", err)
-	}
+	writeEncryptedSecretBytes(t, secretsDir, "mirror-trust", secretstore.MaterialPrimary, mirrorTrust)
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -470,5 +455,18 @@ func TestBakeProxyCredentials(t *testing.T) {
 				t.Fatalf("password round-trip got %q, want %q", pwd, tc.creds.Password)
 			}
 		})
+	}
+}
+
+func writeEncryptedSecret(t *testing.T, dir, name string, role secretstore.MaterialRole, content string) {
+	t.Helper()
+	writeEncryptedSecretBytes(t, dir, name, role, []byte(content))
+}
+
+func writeEncryptedSecretBytes(t *testing.T, dir, name string, role secretstore.MaterialRole, content []byte) {
+	t.Helper()
+	store := secretstore.NewContextStore("test", dir)
+	if err := store.Write(secretstore.MaterialKey{Name: name, Role: role}, content); err != nil {
+		t.Fatalf("write encrypted %s/%s: %v", name, role, err)
 	}
 }

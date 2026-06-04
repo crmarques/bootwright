@@ -15,6 +15,10 @@ import (
 // returns nil when proxy is Bootwright-managed: Bootwright provisions that
 // proxy, so bootstrap cannot route through a proxy that does not yet exist.
 func resolveProxyEnv(state v1alpha1.State, secretsDir string) (map[string]string, error) {
+	return resolveProxyEnvForContext("test", state, secretsDir)
+}
+
+func resolveProxyEnvForContext(contextName string, state v1alpha1.State, secretsDir string) (map[string]string, error) {
 	if proxy.IsManaged(state) {
 		return nil, nil
 	}
@@ -26,12 +30,8 @@ func resolveProxyEnv(state v1alpha1.State, secretsDir string) (map[string]string
 		}
 		authority := ""
 		if effectiveProxyEnvUsesCredentials(eff) {
-			path := resolvedSecretPath(eff.Auth.Name, &env, secretsDir)
-			read := secret.ReadUserPasswordFile
-			if secret.MaterialPathUsesExternalSource(eff.Auth.Name, &env, secret.MaterialPrimary) {
-				read = secret.ReadExternalUserPasswordFile
-			}
-			creds, err := read(path, "proxy credentials")
+			resolver := secret.NewResolver(contextName, secretsDir, &env)
+			creds, err := resolver.ReadUserPasswordMaterial(eff.Auth.Name, secret.MaterialPrimary, "proxy credentials")
 			if err != nil {
 				return nil, err
 			}

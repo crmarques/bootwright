@@ -75,7 +75,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if err != nil {
 			return failErr(1, err)
 		}
-		proxyEnv, err := resolveProxyEnv(state, ctx.SecretsDir)
+		proxyEnv, err := resolveProxyEnvForContext(ctx.Name, state, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

@@ -7,12 +7,24 @@ path, but never carries secret bytes.
 
 `Environment.spec.secrets` declares every secret source used by the loaded
 state. A scalar list item, or a single-key list item with an omitted/null
-value, is context-local material written under the current context secrets
-directory. `file:` points at operator-owned local material, and `generated:`
-describes material Bootwright can create under the context secrets directory.
-`Environment.spec.secretStorage.mode` defaults to `source`; `context` requires
-`bootwright secret materialize` before workflows read file-sourced entries
-from context storage.
+value, is context-local material written through the encrypted context secret
+store under the current context secrets directory. `file:` points at
+operator-owned local material, and `generated:` describes material Bootwright
+can create under the encrypted context store. `Environment.spec.secretStorage.mode`
+defaults to `source`; `context` requires `bootwright secret materialize` before
+workflows read encrypted context-local copies of file-sourced entries.
+
+The context secret store preserves the SecretRef/name UX and logical material
+paths (`<name>`, `<name>.key`, `<name>.pub`) but stores AES-256-GCM envelopes
+instead of plaintext bytes. The initial key provider is `root-owned-file`:
+Bootwright creates a hidden keyring under `secrets/.bootwright/` on the first
+context-local secret write, stores 32-byte keys in `keys/<key-id>.key`, and
+requires root-owned non-symlink regular files/directories with modes `0600`
+for files and `0700` for directories. Envelopes bind authenticated data to
+context name, secret name, material role, algorithm, key provider, and key ID.
+Normal reads must never fall back to plaintext; only
+`bootwright secret encryption migrate --yes` may consume existing plaintext
+context secret files and replace them with encrypted envelopes.
 
 Sensitive material includes pull secrets, SSH private keys, TLS private keys,
 BMC credentials, vCenter credentials, proxy credentials, mirror credentials,
@@ -87,7 +99,10 @@ Generated output boundaries are part of the safety contract:
 - User-authored YAML lives under
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Context-local secrets live under
-  `/var/lib/bootwright/contexts/<context>/secrets/`.
+  `/var/lib/bootwright/contexts/<context>/secrets/` as encrypted envelopes.
+  Short-lived plaintext copies for external tools may be materialized only
+  under per-run/task runtime directories with `0700` directories and `0600`
+  files, and must be removed after execution.
 - Managed ISO media lives under `/var/lib/bootwright/media/`. These files are
   host-local, root-managed, non-secret, and not versioned; licensed media such
   as RHEL ISOs must be supplied by the operator.

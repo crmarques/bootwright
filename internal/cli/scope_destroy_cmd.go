@@ -149,6 +149,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			RenderedDir:        ctx.RenderedDir,
 			ClustersDir:        clustersDir,
 			RunsDir:            ctx.RunsDir,
+			ContextName:        ctx.Name,
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,

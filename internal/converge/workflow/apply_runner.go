@@ -52,13 +52,13 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 	}
 	runner := runnerFactory(stdout, stderr)
 	now := time.Now()
-	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.SecretsDir, runID, task, now); err != nil {
+	if err := MarkClusterInstallTaskStarted(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	result, err := Run(ctx, taskOpts, runner, nil)
 	now = time.Now()
 	if err != nil {
-		if recordErr := MarkClusterInstallTaskFailed(opts.ClustersDir, opts.SecretsDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskFailed(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
 			err = fmt.Errorf("%w; additionally failed to record cluster install state: %v", err, recordErr)
 		}
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
@@ -74,7 +74,7 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		}
 	}
 	if !result.Skipped {
-		if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, opts.SecretsDir, runID, task, now); recordErr != nil {
+		if recordErr := MarkClusterInstallTaskSucceeded(opts.ClustersDir, opts.ContextName, opts.SecretsDir, runID, task, now); recordErr != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}

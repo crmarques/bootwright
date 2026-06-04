@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/render"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -150,15 +151,9 @@ func TestResolveInstallerWritesEffectiveFilesUnderClusterRuntimeDir(t *testing.T
 		t.Fatal(err)
 	}
 	secretsDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(secretsDir, "openshift-pull-secret"), []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(secretsDir, "sno-libvirt-cluster-admin-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(secretsDir, "proxy-credentials"), []byte("proxy:secret\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeEncryptedContextSecret(t, secretsDir, "openshift-pull-secret", secretstore.MaterialPrimary, []byte(`{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`))
+	writeEncryptedContextSecret(t, secretsDir, "sno-libvirt-cluster-admin-ssh-key", secretstore.MaterialSSHPublic, []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"))
+	writeEncryptedContextSecret(t, secretsDir, "proxy-credentials", secretstore.MaterialPrimary, []byte("proxy:secret\n"))
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)

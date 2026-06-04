@@ -176,10 +176,16 @@ func contextMaterialPath(name, secretsDir string, role MaterialRole) string {
 }
 
 func fallbackRole(role MaterialRole) MaterialRole {
-	if role == MaterialTLSKey {
+	switch role {
+	case MaterialTLSKey:
 		return MaterialTLSKey
+	case MaterialSSHPublic:
+		return MaterialSSHPublic
+	case MaterialSSHPrivate:
+		return MaterialSSHPrivate
+	default:
+		return MaterialPrimary
 	}
-	return MaterialPrimary
 }
 
 func sshPrivatePath(path string) string {

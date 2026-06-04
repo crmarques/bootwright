@@ -32,7 +32,7 @@ func newPrintEnvCmd(stdout io.Writer) *cobra.Command {
 		if proxyEnvRequiresSecrets(state) && !sensitive {
 			return failErr(1, errors.New("proxy credentials would be printed; rerun with --sensitive to export them"))
 		}
-		proxyEnv, err := resolveProxyEnv(state, ctx.SecretsDir)
+		proxyEnv, err := resolveProxyEnvForContext(ctx.Name, state, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

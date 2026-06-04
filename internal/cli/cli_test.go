@@ -1239,9 +1239,7 @@ func TestSecretListReportsUnreadableFileAsFailedEntry(t *testing.T) {
 
 func TestSecretShowPrintsRawContextSecret(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	if err := os.WriteFile(filepath.Join(ctx.SecretsDir, "manual-secret"), []byte("secret\nwith-newline\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeTestContextSecret(t, ctx.Name, ctx.SecretsDir, "manual-secret", secret.MaterialPrimary, []byte("secret\nwith-newline\n"))
 	stdout, stderr, code := runCLI(t, "secret", "show", "--name", "manual-secret")
 	if code != 0 {
 		t.Fatalf("secret show exited %d, stderr=%q", code, stderr)
@@ -1264,9 +1262,7 @@ func TestSecretShowRejectsInvalidName(t *testing.T) {
 
 func TestSecretDeleteDoesNotRequireValidDesiredState(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	if err := os.WriteFile(filepath.Join(ctx.SecretsDir, "manual-secret"), []byte("secret\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeTestContextSecret(t, ctx.Name, ctx.SecretsDir, "manual-secret", secret.MaterialPrimary, []byte("secret\n"))
 	if err := os.WriteFile(filepath.Join(ctx.InputDir, "environment.yaml"), []byte("not: [valid\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1276,6 +1272,65 @@ func TestSecretDeleteDoesNotRequireValidDesiredState(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(ctx.SecretsDir, "manual-secret")); !os.IsNotExist(err) {
 		t.Fatalf("manual-secret still exists or stat failed unexpectedly: %v", err)
+	}
+}
+
+func TestSecretEncryptionInitStatusMigrateRotate(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "secret", "encryption", "init")
+	if code != 0 {
+		t.Fatalf("secret encryption init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "secret", "encryption", "status", "--output", "json")
+	if code != 0 {
+		t.Fatalf("secret encryption status exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	var status secret.StoreStatus
+	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+		t.Fatalf("decode status: %v\n%s", err, stdout)
+	}
+	if !status.Initialized || status.KeyProvider != "root-owned-file" || status.ActiveKeyID == "" {
+		t.Fatalf("status = %+v, want initialized root-owned-file", status)
+	}
+
+	plainPath := filepath.Join(ctx.SecretsDir, "manual-secret")
+	if err := os.WriteFile(plainPath, []byte("plain\n"), 0o600); err != nil {
+		t.Fatalf("write plaintext fixture: %v", err)
+	}
+	_, stderr, code = runCLI(t, "secret", "show", "--name", "manual-secret")
+	if code == 0 || !strings.Contains(stderr, "not found") {
+		t.Fatalf("secret show before migrate code=%d stderr=%q", code, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "secret", "encryption", "migrate", "--yes")
+	if code != 0 {
+		t.Fatalf("secret encryption migrate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	got, err := secret.NewContextStore(ctx.Name, ctx.SecretsDir).Read(secret.MaterialKey{Name: "manual-secret", Role: secret.MaterialPrimary})
+	if err != nil {
+		t.Fatalf("read migrated secret: %v", err)
+	}
+	if string(got) != "plain\n" {
+		t.Fatalf("migrated secret = %q", got)
+	}
+	rawEnvelope, err := os.ReadFile(plainPath)
+	if err != nil {
+		t.Fatalf("read migrated envelope: %v", err)
+	}
+	if bytes.Contains(rawEnvelope, []byte("plain")) {
+		t.Fatalf("migrated envelope leaked plaintext")
+	}
+	before := secret.NewContextStore(ctx.Name, ctx.SecretsDir).Status().ActiveKeyID
+	stdout, stderr, code = runCLI(t, "secret", "encryption", "rotate", "--yes")
+	if code != 0 {
+		t.Fatalf("secret encryption rotate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	after := secret.NewContextStore(ctx.Name, ctx.SecretsDir).Status().ActiveKeyID
+	if before == after {
+		t.Fatalf("active key did not rotate: %s", before)
+	}
+	got, err = secret.NewContextStore(ctx.Name, ctx.SecretsDir).Read(secret.MaterialKey{Name: "manual-secret", Role: secret.MaterialPrimary})
+	if err != nil || string(got) != "plain\n" {
+		t.Fatalf("read rotated secret = %q err=%v", got, err)
 	}
 }
 
@@ -1842,7 +1897,7 @@ func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
 		t.Fatalf("secret set --raw-file exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	target := filepath.Join(ctx.SecretsDir, "shared-ceph-external-details")
-	got, err := os.ReadFile(target)
+	got, err := secret.NewContextStore(ctx.Name, ctx.SecretsDir).Read(secret.MaterialKey{Name: "shared-ceph-external-details", Role: secret.MaterialPrimary})
 	if err != nil {
 		t.Fatalf("read raw secret: %v", err)
 	}
@@ -3004,14 +3059,22 @@ func TestApplyContainerClusterBlocksInstallMismatchBeforeRuntimeInstallerRewrite
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatalf("mkdir ssh dir: %v", err)
 	}
+	for _, item := range []struct {
+		name string
+		role secret.MaterialRole
+		body string
+	}{
+		{name: "openshift-pull-secret", role: secret.MaterialPrimary, body: `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`},
+		{name: "3-nodes-ocp-baremetal-cluster-admin-ssh-key", role: secret.MaterialSSHPrivate, body: "fake-private-key\n"},
+		{name: "3-nodes-ocp-baremetal-cluster-admin-ssh-key", role: secret.MaterialSSHPublic, body: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n"},
+		{name: "bmc-credentials", role: secret.MaterialPrimary, body: "admin:password\n"},
+		{name: "proxy-credentials", role: secret.MaterialPrimary, body: "proxy:password\n"},
+	} {
+		writeTestContextSecret(t, ctx.Name, ctx.SecretsDir, item.name, item.role, []byte(item.body))
+	}
 	secrets := map[string]string{
-		filepath.Join(ctx.SecretsDir, "openshift-pull-secret"):                           `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		filepath.Join(ctx.SecretsDir, "3-nodes-ocp-baremetal-cluster-admin-ssh-key"):     "fake-private-key\n",
-		filepath.Join(ctx.SecretsDir, "3-nodes-ocp-baremetal-cluster-admin-ssh-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
-		filepath.Join(ctx.SecretsDir, "bmc-credentials"):                                 "admin:password\n",
-		filepath.Join(ctx.SecretsDir, "proxy-credentials"):                               "proxy:password\n",
-		filepath.Join(sshDir, "bootwright-ssh-key"):                                      "fake-private-key\n",
-		filepath.Join(sshDir, "bootwright-ssh-key.pub"):                                  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
+		filepath.Join(sshDir, "bootwright-ssh-key"):     "fake-private-key\n",
+		filepath.Join(sshDir, "bootwright-ssh-key.pub"): "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForApplyTest\n",
 	}
 	for path, body := range secrets {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -3146,6 +3209,14 @@ func TestApplyDryRunJSONIncludesParallelNodeBootTasks(t *testing.T) {
 	}
 	if len(wait.Dependencies) != 1 || wait.Dependencies[0] != "boot.3-nodes-ocp-baremetal" {
 		t.Fatalf("wait deps = %v, want boot.3-nodes-ocp-baremetal", wait.Dependencies)
+	}
+}
+
+func writeTestContextSecret(t *testing.T, contextName, secretsDir, name string, role secret.MaterialRole, data []byte) {
+	t.Helper()
+	store := secret.NewContextStore(contextName, secretsDir)
+	if err := store.Write(secret.MaterialKey{Name: name, Role: role}, data); err != nil {
+		t.Fatalf("write encrypted %s/%s: %v", name, role, err)
 	}
 }
 

@@ -9,8 +9,8 @@ Desired-state YAML references secret material **by name only**. Bytes
 live outside the repo. Three sources are supported per name:
 
 - Scalar list item, or a single-key list item with an omitted/null value -
-  context-local bytes written with `bootwright secret set` under the current
-  context secrets directory.
+  context-local bytes written with `bootwright secret set` into the encrypted
+  current context secret store.
 - `file:` — operator-supplied bytes that already exist at a declared
   path. The path is local to the bastion.
 - `generated:` — bytes Bootwright produces via `bootwright secret
@@ -90,7 +90,10 @@ Bytes live under the root-managed Bootwright context directory:
 | Secrets dir | `/var/lib/bootwright/contexts/<context-name>/secrets` |
 
 The secrets directory must be host-local, unversioned, mode `0700`, and
-individual files mode `0600`.
+individual files mode `0600`. Context-local material is encrypted at rest with
+AES-256-GCM envelopes. Bootwright auto-initializes a `root-owned-file` keyring
+under `secrets/.bootwright/` on the first context-local write; the key files
+are host-local, unversioned, non-symlink regular files with mode `0600`.
 
 ## Writing secrets
 
@@ -106,6 +109,10 @@ individual files mode `0600`.
 | Print one local secret as raw bytes | `bootwright secret show --name <name>` |
 | Print generated SSH public key | `bootwright secret show --name <name> --part public` |
 | Delete local material | `bootwright secret delete <name> --yes` |
+| Initialize encryption explicitly | `bootwright secret encryption init` |
+| Inspect encryption status | `bootwright secret encryption status` |
+| Migrate old plaintext context files | `bootwright secret encryption migrate --yes` |
+| Rotate the active context key | `bootwright secret encryption rotate --yes` |
 
 After a successful cluster install, Bootwright stores the kubeadmin password at
 `clusters/<cluster>/secrets/kubeadmin-password`.
@@ -124,23 +131,32 @@ under `~/.ssh`, must already exist at their declared paths before they can be
 copied.
 
 `bootwright secret show` reads only context-local secret files. It does not
-read external `file:` sources.
+read external `file:` sources. It decrypts only the requested material.
 
 `bootwright print-env` exports `BOOTWRIGHT_CONTEXT` and proxy environment variables.
 When proxy credentials would be embedded in those exports, rerun it as
 `bootwright print-env --sensitive` and avoid recording the shell output.
 
-## Format on disk
+## Logical Material
 
-| Secret kind | File contents |
+The same logical paths are used for encrypted context material:
+
+| Secret kind | Logical path |
 | --- | --- |
-| Pull secret | JSON as downloaded from console.redhat.com |
-| Node SSH public key | OpenSSH public key |
-| Provider host SSH key | OpenSSH private key |
-| Generated SSH key pair | OpenSSH private key in `<name>` and public key in `<name>.pub` |
-| BMC / proxy credentials | One `username:password\n` line — sushy-emulator and Squid htpasswd files are derived from this at apply time and never committed |
-| Self-signed cert + key | PEM cert and PEM key written by `bootwright secret generate` |
-| TLS pair | PEM certificate chain in `<name>` and unencrypted PEM private key in `<name>.key` |
+| Pull secret | `<name>` |
+| Node SSH public key | `<name>.pub` |
+| Provider host SSH key | `<name>` |
+| Generated SSH key pair | private key in `<name>` and public key in `<name>.pub` |
+| BMC / proxy credentials | `<name>` |
+| Self-signed cert + key | cert in `<name>` and key in `<name>.key` |
+| TLS pair | certificate chain in `<name>` and private key in `<name>.key` |
+
+On disk, those files contain JSON encryption envelopes with version,
+algorithm, key provider, key ID, context, secret name, material role, nonce,
+ciphertext, and `kdf: none`. Plaintext context files are blocked during normal
+reads; run `bootwright secret encryption migrate --yes` once to replace old
+plaintext files with encrypted envelopes. External `file:` sources remain
+operator-owned files at their declared paths.
 
 ## What never appears in YAML or logs
 

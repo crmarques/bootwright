@@ -173,7 +173,7 @@ func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRec
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
+func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -183,7 +183,7 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, secrets
 		if !stateHasContainerCluster(state, name) {
 			continue
 		}
-		hash, err := clusterInstallDesiredHash(state, name, secretsDir)
+		hash, err := clusterInstallDesiredHashForContext(contextName, state, name, secretsDir)
 		if err != nil {
 			return out, err
 		}
@@ -284,7 +284,7 @@ func resumeClusterInstallTasks(tasks []ApplyTask, record ClusterInstallRecord, n
 	}
 }
 
-func MarkClusterInstallTaskStarted(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -292,7 +292,7 @@ func MarkClusterInstallTaskStarted(clustersDir, secretsDir, runID string, task A
 	if !stateHasContainerCluster(task.State, task.Entry.Cluster) {
 		return nil
 	}
-	hash, err := clusterInstallDesiredHash(task.State, task.Entry.Cluster, secretsDir)
+	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func MarkClusterInstallTaskStarted(clustersDir, secretsDir, runID string, task A
 	return nil
 }
 
-func MarkClusterInstallTaskSucceeded(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskSuccessPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -333,7 +333,7 @@ func MarkClusterInstallTaskSucceeded(clustersDir, secretsDir, runID string, task
 	if !found {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
-	hash, err := clusterInstallDesiredHash(task.State, task.Entry.Cluster, secretsDir)
+	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
@@ -360,7 +360,7 @@ func MarkClusterInstallTaskSucceeded(clustersDir, secretsDir, runID string, task
 	return nil
 }
 
-func MarkClusterInstallTaskFailed(clustersDir, secretsDir, runID string, task ApplyTask, now time.Time) error {
+func MarkClusterInstallTaskFailed(clustersDir, contextName, secretsDir, runID string, task ApplyTask, now time.Time) error {
 	phase, ok := clusterInstallTaskStartPhase(task.Entry.Kind)
 	if !ok || task.Entry.Cluster == "" {
 		return nil
@@ -375,7 +375,7 @@ func MarkClusterInstallTaskFailed(clustersDir, secretsDir, runID string, task Ap
 	if !found {
 		record = ClusterInstallRecord{Cluster: task.Entry.Cluster, StartedAt: now.UTC()}
 	}
-	hash, err := clusterInstallDesiredHash(task.State, task.Entry.Cluster, secretsDir)
+	hash, err := clusterInstallDesiredHashForContext(contextName, task.State, task.Entry.Cluster, secretsDir)
 	if err != nil {
 		return err
 	}
@@ -423,6 +423,11 @@ func clusterInstallPhaseMayHaveBooted(phase ClusterInstallPhase) bool {
 }
 
 func clusterInstallDesiredHash(state v1alpha1.State, clusterName, secretsDir string) (string, error) {
+	return clusterInstallDesiredHashForContext("test", state, clusterName, secretsDir)
+}
+
+func clusterInstallDesiredHashForContext(contextName string, state v1alpha1.State, clusterName, secretsDir string) (string, error) {
+	contextName = effectiveContextName(contextName)
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
 	if len(clusterState.ContainerClusters) != 1 {
 		return "", fmt.Errorf("ContainerCluster/%s does not resolve to exactly one selected cluster", clusterName)
@@ -436,7 +441,7 @@ func clusterInstallDesiredHash(state v1alpha1.State, clusterName, secretsDir str
 	if err != nil {
 		return "", err
 	}
-	secretInputs, err := render.InstallerSecretInputStats(clusterState, ocp, secretsDir)
+	secretInputs, err := render.InstallerSecretInputStatsForContext(contextName, clusterState, ocp, secretsDir)
 	if err != nil {
 		return "", err
 	}

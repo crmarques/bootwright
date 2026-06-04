@@ -241,6 +241,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			RenderedDir:        ctx.RenderedDir,
 			ClustersDir:        clustersDir,
 			RunsDir:            ctx.RunsDir,
+			ContextName:        ctx.Name,
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
@@ -286,7 +287,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
-			if _, err := workflow.ResolveInstaller(clustersDir, ctx.SecretsDir, plan.state); err != nil {
+			if _, err := workflow.ResolveInstallerForContext(ctx.Name, clustersDir, ctx.SecretsDir, plan.state); err != nil {
 				return failErr(1, err)
 			}
 		}

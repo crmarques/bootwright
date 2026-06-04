@@ -112,7 +112,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	}
 
 	if stateLoaded {
-		printSecretStatus(p, ctx.SecretsDir, state)
+		printSecretStatus(p, ctx.Name, ctx.SecretsDir, state)
 		printClusterStatus(p, state, ctx.RenderedDir, ctx.ClustersDir)
 		printSharedStatus(p, state)
 	}
@@ -122,7 +122,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	p.Section("Next steps")
 	var items []cliout.Item
-	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.SecretsDir)
+	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
 		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
 		hints = ledgerNextSteps(ledger, activity, hints)
@@ -234,8 +234,8 @@ func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
 	}
 }
 
-func printSecretStatus(p *cliout.Printer, secretsDir string, state v1alpha1.State) {
-	entries, err := declaredSecretEntries(secretsDir, state)
+func printSecretStatus(p *cliout.Printer, contextName, secretsDir string, state v1alpha1.State) {
+	entries, err := declaredSecretEntriesForContext(contextName, secretsDir, state)
 	if err != nil {
 		p.Section("Secret material")
 		p.Status(cliout.StatusFail, "declared secrets", err.Error())
@@ -258,10 +258,10 @@ func printSecretStatus(p *cliout.Printer, secretsDir string, state v1alpha1.Stat
 	}
 }
 
-func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, secretsDir string) []string {
+func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretsDir string) []string {
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
-		hints = append(hints, secretNextStepHints(state, secretsDir)...)
+		hints = append(hints, secretNextStepHints(state, contextName, secretsDir)...)
 		hints = append(hints, "bootwright apply bastion --yes", "bootwright check all", "bootwright render effective")
 		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
@@ -283,8 +283,8 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 	}
 }
 
-func secretNextStepHints(state v1alpha1.State, secretsDir string) []string {
-	entries, err := declaredSecretEntries(secretsDir, state)
+func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) []string {
+	entries, err := declaredSecretEntriesForContext(contextName, secretsDir, state)
 	if err != nil {
 		return nil
 	}

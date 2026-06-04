@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
@@ -36,8 +37,8 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	}
 	privatePath := filepath.Join(secretsDir, "demo-cluster-admin-ssh-key")
 	publicPath := privatePath + ".pub"
-	privateBody := readTestFile(t, privatePath)
-	publicBody := readTestFile(t, publicPath)
+	privateBody := readTestSecret(t, secretsDir, "demo-cluster-admin-ssh-key", secretstore.MaterialSSHPrivate)
+	publicBody := readTestSecret(t, secretsDir, "demo-cluster-admin-ssh-key", secretstore.MaterialSSHPublic)
 	if !strings.Contains(privateBody, "OPENSSH PRIVATE KEY") {
 		t.Fatalf("private key missing OpenSSH header:\n%s", privateBody)
 	}
@@ -54,7 +55,7 @@ func TestMaterializeGeneratedSSHKeyPair(t *testing.T) {
 	if len(results) != 1 || !strings.Contains(results[0].action, "reused existing SSH key pair") {
 		t.Fatalf("second results = %+v", results)
 	}
-	if got := readTestFile(t, privatePath); got != privateBody {
+	if got := readTestSecret(t, secretsDir, "demo-cluster-admin-ssh-key", secretstore.MaterialSSHPrivate); got != privateBody {
 		t.Fatal("second materialize rewrote private key")
 	}
 }
@@ -96,10 +97,10 @@ func TestMaterializeCopiesSSHFileSourcesInContextMode(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two SSH key copies", results)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key")); got != "PRIVATE\n" {
+	if got := readTestSecret(t, secretsDir, "cluster-cluster-admin-ssh-key", secretstore.MaterialSSHPrivate); got != "PRIVATE\n" {
 		t.Fatalf("private copy = %q", got)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key.pub")); got != "ssh-ed25519 AAAA test\n" {
+	if got := readTestSecret(t, secretsDir, "cluster-cluster-admin-ssh-key", secretstore.MaterialSSHPublic); got != "ssh-ed25519 AAAA test\n" {
 		t.Fatalf("public copy = %q", got)
 	}
 	assertTestFileMode(t, filepath.Join(secretsDir, "cluster-cluster-admin-ssh-key"), 0o600)
@@ -147,10 +148,10 @@ func TestMaterializeCopiesSplitNodeSSHFileSources(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two SSH key copies", results)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-private")); got != "PRIVATE\n" {
+	if got := readTestSecret(t, secretsDir, "cluster-admin-private", secretstore.MaterialSSHPrivate); got != "PRIVATE\n" {
 		t.Fatalf("private copy = %q", got)
 	}
-	if got := readTestFile(t, filepath.Join(secretsDir, "cluster-admin-public.pub")); got != "ssh-ed25519 AAAA split\n" {
+	if got := readTestSecret(t, secretsDir, "cluster-admin-public", secretstore.MaterialSSHPublic); got != "ssh-ed25519 AAAA split\n" {
 		t.Fatalf("public copy = %q", got)
 	}
 }
@@ -191,6 +192,15 @@ func readTestFile(t *testing.T, path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func readTestSecret(t *testing.T, secretsDir, name string, role secretstore.MaterialRole) string {
+	t.Helper()
+	data, err := secretstore.NewContextStore("test", secretsDir).Read(secretstore.MaterialKey{Name: name, Role: role})
+	if err != nil {
+		t.Fatalf("read encrypted %s/%s: %v", name, role, err)
 	}
 	return string(data)
 }

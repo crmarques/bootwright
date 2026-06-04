@@ -26,6 +26,7 @@ func newSecretCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Co
 		newSecretListCmd(stdout),
 		newSecretShowCmd(stdout),
 		newSecretDeleteCmd(stdin, stdout),
+		newSecretEncryptionCmd(stdin, stdout),
 	)
 	requireSubcommand(cmd)
 	return cmd

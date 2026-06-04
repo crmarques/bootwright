@@ -58,6 +58,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			RenderedDir:        ctx.RenderedDir,
 			ClustersDir:        clustersDir,
 			RunsDir:            ctx.RunsDir,
+			ContextName:        ctx.Name,
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,

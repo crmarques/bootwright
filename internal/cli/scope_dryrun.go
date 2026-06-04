@@ -82,6 +82,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		RenderedDir:        ctx.RenderedDir,
 		ClustersDir:        clustersDir,
 		RunsDir:            ctx.RunsDir,
+		ContextName:        ctx.Name,
 		SecretsDir:         ctx.SecretsDir,
 		ManagedServicesDir: ctx.ManagedServicesDir,
 		ProviderStateDir:   ctx.ProviderStateDir,

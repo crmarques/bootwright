@@ -309,6 +309,10 @@ func VerifySelfSignedCertificateMatchesRequest(certPath string, source v1alpha1.
 	if err != nil {
 		return fmt.Errorf("read certificate: %w", err)
 	}
+	return VerifySelfSignedCertificateBytesMatchRequest(data, source)
+}
+
+func VerifySelfSignedCertificateBytesMatchRequest(data []byte, source v1alpha1.SelfSignedCertificateSpec) error {
 	block, _ := pem.Decode(data)
 	if block == nil {
 		return fmt.Errorf("certificate is not PEM-encoded")

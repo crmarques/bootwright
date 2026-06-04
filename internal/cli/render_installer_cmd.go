@@ -63,7 +63,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 		var resolved render.Result
 		hasResolved := false
 		if sensitive {
-			resolved, err = workflow.ResolveInstaller(clustersDir, ctx.SecretsDir, state)
+			resolved, err = workflow.ResolveInstallerForContext(ctx.Name, clustersDir, ctx.SecretsDir, state)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -100,7 +100,7 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	if err != nil {
 		return failErr(1, fmt.Errorf("resolve --output-dir %s: %w", outputDir, err))
 	}
-	result, err := workflow.RenderToolInputs(outputDir, ctx.SecretsDir, state)
+	result, err := workflow.RenderToolInputsForContext(ctx.Name, outputDir, ctx.SecretsDir, state)
 	if err != nil {
 		return failErr(1, err)
 	}

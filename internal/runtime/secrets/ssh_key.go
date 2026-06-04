@@ -45,6 +45,10 @@ func VerifySSHKeyPairPublicMatchesRequest(publicPath string, source v1alpha1.Gen
 	if err != nil {
 		return fmt.Errorf("read SSH public key: %w", err)
 	}
+	return VerifySSHKeyPairPublicBytesMatchRequest(data, source)
+}
+
+func VerifySSHKeyPairPublicBytesMatchRequest(data []byte, source v1alpha1.GeneratedSSHKeyPairSpec) error {
 	fields := strings.Fields(strings.TrimSpace(string(data)))
 	if len(fields) < 2 {
 		return errors.New("SSH public key must use authorized_keys format")

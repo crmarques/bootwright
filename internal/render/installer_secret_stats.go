@@ -18,7 +18,12 @@ type InstallerSecretInputStat struct {
 }
 
 func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
+	return InstallerSecretInputStatsForContext("test", state, ocp, secretsDir)
+}
+
+func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
 	env := primaryEnvironment(state)
+	resolver := secret.NewResolver(contextName, secretsDir, env)
 	refs := installerSecretRefs(state, ocp, env)
 	out := make([]InstallerSecretInputStat, 0, len(refs))
 	seen := map[string]bool{}
@@ -38,11 +43,7 @@ func InstallerSecretInputStats(state v1alpha1.State, ocp v1alpha1.ContainerClust
 			continue
 		}
 		seen[key] = true
-		stat := secret.Stat
-		if secret.MaterialPathUsesExternalSource(ref.name, env, ref.role()) {
-			stat = secret.StatExternalFile
-		}
-		info, err := stat(path)
+		info, err := resolver.StatMaterial(ref.name, ref.role())
 		if err != nil {
 			return nil, fmt.Errorf("%s %s at %s: %w", ocp.Metadata.Name, ref.label, path, err)
 		}

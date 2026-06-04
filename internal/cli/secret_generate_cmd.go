@@ -27,7 +27,7 @@ func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		return runSecretMaterialize(stdout, "secret generate", ctx.SecretsDir, state, secretMaterializeOptions{Generated: true}, cliout.StatusSkip)
+		return runSecretMaterialize(stdout, "secret generate", ctx.Name, ctx.SecretsDir, state, secretMaterializeOptions{Generated: true}, cliout.StatusSkip)
 	}
 	return cmd
 }

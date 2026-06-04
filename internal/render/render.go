@@ -186,17 +186,25 @@ func ensureLocalDir(fs FileSystem, dir string) error {
 // Placeholder copies under the rendered installer dir are left untouched.
 // Uses the default os-backed FileSystem; tests use ResolveInstallerOn.
 func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
-	return ResolveInstallerOn(defaultFS, clustersDir, secretsDir, state)
+	return ResolveInstallerForContext("test", clustersDir, secretsDir, state)
+}
+
+func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ResolveInstallerOnForContext(defaultFS, contextName, clustersDir, secretsDir, state)
 }
 
 // ResolveInstallerOn is ResolveInstaller parameterised on FileSystem so
 // tests can assert mode invariants on the secret-inlined work-dir
 // writes without touching disk. Production callers use ResolveInstaller.
 func ResolveInstallerOn(fs FileSystem, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ResolveInstallerOnForContext(fs, "test", clustersDir, secretsDir, state)
+}
+
+func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{InstallerAssets: InstallerAssets(clustersDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+		secrets, err := LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
@@ -232,14 +240,22 @@ func runtimeInstallerDirs(asset InstallerAsset) []string {
 }
 
 func ToolInputs(outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ToolInputsForContext("test", outputDir, secretsDir, state)
+}
+
+func ToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	cleanOutputDir, err := managedroot.Ensure(outputDir, localDirMode)
 	if err != nil {
 		return Result{}, err
 	}
-	return ToolInputsOn(defaultFS, cleanOutputDir, secretsDir, state)
+	return ToolInputsOnForContext(defaultFS, contextName, cleanOutputDir, secretsDir, state)
 }
 
 func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return ToolInputsOnForContext(fs, "test", outputDir, secretsDir, state)
+}
+
+func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	result := Result{
 		EffectiveStatePath: filepath.Join(outputDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(outputDir, "bootwright.lock.yaml"),
@@ -277,7 +293,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 	}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		secrets, err := LoadInstallerSecrets(state, ocp, secretsDir)
+		secrets, err := LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
@@ -299,7 +315,7 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 			return result, err
 		}
 	}
-	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{ExternalDetailsSecretsDir: secretsDir}); err != nil {
+	if err := writeStorageAssets(fs, result.StorageAssets, state, storageAssetWriteOptions{ContextName: contextName, ExternalDetailsSecretsDir: secretsDir}); err != nil {
 		return result, err
 	}
 	return result, nil

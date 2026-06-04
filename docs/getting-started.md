@@ -173,6 +173,7 @@ secrets directory. Run the commands that match the names declared in
 bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pull-secret.json"
 bootwright secret generate
 bootwright secret materialize
+bootwright secret encryption status
 bootwright host trust
 bootwright secret list
 bootwright context validate
@@ -182,6 +183,9 @@ Get the OpenShift pull secret from
 `https://console.redhat.com/openshift/install/pull-secret`. Prefer
 `--password-stdin` for credentials on shared shells; `--password` is useful
 when credentials already come from protected environment variables.
+Context-local secrets are encrypted at rest automatically; `secret encryption
+status` shows the root-owned-file keyring and whether any old plaintext files
+still need `secret encryption migrate --yes`.
 
 For non-generated credentials declared by your desired state, use `secret set`
 with a protected input source:

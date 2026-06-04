@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/fs"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
@@ -122,20 +120,20 @@ provides. Use --generate for test fixtures.`,
 		}
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if pullSecret != "" {
-			return runSecretSetPullSecret(stdout, name, pullSecret, ctx.SecretsDir)
+			return runSecretSetPullSecret(stdout, name, pullSecret, ctx.Name, ctx.SecretsDir)
 		}
 		if tlsCert != "" {
-			return runSecretSetTLS(stdout, name, tlsCert, tlsKey, ctx.SecretsDir)
+			return runSecretSetTLS(stdout, name, tlsCert, tlsKey, ctx.Name, ctx.SecretsDir)
 		}
 		if rawFile != "" {
-			return runSecretSetRawFile(stdout, name, rawFile, ctx.SecretsDir)
+			return runSecretSetRawFile(stdout, name, rawFile, ctx.Name, ctx.SecretsDir)
 		}
-		return runSecretSetCredentials(c, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.SecretsDir)
+		return runSecretSetCredentials(c, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.Name, ctx.SecretsDir)
 	}
 	return cmd
 }
 
-func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, secretsDir string) error {
+func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, contextName, secretsDir string) error {
 	certData, err := os.ReadFile(certFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read TLS certificate file %s: %w", certFile, err))
@@ -147,26 +145,21 @@ func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, secretsDir strin
 	if _, err := secret.ValidateTLSCertificateKey(certData, keyData); err != nil {
 		return failErr(1, err)
 	}
-	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
-	}
-	if err := os.Chmod(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
-	}
-	certTarget := filepath.Join(secretsDir, name)
-	keyTarget := certTarget + ".key"
-	certExists, err := safefs.RegularFileExists(certTarget)
+	store := secret.NewContextStore(contextName, secretsDir)
+	certKey := secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}
+	tlsKey := secret.MaterialKey{Name: name, Role: secret.MaterialTLSKey}
+	certExists, err := store.Exists(certKey)
 	if err != nil {
 		return failErr(1, err)
 	}
-	keyExists, err := safefs.RegularFileExists(keyTarget)
+	keyExists, err := store.Exists(tlsKey)
 	if err != nil {
 		return failErr(1, err)
 	}
-	if err := safefs.AtomicWriteFile(certTarget, certData, 0o600); err != nil {
+	if err := store.Write(certKey, certData); err != nil {
 		return failErr(1, err)
 	}
-	if err := safefs.AtomicWriteFile(keyTarget, keyData, 0o600); err != nil {
+	if err := store.Write(tlsKey, keyData); err != nil {
 		return failErr(1, err)
 	}
 	action := "wrote"
@@ -175,11 +168,11 @@ func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, secretsDir strin
 	}
 	p := output.New(stdout)
 	p.Command("secret set")
-	p.Summary(output.StatusOK, name, fmt.Sprintf("%s TLS certificate and key at %s and %s", action, certTarget, keyTarget))
+	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted TLS certificate and key under %s", action, secretsDir))
 	return nil
 }
 
-func runSecretSetPullSecret(stdout io.Writer, name, fromFile, secretsDir string) error {
+func runSecretSetPullSecret(stdout io.Writer, name, fromFile, contextName, secretsDir string) error {
 	data, err := os.ReadFile(fromFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read pull secret file %s: %w", fromFile, err))
@@ -187,18 +180,13 @@ func runSecretSetPullSecret(stdout io.Writer, name, fromFile, secretsDir string)
 	if err := secret.ValidatePullSecretJSON(data); err != nil {
 		return failErr(1, err)
 	}
-	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
-	}
-	if err := os.Chmod(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
-	}
-	target := filepath.Join(secretsDir, name)
-	exists, err := safefs.RegularFileExists(target)
+	store := secret.NewContextStore(contextName, secretsDir)
+	key := secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}
+	exists, err := store.Exists(key)
 	if err != nil {
 		return failErr(1, err)
 	}
-	if err := safefs.AtomicWriteFile(target, data, 0o600); err != nil {
+	if err := store.Write(key, data); err != nil {
 		return failErr(1, err)
 	}
 	action := "wrote"
@@ -207,27 +195,22 @@ func runSecretSetPullSecret(stdout io.Writer, name, fromFile, secretsDir string)
 	}
 	p := output.New(stdout)
 	p.Command("secret set")
-	p.Summary(output.StatusOK, name, fmt.Sprintf("%s pull secret at %s", action, target))
+	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted pull secret under %s", action, secretsDir))
 	return nil
 }
 
-func runSecretSetRawFile(stdout io.Writer, name, fromFile, secretsDir string) error {
+func runSecretSetRawFile(stdout io.Writer, name, fromFile, contextName, secretsDir string) error {
 	data, err := os.ReadFile(fromFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read raw secret file %s: %w", fromFile, err))
 	}
-	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
-	}
-	if err := os.Chmod(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
-	}
-	target := filepath.Join(secretsDir, name)
-	exists, err := safefs.RegularFileExists(target)
+	store := secret.NewContextStore(contextName, secretsDir)
+	key := secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}
+	exists, err := store.Exists(key)
 	if err != nil {
 		return failErr(1, err)
 	}
-	if err := safefs.AtomicWriteFile(target, data, 0o600); err != nil {
+	if err := store.Write(key, data); err != nil {
 		return failErr(1, err)
 	}
 	action := "wrote"
@@ -236,11 +219,11 @@ func runSecretSetRawFile(stdout io.Writer, name, fromFile, secretsDir string) er
 	}
 	p := output.New(stdout)
 	p.Command("secret set")
-	p.Summary(output.StatusOK, name, fmt.Sprintf("%s raw secret at %s", action, target))
+	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted raw secret under %s", action, secretsDir))
 	return nil
 }
 
-func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile, username, password string, passwordStdin, generate bool, secretsDir string) error {
+func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile, username, password string, passwordStdin, generate bool, contextName, secretsDir string) error {
 	var resolvedUser, resolvedPass string
 	switch {
 	case fromFile != "":
@@ -288,26 +271,21 @@ func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile,
 	if resolvedPass == "" {
 		return failErr(1, errors.New("password must not be empty"))
 	}
-	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("create secrets directory %s: %w", secretsDir, err))
-	}
-	if err := os.Chmod(secretsDir, 0o700); err != nil {
-		return failErr(1, fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err))
-	}
-	target := filepath.Join(secretsDir, name)
-	exists, err := safefs.RegularFileExists(target)
+	store := secret.NewContextStore(contextName, secretsDir)
+	key := secret.MaterialKey{Name: name, Role: secret.MaterialPrimary}
+	exists, err := store.Exists(key)
 	if err != nil {
 		return failErr(1, err)
 	}
 	payload := []byte(resolvedUser + ":" + resolvedPass + "\n")
-	if err := safefs.AtomicWriteFile(target, payload, 0o600); err != nil {
+	if err := store.Write(key, payload); err != nil {
 		return failErr(1, err)
 	}
 	action := "wrote"
 	if exists {
 		action = "updated"
 	}
-	message := fmt.Sprintf("%s credentials at %s (user %q)", action, target, resolvedUser)
+	message := fmt.Sprintf("%s encrypted credentials under %s (user %q)", action, secretsDir, resolvedUser)
 	if generate {
 		message += " — password generated; copy it from the file above before sharing"
 	}

@@ -33,7 +33,13 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 	}
 	taskRoot := filepath.Join(runsDir, "history", runID, "tasks", task.Entry.ID)
 	renderDir := filepath.Join(taskRoot, "rendered")
-	result, err := render.All(renderDir, opts.ClustersDir, opts.SecretsDir, task.State)
+	runtimeSecretsDir := filepath.Join(taskRoot, "runtime", "secrets")
+	contextName := effectiveContextName(opts.ContextName)
+	if err := secret.NewContextStore(contextName, opts.SecretsDir).MaterializeRuntime(runtimeSecretsDir); err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
+	defer os.RemoveAll(runtimeSecretsDir)
+	result, err := render.All(renderDir, opts.ClustersDir, runtimeSecretsDir, task.State)
 	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
@@ -50,7 +56,9 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 	sshRunner := sshRunnerFactory(stdout, stderr)
 	if err := writeStorageAttachmentExternalDetails(ctx, asset.ExternalClusterDetailsPath, task.State, *task.StorageAttachment, storageAttachmentExternalDetailsOptions{
 		ClustersDir:        opts.ClustersDir,
-		SecretsDir:         opts.SecretsDir,
+		ContextName:        contextName,
+		ContextSecretsDir:  opts.SecretsDir,
+		SecretsDir:         runtimeSecretsDir,
 		TaskRoot:           taskRoot,
 		BundleDir:          opts.BundleDir,
 		Executable:         opts.Executable,
@@ -78,6 +86,8 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 
 type storageAttachmentExternalDetailsOptions struct {
 	ClustersDir        string
+	ContextName        string
+	ContextSecretsDir  string
 	SecretsDir         string
 	TaskRoot           string
 	BundleDir          string
@@ -103,7 +113,7 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 	}
 	attachment := render.StorageAttachment{Binding: binding, Addon: plan.Addon, Input: input}
 	if fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export); fromSecret != "" {
-		detailsJSON, err := datafoundation.LoadExternalDetailsSecretJSON(state, opts.SecretsDir, fromSecret)
+		detailsJSON, err := datafoundation.LoadExternalDetailsSecretJSONForContext(opts.ContextName, state, opts.ContextSecretsDir, fromSecret)
 		if err != nil {
 			return err
 		}

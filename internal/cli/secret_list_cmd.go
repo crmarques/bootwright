@@ -46,7 +46,7 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		entries, err := declaredSecretEntries(cf.ctx.SecretsDir, state)
+		entries, err := declaredSecretEntriesForContext(cf.ctx.Name, cf.ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -83,10 +83,15 @@ func newSecretListCmd(stdout io.Writer) *cobra.Command {
 }
 
 func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
+	return declaredSecretEntriesForContext("test", secretsDir, state)
+}
+
+func declaredSecretEntriesForContext(contextName, secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
 	env := primaryEnvironmentForSync(state)
 	if env == nil || len(env.Spec.Secrets) == 0 {
 		return nil, nil
 	}
+	store := secret.NewContextStore(contextName, secretsDir)
 	names := make([]string, 0, len(env.Spec.Secrets))
 	for name := range env.Spec.Secrets {
 		names = append(names, name)
@@ -98,7 +103,7 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 		typ := secretSpecType(name, spec, state)
 		pathEntries := secretSpecPathEntries(name, spec, env, secretsDir, state)
 		paths := secretPathEntryPaths(pathEntries)
-		present, detail := secretPathsPresent(pathEntries)
+		present, detail := secretPathsPresent(store, pathEntries)
 		entries = append(entries, secretListEntry{
 			Name:    name,
 			Type:    typ,
@@ -111,6 +116,8 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 }
 
 type secretPathEntry struct {
+	name           string
+	role           secret.MaterialRole
 	path           string
 	externalSource bool
 }
@@ -141,13 +148,15 @@ func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1al
 func secretSpecPathEntries(name string, spec v1alpha1.EnvironmentSecretSpec, env *v1alpha1.Environment, secretsDir string, state v1alpha1.State) []secretPathEntry {
 	entry := func(role secret.MaterialRole) secretPathEntry {
 		return secretPathEntry{
+			name:           name,
+			role:           role,
 			path:           secret.ResolveMaterialPath(name, env, secretsDir, role),
 			externalSource: secret.MaterialPathUsesExternalSource(name, env, role),
 		}
 	}
 	if spec.Generated != nil && spec.Generated.SSHKeyPair != nil {
 		return []secretPathEntry{
-			entry(secret.MaterialPrimary),
+			entry(secret.MaterialSSHPrivate),
 			entry(secret.MaterialSSHPublic),
 		}
 	}
@@ -254,21 +263,30 @@ func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {
 	return false
 }
 
-func secretPathsPresent(paths []secretPathEntry) (bool, string) {
+func secretPathsPresent(store *secret.ContextStore, paths []secretPathEntry) (bool, string) {
 	for _, path := range paths {
-		stat := secret.Stat
 		if path.externalSource {
-			stat = secret.StatExternalFile
+			info, err := secret.StatExternalFile(path.path)
+			if errors.Is(err, os.ErrNotExist) {
+				return false, "missing " + path.path
+			}
+			if err != nil {
+				return false, fmt.Sprintf("stat %s: %v", path.path, err)
+			}
+			if info.IsDir() {
+				return false, path.path + " is a directory"
+			}
+			continue
 		}
-		info, err := stat(path.path)
-		if errors.Is(err, os.ErrNotExist) {
-			return false, "missing " + path.path
-		}
+		status, err := store.Inspect(secret.MaterialKey{Name: path.name, Role: path.role})
 		if err != nil {
-			return false, fmt.Sprintf("stat %s: %v", path.path, err)
+			return false, err.Error()
 		}
-		if info.IsDir() {
-			return false, path.path + " is a directory"
+		if status.State != secret.MaterialStateEncrypted {
+			if status.Message != "" {
+				return false, fmt.Sprintf("%s %s: %s", path.path, status.State, status.Message)
+			}
+			return false, fmt.Sprintf("%s %s", path.path, status.State)
 		}
 	}
 	return true, ""

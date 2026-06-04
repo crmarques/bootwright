@@ -10,11 +10,20 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any {
 	t.Helper()
 	return componentByKind(t, cluster, v1alpha1.ComponentSlotMachines)
+}
+
+func writeEncryptedContextSecret(t *testing.T, dir, name string, role secretstore.MaterialRole, data []byte) {
+	t.Helper()
+	store := secretstore.NewContextStore("test", dir)
+	if err := store.Write(secretstore.MaterialKey{Name: name, Role: role}, data); err != nil {
+		t.Fatalf("write encrypted %s/%s: %v", name, role, err)
+	}
 }
 
 func containerClusterByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.ContainerCluster {

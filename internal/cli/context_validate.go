@@ -159,7 +159,7 @@ func validateContextChecks(ctx contextstore.Context) []output.Check {
 		checks = append(checks, missingContextCheck("desired state", err.Error(), "fix context input files and rerun bootwright context validate"))
 	} else {
 		checks = append(checks, okContextCheck("desired state", "loads, normalizes, and validates"))
-		checks = append(checks, declaredSecretContextChecks(ctx.SecretsDir, state)...)
+		checks = append(checks, declaredSecretContextChecks(ctx.Name, ctx.SecretsDir, state)...)
 		checks = append(checks, contextHostTrustChecks(ctx.BaseDir, state)...)
 		result := locality.CheckController(state, controllerLocalityPolicy)
 		if result.OK {
@@ -171,8 +171,8 @@ func validateContextChecks(ctx contextstore.Context) []output.Check {
 	return checks
 }
 
-func declaredSecretContextChecks(secretsDir string, state v1alpha1.State) []output.Check {
-	entries, err := declaredSecretEntries(secretsDir, state)
+func declaredSecretContextChecks(contextName, secretsDir string, state v1alpha1.State) []output.Check {
+	entries, err := declaredSecretEntriesForContext(contextName, secretsDir, state)
 	if err != nil {
 		return []output.Check{missingContextCheck("declared secrets", err.Error(), "fix Environment.spec.secrets and rerun bootwright context validate")}
 	}

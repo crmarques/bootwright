@@ -91,16 +91,17 @@ func ExternalDetailsSourceSSH(export v1alpha1.StorageExport) *v1alpha1.StorageEx
 }
 
 func LoadExternalDetailsSecretJSON(state v1alpha1.State, secretsDir string, name string) (string, error) {
+	return LoadExternalDetailsSecretJSONForContext("test", state, secretsDir, name)
+}
+
+func LoadExternalDetailsSecretJSONForContext(contextName string, state v1alpha1.State, secretsDir string, name string) (string, error) {
 	if strings.TrimSpace(name) == "" {
 		return "", fmt.Errorf("data foundation externalDetails.fromSecret is required")
 	}
 	env := primaryEnvironment(state)
 	path := secret.ResolvePath(name, env, secretsDir)
-	read := secret.ReadFile
-	if secret.MaterialPathUsesExternalSource(name, env, secret.MaterialPrimary) {
-		read = secret.ReadExternalFile
-	}
-	data, err := read(path)
+	resolver := secret.NewResolver(contextName, secretsDir, env)
+	data, err := resolver.ReadMaterial(name, secret.MaterialPrimary)
 	if err != nil {
 		return "", fmt.Errorf("read data foundation external details secret %q at %s: %w", name, path, err)
 	}

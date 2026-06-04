@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/render"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
@@ -521,7 +522,7 @@ func TestClusterInstallDesiredHashChangesWhenProxyCredentialsChange(t *testing.T
 		t.Fatalf("clusterInstallDesiredHash first: %v", err)
 	}
 	proxyCreds := filepath.Join(secretsDir, "proxy-credentials")
-	if err := os.WriteFile(proxyCreds, []byte("proxy:changed-secret\n"), 0o600); err != nil {
+	if err := secretstore.NewContextStore("test", secretsDir).Write(secretstore.MaterialKey{Name: "proxy-credentials", Role: secretstore.MaterialPrimary}, []byte("proxy:changed-secret\n")); err != nil {
 		t.Fatalf("write proxy credentials: %v", err)
 	}
 	changedAt := time.Now().Add(2 * time.Second)
@@ -1135,16 +1136,21 @@ func writeWorkflowInstallerSecrets(t *testing.T, root string) string {
 	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
 		t.Fatalf("mkdir secrets dir: %v", err)
 	}
-	files := map[string]string{
-		"openshift-pull-secret":                                `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`,
-		"sno-libvirt-cluster-admin-ssh-key.pub":                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
-		"3-nodes-ocp-emul-baremetal-cluster-admin-ssh-key.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
-		"demo-cluster-admin-ssh-key.pub":                       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n",
-		"proxy-credentials":                                    "proxy:secret\n",
+	files := []struct {
+		name string
+		role secretstore.MaterialRole
+		body string
+	}{
+		{name: "openshift-pull-secret", role: secretstore.MaterialPrimary, body: `{"auths":{"quay.io":{"auth":"dXNlcjpwYXNz"}}}`},
+		{name: "sno-libvirt-cluster-admin-ssh-key", role: secretstore.MaterialSSHPublic, body: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n"},
+		{name: "3-nodes-ocp-emul-baremetal-cluster-admin-ssh-key", role: secretstore.MaterialSSHPublic, body: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n"},
+		{name: "demo-cluster-admin-ssh-key", role: secretstore.MaterialSSHPublic, body: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForWorkflowTests\n"},
+		{name: "proxy-credentials", role: secretstore.MaterialPrimary, body: "proxy:secret\n"},
 	}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(secretsDir, name), []byte(content), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
+	store := secretstore.NewContextStore("test", secretsDir)
+	for _, item := range files {
+		if err := store.Write(secretstore.MaterialKey{Name: item.name, Role: item.role}, []byte(item.body)); err != nil {
+			t.Fatalf("write %s/%s: %v", item.name, item.role, err)
 		}
 	}
 	return secretsDir

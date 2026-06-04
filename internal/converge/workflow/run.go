@@ -15,6 +15,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/ansible/runconfig"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
 // RunOptions describes one ansible-playbook invocation against rendered
@@ -33,6 +35,7 @@ type RunOptions struct {
 	ClustersDir        string
 	RunsDir            string
 	RenderDir          string
+	ContextName        string
 	SecretsDir         string
 	ManagedServicesDir string
 	ProviderStateDir   string
@@ -113,7 +116,17 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if renderDir == "" {
 		renderDir = opts.RenderedDir
 	}
-	result, err := render.All(renderDir, opts.ClustersDir, opts.SecretsDir, opts.State)
+	contextName := effectiveContextName(opts.ContextName)
+	runSecretsDir := opts.SecretsDir
+	if !opts.DryRun {
+		runtimeSecretsDir := filepath.Join(runtimeSecretBaseDir(renderDir, opts.ArtifactsRoot), "secrets")
+		if err := secret.NewContextStore(contextName, opts.SecretsDir).MaterializeRuntime(runtimeSecretsDir); err != nil {
+			return RunResult{}, err
+		}
+		defer os.RemoveAll(runtimeSecretsDir)
+		runSecretsDir = runtimeSecretsDir
+	}
+	result, err := render.All(renderDir, opts.ClustersDir, runSecretsDir, opts.State)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -121,7 +134,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		if reporter != nil {
 			reporter.ResolveInstallerStart()
 		}
-		if _, err := render.ResolveInstaller(opts.ClustersDir, opts.SecretsDir, opts.State); err != nil {
+		if _, err := render.ResolveInstallerForContext(contextName, opts.ClustersDir, opts.SecretsDir, opts.State); err != nil {
 			return RunResult{Render: result}, err
 		}
 	}
@@ -135,7 +148,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		RenderedDir:        renderDir,
 		ClustersDir:        opts.ClustersDir,
 		RunsDir:            opts.RunsDir,
-		SecretsDir:         opts.SecretsDir,
+		SecretsDir:         runSecretsDir,
 		ManagedServicesDir: opts.ManagedServicesDir,
 		ProviderStateDir:   opts.ProviderStateDir,
 		InventoryPath:      result.InventoryPath,
@@ -182,6 +195,20 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		return RunResult{Render: result, Command: command}, err
 	}
 	return RunResult{Render: result, Command: command}, nil
+}
+
+func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
+	if artifactsRoot != "" {
+		return filepath.Join(artifactsRoot, "runtime")
+	}
+	return filepath.Join(filepath.Dir(renderDir), "runtime")
+}
+
+func effectiveContextName(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "test"
+	}
+	return name
 }
 
 // LimitMatchesNoHosts reports whether an ansible-playbook --limit
@@ -241,8 +268,16 @@ func ResolveInstaller(clustersDir, secretsDir string, state v1alpha1.State) (ren
 	return render.ResolveInstaller(clustersDir, secretsDir, state)
 }
 
+func ResolveInstallerForContext(contextName, clustersDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.ResolveInstallerForContext(contextName, clustersDir, secretsDir, state)
+}
+
 func RenderToolInputs(outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ToolInputs(outputDir, secretsDir, state)
+}
+
+func RenderToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
+	return render.ToolInputsForContext(contextName, outputDir, secretsDir, state)
 }
 
 // ShellQuote returns a shell-safe representation of argv suitable for

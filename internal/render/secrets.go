@@ -58,7 +58,12 @@ func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClu
 }
 
 func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) (InstallerSecrets, error) {
+	return LoadInstallerSecretsForContext("test", state, ocp, secretsDir)
+}
+
+func LoadInstallerSecretsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) (InstallerSecrets, error) {
 	env := primaryEnvironment(state)
+	resolver := secret.NewResolver(contextName, secretsDir, env)
 	var out InstallerSecrets
 
 	pullName := ocp.Spec.Install.PullSecretRef.Name
@@ -66,7 +71,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 		return out, fmt.Errorf("%s: pullSecretRef is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.pullSecretRef", ocp.Metadata.Name, v1alpha1.DefaultPullSecretName)
 	}
 	if pullName != "" {
-		pullPath, pullSecret, err := readSecretMaterial(pullName, env, secretsDir, secret.MaterialPrimary, "pull secret")
+		pullPath, pullSecret, err := readSecretMaterial(resolver, pullName, secret.MaterialPrimary, "pull secret")
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 		}
@@ -82,7 +87,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	if sshName == "" {
 		return out, fmt.Errorf("%s: nodeSSH public key is empty; declare %s in Environment.spec.secrets or set ContainerCluster.spec.install.nodeSSH", ocp.Metadata.Name, v1alpha1.ClusterAdminSSHKeyName(ocp.Metadata.Name))
 	}
-	_, sshKey, err := readSecretMaterial(sshName, env, secretsDir, secret.MaterialSSHPublic, "cluster admin public key")
+	_, sshKey, err := readSecretMaterial(resolver, sshName, secret.MaterialSSHPublic, "cluster admin public key")
 	if err != nil {
 		return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 	}
@@ -92,7 +97,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 		var bundles []string
 		for _, ref := range refs {
 			name := ref.Name
-			tbPath, bundle, err := readSecretMaterial(name, env, secretsDir, secret.MaterialPrimary, "additional trust bundle")
+			tbPath, bundle, err := readSecretMaterial(resolver, name, secret.MaterialPrimary, "additional trust bundle")
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 			}
@@ -107,11 +112,11 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	if refs := servingCertificateSecretRefs(ocp); len(refs) > 0 {
 		out.TLSPairs = map[string]InstallerTLSSecret{}
 		for _, ref := range refs {
-			_, certPEM, err := readSecretMaterial(ref.Name, env, secretsDir, secret.MaterialPrimary, "serving certificate")
+			_, certPEM, err := readSecretMaterial(resolver, ref.Name, secret.MaterialPrimary, "serving certificate")
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 			}
-			_, keyPEM, err := readSecretMaterial(ref.Name, env, secretsDir, secret.MaterialTLSKey, "serving certificate private key")
+			_, keyPEM, err := readSecretMaterial(resolver, ref.Name, secret.MaterialTLSKey, "serving certificate private key")
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 			}
@@ -134,7 +139,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 	}
 	if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 		if reg := env.Spec.Registries; reg != nil && reg.Mirror != nil && reg.Mirror.CredentialsRef.Name != "" {
-			creds, err := readUserPassMaterial(reg.Mirror.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary, "mirror registry credentials")
+			creds, err := readUserPassMaterial(resolver, reg.Mirror.CredentialsRef.Name, secret.MaterialPrimary, "mirror registry credentials")
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 			}
@@ -164,7 +169,7 @@ func LoadInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster, s
 		httpURL := pick(eff.HTTP, fallbackURL)
 		httpsURL := pick(eff.HTTPS, fallbackURL)
 		if eff.Auth.Name != "" && (httpURL != "" || httpsURL != "") {
-			creds, err := readUserPassMaterial(eff.Auth.Name, env, secretsDir, secret.MaterialPrimary, "proxy credentials")
+			creds, err := readUserPassMaterial(resolver, eff.Auth.Name, secret.MaterialPrimary, "proxy credentials")
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
 			}
@@ -194,25 +199,16 @@ func pick(declared, derived string) string {
 	return derived
 }
 
-func readSecretMaterial(name string, env *v1alpha1.Environment, secretsDir string, role secret.MaterialRole, kind string) (string, string, error) {
-	path := secret.ResolveMaterialPath(name, env, secretsDir, role)
-	data, err := readSecretFile(path, kind, secret.MaterialPathUsesExternalSource(name, env, role))
-	return path, data, err
-}
-
-func readSecretFile(path, kind string, externalSource bool) (string, error) {
+func readSecretMaterial(resolver secret.Resolver, name string, role secret.MaterialRole, kind string) (string, string, error) {
+	path := secret.ResolveMaterialPath(name, resolver.Env, resolver.SecretsDir, role)
 	if path == "" {
-		return "", fmt.Errorf("%s path is empty", kind)
+		return "", "", fmt.Errorf("%s path is empty", kind)
 	}
-	read := secret.ReadFile
-	if externalSource {
-		read = secret.ReadExternalFile
-	}
-	data, err := read(path)
+	data, err := resolver.ReadMaterial(name, role)
 	if err != nil {
-		return "", fmt.Errorf("read %s at %s: %w", kind, path, err)
+		return path, "", fmt.Errorf("read %s at %s: %w", kind, path, err)
 	}
-	return strings.TrimRight(string(data), "\n"), nil
+	return path, strings.TrimRight(string(data), "\n"), nil
 }
 
 func additionalTrustBundleRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []v1alpha1.SecretRef {
@@ -325,16 +321,12 @@ func readUserPassFile(path, kind string) (userPass, error) {
 	return userPass{Username: creds.Username, Password: creds.Password}, nil
 }
 
-func readUserPassMaterial(name string, env *v1alpha1.Environment, secretsDir string, role secret.MaterialRole, kind string) (userPass, error) {
-	path := secret.ResolveMaterialPath(name, env, secretsDir, role)
-	if secret.MaterialPathUsesExternalSource(name, env, role) {
-		creds, err := secret.ReadExternalUserPasswordFile(path, kind)
-		if err != nil {
-			return userPass{}, err
-		}
-		return userPass{Username: creds.Username, Password: creds.Password}, nil
+func readUserPassMaterial(resolver secret.Resolver, name string, role secret.MaterialRole, kind string) (userPass, error) {
+	creds, err := resolver.ReadUserPasswordMaterial(name, role, kind)
+	if err != nil {
+		return userPass{}, err
 	}
-	return readUserPassFile(path, kind)
+	return userPass{Username: creds.Username, Password: creds.Password}, nil
 }
 
 func mergeMirrorAuth(pullSecret, registryURL string, creds userPass) (string, error) {

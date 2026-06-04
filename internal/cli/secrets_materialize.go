@@ -3,13 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/fs"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -101,8 +99,8 @@ type secretMaterializeResult struct {
 	action string
 }
 
-func runSecretMaterialize(stdout io.Writer, command, secretsDir string, state v1alpha1.State, opts secretMaterializeOptions, emptyStatus cliout.Status) error {
-	results, err := materializeSecrets(secretsDir, state, opts)
+func runSecretMaterialize(stdout io.Writer, command, contextName, secretsDir string, state v1alpha1.State, opts secretMaterializeOptions, emptyStatus cliout.Status) error {
+	results, err := materializeSecretsForContext(contextName, secretsDir, state, opts)
 	if err != nil {
 		return failErr(1, err)
 	}
@@ -120,9 +118,11 @@ func runSecretMaterialize(stdout io.Writer, command, secretsDir string, state v1
 }
 
 func materializeSecrets(secretsDir string, state v1alpha1.State, opts secretMaterializeOptions) ([]secretMaterializeResult, error) {
-	if err := ensureSecretsDir(secretsDir); err != nil {
-		return nil, err
-	}
+	return materializeSecretsForContext("test", secretsDir, state, opts)
+}
+
+func materializeSecretsForContext(contextName, secretsDir string, state v1alpha1.State, opts secretMaterializeOptions) ([]secretMaterializeResult, error) {
+	store := secret.NewContextStore(contextName, secretsDir)
 	var out []secretMaterializeResult
 	if opts.Generated {
 		certRequests, err := generatedSelfSignedRequests(state)
@@ -130,21 +130,21 @@ func materializeSecrets(secretsDir string, state v1alpha1.State, opts secretMate
 			return nil, err
 		}
 		for _, request := range certRequests {
-			action, err := materializeSelfSignedCertificate(secretsDir, request)
+			action, err := materializeSelfSignedCertificate(store, secretsDir, request)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, secretMaterializeResult{name: request.name, action: action})
 		}
 		for _, request := range generatedCredentialsRequestsFor(state) {
-			action, err := materializeGeneratedCredentials(secretsDir, request)
+			action, err := materializeGeneratedCredentials(store, secretsDir, request)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, secretMaterializeResult{name: request.name, action: action})
 		}
 		for _, request := range generatedSSHKeyPairRequestsFor(state) {
-			action, err := materializeGeneratedSSHKeyPair(secretsDir, request)
+			action, err := materializeGeneratedSSHKeyPair(store, secretsDir, request)
 			if err != nil {
 				return nil, err
 			}
@@ -153,7 +153,7 @@ func materializeSecrets(secretsDir string, state v1alpha1.State, opts secretMate
 	}
 	if opts.FileSources {
 		for _, request := range fileSecretCopyRequests(state, secretsDir) {
-			action, err := materializeFileSecretCopy(request)
+			action, err := materializeFileSecretCopy(store, request)
 			if err != nil {
 				return nil, err
 			}
@@ -163,24 +163,16 @@ func materializeSecrets(secretsDir string, state v1alpha1.State, opts secretMate
 	return out, nil
 }
 
-func ensureSecretsDir(secretsDir string) error {
-	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
-		return fmt.Errorf("create secrets directory %s: %w", secretsDir, err)
-	}
-	if err := os.Chmod(secretsDir, 0o700); err != nil {
-		return fmt.Errorf("chmod secrets directory %s: %w", secretsDir, err)
-	}
-	return nil
-}
-
-func materializeSelfSignedCertificate(secretsDir string, request generatedSelfSignedRequest) (string, error) {
+func materializeSelfSignedCertificate(store *secret.ContextStore, secretsDir string, request generatedSelfSignedRequest) (string, error) {
 	certPath := filepath.Join(secretsDir, request.name)
 	keyPath := certPath + ".key"
-	certExists, err := safefs.RegularFileExists(certPath)
+	certKey := secret.MaterialKey{Name: request.name, Role: secret.MaterialPrimary}
+	keyKey := secret.MaterialKey{Name: request.name, Role: secret.MaterialTLSKey}
+	certExists, err := store.Exists(certKey)
 	if err != nil {
 		return "", err
 	}
-	keyExists, err := safefs.RegularFileExists(keyPath)
+	keyExists, err := store.Exists(keyKey)
 	if err != nil {
 		return "", err
 	}
@@ -188,7 +180,11 @@ func materializeSelfSignedCertificate(secretsDir string, request generatedSelfSi
 		return "", fmt.Errorf("generated self-signed certificate %q is partially present; expected both %s and %s", request.name, certPath, keyPath)
 	}
 	if certExists {
-		if err := secret.VerifySelfSignedCertificateMatchesRequest(certPath, request.certificate); err != nil {
+		data, err := store.Read(certKey)
+		if err != nil {
+			return "", err
+		}
+		if err := secret.VerifySelfSignedCertificateBytesMatchRequest(data, request.certificate); err != nil {
 			return "", fmt.Errorf("existing self-signed certificate %q at %s no longer matches the desired spec: %w; remove %s and %s to regenerate", request.name, certPath, err, certPath, keyPath)
 		}
 		return "reused existing certificate and key", nil
@@ -197,28 +193,29 @@ func materializeSelfSignedCertificate(secretsDir string, request generatedSelfSi
 	if err != nil {
 		return "", err
 	}
-	if err := safefs.WriteNewFile(certPath, certPEM, 0o600); err != nil {
+	if err := store.Write(certKey, certPEM); err != nil {
 		return "", err
 	}
-	if err := safefs.WriteNewFile(keyPath, keyPEM, 0o600); err != nil {
-		_ = os.Remove(certPath)
+	if err := store.Write(keyKey, keyPEM); err != nil {
+		_ = store.Delete(certKey)
 		return "", err
 	}
 	return fmt.Sprintf("generated %s and %s", certPath, keyPath), nil
 }
 
-func materializeGeneratedCredentials(secretsDir string, request generatedCredentialsRequest) (string, error) {
+func materializeGeneratedCredentials(store *secret.ContextStore, secretsDir string, request generatedCredentialsRequest) (string, error) {
 	target := filepath.Join(secretsDir, request.name)
 	wantUser := request.credentials.Username
 	if wantUser == "" {
 		wantUser = "admin"
 	}
-	exists, err := safefs.RegularFileExists(target)
+	key := secret.MaterialKey{Name: request.name, Role: secret.MaterialPrimary}
+	exists, err := store.Exists(key)
 	if err != nil {
 		return "", err
 	}
 	if exists {
-		data, err := os.ReadFile(target)
+		data, err := store.Read(key)
 		if err != nil {
 			return "", fmt.Errorf("read existing credentials %s: %w", target, err)
 		}
@@ -236,20 +233,22 @@ func materializeGeneratedCredentials(secretsDir string, request generatedCredent
 		return "", err
 	}
 	payload := []byte(wantUser + ":" + password + "\n")
-	if err := safefs.AtomicWriteFile(target, payload, 0o600); err != nil {
+	if err := store.Write(key, payload); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("generated %s (user %q)", target, wantUser), nil
 }
 
-func materializeGeneratedSSHKeyPair(secretsDir string, request generatedSSHKeyPairRequest) (string, error) {
+func materializeGeneratedSSHKeyPair(store *secret.ContextStore, secretsDir string, request generatedSSHKeyPairRequest) (string, error) {
 	privatePath := filepath.Join(secretsDir, request.name)
 	publicPath := privatePath + ".pub"
-	privateExists, err := safefs.RegularFileExists(privatePath)
+	privateMaterial := secret.MaterialKey{Name: request.name, Role: secret.MaterialSSHPrivate}
+	publicMaterial := secret.MaterialKey{Name: request.name, Role: secret.MaterialSSHPublic}
+	privateExists, err := store.Exists(privateMaterial)
 	if err != nil {
 		return "", err
 	}
-	publicExists, err := safefs.RegularFileExists(publicPath)
+	publicExists, err := store.Exists(publicMaterial)
 	if err != nil {
 		return "", err
 	}
@@ -257,20 +256,24 @@ func materializeGeneratedSSHKeyPair(secretsDir string, request generatedSSHKeyPa
 		return "", fmt.Errorf("generated SSH key pair %q is partially present; expected both %s and %s", request.name, privatePath, publicPath)
 	}
 	if privateExists {
-		if err := secret.VerifySSHKeyPairPublicMatchesRequest(publicPath, request.keyPair); err != nil {
+		data, err := store.Read(publicMaterial)
+		if err != nil {
+			return "", err
+		}
+		if err := secret.VerifySSHKeyPairPublicBytesMatchRequest(data, request.keyPair); err != nil {
 			return "", fmt.Errorf("existing SSH key pair %q at %s no longer matches the desired spec: %w; remove %s and %s to regenerate", request.name, publicPath, err, privatePath, publicPath)
 		}
 		return "reused existing SSH key pair", nil
 	}
-	privateKey, publicKey, err := secret.SSHKeyPairPEM(request.keyPair)
+	privateKeyPEM, publicKey, err := secret.SSHKeyPairPEM(request.keyPair)
 	if err != nil {
 		return "", err
 	}
-	if err := safefs.WriteNewFile(privatePath, privateKey, 0o600); err != nil {
+	if err := store.Write(privateMaterial, privateKeyPEM); err != nil {
 		return "", err
 	}
-	if err := safefs.WriteNewFile(publicPath, publicKey, 0o600); err != nil {
-		_ = os.Remove(privatePath)
+	if err := store.Write(publicMaterial, publicKey); err != nil {
+		_ = store.Delete(privateMaterial)
 		return "", err
 	}
 	return fmt.Sprintf("generated %s and %s", privatePath, publicPath), nil
@@ -278,6 +281,7 @@ func materializeGeneratedSSHKeyPair(secretsDir string, request generatedSSHKeyPa
 
 type fileSecretCopyRequest struct {
 	name   string
+	role   secret.MaterialRole
 	source string
 	target string
 }
@@ -307,7 +311,7 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 			return
 		}
 		seen[key] = true
-		out = append(out, fileSecretCopyRequest{name: name, source: sourcePath, target: targetPath})
+		out = append(out, fileSecretCopyRequest{name: name, role: role, source: sourcePath, target: targetPath})
 	}
 	for _, name := range names {
 		added := false
@@ -334,7 +338,7 @@ func fileSecretCopyRequests(state v1alpha1.State, secretsDir string) []fileSecre
 	return out
 }
 
-func materializeFileSecretCopy(request fileSecretCopyRequest) (string, error) {
+func materializeFileSecretCopy(store *secret.ContextStore, request fileSecretCopyRequest) (string, error) {
 	if filepath.Clean(request.source) == filepath.Clean(request.target) {
 		return "source already context-local at " + request.target, nil
 	}
@@ -342,11 +346,12 @@ func materializeFileSecretCopy(request fileSecretCopyRequest) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read file-sourced secret %s for %s: %w", request.source, request.name, err)
 	}
-	exists, err := safefs.RegularFileExists(request.target)
+	key := secret.MaterialKey{Name: request.name, Role: request.role}
+	exists, err := store.Exists(key)
 	if err != nil {
 		return "", err
 	}
-	if err := safefs.AtomicWriteFile(request.target, data, 0o600); err != nil {
+	if err := store.Write(key, data); err != nil {
 		return "", err
 	}
 	action := "copied"

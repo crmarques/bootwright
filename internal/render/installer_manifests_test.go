@@ -19,6 +19,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"go.yaml.in/yaml/v3"
 )
@@ -198,9 +199,11 @@ func writeInstallerCoreSecrets(t *testing.T, dir string) {
 		"ssh":               "ssh-rsa AAAA test\n",
 		"proxy-credentials": "proxy:secret\n",
 	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
+		role := secretstore.MaterialPrimary
+		if name == "ssh" {
+			role = secretstore.MaterialSSHPublic
 		}
+		writeEncryptedContextSecret(t, dir, name, role, []byte(content))
 	}
 }
 
@@ -210,12 +213,8 @@ func writeSelfSignedPair(t *testing.T, dir, name string, spec v1alpha1.SelfSigne
 	if err != nil {
 		t.Fatalf("generate %s: %v", name, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), cert, 0o600); err != nil {
-		t.Fatalf("write %s cert: %v", name, err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, name+".key"), key, 0o600); err != nil {
-		t.Fatalf("write %s key: %v", name, err)
-	}
+	writeEncryptedContextSecret(t, dir, name, secretstore.MaterialPrimary, cert)
+	writeEncryptedContextSecret(t, dir, name, secretstore.MaterialTLSKey, key)
 	return cert, key
 }
 

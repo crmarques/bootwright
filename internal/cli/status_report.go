@@ -119,7 +119,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		},
 		Clusters:  []statusCluster{},
 		Shared:    []statusShared{},
-		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.SecretsDir),
+		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir),
 	}
 	if loadErr != nil {
 		report.Desired.LoadError = loadErr.Error()
@@ -138,7 +138,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Desired.ClusterAddonBindings = len(state.ClusterAddonBindings)
 		report.Clusters = buildStatusClusters(state, ctx.RenderedDir, ctx.ClustersDir)
 		report.Shared = buildStatusShared(state)
-		report.Secrets, _ = declaredSecretEntries(ctx.SecretsDir, state)
+		report.Secrets, _ = declaredSecretEntriesForContext(ctx.Name, ctx.SecretsDir, state)
 	}
 	if ledger, ok, err := workflow.LoadRunLedger(ctx.RunsDir); err == nil && ok {
 		report.ApplyRun = &ledger

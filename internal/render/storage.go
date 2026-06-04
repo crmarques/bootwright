@@ -32,6 +32,7 @@ type StorageAttachmentAsset struct {
 }
 
 type storageAssetWriteOptions struct {
+	ContextName               string
 	ExternalDetailsSecretsDir string
 }
 
@@ -117,7 +118,7 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			externalDetails := dataFoundationExternalDetailsManifest(state, cluster, export, attachment, attachmentAsset.ContainerClusterName)
 			fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export)
 			if fromSecret != "" && opts.ExternalDetailsSecretsDir != "" {
-				detailsJSON, err := datafoundation.LoadExternalDetailsSecretJSON(state, opts.ExternalDetailsSecretsDir, fromSecret)
+				detailsJSON, err := datafoundation.LoadExternalDetailsSecretJSONForContext(opts.ContextName, state, opts.ExternalDetailsSecretsDir, fromSecret)
 				if err != nil {
 					return err
 				}
