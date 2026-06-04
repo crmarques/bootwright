@@ -285,6 +285,58 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 	}
 }
 
+func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/ssh_trust.yml")
+	scan := tasks[findAnsibleTask(t, tasks, "Scan managed OS SSH host key")]
+	if _, ok := scan["retries"]; !ok {
+		t.Fatalf("%s must retry because port 22 can open before sshd returns host keys", scan["name"])
+	}
+	if _, ok := scan["delay"]; !ok {
+		t.Fatalf("%s must set retry delay", scan["name"])
+	}
+	until := fmt.Sprint(scan["until"])
+	for _, want := range []string{
+		"bootwright_os_ssh_keyscan_required",
+		"stdout_lines",
+		"reject('match', '^#')",
+	} {
+		if !strings.Contains(until, want) {
+			t.Fatalf("%s until missing %q: %s", scan["name"], want, until)
+		}
+	}
+	failedWhen := fmt.Sprint(scan["failed_when"])
+	if !strings.Contains(failedWhen, "not in [0, 1]") {
+		t.Fatalf("%s must tolerate ssh-keyscan rc=1 while waiting for keys, got %s", scan["name"], failedWhen)
+	}
+
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
+	pre := mainTasks[findAnsibleTask(t, mainTasks, "Record managed OS SSH host key before install when reachable")]
+	assertIncludeTasksFile(t, pre, "ssh_trust.yml")
+	preVars, ok := pre["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass keyscan vars", pre["name"])
+	}
+	if got := fmt.Sprint(preVars["bootwright_os_ssh_keyscan_required"]); got != "false" {
+		t.Fatalf("%s keyscan required = %s, want false", pre["name"], got)
+	}
+
+	post := mainTasks[findAnsibleTask(t, mainTasks, "Record managed OS SSH host key")]
+	assertIncludeTasksFile(t, post, "ssh_trust.yml")
+	postVars, ok := post["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass keyscan vars", post["name"])
+	}
+	for key, want := range map[string]string{
+		"bootwright_os_ssh_keyscan_required": "true",
+		"bootwright_os_ssh_keyscan_retries":  "60",
+		"bootwright_os_ssh_keyscan_delay":    "10",
+	} {
+		if got := fmt.Sprint(postVars[key]); got != want {
+			t.Fatalf("%s %s = %s, want %s", post["name"], key, got, want)
+		}
+	}
+}
+
 func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml")
 	if len(plays) != 1 {

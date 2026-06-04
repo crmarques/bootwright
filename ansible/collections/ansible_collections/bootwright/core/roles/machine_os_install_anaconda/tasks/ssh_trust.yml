@@ -10,6 +10,12 @@
       - "{{ bootwright_component.osInstall.ssh.address }}"
   delegate_to: localhost
   register: bootwright_os_ssh_keyscan
+  retries: "{{ bootwright_os_ssh_keyscan_retries | default(1) }}"
+  delay: "{{ bootwright_os_ssh_keyscan_delay | default(1) }}"
+  until: >-
+    not (bootwright_os_ssh_keyscan_required | default(true) | bool)
+    or ((bootwright_os_ssh_keyscan.stdout_lines | default([]) | reject('match', '^#') | list | length) > 0)
+  failed_when: (bootwright_os_ssh_keyscan.rc | int) not in [0, 1]
   changed_when: false
 
 - name: Ensure managed OS SSH trust directory

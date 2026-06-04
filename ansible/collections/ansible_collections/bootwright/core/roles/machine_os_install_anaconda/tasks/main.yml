@@ -41,6 +41,10 @@
 
 - name: Record managed OS SSH host key before install when reachable
   ansible.builtin.include_tasks: ssh_trust.yml
+  vars:
+    bootwright_os_ssh_keyscan_required: false
+    bootwright_os_ssh_keyscan_retries: 1
+    bootwright_os_ssh_keyscan_delay: 1
   when:
     - not (bootwright_os_pre_ssh_port.failed | default(false))
     - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
@@ -210,6 +214,10 @@
 
 - name: Record managed OS SSH host key
   ansible.builtin.include_tasks: ssh_trust.yml
+  vars:
+    bootwright_os_ssh_keyscan_required: true
+    bootwright_os_ssh_keyscan_retries: 60
+    bootwright_os_ssh_keyscan_delay: 10
   when: (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
 - name: Verify managed OS SSH authentication
