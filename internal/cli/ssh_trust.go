@@ -191,7 +191,7 @@ func hostTrustNeedsScan(state v1alpha1.State, selected map[string]bool) bool {
 		if len(selected) > 0 && !selected[machine.Metadata.Name] {
 			continue
 		}
-		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, controllerLocalityPolicy) {
+		if !machineNeedsManagedHostTrust(machine, controllerLocalityPolicy) {
 			continue
 		}
 		return true
@@ -257,6 +257,11 @@ func evaluateHostTrust(ctx context.Context, machine v1alpha1.Machine, store ssht
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		report.Action = "skip"
 		report.Reason = "uses explicit knownHostsRef"
+		return report, sshtrust.HostRecord{}, false, nil
+	}
+	if !v1alpha1.MachineOSProvided(machine) {
+		report.Action = "skip"
+		report.Reason = "Machine OS is not provided"
 		return report, sshtrust.HostRecord{}, false, nil
 	}
 	keys, err := scan(ctx, report.Address, defaultHostTrustScanTimeout)

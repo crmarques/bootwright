@@ -100,12 +100,19 @@ func managedHostTrustChecks(state v1alpha1.State, secretsDir string, deps prefli
 func managedTrustMachines(state v1alpha1.State, policy locality.Policy) []v1alpha1.Machine {
 	var machines []v1alpha1.Machine
 	for _, machine := range state.Machines {
-		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, policy) {
+		if !machineNeedsManagedHostTrust(machine, policy) {
 			continue
 		}
 		machines = append(machines, machine)
 	}
 	return machines
+}
+
+func machineNeedsManagedHostTrust(machine v1alpha1.Machine, policy locality.Policy) bool {
+	return machine.Spec.Access.SSH != nil &&
+		machine.Spec.Access.SSH.KnownHostsRef.Name == "" &&
+		v1alpha1.MachineOSProvided(machine) &&
+		!locality.IsControllerLocalMachine(machine, policy)
 }
 
 type outputStatus = string

@@ -116,6 +116,46 @@ func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
 	}
 }
 
+func TestHostTrustPreflightSkipsMachinesWithManagedOS(t *testing.T) {
+	state := hostTrustManagedOSTestState()
+	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machine-infra"}}, preflightDeps{
+		lookPath: func(name string, _ []string) (string, error) {
+			t.Fatalf("unexpected lookup %s", name)
+			return "", errors.New("unexpected lookup")
+		},
+		statPath: func(path string) (os.FileInfo, error) {
+			t.Fatalf("unexpected stat %s", path)
+			return nil, errors.New("unexpected stat")
+		},
+	})
+	if len(checks) != 0 {
+		t.Fatalf("checks = %+v, want no host trust checks for managed OS machines", checks)
+	}
+}
+
+func TestHostTrustCommandSkipsMachinesWithManagedOS(t *testing.T) {
+	var stdout strings.Builder
+	report, err := runHostTrust(context.Background(), strings.NewReader(""), &stdout, "lab", t.TempDir(), hostTrustManagedOSTestState(), hostTrustOptions{
+		DryRun: true,
+		Output: outputJSON,
+	}, hostTrustDeps{
+		lookPath: func(name string, _ []string) (string, error) {
+			t.Fatalf("unexpected lookup %s", name)
+			return "", errors.New("unexpected lookup")
+		},
+		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+			t.Fatalf("unexpected scan %s", address)
+			return nil, errors.New("unexpected scan")
+		},
+	})
+	if err != nil {
+		t.Fatalf("host trust failed: %v", err)
+	}
+	if len(report.Hosts) != 1 || report.Hosts[0].Action != "skip" || report.Hosts[0].Reason != "Machine OS is not provided" {
+		t.Fatalf("report hosts = %+v", report.Hosts)
+	}
+}
+
 func initHostTrustTestContext(t *testing.T) contextstore.Context {
 	t.Helper()
 	setTestHomeAndRoot(t)
@@ -186,6 +226,26 @@ func hostTrustTestState() v1alpha1.State {
 				SSH: &v1alpha1.MachineSSHSpec{
 					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 					KeyRef:     v1alpha1.SecretRef{Name: "bastion-host-ssh"},
+				},
+			},
+		},
+	}}}
+}
+
+func hostTrustManagedOSTestState() v1alpha1.State {
+	return v1alpha1.State{Machines: []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+			OS: v1alpha1.MachineOSSpec{
+				Provided:   v1alpha1.BoolPtr(false),
+				ProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph-node"},
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.168.134.20"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{
+					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+					KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
 				},
 			},
 		},
