@@ -2518,6 +2518,49 @@ func TestRunBootstrapPlanExplainsPythonInstallFailure(t *testing.T) {
 			t.Fatalf("error missing %q:\n%s", want, msg)
 		}
 	}
+	if !strings.Contains(msg, "no enabled repositories") {
+		t.Fatalf("error missing captured command output:\n%s", msg)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want command output captured in error", got)
+	}
+}
+
+func TestRunBootstrapPlanSuppressesSuccessfulStepOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	fakePip := filepath.Join(dir, "pip")
+	if err := os.WriteFile(fakePip, []byte(`#!/bin/sh
+printf '%s\n' 'Collecting ansible-core==2.21.0'
+printf '%s\n' 'Installing collected packages: ansible-core'
+printf '%s\n' '[notice] A new release of pip is available' >&2
+`), 0o755); err != nil {
+		t.Fatalf("write fake pip: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runBootstrapPlan(
+		context.Background(),
+		strings.NewReader("unused\n"),
+		&stdout,
+		&stderr,
+		[]bastion.BootstrapStep{{Label: "install ansible-core==2.21.0 into venv", Cmd: []string{fakePip, "install", "ansible-core==2.21.0"}}},
+		nil,
+		"",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("runBootstrapPlan: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); strings.Contains(got, "Collecting ansible-core") || strings.Contains(got, "Installing collected packages") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
+		t.Fatalf("stdout should hide bootstrap step output and show runtime status:\n%s", got)
+	}
+	if got := stderr.String(); strings.Contains(got, "new release of pip") {
+		t.Fatalf("stderr should hide bootstrap step output:\n%s", got)
+	}
 }
 
 func TestRunBootstrapPlanRefreshesSudoWithOneBecomePassword(t *testing.T) {
@@ -2596,7 +2639,7 @@ exec "$@"
 	if got := stderr.String(); got != "" {
 		t.Fatalf("stderr = %q, want no sudo prompt", got)
 	}
-	if got := stdout.String(); strings.Contains(got, "$ sudo") || !strings.Contains(got, "first") || !strings.Contains(got, "second") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
+	if got := stdout.String(); strings.Contains(got, "$ sudo") || strings.Contains(got, "first") || strings.Contains(got, "second") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
 		t.Fatalf("stdout should hide commands and show runtime status:\n%s", got)
 	}
 	body, err := os.ReadFile(passwordLog)
@@ -2645,7 +2688,7 @@ exec "$@"
 	if err != nil {
 		t.Fatalf("runBootstrapPlan: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
-	if got := stdout.String(); strings.Contains(got, "$ sudo") || !strings.Contains(got, "ok") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
+	if got := stdout.String(); strings.Contains(got, "$ sudo") || strings.Contains(got, "ok") || !strings.Contains(got, "[OK] Ansible runtime: ready") {
 		t.Fatalf("stdout should hide commands and show runtime status:\n%s", got)
 	}
 }

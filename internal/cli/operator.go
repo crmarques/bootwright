@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -72,19 +73,28 @@ func runBootstrapPlan(ctx context.Context, stdin io.Reader, stdout io.Writer, st
 			}
 		}
 		run := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
-		run.Stdout = stdout
-		run.Stderr = stderr
+		var stepOutput bytes.Buffer
+		run.Stdout = &stepOutput
+		run.Stderr = &stepOutput
 		run.Stdin = stdin
 		run.Env = env
 		if err := run.Run(); err != nil {
 			if isPython312InstallStep(step) {
-				return failErr(1, fmt.Errorf("bootstrap step %q: Python 3.12+ was not found and %s install failed; enable or repair host package repositories, register the host if required, or install Python 3.12+ on PATH manually: %w", step.Label, bootstrapPythonInstallTool(step.Cmd), err))
+				return failErr(1, fmt.Errorf("bootstrap step %q: Python 3.12+ was not found and %s install failed; enable or repair host package repositories, register the host if required, or install Python 3.12+ on PATH manually: %w%s", step.Label, bootstrapPythonInstallTool(step.Cmd), err, bootstrapStepOutputSuffix(stepOutput.String())))
 			}
-			return failErr(1, fmt.Errorf("bootstrap step %q: %w", step.Label, err))
+			return failErr(1, fmt.Errorf("bootstrap step %q: %w%s", step.Label, err, bootstrapStepOutputSuffix(stepOutput.String())))
 		}
 	}
 	p.Status(output.StatusOK, "Ansible runtime", "ready")
 	return nil
+}
+
+func bootstrapStepOutputSuffix(out string) string {
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return ""
+	}
+	return "\n" + out
 }
 
 func isPython312InstallStep(step bastion.BootstrapStep) bool {
