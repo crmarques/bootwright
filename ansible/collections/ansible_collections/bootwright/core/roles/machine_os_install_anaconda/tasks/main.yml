@@ -1,0 +1,234 @@
+---
+- name: Validate managed Anaconda install inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.osInstall is mapping
+      - bootwright_component.osInstall.image is mapping
+      - (bootwright_component.osInstall.image.kind | default('') | length) > 0
+      - (bootwright_component.osInstall.kickstart.hostname | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.address | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.user | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.privateKeyPath | default('') | length) > 0
+      - bootwright_component.boot is mapping
+      - bootwright_component.boot.agentIso is mapping
+    fail_msg: "managed Anaconda OS install needs image, kickstart, SSH, and boot virtual-media vars"
+
+- name: Resolve managed OS install paths
+  ansible.builtin.set_fact:
+    bootwright_os_install_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_os_group.name }}/{{ bootwright_component.name }}"
+    bootwright_os_install_token: "{{ (bootwright_current_os_group.name ~ '-' ~ bootwright_component.name ~ '-osinstall') | to_uuid }}"
+  changed_when: false
+
+- name: Resolve managed OS install files
+  ansible.builtin.set_fact:
+    bootwright_os_source_iso: "{{ bootwright_os_install_root }}/source.iso"
+    bootwright_os_kickstart_path: "{{ bootwright_os_install_root }}/ks.cfg"
+    bootwright_os_install_iso: "{{ bootwright_os_install_root }}/install.iso"
+    bootwright_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+    bootwright_os_fetch_url: "{{ bootwright_component.boot.agentIso.fetchUrl | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+  changed_when: false
+
+- name: Probe managed OS SSH before install
+  ansible.builtin.wait_for:
+    host: "{{ bootwright_component.osInstall.ssh.address }}"
+    port: 22
+    state: started
+    timeout: 5
+  delegate_to: localhost
+  register: bootwright_os_pre_ssh_port
+  failed_when: false
+  changed_when: false
+
+- name: Record managed OS SSH host key before install when reachable
+  ansible.builtin.include_tasks: ssh_trust.yml
+  when:
+    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+
+- name: Probe managed OS SSH authentication before install
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "true"
+  delegate_to: localhost
+  register: bootwright_os_pre_ssh_auth
+  failed_when: false
+  changed_when: false
+  when:
+    - not (bootwright_os_pre_ssh_port.failed | default(false))
+    - (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+
+- name: Resolve managed OS readiness before install
+  ansible.builtin.set_fact:
+    bootwright_managed_os_already_ready: "{{ (bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0 }}"
+  changed_when: false
+
+- name: Install managed OS from virtual media
+  when: not (bootwright_managed_os_already_ready | bool)
+  block:
+    - name: Create managed OS install work directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Verify mkksiso is available
+      ansible.builtin.command:
+        argv:
+          - which
+          - mkksiso
+      register: bootwright_mkksiso_path
+      changed_when: false
+      failed_when: bootwright_mkksiso_path.rc != 0
+
+    - name: Copy managed ISO source to provider host
+      ansible.builtin.copy:
+        src: "{{ bootwright_component.osInstall.image.path }}"
+        dest: "{{ bootwright_os_source_iso }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_os_source_copy
+      when: bootwright_component.osInstall.image.kind in ['media', 'file']
+
+    - name: Download managed ISO source on provider host
+      ansible.builtin.get_url:
+        url: "{{ bootwright_component.osInstall.image.url }}"
+        dest: "{{ bootwright_os_source_iso }}"
+        checksum: "{{ ('sha256:' ~ bootwright_component.osInstall.image.checksum) if (bootwright_component.osInstall.image.checksum | default('') | length) > 0 else omit }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_os_source_download
+      when: bootwright_component.osInstall.image.kind == 'url'
+
+    - name: Verify managed ISO checksum
+      ansible.builtin.command:
+        argv:
+          - sha256sum
+          - "{{ bootwright_os_source_iso }}"
+      register: bootwright_os_source_sha256
+      changed_when: false
+      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+
+    - name: Assert managed ISO checksum
+      ansible.builtin.assert:
+        that:
+          - (bootwright_os_source_sha256.stdout.split()[0] | lower) == (bootwright_component.osInstall.image.checksum | lower | regex_replace('^sha256:', ''))
+        fail_msg: "managed ISO checksum mismatch for {{ bootwright_component.osInstall.image.original }}"
+      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+
+    - name: Render managed OS Kickstart
+      ansible.builtin.template:
+        src: ks.cfg.j2
+        dest: "{{ bootwright_os_kickstart_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      register: bootwright_os_kickstart
+
+    - name: Stat managed OS install ISO
+      ansible.builtin.stat:
+        path: "{{ bootwright_os_install_iso }}"
+      register: bootwright_os_install_iso_stat
+
+    - name: Build managed OS install ISO
+      ansible.builtin.command:
+        argv:
+          - mkksiso
+          - --ks
+          - "{{ bootwright_os_kickstart_path }}"
+          - "{{ bootwright_os_source_iso }}"
+          - "{{ bootwright_os_install_iso }}"
+      when:
+        - bootwright_os_source_copy.changed | default(false) or bootwright_os_source_download.changed | default(false) or bootwright_os_kickstart.changed | default(false) or not (bootwright_os_install_iso_stat.stat.exists | default(false))
+
+    - name: Create managed OS virtual media stage directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_stage_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Stage managed OS install ISO for virtual media
+      ansible.builtin.copy:
+        src: "{{ bootwright_os_install_iso }}"
+        dest: "{{ bootwright_os_stage_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Prepare provider virtual media before managed OS boot
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.mediaPrepareRole }}"
+      when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
+
+    - name: Resolve managed OS Redfish boot component
+      ansible.builtin.set_fact:
+        bootwright_managed_os_boot_component: >-
+          {{
+            bootwright_component | combine({
+              'boot': bootwright_component.boot | combine({
+                'agentIso': bootwright_component.boot.agentIso | combine({
+                  'stagePath': bootwright_os_stage_path,
+                  'fetchUrl': bootwright_os_fetch_url
+                })
+              }, recursive=True)
+            }, recursive=True)
+          }}
+      changed_when: false
+
+    - name: Boot managed OS installer through Redfish virtual media
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.bootApplyRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+        bootwright_agent_iso_publish_token: "{{ bootwright_os_install_token }}"
+        bootwright_redfish_action: boot
+
+- name: Wait for managed OS SSH port
+  ansible.builtin.wait_for:
+    host: "{{ bootwright_component.osInstall.ssh.address }}"
+    port: 22
+    state: started
+    timeout: 1800
+  delegate_to: localhost
+  changed_when: false
+
+- name: Record managed OS SSH host key
+  ansible.builtin.include_tasks: ssh_trust.yml
+  when: (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
+
+- name: Verify managed OS SSH authentication
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "true"
+  delegate_to: localhost
+  register: bootwright_os_ssh_auth
+  retries: 60
+  delay: 10
+  until: bootwright_os_ssh_auth.rc == 0
+  changed_when: false

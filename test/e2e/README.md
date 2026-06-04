@@ -22,6 +22,7 @@ container-cluster.yaml ContainerCluster
 | `003-3nodes-libvirt` | Three-node compact control plane on libvirt |
 | `004-3nodes-emul-baremetal` | Three-node bare-metal shape backed by emulated services |
 | `005-3nodes-baremetal` | Three-node real bare-metal shape with bonded VLAN networking |
+| `006-ceph-3nodes-libvirt-managed-os` | Three-node Ceph on libvirt with managed RHEL install |
 
 ## Local Fixture Checks
 

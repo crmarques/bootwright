@@ -1,0 +1,62 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-libvirt
+spec:
+  type: ceph
+
+  management: managed
+
+  ceph:
+    cephadm:
+      addressRef:
+        name: ssh
+      bootstrap:
+        seedNode: ceph-0
+        monIP:
+          nodeRef:
+            name: ceph-0
+      registry:
+        url: registry.redhat.io
+        credentialsRef:
+          name: ceph-registry-credentials
+    networks:
+      publicCIDRs:
+        - 192.168.134.0/24
+      clusterCIDRs:
+        - 192.168.134.0/24
+    topology:
+      nodes:
+        - name: ceph-0
+          site: lab
+          roles:
+            - mon
+            - mgr
+            - osd
+          devices:
+            - /dev/vdb
+            - /dev/vdc
+          machineRef:
+            name: ceph-0
+        - name: ceph-1
+          site: lab
+          roles:
+            - mon
+            - mgr
+            - osd
+          devices:
+            - /dev/vdb
+            - /dev/vdc
+          machineRef:
+            name: ceph-1
+        - name: ceph-2
+          site: lab
+          roles:
+            - mon
+            - mgr
+            - osd
+          devices:
+            - /dev/vdb
+            - /dev/vdc
+          machineRef:
+            name: ceph-2

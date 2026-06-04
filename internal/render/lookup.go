@@ -41,6 +41,24 @@ func findProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile
 	return stateview.MachineProfile(p, name)
 }
 
+func findMachineImage(state v1alpha1.State, name string) (v1alpha1.MachineImage, bool) {
+	for _, image := range state.MachineImages {
+		if image.Metadata.Name == name {
+			return image, true
+		}
+	}
+	return v1alpha1.MachineImage{}, false
+}
+
+func findMachineInstallProfile(state v1alpha1.State, name string) (v1alpha1.MachineInstallProfile, bool) {
+	for _, profile := range state.MachineInstallProfiles {
+		if profile.Metadata.Name == name {
+			return profile, true
+		}
+	}
+	return v1alpha1.MachineInstallProfile{}, false
+}
+
 func findProviderMachine(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
 	return stateview.Machine(state, name)
 }

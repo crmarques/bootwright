@@ -62,6 +62,12 @@ and VM boot tasks also lock
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.
 
+Shared parsing and resolution must live behind one reusable package or adapter
+before provider-specific roles consume it. ISO references are resolved by the
+Bootwright managed media resolver; providers, OS installers, and future
+user-supplied ISO fields must not duplicate `media:`, `file://`, or HTTP(S)
+parsing.
+
 ## Ownership Boundaries
 
 - `Environment` owns fleet-wide defaults, context resource selection, cluster
@@ -110,6 +116,9 @@ These boundaries are reflected in rendering:
 - Storage tool inputs render to cephadm host, core service, and late service
   specs; explicit operation metadata; Ansible storage contracts; and generated
   Data Foundation manifests for managed storage.
+- Managed machine OS inputs render from `Machine`, `MachineImage`, and
+  `MachineInstallProfile`, then reuse the same machine component, provider,
+  BMC, virtual-media boot, and SSH trust contracts used by cluster node flows.
 - Extension apply plans are rendered from `ClusterAddonBinding` expansion,
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.

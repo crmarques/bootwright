@@ -241,6 +241,7 @@ func machineServiceConsumers(state v1alpha1.State) []MachineServiceConsumer {
 		infra, _ := stateview.ClusterInstallForContainerCluster(state, cluster)
 		out = append(out, clusterMachineServiceConsumers(state, infra, cluster)...)
 	}
+	out = append(out, storageMachineServiceConsumers(state)...)
 	return out
 }
 
@@ -278,36 +279,76 @@ func clusterMachineServiceConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 func bmcConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	var out []MachineServiceConsumer
 	for _, machine := range infra.Machines {
-		driver := machineDriver(state, machine)
-		if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
-			continue
-		}
-		machineRef := serviceMachineRef(state, machine)
-		if machineRef == "" {
-			continue
-		}
-		configKey := machineBMCConfigKey(state, machine)
-		if configKey == "" {
-			continue
-		}
-		out = append(out, newServiceConsumer(
+		consumer, ok := bmcConsumerForMachine(
+			state,
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
 			fmt.Sprintf("ClusterInstall/%s nodes[%s] provider %s", infra.Metadata.Name, machine.Name, machine.Source.ProviderRef.Name),
-			v1alpha1.ProviderServiceKindBMC,
-			machine.Source.ProviderRef.Name,
-			driver.Dispatch.BMCRole,
-			driver.Dispatch.BMCRole,
-			map[string]string{
-				"machineRef":  machineRef,
-				"bmcRole":     driver.Dispatch.BMCRole,
-				"configKey":   configKey,
-				"machineName": machine.Name,
-			},
-			nil,
-		))
+			machine,
+		)
+		if ok {
+			out = append(out, consumer)
+		}
 	}
 	return out
+}
+
+func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsumer {
+	var out []MachineServiceConsumer
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil || (cluster.Spec.Management != "" && cluster.Spec.Management != v1alpha1.StorageClusterManagementManaged) {
+			continue
+		}
+		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
+			if !ok || machineObj.Spec.OS.Mode != v1alpha1.MachineOSModeManaged {
+				continue
+			}
+			machine := stateview.InstallMachineFromMachine(machineObj)
+			consumer, ok := bmcConsumerForMachine(
+				state,
+				cluster.Metadata.Name,
+				cluster.Metadata.Name,
+				fmt.Sprintf("StorageCluster/%s nodes[%s] provider %s", cluster.Metadata.Name, machine.Name, machine.Source.ProviderRef.Name),
+				machine,
+			)
+			if ok {
+				out = append(out, consumer)
+			}
+		}
+	}
+	return out
+}
+
+func bmcConsumerForMachine(state v1alpha1.State, clusterName, clusterInstallName, owner string, machine v1alpha1.InstallMachine) (MachineServiceConsumer, bool) {
+	driver := machineDriver(state, machine)
+	if driver.Dispatch.BMCRole == "none" || driver.Roles.BMCApplyRole == "" {
+		return MachineServiceConsumer{}, false
+	}
+	machineRef := serviceMachineRef(state, machine)
+	if machineRef == "" {
+		return MachineServiceConsumer{}, false
+	}
+	configKey := machineBMCConfigKey(state, machine)
+	if configKey == "" {
+		return MachineServiceConsumer{}, false
+	}
+	return newServiceConsumer(
+		clusterName,
+		clusterInstallName,
+		owner,
+		v1alpha1.ProviderServiceKindBMC,
+		machine.Source.ProviderRef.Name,
+		driver.Dispatch.BMCRole,
+		driver.Dispatch.BMCRole,
+		map[string]string{
+			"machineRef":  machineRef,
+			"bmcRole":     driver.Dispatch.BMCRole,
+			"configKey":   configKey,
+			"machineName": machine.Name,
+		},
+		nil,
+	), true
 }
 
 func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {

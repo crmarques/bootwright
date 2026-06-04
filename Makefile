@@ -68,6 +68,7 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.task_infra_component_services_destroy \
 	bootwright.core.task_machine_infra_apply \
 	bootwright.core.task_machine_infra_destroy \
+	bootwright.core.task_managed_machine_os_apply \
 	bootwright.core.task_container_cluster_create_agent_iso \
 	bootwright.core.task_container_cluster_boot_agent_machine \
 	bootwright.core.task_container_cluster_wait_agent_install \

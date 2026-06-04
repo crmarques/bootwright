@@ -21,6 +21,14 @@
       <source file='{{ bootwright_libvirt_machine_root }}/disk.qcow2'/>
       <target dev='vda' bus='virtio'/>
     </disk>
+{% set _data_disk_letters = ['b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'] %}
+{% for disk in bootwright_component.profile.dataDisks | default([]) %}
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ bootwright_libvirt_machine_root }}/data-{{ disk.name }}.qcow2'/>
+      <target dev='vd{{ _data_disk_letters[loop.index0] }}' bus='virtio'/>
+    </disk>
+{% endfor %}
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <target dev='sda' bus='sata'/>

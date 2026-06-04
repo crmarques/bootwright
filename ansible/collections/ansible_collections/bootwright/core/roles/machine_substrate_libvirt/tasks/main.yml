@@ -93,6 +93,21 @@
   args:
     creates: "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
 
+- name: Create machine data disks
+  ansible.builtin.command:
+    argv:
+      - qemu-img
+      - create
+      - -f
+      - qcow2
+      - "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+      - "{{ item.sizeGiB }}G"
+  args:
+    creates: "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Render libvirt domain XML
   ansible.builtin.template:
     src: domain.xml.j2

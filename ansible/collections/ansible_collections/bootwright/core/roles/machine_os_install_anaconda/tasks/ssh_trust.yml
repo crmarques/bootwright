@@ -1,0 +1,34 @@
+---
+- name: Scan managed OS SSH host key
+  ansible.builtin.command:
+    argv:
+      - ssh-keyscan
+      - -T
+      - "30"
+      - -t
+      - ed25519,ecdsa,rsa
+      - "{{ bootwright_component.osInstall.ssh.address }}"
+  delegate_to: localhost
+  register: bootwright_os_ssh_keyscan
+  changed_when: false
+
+- name: Ensure managed OS SSH trust directory
+  ansible.builtin.file:
+    path: "{{ bootwright_component.osInstall.ssh.knownHostsPath | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  delegate_to: localhost
+
+- name: Record managed OS SSH known_hosts entry
+  ansible.builtin.lineinfile:
+    path: "{{ bootwright_component.osInstall.ssh.knownHostsPath }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0600"
+    regexp: "^{{ bootwright_component.osInstall.ssh.address | regex_escape }}[ ,]"
+    line: "{{ bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list | first }}"
+  delegate_to: localhost
+  when: (bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list | length) > 0

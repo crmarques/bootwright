@@ -39,8 +39,33 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
 				continue
 			}
+			managedOSDeps := []string{}
+			if managedOSCount := managedOSMachineCount(state, cluster); managedOSCount > 0 {
+				taskID := "osinstall." + cluster.Metadata.Name
+				managedOSDeps = append(managedOSDeps, taskID)
+				tasks = append(tasks, ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindManagedMachineOS,
+						Label:        "managed OS " + cluster.Metadata.Name,
+						Cluster:      cluster.Metadata.Name,
+						ClusterKind:  ApplyClusterKindStorage,
+						Status:       TaskStatusPending,
+						Dependencies: append([]string(nil), machineServiceTaskIDs...),
+						ResourceKeys: managedOSResourceKeys(state, cluster.Metadata.Name),
+					},
+					Playbook:      applyManagedMachineOSPlaybook,
+					Limit:         render.GroupInfraHosts,
+					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
+					State:         storageTaskState(state, cluster.Metadata.Name),
+					Forks:         managedOSCount,
+					RedfishSlots:  managedOSCount,
+				})
+			}
 			taskID := "storageinfra." + cluster.Metadata.Name
 			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+			deps := append([]string(nil), machineServiceTaskIDs...)
+			deps = append(deps, managedOSDeps...)
 			tasks = append(tasks, ApplyTask{
 				Entry: TaskLedgerEntry{
 					ID:           taskID,
@@ -49,7 +74,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					Cluster:      cluster.Metadata.Name,
 					ClusterKind:  ApplyClusterKindStorage,
 					Status:       TaskStatusPending,
-					Dependencies: append([]string(nil), machineServiceTaskIDs...),
+					Dependencies: deps,
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
 				Playbook:      applyStoragePlaybook,

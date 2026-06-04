@@ -13,6 +13,7 @@ const (
 	ApplyTaskKindProvider               = "providerServices"
 	ApplyTaskKindInfraComponentServices = "infraComponentServices"
 	ApplyTaskKindClusterInstall         = "clusterInstall"
+	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
 	ApplyTaskKindNodeBoot               = "nodeBoot"
@@ -33,13 +34,14 @@ const (
 	ApplyPhaseContainerCluster = "container-cluster"
 	ApplyPhaseAddons           = "addons"
 
-	applyProviderPlaybook        = "bootwright.core.task_provider_services_apply"
-	applyInfraComponentsPlaybook = "bootwright.core.task_infra_component_services_apply"
-	applyClusterInstallPlaybook  = "bootwright.core.task_machine_infra_apply"
-	applyCreateISOPlaybook       = "bootwright.core.task_container_cluster_create_agent_iso"
-	applyBootMachinePlaybook     = "bootwright.core.task_container_cluster_boot_agent_machine"
-	applyWaitInstallPlaybook     = "bootwright.core.task_container_cluster_wait_agent_install"
-	applyStoragePlaybook         = "bootwright.core.task_storage_cluster_apply"
+	applyProviderPlaybook         = "bootwright.core.task_provider_services_apply"
+	applyInfraComponentsPlaybook  = "bootwright.core.task_infra_component_services_apply"
+	applyClusterInstallPlaybook   = "bootwright.core.task_machine_infra_apply"
+	applyManagedMachineOSPlaybook = "bootwright.core.task_managed_machine_os_apply"
+	applyCreateISOPlaybook        = "bootwright.core.task_container_cluster_create_agent_iso"
+	applyBootMachinePlaybook      = "bootwright.core.task_container_cluster_boot_agent_machine"
+	applyWaitInstallPlaybook      = "bootwright.core.task_container_cluster_wait_agent_install"
+	applyStoragePlaybook          = "bootwright.core.task_storage_cluster_apply"
 )
 
 type ApplyTarget struct {

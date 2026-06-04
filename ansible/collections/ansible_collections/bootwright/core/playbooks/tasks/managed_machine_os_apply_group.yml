@@ -1,0 +1,36 @@
+---
+- name: Resolve current managed OS group
+  ansible.builtin.set_fact:
+    bootwright_current_os_group: "{{ bootwright_os_group }}"
+    bootwright_current_cluster:
+      name: "{{ bootwright_os_group.name }}"
+      networks: "{{ bootwright_os_group.networks | default([]) }}"
+  changed_when: false
+
+- name: Pick managed OS components on this host
+  ansible.builtin.set_fact:
+    bootwright_current_machines: >-
+      {{
+        bootwright_current_os_group.components
+        | selectattr('kind', 'equalto', 'machines')
+        | selectattr('machineRef', 'defined')
+        | selectattr('machineRef', 'equalto', bootwright_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Dispatch substrate per managed OS machine
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.substrateApplyRole }}"
+  loop: "{{ bootwright_current_machines }}"
+  loop_control:
+    loop_var: bootwright_component
+    label: "{{ bootwright_component.clusterName }}/{{ bootwright_component.name }}"
+
+- name: Install managed operating system per machine
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_os_install_anaconda
+  loop: "{{ bootwright_current_machines }}"
+  loop_control:
+    loop_var: bootwright_component
+    label: "{{ bootwright_component.clusterName }}/{{ bootwright_component.name }}"

@@ -74,13 +74,15 @@ all OpenShift nodes in one cluster must reference the same `Machine and Containe
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
 
-Storage actions also run from the bastion. For managed storage, Bootwright
-schedules an Ansible storage task that SSHes to the preinstalled RHEL Ceph seed
-node, prepares every declared storage node, runs cephadm there, and applies
-generated core services, storage operations, late RGW/MDS services, and Data
-Foundation credential operations from the rendered storage tree. The managed
-Ceph declaration includes a cephadm registry URL and credential reference; it
-does not embed registry secrets in desired state. For imported storage,
+Storage actions also run from the bastion. For managed storage, Bootwright can
+first install managed RHEL machines from `MachineImage` and
+`MachineInstallProfile` through the provider/BMC virtual-media path. It then
+schedules an Ansible storage task that SSHes to the RHEL Ceph seed node,
+prepares every declared storage node, runs cephadm there, and applies generated
+core services, storage operations, late RGW/MDS services, and Data Foundation
+credential operations from the rendered storage tree. The managed Ceph
+declaration includes a cephadm registry URL and credential reference; it does
+not embed registry secrets in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
 `storage-export-attachment` effect, bindings provide `exportRef`, and
@@ -89,8 +91,7 @@ operator-provided external-cluster details secret. The attachment applies later
 in the add-ons phase after the target
 cluster and Data Foundation add-on are ready. Managed Ceph generates those
 details during storage apply and saves them as restrictive runtime secret
-material. Installing RHEL onto bare-metal storage nodes through BMC and
-kickstart is a roadmap path, not part of the current managed storage flow.
+material.
 
 ## KubeVirt Child Clusters
 

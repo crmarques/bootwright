@@ -88,6 +88,9 @@ Generated output boundaries are part of the safety contract:
   `/var/lib/bootwright/contexts/<context>/input/`.
 - Context-local secrets live under
   `/var/lib/bootwright/contexts/<context>/secrets/`.
+- Managed ISO media lives under `/var/lib/bootwright/media/`. These files are
+  host-local, root-managed, non-secret, and not versioned; licensed media such
+  as RHEL ISOs must be supplied by the operator.
 - Placeholder installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
 - Secret-inlined runtime installer output lives under

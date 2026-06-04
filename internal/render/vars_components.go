@@ -259,6 +259,7 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					"cpu":       profile.CPU,
 					"memoryMiB": profile.MemoryMiB,
 					"diskGiB":   profile.DiskGiB,
+					"dataDisks": machineProfileDisksVars(profile.DataDisks),
 				}
 				switch provider.Spec.Type {
 				case v1alpha1.ProvisionerLibvirt:

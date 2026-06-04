@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/media"
 )
 
 var validMachineCapabilities = map[string]bool{
@@ -310,6 +311,11 @@ func validateMachineImages(state v1alpha1.State) []string {
 		}
 		if image.Spec.URL == "" {
 			errs = append(errs, prefix+".url is required")
+		} else if err := media.ValidateISOReference(image.Spec.URL); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.url %s", prefix, err))
+		}
+		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 		}
 	}
 	return errs

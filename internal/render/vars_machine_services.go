@@ -197,6 +197,11 @@ func clusterInstallByName(state v1alpha1.State, name string) (v1alpha1.ClusterIn
 			return stateview.ClusterInstallForContainerCluster(state, cluster)
 		}
 	}
+	for _, cluster := range managedStorageClusters(state) {
+		if cluster.Metadata.Name == name {
+			return storageClusterInstall(state, cluster)
+		}
+	}
 	return v1alpha1.ClusterInstall{}, false
 }
 

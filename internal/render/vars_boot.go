@@ -31,11 +31,14 @@ func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vmediaPort 
 }
 
 func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
+	return machineBootVarsWithISO(state, ci, m, clusterName, fmt.Sprintf("agent-%s.iso", clusterName))
+}
+
+func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName, isoBasename string) map[string]any {
 	provider, ok := findProvider(state, m.Source.ProviderRef.Name)
 	if !ok {
 		return nil
 	}
-	isoBasename := fmt.Sprintf("agent-%s.iso", clusterName)
 
 	if m.Source.ProfileRef.Name != "" {
 		if _, ok := findProfile(provider, m.Source.ProfileRef.Name); !ok {

@@ -1069,6 +1069,23 @@ func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 	}
 }
 
+func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+
+	assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.lab-host")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.lab-host", "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.lab-host", "storageinfra.ceph-libvirt")
+	assertTaskResourceKeys(t, tasks, "osinstall.ceph-libvirt", "storage:ceph-libvirt", "host:lab-host:mutating")
+}
+
 func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
 	state := kubeVirtChildPlanningState(true)
 

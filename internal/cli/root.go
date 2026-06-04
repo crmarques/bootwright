@@ -61,6 +61,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newContainerClusterCmd(stdout),
 		newExampleCmd(stdout),
 		newPrintEnvCmd(stdout),
+		newMediaCmd(stdin, stdout),
 		newSecretCmd(stdin, stdout, stderr),
 		newCheckCmd(stdout, stderr),
 		newStatusCmd(stdout),

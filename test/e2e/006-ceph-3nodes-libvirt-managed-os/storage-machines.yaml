@@ -1,0 +1,128 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef:
+      name: lab-libvirt-provider
+    libvirt:
+      profileRef:
+        name: ceph-node
+
+  os:
+    mode: managed
+    install:
+      profileRef:
+        name: rhel-9-ceph-node
+      network:
+        networkConfigRef:
+          name: ceph-bridge
+        attachmentRef:
+          name: ceph-bridge
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.134.20
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+    addresses:
+      - name: ssh
+        address: 192.168.134.20
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-node-ssh
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-1
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef:
+      name: lab-libvirt-provider
+    libvirt:
+      profileRef:
+        name: ceph-node
+
+  os:
+    mode: managed
+    install:
+      profileRef:
+        name: rhel-9-ceph-node
+      network:
+        networkConfigRef:
+          name: ceph-bridge
+        attachmentRef:
+          name: ceph-bridge
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.134.21
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+    addresses:
+      - name: ssh
+        address: 192.168.134.21
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-node-ssh
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-2
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef:
+      name: lab-libvirt-provider
+    libvirt:
+      profileRef:
+        name: ceph-node
+
+  os:
+    mode: managed
+    install:
+      profileRef:
+        name: rhel-9-ceph-node
+      network:
+        networkConfigRef:
+          name: ceph-bridge
+        attachmentRef:
+          name: ceph-bridge
+        overrides:
+          interfaces:
+            - name: primary
+              ipv4:
+                address:
+                  - ip: 192.168.134.22
+                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/vda
+    addresses:
+      - name: ssh
+        address: 192.168.134.22
+    ssh:
+      addressName: ssh
+      user: root
+      keyRef:
+        name: ceph-node-ssh

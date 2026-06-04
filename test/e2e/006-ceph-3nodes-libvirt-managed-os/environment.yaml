@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-3nodes-libvirt-managed-os
+spec:
+  baseDomain: bootwright.test
+
+  storageClusters:
+    - ceph-libvirt
+
+  secrets:
+    - provider-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - bmc-credentials:
+        generated:
+          credentials:
+            username: admin
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            type: ed25519
+            comment: bootwright-ceph-libvirt
+    - ceph-registry-credentials:
+        generated:
+          credentials:
+            username: replace-with-registry-user

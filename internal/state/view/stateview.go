@@ -111,6 +111,10 @@ func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.Co
 	}, len(nodes) > 0 || len(cluster.Spec.Install.Endpoints) > 0 || cluster.Spec.Install.Platform.Type != ""
 }
 
+func InstallMachineFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
+	return clusterNodeFromMachine(machine)
+}
+
 func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
 	network := machine.Spec.OS.Install.Network
 	node := v1alpha1.InstallMachine{

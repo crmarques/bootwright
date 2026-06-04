@@ -1,0 +1,44 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-x86-64-dvd
+spec:
+  type: iso
+
+  url: media:rhel-9-x86_64-dvd.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+spec:
+  os:
+    family: rhel
+    version: "9"
+    architecture: x86_64
+
+  installer:
+    type: anaconda
+    anaconda:
+      imageRef:
+        name: rhel-9-x86-64-dvd
+
+  customizations:
+    hostname:
+      source: machineName
+    ssh:
+      authorizeMachineSSHKey: true
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        source: substrateRootDeviceHints
+      wipe: true
+    packages:
+      - chrony
+      - firewalld
+      - lvm2
+      - podman
+    services:
+      enabled:
+        - chronyd
+        - sshd

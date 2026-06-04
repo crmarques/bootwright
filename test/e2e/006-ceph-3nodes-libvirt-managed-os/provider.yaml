@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt-provider
+spec:
+  type: libvirt
+
+  libvirt:
+    machineRef:
+      name: lab-host
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      auth:
+        credentialRef:
+          name: bmc-credentials
+    machineProfiles:
+      - name: ceph-node
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 80
+        dataDisks:
+          - name: osd0
+            sizeGiB: 120
+          - name: osd1
+            sizeGiB: 120
+
+  networkAttachments:
+    - name: ceph-bridge
+      libvirt:
+        bridge: vbr-cb-ceph
