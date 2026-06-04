@@ -17,14 +17,14 @@ spec:
           name: bmc-credentials
     machineProfiles:
       - name: ceph-node
-        cpu: 4
-        memoryMiB: 8192
-        diskGiB: 80
+        cpu: 2
+        memoryMiB: 6144
+        diskGiB: 40
         dataDisks:
           - name: osd0
-            sizeGiB: 120
+            sizeGiB: 40
           - name: osd1
-            sizeGiB: 120
+            sizeGiB: 40
 
   networkAttachments:
     - name: ceph-bridge

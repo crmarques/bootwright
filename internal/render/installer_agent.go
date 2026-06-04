@@ -62,7 +62,7 @@ func agentNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, machin
 	return out
 }
 
-func machineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, clusterName string) []v1alpha1.MachineInterface {
+func machineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, clusterName string) []v1alpha1.MachineNIC {
 	if interfaces := providerMachineInterfaces(state, machine); len(interfaces) > 0 {
 		return interfaces
 	}
@@ -80,9 +80,9 @@ func machineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, cl
 		return nil
 	}
 	names := clusterMachineInterfaceNames(state, machine)
-	out := make([]v1alpha1.MachineInterface, 0, len(names))
+	out := make([]v1alpha1.MachineNIC, 0, len(names))
 	for _, name := range names {
-		out = append(out, v1alpha1.MachineInterface{
+		out = append(out, v1alpha1.MachineNIC{
 			Name:       name,
 			MACAddress: libvirtMACAddress(clusterName, machine.Name, name),
 		})
@@ -98,15 +98,30 @@ func clusterMachineInterfaceNames(state v1alpha1.State, machine v1alpha1.Install
 	return out
 }
 
-func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine) []v1alpha1.MachineInterface {
+func providerMachineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine) []v1alpha1.MachineNIC {
 	if machine.Source.MachineRef.Name == "" {
 		return nil
 	}
 	pm, ok := findProviderMachine(state, machine.Source.MachineRef.Name)
-	if !ok || pm.Spec.Substrate.BareMetal == nil {
+	if !ok || len(pm.Spec.Hardware.NICs) == 0 {
 		return nil
 	}
-	return append([]v1alpha1.MachineInterface(nil), pm.Spec.Substrate.BareMetal.Interfaces...)
+	nics := map[string]v1alpha1.MachineNIC{}
+	for _, nic := range pm.Spec.Hardware.NICs {
+		nics[nic.Name] = nic
+	}
+	if len(machine.InterfaceBinding) == 0 {
+		return append([]v1alpha1.MachineNIC(nil), pm.Spec.Hardware.NICs...)
+	}
+	out := make([]v1alpha1.MachineNIC, 0, len(machine.InterfaceBinding))
+	for _, binding := range machine.InterfaceBinding {
+		nic := nics[binding.NICRef.Name]
+		out = append(out, v1alpha1.MachineNIC{
+			Name:       binding.InterfaceName,
+			MACAddress: nic.MACAddress,
+		})
+	}
+	return out
 }
 
 func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.InstallMachine) *v1alpha1.RootDeviceHints {
@@ -117,13 +132,13 @@ func machineRootDeviceHints(state v1alpha1.State, machine v1alpha1.InstallMachin
 		return nil
 	}
 	pm, ok := findProviderMachine(state, machine.Source.MachineRef.Name)
-	if !ok || pm.Spec.Substrate.BareMetal == nil {
+	if !ok {
 		return nil
 	}
-	return pm.Spec.Substrate.BareMetal.RootDeviceHints
+	return pm.Spec.OS.Install.RootDeviceHints
 }
 
-func renderMachineMACs(config map[string]any, ifaces []v1alpha1.MachineInterface) {
+func renderMachineMACs(config map[string]any, ifaces []v1alpha1.MachineNIC) {
 	if len(ifaces) == 0 {
 		return
 	}

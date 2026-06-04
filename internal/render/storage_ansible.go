@@ -63,7 +63,7 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
 	nodeName := node.Name
 	entry := map[string]any{}
-	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.OS.SSH != nil {
+	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.Access.SSH != nil {
 		entry = machineInventoryEntry(machine, env, secretsDir, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
@@ -117,17 +117,17 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		return nil
 	}
 	machine, ok := topology.NodeMachine(state, cluster, cluster.Spec.Ceph.Topology.Nodes[0].Name)
-	if !ok || machine.Spec.OS.SSH == nil {
+	if !ok || machine.Spec.Access.SSH == nil {
 		return nil
 	}
 	out := map[string]any{}
-	if machine.Spec.OS.SSH.User != "" {
-		out["user"] = machine.Spec.OS.SSH.User
+	if machine.Spec.Access.SSH.User != "" {
+		out["user"] = machine.Spec.Access.SSH.User
 	}
-	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir); privatePath != "" {
+	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir); privatePath != "" {
 		out["privateKeyPath"] = privatePath
 	}
-	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir); publicPath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir); publicPath != "" {
 		out["publicKeyPath"] = publicPath
 	}
 	if knownHostsPath := machineKnownHostsPath(machine, env, secretsDir); knownHostsPath != "" {

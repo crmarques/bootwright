@@ -9,37 +9,49 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 52:54:00:33:11:10
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:33:11:10
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-vlan
+      attachmentRef:
+        name: rack1-vlan
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.20
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:33:11:10
+    management:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: primary
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-vlan
-        attachmentRef:
-          name: rack1-vlan
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.20
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/vda
+  addresses:
+    - name: ip
+      address: 192.168.133.20
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -52,37 +64,49 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 52:54:00:33:11:11
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:33:11:11
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-vlan
+      attachmentRef:
+        name: rack1-vlan
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.21
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:33:11:11
+    management:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: primary
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-vlan
-        attachmentRef:
-          name: rack1-vlan
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.21
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/vda
+  addresses:
+    - name: ip
+      address: 192.168.133.21
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -95,34 +119,46 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 52:54:00:33:11:12
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:33:11:12
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-vlan
+      attachmentRef:
+        name: rack1-vlan
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.22
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:33:11:12
+    management:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: primary
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-vlan
-        attachmentRef:
-          name: rack1-vlan
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.22
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/vda
+  addresses:
+    - name: ip
+      address: 192.168.133.22

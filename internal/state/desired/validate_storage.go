@@ -158,17 +158,17 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 				if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephNode) {
 					errs = append(errs, fmt.Sprintf("%s.machineRef.name %q lacks capability %q", owner, node.MachineRef.Name, v1alpha1.MachineCapabilityCephNode))
 				}
-				if machine.Spec.OS.SSH == nil {
-					errs = append(errs, fmt.Sprintf("Machine/%s spec.os.ssh is required for %s.machineRef.name", machine.Metadata.Name, owner))
+				if machine.Spec.Access.SSH == nil {
+					errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s.machineRef.name", machine.Metadata.Name, owner))
 				} else {
 					if !sshSeen {
-						sshUser = machine.Spec.OS.SSH.User
-						sshKeyRef = machine.Spec.OS.SSH.KeyRef.Name
+						sshUser = machine.Spec.Access.SSH.User
+						sshKeyRef = machine.Spec.Access.SSH.KeyRef.Name
 						sshSeen = true
-					} else if machine.Spec.OS.SSH.User != sshUser {
-						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.OS.SSH.User, sshUser))
-					} else if machine.Spec.OS.SSH.KeyRef.Name != sshKeyRef {
-						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.keyRef.name %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.OS.SSH.KeyRef.Name, sshKeyRef))
+					} else if machine.Spec.Access.SSH.User != sshUser {
+						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
+					} else if machine.Spec.Access.SSH.KeyRef.Name != sshKeyRef {
+						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.keyRef.name %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
 				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef.name", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
@@ -632,8 +632,8 @@ func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCl
 		if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephAdmin) {
 			errs = append(errs, fmt.Sprintf("%s %q must reference a Machine with capability %q", owner, ref.Name, v1alpha1.MachineCapabilityCephAdmin))
 		}
-		if machine.Spec.OS.SSH == nil {
-			errs = append(errs, fmt.Sprintf("Machine/%s spec.os.ssh is required for %s", machine.Metadata.Name, owner))
+		if machine.Spec.Access.SSH == nil {
+			errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s", machine.Metadata.Name, owner))
 		}
 	}
 	if spec.Timeout != "" {
@@ -787,14 +787,14 @@ func validateStorageNodeMachineAddress(owner string, cluster v1alpha1.StorageClu
 	if resolvedName == "" {
 		resolvedName = defaultAddressName
 	}
-	if resolvedName == "" && machine.Spec.OS.SSH != nil {
-		resolvedName = machine.Spec.OS.SSH.AddressName
+	if resolvedName == "" && machine.Spec.Access.SSH != nil {
+		resolvedName = machine.Spec.Access.SSH.AddressRef.Name
 	}
 	if resolvedName == "" {
-		return []string{fmt.Sprintf("%s must set addressRef.name or Machine/%s spec.os.ssh.addressName", owner, machine.Metadata.Name)}
+		return []string{fmt.Sprintf("%s must set addressRef.name or Machine/%s spec.access.ssh.addressRef.name", owner, machine.Metadata.Name)}
 	}
 	if _, ok := v1alpha1.MachineAddressByName(machine, resolvedName); !ok {
-		return []string{fmt.Sprintf("%s %q does not resolve to Machine/%s spec.os.addresses[].name", owner, resolvedName, machine.Metadata.Name)}
+		return []string{fmt.Sprintf("%s %q does not resolve to Machine/%s spec.addresses[].name", owner, resolvedName, machine.Metadata.Name)}
 	}
 	return nil
 }

@@ -100,7 +100,7 @@ func managedHostTrustChecks(state v1alpha1.State, secretsDir string, deps prefli
 func managedTrustMachines(state v1alpha1.State, policy locality.Policy) []v1alpha1.Machine {
 	var machines []v1alpha1.Machine
 	for _, machine := range state.Machines {
-		if machine.Spec.OS.SSH == nil || machine.Spec.OS.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, policy) {
+		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, policy) {
 			continue
 		}
 		machines = append(machines, machine)

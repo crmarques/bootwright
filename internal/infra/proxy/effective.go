@@ -141,7 +141,7 @@ func auto(state v1alpha1.State, env *v1alpha1.Environment) []string {
 		}
 	}
 	for _, machine := range state.Machines {
-		for _, address := range machine.Spec.OS.Addresses {
+		for _, address := range machine.Spec.Addresses {
 			if address.Address != "" {
 				out = append(out, address.Address)
 			}
@@ -216,10 +216,7 @@ func noProxyCIDRs(entries []string) []netip.Prefix {
 func noProxyTargets(state v1alpha1.State) []string {
 	var out []string
 	for _, machine := range state.Machines {
-		if machine.Spec.Substrate.BareMetal == nil {
-			continue
-		}
-		if host := hostFromAddress(machine.Spec.Substrate.BareMetal.BMC.Address); host != "" {
+		if host := hostFromAddress(machine.Spec.Hardware.Management.BMC.Address); host != "" {
 			out = append(out, host)
 		}
 	}

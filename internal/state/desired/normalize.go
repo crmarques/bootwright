@@ -99,11 +99,11 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 }
 
 func normalizeMachine(m *v1alpha1.Machine, sshUser string) {
-	if m.Spec.OS.SSH != nil && m.Spec.OS.SSH.User == "" && sshUser != "" {
-		m.Spec.OS.SSH.User = sshUser
+	if m.Spec.Access.SSH != nil && m.Spec.Access.SSH.User == "" && sshUser != "" {
+		m.Spec.Access.SSH.User = sshUser
 	}
-	if m.Spec.Substrate.BareMetal != nil {
-		normalizeBMC(&m.Spec.Substrate.BareMetal.BMC)
+	if m.Spec.Hardware.Management.BMC.Address != "" {
+		normalizeBMC(&m.Spec.Hardware.Management.BMC)
 	}
 }
 

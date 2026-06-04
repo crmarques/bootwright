@@ -11,32 +11,35 @@ type Machine struct {
 type MachineSpec struct {
 	Capabilities []string         `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 	Substrate    MachineSubstrate `yaml:"substrate,omitempty" json:"substrate,omitempty"`
+	Hardware     MachineHardware  `yaml:"hardware,omitempty" json:"hardware,omitempty"`
 	OS           MachineOSSpec    `yaml:"os" json:"os"`
+	Network      MachineNetwork   `yaml:"network,omitempty" json:"network,omitempty"`
+	Addresses    []MachineAddress `yaml:"addresses,omitempty" json:"addresses,omitempty"`
+	Access       MachineAccess    `yaml:"access,omitempty" json:"access,omitempty"`
 }
 
 type MachineSubstrate struct {
-	ProviderRef LocalObjectReference       `yaml:"providerRef,omitempty" json:"providerRef,omitempty"`
-	BareMetal   *MachineBareMetalSubstrate `yaml:"bareMetal,omitempty" json:"bareMetal,omitempty"`
-	Libvirt     *MachineProfiledSubstrate  `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
-	VSphere     *MachineProfiledSubstrate  `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
-	KubeVirt    *MachineProfiledSubstrate  `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
+	ProviderRef LocalObjectReference `yaml:"providerRef,omitempty" json:"providerRef,omitempty"`
+	ProfileRef  LocalObjectReference `yaml:"profileRef,omitempty" json:"profileRef,omitempty"`
 }
 
-type MachineProfiledSubstrate struct {
-	ProfileRef LocalObjectReference `yaml:"profileRef" json:"profileRef"`
-	VMName     string               `yaml:"vmName,omitempty" json:"vmName,omitempty"`
+type MachineHardware struct {
+	NICs       []MachineNIC              `yaml:"nics,omitempty" json:"nics,omitempty"`
+	Boot       MachineHardwareBoot       `yaml:"boot,omitempty" json:"boot,omitempty"`
+	Management MachineHardwareManagement `yaml:"management,omitempty" json:"management,omitempty"`
 }
 
-type MachineBareMetalSubstrate struct {
-	BootMACAddress  string             `yaml:"bootMACAddress,omitempty" json:"bootMACAddress,omitempty"`
-	Interfaces      []MachineInterface `yaml:"interfaces,omitempty" json:"interfaces,omitempty"`
-	RootDeviceHints *RootDeviceHints   `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
-	BMC             BMCSpec            `yaml:"bmc,omitempty" json:"bmc,omitempty"`
-}
-
-type MachineInterface struct {
+type MachineNIC struct {
 	Name       string `yaml:"name" json:"name"`
-	MACAddress string `yaml:"macAddress" json:"macAddress"`
+	MACAddress string `yaml:"macAddress,omitempty" json:"macAddress,omitempty"`
+}
+
+type MachineHardwareBoot struct {
+	NICRef LocalObjectReference `yaml:"nicRef,omitempty" json:"nicRef,omitempty"`
+}
+
+type MachineHardwareManagement struct {
+	BMC BMCSpec `yaml:"bmc,omitempty" json:"bmc,omitempty"`
 }
 
 type BMCSpec struct {
@@ -58,24 +61,30 @@ type RootDeviceHints struct {
 }
 
 type MachineOSSpec struct {
-	Mode         string               `yaml:"mode" json:"mode"`
-	Install      MachineOSInstallSpec `yaml:"install,omitempty" json:"install,omitempty"`
-	Addresses    []MachineAddress     `yaml:"addresses,omitempty" json:"addresses,omitempty"`
-	SSH          *MachineSSHSpec      `yaml:"ssh,omitempty" json:"ssh,omitempty"`
-	Capabilities []string             `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Provided   *bool                `yaml:"provided" json:"provided"`
+	ProfileRef LocalObjectReference `yaml:"profileRef,omitempty" json:"profileRef,omitempty"`
+	Install    MachineOSInstallSpec `yaml:"install,omitempty" json:"install,omitempty"`
 }
 
 type MachineOSInstallSpec struct {
-	ProfileRef      LocalObjectReference `yaml:"profileRef,omitempty" json:"profileRef,omitempty"`
-	Network         MachineNetwork       `yaml:"network,omitempty" json:"network,omitempty"`
-	RootDeviceHints *RootDeviceHints     `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
+	RootDeviceHints *RootDeviceHints `yaml:"rootDeviceHints,omitempty" json:"rootDeviceHints,omitempty"`
 }
 
 type MachineNetwork struct {
+	Config           MachineNetworkConfig             `yaml:"config,omitempty" json:"config,omitempty"`
+	InterfaceBinding []MachineNetworkInterfaceBinding `yaml:"interfaceBinding,omitempty" json:"interfaceBinding,omitempty"`
+}
+
+type MachineNetworkConfig struct {
 	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
 	AttachmentRef    LocalObjectReference `yaml:"attachmentRef,omitempty" json:"attachmentRef,omitempty"`
 	Overrides        map[string]any       `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 	Spec             *NetworkConfigSpec   `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+type MachineNetworkInterfaceBinding struct {
+	NICRef        LocalObjectReference `yaml:"nicRef" json:"nicRef"`
+	InterfaceName string               `yaml:"interfaceName" json:"interfaceName"`
 }
 
 type MachineAddress struct {
@@ -83,11 +92,15 @@ type MachineAddress struct {
 	Address string `yaml:"address" json:"address"`
 }
 
+type MachineAccess struct {
+	SSH *MachineSSHSpec `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+}
+
 type MachineSSHSpec struct {
-	AddressName   string    `yaml:"addressName" json:"addressName"`
-	User          string    `yaml:"user,omitempty" json:"user,omitempty"`
-	KeyRef        SecretRef `yaml:"keyRef" json:"keyRef"`
-	KnownHostsRef SecretRef `yaml:"knownHostsRef,omitempty" json:"knownHostsRef,omitempty"`
+	AddressRef    LocalObjectReference `yaml:"addressRef" json:"addressRef"`
+	User          string               `yaml:"user,omitempty" json:"user,omitempty"`
+	KeyRef        SecretRef            `yaml:"keyRef" json:"keyRef"`
+	KnownHostsRef SecretRef            `yaml:"knownHostsRef,omitempty" json:"knownHostsRef,omitempty"`
 }
 
 type MachineImage struct {
@@ -172,7 +185,7 @@ type MachineInstallServices struct {
 }
 
 func MachineAddressByName(machine Machine, name string) (string, bool) {
-	for _, address := range machine.Spec.OS.Addresses {
+	for _, address := range machine.Spec.Addresses {
 		if address.Name == name {
 			return address.Address, true
 		}
@@ -181,11 +194,23 @@ func MachineAddressByName(machine Machine, name string) (string, bool) {
 }
 
 func MachineSSHAddress(machine Machine) string {
-	if machine.Spec.OS.SSH == nil || machine.Spec.OS.SSH.AddressName == "" {
+	if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.AddressRef.Name == "" {
 		return ""
 	}
-	address, _ := MachineAddressByName(machine, machine.Spec.OS.SSH.AddressName)
+	address, _ := MachineAddressByName(machine, machine.Spec.Access.SSH.AddressRef.Name)
 	return address
+}
+
+func MachineOSProvided(machine Machine) bool {
+	return machine.Spec.OS.Provided != nil && *machine.Spec.OS.Provided
+}
+
+func MachineRequiresSubstrate(machine Machine) bool {
+	return machine.Spec.OS.Provided != nil && !*machine.Spec.OS.Provided
+}
+
+func MachineInstallsOS(machine Machine) bool {
+	return MachineRequiresSubstrate(machine) && machine.Spec.OS.ProfileRef.Name != ""
 }
 
 func MachineHasCapability(machine Machine, want string) bool {
@@ -194,38 +219,20 @@ func MachineHasCapability(machine Machine, want string) bool {
 			return true
 		}
 	}
-	for _, capability := range machine.Spec.OS.Capabilities {
-		if capability == want {
-			return true
-		}
-	}
 	return false
 }
 
-func MachineSubstrateKind(machine Machine) string {
-	switch {
-	case machine.Spec.Substrate.BareMetal != nil:
-		return ProvisionerBareMetal
-	case machine.Spec.Substrate.Libvirt != nil:
-		return ProvisionerLibvirt
-	case machine.Spec.Substrate.VSphere != nil:
-		return ProvisionerVSphere
-	case machine.Spec.Substrate.KubeVirt != nil:
-		return ProvisionerKubeVirt
-	default:
-		return ""
-	}
+func MachineProfileRef(machine Machine) LocalObjectReference {
+	return machine.Spec.Substrate.ProfileRef
 }
 
-func MachineProfileRef(machine Machine) LocalObjectReference {
-	switch {
-	case machine.Spec.Substrate.Libvirt != nil:
-		return machine.Spec.Substrate.Libvirt.ProfileRef
-	case machine.Spec.Substrate.VSphere != nil:
-		return machine.Spec.Substrate.VSphere.ProfileRef
-	case machine.Spec.Substrate.KubeVirt != nil:
-		return machine.Spec.Substrate.KubeVirt.ProfileRef
-	default:
-		return LocalObjectReference{}
-	}
+func (n MachineNetworkConfig) IsZero() bool {
+	return n.NetworkConfigRef.Name == "" &&
+		n.AttachmentRef.Name == "" &&
+		len(n.Overrides) == 0 &&
+		n.Spec == nil
+}
+
+func (i MachineOSInstallSpec) IsZero() bool {
+	return i.RootDeviceHints == nil
 }

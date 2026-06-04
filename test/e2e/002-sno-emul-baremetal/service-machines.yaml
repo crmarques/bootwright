@@ -8,13 +8,17 @@ spec:
     - artifact-server
 
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: localhost
-      - name: bmc-lan
-        address: 192.168.132.1
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: localhost
+    - name: bmc-lan
+      address: 192.168.132.1
+
+  access:
     ssh:
-      addressName: ssh
       keyRef:
         name: provider-host-ssh
+      addressRef:
+        name: ssh

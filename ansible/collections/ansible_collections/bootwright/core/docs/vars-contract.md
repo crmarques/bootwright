@@ -342,7 +342,7 @@ keeps the stable host name `storage__<cluster>` for task limiting; non-seed
 nodes render as `storage__<cluster>__<node>`. Every storage host renders
 `bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
 `ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
-`ansible_ssh_common_args` from the node's referenced `Machine.spec.os.ssh`. The
+`ansible_ssh_common_args` from the node's referenced `Machine.spec.access.ssh`. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
 

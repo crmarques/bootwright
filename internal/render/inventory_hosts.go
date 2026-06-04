@@ -39,7 +39,7 @@ func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 		}
 		for _, m := range ci.Machines {
 			machine, ok := findMachine(state, m.Name)
-			if !ok || machine.Spec.OS.Mode != v1alpha1.MachineOSModeManaged {
+			if !ok || !v1alpha1.MachineInstallsOS(machine) {
 				continue
 			}
 			if host := machineHostRef(state, m); host != "" {
@@ -98,7 +98,7 @@ func providerHostSetupReferencedHosts(state v1alpha1.State) map[string]bool {
 		}
 		for _, machine := range ci.Machines {
 			rawMachine, ok := findMachine(state, machine.Name)
-			if !ok || rawMachine.Spec.OS.Mode != v1alpha1.MachineOSModeManaged {
+			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) {
 				continue
 			}
 			machineRef := machineHostRef(state, machine)

@@ -47,7 +47,7 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 	hosts := map[string]any{}
 	for _, name := range sortedHostSet(allHostSet) {
 		h, ok := findMachine(state, name)
-		if !ok || h.Spec.OS.SSH == nil {
+		if !ok || h.Spec.Access.SSH == nil {
 			continue
 		}
 		hosts[name] = machineInventoryEntry(h, env, secretsDir, localPolicy)
@@ -176,10 +176,10 @@ func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secret
 		entry["ansible_connection"] = "local"
 		return entry
 	}
-	if h.Spec.OS.SSH.User != "" {
-		entry["ansible_user"] = h.Spec.OS.SSH.User
+	if h.Spec.Access.SSH.User != "" {
+		entry["ansible_user"] = h.Spec.Access.SSH.User
 	}
-	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.OS.SSH.KeyRef.Name, env, secretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, env, secretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
 	if path := machineKnownHostsPath(h, env, secretsDir); path != "" {
@@ -189,11 +189,11 @@ func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secret
 }
 
 func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string) string {
-	if h.Spec.OS.SSH == nil {
+	if h.Spec.Access.SSH == nil {
 		return ""
 	}
-	if h.Spec.OS.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(h.Spec.OS.SSH.KnownHostsRef.Name, env, secretsDir)
+	if h.Spec.Access.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(h.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
 	}
 	return sshtrust.KnownHostsPathForSecrets(secretsDir)
 }

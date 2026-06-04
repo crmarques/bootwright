@@ -69,10 +69,11 @@ type LoadBalancerBindAddress struct {
 }
 
 type InstallMachine struct {
-	Name            string               `yaml:"-" json:"-"`
-	Source          InstallMachineSource `yaml:"-" json:"-"`
-	Network         MachineNetwork       `yaml:"-" json:"-"`
-	RootDeviceHints *RootDeviceHints     `yaml:"-" json:"-"`
+	Name             string                           `yaml:"-" json:"-"`
+	Source           InstallMachineSource             `yaml:"-" json:"-"`
+	Network          MachineNetworkConfig             `yaml:"-" json:"-"`
+	InterfaceBinding []MachineNetworkInterfaceBinding `yaml:"-" json:"-"`
+	RootDeviceHints  *RootDeviceHints                 `yaml:"-" json:"-"`
 }
 
 type InstallMachineSource struct {

@@ -65,9 +65,11 @@ func minimalState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "bastion"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "bastion.example.test"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "bastion.example.test"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}},
@@ -364,9 +366,11 @@ func stateWithInfraHost(hostName string) v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityLibvirt},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: hostName}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: hostName}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}, {
@@ -374,11 +378,9 @@ func stateWithInfraHost(hostName string) v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Substrate: v1alpha1.MachineSubstrate{
 					ProviderRef: v1alpha1.LocalObjectReference{Name: "provider"},
-					Libvirt: &v1alpha1.MachineProfiledSubstrate{
-						ProfileRef: v1alpha1.LocalObjectReference{Name: "profile"},
-					},
+					ProfileRef:  v1alpha1.LocalObjectReference{Name: "profile"},
 				},
-				OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 			},
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{

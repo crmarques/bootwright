@@ -297,10 +297,12 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+				Access: v1alpha1.MachineAccess{
 					SSH: &v1alpha1.MachineSSHSpec{
-						AddressName:   "ssh",
+						AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 						KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
 						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 					},
@@ -354,10 +356,12 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
-					AddressName:   "ssh",
+					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 				},

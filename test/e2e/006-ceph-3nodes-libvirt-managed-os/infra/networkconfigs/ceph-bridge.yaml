@@ -6,6 +6,9 @@ spec:
   machineNetwork:
     - cidr: 192.168.134.0/24
 
+  dnsRefs:
+    - lab-dns
+
   template:
     networkConfig:
       interfaces:

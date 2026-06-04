@@ -32,7 +32,7 @@ func TestMachineNetworkConfigUsesMachineNetworkRefsOnly(t *testing.T) {
 		Machines: []v1alpha1.InstallMachine{
 			{
 				Name: "master-0",
-				Network: v1alpha1.MachineNetwork{
+				Network: v1alpha1.MachineNetworkConfig{
 					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "machine-net"},
 				},
 			},
@@ -53,7 +53,7 @@ func TestMachineNetworkConfigUsesInlineMachineSpecs(t *testing.T) {
 	ci := v1alpha1.ClusterInstall{
 		Machines: []v1alpha1.InstallMachine{{
 			Name: "master-0",
-			Network: v1alpha1.MachineNetwork{
+			Network: v1alpha1.MachineNetworkConfig{
 				Spec: &v1alpha1.NetworkConfigSpec{
 					MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.132.0/24"}},
 				},

@@ -164,8 +164,13 @@ func anyPhaseInScope(names []string, selected []Phase) bool {
 }
 
 func stateNeedsKubeVirt(state v1alpha1.State) bool {
+	providers := map[string]v1alpha1.InfraProvider{}
+	for _, provider := range state.InfraProviders {
+		providers[provider.Metadata.Name] = provider
+	}
 	for _, machine := range state.Machines {
-		if machine.Spec.Substrate.KubeVirt != nil {
+		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
 			return true
 		}
 	}

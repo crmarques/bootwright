@@ -9,7 +9,8 @@ points here when the operator chooses the host-bastion mode.
 
 The bastion is a Linux machine you SSH into and run `bootwright` from. It must
 be able to reach every provider and service host the case declares over SSH.
-Use the declared `Machine.spec.os.ssh.addressName` addresses for those hosts.
+Use the declared `Machine.spec.access.ssh.addressRef.name` addresses for those
+hosts.
 
 - A non-root user with `sudo`.
 - `bin/bootwright` available in `$PATH`.

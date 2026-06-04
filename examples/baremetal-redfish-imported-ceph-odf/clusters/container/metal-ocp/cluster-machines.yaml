@@ -4,36 +4,50 @@ metadata:
   name: metal-master-0
 spec:
   capabilities:
-  - openshift-node
+    - openshift-node
 
   substrate:
     providerRef:
       name: baremetal-provider
-    bareMetal:
-      bootMACAddress: 52:54:00:60:10:10
-      interfaces:
-      - name: primary
-        macAddress: 52:54:00:60:10:10
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: metal-net
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.160.20
+                  prefix-length: 24
+      attachmentRef:
+        name: metal-net
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:60:10:10
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-metal-master-0.bootwright.test/redfish/v1/Systems/1
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: primary
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: metal-net
-        overrides:
-          interfaces:
-          - name: primary
-            ipv4:
-              address:
-              - ip: 192.168.160.20
-                prefix-length: 24
-        attachmentRef:
-          name: metal-net
+  addresses:
+    - name: ip
+      address: 192.168.160.20

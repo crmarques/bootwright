@@ -15,56 +15,70 @@ apply adapter is not converged yet.
 
 ## Bare Metal
 
-Bare-metal inventory keeps physical server facts:
+Bare-metal inventory keeps physical server facts on the installing `Machine`:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
-kind: InfraProvider
+kind: Machine
 metadata:
-  name: rack1-baremetal
+  name: rack1-srv1
 spec:
-  machines:
-    - name: rack1-srv1
-      baremetal:
-        bootMACAddress: 52:54:00:33:11:10
-        interfaces:
-          - name: eno1
-            macAddress: 52:54:00:33:11:10
-          - name: eno2
-            macAddress: 52:54:00:33:11:20
-        rootDeviceHints:
-          deviceName: /dev/sda
-        bmc:
-          address: redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1
-          credentialsRef:
-            name: bmc-credentials
-          disableCertificateVerification: true
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef:
+      name: rack1-baremetal
+  hardware:
+    nics:
+      - name: nic1
+        macAddress: 52:54:00:33:11:10
+      - name: nic2
+        macAddress: 52:54:00:33:11:20
+    boot:
+      nicRef:
+        name: nic1
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1
+        credentialsRef:
+          name: bmc-credentials
+        disableCertificateVerification: true
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
 ```
 
 `disableCertificateVerification: true` is a lab posture for BMCs without
 trusted TLS. Do not treat it as the production default.
 
-The cluster selects that server and adds IP overrides in `Machine and ContainerCluster`:
+The Machine selects its provider attachment and adds IP overrides:
 
 ```yaml
-components:
-  nodes:
-    - name: master-0
-      source:
-        providerRef:
-          name: rack1-baremetal
-        machineRef:
-          name: rack1-srv1
-      network:
-        networkConfigRef:
-          name: rack1-bonded-machine
-        overrides:
-          interfaces:
-            - name: bond0
-              ipv4:
-                address:
-                  - ip: 192.168.133.20
-                    prefix-length: 24
+network:
+  config:
+    networkConfigRef:
+      name: rack1-bonded-machine
+    attachmentRef:
+      name: rack1-machine-net
+    overrides:
+      interfaces:
+        - name: bond0
+          ipv4:
+            address:
+              - ip: 192.168.133.20
+                prefix-length: 24
+  interfaceBinding:
+    - nicRef:
+        name: nic1
+      interfaceName: eno1
+    - nicRef:
+        name: nic2
+      interfaceName: eno2
+addresses:
+  - name: ip
+    address: 192.168.133.20
 ```
 
 ## vSphere
@@ -73,30 +87,41 @@ vSphere profiles keep vCenter, datacenter, failure-domain, and topology facts
 inside the provider:
 
 ```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: vsphere-provider
 spec:
-  machineProfiles:
-    - name: vsphere-control-plane
-      vsphere:
-        vcenters:
-          - server: vcenter.example.test
-            port: 443
-            datacenters:
-              - dc1
-            credentialsRef:
-              name: vcenter-credentials
-        failureDomains:
-          - name: dc1-zone-a
-            region: dc1
-            zone: zone-a
-            server: vcenter.example.test
-            topology:
-              datacenter: dc1
-              computeCluster: /dc1/host/cluster1
-              datastore: /dc1/datastore/datastore1
-              folder: /dc1/vm/bootwright
-              resourcePool: /dc1/host/cluster1/Resources/bootwright
-              networks:
-                - VM_Network_1
+  type: vsphere
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        port: 443
+        datacenters:
+          - dc1
+        credentialsRef:
+          name: vcenter-credentials
+    failureDomains:
+      - name: dc1-zone-a
+        region: dc1
+        zone: zone-a
+        server: vcenter.example.test
+        topology:
+          datacenter: dc1
+          computeCluster: /dc1/host/cluster1
+          datastore: /dc1/datastore/datastore1
+          folder: /dc1/vm/bootwright
+          resourcePool: /dc1/host/cluster1/Resources/bootwright
+          networks:
+            - VM_Network_1
+    machineProfiles:
+      - name: vsphere-control-plane
+        cpu: 8
+        memoryMiB: 22528
+        diskGiB: 120
+        template: rhcos
+        failureDomainRef:
+          name: dc1-zone-a
 ```
 
 The vSphere desired-state shape is present so the schema can stabilize ahead
@@ -114,18 +139,22 @@ kind: InfraProvider
 metadata:
   name: child-kubevirt-provider
 spec:
-  machineProfiles:
-    - name: child-sno
-      cpu: 8
-      memoryMiB: 16384
-      diskGiB: 120
-      kubevirt:
-        hostClusterRef:
-          name: metal-ocp
-        namespace: bootwright-child-ocp
-        storageClassRef:
-          name: lvms-vg1
+  type: kubevirt
+  kubevirt:
+    hostClusterRef:
+      name: metal-ocp
+    namespace: bootwright-child-ocp
+    storageClassRef:
+      name: lvms-vg1
+    machineProfiles:
+      - name: child-sno
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
 ```
+
+Machines select one of those profiles through
+`Machine.spec.substrate.profileRef`.
 
 Use `hostClusterRef` when the virtualization host is another Bootwright
 `ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that host

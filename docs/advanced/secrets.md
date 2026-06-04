@@ -59,7 +59,7 @@ references the secret by name: `keyRef.name`, `credentialRef.name`,
 `trustBundleRef.name`, `installTrust.caBundleRefs[].name`,
 `proxyAuthRef.name`, `secretRef.name`, `defaultCertificateRef.name`, or
 `nodeSSH.keyPairRef.name`. Durable SSH targets normally use context-managed
-host trust recorded by `bootwright host trust`; `Machine.spec.os.ssh.knownHostsRef`
+host trust recorded by `bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef`
 is available when an operator needs to point at explicit known_hosts material.
 
 For node SSH, use `install.nodeSSH.keyPairRef` when one
@@ -71,7 +71,7 @@ local post-install probes are stored under different secret names. When
 that name explicitly.
 
 For durable machines Bootwright or managed tools SSH into, put SSH connection
-material on `Machine.spec.os.ssh`. `keyRef.name` supplies private SSH key material;
+material on `Machine.spec.access.ssh`. `keyRef.name` supplies private SSH key material;
 managed Ceph node Hosts also require the public half at `<name>.pub` so
 Bootwright can pass it to cephadm. Run `bootwright host trust` after importing
 or updating a context so Bootwright records each non-local Machine server key

@@ -286,9 +286,11 @@ func libvirtHostMachine(name, address string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityLibvirt},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: address}},
-				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: address}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 			},
 		},
 	}
@@ -300,9 +302,11 @@ func libvirtNodeMachine(name, provider string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
-				Libvirt:     &v1alpha1.MachineProfiledSubstrate{ProfileRef: v1alpha1.LocalObjectReference{Name: "libvirt-profile"}},
+				ProfileRef:  v1alpha1.LocalObjectReference{Name: "libvirt-profile"},
 			},
-			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			OS: v1alpha1.MachineOSSpec{
+				Provided: v1alpha1.BoolPtr(false),
+			},
 		},
 	}
 }
@@ -347,9 +351,11 @@ func serviceMachine() v1alpha1.Machine {
 				v1alpha1.MachineCapabilityArtifactServer,
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
-				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 			},
 		},
 	}
@@ -361,15 +367,18 @@ func rawMachine(name, provider, networkName string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
-				BareMetal: &v1alpha1.MachineBareMetalSubstrate{
-					Interfaces: []v1alpha1.MachineInterface{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
-				},
+			},
+			Hardware: v1alpha1.MachineHardware{
+				NICs: []v1alpha1.MachineNIC{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
+				Boot: v1alpha1.MachineHardwareBoot{NICRef: v1alpha1.LocalObjectReference{Name: "primary"}},
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Mode: v1alpha1.MachineOSModeRaw,
-				Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+				Provided: v1alpha1.BoolPtr(false),
+			},
+			Network: v1alpha1.MachineNetwork{
+				Config: v1alpha1.MachineNetworkConfig{
 					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
-				}},
+				},
 			},
 		},
 	}

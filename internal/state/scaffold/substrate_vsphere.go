@@ -16,25 +16,26 @@ spec:
   substrate:
     providerRef:
       name: {{.ProviderID}}
-    vsphere:
-      profileRef:
-        name: sno
-      vmName: {{.Cluster}}-master-0
+    profileRef:
+      name: sno
   os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: {{.NetworkID}}
-        attachmentRef:
-          name: {{.NetworkID}}
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.130.20
-                    prefix-length: 24
+    provided: false
+  network:
+    config:
+      networkConfigRef:
+        name: {{.NetworkID}}
+      attachmentRef:
+        name: {{.NetworkID}}
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.130.20
+                  prefix-length: 24
+  addresses:
+    - name: ip
+      address: 192.168.130.20
 `,
 	ProviderCapabilities: `apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

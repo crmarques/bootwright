@@ -32,22 +32,17 @@ spec:
     - load-balancer
     - name-resolution
     - ntp
-  substrate:
-    providerRef:
-      name: {{.Cluster}}-hosts
-    bareMetal:
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:10:00:01
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: 192.168.10.11
-      - name: cluster-lan
-        address: 192.168.130.1
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.168.10.11
+    - name: cluster-lan
+      address: 192.168.130.1
+  access:
     ssh:
-      addressName: ssh
+      addressRef:
+        name: ssh
       keyRef:
         name: provider-host-ssh
 ---
@@ -61,25 +56,26 @@ spec:
   substrate:
     providerRef:
       name: {{.ProviderID}}
-    libvirt:
-      profileRef:
-        name: sno
-      vmName: {{.Cluster}}-master-0
+    profileRef:
+      name: sno
   os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: {{.NetworkID}}
-        attachmentRef:
-          name: {{.NetworkID}}
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.130.20
-                    prefix-length: 24
+    provided: false
+  network:
+    config:
+      networkConfigRef:
+        name: {{.NetworkID}}
+      attachmentRef:
+        name: {{.NetworkID}}
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.130.20
+                  prefix-length: 24
+  addresses:
+    - name: ip
+      address: 192.168.130.20
 `,
 	NetworkDNSServers: "",
 	NetworkDNSRefs: `  dnsRefs:

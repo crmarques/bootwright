@@ -230,9 +230,11 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "controller"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "127.0.0.1"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "127.0.0.1"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}, installerTestMachine("master-0")},
@@ -275,7 +277,7 @@ func installerTestMachine(name string) v1alpha1.Machine {
 	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.MachineSpec{
-			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 		},
 	}
 }
@@ -286,13 +288,15 @@ func vsphereTestMachine(name string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: "vsphere"},
-				VSphere:     &v1alpha1.MachineProfiledSubstrate{ProfileRef: v1alpha1.LocalObjectReference{Name: "control-plane"}},
+				ProfileRef:  v1alpha1.LocalObjectReference{Name: "control-plane"},
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Mode: v1alpha1.MachineOSModeRaw,
-				Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+				Provided: v1alpha1.BoolPtr(false),
+			},
+			Network: v1alpha1.MachineNetwork{
+				Config: v1alpha1.MachineNetworkConfig{
 					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "vsphere-net"},
-				}},
+				},
 			},
 		},
 	}
@@ -389,7 +393,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	}}
 	for i := range state.Machines {
 		if state.Machines[i].Metadata.Name == "lab-host" {
-			state.Machines[i].Spec.OS.Addresses[1].Address = "192.168.132.99"
+			state.Machines[i].Spec.Addresses[1].Address = "192.168.132.99"
 		}
 	}
 	state.InfraComponents = append(state.InfraComponents,

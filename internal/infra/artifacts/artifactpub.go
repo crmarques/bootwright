@@ -155,8 +155,8 @@ func ClusterUsesBareMetalMachine(state v1alpha1.State, ci v1alpha1.ClusterInstal
 		if machine.Source.MachineRef.Name == "" {
 			continue
 		}
-		server, ok := stateview.Machine(state, machine.Source.MachineRef.Name)
-		if !ok || v1alpha1.MachineSubstrateKind(server) != v1alpha1.ProvisionerBareMetal {
+		provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerBareMetal {
 			continue
 		}
 		return true

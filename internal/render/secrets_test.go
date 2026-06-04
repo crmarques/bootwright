@@ -236,7 +236,7 @@ func installerNodeMachine(name string) v1alpha1.Machine {
 	return v1alpha1.Machine{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.MachineSpec{
-			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 		},
 	}
 }
@@ -334,9 +334,11 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime, v1alpha1.MachineCapabilityRegistry},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "registry.lab"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "registry.lab"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}, installerNodeMachine("master-0")},

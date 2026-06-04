@@ -37,8 +37,8 @@ func NodeAddressByRef(state v1alpha1.State, cluster v1alpha1.StorageCluster, nod
 	if !ok {
 		return ""
 	}
-	if addressName == "" && machine.Spec.OS.SSH != nil {
-		addressName = machine.Spec.OS.SSH.AddressName
+	if addressName == "" && machine.Spec.Access.SSH != nil {
+		addressName = machine.Spec.Access.SSH.AddressRef.Name
 	}
 	address, _ := v1alpha1.MachineAddressByName(machine, addressName)
 	return address

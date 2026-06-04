@@ -12,12 +12,14 @@ func clusterFacingState(hostSSH, hostClusterAddr, networkGateway string) v1alpha
 			Metadata: v1alpha1.Metadata{Name: "lab-host"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode: v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{
-						{Name: "ssh", Address: hostSSH},
-						{Name: "cluster", Address: hostClusterAddr},
-					},
-					SSH: &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{
+					{Name: "ssh", Address: hostSSH},
+					{Name: "cluster", Address: hostClusterAddr},
+				},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}},
@@ -37,7 +39,7 @@ func clusterFacingInfra() v1alpha1.ClusterInstall {
 		},
 		Machines: []v1alpha1.InstallMachine{{
 			Name: "master-0",
-			Network: v1alpha1.MachineNetwork{
+			Network: v1alpha1.MachineNetworkConfig{
 				NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 			},
 		}},
@@ -120,7 +122,7 @@ func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) 
 	infra.Endpoints = nil
 	infra.Machines = []v1alpha1.InstallMachine{{
 		Name: "master-0",
-		Network: v1alpha1.MachineNetwork{
+		Network: v1alpha1.MachineNetworkConfig{
 			NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 		},
 	}}
@@ -140,8 +142,8 @@ func TestHostRouteAddressUsesNamedAddress(t *testing.T) {
 
 func TestManagedProxyURLAutoSubstitutesLoopback(t *testing.T) {
 	state := stateWithManagedProxy()
-	state.Machines[0].Spec.OS.Addresses = []v1alpha1.MachineAddress{{Name: "ssh", Address: "localhost"}}
-	state.Machines[0].Spec.OS.SSH = &v1alpha1.MachineSSHSpec{AddressName: "ssh"}
+	state.Machines[0].Spec.Addresses = []v1alpha1.MachineAddress{{Name: "ssh", Address: "localhost"}}
+	state.Machines[0].Spec.Access.SSH = &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}}
 	state.NetworkConfigs = []v1alpha1.NetworkConfig{{
 		Metadata: v1alpha1.Metadata{Name: "bridge-net"},
 		Spec:     networkConfigSpec("192.168.132.0/24", "192.168.132.1"),
@@ -152,7 +154,7 @@ func TestManagedProxyURLAutoSubstitutesLoopback(t *testing.T) {
 	}
 	infra.Machines = []v1alpha1.InstallMachine{{
 		Name: "master-0",
-		Network: v1alpha1.MachineNetwork{
+		Network: v1alpha1.MachineNetworkConfig{
 			NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 		},
 	}}

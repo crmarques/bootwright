@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-x86-64-dvd
+spec:
+  type: iso
+
+  url: media:rhel-9-x86_64-dvd.iso

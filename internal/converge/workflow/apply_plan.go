@@ -340,11 +340,11 @@ func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string
 
 func applyNodeRedfishResource(state v1alpha1.State, clusterName, machineName string) string {
 	for _, machine := range state.Machines {
-		if machine.Metadata.Name != machineName || machine.Spec.Substrate.BareMetal == nil {
+		if machine.Metadata.Name != machineName {
 			continue
 		}
-		if machine.Spec.Substrate.BareMetal.BMC.Address != "" {
-			return "redfish:" + machine.Spec.Substrate.BareMetal.BMC.Address
+		if machine.Spec.Hardware.Management.BMC.Address != "" {
+			return "redfish:" + machine.Spec.Hardware.Management.BMC.Address
 		}
 	}
 	return "redfish:" + clusterName + "/" + machineName

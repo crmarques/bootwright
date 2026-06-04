@@ -59,15 +59,7 @@ func cidrContainsIP(cidr string, ip net.IP) bool {
 	return false
 }
 
-func templateBareMetalInterfaceNames(n v1alpha1.NetworkConfig) []string {
-	return bareMetalInterfaceNames(n.Spec.Template.NetworkConfig)
-}
-
-func overrideBareMetalInterfaceNames(config map[string]any) []string {
-	return bareMetalInterfaceNames(config)
-}
-
-func bareMetalInterfaceNames(config map[string]any) []string {
+func networkInterfaceNames(config map[string]any) []string {
 	raw, ok := config["interfaces"].([]any)
 	if !ok {
 		return nil

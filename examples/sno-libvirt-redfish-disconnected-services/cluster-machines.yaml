@@ -4,30 +4,34 @@ metadata:
   name: sno-disconnected-master-0
 spec:
   capabilities:
-  - openshift-node
+    - openshift-node
 
   substrate:
     providerRef:
       name: lab-libvirt-provider
-    libvirt:
-      profileRef:
-        name: sno
-      vmName: sno-disconnected-master-0
+    profileRef:
+      name: sno
 
   os:
-    mode: raw
     install:
-      network:
-        networkConfigRef:
-          name: sno-bridge
-        overrides:
-          interfaces:
+      rootDeviceHints:
+        deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: sno-bridge
+      overrides:
+        interfaces:
           - name: primary
             ipv4:
               address:
-              - ip: 192.168.132.40
-                prefix-length: 24
-        attachmentRef:
-          name: sno-bridge
-      rootDeviceHints:
-        deviceName: /dev/vda
+                - ip: 192.168.132.40
+                  prefix-length: 24
+      attachmentRef:
+        name: sno-bridge
+
+  addresses:
+    - name: ip
+      address: 192.168.132.40

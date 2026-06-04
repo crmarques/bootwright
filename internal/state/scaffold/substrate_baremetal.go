@@ -15,22 +15,17 @@ spec:
   capabilities:
     - container-runtime
     - artifact-server
-  substrate:
-    providerRef:
-      name: {{.ProviderID}}
-    bareMetal:
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:30:00:01
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: 192.168.130.1
-      - name: bmc-lan
-        address: 192.168.130.1
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.168.130.1
+    - name: bmc-lan
+      address: 192.168.130.1
+  access:
     ssh:
-      addressName: ssh
+      addressRef:
+        name: ssh
       keyRef:
         name: provider-host-ssh
 ---
@@ -44,33 +39,44 @@ spec:
   substrate:
     providerRef:
       name: {{.ProviderID}}
-    bareMetal:
-      bootMACAddress: 52:54:00:21:11:10
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:21:11:10
-      rootDeviceHints:
-        deviceName: /dev/sda
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:21:11:10
+    boot:
+      nicRef:
+        name: primary
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.example.test/redfish/v1/Systems/1
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
   os:
-    mode: raw
+    provided: false
     install:
-      network:
-        networkConfigRef:
-          name: {{.NetworkID}}
-        attachmentRef:
-          name: {{.NetworkID}}
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.130.20
-                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    config:
+      networkConfigRef:
+        name: {{.NetworkID}}
+      attachmentRef:
+        name: {{.NetworkID}}
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.130.20
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+  addresses:
+    - name: ip
+      address: 192.168.130.20
 `,
 	EnvArtifactServer: `  infraComponents:
     artifactServers:

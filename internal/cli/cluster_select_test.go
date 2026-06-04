@@ -175,11 +175,11 @@ func cliServiceMachine() v1alpha1.Machine {
 				v1alpha1.MachineCapabilityRegistry,
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
-				SSH: &v1alpha1.MachineSSHSpec{
-					AddressName: "ssh",
-				},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 			},
 		},
 	}
@@ -192,19 +192,17 @@ func cliRawMachine(name, providerName, networkName string) v1alpha1.Machine {
 			Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode},
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: providerName},
-				BareMetal: &v1alpha1.MachineBareMetalSubstrate{
-					Interfaces: []v1alpha1.MachineInterface{{
-						Name:       "primary",
-						MACAddress: "52:54:00:00:00:01",
-					}},
-				},
+			},
+			Hardware: v1alpha1.MachineHardware{
+				NICs: []v1alpha1.MachineNIC{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
+				Boot: v1alpha1.MachineHardwareBoot{NICRef: v1alpha1.LocalObjectReference{Name: "primary"}},
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Mode: v1alpha1.MachineOSModeRaw,
-				Install: v1alpha1.MachineOSInstallSpec{
-					Network: v1alpha1.MachineNetwork{
-						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
-					},
+				Provided: v1alpha1.BoolPtr(false),
+			},
+			Network: v1alpha1.MachineNetwork{
+				Config: v1alpha1.MachineNetworkConfig{
+					NetworkConfigRef: v1alpha1.LocalObjectReference{Name: networkName},
 				},
 			},
 		},

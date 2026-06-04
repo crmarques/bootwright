@@ -93,12 +93,12 @@ func machineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
 
 func machineSSHSecretRequirements(label string, phases []string, machine v1alpha1.Machine, requirePair bool) []secretRefRequirement {
 	var out []secretRefRequirement
-	if machine.Spec.OS.SSH == nil {
+	if machine.Spec.Access.SSH == nil {
 		return out
 	}
-	if machine.Spec.OS.SSH.KeyRef.Name != "" {
+	if machine.Spec.Access.SSH.KeyRef.Name != "" {
 		req := secretRefRequirement{
-			refName: machine.Spec.OS.SSH.KeyRef.Name,
+			refName: machine.Spec.Access.SSH.KeyRef.Name,
 			label:   label + " keyRef",
 			phases:  phases,
 			role:    secret.MaterialSSHPrivate,
@@ -109,9 +109,9 @@ func machineSSHSecretRequirements(label string, phases []string, machine v1alpha
 		}
 		out = append(out, req)
 	}
-	if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
+	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		out = append(out, secretRefRequirement{
-			refName: machine.Spec.OS.SSH.KnownHostsRef.Name,
+			refName: machine.Spec.Access.SSH.KnownHostsRef.Name,
 			label:   label + " knownHostsRef",
 			phases:  phases,
 			role:    secret.MaterialPrimary,

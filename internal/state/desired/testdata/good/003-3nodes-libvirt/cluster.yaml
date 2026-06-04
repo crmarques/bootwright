@@ -9,27 +9,32 @@ spec:
   substrate:
     providerRef:
       name: lab-libvirt-provider
-    libvirt:
-      profileRef:
-        name: compact-control-plane
+    profileRef:
+      name: compact-control-plane
 
   os:
-    mode: raw
     install:
-      network:
-        networkConfigRef:
-          name: cluster-3n-bridge
-        attachmentRef:
-          name: cluster-3n-bridge
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.20
-                    prefix-length: 24
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: cluster-3n-bridge
+      attachmentRef:
+        name: cluster-3n-bridge
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.20
+                  prefix-length: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.133.20
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -42,27 +47,32 @@ spec:
   substrate:
     providerRef:
       name: lab-libvirt-provider
-    libvirt:
-      profileRef:
-        name: compact-control-plane
+    profileRef:
+      name: compact-control-plane
 
   os:
-    mode: raw
     install:
-      network:
-        networkConfigRef:
-          name: cluster-3n-bridge
-        attachmentRef:
-          name: cluster-3n-bridge
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.21
-                    prefix-length: 24
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: cluster-3n-bridge
+      attachmentRef:
+        name: cluster-3n-bridge
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.21
+                  prefix-length: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.133.21
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -75,27 +85,32 @@ spec:
   substrate:
     providerRef:
       name: lab-libvirt-provider
-    libvirt:
-      profileRef:
-        name: compact-control-plane
+    profileRef:
+      name: compact-control-plane
 
   os:
-    mode: raw
     install:
-      network:
-        networkConfigRef:
-          name: cluster-3n-bridge
-        attachmentRef:
-          name: cluster-3n-bridge
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.168.133.22
-                    prefix-length: 24
       rootDeviceHints:
         deviceName: /dev/vda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: cluster-3n-bridge
+      attachmentRef:
+        name: cluster-3n-bridge
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.133.22
+                  prefix-length: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.133.22
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

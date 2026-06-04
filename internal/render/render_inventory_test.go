@@ -127,12 +127,12 @@ func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	bastion, ok := inventoryTestMachine(state, "bastion")
-	if !ok || bastion.Spec.OS.SSH == nil {
-		t.Fatal("Machine/bastion spec.os.ssh was not defaulted")
+	if !ok || bastion.Spec.Access.SSH == nil {
+		t.Fatal("Machine/bastion spec.access.ssh was not defaulted")
 	}
-	want := bastion.Spec.OS.SSH.User
+	want := bastion.Spec.Access.SSH.User
 	if want == "" {
-		t.Fatal("Machine.spec.os.ssh.user was not defaulted")
+		t.Fatal("Machine.spec.access.ssh.user was not defaulted")
 	}
 
 	inv := render.Inventory(state, "")
@@ -140,7 +140,7 @@ func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
 	if got := serviceHost["ansible_user"]; got != want {
-		t.Fatalf("ansible_user = %v, want defaulted Machine.spec.os.ssh.user %q", got, want)
+		t.Fatalf("ansible_user = %v, want defaulted Machine.spec.access.ssh.user %q", got, want)
 	}
 }
 
@@ -232,8 +232,8 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	for i := range state.Machines {
-		if state.Machines[i].Metadata.Name == "bastion" && state.Machines[i].Spec.OS.SSH != nil {
-			state.Machines[i].Spec.OS.SSH.User = "provider-admin"
+		if state.Machines[i].Metadata.Name == "bastion" && state.Machines[i].Spec.Access.SSH != nil {
+			state.Machines[i].Spec.Access.SSH.User = "provider-admin"
 		}
 	}
 
@@ -246,7 +246,7 @@ func TestInventoryUsesExplicitHostSSHUser(t *testing.T) {
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
 	if got := serviceHost["ansible_user"]; got != "provider-admin" {
-		t.Fatalf("ansible_user got %v, want explicit Machine.spec.os.ssh.user", got)
+		t.Fatalf("ansible_user got %v, want explicit Machine.spec.access.ssh.user", got)
 	}
 }
 
@@ -285,9 +285,11 @@ func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityLibvirt, v1alpha1.MachineCapabilityContainerRuntime},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.0.2.10"}},
-				SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.0.2.10"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 			},
 		},
 	})
@@ -442,7 +444,7 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 		t.Fatalf("storage seed ansible_host = %v, want 192.168.141.30", got)
 	}
 	if got := seed["ansible_user"]; got != "root" {
-		t.Fatalf("storage seed ansible_user = %v, want root from Machine.spec.os.ssh.user", got)
+		t.Fatalf("storage seed ansible_user = %v, want root from Machine.spec.access.ssh.user", got)
 	}
 	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(secretsDir, "ceph-storage-cluster-admin-ssh-key") {
 		t.Fatalf("storage seed key = %v", got)

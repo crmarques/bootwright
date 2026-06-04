@@ -8,13 +8,17 @@ spec:
     - libvirt
 
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: localhost
-      - name: cluster-lan
-        address: 192.168.134.1
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: localhost
+    - name: cluster-lan
+      address: 192.168.134.1
+
+  access:
     ssh:
-      addressName: ssh
       keyRef:
         name: provider-host-ssh
+      addressRef:
+        name: ssh

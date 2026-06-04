@@ -84,7 +84,7 @@ func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected validation error, got nil")
 		}
-		want := `Machine/services-host spec.os.ssh.knownHostsRef "provider-host-known-hosts" is not declared`
+		want := `Machine/services-host spec.access.ssh.knownHostsRef "provider-host-known-hosts" is not declared`
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not contain %q", err, want)
 		}
@@ -223,7 +223,7 @@ spec:
 	if err == nil {
 		t.Fatal("expected missing baremetal interface error, got nil")
 	}
-	want := `Machine/srv1 spec.os.install.network.networkConfigRef "cluster-net" requires bareMetal interface "secondary" but Machine/srv1 spec.substrate.bareMetal.interfaces does not declare it`
+	want := `Machine/srv1 spec.network.interfaceBinding must bind NetworkConfig interface "secondary" to a hardware NIC for baremetal machines`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -243,13 +243,13 @@ func TestMachineNetworkAcceptsInlineSpec(t *testing.T) {
 func TestMachineNetworkRejectsRefAndSpec(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "        networkConfigRef: { name: cluster-net }\n", "        networkConfigRef: { name: cluster-net }\n"+inlineNetworkConfigSpecYAML(), 1)
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "      networkConfigRef: { name: cluster-net }\n", "      networkConfigRef: { name: cluster-net }\n"+inlineNetworkConfigSpecYAML(), 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
 		t.Fatal("expected ref plus spec validation error, got nil")
 	}
-	want := "spec.os.install.network must set only one of networkConfigRef or spec"
+	want := "spec.network.config must set only one of networkConfigRef or spec"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -259,19 +259,19 @@ func TestMachineNetworkRejectsInlineSpecOverrides(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	delete(files, "network.yaml")
-	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], baselineMachineNetworkConfigYAML(), inlineMachineNetworkConfigYAML(`        overrides:
-            interfaces:
-              - name: primary
-                ipv4:
-                  address:
-                    - { ip: 192.168.132.20, prefix-length: 24 }
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], baselineMachineNetworkConfigYAML(), inlineMachineNetworkConfigYAML(`      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - { ip: 192.168.132.20, prefix-length: 24 }
 `), 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
 		t.Fatal("expected inline spec overrides validation error, got nil")
 	}
-	want := "spec.os.install.network.overrides is only valid with Machine/srv1 spec.os.install.network.networkConfigRef"
+	want := "spec.network.config.overrides is only valid with Machine/srv1 spec.network.config.networkConfigRef"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -331,8 +331,8 @@ func TestProviderMachineLabelsValidation(t *testing.T) {
 func TestArtifactAccessEndpointNamesSelectInfraEndpoint(t *testing.T) {
 	files := newBaselineFiles()
 	files["service-machines.yaml"] = strings.Replace(files["service-machines.yaml"],
-		"      - name: bmc-lan\n        address: 192.168.132.1",
-		"      - name: bmc-lan\n        address: 192.168.132.1\n      - name: dnsAlias\n        address: artifact.example.test", 1)
+		"    - name: bmc-lan\n      address: 192.168.132.1",
+		"    - name: bmc-lan\n      address: 192.168.132.1\n    - name: dnsAlias\n      address: artifact.example.test", 1)
 	files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"],
 		"name: bmc\n        listener: https\n        machineAddress: bmc-lan",
 		"name: dnsAlias\n        listener: https\n        machineAddress: dnsAlias", 1)
@@ -450,7 +450,7 @@ spec:
 		{
 			name: "host-ssh-address-rejected",
 			files: map[string]string{"service-machines.yaml": strings.Replace(newHostsYAML,
-				"addressName: ssh",
+				"addressRef: { name: ssh }",
 				"address: 192.168.132.1", 1)},
 			wantSubstring: "field address not found",
 		},
@@ -464,16 +464,16 @@ spec:
 		{
 			name: "host-duplicate-address-name-rejected",
 			files: map[string]string{"service-machines.yaml": strings.Replace(newHostsYAML,
-				"addresses:\n      - name: ssh\n        address: 192.168.132.1",
-				"addresses:\n      - name: ssh\n        address: 192.168.132.1\n      - name: ssh\n        address: 192.168.132.2", 1)},
-			wantSubstring: `spec.os.addresses[1].name "ssh" is duplicated`,
+				"addresses:\n    - name: ssh\n      address: 192.168.132.1",
+				"addresses:\n    - name: ssh\n      address: 192.168.132.1\n    - name: ssh\n      address: 192.168.132.2", 1)},
+			wantSubstring: `spec.addresses[1].name "ssh" is duplicated`,
 		},
 		{
 			name: "host-missing-ssh-address-name-rejected",
 			files: map[string]string{"service-machines.yaml": strings.Replace(newHostsYAML,
-				"addressName: ssh",
-				"addressName: missing", 1)},
-			wantSubstring: `spec.os.ssh.addressName "missing" does not resolve`,
+				"addressRef: { name: ssh }",
+				"addressRef: { name: missing }", 1)},
+			wantSubstring: `spec.access.ssh.addressRef.name "missing" does not resolve`,
 		},
 		{
 			name: "containercluster-role-rejected",
@@ -485,8 +485,8 @@ spec:
 		{
 			name: "clusterinfra-artifacts-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster",
-				"    artifacts: { source: { providerRef: { name: rack }, machineRef: { name: default } } }\n---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster", 1)},
+				"  os:\n",
+				"  artifacts: { source: { providerRef: { name: rack }, machineRef: { name: default } } }\n  os:\n", 1)},
 			wantSubstring: "field artifacts not found",
 		},
 		{
@@ -542,7 +542,7 @@ spec:
 			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
 				"machineAddress: bmc-lan",
 				"machineAddress: missing", 1)},
-			wantSubstring: `spec.artifactServer.endpoints[0].machineAddress "missing" does not resolve to Machine/services-host spec.os.addresses[].name`,
+			wantSubstring: `spec.artifactServer.endpoints[0].machineAddress "missing" does not resolve to Machine/services-host spec.addresses[].name`,
 		},
 		{
 			name: "artifact-server-endpoint-address-name-rejected",
@@ -1332,12 +1332,13 @@ metadata: { name: lab-host }
 spec:
   capabilities: [libvirt]
   os:
-    mode: external
-    addresses:
-      - { name: ssh, address: 192.168.132.1 }
+    provided: true
+  addresses:
+    - { name: ssh, address: 192.168.132.1 }
+  access:
     ssh:
-      addressName: ssh
       keyRef: { name: provider-host-ssh }
+      addressRef: { name: ssh }
 `,
 				"provider.yaml": tc.providerYAML,
 			})
@@ -1662,14 +1663,16 @@ spec:
   capabilities:
     - container-runtime
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: 192.168.132.50
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.168.132.50
+  access:
     ssh:
-      addressName: ssh
       keyRef:
         name: missing-secret
+      addressRef:
+        name: ssh
 `,
 		},
 		{
@@ -2116,9 +2119,9 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 		{
 			name: "missing-network-binding",
 			mutate: func(files map[string]string) {
-				files["child.yaml"] = strings.Replace(files["child.yaml"], "        attachmentRef: { name: child-machine-net }\n", "", 1)
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "      attachmentRef: { name: child-machine-net }\n", "", 1)
 			},
-			wantSubstring: `spec.os.install.network.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine`,
+			wantSubstring: `spec.network.config.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine`,
 		},
 		{
 			name: "missing-network-attachment",
@@ -2230,21 +2233,21 @@ spec:
   capabilities: [openshift-node]
   substrate:
     providerRef: { name: child-kubevirt-provider }
-    kubevirt:
-      profileRef: { name: child-sno }
-      vmName: child-master-0
+    profileRef: { name: child-sno }
   os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef: { name: child-machine-net }
-        attachmentRef: { name: child-machine-net }
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - { ip: 192.168.134.20, prefix-length: 24 }
+    provided: false
+  network:
+    config:
+      networkConfigRef: { name: child-machine-net }
+      attachmentRef: { name: child-machine-net }
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - { ip: 192.168.134.20, prefix-length: 24 }
+  addresses:
+    - { name: ip, address: 192.168.134.20 }
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -2445,21 +2448,21 @@ spec:
   capabilities: [openshift-node]
   substrate:
     providerRef: { name: ` + provider + ` }
-    kubevirt:
-      profileRef: { name: cp }
-      vmName: ` + name + `-master-0
+    profileRef: { name: cp }
   os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef: { name: ` + network + ` }
-        attachmentRef: { name: ` + network + ` }
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - { ip: ` + nodeIP + `, prefix-length: 24 }
+    provided: false
+  network:
+    config:
+      networkConfigRef: { name: ` + network + ` }
+      attachmentRef: { name: ` + network + ` }
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - { ip: ` + nodeIP + `, prefix-length: 24 }
+  addresses:
+    - { name: ip, address: ` + nodeIP + ` }
 `
 }
 
@@ -2534,12 +2537,13 @@ metadata: { name: services-host }
 spec:
   capabilities: [container-runtime]
   os:
-    mode: external
-    addresses:
-      - { name: ssh, address: 192.168.133.1 }
+    provided: true
+  addresses:
+    - { name: ssh, address: 192.168.133.1 }
+  access:
     ssh:
-      addressName: ssh
       keyRef: { name: provider-host-ssh }
+      addressRef: { name: ssh }
 `,
 		"network.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -2591,21 +2595,21 @@ spec:
   capabilities: [openshift-node]
   substrate:
     providerRef: { name: vsphere }
-    vsphere:
-      profileRef: { name: control-plane }
-      vmName: vsphere-master-0
+    profileRef: { name: control-plane }
   os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef: { name: vsphere-net }
-        attachmentRef: { name: vsphere-net }
-        overrides:
-          interfaces:
-            - name: ens192
-              ipv4:
-                address:
-                  - { ip: 192.168.133.20, prefix-length: 24 }
+    provided: false
+  network:
+    config:
+      networkConfigRef: { name: vsphere-net }
+      attachmentRef: { name: vsphere-net }
+      overrides:
+        interfaces:
+          - name: ens192
+            ipv4:
+              address:
+                - { ip: 192.168.133.20, prefix-length: 24 }
+  addresses:
+    - { name: ip, address: 192.168.133.20 }
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -2790,15 +2794,16 @@ metadata: { name: services-host }
 spec:
   capabilities: [container-runtime]
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: 192.168.132.1
-      - name: bmc-lan
-        address: 192.168.132.1
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.168.132.1
+    - name: bmc-lan
+      address: 192.168.132.1
+  access:
     ssh:
-      addressName: ssh
       keyRef: { name: provider-host-ssh }
+      addressRef: { name: ssh }
 `
 
 const newNetworkConfigYAML = `apiVersion: bootwright.io/v1alpha1
@@ -2861,43 +2866,51 @@ spec:
 `
 
 func baselineMachineNetworkConfigYAML() string {
-	return `      network:
-        networkConfigRef: { name: cluster-net }
-        attachmentRef: { name: cluster-net }
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - { ip: 192.168.132.20, prefix-length: 24 }
+	return `  network:
+    config:
+      networkConfigRef: { name: cluster-net }
+      attachmentRef: { name: cluster-net }
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - { ip: 192.168.132.20, prefix-length: 24 }
+    interfaceBinding:
+      - nicRef: { name: primary }
+        interfaceName: primary
 `
 }
 
 func inlineMachineNetworkConfigYAML(extra string) string {
-	return `      network:
-` + inlineNetworkConfigSpecYAML() + extra
+	return `  network:
+    config:
+` + inlineNetworkConfigSpecYAML() + extra + `    interfaceBinding:
+      - nicRef: { name: primary }
+        interfaceName: primary
+`
 }
 
 func inlineNetworkConfigSpecYAML() string {
-	return `        spec:
-          machineNetwork:
-            - { cidr: 192.168.132.0/24 }
-          template:
-            networkConfig:
-              interfaces:
-                - name: primary
-                  type: ethernet
-                  state: up
-                  ipv4:
-                    enabled: true
-                    dhcp: false
-                    address:
-                      - { ip: 192.168.132.20, prefix-length: 24 }
-                  ipv6:
-                    enabled: false
-              routes:
-                config:
-                  - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: primary, table-id: 254 }
+	return `      spec:
+        machineNetwork:
+          - { cidr: 192.168.132.0/24 }
+        template:
+          networkConfig:
+            interfaces:
+              - name: primary
+                type: ethernet
+                state: up
+                ipv4:
+                  enabled: true
+                  dhcp: false
+                  address:
+                    - { ip: 192.168.132.20, prefix-length: 24 }
+                ipv6:
+                  enabled: false
+            routes:
+              config:
+                - { destination: 0.0.0.0/0, next-hop-address: 192.168.132.1, next-hop-interface: primary, table-id: 254 }
 `
 }
 
@@ -2908,17 +2921,20 @@ spec:
   capabilities: [openshift-node]
   substrate:
     providerRef: { name: rack }
-    bareMetal:
-      bootMACAddress: 52:54:00:32:11:10
-      interfaces:
-        - { name: primary, macAddress: 52:54:00:32:11:10 }
+  hardware:
+    nics:
+      - { name: primary, macAddress: 52:54:00:32:11:10 }
+    boot:
+      nicRef: { name: primary }
+    management:
       bmc:
         address: redfish-virtualmedia+http://10.0.0.1/redfish/v1/Systems/1
         credentialsRef: { name: bmc-credentials }
   os:
-    mode: raw
-    install:
+    provided: false
 ` + baselineMachineNetworkConfigYAML() + `
+  addresses:
+    - { name: ip, address: 192.168.132.20 }
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

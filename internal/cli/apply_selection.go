@@ -51,11 +51,11 @@ func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
 	for _, cluster := range state.ContainerClusters {
 		for _, node := range cluster.Spec.Nodes {
 			machine, ok := stateview.Machine(state, node.MachineRef.Name)
-			if !ok || machine.Spec.Substrate.KubeVirt == nil {
+			if !ok {
 				continue
 			}
 			provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
-			if !ok || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
+			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil {
 				continue
 			}
 			parent := provider.Spec.KubeVirt.HostClusterRef.Name

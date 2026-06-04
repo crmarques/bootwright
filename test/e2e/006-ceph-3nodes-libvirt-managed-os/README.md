@@ -2,7 +2,37 @@
 
 This fixture provisions a Ceph-only 3-node lab on a laptop libvirt host. It
 uses Bootwright-managed RHEL installation through emulated Redfish virtual media
-before running the existing Ceph storage flow.
+before running the existing Ceph storage flow. Each YAML file contains one
+desired-state object with short names so the fixture stays easy to inspect.
+
+The current fixture keeps only state supported by the current code path:
+
+- one provided libvirt host named `lab-host`
+- three lean managed Ceph VMs named `ceph-0`, `ceph-1`, and `ceph-2`
+- an external DNS catalog entry named `lab-dns` at `192.168.134.1`
+- Ceph MON, MGR, OSD, MDS, RGW, and ingress roles on all three nodes
+- RBD, CephFS metadata, CephFS data, and RGW pools
+
+The requested managed infra-services VM, managed DNS service, artifact service,
+and storage-owned RGW/dashboard ingress endpoints are listed below as
+implementation work because the current workflow cannot model them without Go
+or Ansible changes.
+
+## Layout
+
+- `environment.yaml`: base domain, storage cluster selection, DNS catalog, and
+  secret names.
+- `infra/machines/*.yaml`: provider host and Ceph VM machine definitions.
+- `infra/providers/libvirt.yaml`: libvirt provider, BMC emulation defaults, and
+  lean VM profile.
+- `infra/networkconfigs/ceph-bridge.yaml`: lab network, resolver, and route
+  template.
+- `infra/images/rhel-9-dvd.yaml` and `infra/profiles/rhel-9-ceph.yaml`: managed
+  OS install inputs.
+- `clusters/storage/ceph-libvirt/*.yaml`: Ceph cluster topology, placement
+  policy, pools, filesystem, and export.
+- `add-ons/`: reserved for future add-on definitions; this fixture does not
+  need add-on objects today.
 
 ## Prerequisites
 
@@ -44,3 +74,51 @@ The infra stage prepares the bastion/provider host, starts the emulated BMC,
 creates the three VMs with root and data disks, installs RHEL through virtual
 media, waits for SSH, and records managed SSH trust. The clusters stage runs the
 existing Ceph prerequisites and cephadm flow against the three installed nodes.
+
+## Laptop DNS
+
+The fixture configures Ceph machines to use the resolver registered as
+`lab-dns`. Point the laptop resolver at the same DNS endpoint before accessing
+Ceph names such as future dashboard and S3 ingress records.
+
+For a temporary `systemd-resolved` setup on the libvirt bridge:
+
+```bash
+sudo resolvectl dns vbr-cb-ceph 192.168.134.1
+sudo resolvectl domain vbr-cb-ceph '~bootwright.test' '~ceph.bootwright.test'
+resolvectl query dashboard.ceph.bootwright.test
+resolvectl query s3.ceph.bootwright.test
+```
+
+For a persistent split-DNS setup:
+
+```bash
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '%s\n' \
+  '[Resolve]' \
+  'DNS=192.168.134.1' \
+  'Domains=~bootwright.test ~ceph.bootwright.test' \
+  | sudo tee /etc/systemd/resolved.conf.d/bootwright-ceph.conf
+sudo systemctl restart systemd-resolved
+```
+
+Use the bridge name and DNS IP from `infra/providers/libvirt.yaml` and
+`environment.yaml` if the lab network changes.
+
+## Implementation Plan
+
+The remaining requested desired state needs implementation support:
+
+1. Include managed service machines selected by `InfraComponent` entries in the
+   managed-OS install graph, before running DNS or artifact service tasks.
+2. Add a bootstrap path for artifact publication when the artifact service is
+   itself hosted on a managed VM.
+3. Add storage-owned endpoint declarations for Ceph dashboard and RGW ingress
+   so storage-only fixtures do not depend on `ContainerCluster` endpoints.
+4. Render cephadm ingress service specs from `StorageObjectGateway` state so
+   cephadm installs and configures keepalived and HAProxy itself.
+5. Extend managed DNS rendering with storage endpoint records for dashboard and
+   S3 VIP names.
+6. Add validation and render tests for the service-VM bootstrap, storage
+   endpoints, cephadm ingress, and DNS records, then enable those objects in
+   this fixture.

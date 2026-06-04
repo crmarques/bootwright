@@ -227,13 +227,13 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 	for _, machine := range state.Machines {
 		require(fmt.Sprintf("Machine/%s spec.substrate.providerRef", machine.Metadata.Name),
 			v1alpha1.KindInfraProvider, machine.Spec.Substrate.ProviderRef.Name)
-		if machine.Spec.OS.Install.ProfileRef.Name != "" {
-			require(fmt.Sprintf("Machine/%s spec.os.install.profileRef", machine.Metadata.Name),
-				v1alpha1.KindMachineInstallProfile, machine.Spec.OS.Install.ProfileRef.Name)
+		if machine.Spec.OS.ProfileRef.Name != "" {
+			require(fmt.Sprintf("Machine/%s spec.os.profileRef", machine.Metadata.Name),
+				v1alpha1.KindMachineInstallProfile, machine.Spec.OS.ProfileRef.Name)
 		}
-		if machine.Spec.OS.Install.Network.NetworkConfigRef.Name != "" {
-			require(fmt.Sprintf("Machine/%s spec.os.install.network.networkConfigRef", machine.Metadata.Name),
-				v1alpha1.KindNetworkConfig, machine.Spec.OS.Install.Network.NetworkConfigRef.Name)
+		if machine.Spec.Network.Config.NetworkConfigRef.Name != "" {
+			require(fmt.Sprintf("Machine/%s spec.network.config.networkConfigRef", machine.Metadata.Name),
+				v1alpha1.KindNetworkConfig, machine.Spec.Network.Config.NetworkConfigRef.Name)
 		}
 	}
 	for _, component := range state.InfraComponents {

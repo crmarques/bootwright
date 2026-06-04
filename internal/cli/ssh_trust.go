@@ -191,7 +191,7 @@ func hostTrustNeedsScan(state v1alpha1.State, selected map[string]bool) bool {
 		if len(selected) > 0 && !selected[machine.Metadata.Name] {
 			continue
 		}
-		if machine.Spec.OS.SSH == nil || machine.Spec.OS.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, controllerLocalityPolicy) {
+		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KnownHostsRef.Name != "" || locality.IsControllerLocalMachine(machine, controllerLocalityPolicy) {
 			continue
 		}
 		return true
@@ -243,9 +243,9 @@ func buildHostTrustPlan(ctx context.Context, state v1alpha1.State, store sshtrus
 
 func evaluateHostTrust(ctx context.Context, machine v1alpha1.Machine, store sshtrust.Store, replace bool, scan func(context.Context, string, time.Duration) ([]sshtrust.ScannedKey, error)) (hostTrustHostReport, sshtrust.HostRecord, bool, error) {
 	report := hostTrustHostReport{Name: machine.Metadata.Name}
-	if machine.Spec.OS.SSH == nil {
+	if machine.Spec.Access.SSH == nil {
 		report.Action = "skip"
-		report.Reason = "Machine has no spec.os.ssh"
+		report.Reason = "Machine has no spec.access.ssh"
 		return report, sshtrust.HostRecord{}, false, nil
 	}
 	report.Address = v1alpha1.MachineSSHAddress(machine)
@@ -254,7 +254,7 @@ func evaluateHostTrust(ctx context.Context, machine v1alpha1.Machine, store ssht
 		report.Reason = "controller-local Machine"
 		return report, sshtrust.HostRecord{}, false, nil
 	}
-	if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
+	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		report.Action = "skip"
 		report.Reason = "uses explicit knownHostsRef"
 		return report, sshtrust.HostRecord{}, false, nil

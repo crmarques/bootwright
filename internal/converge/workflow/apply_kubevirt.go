@@ -22,11 +22,11 @@ func kubeVirtHostClusterApplyDeps(state v1alpha1.State) (map[string][]string, er
 	for _, cluster := range state.ContainerClusters {
 		for _, node := range cluster.Spec.Nodes {
 			machine, ok := machines[node.MachineRef.Name]
-			if !ok || machine.Spec.Substrate.KubeVirt == nil {
+			if !ok {
 				continue
 			}
 			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-			if !ok || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
+			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
 				continue
 			}
 			parent := provider.Spec.KubeVirt.HostClusterRef.Name
@@ -92,11 +92,11 @@ func kubeVirtResourceKeys(state v1alpha1.State, clusterName string) []string {
 	var out []string
 	for _, node := range cluster.Spec.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
-		if !ok || machine.Spec.Substrate.KubeVirt == nil {
+		if !ok {
 			continue
 		}
 		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-		if !ok || provider.Spec.KubeVirt == nil {
+		if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil {
 			continue
 		}
 		out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
@@ -151,11 +151,9 @@ func applyNodeBootResourceKeys(state v1alpha1.State, clusterName string, machine
 		if !ok {
 			continue
 		}
-		if machine.Spec.Substrate.KubeVirt != nil {
-			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-			if ok && provider.Spec.KubeVirt != nil {
-				out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
-			}
+		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
+		if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
+			out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
 			continue
 		}
 		out = appendUniqueString(out, applyNodeRedfishResource(state, clusterName, machineName))

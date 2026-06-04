@@ -313,12 +313,12 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 					serverVars["labels"] = server.Metadata.Labels
 				}
 				out["server"] = serverVars
-				if server.Spec.Substrate.BareMetal != nil {
+				if bmc := server.Spec.Hardware.Management.BMC; bmc.Address != "" {
 					out["bmc"] = map[string]any{
-						"address":                        server.Spec.Substrate.BareMetal.BMC.Address,
-						"protocol":                       server.Spec.Substrate.BareMetal.BMC.Protocol,
-						"credentialsRef":                 server.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name,
-						"disableCertificateVerification": server.Spec.Substrate.BareMetal.BMC.DisableCertificateVerification,
+						"address":                        bmc.Address,
+						"protocol":                       bmc.Protocol,
+						"credentialsRef":                 bmc.CredentialsRef.Name,
+						"disableCertificateVerification": bmc.DisableCertificateVerification,
 					}
 				}
 			}

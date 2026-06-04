@@ -95,7 +95,7 @@ func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 		Type: v1alpha1.EnvironmentComponentExternal,
 		IP:   "192.168.130.53",
 	})
-	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.Network.Config.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
 	}
 	ci := dnsRefInfra(state)
@@ -137,7 +137,7 @@ func TestAgentNetworkConfigMergesNamedInterfaceOverrides(t *testing.T) {
 			},
 		},
 	}
-	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.Network.Config.Overrides = map[string]any{
 		"interfaces": []any{map[string]any{
 			"name": "primary",
 			"ipv4": map[string]any{
@@ -198,7 +198,7 @@ func TestAgentNetworkConfigMergesPositionalMapListOverrides(t *testing.T) {
 			},
 		},
 	}
-	state.Machines[0].Spec.OS.Install.Network.Overrides = map[string]any{
+	state.Machines[0].Spec.Network.Config.Overrides = map[string]any{
 		"routes": map[string]any{
 			"config": []any{map[string]any{
 				"next-hop-interface": "ens65f0",
@@ -252,10 +252,12 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 			Metadata: v1alpha1.Metadata{Name: "master-0"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode: v1alpha1.MachineOSModeRaw,
-					Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+					Provided: v1alpha1.BoolPtr(false),
+				},
+				Network: v1alpha1.MachineNetwork{
+					Config: v1alpha1.MachineNetworkConfig{
 						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "lab-net"},
-					}},
+					},
 				},
 			},
 		}},

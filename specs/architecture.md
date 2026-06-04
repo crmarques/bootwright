@@ -73,8 +73,9 @@ parsing.
 - `Environment` owns fleet-wide defaults, context resource selection, cluster
   selection, secret sources, service access catalog entries, registry mirrors,
   and component images.
-- `Machine` owns substrate binding, OS lifecycle mode, OS install network,
-  named addresses, SSH, root-device hints, and capabilities.
+- `Machine` owns substrate binding, provided-vs-installed OS state, install
+  network, named addresses, SSH, hardware inventory, root-device hints, and
+  capabilities.
 - `MachineImage` owns trusted OS install media.
 - `MachineInstallProfile` owns OS installer profile and customizations.
 - `InfraProvider` owns substrate capabilities, machine profiles, provider
@@ -104,8 +105,8 @@ These boundaries are reflected in rendering:
 - `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
   referenced `Machine` objects, `NetworkConfig` templates, and provider or
   generated substrate MAC inventory.
-- Machine and endpoint provider variables resolve substrate network attachments
-  from `Machine.spec.os.install.network.attachmentRef` to
+- Machine and endpoint provider variables resolve substrate network
+  attachments from `Machine.spec.network.config.attachmentRef` to
   `InfraProvider.spec.networkAttachments[]`.
 - Global boot-artifact and time-source fields are rendered from disconnected
   install mode, `ContainerCluster.spec.install.artifactAccess`, and resolved

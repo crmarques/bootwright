@@ -126,7 +126,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 	}
 
 	for _, machine := range state.Machines {
-		if machine.Spec.OS.SSH == nil || machine.Spec.OS.SSH.KeyRef.Name == "" {
+		if machine.Spec.Access.SSH == nil || machine.Spec.Access.SSH.KeyRef.Name == "" {
 			continue
 		}
 		if locality.IsControllerLocalMachine(machine, localPolicy) {
@@ -163,12 +163,12 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		}
 	}
 	for _, machine := range state.Machines {
-		if machine.Spec.Substrate.BareMetal == nil || machine.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name == "" {
+		if machine.Spec.Hardware.Management.BMC.CredentialsRef.Name == "" {
 			continue
 		}
 		out = append(out, secretRefRequirement{
-			refName: machine.Spec.Substrate.BareMetal.BMC.CredentialsRef.Name,
-			label:   fmt.Sprintf("machine %s bareMetal bmc credentialsRef", machine.Metadata.Name),
+			refName: machine.Spec.Hardware.Management.BMC.CredentialsRef.Name,
+			label:   fmt.Sprintf("machine %s hardware management bmc credentialsRef", machine.Metadata.Name),
 			phases:  []string{"provider", "container-cluster"},
 		})
 	}

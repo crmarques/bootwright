@@ -31,7 +31,7 @@ func findContainerCluster(state v1alpha1.State, name string) (v1alpha1.Container
 }
 
 func lookupMachineAddress(state v1alpha1.State, name string) string {
-	if m, ok := findMachine(state, name); ok && m.Spec.OS.SSH != nil {
+	if m, ok := findMachine(state, name); ok && m.Spec.Access.SSH != nil {
 		return v1alpha1.MachineSSHAddress(m)
 	}
 	return ""

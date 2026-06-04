@@ -82,9 +82,11 @@ Edit these first:
   part of the loaded fleet.
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
   external or managed proxy, DNS, artifact, registry, or NTP services.
-- `Machine.spec.os.addresses[]` and SSH key references for provider/service hosts.
-- Physical MACs, BMC addresses, or virtual machine profiles in `provider.yaml`,
-  `shared/provider.yaml`, or `infra/providers/*.yaml`.
+- `Machine.spec.addresses[]` and `Machine.spec.access.ssh` references for
+  provider/service hosts.
+- Physical MACs, BMC addresses, or virtual machine profile refs in
+  `cluster-machines.yaml`, `clusters/<cluster>/cluster-machines.yaml`, or
+  `clusters/container/<cluster>/cluster-machines.yaml`.
 - Machine CIDRs and NMState templates in `networkconfig.yaml`,
   `shared/networks.yaml`, or `infra/networkconfigs/*.yaml`.
 - Endpoint definitions and per-machine IP overrides in
@@ -130,9 +132,9 @@ For example, an operator can test SSH auth manually:
 ssh -i "${HOME}/.ssh/bootwright-ssh-key" -o StrictHostKeyChecking=accept-new "${USER}@${HOST_ADDRESS}" true
 ```
 
-Use the exact address you declare in `Machine.spec.os.addresses[]` for each provider
-or service host. This manual check updates the user's SSH trust state, not
-Bootwright's managed context trust.
+Use the exact address you declare in `Machine.spec.addresses[]` for each
+provider or service host. This manual check updates the user's SSH trust
+state, not Bootwright's managed context trust.
 
 ## 3. Import A Context
 

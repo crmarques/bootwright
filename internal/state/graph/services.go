@@ -301,7 +301,7 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
-			if !ok || machineObj.Spec.OS.Mode != v1alpha1.MachineOSModeManaged {
+			if !ok || !v1alpha1.MachineInstallsOS(machineObj) {
 				continue
 			}
 			machine := stateview.InstallMachineFromMachine(machineObj)
@@ -609,12 +609,10 @@ func machineDriver(state v1alpha1.State, machine v1alpha1.InstallMachine) suppor
 		}
 		return support.LookupProfileProvisioner(provider.Spec.Type)
 	}
-	if machine.Source.MachineRef.Name != "" {
-		server, ok := stateview.Machine(state, machine.Source.MachineRef.Name)
-		if !ok {
-			return support.LookupDispatch("none", "none", "none")
+	if provider.Spec.Type == v1alpha1.ProvisionerBareMetal && machine.Source.MachineRef.Name != "" {
+		if _, ok := stateview.Machine(state, machine.Source.MachineRef.Name); ok {
+			return support.LookupMachineProvisioner(provider.Spec.Type)
 		}
-		return support.LookupMachineProvisioner(v1alpha1.MachineSubstrateKind(server))
 	}
 	return support.LookupDispatch("none", "none", "none")
 }

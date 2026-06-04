@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: odf
+spec:
+  type: data-foundation
+
+  storageClusterRef:
+    name: ceph-libvirt
+
+  dataFoundation:
+    rbdPoolRef:
+      name: rbd
+    cephFSRef:
+      name: cephfs

@@ -50,13 +50,10 @@ const (
 	MachineCapabilityRegistry         = "registry"
 	MachineCapabilityCephAdmin        = "ceph-admin"
 	MachineCapabilityCephNode         = "ceph-node"
-	MachineOSModeRaw                  = "raw"
-	MachineOSModeExternal             = "external"
-	MachineOSModeManaged              = "managed"
 	MachineInstallProfileTypeAnaconda = "anaconda"
 	MachineImageTypeISO               = "iso"
 	MachineInstallHostnameMachineName = "machineName"
-	MachineInstallRootDeviceSubstrate = "substrateRootDeviceHints"
+	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"

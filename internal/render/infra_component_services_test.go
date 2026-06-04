@@ -55,7 +55,7 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "master-b"
 	state.Machines = append(state.Machines, state.Machines[1])
 	state.Machines[2].Metadata.Name = "master-b"
-	state.Machines[2].Spec.OS.Install.Network.NetworkConfigRef.Name = "managed-net-b"
+	state.Machines[2].Spec.Network.Config.NetworkConfigRef.Name = "managed-net-b"
 
 	services := infraComponentServicesVars(state)
 	if len(services) != 1 {

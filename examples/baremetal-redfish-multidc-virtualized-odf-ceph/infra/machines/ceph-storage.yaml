@@ -4,18 +4,22 @@ metadata:
   name: ceph-dc1-0
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.141.30
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -23,18 +27,22 @@ metadata:
   name: ceph-dc1-1
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.141.31
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -42,18 +50,22 @@ metadata:
   name: ceph-dc1-2
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.141.32
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -61,18 +73,22 @@ metadata:
   name: ceph-dc2-0
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.142.30
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -80,18 +96,22 @@ metadata:
   name: ceph-dc2-1
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.142.31
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -99,18 +119,22 @@ metadata:
   name: ceph-dc2-2
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.142.32
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -118,15 +142,19 @@ metadata:
   name: ceph-arbiter
 spec:
   capabilities:
-  - ceph-node
+    - ceph-node
 
   os:
-    mode: external
-    addresses:
+    provided: true
+
+  addresses:
     - name: ssh
       address: 192.168.143.30
+
+  access:
     ssh:
-      addressName: ssh
       user: root
       keyRef:
         name: ceph-storage-cluster-admin-ssh-key
+      addressRef:
+        name: ssh

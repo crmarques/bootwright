@@ -205,24 +205,22 @@ func bmcEmulationDefaultsVars(d *v1alpha1.BMCEmulationDefaults) map[string]any {
 }
 
 func providerInterfacesVars(m v1alpha1.Machine) []any {
-	if m.Spec.Substrate.BareMetal == nil {
-		return nil
-	}
-	return machineInterfaceVars(m.Spec.Substrate.BareMetal.Interfaces)
+	return machineInterfaceVars(m.Spec.Hardware.NICs)
 }
 
-func machineInterfaceVars(interfaces []v1alpha1.MachineInterface) []any {
+func machineInterfaceVars(interfaces []v1alpha1.MachineNIC) []any {
 	out := make([]any, 0, len(interfaces))
 	for _, i := range interfaces {
-		out = append(out, map[string]any{
-			"name":       i.Name,
-			"macAddress": i.MACAddress,
-		})
+		entry := map[string]any{"name": i.Name}
+		if i.MACAddress != "" {
+			entry["macAddress"] = i.MACAddress
+		}
+		out = append(out, entry)
 	}
 	return out
 }
 
-func clusterMachineNetworkConfigVars(n v1alpha1.MachineNetwork) map[string]any {
+func clusterMachineNetworkConfigVars(n v1alpha1.MachineNetworkConfig) map[string]any {
 	out := map[string]any{}
 	if n.NetworkConfigRef.Name != "" {
 		out["ref"] = n.NetworkConfigRef.Name

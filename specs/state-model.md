@@ -14,8 +14,8 @@ shapes must fail strict decode or validation instead of being translated.
   clusters, secret sources, proxy defaults, registry mirrors, component image
   pins, and service access catalog entries.
 - `Machine` owns machine desired state: capability tags, substrate binding,
-  raw/external/managed OS mode, install profile reference, install network,
-  named addresses, SSH, and OS capabilities.
+  provided-vs-installed OS state, install profile reference, install network,
+  named addresses, SSH, and hardware inventory.
 - `MachineImage` owns bootable OS install media such as a base ISO URL,
   checksum, and trust references.
 - `MachineInstallProfile` owns Bootwright-managed OS install behavior:
@@ -90,57 +90,73 @@ spec:
   substrate:
     providerRef:
       name: rack-a
-    bareMetal:
-      bootMACAddress: 52:54:00:21:11:10
-      interfaces:
-        - name: primary
-          macAddress: 52:54:00:21:11:10
+  hardware:
+    nics:
+      - name: primary
+        macAddress: 52:54:00:21:11:10
+    boot:
+      nicRef:
+        name: primary
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-0.example.test/redfish/v1/Systems/1
         credentialsRef:
           name: bmc-credentials
   os:
-    mode: raw
+    provided: false
     install:
-      network:
-        networkConfigRef:
-          name: ocp-machine-net
-        attachmentRef:
-          name: ocp-install
-        overrides:
-          interfaces:
-            - name: primary
-              ipv4:
-                address:
-                  - ip: 192.0.2.20
-                    prefix-length: 24
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    config:
+      networkConfigRef:
+        name: ocp-machine-net
+      attachmentRef:
+        name: ocp-install
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.0.2.20
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: primary
+        interfaceName: primary
+  addresses:
+    - name: ip
+      address: 192.0.2.20
 ```
 
 Rules:
 
-- `spec.os.mode` is required and accepts `raw`, `external`, or `managed`.
-- `raw` means a cluster installer consumes the machine without Bootwright
-  installing an OS first.
-- `managed` means Bootwright installs an OS using
-  `spec.os.install.profileRef` before downstream workflows use the machine.
-- `external` means the OS is already installed and Bootwright reaches the
-  machine through `spec.os.ssh`.
-- `raw` and `managed` machines must declare exactly one substrate arm under
-  `spec.substrate`.
-- `external` machines may omit substrate data when they are imported OS-ready
-  nodes or service machines.
-- `spec.capabilities[]` and `spec.os.capabilities[]` are generic tags such as
-  `openshift-node`, `ceph-node`, `ceph-admin`, `container-runtime`,
-  `artifact-server`, `load-balancer`, `proxy`, `name-resolution`, `ntp`,
-  `registry`, `libvirt`.
-- `spec.os.install.network.networkConfigRef` selects a `NetworkConfig`.
-- `spec.os.install.network.attachmentRef` selects an
+- `spec.os.provided` is required. `true` means the OS already exists;
+  `false` means Bootwright or a downstream installer must provision the OS.
+- `spec.os.provided: false` machines must declare `spec.substrate.providerRef`.
+- Bare-metal install machines declare physical inventory under
+  `spec.hardware.nics`, boot NIC selection under `spec.hardware.boot.nicRef`,
+  and BMC access under `spec.hardware.management.bmc`.
+- Libvirt, vSphere, and KubeVirt install machines select VM shape through
+  `spec.substrate.profileRef`.
+- `spec.os.profileRef` selects a `MachineInstallProfile` when Bootwright
+  installs a managed OS.
+- `spec.os.install.rootDeviceHints` is the Machine-owned root-device hint
+  location.
+- `spec.network.config.networkConfigRef` selects a `NetworkConfig`.
+- `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
-- `spec.os.install.network.overrides` merges into the rendered NMState for
-  that machine.
-- `spec.os.addresses[]` owns durable named addresses used by SSH and shared
+- `spec.network.config.overrides` merges into the rendered NMState for that
+  machine.
+- `spec.network.interfaceBinding[]` maps hardware NIC names to effective
+  NMState interface names for MAC injection.
+- `spec.addresses[]` owns durable named addresses used by SSH and shared
   service endpoints.
-- `spec.os.ssh` owns bastion-to-machine SSH identity and known-host material.
+- `spec.access.ssh` owns bastion-to-machine SSH identity and known-host
+  material.
+- `spec.capabilities[]` is a generic tag list such as `openshift-node`,
+  `ceph-node`, `ceph-admin`, `container-runtime`, `artifact-server`,
+  `load-balancer`, `proxy`, `name-resolution`, `ntp`, `registry`, `libvirt`.
 
 ## MachineImage
 
@@ -204,7 +220,7 @@ spec:
       passwordAuthentication: false
     storage:
       rootDevice:
-        source: substrateRootDeviceHints
+        source: machineRootDeviceHints
       wipe: true
     packages:
       - cephadm
@@ -219,9 +235,9 @@ Rules:
 - `spec.installer.anaconda.imageRef.name` references a `MachineImage`.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
-  `substrateRootDeviceHints`.
-- A `Machine` with `os.mode: managed` must set
-  `spec.os.install.profileRef.name`.
+  `machineRootDeviceHints`.
+- A `Machine` with `os.provided: false` and managed OS install must set
+  `spec.os.profileRef.name`.
 
 ## InfraProvider
 
@@ -230,12 +246,12 @@ Rules:
 Rules:
 
 - `spec.type` accepts `baremetal`, `libvirt`, `vsphere`, or `kubevirt`.
-- Bare-metal providers declare boot behavior and expose explicit machines
-  through `Machine.spec.substrate.bareMetal`.
+- Bare-metal providers declare boot behavior. Physical machine inventory lives
+  on `Machine.spec.hardware`.
 - Libvirt, vSphere, and KubeVirt providers declare `machineProfiles[]`.
-  Machines select a profile through their matching substrate arm.
+  Machines select a profile through `Machine.spec.substrate.profileRef`.
 - `networkAttachments[]` names provider-specific attachment targets. Machines
-  bind to them through `spec.os.install.network.attachmentRef`.
+  bind to them through `spec.network.config.attachmentRef`.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.
   `hostClusterRef` references a Bootwright `ContainerCluster`; `kubeconfigRef`
   references a secret containing an external virtualization kubeconfig.
@@ -250,7 +266,7 @@ Rules:
 - Artifact server, proxy, name-resolution, NTP, registry, and load-balancer
   arms require compatible machine capabilities.
 - Endpoint entries use `machineAddress` to select a named
-  `Machine.spec.os.addresses[]` value on the placement machine.
+  `Machine.spec.addresses[]` value on the placement machine.
 
 ## NetworkConfig
 
@@ -329,7 +345,7 @@ Rules:
 - Endpoint sources accept `external`, `infraComponent`, `openshift`, or
   `cephadm`.
 - `spec.nodes[].machineRef.name` references a `Machine` with
-  `openshift-node` capability and `os.mode: raw`.
+  `openshift-node` capability and `os.provided: false`.
 - Each node hostname must be unique inside the cluster.
 - Node network input is owned by the referenced `Machine`, not by the cluster
   node entry.
@@ -346,9 +362,9 @@ Rules:
 - Imported storage declares external details and does not run cephadm.
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
-- Managed storage seed/admin operations use `Machine.spec.os.ssh`.
+- Managed storage seed/admin operations use `Machine.spec.access.ssh`.
 - `cephadm.addressRef.name`, when set, selects a named
-  `Machine.spec.os.addresses[]` entry for cephadm traffic.
+  `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.bootstrap.seedNode` names a storage topology node.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
@@ -373,10 +389,10 @@ Rules:
 - Unknown kinds and unknown fields are rejected at load time.
 - Retired kinds and fields are not migrated.
 - References must resolve to loaded resources selected by `Environment`.
-- Machines must have exactly one valid OS mode.
-- Raw and managed machines must have a valid substrate arm.
-- External machines that are used over SSH must declare
-  `spec.os.ssh.addressName`, `keyRef.name`, and a matching address.
+- Machines must declare `spec.os.provided`.
+- Machines with `os.provided: false` must have `spec.substrate.providerRef`.
+- Machines that are used over SSH must declare
+  `spec.access.ssh.addressRef.name`, `keyRef.name`, and a matching address.
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - Container cluster endpoints must resolve to valid addresses or valid

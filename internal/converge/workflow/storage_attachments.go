@@ -185,19 +185,19 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 			if !ok {
 				return nil, fmt.Errorf("storage export externalDetails.sshExecution machineRef %q does not match any Machine", ref.Name)
 			}
-			if machine.Spec.OS.SSH == nil {
-				return nil, fmt.Errorf("machine/%s spec.os.ssh is required", machine.Metadata.Name)
+			if machine.Spec.Access.SSH == nil {
+				return nil, fmt.Errorf("machine/%s spec.access.ssh is required", machine.Metadata.Name)
 			}
 			address := v1alpha1.MachineSSHAddress(machine)
 			if address == "" {
-				return nil, fmt.Errorf("machine/%s spec.os.ssh.addressName %q does not resolve", machine.Metadata.Name, machine.Spec.OS.SSH.AddressName)
+				return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef.name %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
 			}
 			targets = append(targets, externalDetailsSSHTarget{
 				label:          "Machine/" + machine.Metadata.Name,
 				inventoryName:  "external_details_" + strconv.Itoa(len(targets)),
 				address:        address,
-				user:           machine.Spec.OS.SSH.User,
-				keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir),
+				user:           machine.Spec.Access.SSH.User,
+				keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
 				knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir),
 			})
 		}
@@ -215,29 +215,29 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	if !ok {
 		return nil, fmt.Errorf("StorageCluster/%s seedNode %q does not resolve to a Machine", cluster.Metadata.Name, seedNode)
 	}
-	if machine.Spec.OS.SSH == nil {
-		return nil, fmt.Errorf("machine/%s spec.os.ssh is required", machine.Metadata.Name)
+	if machine.Spec.Access.SSH == nil {
+		return nil, fmt.Errorf("machine/%s spec.access.ssh is required", machine.Metadata.Name)
 	}
 	address := v1alpha1.MachineSSHAddress(machine)
 	if address == "" {
-		return nil, fmt.Errorf("machine/%s spec.os.ssh.addressName %q does not resolve", machine.Metadata.Name, machine.Spec.OS.SSH.AddressName)
+		return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef.name %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
 	}
 	return []externalDetailsSSHTarget{{
 		label:          "StorageCluster/" + cluster.Metadata.Name + " seedNode/" + seedNode,
 		inventoryName:  "external_details_0",
 		address:        address,
-		user:           machine.Spec.OS.SSH.User,
-		keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir),
+		user:           machine.Spec.Access.SSH.User,
+		keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
 		knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir),
 	}}, nil
 }
 
 func workflowMachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string) string {
-	if machine.Spec.OS.SSH == nil {
+	if machine.Spec.Access.SSH == nil {
 		return ""
 	}
-	if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(machine.Spec.OS.SSH.KnownHostsRef.Name, env, secretsDir)
+	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
+		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
 	}
 	return sshtrust.KnownHostsPathForSecrets(secretsDir)
 }

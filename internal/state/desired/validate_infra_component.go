@@ -150,7 +150,7 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 		if endpoint.MachineAddress == "" {
 			errs = append(errs, owner+".machineAddress is required")
 		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.os.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
+			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
 		}
 	}
 	return errs
@@ -273,7 +273,7 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 		if endpoint.MachineAddress == "" {
 			errs = append(errs, owner+".machineAddress is required")
 		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.os.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
+			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
 		}
 	}
 	return errs

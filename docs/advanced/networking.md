@@ -11,7 +11,7 @@ description: NetworkConfig templates, machine overrides, endpoints, and load bal
 - `template.networkConfig`, rendered into `agent-config.yaml`
 
 Substrate network surfaces live on
-`InfraProvider.spec.networkAttachments[]`. `Machine.spec.os.install.network.attachmentRef`
+`InfraProvider.spec.networkAttachments[]`. `Machine.spec.network.config.attachmentRef`
 maps a logical `NetworkConfig` to the selected provider attachment.
 
 ## Bonded Bare-Metal Template
@@ -67,16 +67,29 @@ spec:
 Each cluster machine references the template and overrides only its address:
 
 ```yaml
-networkConfig:
-  ref:
-    name: rack1-bonded-machine
-  overrides:
-    interfaces:
-      - name: bond0
-        ipv4:
-          address:
-            - ip: 192.168.133.20
-              prefix-length: 24
+network:
+  config:
+    networkConfigRef:
+      name: rack1-bonded-machine
+    attachmentRef:
+      name: rack1-machine-net
+    overrides:
+      interfaces:
+        - name: bond0
+          ipv4:
+            address:
+              - ip: 192.168.133.20
+                prefix-length: 24
+  interfaceBinding:
+    - nicRef:
+        name: nic1
+      interfaceName: eno1
+    - nicRef:
+        name: nic2
+      interfaceName: eno2
+addresses:
+  - name: ip
+    address: 192.168.133.20
 ```
 
 ## Provider Attachments
@@ -96,14 +109,13 @@ spec:
         bridge: vbr-rack1
 ```
 
-Bind that attachment from the cluster infrastructure:
+Bind that attachment from each installing Machine:
 
 ```yaml
-networkBindings:
-  - networkConfigRef:
+network:
+  config:
+    networkConfigRef:
       name: rack1-bonded-machine
-    providerRef:
-      name: lab-libvirt
     attachmentRef:
       name: rack1-machine-net
 ```

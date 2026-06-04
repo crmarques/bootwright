@@ -18,8 +18,9 @@ KubeVirt VMs in that parent cluster.
 ## Decision
 
 Child clusters remain normal `ContainerCluster` objects. Their machines select
-a KubeVirt `InfraProvider` profile through `Machine.spec.substrate.kubevirt`, the same way other
-clusters select libvirt, bare-metal, or vSphere substrate facts.
+a KubeVirt `InfraProvider` through `Machine.spec.substrate.providerRef` and a
+profile through `Machine.spec.substrate.profileRef`, the same way other virtual
+substrates select provider-owned profiles.
 
 KubeVirt profiles use exactly one host reference:
 

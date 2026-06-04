@@ -166,13 +166,13 @@ func machinesVars(state v1alpha1.State) []any {
 		entry := map[string]any{
 			"name":         h.Metadata.Name,
 			"addresses":    machineAddressesVars(h),
-			"capabilities": h.Spec.OS.Capabilities,
+			"capabilities": h.Spec.Capabilities,
 		}
-		if h.Spec.OS.SSH != nil {
+		if h.Spec.Access.SSH != nil {
 			entry["sshAddress"] = v1alpha1.MachineSSHAddress(h)
-			entry["sshAddressName"] = h.Spec.OS.SSH.AddressName
-			entry["sshUser"] = h.Spec.OS.SSH.User
-			entry["sshKeyName"] = h.Spec.OS.SSH.KeyRef.Name
+			entry["sshAddressName"] = h.Spec.Access.SSH.AddressRef.Name
+			entry["sshUser"] = h.Spec.Access.SSH.User
+			entry["sshKeyName"] = h.Spec.Access.SSH.KeyRef.Name
 		}
 		out = append(out, entry)
 	}
@@ -180,8 +180,8 @@ func machinesVars(state v1alpha1.State) []any {
 }
 
 func machineAddressesVars(host v1alpha1.Machine) []any {
-	out := make([]any, 0, len(host.Spec.OS.Addresses))
-	for _, address := range host.Spec.OS.Addresses {
+	out := make([]any, 0, len(host.Spec.Addresses))
+	for _, address := range host.Spec.Addresses {
 		out = append(out, map[string]any{
 			"name":    address.Name,
 			"address": address.Address,

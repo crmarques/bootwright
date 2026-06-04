@@ -153,12 +153,14 @@ spec:
   capabilities:
     - libvirt
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: provider-01.example.test
+    provided: true
+  addresses:
+    - name: ssh
+      address: provider-01.example.test
+  access:
     ssh:
-      addressName: ssh
+      addressRef:
+        name: ssh
       user: core
       keyRef:
         name: provider-host-ssh
@@ -177,11 +179,13 @@ func hostTrustTestState() v1alpha1.State {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityLibvirt},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "provider-01.example.test"}},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "provider-01.example.test"}},
+			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
-					AddressName: "ssh",
-					KeyRef:      v1alpha1.SecretRef{Name: "provider-host-ssh"},
+					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+					KeyRef:     v1alpha1.SecretRef{Name: "provider-host-ssh"},
 				},
 			},
 		},

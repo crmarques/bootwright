@@ -901,7 +901,7 @@ func TestWriteStorageAttachmentExternalDetailsUsesSSHExecution(t *testing.T) {
 			},
 		},
 	}
-	state.Machines[0].Spec.OS.SSH.User = "operator"
+	state.Machines[0].Spec.Access.SSH.User = "operator"
 
 	secretsDir := t.TempDir()
 	exportedJSON := `[{"name":"rook-ceph-mon","kind":"Secret","data":{"fsid":"ssh-fsid"}}]`
@@ -1010,9 +1010,11 @@ func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh", User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin.example.test"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}, User: "ceph", KeyRef: v1alpha1.SecretRef{Name: "ceph-admin-ssh"}, KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"}},
 				},
 			},
 		}},
@@ -1184,10 +1186,12 @@ func storageAttachmentPlanningState() v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.10.10.10"}},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.10.10.10"}},
+				Access: v1alpha1.MachineAccess{
 					SSH: &v1alpha1.MachineSSHSpec{
-						AddressName:   "ssh",
+						AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 						KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
 						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
 					},
@@ -1320,11 +1324,9 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Substrate: v1alpha1.MachineSubstrate{
 					ProviderRef: v1alpha1.LocalObjectReference{Name: "child-kubevirt-provider"},
-					KubeVirt: &v1alpha1.MachineProfiledSubstrate{
-						ProfileRef: v1alpha1.LocalObjectReference{Name: "sno"},
-					},
+					ProfileRef:  v1alpha1.LocalObjectReference{Name: "sno"},
 				},
-				OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 			},
 		}},
 		InfraProviders: []v1alpha1.InfraProvider{{

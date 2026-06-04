@@ -9,39 +9,54 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 00:25:90:5a:10:01
-      interfaces:
-        - name: eno1
-          macAddress: 00:25:90:5a:10:01
-        - name: eno2
-          macAddress: 00:25:90:5a:10:02
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-bond140-machine
+      attachmentRef:
+        name: rack1-bond140-machine
+      overrides:
+        interfaces:
+          - name: bond0.140
+            ipv4:
+              address:
+                - ip: 192.168.140.20
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: eno1
+        interfaceName: eno1
+      - nicRef:
+          name: eno2
+        interfaceName: eno2
+
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:10:01
+      - name: eno2
+        macAddress: 00:25:90:5a:10:02
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: eno1
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-bond140-machine
-        attachmentRef:
-          name: rack1-bond140-machine
-        overrides:
-          interfaces:
-            - name: bond0.140
-              ipv4:
-                address:
-                  - ip: 192.168.140.20
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/sda
+  addresses:
+    - name: ip
+      address: 192.168.140.20
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -54,39 +69,54 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 00:25:90:5a:11:01
-      interfaces:
-        - name: eno1
-          macAddress: 00:25:90:5a:11:01
-        - name: eno2
-          macAddress: 00:25:90:5a:11:02
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-bond140-machine
+      attachmentRef:
+        name: rack1-bond140-machine
+      overrides:
+        interfaces:
+          - name: bond0.140
+            ipv4:
+              address:
+                - ip: 192.168.140.21
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: eno1
+        interfaceName: eno1
+      - nicRef:
+          name: eno2
+        interfaceName: eno2
+
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:11:01
+      - name: eno2
+        macAddress: 00:25:90:5a:11:02
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: eno1
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-bond140-machine
-        attachmentRef:
-          name: rack1-bond140-machine
-        overrides:
-          interfaces:
-            - name: bond0.140
-              ipv4:
-                address:
-                  - ip: 192.168.140.21
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/sda
+  addresses:
+    - name: ip
+      address: 192.168.140.21
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -99,39 +129,54 @@ spec:
   substrate:
     providerRef:
       name: rack1-baremetal-provider
-    bareMetal:
-      bootMACAddress: 00:25:90:5a:12:01
-      interfaces:
-        - name: eno1
-          macAddress: 00:25:90:5a:12:01
-        - name: eno2
-          macAddress: 00:25:90:5a:12:02
+
+  os:
+    install:
       rootDeviceHints:
         deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef:
+        name: rack1-bond140-machine
+      attachmentRef:
+        name: rack1-bond140-machine
+      overrides:
+        interfaces:
+          - name: bond0.140
+            ipv4:
+              address:
+                - ip: 192.168.140.22
+                  prefix-length: 24
+    interfaceBinding:
+      - nicRef:
+          name: eno1
+        interfaceName: eno1
+      - nicRef:
+          name: eno2
+        interfaceName: eno2
+
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:12:01
+      - name: eno2
+        macAddress: 00:25:90:5a:12:02
+    management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
         credentialsRef:
           name: bmc-credentials
         disableCertificateVerification: true
+    boot:
+      nicRef:
+        name: eno1
 
-  os:
-    mode: raw
-    install:
-      network:
-        networkConfigRef:
-          name: rack1-bond140-machine
-        attachmentRef:
-          name: rack1-bond140-machine
-        overrides:
-          interfaces:
-            - name: bond0.140
-              ipv4:
-                address:
-                  - ip: 192.168.140.22
-                    prefix-length: 24
-      rootDeviceHints:
-        deviceName: /dev/sda
+  addresses:
+    - name: ip
+      address: 192.168.140.22
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster

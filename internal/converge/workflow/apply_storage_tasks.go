@@ -80,7 +80,7 @@ func managedOSMachineCount(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		}
 		seen[node.MachineRef.Name] = true
 		machine, ok := stateview.Machine(state, node.MachineRef.Name)
-		if ok && machine.Spec.OS.Mode == v1alpha1.MachineOSModeManaged {
+		if ok && v1alpha1.MachineInstallsOS(machine) {
 			count++
 		}
 	}

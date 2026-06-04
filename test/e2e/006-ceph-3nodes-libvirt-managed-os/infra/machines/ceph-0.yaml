@@ -1,0 +1,47 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+
+  substrate:
+    providerRef:
+      name: lab-libvirt-provider
+    profileRef:
+      name: ceph-node
+
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+    provided: false
+    profileRef:
+      name: rhel-9-ceph-node
+
+  network:
+    config:
+      networkConfigRef:
+        name: ceph-bridge
+      attachmentRef:
+        name: ceph-bridge
+      overrides:
+        interfaces:
+          - name: primary
+            ipv4:
+              address:
+                - ip: 192.168.134.20
+                  prefix-length: 24
+
+  addresses:
+    - name: ssh
+      address: 192.168.134.20
+
+  access:
+    ssh:
+      user: root
+      keyRef:
+        name: ceph-node-ssh
+      addressRef:
+        name: ssh

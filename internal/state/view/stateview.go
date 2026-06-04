@@ -92,7 +92,7 @@ func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.Co
 			continue
 		}
 		nodes = append(nodes, clusterNodeFromMachine(machine))
-		network := machine.Spec.OS.Install.Network
+		network := machine.Spec.Network.Config
 		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
 			networkBindings = append(networkBindings, v1alpha1.MachineNetworkBinding{
 				NetworkConfigRef: network.NetworkConfigRef,
@@ -116,23 +116,16 @@ func InstallMachineFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine
 }
 
 func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
-	network := machine.Spec.OS.Install.Network
 	node := v1alpha1.InstallMachine{
 		Name: machine.Metadata.Name,
 		Source: v1alpha1.InstallMachineSource{
 			ProviderRef: machine.Spec.Substrate.ProviderRef,
+			MachineRef:  v1alpha1.LocalObjectReference{Name: machine.Metadata.Name},
+			ProfileRef:  v1alpha1.MachineProfileRef(machine),
 		},
-		Network:         v1alpha1.MachineNetwork(network),
-		RootDeviceHints: machine.Spec.OS.Install.RootDeviceHints,
-	}
-	switch v1alpha1.MachineSubstrateKind(machine) {
-	case v1alpha1.ProvisionerBareMetal:
-		node.Source.MachineRef.Name = machine.Metadata.Name
-		if node.RootDeviceHints == nil && machine.Spec.Substrate.BareMetal != nil {
-			node.RootDeviceHints = machine.Spec.Substrate.BareMetal.RootDeviceHints
-		}
-	case v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerVSphere, v1alpha1.ProvisionerKubeVirt:
-		node.Source.ProfileRef = v1alpha1.MachineProfileRef(machine)
+		Network:          machine.Spec.Network.Config,
+		InterfaceBinding: append([]v1alpha1.MachineNetworkInterfaceBinding(nil), machine.Spec.Network.InterfaceBinding...),
+		RootDeviceHints:  machine.Spec.OS.Install.RootDeviceHints,
 	}
 	return node
 }

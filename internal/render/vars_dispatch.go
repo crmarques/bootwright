@@ -32,12 +32,10 @@ func ProviderDriver(state v1alpha1.State, m v1alpha1.InstallMachine) support.Dis
 		}
 		return support.LookupProfileProvisioner(provider.Spec.Type)
 	}
-	if m.Source.MachineRef.Name != "" {
-		server, ok := findProviderMachine(state, m.Source.MachineRef.Name)
-		if !ok {
-			return support.LookupDispatch("none", "none", "none")
+	if provider.Spec.Type == v1alpha1.ProvisionerBareMetal && m.Source.MachineRef.Name != "" {
+		if _, ok := findProviderMachine(state, m.Source.MachineRef.Name); ok {
+			return support.LookupMachineProvisioner(provider.Spec.Type)
 		}
-		return support.LookupMachineProvisioner(v1alpha1.MachineSubstrateKind(server))
 	}
 	return support.LookupDispatch("none", "none", "none")
 }

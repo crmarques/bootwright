@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: cephfs
+spec:
+  storageClusterRef:
+    name: ceph-libvirt
+
+  cephfs:
+    metadataPoolRef:
+      name: cephfs-meta
+    dataPoolRefs:
+      - name: cephfs-data
+        default: true
+    mds:
+      activeCount: 2
+      placement:
+        hosts:
+          - ceph-0
+          - ceph-1
+          - ceph-2
+        countPerHost: 1

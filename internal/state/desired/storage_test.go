@@ -329,9 +329,9 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		{
 			name: "missing-machine-ssh",
 			edit: func(state *v1alpha1.State) {
-				state.Machines[0].Spec.OS.SSH = nil
+				state.Machines[0].Spec.Access.SSH = nil
 			},
-			want: "Machine/ceph-dc1-0 spec.os.ssh is required",
+			want: "Machine/ceph-dc1-0 spec.access.ssh is required",
 		},
 		{
 			name: "missing-ceph-node-capability",
@@ -343,14 +343,14 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		{
 			name: "mixed-users",
 			edit: func(state *v1alpha1.State) {
-				state.Machines[1].Spec.OS.SSH.User = "ceph"
+				state.Machines[1].Spec.Access.SSH.User = "ceph"
 			},
 			want: `with ssh.user "ceph"; all storage node Machines in one StorageCluster must use "root"`,
 		},
 		{
 			name: "mixed-key-refs",
 			edit: func(state *v1alpha1.State) {
-				state.Machines[1].Spec.OS.SSH.KeyRef.Name = "other-ceph-node-ssh"
+				state.Machines[1].Spec.Access.SSH.KeyRef.Name = "other-ceph-node-ssh"
 			},
 			want: `with ssh.keyRef.name "other-ceph-node-ssh"; all storage node Machines in one StorageCluster must use "ceph-node-ssh"`,
 		},
@@ -581,10 +581,12 @@ func storageValidationHost(name string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: name + ".example.test"}},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: name + ".example.test"}},
+			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
-					AddressName:   "ssh",
+					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 					User:          "root",
 					KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
@@ -600,10 +602,12 @@ func storageValidationAdminMachine(name string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
 			OS: v1alpha1.MachineOSSpec{
-				Mode:      v1alpha1.MachineOSModeExternal,
-				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: name + ".example.test"}},
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: name + ".example.test"}},
+			Access: v1alpha1.MachineAccess{
 				SSH: &v1alpha1.MachineSSHSpec{
-					AddressName:   "ssh",
+					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
 					User:          "ceph",
 					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
 					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-admin-known-hosts"},

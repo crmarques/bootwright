@@ -20,7 +20,7 @@ CA bundles, tokens, and kubeconfigs. These values must stay outside versioned
 desired state.
 
 Machine SSH follows the same boundary. Durable SSH connection details live on
-`Machine.spec.os.ssh`. `keyRef` and `knownHostsRef` reference
+`Machine.spec.access.ssh`. `keyRef` and `knownHostsRef` reference
 `Environment.spec.secrets`; when `knownHostsRef` is omitted, Bootwright records
 server keys under context-managed SSH trust state. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.

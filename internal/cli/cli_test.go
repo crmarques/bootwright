@@ -935,13 +935,17 @@ kind: Machine
 metadata:
   name: spare-machine
 spec:
+  os:
+    provided: true
   addresses:
     - name: ssh
       address: 192.168.132.50
-  ssh:
-    addressName: ssh
-    keyRef:
-      name: missing-secret
+  access:
+    ssh:
+      addressRef:
+        name: ssh
+      keyRef:
+        name: missing-secret
   capabilities:
     - container-runtime
 `), 0o600); err != nil {

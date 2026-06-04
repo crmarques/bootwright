@@ -8,13 +8,17 @@ spec:
     - artifact-server
 
   os:
-    mode: external
-    addresses:
-      - name: ssh
-        address: bastion.bootwright.test
-      - name: lab-lan
-        address: 192.168.150.5
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: bastion.bootwright.test
+    - name: lab-lan
+      address: 192.168.150.5
+
+  access:
     ssh:
-      addressName: ssh
       keyRef:
         name: provider-host-ssh
+      addressRef:
+        name: ssh

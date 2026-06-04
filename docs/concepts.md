@@ -139,11 +139,11 @@ when you intentionally want one slice of the graph.
 Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
 KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
-`Machine.spec.os.install.network.attachmentRef`.
+`Machine.spec.network.config.attachmentRef`.
 
 Most provider-sourced nodes reuse the same NMState template and only set static
 IPs in
-`Machine.network.overrides.interfaces[].ipv4.address[]`.
+`Machine.spec.network.config.overrides.interfaces[].ipv4.address[]`.
 Advanced provider-sourced nodes may provide a full inline `network.spec`.
 
 Provider MAC inventory, or deterministic generated MACs for Bootwright-created

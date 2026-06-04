@@ -23,7 +23,7 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, secretsDir string) 
 		var components []any
 		for _, m := range ci.Machines {
 			machine, ok := stateview.Machine(state, m.Name)
-			if !ok || machine.Spec.OS.Mode != v1alpha1.MachineOSModeManaged {
+			if !ok || !v1alpha1.MachineInstallsOS(machine) {
 				continue
 			}
 			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, secretsDir)
@@ -63,7 +63,7 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		}
 		seen[node.MachineRef.Name] = true
 		machines = append(machines, stateview.InstallMachineFromMachine(machine))
-		network := machine.Spec.OS.Install.Network
+		network := machine.Spec.Network.Config
 		if network.NetworkConfigRef.Name != "" && network.AttachmentRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" {
 			bindings = append(bindings, v1alpha1.MachineNetworkBinding{
 				NetworkConfigRef: network.NetworkConfigRef,
@@ -87,10 +87,10 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 }
 
 func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName, secretsDir string) map[string]any {
-	if machine.Spec.OS.SSH == nil {
+	if machine.Spec.Access.SSH == nil {
 		return nil
 	}
-	profile, ok := findMachineInstallProfile(state, machine.Spec.OS.Install.ProfileRef.Name)
+	profile, ok := findMachineInstallProfile(state, machine.Spec.OS.ProfileRef.Name)
 	if !ok || profile.Spec.Installer.Anaconda == nil {
 		return nil
 	}
@@ -117,8 +117,8 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"image": machineOSInstallImageVars(resolved, image.Spec.Checksum),
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(profile, machine),
-			"sshUser":                machine.Spec.OS.SSH.User,
-			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir),
+			"sshUser":                machine.Spec.Access.SSH.User,
+			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
 			"packages":               append([]string(nil), profile.Spec.Customizations.Packages...),
@@ -127,11 +127,11 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"network":                machineInstallNetworkVars(state, ci, m, clusterName),
 		},
 	}
-	if machine.Spec.OS.SSH != nil {
+	if machine.Spec.Access.SSH != nil {
 		out["ssh"] = map[string]any{
 			"address":        v1alpha1.MachineSSHAddress(machine),
-			"user":           machine.Spec.OS.SSH.User,
-			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.OS.SSH.KeyRef.Name, env, secretsDir),
+			"user":           machine.Spec.Access.SSH.User,
+			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
 			"knownHostsPath": machineKnownHostsPath(machine, env, secretsDir),
 			"trustDir":       sshtrust.DirForSecrets(secretsDir),
 		}
@@ -181,7 +181,7 @@ func machineInstallHostname(profile v1alpha1.MachineInstallProfile, machine v1al
 func machineInstallStorageVars(profile v1alpha1.MachineInstallProfile, state v1alpha1.State, m v1alpha1.InstallMachine) map[string]any {
 	storage := profile.Spec.Customizations.Storage
 	rootDevice := ""
-	if storage.RootDevice.Source == "substrateRootDeviceHints" || storage.RootDevice.Source == "" {
+	if storage.RootDevice.Source == v1alpha1.MachineInstallRootDeviceMachine || storage.RootDevice.Source == "" {
 		if hints := machineRootDeviceHints(state, m); hints != nil {
 			rootDevice = hints.DeviceName
 		}

@@ -490,7 +490,7 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		if state.Machines[i].Metadata.Name != "services-host" {
 			continue
 		}
-		state.Machines[i].Spec.OS.Addresses = append(state.Machines[i].Spec.OS.Addresses, v1alpha1.MachineAddress{
+		state.Machines[i].Spec.Addresses = append(state.Machines[i].Spec.Addresses, v1alpha1.MachineAddress{
 			Name:    "cluster-lan",
 			Address: "192.168.132.9",
 		})
@@ -945,8 +945,8 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
 	machine := machineByName(t, state, state.ContainerClusters[0].Spec.Nodes[0].MachineRef.Name)
 	machine.Metadata.Name = "sno-libvirt-b-master-0"
-	machine.Spec.OS.Install.Network.Overrides = maps.Clone(machine.Spec.OS.Install.Network.Overrides)
-	interfaces := machine.Spec.OS.Install.Network.Overrides["interfaces"].([]any)
+	machine.Spec.Network.Config.Overrides = maps.Clone(machine.Spec.Network.Config.Overrides)
+	interfaces := machine.Spec.Network.Config.Overrides["interfaces"].([]any)
 	primary := maps.Clone(interfaces[0].(map[string]any))
 	ipv4 := maps.Clone(primary["ipv4"].(map[string]any))
 	addresses := append([]any(nil), ipv4["address"].([]any)...)
@@ -956,7 +956,7 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	ipv4["address"] = addresses
 	primary["ipv4"] = ipv4
 	interfaces[0] = primary
-	machine.Spec.OS.Install.Network.Overrides["interfaces"] = interfaces
+	machine.Spec.Network.Config.Overrides["interfaces"] = interfaces
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected

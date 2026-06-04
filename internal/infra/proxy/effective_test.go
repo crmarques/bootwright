@@ -56,9 +56,11 @@ func stateWithManagedProxy() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "lab-host"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}},
@@ -141,9 +143,11 @@ func TestResolveNoProxyMergesAndDedupes(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "h1"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}},
@@ -205,8 +209,8 @@ func stateWithBareMetalBMC(address string) v1alpha1.State {
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "master-0"},
 			Spec: v1alpha1.MachineSpec{
-				Substrate: v1alpha1.MachineSubstrate{
-					BareMetal: &v1alpha1.MachineBareMetalSubstrate{
+				Hardware: v1alpha1.MachineHardware{
+					Management: v1alpha1.MachineHardwareManagement{
 						BMC: v1alpha1.BMCSpec{Address: address},
 					},
 				},
@@ -240,7 +244,7 @@ func TestManagedProxyURLDefaultsPort(t *testing.T) {
 
 func TestManagedProxyURLErrors(t *testing.T) {
 	state := stateWithManagedProxy()
-	state.Machines[0].Spec.OS.SSH = &v1alpha1.MachineSSHSpec{}
+	state.Machines[0].Spec.Access.SSH = &v1alpha1.MachineSSHSpec{}
 	_, err := ManagedProxyURL(state, v1alpha1.ClusterInstall{})
 	if err == nil {
 		t.Fatal("want error, got nil")

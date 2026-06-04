@@ -107,11 +107,8 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 			if !ok {
 				continue
 			}
-			if machine.Spec.Substrate.KubeVirt == nil {
-				continue
-			}
 			provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-			if !ok || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
+			if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil || provider.Spec.KubeVirt.HostClusterRef == nil || provider.Spec.KubeVirt.HostClusterRef.Name == "" {
 				continue
 			}
 			parent := provider.Spec.KubeVirt.HostClusterRef.Name
@@ -314,14 +311,14 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		require(owner+".trustBundleRef", registries.Mirror.TrustBundleRef)
 	}
 	for _, machine := range state.Machines {
-		if machine.Spec.OS.SSH != nil {
-			requireSSHKey(fmt.Sprintf("Machine/%s spec.os.ssh.keyRef", machine.Metadata.Name), machine.Spec.OS.SSH.KeyRef)
-			if machine.Spec.OS.SSH.KnownHostsRef.Name != "" {
-				require(fmt.Sprintf("Machine/%s spec.os.ssh.knownHostsRef", machine.Metadata.Name), machine.Spec.OS.SSH.KnownHostsRef)
+		if machine.Spec.Access.SSH != nil {
+			requireSSHKey(fmt.Sprintf("Machine/%s spec.access.ssh.keyRef", machine.Metadata.Name), machine.Spec.Access.SSH.KeyRef)
+			if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
+				require(fmt.Sprintf("Machine/%s spec.access.ssh.knownHostsRef", machine.Metadata.Name), machine.Spec.Access.SSH.KnownHostsRef)
 			}
 		}
-		if machine.Spec.Substrate.BareMetal != nil {
-			require(fmt.Sprintf("Machine/%s spec.substrate.bareMetal.bmc.credentialsRef", machine.Metadata.Name), machine.Spec.Substrate.BareMetal.BMC.CredentialsRef)
+		if machine.Spec.Hardware.Management.BMC.CredentialsRef.Name != "" {
+			require(fmt.Sprintf("Machine/%s spec.hardware.management.bmc.credentialsRef", machine.Metadata.Name), machine.Spec.Hardware.Management.BMC.CredentialsRef)
 		}
 	}
 	for _, image := range state.MachineImages {

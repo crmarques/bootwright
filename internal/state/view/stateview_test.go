@@ -89,7 +89,7 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 			},
 		},
 		Machines: []v1alpha1.InstallMachine{{
-			Network: v1alpha1.MachineNetwork{
+			Network: v1alpha1.MachineNetworkConfig{
 				NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
 			},
 		}},
@@ -133,12 +133,14 @@ func TestHostRouteAddressFallback(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "provider"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
-					Mode: v1alpha1.MachineOSModeExternal,
-					SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
-					Addresses: []v1alpha1.MachineAddress{
-						{Name: "ssh", Address: "127.0.0.1"},
-						{Name: "lan", Address: "192.168.133.2"},
-					},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{
+					{Name: "ssh", Address: "127.0.0.1"},
+					{Name: "lan", Address: "192.168.133.2"},
+				},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}},
@@ -162,7 +164,7 @@ func TestHostRouteAddressFallback(t *testing.T) {
 			v1alpha1.EndpointAPI: {Address: "192.168.133.10"},
 		},
 		Machines: []v1alpha1.InstallMachine{{
-			Network: v1alpha1.MachineNetwork{
+			Network: v1alpha1.MachineNetworkConfig{
 				NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "network"},
 			},
 		}},

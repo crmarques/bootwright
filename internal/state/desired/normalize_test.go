@@ -78,8 +78,10 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 				Metadata: v1alpha1.Metadata{Name: "defaulted"},
 				Spec: v1alpha1.MachineSpec{
 					OS: v1alpha1.MachineOSSpec{
-						Mode: v1alpha1.MachineOSModeExternal,
-						SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+						Provided: v1alpha1.BoolPtr(true),
+					},
+					Access: v1alpha1.MachineAccess{
+						SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 					},
 				},
 			},
@@ -87,8 +89,10 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 				Metadata: v1alpha1.Metadata{Name: "explicit"},
 				Spec: v1alpha1.MachineSpec{
 					OS: v1alpha1.MachineOSSpec{
-						Mode: v1alpha1.MachineOSModeExternal,
-						SSH:  &v1alpha1.MachineSSHSpec{AddressName: "ssh", User: "root"},
+						Provided: v1alpha1.BoolPtr(true),
+					},
+					Access: v1alpha1.MachineAccess{
+						SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}, User: "root"},
 					},
 				},
 			},
@@ -100,10 +104,10 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.Machines[0].Spec.OS.SSH.User; got != "operator" {
+	if got := state.Machines[0].Spec.Access.SSH.User; got != "operator" {
 		t.Fatalf("defaulted Machine SSH user = %q, want operator", got)
 	}
-	if got := state.Machines[1].Spec.OS.SSH.User; got != "root" {
+	if got := state.Machines[1].Spec.Access.SSH.User; got != "root" {
 		t.Fatalf("explicit Machine SSH user = %q, want root", got)
 	}
 }
@@ -242,9 +246,15 @@ func bareMetalMachine(name, provider string) v1alpha1.Machine {
 		Spec: v1alpha1.MachineSpec{
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
-				BareMetal:   &v1alpha1.MachineBareMetalSubstrate{},
 			},
-			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			Hardware: v1alpha1.MachineHardware{
+				NICs: []v1alpha1.MachineNIC{{Name: "primary", MACAddress: "52:54:00:00:00:01"}},
+				Boot: v1alpha1.MachineHardwareBoot{NICRef: v1alpha1.LocalObjectReference{Name: "primary"}},
+				Management: v1alpha1.MachineHardwareManagement{
+					BMC: v1alpha1.BMCSpec{Address: "redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1"},
+				},
+			},
+			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 		},
 	}
 }
@@ -256,13 +266,11 @@ func profiledMachine(name, provider, providerType string) v1alpha1.Machine {
 			Substrate: v1alpha1.MachineSubstrate{
 				ProviderRef: v1alpha1.LocalObjectReference{Name: provider},
 			},
-			OS: v1alpha1.MachineOSSpec{Mode: v1alpha1.MachineOSModeRaw},
+			OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 		},
 	}
 	if providerType == v1alpha1.ProvisionerLibvirt {
-		machine.Spec.Substrate.Libvirt = &v1alpha1.MachineProfiledSubstrate{
-			ProfileRef: v1alpha1.LocalObjectReference{Name: "worker"},
-		}
+		machine.Spec.Substrate.ProfileRef = v1alpha1.LocalObjectReference{Name: "worker"}
 	}
 	return machine
 }

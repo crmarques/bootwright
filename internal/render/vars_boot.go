@@ -49,12 +49,12 @@ func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m 
 		}
 		return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
 	}
-	if m.Source.MachineRef.Name != "" {
+	if provider.Spec.Type == v1alpha1.ProvisionerBareMetal && m.Source.MachineRef.Name != "" {
 		server, ok := findProviderMachine(state, m.Source.MachineRef.Name)
 		if !ok {
 			return nil
 		}
-		if server.Spec.Substrate.BareMetal == nil {
+		if server.Spec.Hardware.Management.BMC.Address == "" {
 			return nil
 		}
 		return baremetalBootVars(state, ci, server, isoBasename)
@@ -125,7 +125,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 }
 
 func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server v1alpha1.Machine, isoBasename string) map[string]any {
-	bmc := server.Spec.Substrate.BareMetal.BMC
+	bmc := server.Spec.Hardware.Management.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
 	stageHost, stagePath, fetchURL := baremetalAgentISOTarget(state, ci, isoBasename)
 

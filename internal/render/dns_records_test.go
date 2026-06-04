@@ -62,9 +62,11 @@ func dnsRecordsState() v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityNameResolution},
 				OS: v1alpha1.MachineOSSpec{
-					Mode:      v1alpha1.MachineOSModeExternal,
-					Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
-					SSH:       &v1alpha1.MachineSSHSpec{AddressName: "ssh"},
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.5"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
 				},
 			},
 		}, {
@@ -72,10 +74,12 @@ func dnsRecordsState() v1alpha1.State {
 			Spec: v1alpha1.MachineSpec{
 				Capabilities: []string{v1alpha1.MachineCapabilityOpenShiftNode},
 				OS: v1alpha1.MachineOSSpec{
-					Mode: v1alpha1.MachineOSModeRaw,
-					Install: v1alpha1.MachineOSInstallSpec{Network: v1alpha1.MachineNetwork{
+					Provided: v1alpha1.BoolPtr(false),
+				},
+				Network: v1alpha1.MachineNetwork{
+					Config: v1alpha1.MachineNetworkConfig{
 						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "managed-net"},
-					}},
+					},
 				},
 			},
 		}},
