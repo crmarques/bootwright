@@ -15,6 +15,7 @@ and coding agents. Load only the specs and skills needed for the current task.
 | Skill | Use When |
 | --- | --- |
 | `definition-stewardship` | Changing specs, ADRs, docs, examples, E2E fixture names, or agent guidance |
+| `parallel-implementation` | Isolating implementation work in temporary worktrees before integration |
 | `architecture` | Designing OpenShift behavior, provider boundaries, multi-cluster provisioning, or lab Redfish emulation |
 | `repo-stewardship` | Changing repository layout, generated-output boundaries, tests, or security hygiene |
 | `security-analysis` | Reviewing secrets, credentials, permissions, command execution, supply chain, or TLS/trust handling |

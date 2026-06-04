@@ -29,19 +29,11 @@ or project-local agent guidance.
 
 ## Required Checks
 
-Run stale-term searches over definition files before finishing:
+Run the maintained stale-term check before finishing:
 
 ```text
-rg -n 'connectivity[.](mode|connected|restricted|disconnected)|spec[.]connectivity|bootwright_''connectivity|local''Registry|bootwright pre''flight|bootwright pl''an|bootwright di''ff|sp''oke|examples/inf''ra|ADR 000''3' README.md docs specs examples test .agents
+make stale-term-check
 ```
 
-Confirm connected provider-swap examples keep `Environment` and `ContainerCluster`
-files byte-identical:
-
-```text
-diff -u examples/libvirt-redfish-fleet/environment.yaml examples/baremetal-redfish/environment.yaml
-diff -u examples/libvirt-redfish-fleet/container-cluster.yaml examples/baremetal-redfish/container-cluster.yaml
-```
-
-Report any remaining stale term only when it is intentionally deferred to the
-next code-focused round.
+Report any failure only when it is intentionally deferred to the next
+code-focused round.

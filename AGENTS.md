@@ -34,6 +34,12 @@ making changes, load only the specs that match the user request.
   tokens, or environment-specific credentials into versioned content.
 - Keep docs and specs concise. Add implementation detail only when it is
   needed by current code or an accepted decision.
+- For any implementation request that changes repo-tracked files, use the
+  `/.agents/skills/parallel-implementation/` skill before editing. Agents must
+  work from an isolated temporary worktree and may touch the primary `main`
+  worktree only for final clean fast-forward integration. If the primary
+  `main` worktree has uncommitted changes, complete edits and validation in the
+  temporary worktree and report a blocked handoff for manual integration.
 - When adding or changing CLI user-facing human output, always use the
   centralized `internal/cli/output` component. Keep the documented raw-output
   exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
