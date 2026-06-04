@@ -4,7 +4,7 @@
     name: "bootwright-{{ bootwright_bmc_provider_name }}-vmedia"
     state: present
     autostart: true
-    xml: "{{ lookup('template', 'vmedia-pool.xml.j2') }}"
+    xml: "{{ lookup('ansible.builtin.template', 'vmedia/pool.xml.j2') }}"
 
 - name: Activate libvirt vmedia storage pool
   community.libvirt.virt_pool:

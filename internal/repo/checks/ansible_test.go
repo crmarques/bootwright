@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -137,6 +138,38 @@ func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
 		}
 		tasks := readAnsibleTasks(t, rel)
 		checkShellTaskGuards(t, rel, tasks)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk ansible roles: %v", err)
+	}
+}
+
+func TestRoleTemplateLookupsReferenceExistingTemplates(t *testing.T) {
+	lookupRE := regexp.MustCompile(`lookup\(\s*['"](?:ansible\.builtin\.)?template['"]\s*,\s*['"]([^'"]+)['"]`)
+	root := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot))
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".yml" || !strings.Contains(path, string(filepath.Separator)+"tasks"+string(filepath.Separator)) {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			return err
+		}
+		roleRoot := strings.Split(rel, "/tasks/")[0]
+		for _, match := range lookupRE.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
+			templateRel := filepath.ToSlash(filepath.Clean(match[1]))
+			if strings.HasPrefix(templateRel, "../") || filepath.IsAbs(templateRel) {
+				t.Fatalf("%s references template outside role templates: %s", rel, match[1])
+			}
+			target := filepath.ToSlash(filepath.Join(roleRoot, "templates", templateRel))
+			if !repoFileExists(t, target) {
+				t.Fatalf("%s references missing role template %s", rel, target)
+			}
+		}
 		return nil
 	})
 	if err != nil {
