@@ -21,7 +21,7 @@
   <dns enable='no'/>
   <ip address='{{ bootwright_libvirt_network.gateway }}' prefix='{{ bootwright_libvirt_network.cidr.split("/") | last }}'>
     <dhcp>
-{% for machine in bootwright_current_machines %}
+{% for machine in bootwright_libvirt_network_machines %}
 {% set primary = machine.networkConfig.addresses | default([]) | first | default({}) %}
 {% set primary_ipv4 = primary.ipv4 | default([]) | first | default({}) %}
 {% if (primary.macAddress | default('') | length > 0) and (primary_ipv4.ip | default('') | length > 0) %}

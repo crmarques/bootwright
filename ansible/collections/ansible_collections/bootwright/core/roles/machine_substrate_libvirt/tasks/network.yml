@@ -21,6 +21,15 @@
     bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"
   changed_when: false
 
+- name: Resolve libvirt network machines
+  ansible.builtin.set_fact:
+    bootwright_libvirt_network_machines: >-
+      {{
+        bootwright_current_machines
+        | default(bootwright_prepare_components | default([bootwright_component]))
+      }}
+  changed_when: false
+
 - name: Create per-cluster libvirt state directory
   ansible.builtin.file:
     path: "{{ bootwright_libvirt_root }}"

@@ -1870,6 +1870,35 @@ func TestLibvirtNetworkUsesResolvedNTPIPv4Sources(t *testing.T) {
 	}
 }
 
+func TestLibvirtNetworkEntrypointBuildsMachineListLocally(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/network.yml")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve libvirt network machines")
+	renderIdx := findAnsibleTask(t, tasks, "Render libvirt network XML")
+	if resolveIdx > renderIdx {
+		t.Fatalf("libvirt network machines must be resolved before rendering network XML")
+	}
+	setFact, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact body", tasks[resolveIdx]["name"])
+	}
+	expr, ok := setFact["bootwright_libvirt_network_machines"].(string)
+	if !ok {
+		t.Fatalf("bootwright_libvirt_network_machines fact = %v", setFact["bootwright_libvirt_network_machines"])
+	}
+	for _, want := range []string{"bootwright_current_machines", "bootwright_prepare_components", "[bootwright_component]"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("libvirt network machine list expression missing %q: %s", want, expr)
+		}
+	}
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/templates/network.xml.j2")
+	if !strings.Contains(body, "bootwright_libvirt_network_machines") {
+		t.Fatalf("libvirt network template must iterate the local network machine list")
+	}
+	if strings.Contains(body, "bootwright_current_machines") {
+		t.Fatalf("libvirt network template must not depend on caller-scoped bootwright_current_machines")
+	}
+}
+
 func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/machine.yml")
 	domainXML := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/templates/domain.xml.j2")
