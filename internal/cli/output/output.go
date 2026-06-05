@@ -20,6 +20,7 @@ const (
 	StatusMissing Status = "MISSING"
 	StatusFail    Status = "FAIL"
 	StatusFailed  Status = "FAILED"
+	StatusInfo    Status = "INFO"
 	StatusWarn    Status = "WARN"
 	StatusSkip    Status = "SKIP"
 	StatusSkipped Status = "SKIPPED"
@@ -371,6 +372,8 @@ func (p *Printer) statusLabel(status Status) string {
 		return p.style(label, color.Bold, color.FgYellow)
 	case StatusFail, StatusFailed:
 		return p.style(label, color.Bold, color.FgRed)
+	case StatusInfo:
+		return p.style(label, color.FgBlue)
 	case StatusWarn:
 		return p.style(label, color.FgYellow)
 	case StatusBlocked:

@@ -191,6 +191,20 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
+	var plays []map[string]any
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_managed_machine_os_apply.yml"
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, path)), &plays); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+	if len(plays) != 1 {
+		t.Fatalf("%s has %d plays, want 1", path, len(plays))
+	}
+	if got := plays[0]["strategy"]; got == "free" {
+		t.Fatalf("%s must use Ansible's default linear strategy so per-task host results stay grouped", path)
+	}
+}
+
 func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
 	root := filepath.Join(repoRoot(t), filepath.FromSlash(bootwrightCollectionRoleRoot))
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {

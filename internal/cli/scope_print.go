@@ -16,6 +16,8 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
+var currentEUID = os.Geteuid
+
 func printApplySummary(w io.Writer, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
 	printWorkflowSummary(w, "Apply plan", selected, askBecomePass, dryRun, noRemoteWork)
 }
@@ -45,8 +47,8 @@ func printWorkflowSummary(w io.Writer, title string, selected []Phase, askBecome
 			p.Warning("Root phases", "sudo escalation is required; this is a dry run, no commands execute")
 		case askBecomePass:
 			p.Warning("Root phases", becomePasswordSummary("workflow"))
-		case os.Geteuid() == 0:
-			p.Warning("Root phases", "bootwright is running as root, no BECOME password prompt needed")
+		case currentEUID() == 0:
+			p.Status(output.StatusInfo, "Root phases", "bootwright is running as root, no BECOME password prompt needed")
 		default:
 			p.Warning("Root phases", "--ask-become-pass=false requires passwordless sudo or an already-root connection user")
 		}

@@ -1,7 +1,6 @@
 ---
 - name: Apply managed machine operating systems
   hosts: bootwright_machine_task_hosts
-  strategy: free
   gather_subset:
     - "!all"
     - min
