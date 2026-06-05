@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/infra/media"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
 	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
@@ -114,7 +115,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"type":         profile.Spec.Installer.Type,
 			"repositories": machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories),
 		},
-		"image": machineOSInstallImageVars(resolved, image.Spec.Checksum),
+		"image": machineOSInstallImageVars(resolved, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m)),
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(profile, machine),
 			"sshUser":                machine.Spec.Access.SSH.User,
@@ -139,12 +140,15 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	return out
 }
 
-func machineOSInstallImageVars(resolved media.Resolved, checksum string) map[string]any {
+func machineOSInstallImageVars(resolved media.Resolved, checksum string, sourceOnTarget bool) map[string]any {
 	normalizedChecksum, _ := media.NormalizeSHA256(checksum)
 	out := map[string]any{
 		"kind":     resolved.Kind,
 		"original": resolved.Original,
 		"checksum": normalizedChecksum,
+	}
+	if sourceOnTarget && (resolved.Key != "" || resolved.Kind == "file") {
+		out["sourceOnTarget"] = true
 	}
 	if resolved.Key != "" {
 		out["key"] = resolved.Key
@@ -156,6 +160,18 @@ func machineOSInstallImageVars(resolved media.Resolved, checksum string) map[str
 		out["url"] = resolved.URL
 	}
 	return out
+}
+
+func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.InstallMachine) bool {
+	machineRef := machineHostRef(state, m)
+	if machineRef == "" {
+		return false
+	}
+	machine, ok := stateview.Machine(state, machineRef)
+	if !ok {
+		return false
+	}
+	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }
 
 func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []any {

@@ -338,6 +338,82 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	}
 }
 
+func TestManagedMachineOSApplyPreparesHostPackages(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_managed_machine_os_apply.yml")
+	if len(plays) != 1 {
+		t.Fatalf("managed machine OS play count = %d, want 1", len(plays))
+	}
+	rawTasks, ok := plays[0]["tasks"].([]any)
+	if !ok {
+		t.Fatalf("managed machine OS play missing tasks: %v", plays[0])
+	}
+	tasks := make([]map[string]any, 0, len(rawTasks))
+	for _, raw := range rawTasks {
+		task, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("task is not a map: %v", raw)
+		}
+		tasks = append(tasks, task)
+	}
+
+	baseIdx := findAnsibleTask(t, tasks, "Apply base host packages")
+	dispatchIdx := findAnsibleTask(t, tasks, "Dispatch managed OS install groups on this host")
+	if baseIdx >= dispatchIdx {
+		t.Fatalf("managed OS apply must prepare host packages before dispatching install groups")
+	}
+	importRole, ok := tasks[baseIdx]["ansible.builtin.import_role"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an import_role task", tasks[baseIdx]["name"])
+	}
+	if got := importRole["name"]; got != "bootwright.core.machine_base" {
+		t.Fatalf("%s imports %v, want bootwright.core.machine_base", tasks[baseIdx]["name"], got)
+	}
+}
+
+func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
+	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
+	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Install managed OS from virtual media")], "block")
+	loadIdx := findAnsibleTask(t, tasks, "Load Anaconda package list")
+	installIdx := findAnsibleTask(t, tasks, "Install Anaconda ISO tooling packages")
+	verifyIdx := findAnsibleTask(t, tasks, "Verify mkksiso is available")
+	if !(loadIdx < installIdx && installIdx < verifyIdx) {
+		t.Fatalf("Anaconda role must install mkksiso packages before verifying mkksiso")
+	}
+	pkg, ok := tasks[installIdx]["ansible.builtin.package"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a package task", tasks[installIdx]["name"])
+	}
+	if got, _ := pkg["name"].(string); got != "{{ bootwright_machine_os_install_anaconda_packages }}" {
+		t.Fatalf("%s package name got %q", tasks[installIdx]["name"], got)
+	}
+	copyIdx := findAnsibleTask(t, tasks, "Copy managed ISO source to provider host")
+	copyTask, ok := tasks[copyIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a copy task", tasks[copyIdx]["name"])
+	}
+	if got, _ := copyTask["remote_src"].(string); !strings.Contains(got, "sourceOnTarget") {
+		t.Fatalf("%s remote_src must use rendered sourceOnTarget, got %q", tasks[copyIdx]["name"], got)
+	}
+	redHat := readAnsibleStringListVar(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/vars/os/RedHat.yml", "bootwright_machine_os_install_anaconda_packages")
+	assertContainsAll(t, redHat, []string{"lorax"})
+}
+
+func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/templates/ks.cfg.j2")
+	if strings.Contains(body, "lookup('ansible.builtin.file', ks.sshPublicKeyPath) if") {
+		t.Fatalf("Kickstart template must not use an inline conditional around the SSH key lookup")
+	}
+	for _, want := range []string{
+		"{% set ssh_key = '' %}",
+		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
+		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Kickstart template missing %q", want)
+		}
+	}
+}
+
 func TestBootAgentMachinePlaybookUsesAgentNodeFanout(t *testing.T) {
 	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml")
 	if len(plays) != 1 {
@@ -506,7 +582,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	waitPowerOffIdx := findAnsibleTask(t, powerTasks, "Wait for BMC to report PowerState=Off")
 	confirmPowerOffIdx := findAnsibleTask(t, powerTasks, "Confirm BMC reports PowerState=Off before power on")
 	powerOnIdx := findAnsibleTask(t, powerTasks, "Power on")
-	confirmPowerOnRequestIdx := findAnsibleTask(t, powerTasks, "Confirm Redfish power-on request was accepted")
+	confirmPowerOnRequestIdx := findAnsibleTask(t, powerTasks, "Confirm Redfish power-on request can be verified")
 	initPowerOnIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish power state wait for PowerState=On")
 	waitPowerOnIdx := findAnsibleTask(t, powerTasks, "Wait for BMC to report PowerState=On")
 	confirmPowerOnIdx := findAnsibleTask(t, powerTasks, "Confirm BMC reports PowerState=On")
@@ -606,6 +682,28 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if got, ok := powerTasks[retryInsertIdx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_insert_media_retries") {
 		t.Fatalf("virtual media retry loop must use configured retry count, got loop=%v", powerTasks[retryInsertIdx]["loop"])
+	}
+	assertSleepCommand(t, insertAttemptTasks[retryDelayIdx], "{{ bootwright_redfish_insert_media_retry_delay_seconds }}")
+	assertSleepCommand(t, powerStateTasks[powerStateDelayIdx], "{{ bootwright_redfish_power_state_delay_seconds }}")
+	powerOnURI, ok := powerTasks[powerOnIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri body", powerTasks[powerOnIdx]["name"])
+	}
+	if got := powerOnURI["status_code"]; !intListEqual(got, []int{200, 202, 204, 409, 500}) {
+		t.Fatalf("Power on status_code got %v, want [200 202 204 409 500]", got)
+	}
+	if got := powerTasks[powerOnIdx]["failed_when"]; got != false {
+		t.Fatalf("Power on must let PowerState polling decide final success, got failed_when=%v", got)
+	}
+	if got, _ := powerTasks[powerOnIdx]["changed_when"].(string); !strings.Contains(got, "in [200, 202, 204]") {
+		t.Fatalf("Power on changed_when got %q, want normal Redfish success codes", got)
+	}
+	powerOnAssert, ok := powerTasks[confirmPowerOnRequestIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no assert body", powerTasks[confirmPowerOnRequestIdx]["name"])
+	}
+	if !strings.Contains(fmt.Sprint(powerOnAssert["that"]), "[200, 202, 204, 409, 500]") {
+		t.Fatalf("Power on request assertion must tolerate retriable Redfish statuses, got %v", powerOnAssert["that"])
 	}
 	mediaCandidatesAssert, ok := prepareTasks[confirmMediaCandidatesIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -2642,6 +2740,24 @@ func assertIncludeRoleName(t *testing.T, task map[string]any, want string) {
 	}
 	if got := strings.TrimSpace(include["name"].(string)); got != want {
 		t.Fatalf("%s include_role got %q", task["name"], got)
+	}
+}
+
+func assertSleepCommand(t *testing.T, task map[string]any, seconds string) {
+	t.Helper()
+	if _, ok := task["ansible.builtin.pause"]; ok {
+		t.Fatalf("%s must not use pause because free strategy does not support host-loop-bypass modules", task["name"])
+	}
+	command, ok := task["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", task["name"])
+	}
+	argv, ok := command["argv"].([]any)
+	if !ok || len(argv) != 2 || fmt.Sprint(argv[0]) != "sleep" || fmt.Sprint(argv[1]) != seconds {
+		t.Fatalf("%s command argv got %v, want sleep %s", task["name"], command["argv"], seconds)
+	}
+	if changed, ok := task["changed_when"].(bool); !ok || changed {
+		t.Fatalf("%s must set changed_when: false, got %v", task["name"], task["changed_when"])
 	}
 }
 

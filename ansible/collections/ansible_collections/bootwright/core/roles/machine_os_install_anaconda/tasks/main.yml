@@ -87,6 +87,15 @@
         group: root
         mode: "0755"
 
+    - name: Load Anaconda package list
+      ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+    - name: Install Anaconda ISO tooling packages
+      ansible.builtin.package:
+        name: "{{ bootwright_machine_os_install_anaconda_packages }}"
+        state: present
+      when: bootwright_machine_os_install_anaconda_packages | length > 0
+
     - name: Verify mkksiso is available
       ansible.builtin.command:
         argv:
@@ -100,6 +109,7 @@
       ansible.builtin.copy:
         src: "{{ bootwright_component.osInstall.image.path }}"
         dest: "{{ bootwright_os_source_iso }}"
+        remote_src: "{{ bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool }}"
         owner: root
         group: root
         mode: "0644"

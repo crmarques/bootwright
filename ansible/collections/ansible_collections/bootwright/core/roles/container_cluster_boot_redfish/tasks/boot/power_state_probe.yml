@@ -31,8 +31,11 @@
   changed_when: false
 
 - name: Wait before retrying Redfish power state probe
-  ansible.builtin.pause:
-    seconds: "{{ bootwright_redfish_power_state_delay_seconds }}"
+  ansible.builtin.command:
+    argv:
+      - sleep
+      - "{{ bootwright_redfish_power_state_delay_seconds }}"
+  changed_when: false
   when:
     - not (bootwright_redfish_power_state_reached | bool)
     - (bootwright_redfish_power_state_attempt | int) < (bootwright_redfish_power_state_retries | int)

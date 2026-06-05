@@ -40,6 +40,9 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.8-x86_64-boot.iso") {
 		t.Fatalf("image path = %v", image["path"])
 	}
+	if image["sourceOnTarget"] != true {
+		t.Fatalf("sourceOnTarget = %v, want true for controller-local provider host", image["sourceOnTarget"])
+	}
 	ks := osInstall["kickstart"].(map[string]any)
 	if ks["hostname"] != "ceph-0" {
 		t.Fatalf("kickstart hostname = %v", ks["hostname"])

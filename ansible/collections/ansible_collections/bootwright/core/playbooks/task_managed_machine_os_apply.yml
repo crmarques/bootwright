@@ -15,6 +15,10 @@
         tasks_from: facts
 
   tasks:
+    - name: Apply base host packages
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_base
+
     - name: Dispatch managed OS install groups on this host
       ansible.builtin.include_tasks: tasks/managed_machine_os_apply_group.yml
       loop: "{{ bootwright_managed_os_install_groups | default([]) }}"

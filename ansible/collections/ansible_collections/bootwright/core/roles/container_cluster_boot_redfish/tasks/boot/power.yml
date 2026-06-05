@@ -341,7 +341,7 @@
     body_format: json
     body:
       ResetType: "On"
-    status_code: [200, 202, 204]
+    status_code: [200, 202, 204, 409, 500]
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
     force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
@@ -349,19 +349,21 @@
     timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_power_on_request
   failed_when: false
+  changed_when: (bootwright_redfish_power_on_request.status | default(0) | int) in [200, 202, 204]
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
-- name: Confirm Redfish power-on request was accepted
+- name: Confirm Redfish power-on request can be verified
   ansible.builtin.assert:
     that:
-      - (bootwright_redfish_power_on_request.status | default(0) | int) in [200, 202, 204]
+      - (bootwright_redfish_power_on_request.status | default(0) | int) in [200, 202, 204, 409, 500]
     fail_msg: >-
-      Redfish BMC rejected power-on for system
-      {{ bootwright_redfish_system_id }} with HTTP status
+      Redfish BMC returned unexpected power-on HTTP status for system
+      {{ bootwright_redfish_system_id }}:
       {{ bootwright_redfish_power_on_request.status | default('unknown') }}.
     success_msg: >-
-      Redfish BMC accepted power-on for system
-      {{ bootwright_redfish_system_id }}.
+      Redfish power-on request for system {{ bootwright_redfish_system_id }}
+      returned HTTP status {{ bootwright_redfish_power_on_request.status | default('unknown') }};
+      verifying PowerState=On next.
 
 - name: Initialize Redfish power state wait for PowerState=On
   ansible.builtin.set_fact:

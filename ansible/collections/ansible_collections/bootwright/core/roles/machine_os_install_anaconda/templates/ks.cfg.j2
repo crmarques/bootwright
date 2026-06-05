@@ -39,7 +39,10 @@ autopart --type=lvm --fstype=xfs
 services --enabled={{ ks.services | join(',') }}
 {% endif %}
 
-{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0 else '' %}
+{% set ssh_key = '' %}
+{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}
+{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}
+{% endif %}
 {% if (ks.sshUser | default('root')) != 'root' %}
 user --name={{ ks.sshUser }} --groups=wheel --lock
 {% endif %}

@@ -1,7 +1,10 @@
 ---
 - name: Wait before retrying Redfish virtual media insertion
-  ansible.builtin.pause:
-    seconds: "{{ bootwright_redfish_insert_media_retry_delay_seconds }}"
+  ansible.builtin.command:
+    argv:
+      - sleep
+      - "{{ bootwright_redfish_insert_media_retry_delay_seconds }}"
+  changed_when: false
   when: (bootwright_redfish_insert_media_attempt | int) > 1
 
 - name: Eject virtual media before retrying insertion
