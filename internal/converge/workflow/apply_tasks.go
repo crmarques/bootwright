@@ -12,7 +12,9 @@ import (
 const (
 	ApplyTaskKindProvider               = "providerServices"
 	ApplyTaskKindInfraComponentServices = "infraComponentServices"
+	ApplyTaskKindMachineInfraPrepare    = "machineInfraPrepare"
 	ApplyTaskKindClusterInstall         = "clusterInstall"
+	ApplyTaskKindMachineInfraFinalize   = "machineInfraFinalize"
 	ApplyTaskKindManagedMachineOS       = "managedMachineOS"
 	ApplyTaskKindStorageInfra           = "storageInfra"
 	ApplyTaskKindClusterISO             = "clusterISO"
@@ -36,7 +38,9 @@ const (
 
 	applyProviderPlaybook         = "bootwright.core.task_provider_services_apply"
 	applyInfraComponentsPlaybook  = "bootwright.core.task_infra_component_services_apply"
+	applyMachineInfraPrepare      = "bootwright.core.task_machine_infra_prepare"
 	applyClusterInstallPlaybook   = "bootwright.core.task_machine_infra_apply"
+	applyMachineInfraFinalize     = "bootwright.core.task_machine_infra_finalize"
 	applyManagedMachineOSPlaybook = "bootwright.core.task_managed_machine_os_apply"
 	applyCreateISOPlaybook        = "bootwright.core.task_container_cluster_create_agent_iso"
 	applyBootMachinePlaybook      = "bootwright.core.task_container_cluster_boot_agent_machine"
@@ -56,6 +60,8 @@ type ApplyTask struct {
 	Limit             string
 	Forks             int
 	RedfishSlots      int
+	HostSlotKey       string
+	HostSlotCount     int
 	ExtraVarPairs     []string
 	State             v1alpha1.State
 	Extension         *extensionplan.ExtensionPlan

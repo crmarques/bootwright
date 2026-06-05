@@ -1,0 +1,48 @@
+---
+- name: Finalize machine infrastructure
+  hosts: bootwright_infra_hosts
+  strategy: free
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+
+  tasks:
+    - name: Resolve selected cluster
+      ansible.builtin.set_fact:
+        bootwright_current_cluster: "{{ (bootwright_clusters | default([]) | selectattr('name', 'equalto', bootwright_task_cluster_name) | list | first) | default({}) }}"
+      changed_when: false
+
+    - name: Validate selected cluster finalization context
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_cluster is mapping
+          - bootwright_current_cluster.name | default('') == bootwright_task_cluster_name
+          - bootwright_task_provider_host_name | default('') == bootwright_host_name
+        fail_msg: >-
+          Could not resolve cluster {{ bootwright_task_cluster_name | default('<unset>') }}
+          finalization context on {{ bootwright_host_name }}.
+
+    - name: Attach managed load balancer VIPs
+      ansible.builtin.import_role:
+        name: bootwright.core.cluster_network_load_balancer_vips
+      when:
+        - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | list | length > 0
+        - bootwright_current_cluster.components | selectattr('kind', 'equalto', 'loadBalancer') | selectattr('machineRef', 'equalto', bootwright_host_name) | list | length > 0
+
+    - name: Report external endpoint DNS diagnostics
+      ansible.builtin.import_role:
+        name: bootwright.core.diagnostic_cluster_endpoint_dns
+      when: >-
+        bootwright_current_cluster.endpoints
+        | selectattr('source', 'defined')
+        | selectattr('source.type', 'equalto', 'external')
+        | list
+        | length > 0

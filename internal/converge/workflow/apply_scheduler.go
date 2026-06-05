@@ -126,13 +126,16 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 	}
 	parallelism := limits.Parallelism
 	redfishLimit := limits.ParallelismRedfish
+	perHostLimit := limits.ParallelismPerHost
 	events := make(chan applyTaskResult)
 	started := map[string]bool{}
 	runningResources := map[string]int{}
+	runningHostSlots := map[string]int{}
 	running := 0
 	runningRedfish := 0
 	completed := initiallyCompletedApplyTasks(tasks)
-	var firstErr error
+	var fatalErr error
+	var firstTaskErr error
 
 	for completed < len(tasks) {
 		startedAny := false
@@ -140,7 +143,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 			if running >= parallelism {
 				break
 			}
-			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskSlotAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) {
+			if taskTerminal(task.Entry.Status) || started[task.Entry.ID] || !taskReady(ledger, task.Entry) || !taskRedfishAvailable(task, runningRedfish, redfishLimit) || !taskResourcesAvailable(task, runningResources) || !taskHostSlotAvailable(task, runningHostSlots, perHostLimit) {
 				continue
 			}
 			redfishSlots := taskRedfishSlots(task, redfishLimit)
@@ -151,15 +154,16 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 			started[task.Entry.ID] = true
 			startedAny = true
 			running++
-			if task.Entry.Kind == ApplyTaskKindNodeBoot {
+			if redfishSlots > 0 {
 				runningRedfish += redfishSlots
 			}
 			acquireTaskResources(task, runningResources)
+			acquireTaskHostSlots(task, runningHostSlots)
 			logPath := TaskLogPath(runsDir, ledger.RunID, task.Entry.ID)
 			ledger.MarkReady(task.Entry.ID)
 			ledger.MarkRunning(task.Entry.ID, logPath, time.Now())
-			if err := SaveRunLedger(runsDir, ledger); err != nil && firstErr == nil {
-				firstErr = err
+			if err := SaveRunLedger(runsDir, ledger); err != nil && fatalErr == nil {
+				fatalErr = err
 				cancel()
 			}
 			if reporter != nil {
@@ -175,7 +179,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 				events <- runOneApplyTask(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
 		}
-		if firstErr != nil && running == 0 {
+		if fatalErr != nil && running == 0 {
 			break
 		}
 		if running == 0 && !startedAny {
@@ -185,27 +189,24 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 		select {
 		case event = <-events:
 		case err := <-leaseErrors:
-			if err != nil && firstErr == nil {
-				firstErr = err
+			if err != nil && fatalErr == nil {
+				fatalErr = err
 				cancel()
 			}
 			continue
 		}
 		running--
-		if taskByID[event.id].Entry.Kind == ApplyTaskKindNodeBoot {
-			runningRedfish -= taskRedfishSlots(taskByID[event.id], redfishLimit)
-		}
+		runningRedfish -= taskRedfishSlots(taskByID[event.id], redfishLimit)
 		releaseTaskResources(taskByID[event.id], runningResources)
-		completed++
+		releaseTaskHostSlots(taskByID[event.id], runningHostSlots)
 		if event.err != nil {
 			failure := event.failure
 			if failure == "" {
 				failure = event.err.Error()
 			}
 			ledger.MarkFailed(event.id, failure, time.Now())
-			if firstErr == nil {
-				firstErr = event.err
-				cancel()
+			if firstTaskErr == nil {
+				firstTaskErr = event.err
 			}
 		} else if event.skipped {
 			reason := event.skippedReason
@@ -217,35 +218,43 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 			ledger.MarkOK(event.id, time.Now())
 		}
 		saveErr := SaveRunLedger(runsDir, ledger)
-		if saveErr != nil && firstErr == nil {
-			firstErr = saveErr
+		if saveErr != nil && fatalErr == nil {
+			fatalErr = saveErr
 			cancel()
 		}
+		completed = terminalApplyTasks(ledger.Tasks)
 		if reporter != nil {
 			reporter.StageSnapshot(ledger)
 		}
 	}
 
-	if firstErr == nil {
+	if fatalErr == nil {
 		blocked := blockUnfinishedApplyTasks(&ledger, time.Now())
 		if len(blocked) > 0 {
 			progressErr := fmt.Errorf("apply task graph could not make progress; blocked task(s): %s", strings.Join(blocked, ", "))
 			if saveErr := SaveRunLedger(runsDir, ledger); saveErr != nil {
-				firstErr = fmt.Errorf("%v; save apply ledger: %w", progressErr, saveErr)
-			} else {
-				firstErr = progressErr
+				fatalErr = fmt.Errorf("%v; save apply ledger: %w", progressErr, saveErr)
+			} else if firstTaskErr == nil {
+				fatalErr = progressErr
 			}
 			if reporter != nil {
 				reporter.StageSnapshot(ledger)
 			}
 		}
 	}
-	if firstErr != nil {
+	if fatalErr != nil {
 		_ = finishRun(RunStatusFailed)
 		if reporter != nil {
 			reporter.RunSummary(ledger)
 		}
-		return ledger, firstErr
+		return ledger, fatalErr
+	}
+	if firstTaskErr != nil {
+		_ = finishRun(RunStatusFailed)
+		if reporter != nil {
+			reporter.RunSummary(ledger)
+		}
+		return ledger, firstTaskErr
 	}
 	if err := finishRun(RunStatusOK); err != nil {
 		return ledger, err
@@ -311,25 +320,43 @@ func blockUnfinishedApplyTasks(ledger *RunLedger, now time.Time) []string {
 	return blocked
 }
 
-func taskSlotAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {
-	if task.Entry.Kind != ApplyTaskKindNodeBoot {
+func taskRedfishAvailable(task ApplyTask, runningRedfish, redfishLimit int) bool {
+	if task.RedfishSlots < 1 {
 		return true
 	}
 	return runningRedfish+taskRedfishSlots(task, redfishLimit) <= redfishLimit
 }
 
 func taskRedfishSlots(task ApplyTask, redfishLimit int) int {
-	if task.Entry.Kind != ApplyTaskKindNodeBoot {
+	if task.RedfishSlots < 1 {
 		return 0
 	}
 	slots := task.RedfishSlots
-	if slots < 1 {
-		slots = 1
-	}
 	if redfishLimit > 0 && slots > redfishLimit {
 		return redfishLimit
 	}
 	return slots
+}
+
+func taskHostSlotAvailable(task ApplyTask, running map[string]int, limit int) bool {
+	key := task.HostSlotKey
+	if key == "" {
+		key = task.Entry.HostSlotKey
+	}
+	if key == "" {
+		return true
+	}
+	count := task.HostSlotCount
+	if count < 1 {
+		count = task.Entry.HostSlotCount
+	}
+	if count < 1 {
+		count = 1
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	return running[key]+count <= limit
 }
 
 func taskResourcesAvailable(task ApplyTask, running map[string]int) bool {
@@ -364,6 +391,45 @@ func releaseTaskResources(task ApplyTask, running map[string]int) {
 	}
 }
 
+func acquireTaskHostSlots(task ApplyTask, running map[string]int) {
+	key := task.HostSlotKey
+	if key == "" {
+		key = task.Entry.HostSlotKey
+	}
+	if key == "" {
+		return
+	}
+	count := task.HostSlotCount
+	if count < 1 {
+		count = task.Entry.HostSlotCount
+	}
+	if count < 1 {
+		count = 1
+	}
+	running[key] += count
+}
+
+func releaseTaskHostSlots(task ApplyTask, running map[string]int) {
+	key := task.HostSlotKey
+	if key == "" {
+		key = task.Entry.HostSlotKey
+	}
+	if key == "" {
+		return
+	}
+	count := task.HostSlotCount
+	if count < 1 {
+		count = task.Entry.HostSlotCount
+	}
+	if count < 1 {
+		count = 1
+	}
+	running[key] -= count
+	if running[key] <= 0 {
+		delete(running, key)
+	}
+}
+
 func applyTaskWriters(task ApplyTask, logs *applyLogSet) (io.Writer, io.Writer) {
 	writer := logs.Writer(task.Entry.Cluster)
 	return writer, writer
@@ -373,6 +439,16 @@ func initiallyCompletedApplyTasks(tasks []ApplyTask) int {
 	completed := 0
 	for _, task := range tasks {
 		if taskTerminal(task.Entry.Status) {
+			completed++
+		}
+	}
+	return completed
+}
+
+func terminalApplyTasks(tasks []TaskLedgerEntry) int {
+	completed := 0
+	for _, task := range tasks {
+		if taskTerminal(task.Status) {
 			completed++
 		}
 	}
@@ -430,7 +506,7 @@ func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) 
 	if limits.Parallelism <= 0 || limits.Parallelism > autoGlobal {
 		limits.Parallelism = autoGlobal
 	}
-	autoPerHost := 1
+	autoPerHost := hostSlotAutoParallelism(tasks)
 	if limits.ParallelismPerHost <= 0 || limits.ParallelismPerHost > autoPerHost {
 		limits.ParallelismPerHost = autoPerHost
 	}
@@ -447,15 +523,37 @@ func ResolveApplyConcurrencyLimits(limits ConcurrencyLimits, tasks []ApplyTask) 
 func nodeBootTaskCount(tasks []ApplyTask) int {
 	count := 0
 	for _, task := range tasks {
-		if task.Entry.Kind == ApplyTaskKindNodeBoot {
-			if task.RedfishSlots > 0 {
-				count += task.RedfishSlots
-			} else {
-				count++
-			}
+		if task.RedfishSlots > 0 {
+			count += task.RedfishSlots
 		}
 	}
 	return count
+}
+
+func hostSlotAutoParallelism(tasks []ApplyTask) int {
+	counts := map[string]int{}
+	maxCount := 1
+	for _, task := range tasks {
+		key := task.HostSlotKey
+		if key == "" {
+			key = task.Entry.HostSlotKey
+		}
+		if key == "" {
+			continue
+		}
+		count := task.HostSlotCount
+		if count < 1 {
+			count = task.Entry.HostSlotCount
+		}
+		if count < 1 {
+			count = 1
+		}
+		counts[key] += count
+		if counts[key] > maxCount {
+			maxCount = counts[key]
+		}
+	}
+	return maxCount
 }
 
 func AnsibleForksForLimit(state v1alpha1.State, limit string) int {

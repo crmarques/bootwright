@@ -1,0 +1,56 @@
+---
+- name: Ensure libvirt host packages and service
+  ansible.builtin.import_role:
+    name: bootwright.core.machine_setup_libvirt
+
+- name: Resolve cluster libvirt network from the machine network config
+  ansible.builtin.set_fact:
+    bootwright_libvirt_network: >-
+      {{
+        (bootwright_current_cluster.networks
+         | selectattr('name', 'equalto', bootwright_component.networkConfig.ref)
+         | first)
+      }}
+  changed_when: false
+
+- name: Resolve libvirt network identifiers
+  ansible.builtin.set_fact:
+    bootwright_libvirt_bridge: "{{ bootwright_component.networkAttachment.libvirt.bridge }}"
+    bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
+    bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
+    bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"
+  changed_when: false
+
+- name: Create per-cluster libvirt state directory
+  ansible.builtin.file:
+    path: "{{ bootwright_libvirt_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render libvirt network XML
+  ansible.builtin.template:
+    src: network.xml.j2
+    dest: "{{ bootwright_libvirt_root }}/network.xml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_libvirt_net_xml
+
+- name: Slurp libvirt network XML
+  ansible.builtin.slurp:
+    src: "{{ bootwright_libvirt_root }}/network.xml"
+  register: bootwright_libvirt_net_xml_slurp
+
+- name: Define libvirt network
+  community.libvirt.virt_net:
+    name: "{{ bootwright_libvirt_network_name }}"
+    state: present
+    xml: "{{ bootwright_libvirt_net_xml_slurp.content | b64decode }}"
+
+- name: Activate libvirt network
+  community.libvirt.virt_net:
+    name: "{{ bootwright_libvirt_network_name }}"
+    state: active
+    autostart: true

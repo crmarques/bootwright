@@ -64,21 +64,16 @@ func applyClusterKind(tasks []workflow.TaskLedgerEntry) string {
 func applyClusterPhases(ledger workflow.RunLedger, cluster string, kind string, tasks []workflow.TaskLedgerEntry) []output.PhaseStatus {
 	switch kind {
 	case "StorageCluster":
-		storageInfraTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageInfra)
 		storageTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster)
-		storageInfraStatus := output.StatusOK
-		if len(storageInfraTasks) > 0 {
-			storageInfraStatus = applyPhaseStatus(storageInfraTasks, output.StatusPending)
-		}
 		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: storageInfraStatus},
-			{Label: "Prepare", Status: storageInfraStatus},
+			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra), output.StatusPending)},
+			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra), output.StatusPending)},
 			{Label: "Provision", Status: applyPhaseStatus(storageTasks, output.StatusPending)},
 			{Label: "Publish", Status: applyPhaseStatus(applyStoragePublishTasks(ledger, cluster), output.StatusPending)},
 		}
 	case "ContainerCluster":
 		return []output.PhaseStatus{
-			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterInstall), output.StatusPending)},
+			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindClusterInstall, workflow.ApplyTaskKindMachineInfraFinalize), output.StatusPending)},
 			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterISO, workflow.ApplyTaskKindNodeBoot), output.StatusPending)},
 			{Label: "Install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindInstallWait), output.StatusPending)},
 			{Label: "Post-install", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindClusterAddonApply, workflow.ApplyTaskKindClusterAddonWait, workflow.ApplyTaskKindStorageAttachmentApply), output.StatusPending)},
@@ -196,16 +191,20 @@ func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
 }
 
 func applyTaskRunDetail(clustersDir string, task workflow.TaskLedgerEntry) string {
-	switch {
-	case task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "":
-		return "installer log " + workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)
-	case task.ClusterLogPath != "":
-		return "log " + task.ClusterLogPath
-	case task.LogPath != "":
-		return "log " + task.LogPath
-	default:
+	var parts []string
+	if task.LogPath != "" {
+		parts = append(parts, "task log "+task.LogPath)
+	}
+	if task.ClusterLogPath != "" {
+		parts = append(parts, "cluster log "+task.ClusterLogPath)
+	}
+	if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" {
+		parts = append(parts, "installer log "+workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster))
+	}
+	if len(parts) == 0 {
 		return task.Kind
 	}
+	return strings.Join(parts, "; ")
 }
 
 func applyFailureReason(failure string) string {

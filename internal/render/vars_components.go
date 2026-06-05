@@ -340,8 +340,17 @@ func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {
 	if len(roles.MachineSetupRoles) > 0 {
 		out["machineSetupRoles"] = stringSliceAny(roles.MachineSetupRoles)
 	}
+	if roles.SubstratePrepareRole != "" {
+		out["substratePrepareRole"] = roles.SubstratePrepareRole
+	}
+	if roles.SubstratePrepareFrom != "" {
+		out["substratePrepareFrom"] = roles.SubstratePrepareFrom
+	}
 	if roles.SubstrateApplyRole != "" {
 		out["substrateApplyRole"] = roles.SubstrateApplyRole
+	}
+	if roles.SubstrateApplyFrom != "" {
+		out["substrateApplyFrom"] = roles.SubstrateApplyFrom
 	}
 	if roles.SubstrateDestroyRole != "" {
 		out["substrateDestroyRole"] = roles.SubstrateDestroyRole

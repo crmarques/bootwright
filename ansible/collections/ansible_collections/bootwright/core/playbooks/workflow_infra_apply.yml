@@ -1,7 +1,7 @@
 ---
 - import_playbook: check_become.yml
   vars:
-    bootwright_become_check_hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts
+    bootwright_become_check_hosts: bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_machine_task_hosts
 
 # Controller-side reachability validation runs first so an unreachable
 # BMC / external proxy failures abort the apply before any on-host
@@ -9,4 +9,6 @@
 - import_playbook: check_external_reachability.yml
 - import_playbook: task_provider_services_apply.yml
 - import_playbook: task_infra_component_services_apply.yml
+- import_playbook: task_machine_infra_prepare.yml
 - import_playbook: task_machine_infra_apply.yml
+- import_playbook: task_machine_infra_finalize.yml

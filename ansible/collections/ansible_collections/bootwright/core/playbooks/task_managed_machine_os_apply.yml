@@ -1,6 +1,6 @@
 ---
 - name: Apply managed machine operating systems
-  hosts: bootwright_infra_hosts
+  hosts: bootwright_machine_task_hosts
   strategy: free
   gather_subset:
     - "!all"
@@ -15,21 +15,71 @@
         tasks_from: facts
 
   tasks:
-    - name: Apply base host packages
-      ansible.builtin.import_role:
-        name: bootwright.core.machine_base
+    - name: Resolve current managed OS group
+      ansible.builtin.set_fact:
+        bootwright_current_os_group: >-
+          {{
+            (bootwright_managed_os_install_groups | default([])
+            | selectattr('name', 'equalto', bootwright_machine_task_cluster_name)
+            | list | first) | default({})
+          }}
+      changed_when: false
 
-    - name: Dispatch managed OS install groups on this host
-      ansible.builtin.include_tasks: tasks/managed_machine_os_apply_group.yml
-      loop: "{{ bootwright_managed_os_install_groups | default([]) }}"
-      loop_control:
-        loop_var: bootwright_os_group
-        label: "{{ bootwright_os_group.name }}"
-      when:
-        - (bootwright_task_managed_os_group_name | default('') | length) == 0 or bootwright_os_group.name == bootwright_task_managed_os_group_name
-        - >-
-          bootwright_os_group.components
-          | selectattr('machineRef', 'defined')
-          | selectattr('machineRef', 'equalto', bootwright_host_name)
-          | list
-          | length > 0
+    - name: Validate current managed OS group
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_os_group is mapping
+          - bootwright_current_os_group.name | default('') == bootwright_machine_task_cluster_name
+          - bootwright_task_managed_os_group_name | default('') == bootwright_machine_task_cluster_name
+          - bootwright_task_machine_name | default('') == bootwright_machine_task_machine_name
+        fail_msg: >-
+          Could not resolve managed OS group {{ bootwright_machine_task_cluster_name | default('<unset>') }}
+          for machine task host {{ inventory_hostname }}.
+
+    - name: Set current managed OS cluster context
+      ansible.builtin.set_fact:
+        bootwright_current_cluster:
+          name: "{{ bootwright_current_os_group.name }}"
+          networks: "{{ bootwright_current_os_group.networks | default([]) }}"
+      changed_when: false
+
+    - name: Pick selected managed OS machine
+      ansible.builtin.set_fact:
+        bootwright_current_machines: >-
+          {{
+            bootwright_current_os_group.components
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('name', 'equalto', bootwright_machine_task_machine_name)
+            | selectattr('machineRef', 'defined')
+            | selectattr('machineRef', 'equalto', bootwright_machine_task_provider_host_name)
+            | list
+          }}
+      changed_when: false
+
+    - name: Validate selected managed OS machine
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_machines | length == 1
+        fail_msg: >-
+          Could not resolve managed OS machine {{ bootwright_machine_task_machine_name | default('<unset>') }}
+          for group {{ bootwright_machine_task_cluster_name | default('<unset>') }}.
+
+    - name: Set selected managed OS machine
+      ansible.builtin.set_fact:
+        bootwright_component: "{{ bootwright_current_machines | first }}"
+      changed_when: false
+
+    - name: Dispatch substrate per managed OS machine entrypoint
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substrateApplyRole }}"
+        tasks_from: "{{ bootwright_component.substrateApplyFrom }}"
+      when: (bootwright_component.substrateApplyFrom | default('') | length) > 0
+
+    - name: Dispatch substrate per managed OS machine
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substrateApplyRole }}"
+      when: (bootwright_component.substrateApplyFrom | default('') | length) == 0
+
+    - name: Install managed operating system on selected machine
+      ansible.builtin.include_role:
+        name: bootwright.core.machine_os_install_anaconda

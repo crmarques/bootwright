@@ -3296,7 +3296,9 @@ func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 	wantIDs := []string{
 		"provider.lab-host",
 		"infra-component.lab-host",
-		"infra.sno-libvirt.lab-host",
+		"infraprepare.sno-libvirt.lab-host",
+		"infra.sno-libvirt.master-0",
+		"infrafinalize.sno-libvirt.lab-host",
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",

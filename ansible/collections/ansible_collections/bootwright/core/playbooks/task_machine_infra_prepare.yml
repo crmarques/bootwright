@@ -1,0 +1,79 @@
+---
+- name: Prepare shared machine infrastructure
+  hosts: bootwright_infra_hosts
+  strategy: free
+  gather_subset:
+    - "!all"
+    - min
+  become: true
+  environment: "{{ bootwright_proxy_env | default({}) }}"
+
+  pre_tasks:
+    - name: Resolve proxy environment
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_proxy
+        tasks_from: facts
+
+  tasks:
+    - name: Apply base host packages
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_base
+
+    - name: Resolve selected container cluster
+      ansible.builtin.set_fact:
+        bootwright_current_cluster: "{{ (bootwright_clusters | default([]) | selectattr('name', 'equalto', bootwright_task_cluster_name | default('')) | list | first) | default({}) }}"
+      changed_when: false
+
+    - name: Resolve selected managed OS group
+      ansible.builtin.set_fact:
+        bootwright_current_cluster: >-
+          {{
+            (bootwright_managed_os_install_groups | default([])
+            | selectattr('name', 'equalto', bootwright_task_cluster_name | default(''))
+            | list | first) | default(bootwright_current_cluster)
+          }}
+      changed_when: false
+      when: (bootwright_current_cluster.name | default('') | length) == 0
+
+    - name: Validate selected machine infrastructure context
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_cluster is mapping
+          - bootwright_current_cluster.name | default('') == bootwright_task_cluster_name | default('')
+          - bootwright_task_provider_host_name | default('') == bootwright_host_name
+        fail_msg: >-
+          Could not resolve shared machine infrastructure context for
+          {{ bootwright_task_cluster_name | default('<unset>') }} on {{ bootwright_host_name }}.
+
+    - name: Pick prepare component on this host
+      ansible.builtin.set_fact:
+        bootwright_prepare_components: >-
+          {{
+            bootwright_current_cluster.components
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('machineRef', 'defined')
+            | selectattr('machineRef', 'equalto', bootwright_host_name)
+            | selectattr('substratePrepareRole', 'defined')
+            | list
+          }}
+      changed_when: false
+
+    - name: Skip host without prepare work
+      ansible.builtin.meta: end_host
+      when: bootwright_prepare_components | length == 0
+
+    - name: Set prepare component
+      ansible.builtin.set_fact:
+        bootwright_component: "{{ bootwright_prepare_components | first }}"
+      changed_when: false
+
+    - name: Dispatch machine infrastructure prepare role entrypoint
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substratePrepareRole }}"
+        tasks_from: "{{ bootwright_component.substratePrepareFrom }}"
+      when: (bootwright_component.substratePrepareFrom | default('') | length) > 0
+
+    - name: Dispatch machine infrastructure prepare role
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substratePrepareRole }}"
+      when: (bootwright_component.substratePrepareFrom | default('') | length) == 0

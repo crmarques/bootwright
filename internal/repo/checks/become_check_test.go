@@ -15,7 +15,7 @@ func TestBecomeCheckPlaybookValidatesBecome(t *testing.T) {
 		t.Fatalf("become check playbook has %d plays, want 1", len(plays))
 	}
 	play := plays[0]
-	if got, want := play["hosts"], "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_boot_hosts') }}"; got != want {
+	if got, want := play["hosts"], "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_boot_hosts') }}"; got != want {
 		t.Fatalf("become check hosts = %v, want %q", got, want)
 	}
 	if got := play["gather_facts"]; got != false {
@@ -42,9 +42,9 @@ func TestRootTargetPlaybooksRunBecomeCheckFirst(t *testing.T) {
 		path  string
 		hosts string
 	}{
-		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml", "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml", "bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_container_cluster_apply.yml", "bootwright_ocp_hosts:bootwright_boot_hosts"},
-		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
+		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_apply.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_machine_task_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy.yml", "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts"},
 		{"ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_infra_destroy_artifact_server.yml", "bootwright_infra_component_hosts"},
 	}

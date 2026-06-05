@@ -42,6 +42,7 @@ func TestInventoryStructure(t *testing.T) {
 		"bootwright_controller_hosts",
 		"bootwright_ocp_hosts",
 		"bootwright_agent_node_hosts",
+		"bootwright_machine_task_hosts",
 		"bootwright_storage_hosts",
 	} {
 		if _, ok := children[group].(map[string]any); !ok {

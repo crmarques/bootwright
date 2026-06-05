@@ -34,7 +34,34 @@
     bootwright_creds_label: "cephadm registry credentialsRef {{ bootwright_ceph_registry_credentials_path }}"
   when: bootwright_ceph_registry_credentials_path | length > 0
 
-- name: Install Ceph prerequisites on storage nodes
+- name: Resolve current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node_matches: >-
+      {{
+        bootwright_selected_storage_cluster.nodes
+        | default([])
+        | selectattr('inventoryHost', 'equalto', inventory_hostname)
+        | list
+      }}
+  changed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Validate current storage node context
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_storage_node_matches | length == 1
+    fail_msg: >-
+      Storage node {{ inventory_hostname }} is not declared exactly once in
+      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Set current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node: "{{ bootwright_current_storage_node_matches | first }}"
+  changed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Install Ceph prerequisites on storage node
   ansible.builtin.package:
     name:
       - cephadm
@@ -43,37 +70,30 @@
       - podman
       - chrony
     state: present
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  delegate_to: "{{ item.inventoryHost }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Start storage node services
   ansible.builtin.service:
-    name: "{{ item.1 }}"
+    name: "{{ item }}"
     state: started
     enabled: true
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) | product(['chronyd', 'firewalld']) | list }}"
+  loop:
+    - chronyd
+    - firewalld
   loop_control:
-    label: "{{ item.0.name }} {{ item.1 }}"
-  delegate_to: "{{ item.0.inventoryHost }}"
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
-- name: Verify cephadm CLI on storage nodes
+- name: Verify cephadm CLI on storage node
   ansible.builtin.command:
     argv:
       - cephadm
       - version
   register: bootwright_cephadm_version
   changed_when: false
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  delegate_to: "{{ item.inventoryHost }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
-- name: Install cephadm registry trust on storage nodes
+- name: Install cephadm registry trust on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_ceph_registry_trust_path }}"
     dest: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
@@ -81,54 +101,37 @@
     group: root
     mode: "0644"
   register: bootwright_ceph_registry_trust
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  delegate_to: "{{ item.inventoryHost }}"
   when:
     - bootwright_ceph_registry_trust_path | length > 0
     - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
-- name: Update storage node trust stores
+- name: Update storage node trust store
   ansible.builtin.command:
     argv:
       - update-ca-trust
-  changed_when: bootwright_ceph_registry_trust_item.changed | default(false)
-  loop: "{{ bootwright_ceph_registry_trust.results | default([]) }}"
-  loop_control:
-    loop_var: bootwright_ceph_registry_trust_item
-    label: "{{ bootwright_ceph_registry_trust_item.item.name | default('<storage-node>') }}"
-  delegate_to: "{{ bootwright_ceph_registry_trust_item.item.inventoryHost }}"
+  changed_when: bootwright_ceph_registry_trust.changed | default(false)
   when:
-    - bootwright_ceph_registry_trust_item.changed | default(false)
+    - bootwright_ceph_registry_trust.changed | default(false)
     - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
-- name: Log storage nodes into cephadm registry
+- name: Log storage node into cephadm registry
   containers.podman.podman_login:
     registry: "{{ bootwright_ceph_registry_url }}"
     username: "{{ bootwright_ceph_registry_credentials.username }}"
     password: "{{ bootwright_ceph_registry_credentials.password }}"
   no_log: true
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  delegate_to: "{{ item.inventoryHost }}"
   when:
     - bootwright_ceph_registry_url | length > 0
     - bootwright_ceph_registry_credentials is defined
     - not bootwright_task_storage_skip_prereqs | default(false) | bool
 
-- name: Authorize cephadm cluster SSH key on storage nodes
+- name: Authorize cephadm cluster SSH key on storage node
   ansible.posix.authorized_key:
     user: "{{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}"
     key: "{{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.clusterSSH.publicKeyPath) }}"
     state: present
     manage_dir: true
   no_log: true
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  delegate_to: "{{ item.inventoryHost }}"
   when:
     - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
     - not bootwright_task_storage_skip_prereqs | default(false) | bool
@@ -139,14 +142,13 @@
       - wipefs
       - --no-act
       - --noheadings
-      - "{{ item.1 }}"
+      - "{{ item }}"
   register: bootwright_ceph_device_check
   changed_when: false
   failed_when: bootwright_ceph_device_check.rc != 0 or (bootwright_ceph_device_check.stdout | regex_search('\\S'))
-  loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) | subelements('devices', skip_missing=True) }}"
+  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
   loop_control:
-    label: "{{ item.0.name }} {{ item.1 }}"
-  delegate_to: "{{ item.0.inventoryHost }}"
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Apply managed Ceph cluster through cephadm

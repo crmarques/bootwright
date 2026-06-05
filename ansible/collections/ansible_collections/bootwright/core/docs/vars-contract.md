@@ -14,6 +14,7 @@ authors.
 | `bootwright_infra_components` | machine-bound infra services such as artifact servers |
 | `bootwright_clusters` | per-cluster endpoints, networks, components, and nodes |
 | `bootwright_storage_clusters` | managed storage apply inputs, seed hosts, cephadm files, operation files, and attachment contexts |
+| `bootwright_managed_os_install_groups` | managed machine OS install groups for storage and service machines |
 | `bootwright_provider_services` | provider/BMC service instances with rendered role names |
 | `bootwright_infra_component_services` | InfraComponent service instances with rendered role names |
 | `bootwright_provider_machine_setups` | provider-machine setup roles selected by machine drivers |
@@ -88,7 +89,10 @@ bootwright_clusters:
         substrateRole: libvirt
         bmcRole: emulated
         bootRole: redfish
+        substratePrepareRole: bootwright.core.machine_substrate_libvirt
+        substratePrepareFrom: network
         substrateApplyRole: bootwright.core.machine_substrate_libvirt
+        substrateApplyFrom: machine
         substrateDestroyRole: bootwright.core.machine_substrate_libvirt
         bmcApplyRole: bootwright.core.provider_service_bmc_emulated
         bmcDestroyRole: bootwright.core.provider_service_bmc_emulated
@@ -382,9 +386,10 @@ Container-backed managed service components (`loadBalancer`, `proxy`,
 `nameResolution`, and `registry`) consume `component.image`; host-package
 services such as `ntp` consume package/config fields, and the `bmc_emulated`
 role consumes provider BMC service `bmcEmulated.*`. Layer playbooks dispatch exact
-rendered role names (`applyRole`, `destroyRole`, `substrateApplyRole`,
-`bootApplyRole`, and `mediaPrepareRole`) rather than constructing role names
-from diagnostic labels.
+rendered role names and task entrypoints (`applyRole`, `destroyRole`,
+`substratePrepareRole`, `substratePrepareFrom`, `substrateApplyRole`,
+`substrateApplyFrom`, `bootApplyRole`, and `mediaPrepareRole`) rather than
+constructing role names from diagnostic labels.
 
 ## Task-Scoped Apply Vars
 
@@ -393,12 +398,22 @@ Parallel apply playbooks receive scheduler-selected scope through extra vars:
 | Fact | Shape |
 | --- | --- |
 | `bootwright_task_cluster_name` | ContainerCluster name selected for one OpenShift agent task |
+| `bootwright_task_machine_name` | Machine name selected for one machine infrastructure or managed OS task |
+| `bootwright_task_provider_host_name` | Provider host selected for one shared machine infrastructure prepare/finalize task |
 | `bootwright_task_storage_cluster_name` | StorageCluster name selected for one storage task |
+| `bootwright_task_storage_prereqs_only` | Optional boolean that limits a storage task to node prerequisites before seed-only cephadm work |
 | `bootwright_agent_node_cluster_name` | ContainerCluster name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
 | `bootwright_agent_node_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_agent_node_hosts` |
+| `bootwright_machine_task_cluster_name` | ContainerCluster or managed OS group name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
+| `bootwright_machine_task_machine_name` | Machine name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
+| `bootwright_machine_task_provider_host_name` | Provider host name attached to one Ansible pseudo-host in `bootwright_machine_task_hosts` |
 | `bootwright_install_override` | Optional boolean from `bootwright apply cluster --override`; when true the install role ignores prior local kubeconfig availability |
 | `bootwright_ansible_artifacts_dir` | Per-task local artifact directory for controlled runner outputs |
 
 The OpenShift agent role uses those vars to create and publish one cluster ISO,
 boot all selected node pseudo-hosts through Ansible host fanout, and run the
-final installer wait after the boot-stage task has completed.
+final installer wait after the boot-stage task has completed. Machine
+infrastructure and managed OS roles use `bootwright_machine_task_hosts` so VM
+creation, OS install, SSH wait, and trust recording run as one selected machine
+per Ansible host. Managed storage prereq tasks run against the storage-node
+inventory group and reserve seed-only cephadm work for the final storage task.

@@ -90,6 +90,8 @@ type TaskLedgerEntry struct {
 	Node           string     `json:"node,omitempty"`
 	Host           string     `json:"host,omitempty"`
 	ResourceKeys   []string   `json:"resourceKeys,omitempty"`
+	HostSlotKey    string     `json:"hostSlotKey,omitempty"`
+	HostSlotCount  int        `json:"hostSlotCount,omitempty"`
 	Status         TaskStatus `json:"status"`
 	Dependencies   []string   `json:"dependencies,omitempty"`
 	StartedAt      *time.Time `json:"startedAt,omitempty"`

@@ -1,15 +1,6 @@
 ---
-# Per-cluster substrate convergence. Runs once per cluster on the
-# provider host that hosts each machine substrate. Currently iterates
-# all clusters; focused apply (`--clusters a,b`) is handled by the
-# renderer reducing `bootwright_clusters` to the selected entries.
-
-- name: Apply cluster infrastructure
-  # bootwright_infra_hosts is the renderer-emitted group of hosts that
-  # back a cluster machine substrate (libvirt machineRefs today). A host
-  # not consuming any cluster substrate is not in the group, so the
-  # earlier "skip when no work" guard is no longer needed.
-  hosts: bootwright_infra_hosts
+- name: Apply machine infrastructure
+  hosts: bootwright_machine_task_hosts
   strategy: free
   gather_subset:
     - "!all"
@@ -23,26 +14,56 @@
         name: bootwright.core.machine_proxy
         tasks_from: facts
 
-  vars:
-    bootwright_host_machine_components: >-
-      {{
-        bootwright_clusters | default([])
-        | map(attribute='components') | flatten
-        | selectattr('kind', 'equalto', 'machines')
-        | selectattr('machineRef', 'defined')
-        | selectattr('machineRef', 'equalto', bootwright_host_name)
-        | list
-      }}
-    bootwright_host_clusters: >-
-      {{
-        bootwright_host_machine_components
-        | map(attribute='clusterName')
-        | unique | list
-      }}
-
   tasks:
-    - name: Dispatch substrate per cluster on this host
-      ansible.builtin.include_tasks: tasks/machine_infra_apply_cluster.yml
-      loop: "{{ bootwright_host_clusters }}"
-      loop_control:
-        loop_var: bootwright_cluster_name
+    - name: Resolve selected cluster
+      ansible.builtin.set_fact:
+        bootwright_current_cluster: "{{ (bootwright_clusters | default([]) | selectattr('name', 'equalto', bootwright_machine_task_cluster_name) | list | first) | default({}) }}"
+      changed_when: false
+
+    - name: Validate selected cluster
+      ansible.builtin.assert:
+        that:
+          - bootwright_current_cluster is mapping
+          - bootwright_current_cluster.name | default('') == bootwright_machine_task_cluster_name
+          - bootwright_task_cluster_name | default('') == bootwright_machine_task_cluster_name
+        fail_msg: >-
+          Could not resolve cluster {{ bootwright_machine_task_cluster_name | default('<unset>') }}
+          for machine task host {{ inventory_hostname }}.
+
+    - name: Pick selected machine component
+      ansible.builtin.set_fact:
+        bootwright_selected_machine_components: >-
+          {{
+            bootwright_current_cluster.components
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('name', 'equalto', bootwright_machine_task_machine_name)
+            | selectattr('machineRef', 'defined')
+            | selectattr('machineRef', 'equalto', bootwright_machine_task_provider_host_name)
+            | list
+          }}
+      changed_when: false
+
+    - name: Validate selected machine component
+      ansible.builtin.assert:
+        that:
+          - bootwright_selected_machine_components | length == 1
+          - bootwright_task_machine_name | default('') == bootwright_machine_task_machine_name
+        fail_msg: >-
+          Could not resolve machine {{ bootwright_machine_task_machine_name | default('<unset>') }}
+          for cluster {{ bootwright_machine_task_cluster_name | default('<unset>') }}.
+
+    - name: Set selected machine component
+      ansible.builtin.set_fact:
+        bootwright_component: "{{ bootwright_selected_machine_components | first }}"
+      changed_when: false
+
+    - name: Dispatch selected machine substrate role entrypoint
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substrateApplyRole }}"
+        tasks_from: "{{ bootwright_component.substrateApplyFrom }}"
+      when: (bootwright_component.substrateApplyFrom | default('') | length) > 0
+
+    - name: Dispatch selected machine substrate role
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.substrateApplyRole }}"
+      when: (bootwright_component.substrateApplyFrom | default('') | length) == 0

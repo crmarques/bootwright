@@ -56,10 +56,12 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 func TestClustersApplyRunsPreflightBeforeInfraAndInstall(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/workflow_clusters_apply.yml")
 	preflight := strings.Index(body, "check_preflight.yml")
+	prepare := strings.Index(body, "task_machine_infra_prepare.yml")
 	infra := strings.Index(body, "task_machine_infra_apply.yml")
+	finalize := strings.Index(body, "task_machine_infra_finalize.yml")
 	install := strings.Index(body, "task_container_cluster_agent_install.yml")
-	if preflight < 0 || infra < 0 || install < 0 || preflight > infra || infra > install {
-		t.Fatalf("clusters apply must run preflight before machine-infra and install-agent")
+	if preflight < 0 || prepare < 0 || infra < 0 || finalize < 0 || install < 0 || preflight > prepare || prepare > infra || infra > finalize || finalize > install {
+		t.Fatalf("clusters apply must run preflight before machine-infra prepare/apply/finalize and install-agent")
 	}
 }
 
@@ -99,7 +101,10 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_preflight.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_apply.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_finalize.yml",
+		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_managed_machine_os_apply.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_boot_agent_machine.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_create_agent_iso.yml",
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/task_container_cluster_agent_destroy.yml",
@@ -338,14 +343,14 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	}
 }
 
-func TestManagedMachineOSApplyPreparesHostPackages(t *testing.T) {
-	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_managed_machine_os_apply.yml")
+func TestMachineInfraPreparePreparesHostPackages(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_prepare.yml")
 	if len(plays) != 1 {
-		t.Fatalf("managed machine OS play count = %d, want 1", len(plays))
+		t.Fatalf("machine infra prepare play count = %d, want 1", len(plays))
 	}
 	rawTasks, ok := plays[0]["tasks"].([]any)
 	if !ok {
-		t.Fatalf("managed machine OS play missing tasks: %v", plays[0])
+		t.Fatalf("machine infra prepare play missing tasks: %v", plays[0])
 	}
 	tasks := make([]map[string]any, 0, len(rawTasks))
 	for _, raw := range rawTasks {
@@ -357,9 +362,9 @@ func TestManagedMachineOSApplyPreparesHostPackages(t *testing.T) {
 	}
 
 	baseIdx := findAnsibleTask(t, tasks, "Apply base host packages")
-	dispatchIdx := findAnsibleTask(t, tasks, "Dispatch managed OS install groups on this host")
-	if baseIdx >= dispatchIdx {
-		t.Fatalf("managed OS apply must prepare host packages before dispatching install groups")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve selected container cluster")
+	if baseIdx >= resolveIdx {
+		t.Fatalf("machine infra prepare must apply base packages before resolving selected work")
 	}
 	importRole, ok := tasks[baseIdx]["ansible.builtin.import_role"].(map[string]any)
 	if !ok {
@@ -1894,7 +1899,7 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
-	registryLogin := mainTasks[findAnsibleTask(t, mainTasks, "Log storage nodes into cephadm registry")]
+	registryLogin := mainTasks[findAnsibleTask(t, mainTasks, "Log storage node into cephadm registry")]
 	if got := registryLogin["no_log"]; got != true {
 		t.Fatalf("registry login must be no_log, got %v", got)
 	}
@@ -1902,7 +1907,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("registry login must use podman_login, got %v", registryLogin)
 	}
 
-	prereqs := mainTasks[findAnsibleTask(t, mainTasks, "Install Ceph prerequisites on storage nodes")]
+	prereqs := mainTasks[findAnsibleTask(t, mainTasks, "Install Ceph prerequisites on storage node")]
 	packages, ok := prereqs["ansible.builtin.package"].(map[string]any)
 	if !ok {
 		t.Fatalf("Ceph prerequisite task missing package module: %v", prereqs)
@@ -1912,8 +1917,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, packages["name"])
 		}
 	}
-	if got := fmt.Sprint(prereqs["delegate_to"]); !strings.Contains(got, "item.inventoryHost") {
-		t.Fatalf("Ceph prerequisites must delegate per storage node, got %v", got)
+	if got := fmt.Sprint(prereqs["delegate_to"]); strings.Contains(got, "item.inventoryHost") || got != "<nil>" {
+		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
 	}
 
 	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")

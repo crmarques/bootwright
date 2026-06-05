@@ -7,6 +7,7 @@ import (
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func PlanApplyTasks(target ApplyTarget, state v1alpha1.State) []ApplyTask {
@@ -40,27 +41,43 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				continue
 			}
 			managedOSDeps := []string{}
-			if managedOSCount := managedOSMachineCount(state, cluster); managedOSCount > 0 {
-				taskID := "osinstall." + cluster.Metadata.Name
-				managedOSDeps = append(managedOSDeps, taskID)
-				tasks = append(tasks, ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:           taskID,
-						Kind:         ApplyTaskKindManagedMachineOS,
-						Label:        "managed OS " + cluster.Metadata.Name,
-						Cluster:      cluster.Metadata.Name,
-						ClusterKind:  ApplyClusterKindStorage,
-						Status:       TaskStatusPending,
-						Dependencies: append([]string(nil), machineServiceTaskIDs...),
-						ResourceKeys: managedOSResourceKeys(state, cluster.Metadata.Name),
-					},
-					Playbook:      applyManagedMachineOSPlaybook,
-					Limit:         render.GroupInfraHosts,
-					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
-					State:         storageTaskState(state, cluster.Metadata.Name),
-					Forks:         managedOSCount,
-					RedfishSlots:  managedOSCount,
-				})
+			managedOSMachines := managedOSMachineNames(state, cluster)
+			if len(managedOSMachines) > 0 {
+				prepareDepsByHost := planStorageManagedOSPrepareTasks(&tasks, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+				for _, machineName := range managedOSMachines {
+					taskID := "osinstall." + cluster.Metadata.Name + "." + machineName
+					host := applyMachineHost(state, machineName)
+					deps := append([]string(nil), machineServiceTaskIDs...)
+					if prepareID := prepareDepsByHost[host]; prepareID != "" {
+						deps = append(deps, prepareID)
+					}
+					hostSlotKey := applyMachineHostSlotKey(state, machineName)
+					managedOSDeps = append(managedOSDeps, taskID)
+					tasks = append(tasks, ApplyTask{
+						Entry: TaskLedgerEntry{
+							ID:            taskID,
+							Kind:          ApplyTaskKindManagedMachineOS,
+							Label:         "managed OS " + cluster.Metadata.Name + "/" + machineName,
+							Cluster:       cluster.Metadata.Name,
+							ClusterKind:   ApplyClusterKindStorage,
+							Node:          machineName,
+							Host:          host,
+							Status:        TaskStatusPending,
+							Dependencies:  deps,
+							ResourceKeys:  applyMachineExclusiveResourceKeys(state, cluster.Metadata.Name, machineName),
+							HostSlotKey:   hostSlotKey,
+							HostSlotCount: 1,
+						},
+						Playbook:      applyManagedMachineOSPlaybook,
+						Limit:         render.ManagedOSHostName(cluster.Metadata.Name, machineName),
+						ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name, "bootwright_task_machine_name=" + machineName},
+						State:         storageTaskState(state, cluster.Metadata.Name),
+						Forks:         1,
+						RedfishSlots:  1,
+						HostSlotKey:   hostSlotKey,
+						HostSlotCount: 1,
+					})
+				}
 			}
 			taskID := "storageinfra." + cluster.Metadata.Name
 			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
@@ -78,9 +95,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 				},
 				Playbook:      applyStoragePlaybook,
-				Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
+				Limit:         render.StorageClusterGroupName(cluster.Metadata.Name),
 				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
 				State:         storageTaskState(state, cluster.Metadata.Name),
+				Forks:         storageClusterNodeCount(cluster),
 			})
 		}
 	}
@@ -121,48 +139,71 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		if phaseSet[ApplyPhaseClusterInstall] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
-			deps := append([]string(nil), machineServiceTaskIDs...)
-			deps = append(deps, kubeVirtDepsByCluster[name]...)
-			resourceKeys := kubeVirtResourceKeys(state, name)
-			if len(infraHosts) == 0 {
-				taskID := "infra." + name
-				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
+			baseDeps := append([]string(nil), machineServiceTaskIDs...)
+			baseDeps = append(baseDeps, kubeVirtDepsByCluster[name]...)
+			prepareDepsByHost := planContainerMachinePrepareTasks(&tasks, state, name, infraHosts, baseDeps)
+			machineTaskIDsByHost := map[string][]string{}
+			for _, machineName := range applyClusterMachineNames(state, name) {
+				host := applyMachineHost(state, machineName)
+				if host == "" {
+					continue
+				}
+				taskID := "infra." + name + "." + machineName
+				deps := append([]string(nil), baseDeps...)
+				if prepareID := prepareDepsByHost[host]; prepareID != "" {
+					deps = append(deps, prepareID)
+				}
+				hostSlotKey := applyMachineHostSlotKey(state, machineName)
+				machineTaskIDsByHost[host] = append(machineTaskIDsByHost[host], taskID)
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
-						ID:           taskID,
-						Kind:         ApplyTaskKindClusterInstall,
-						Label:        "infra " + name,
-						Cluster:      name,
-						ClusterKind:  ApplyClusterKindContainer,
-						Status:       TaskStatusPending,
-						Dependencies: deps,
-						ResourceKeys: resourceKeys,
+						ID:            taskID,
+						Kind:          ApplyTaskKindClusterInstall,
+						Label:         "machine infra " + name + "/" + machineName,
+						Cluster:       name,
+						ClusterKind:   ApplyClusterKindContainer,
+						Node:          machineName,
+						Host:          host,
+						ResourceKeys:  applyMachineExclusiveResourceKeys(state, name, machineName),
+						HostSlotKey:   hostSlotKey,
+						HostSlotCount: 1,
+						Status:        TaskStatusPending,
+						Dependencies:  deps,
 					},
-					Playbook: applyClusterInstallPlaybook,
-					Limit:    render.GroupInfraHosts,
-					State:    clusterState,
+					Playbook:      applyClusterInstallPlaybook,
+					Limit:         render.MachineInfraHostName(name, machineName),
+					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
+					Forks:         1,
+					State:         clusterState,
+					HostSlotKey:   hostSlotKey,
+					HostSlotCount: 1,
 				})
-				continue
 			}
 			for _, host := range infraHosts {
-				taskID := "infra." + name + "." + host
+				taskID := "infrafinalize." + name + "." + host
+				deps := append([]string(nil), baseDeps...)
+				deps = append(deps, machineTaskIDsByHost[host]...)
+				if prepareID := prepareDepsByHost[host]; prepareID != "" && len(machineTaskIDsByHost[host]) == 0 {
+					deps = append(deps, prepareID)
+				}
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
 				tasks = append(tasks, ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:           taskID,
-						Kind:         ApplyTaskKindClusterInstall,
-						Label:        "infra " + name + " on " + host,
+						Kind:         ApplyTaskKindMachineInfraFinalize,
+						Label:        "machine infra finalize " + name + " on " + host,
 						Cluster:      name,
 						ClusterKind:  ApplyClusterKindContainer,
 						Host:         host,
-						ResourceKeys: append([]string{hostMutationResource(host)}, resourceKeys...),
+						ResourceKeys: []string{hostMutationResource(host)},
 						Status:       TaskStatusPending,
 						Dependencies: deps,
 					},
-					Playbook: applyClusterInstallPlaybook,
-					Limit:    host,
-					Forks:    1,
-					State:    clusterState,
+					Playbook:      applyMachineInfraFinalize,
+					Limit:         host,
+					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
+					Forks:         1,
+					State:         clusterState,
 				})
 			}
 		}
@@ -295,6 +336,150 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 		}
 	}
 	return tasks, nil
+}
+
+func planContainerMachinePrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, clusterName string, hosts []string, deps []string) map[string]string {
+	out := map[string]string{}
+	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
+	for _, host := range hosts {
+		if !clusterHostNeedsSubstratePrepare(state, clusterName, host) {
+			continue
+		}
+		taskID := "infraprepare." + clusterName + "." + host
+		out[host] = taskID
+		*tasks = append(*tasks, ApplyTask{
+			Entry: TaskLedgerEntry{
+				ID:           taskID,
+				Kind:         ApplyTaskKindMachineInfraPrepare,
+				Label:        "machine infra prepare " + clusterName + " on " + host,
+				Cluster:      clusterName,
+				ClusterKind:  ApplyClusterKindContainer,
+				Host:         host,
+				ResourceKeys: []string{hostMutationResource(host)},
+				Status:       TaskStatusPending,
+				Dependencies: append([]string(nil), deps...),
+			},
+			Playbook:      applyMachineInfraPrepare,
+			Limit:         host,
+			ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+			Forks:         1,
+			State:         clusterState,
+		})
+	}
+	return out
+}
+
+func planStorageManagedOSPrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, clusterName string, machineNames []string, deps []string) map[string]string {
+	out := map[string]string{}
+	seen := map[string]bool{}
+	for _, machineName := range machineNames {
+		host := applyMachineHost(state, machineName)
+		if host == "" || seen[host] || !applyMachineNeedsSubstratePrepare(state, machineName) {
+			continue
+		}
+		seen[host] = true
+		taskID := "osprepare." + clusterName + "." + host
+		out[host] = taskID
+		*tasks = append(*tasks, ApplyTask{
+			Entry: TaskLedgerEntry{
+				ID:           taskID,
+				Kind:         ApplyTaskKindMachineInfraPrepare,
+				Label:        "managed OS prepare " + clusterName + " on " + host,
+				Cluster:      clusterName,
+				ClusterKind:  ApplyClusterKindStorage,
+				Host:         host,
+				ResourceKeys: []string{hostMutationResource(host)},
+				Status:       TaskStatusPending,
+				Dependencies: append([]string(nil), deps...),
+			},
+			Playbook:      applyMachineInfraPrepare,
+			Limit:         host,
+			ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+			Forks:         1,
+			State:         storageTaskState(state, clusterName),
+		})
+	}
+	return out
+}
+
+func clusterHostNeedsSubstratePrepare(state v1alpha1.State, clusterName, host string) bool {
+	cluster, ok := containerClusterByName(state, clusterName)
+	if !ok {
+		return false
+	}
+	for _, node := range cluster.Spec.Nodes {
+		if node.MachineRef.Name == "" || applyMachineHost(state, node.MachineRef.Name) != host {
+			continue
+		}
+		if applyMachineNeedsSubstratePrepare(state, node.MachineRef.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyMachineHost(state v1alpha1.State, machineName string) string {
+	machine, ok := stateview.Machine(state, machineName)
+	if !ok || machine.Spec.Substrate.ProviderRef.Name == "" || machine.Spec.Substrate.ProfileRef.Name == "" {
+		return ""
+	}
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	if !ok {
+		return ""
+	}
+	switch provider.Spec.Type {
+	case v1alpha1.ProvisionerLibvirt:
+		if provider.Spec.Libvirt != nil {
+			return provider.Spec.Libvirt.MachineRef.Name
+		}
+	case v1alpha1.ProvisionerKubeVirt:
+		return "localhost"
+	}
+	return ""
+}
+
+func applyMachineNeedsSubstratePrepare(state v1alpha1.State, machineName string) bool {
+	machine, ok := stateview.Machine(state, machineName)
+	if !ok {
+		return false
+	}
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	return ok && provider.Spec.Type == v1alpha1.ProvisionerLibvirt
+}
+
+func applyMachineHostSlotKey(state v1alpha1.State, machineName string) string {
+	host := applyMachineHost(state, machineName)
+	if host == "" || applyMachineProviderType(state, machineName) != v1alpha1.ProvisionerLibvirt {
+		return ""
+	}
+	return "host:" + host + ":machine"
+}
+
+func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machineName string) []string {
+	machine, ok := stateview.Machine(state, machineName)
+	if !ok {
+		return nil
+	}
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
+		return []string{kubeVirtResourceKey(provider.Spec.KubeVirt)}
+	}
+	if machine.Spec.Hardware.Management.BMC.Address != "" {
+		return []string{applyNodeRedfishResource(state, clusterName, machineName)}
+	}
+	return nil
+}
+
+func applyMachineProviderType(state v1alpha1.State, machineName string) string {
+	machine, ok := stateview.Machine(state, machineName)
+	if !ok {
+		return ""
+	}
+	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+	if !ok {
+		return ""
+	}
+	return provider.Spec.Type
 }
 
 func applyClusterNames(state v1alpha1.State) []string {

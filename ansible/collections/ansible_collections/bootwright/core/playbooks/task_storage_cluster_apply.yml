@@ -21,6 +21,7 @@
     - name: End selected storage non-seed hosts
       ansible.builtin.meta: end_host
       when:
+        - not bootwright_task_storage_prereqs_only | default(false) | bool
         - bootwright_selected_storage_cluster.seedHost | default('') | length > 0
         - bootwright_selected_storage_cluster.seedHost | default('') != inventory_hostname
 
@@ -29,11 +30,19 @@
         that:
           - bootwright_task_storage_cluster_name | default('') | length > 0
           - bootwright_selected_storage_cluster.name | default('') == bootwright_task_storage_cluster_name
-          - bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname
           - bootwright_ansible_artifacts_dir | default('') | length > 0
         fail_msg: >-
           Storage task did not receive a rendered context for
           {{ bootwright_task_storage_cluster_name | default('<unset>') }}.
+
+    - name: Validate selected storage seed context
+      ansible.builtin.assert:
+        that:
+          - bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname
+        fail_msg: >-
+          Storage task {{ bootwright_task_storage_cluster_name | default('<unset>') }}
+          must run on seed host {{ bootwright_selected_storage_cluster.seedHost | default('<unset>') }}.
+      when: not bootwright_task_storage_prereqs_only | default(false) | bool
 
     - name: Apply Ceph storage cluster
       ansible.builtin.include_role:

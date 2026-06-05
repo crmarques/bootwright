@@ -22,7 +22,10 @@ type Dispatch struct {
 
 type RoleContract struct {
 	MachineSetupRoles    []string
+	SubstratePrepareRole string
+	SubstratePrepareFrom string
 	SubstrateApplyRole   string
+	SubstrateApplyFrom   string
 	SubstrateDestroyRole string
 	BMCApplyRole         string
 	BMCDestroyRole       string
@@ -57,7 +60,10 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 		Dispatch: Dispatch{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"},
 		Roles: RoleContract{
 			MachineSetupRoles:    []string{"bootwright.core.machine_setup_libvirt"},
+			SubstratePrepareRole: "bootwright.core.machine_substrate_libvirt",
+			SubstratePrepareFrom: "network",
 			SubstrateApplyRole:   "bootwright.core.machine_substrate_libvirt",
+			SubstrateApplyFrom:   "machine",
 			SubstrateDestroyRole: "bootwright.core.machine_substrate_libvirt",
 			BMCApplyRole:         "bootwright.core.provider_service_bmc_emulated",
 			BMCDestroyRole:       "bootwright.core.provider_service_bmc_emulated",

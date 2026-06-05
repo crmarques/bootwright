@@ -1,6 +1,6 @@
 ---
 - name: Validate Ansible become escalation
-  hosts: "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_boot_hosts') }}"
+  hosts: "{{ bootwright_become_check_hosts | default('bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_machine_task_hosts:bootwright_boot_hosts') }}"
   gather_facts: false
   become: true
   environment: "{{ bootwright_proxy_env | default({}) }}"

@@ -5,7 +5,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
-	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -68,12 +67,12 @@ func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
 }
 
-func managedOSMachineCount(state v1alpha1.State, cluster v1alpha1.StorageCluster) int {
+func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
 	if cluster.Spec.Ceph == nil {
-		return 0
+		return nil
 	}
 	seen := map[string]bool{}
-	count := 0
+	var names []string
 	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 			continue
@@ -81,18 +80,19 @@ func managedOSMachineCount(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		seen[node.MachineRef.Name] = true
 		machine, ok := stateview.Machine(state, node.MachineRef.Name)
 		if ok && v1alpha1.MachineInstallsOS(machine) {
-			count++
+			names = append(names, node.MachineRef.Name)
 		}
 	}
-	return count
+	sort.Strings(names)
+	return names
 }
 
-func managedOSResourceKeys(state v1alpha1.State, clusterName string) []string {
-	keys := []string{"storage:" + clusterName}
-	filtered := storageTaskState(state, clusterName)
-	for _, host := range render.HostGroupMembers(filtered)[render.GroupInfraHosts] {
-		keys = append(keys, hostMutationResource(host))
+func storageClusterNodeCount(cluster v1alpha1.StorageCluster) int {
+	if cluster.Spec.Ceph == nil {
+		return 1
 	}
-	sort.Strings(keys[1:])
-	return keys
+	if count := len(cluster.Spec.Ceph.Topology.Nodes); count > 0 {
+		return count
+	}
+	return 1
 }

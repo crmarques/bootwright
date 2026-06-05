@@ -74,36 +74,6 @@ func extensionProvides(extension v1alpha1.ClusterAddon, capability string) bool 
 	return false
 }
 
-func kubeVirtResourceKeys(state v1alpha1.State, clusterName string) []string {
-	providers := providerIndex(state)
-	machines := machineIndex(state)
-	var cluster v1alpha1.ContainerCluster
-	foundCluster := false
-	for _, item := range state.ContainerClusters {
-		if item.Metadata.Name == clusterName {
-			cluster = item
-			foundCluster = true
-			break
-		}
-	}
-	if !foundCluster {
-		return nil
-	}
-	var out []string
-	for _, node := range cluster.Spec.Nodes {
-		machine, ok := machines[node.MachineRef.Name]
-		if !ok {
-			continue
-		}
-		provider, ok := providers[machine.Spec.Substrate.ProviderRef.Name]
-		if !ok || provider.Spec.Type != v1alpha1.ProvisionerKubeVirt || provider.Spec.KubeVirt == nil {
-			continue
-		}
-		out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
-	}
-	return out
-}
-
 func kubeVirtResourceKey(profile *v1alpha1.InfraProviderKubeVirt) string {
 	owner := "external"
 	if profile.HostClusterRef != nil && profile.HostClusterRef.Name != "" {

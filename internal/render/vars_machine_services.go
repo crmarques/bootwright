@@ -293,25 +293,41 @@ func providerMachineSetupsVars(state v1alpha1.State) []any {
 	}
 	seen := map[key]bool{}
 	var keys []key
+	addMachine := func(machine v1alpha1.InstallMachine) {
+		machineRef := machineHostRef(state, machine)
+		if machineRef == "" {
+			return
+		}
+		driver := ProviderDriver(state, machine)
+		for _, role := range driver.Roles.MachineSetupRoles {
+			k := key{machine: machineRef, role: role}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
 	for _, cluster := range state.ContainerClusters {
 		ci, ok := stateview.ClusterInstallForContainerCluster(state, cluster)
 		if !ok {
 			continue
 		}
 		for _, machine := range ci.Machines {
-			machineRef := machineHostRef(state, machine)
-			if machineRef == "" {
+			addMachine(machine)
+		}
+	}
+	for _, cluster := range managedStorageClusters(state) {
+		ci, ok := storageClusterInstall(state, cluster)
+		if !ok {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			rawMachine, ok := stateview.Machine(state, machine.Name)
+			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) {
 				continue
 			}
-			driver := ProviderDriver(state, machine)
-			for _, role := range driver.Roles.MachineSetupRoles {
-				k := key{machine: machineRef, role: role}
-				if seen[k] {
-					continue
-				}
-				seen[k] = true
-				keys = append(keys, k)
-			}
+			addMachine(machine)
 		}
 	}
 	sort.Slice(keys, func(i, j int) bool {

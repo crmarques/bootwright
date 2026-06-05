@@ -36,6 +36,7 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 	ocpHostSet := ocpReferencedHosts(state)
 	storageHostSet := storageReferencedHosts(state)
 	storageHostGroups := storageClusterHostSets(state)
+	machineTaskHostSet, machineTaskGroups := machineTaskHostSets(state)
 	allHostSet := mergeHostSets(mergeHostSets(mergeHostSets(mergeHostSets(infraHostSet, providerHostSet), infraComponentHostSet), bootHostSet), ocpHostSet)
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 
@@ -69,6 +70,9 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 			hosts[hostName] = entry
 		}
 	}
+	for name, entry := range machineTaskHostEntries(state, env, secretsDir, localPolicy) {
+		hosts[name] = entry
+	}
 	children := map[string]any{
 		GroupProviderHosts:       map[string]any{"hosts": hostsAsEmptyMap(providerHostSet)},
 		GroupInfraComponentHosts: map[string]any{"hosts": hostsAsEmptyMap(infraComponentHostSet)},
@@ -77,9 +81,13 @@ func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localP
 		GroupControllerHosts:     map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
 		GroupOCPHosts:            map[string]any{"hosts": hostsAsEmptyMap(ocpHostSet)},
 		GroupAgentNodeHosts:      map[string]any{"hosts": hostsAsEmptyMap(agentNodeHostSet)},
+		GroupMachineTaskHosts:    map[string]any{"hosts": hostsAsEmptyMap(machineTaskHostSet)},
 		GroupStorageHosts:        map[string]any{"hosts": hostsAsEmptyMap(storageHostSet)},
 	}
 	for group, set := range agentNodeGroups {
+		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
+	}
+	for group, set := range machineTaskGroups {
 		children[group] = map[string]any{"hosts": hostsAsEmptyMap(set)}
 	}
 	for group, set := range storageHostGroups {
@@ -105,6 +113,7 @@ const (
 	GroupControllerHosts     = "bootwright_controller_hosts"
 	GroupOCPHosts            = "bootwright_ocp_hosts"
 	GroupAgentNodeHosts      = "bootwright_agent_node_hosts"
+	GroupMachineTaskHosts    = "bootwright_machine_task_hosts"
 	GroupStorageHosts        = "bootwright_storage_hosts"
 )
 
@@ -116,6 +125,7 @@ const (
 func HostGroupCounts(state v1alpha1.State) map[string]int {
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	storageHostGroups := storageClusterHostSets(state)
+	machineTaskHostSet, machineTaskGroups := machineTaskHostSets(state)
 	out := map[string]int{
 		GroupInfraHosts:          len(infraReferencedHosts(state)),
 		GroupProviderHosts:       len(providerReferencedHosts(state)),
@@ -124,9 +134,13 @@ func HostGroupCounts(state v1alpha1.State) map[string]int {
 		GroupControllerHosts:     len(ocpReferencedHosts(state)),
 		GroupOCPHosts:            len(ocpReferencedHosts(state)),
 		GroupAgentNodeHosts:      len(agentNodeHostSet),
+		GroupMachineTaskHosts:    len(machineTaskHostSet),
 		GroupStorageHosts:        len(storageReferencedHosts(state)),
 	}
 	for group, set := range agentNodeGroups {
+		out[group] = len(set)
+	}
+	for group, set := range machineTaskGroups {
 		out[group] = len(set)
 	}
 	for group, set := range storageHostGroups {
@@ -139,6 +153,7 @@ func HostGroupMembers(state v1alpha1.State) map[string][]string {
 	ocpHosts := sortedHostSet(ocpReferencedHosts(state))
 	agentNodeHostSet, agentNodeGroups := agentNodeHostSets(state)
 	storageHostGroups := storageClusterHostSets(state)
+	machineTaskHostSet, machineTaskGroups := machineTaskHostSets(state)
 	out := map[string][]string{
 		GroupInfraHosts:          sortedHostSet(infraReferencedHosts(state)),
 		GroupProviderHosts:       sortedHostSet(providerReferencedHosts(state)),
@@ -147,9 +162,13 @@ func HostGroupMembers(state v1alpha1.State) map[string][]string {
 		GroupControllerHosts:     ocpHosts,
 		GroupOCPHosts:            ocpHosts,
 		GroupAgentNodeHosts:      sortedHostSet(agentNodeHostSet),
+		GroupMachineTaskHosts:    sortedHostSet(machineTaskHostSet),
 		GroupStorageHosts:        sortedHostSet(storageReferencedHosts(state)),
 	}
 	for group, set := range agentNodeGroups {
+		out[group] = sortedHostSet(set)
+	}
+	for group, set := range machineTaskGroups {
 		out[group] = sortedHostSet(set)
 	}
 	for group, set := range storageHostGroups {
@@ -164,6 +183,22 @@ func AgentNodeGroupName(clusterName string) string {
 
 func AgentNodeHostName(clusterName, machineName string) string {
 	return clusterName + "__" + machineName
+}
+
+func MachineInfraGroupName(clusterName string) string {
+	return GroupMachineTaskHosts + "_container_" + inventoryGroupToken(clusterName)
+}
+
+func ManagedOSGroupName(clusterName string) string {
+	return GroupMachineTaskHosts + "_storage_" + inventoryGroupToken(clusterName)
+}
+
+func MachineInfraHostName(clusterName, machineName string) string {
+	return "machine__container__" + clusterName + "__" + machineName
+}
+
+func ManagedOSHostName(clusterName, machineName string) string {
+	return "machine__storage__" + clusterName + "__" + machineName
 }
 
 func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
@@ -224,6 +259,88 @@ func agentNodeHostSets(state v1alpha1.State) (map[string]bool, map[string]map[st
 		byGroup[groupName] = group
 	}
 	return all, byGroup
+}
+
+func machineTaskHostSets(state v1alpha1.State) (map[string]bool, map[string]map[string]bool) {
+	all := map[string]bool{}
+	byGroup := map[string]map[string]bool{}
+	add := func(groupName, hostName string) {
+		all[hostName] = true
+		group := byGroup[groupName]
+		if group == nil {
+			group = map[string]bool{}
+			byGroup[groupName] = group
+		}
+		group[hostName] = true
+	}
+	for _, cluster := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, cluster)
+		if err != nil {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			if machineHostRef(state, machine) == "" {
+				continue
+			}
+			add(MachineInfraGroupName(cluster.Metadata.Name), MachineInfraHostName(cluster.Metadata.Name, machine.Name))
+		}
+	}
+	for _, cluster := range managedStorageClusters(state) {
+		ci, ok := storageClusterInstall(state, cluster)
+		if !ok {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			rawMachine, ok := findMachine(state, machine.Name)
+			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) || machineHostRef(state, machine) == "" {
+				continue
+			}
+			add(ManagedOSGroupName(cluster.Metadata.Name), ManagedOSHostName(cluster.Metadata.Name, machine.Name))
+		}
+	}
+	return all, byGroup
+}
+
+func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+	out := map[string]any{}
+	add := func(hostName, clusterName, machineName string, machine v1alpha1.InstallMachine) {
+		providerHost := machineHostRef(state, machine)
+		if providerHost == "" {
+			return
+		}
+		providerMachine, ok := findMachine(state, providerHost)
+		if !ok || providerMachine.Spec.Access.SSH == nil {
+			return
+		}
+		entry := machineInventoryEntry(providerMachine, env, secretsDir, localPolicy)
+		entry["bootwright_machine_task_cluster_name"] = clusterName
+		entry["bootwright_machine_task_machine_name"] = machineName
+		entry["bootwright_machine_task_provider_host_name"] = providerHost
+		out[hostName] = entry
+	}
+	for _, cluster := range state.ContainerClusters {
+		ci, err := clusterInstallForOCP(state, cluster)
+		if err != nil {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			add(MachineInfraHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, machine)
+		}
+	}
+	for _, cluster := range managedStorageClusters(state) {
+		ci, ok := storageClusterInstall(state, cluster)
+		if !ok {
+			continue
+		}
+		for _, machine := range ci.Machines {
+			rawMachine, ok := findMachine(state, machine.Name)
+			if !ok || !v1alpha1.MachineInstallsOS(rawMachine) {
+				continue
+			}
+			add(ManagedOSHostName(cluster.Metadata.Name, machine.Name), cluster.Metadata.Name, machine.Name, machine)
+		}
+	}
+	return out
 }
 
 func clusterMachineNames(cluster v1alpha1.ContainerCluster) []string {

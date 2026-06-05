@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +41,15 @@ type storageResultRunner struct {
 
 type blockingApplyRunner struct {
 	started chan struct{}
+}
+
+type recordingApplyRunner struct {
+	mu        sync.Mutex
+	calls     []string
+	failures  map[string]error
+	delay     time.Duration
+	active    int
+	maxActive int
 }
 
 type externalDetailsAnsibleRunner struct {
@@ -89,6 +99,44 @@ func (r *blockingApplyRunner) Run(ctx context.Context, _ ansible.RunSpec) error 
 
 func (r *blockingApplyRunner) Command(ansible.RunSpec) []string {
 	return []string{"ansible-playbook"}
+}
+
+func (r *recordingApplyRunner) Run(ctx context.Context, spec ansible.RunSpec) error {
+	id := spec.Playbook
+	r.mu.Lock()
+	r.calls = append(r.calls, id)
+	r.active++
+	if r.active > r.maxActive {
+		r.maxActive = r.active
+	}
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.active--
+		r.mu.Unlock()
+	}()
+
+	if r.delay > 0 {
+		select {
+		case <-time.After(r.delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if err := r.failures[id]; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *recordingApplyRunner) Command(spec ansible.RunSpec) []string {
+	return []string{spec.Playbook}
+}
+
+func (r *recordingApplyRunner) snapshot() ([]string, int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...), r.maxActive
 }
 
 func (r *externalDetailsAnsibleRunner) Run(_ context.Context, spec ansible.RunSpec) error {
@@ -208,6 +256,107 @@ func TestRunApplyTaskGraphFailsWhenTasksCannotMakeProgress(t *testing.T) {
 	}
 	if !strings.Contains(got.SkippedReason, "provider.missing (missing)") {
 		t.Fatalf("blocked reason = %q, want missing dependency", got.SkippedReason)
+	}
+}
+
+func TestRunApplyTaskGraphContinuesIndependentBranchAfterTaskFailure(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &recordingApplyRunner{failures: map[string]error{"fail-a": errors.New("boom")}}
+	tasks := []ApplyTask{
+		{
+			Entry:    TaskLedgerEntry{ID: "fail-a", Kind: ApplyTaskKindProvider, Label: "fail-a", Status: TaskStatusPending},
+			Playbook: "fail-a",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "blocked-a", Kind: ApplyTaskKindProvider, Label: "blocked-a", Status: TaskStatusPending, Dependencies: []string{"fail-a"}},
+			Playbook: "blocked-a",
+			State:    state,
+		},
+		{
+			Entry:    TaskLedgerEntry{ID: "ok-b", Kind: ApplyTaskKindProvider, Label: "ok-b", Status: TaskStatusPending},
+			Playbook: "ok-b",
+			State:    state,
+		},
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err == nil || !strings.Contains(err.Error(), "fail-a failed") {
+		t.Fatalf("RunApplyTaskGraph error = %v, want fail-a task error", err)
+	}
+	calls, _ := runner.snapshot()
+	if !reflect.DeepEqual(calls, []string{"fail-a", "ok-b"}) {
+		t.Fatalf("runner calls = %v, want failed branch and independent branch only", calls)
+	}
+	if task, _ := ledger.Task("fail-a"); task.Status != TaskStatusFailed {
+		t.Fatalf("fail-a status = %s, want failed", task.Status)
+	}
+	if task, _ := ledger.Task("ok-b"); task.Status != TaskStatusOK {
+		t.Fatalf("ok-b status = %s, want ok", task.Status)
+	}
+	if task, _ := ledger.Task("blocked-a"); task.Status != TaskStatusBlocked || !strings.Contains(task.SkippedReason, "dependency fail-a failed") {
+		t.Fatalf("blocked-a = %s/%q, want blocked by failed dependency", task.Status, task.SkippedReason)
+	}
+}
+
+func TestRunApplyTaskGraphHonorsCountedHostSlots(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &recordingApplyRunner{delay: 25 * time.Millisecond}
+	tasks := []ApplyTask{}
+	for _, id := range []string{"machine-a", "machine-b", "machine-c"} {
+		tasks = append(tasks, ApplyTask{
+			Entry: TaskLedgerEntry{
+				ID:            id,
+				Kind:          ApplyTaskKindClusterInstall,
+				Label:         id,
+				Status:        TaskStatusPending,
+				HostSlotKey:   "host:lab-host:machine",
+				HostSlotCount: 1,
+			},
+			Playbook:      id,
+			State:         state,
+			HostSlotKey:   "host:lab-host:machine",
+			HostSlotCount: 1,
+		})
+	}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseClusterInstall}}, "", tasks, ConcurrencyLimits{Parallelism: 3, ParallelismPerHost: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	calls, maxActive := runner.snapshot()
+	if len(calls) != 3 {
+		t.Fatalf("runner calls = %v, want all three machine tasks", calls)
+	}
+	if maxActive != 2 {
+		t.Fatalf("max active host-slot tasks = %d, want 2", maxActive)
+	}
+	for _, id := range []string{"machine-a", "machine-b", "machine-c"} {
+		if task, _ := ledger.Task(id); task.Status != TaskStatusOK {
+			t.Fatalf("%s status = %s, want ok", id, task.Status)
+		}
 	}
 }
 
@@ -1082,11 +1231,17 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
-	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.lab-host")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.lab-host", "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.lab-host", "provider.lab-host")
+	for _, machine := range []string{"ceph-0", "ceph-1", "ceph-2"} {
+		taskID := "osinstall.ceph-libvirt." + machine
+		task := assertTaskPresent(t, tasks, taskID)
+		assertTaskDeps(t, tasks, taskID, "provider.lab-host", "osprepare.ceph-libvirt.lab-host")
+		if task.Entry.HostSlotKey != "host:lab-host:machine" || task.Entry.HostSlotCount != 1 {
+			t.Fatalf("%s host slot = %q/%d, want host:lab-host:machine/1", taskID, task.Entry.HostSlotKey, task.Entry.HostSlotCount)
+		}
+	}
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.lab-host", "osinstall.ceph-libvirt.ceph-0", "osinstall.ceph-libvirt.ceph-1", "osinstall.ceph-libvirt.ceph-2")
 	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.lab-host", "storageinfra.ceph-libvirt")
-	assertTaskResourceKeys(t, tasks, "osinstall.ceph-libvirt", "storage:ceph-libvirt", "host:lab-host:mutating")
 }
 
 func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {
@@ -1097,8 +1252,10 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "infra.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
-	assertTaskResourceKeys(t, tasks, "infra.child-ocp.localhost", "host:localhost:mutating", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskDeps(t, tasks, "infra.child-ocp.child-master-0", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
+	assertTaskResourceKeys(t, tasks, "infra.child-ocp.child-master-0", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskDeps(t, tasks, "infrafinalize.child-ocp.localhost", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait", "infra.child-ocp.child-master-0")
+	assertTaskResourceKeys(t, tasks, "infrafinalize.child-ocp.localhost", "host:localhost:mutating")
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
 
@@ -1385,14 +1542,15 @@ func applyContainerClusterTarget() ApplyTarget {
 	return ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}
 }
 
-func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) {
+func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) ApplyTask {
 	t.Helper()
 	for _, task := range tasks {
 		if task.Entry.ID == id {
-			return
+			return task
 		}
 	}
 	t.Fatalf("task %s not found in %+v", id, applyTaskIDs(tasks))
+	return ApplyTask{}
 }
 
 func assertTaskMissing(t *testing.T, tasks []ApplyTask, id string) {

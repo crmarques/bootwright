@@ -27,6 +27,15 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 		t.Fatalf("components = %v", components)
 	}
 	first := components[0].(map[string]any)
+	if got := first["substratePrepareRole"]; got != "bootwright.core.machine_substrate_libvirt" {
+		t.Fatalf("substratePrepareRole = %v", got)
+	}
+	if got := first["substratePrepareFrom"]; got != "network" {
+		t.Fatalf("substratePrepareFrom = %v", got)
+	}
+	if got := first["substrateApplyFrom"]; got != "machine" {
+		t.Fatalf("substrateApplyFrom = %v", got)
+	}
 	profile := first["profile"].(map[string]any)
 	dataDisks := profile["dataDisks"].([]any)
 	if len(dataDisks) != 2 {
@@ -69,5 +78,30 @@ func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 	}
 	if got := strings.Join(members[GroupProviderHosts], ","); got != "lab-host" {
 		t.Fatalf("provider hosts = %v", members[GroupProviderHosts])
+	}
+	wantMachineTaskHosts := strings.Join([]string{
+		ManagedOSHostName("ceph-libvirt", "ceph-0"),
+		ManagedOSHostName("ceph-libvirt", "ceph-1"),
+		ManagedOSHostName("ceph-libvirt", "ceph-2"),
+	}, ",")
+	if got := strings.Join(members[GroupMachineTaskHosts], ","); got != wantMachineTaskHosts {
+		t.Fatalf("machine task hosts = %v, want %s", members[GroupMachineTaskHosts], wantMachineTaskHosts)
+	}
+	if got := strings.Join(members[ManagedOSGroupName("ceph-libvirt")], ","); got != wantMachineTaskHosts {
+		t.Fatalf("managed OS group hosts = %v, want %s", members[ManagedOSGroupName("ceph-libvirt")], wantMachineTaskHosts)
+	}
+
+	inv := Inventory(state, "/context/secrets")
+	all := inv["all"].(map[string]any)
+	hosts := all["hosts"].(map[string]any)
+	pseudoHost := hosts[ManagedOSHostName("ceph-libvirt", "ceph-0")].(map[string]any)
+	if got := pseudoHost["bootwright_machine_task_cluster_name"]; got != "ceph-libvirt" {
+		t.Fatalf("machine task cluster = %v", got)
+	}
+	if got := pseudoHost["bootwright_machine_task_machine_name"]; got != "ceph-0" {
+		t.Fatalf("machine task machine = %v", got)
+	}
+	if got := pseudoHost["bootwright_machine_task_provider_host_name"]; got != "lab-host" {
+		t.Fatalf("machine task provider host = %v", got)
 	}
 }
