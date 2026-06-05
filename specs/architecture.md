@@ -59,6 +59,14 @@ task per Redfish system or BMC target. KubeVirt-backed child VM infrastructure
 and VM boot tasks also lock
 `kubevirt:<host-cluster-or-kubeconfig>:<namespace>`.
 
+The Ansible source tree is authored under `/ansible`. `make sync-bundle` packs
+that source and pinned external collections into the generated embedded archive
+under `internal/converge/bundle/ansible_bundle.zip`; `make build` runs that
+sync before compiling the CLI. The generated archive is not versioned. Source
+checkouts without the generated archive must still compile and report an empty
+embedded bundle for commands that need Ansible until the operator runs
+`make build`.
+
 The desired-state API is defined in `api/v1alpha1` and specified in
 `specs/state-model.md`.
 

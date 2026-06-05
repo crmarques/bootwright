@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-//go:embed ansible_bundle.zip
+//go:embed ansible_bundle*
 var bundleArchiveFS embed.FS
 
 const bundleArchiveRelPath = "ansible_bundle.zip"
@@ -84,7 +84,7 @@ func ExtractAnsibleBundle(dest string, bundleVersion string) error {
 func openAnsibleBundleArchive() (*zip.Reader, error) {
 	data, err := bundleArchiveFS.ReadFile(bundleArchiveRelPath)
 	if err != nil {
-		return nil, fmt.Errorf("locate embedded ansible bundle: %w", err)
+		return nil, fmt.Errorf("%w (rebuild bootwright via 'make build'): missing %s", errEmptyAnsibleBundle, bundleArchiveRelPath)
 	}
 	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {

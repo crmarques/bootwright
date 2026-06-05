@@ -27,6 +27,7 @@ out/
 rendered/
 site/
 tmp/
+internal/converge/bundle/ansible_bundle.zip
 
 # Tooling
 .DS_Store

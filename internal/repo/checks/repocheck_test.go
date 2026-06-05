@@ -231,7 +231,8 @@ func TestDesiredStateYAMLUsesBlockStyleCollections(t *testing.T) {
 func TestMakefileGuardsDestructiveCleanTargets(t *testing.T) {
 	body := readRepoFile(t, "Makefile")
 	for _, want := range []string{
-		"CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp",
+		"CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) $(EMBED_BUNDLE_ARCHIVE) dist build out rendered tmp",
+		"--exclude='./$(EMBED_BUNDLE_ARCHIVE)'",
 		"refusing to clean unsafe path",
 		"refusing unsafe CASE",
 		"refusing to clean E2E_CONTEXT_DIR outside expected case context",

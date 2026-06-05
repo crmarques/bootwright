@@ -6,7 +6,7 @@ COMMA := ,
 BINARY ?= bootwright
 BIN_DIR ?= bin
 STATE_DIR ?= .state
-CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) dist build out rendered tmp
+CLEAN_PATHS = $(BIN_DIR) $(STATE_DIR) $(EMBED_BUNDLE_ARCHIVE) dist build out rendered tmp
 CONTAINER_IMAGE ?= bootwright
 CONTAINERFILE ?= Containerfile
 CONTAINER_CACHE_DIR ?= .cache/container-build
@@ -199,6 +199,7 @@ go-test-clean-checkout:
 		--exclude='./rendered' \
 		--exclude='./tmp' \
 		--exclude='./.cache' \
+		--exclude='./$(EMBED_BUNDLE_ARCHIVE)' \
 		-cf "$$tmp/source.tar" .; \
 	tar -xf "$$tmp/source.tar" -C "$$work"; \
 	mkdir -p "$$tmp/go-build-cache" "$$tmp/go-tmp"; \
@@ -317,7 +318,7 @@ help:
 		'Targets:' \
 		'  build            Build bin/bootwright (syncs the embedded ansible bundle first)' \
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
-		'  sync-bundle      Refresh internal/converge/bundle/ansible_bundle.zip' \
+		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip' \
 		'  check            Run fast guardrails first, then Go, Python, and Ansible checks' \
 		'  check-fast       Run cheap local guardrails without Go, Python, or Ansible tests' \
 		'  test             Run Go tests' \

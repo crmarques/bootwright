@@ -1,9 +1,10 @@
 # Ansible Bundle
 
-This tree is embedded into the `bootwright` binary and materialized under
-`/var/lib/bootwright/cache/ansible-bundles/<version>/` at runtime. Users do not edit inventory,
-`group_vars`, or `host_vars`; Go renders inventory and vars from desired
-state.
+This source tree is packed into a generated embedded archive during
+`make build` and materialized under
+`/var/lib/bootwright/cache/ansible-bundles/<version>/` at runtime. Users do not
+edit inventory, `group_vars`, or `host_vars`; Go renders inventory and vars
+from desired state.
 
 ## Ownership
 

@@ -222,7 +222,7 @@ func skipSourceBundlePath(rel string, isDir bool) bool {
 func skipEmbeddedBundlePath(rel string, isDir bool) bool {
 	rel = filepath.ToSlash(rel)
 	switch rel {
-	case ".gitignore", "PLACEHOLDER", "collections/.stamp":
+	case ".gitignore", "PLACEHOLDER", "ansible_bundle.marker", "collections/.stamp":
 		return true
 	default:
 		return strings.HasPrefix(rel, "collections/ansible_collections/") && !strings.HasPrefix(rel, BootwrightCollectionRelPath+"/")
