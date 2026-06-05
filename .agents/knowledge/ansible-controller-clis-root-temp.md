@@ -1,6 +1,6 @@
 # Ansible Controller CLI Root Temp
 
-**Symptom:** `bootwright apply bastion` fails during
+**Symptom:** `bootwright bastion setup` fails during
 `ocp_clis : Ensure tmp working directory exists` with a permission denied
 error under a user state directory, such as:
 

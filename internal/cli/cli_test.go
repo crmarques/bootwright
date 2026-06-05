@@ -76,7 +76,7 @@ func TestClusterTargets(t *testing.T) {
 		{"check", "container-cluster", "--help"},
 		{"destroy", "container-cluster", "--help"},
 		{"apply", "--help"},
-		{"apply", "bastion", "--help"},
+		{"bastion", "setup", "--help"},
 	} {
 		_, stderr, code := runCLI(t, args...)
 		if code != 0 {
@@ -97,7 +97,7 @@ func TestClusterTargets(t *testing.T) {
 			t.Fatalf("%s stderr %q does not reject unsupported target", strings.Join(args, " "), stderr)
 		}
 	}
-	for _, target := range []string{"infra", "clusters", "container-cluster", "storage-cluster", "addons", "all"} {
+	for _, target := range []string{"bastion", "infra", "clusters", "container-cluster", "storage-cluster", "addons", "all"} {
 		_, stderr, code := runCLI(t, "apply", target)
 		if code == 0 {
 			t.Fatalf("bootwright apply %s unexpectedly succeeded", target)
@@ -121,12 +121,12 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster", "bastion"} {
+	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, reject := range []string{"--scope", "--cluster ", "container|storage|install|addons", "Subcommand Flags"} {
+	for _, reject := range []string{"--scope", "--cluster ", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
 		}
@@ -1529,7 +1529,7 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{args: []string{"apply", "bastion"}, want: true},
+		{args: []string{"bastion", "setup"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
 		{args: []string{"apply"}, want: true},

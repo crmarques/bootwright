@@ -154,7 +154,7 @@ func hostTrustHasFailure(checks []preflightCheck) bool {
 func sshKeyscanCheck(deps preflightDeps) preflightCheck {
 	path, err := deps.lookPath("ssh-keyscan", nil)
 	if err != nil {
-		remediation := "install OpenSSH clients or run bootwright apply bastion"
+		remediation := "install OpenSSH clients or run bootwright bastion setup"
 		if errors.Is(err, exec.ErrNotFound) {
 			return failCheck(checkGroupHostTrust, "ssh-keyscan", "not found", "Bootwright needs ssh-keyscan to record SSH host trust", remediation)
 		}

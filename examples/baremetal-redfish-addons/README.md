@@ -24,7 +24,7 @@ checks, and a manifest-set add-on.
 bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
 bootwright secret generate
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright check all
 bootwright plan
 bootwright apply --yes

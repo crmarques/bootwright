@@ -90,7 +90,7 @@ func TestResolveProxyEnvHonorsProxyForNone(t *testing.T) {
 	}
 }
 
-func TestBastionApplyDryRunShowsContextProxy(t *testing.T) {
+func TestBastionSetupDryRunShowsContextProxy(t *testing.T) {
 	clearProxyEnv(t)
 	initTestContext(t, "002-sno-emul-baremetal")
 	_, stderr, code := runCLI(t, "secret", "set", "proxy-credentials", "--username", "proxy", "--password", "secret")
@@ -98,9 +98,9 @@ func TestBastionApplyDryRunShowsContextProxy(t *testing.T) {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
 
-	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	stdout, stderr, code := runCLI(t, "bastion", "setup", "--dry-run")
 	if code != 0 {
-		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("bastion setup --dry-run exited %d, stderr=%q", code, stderr)
 	}
 	want := "proxy: configured (https, http,"
 	if !strings.Contains(stdout, want) {
@@ -108,26 +108,26 @@ func TestBastionApplyDryRunShowsContextProxy(t *testing.T) {
 	}
 }
 
-func TestBastionApplyDryRunShowsNoProxyWhenUnset(t *testing.T) {
+func TestBastionSetupDryRunShowsNoProxyWhenUnset(t *testing.T) {
 	clearProxyEnv(t)
 	initTestContext(t, "001-sno-libvirt")
 
-	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	stdout, stderr, code := runCLI(t, "bastion", "setup", "--dry-run")
 	if code != 0 {
-		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("bastion setup --dry-run exited %d, stderr=%q", code, stderr)
 	}
 	if !strings.Contains(stdout, "proxy: none\n") {
 		t.Fatalf("stdout does not show no-proxy status:\n%s", stdout)
 	}
 }
 
-func TestBastionApplyDryRunShowsHighLevelActions(t *testing.T) {
+func TestBastionSetupDryRunShowsHighLevelActions(t *testing.T) {
 	clearProxyEnv(t)
 	initTestContext(t, "001-sno-libvirt")
 
-	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	stdout, stderr, code := runCLI(t, "bastion", "setup", "--dry-run")
 	if code != 0 {
-		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("bastion setup --dry-run exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{
 		"runtime: managed Ansible environment",
@@ -146,14 +146,14 @@ func TestBastionApplyDryRunShowsHighLevelActions(t *testing.T) {
 	}
 }
 
-func TestBastionApplyDryRunShowsLocalSudoAuth(t *testing.T) {
+func TestBastionSetupDryRunShowsLocalSudoAuth(t *testing.T) {
 	clearProxyEnv(t)
 	t.Setenv(localRootSudoAuthEnv, localSudoAuthNonInteractive)
 	initTestContext(t, "001-sno-libvirt")
 
-	stdout, stderr, code := runCLI(t, "apply", "bastion", "--dry-run")
+	stdout, stderr, code := runCLI(t, "bastion", "setup", "--dry-run")
 	if code != 0 {
-		t.Fatalf("apply bastion --dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("bastion setup --dry-run exited %d, stderr=%q", code, stderr)
 	}
 	want := "sudo: ready (non-interactive)"
 	if !strings.Contains(stdout, want) {

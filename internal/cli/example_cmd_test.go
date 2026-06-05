@@ -84,7 +84,7 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright validate -f ./lab-input",
 		"bootwright context init lab",
 		"bootwright context update lab",
-		"bootwright apply bastion --yes",
+		"bootwright bastion setup --yes",
 		"bootwright check all",
 		"bootwright render effective",
 		"bootwright plan",

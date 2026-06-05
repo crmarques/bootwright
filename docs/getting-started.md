@@ -208,7 +208,7 @@ eval "$(bootwright print-env --sensitive)"
 ## 6. Check And Apply
 
 ```text
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright check all
 bootwright render effective
 bootwright plan
@@ -217,7 +217,7 @@ bootwright status --watch
 bootwright cluster access-info
 ```
 
-`apply bastion` installs bastion-host prerequisites. `check all` validates the
+`bastion setup` installs bastion-host prerequisites. `check all` validates the
 full graph before convergence. `render effective` writes
 `effective-state.yaml` with defaults applied so you can inspect the normalized
 state before applying it. `plan` previews the full apply task graph without

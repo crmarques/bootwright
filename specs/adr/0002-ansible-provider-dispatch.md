@@ -112,7 +112,8 @@ those facts and does not move provider or install decisions out of the renderer.
 
 ## Consequences
 
-- Public CLI commands stay stable: `bootwright check/apply bastion|infra|cluster|all`.
+- Public CLI commands expose separate bastion setup, check targets, staged
+  graph apply, and full graph apply.
 - Adding or removing apply support for a provider remains close to a role
   operation: add or remove the relevant collection role and one registry entry,
   then update tests. Public schema support still requires the typed API arm,

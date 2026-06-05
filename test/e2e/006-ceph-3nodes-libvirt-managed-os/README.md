@@ -40,7 +40,7 @@ or Ansible changes.
 - Valid Red Hat registry credentials for Ceph container images.
 
 Bootwright owns lab host preparation for this fixture. After
-`bootwright apply bastion --yes` and
+`bootwright bastion setup --yes` and
 `bootwright apply --stage infra --clusters ceph-libvirt --yes`, the required
 libvirt tooling, `qemu-img`, `sushy-tools`, `mkksiso`, Ansible requirements,
 and firewall rules should be installed or configured by Bootwright. Missing
@@ -77,7 +77,7 @@ bootwright context init 006-ceph-3nodes-libvirt-managed-os \
 bootwright secret materialize
 bootwright secret set ceph-registry-credentials --from-file /path/to/registry-credentials.txt
 bootwright host trust --hosts lab-host --yes
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-libvirt --yes
 bootwright apply --stage clusters --clusters ceph-libvirt --yes
 ```

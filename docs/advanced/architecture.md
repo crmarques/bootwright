@@ -49,7 +49,7 @@ defaults. That keeps provider swaps and release changes explicit.
 
 ## Apply Workflow
 
-`apply bastion` prepares bastion-local tools on localhost. `apply --yes` is the
+`bastion setup` prepares bastion-local tools on localhost. `apply --yes` is the
 normal convergence target after `check all` and a dry run. Focused recovery uses
 two stages:
 

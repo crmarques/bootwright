@@ -91,7 +91,7 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 
 - Linux host with KVM support (`/dev/kvm`) for libvirt cases.
 - Go toolchain compatible with `go.mod`.
-- Python 3.12+ on the controller, or permission for `bootwright apply bastion`
+- Python 3.12+ on the controller, or permission for `bootwright bastion setup`
   to install it.
 - Permission to escalate to root on provider hosts and manage the Bootwright
   host runtime under `/var/lib/bootwright`.

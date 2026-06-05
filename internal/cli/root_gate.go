@@ -155,6 +155,11 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		return true
+	case "bastion":
+		if len(args) == 1 {
+			return false
+		}
+		return true
 	case "render":
 		if len(args) == 1 {
 			return false
@@ -271,6 +276,9 @@ func contextDeleteArgsHavePurge(args []string) bool {
 
 func argsMayUseBecome(args []string) bool {
 	if len(args) >= 1 && args[0] == "apply" {
+		return true
+	}
+	if len(args) >= 2 && args[0] == "bastion" && args[1] == "setup" {
 		return true
 	}
 	if len(args) < 2 {

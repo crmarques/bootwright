@@ -29,7 +29,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright secret generate
   bootwright secret materialize
   bootwright host trust
-  bootwright apply bastion --yes
+  bootwright bastion setup --yes
   bootwright check all
   bootwright render effective
   bootwright plan
@@ -57,6 +57,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newValidateCmd(stdout),
 		newContextCmd(stdin, stdout, stderr),
 		newHostCmd(stdin, stdout, stderr),
+		newBastionCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
 		newContainerClusterCmd(stdout),
 		newExampleCmd(stdout),

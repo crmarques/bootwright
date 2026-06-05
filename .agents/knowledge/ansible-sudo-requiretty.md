@@ -1,6 +1,6 @@
 # Ansible Sudo Requiretty
 
-**Symptom:** `bootwright apply bastion` fails during
+**Symptom:** `bootwright bastion setup` fails during
 `ocp_clis : Install controller OS packages` with:
 
 ```text
@@ -15,7 +15,7 @@ before Ansible sees the become success marker.
 
 **Controller-local fix:** Run the controller CLI playbook itself through direct sudo, and do not
 use Ansible local `become` in the `ocp_clis` role. Non-root
-`apply bastion` follows the scoped apply default and allows a sudo prompt.
+`bastion setup` keeps the mutating-workflow default and allows a sudo prompt.
 Passing `--ask-become-pass=false` keeps the automation path on `sudo -n` under
 Bootwright's controlling PTY, so passwordless sudo still works with
 `requiretty`.

@@ -11,6 +11,16 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 )
 
+func newBastionCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "bastion <command>",
+		Short: "Manage bastion prerequisites",
+	}
+	cmd.AddCommand(newBastionSetupCmd(stdin, stdout, stderr))
+	requireSubcommand(cmd)
+	return cmd
+}
+
 func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
@@ -36,7 +46,7 @@ func runBastionChecks(stdout io.Writer) error {
 	return renderCheckResults(stdout, "bastion check", checks)
 }
 
-func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
 		dryRun        bool
 		yes           bool
@@ -44,17 +54,17 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		strictSecrets bool
 	)
 	cmd := &cobra.Command{
-		Use:   "apply",
+		Use:   "setup",
 		Short: "Install bastion prerequisites",
 		Args:  cobra.NoArgs,
 		Example: `  # Install runtime and release-specific OCP CLIs for the current context
-  bootwright apply bastion --yes
+  bootwright bastion setup --yes
 
   # Show planned actions without changing the host
-  bootwright apply bastion --dry-run
+  bootwright bastion setup --dry-run
 
   # Apply non-interactively when passwordless sudo is available
-  bootwright apply bastion --ask-become-pass=false --yes`,
+  bootwright bastion setup --ask-become-pass=false --yes`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print planned actions without executing them")
@@ -86,7 +96,7 @@ func newBastionApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		cliSpec := planControllerCLIInstall(state, defaultControllerCLIInstallDir())
 
 		p := output.New(stdout)
-		p.Command("bastion apply")
+		p.Command("bastion setup")
 		p.Section("Plan")
 		fields := []output.Field{{Key: "runtime", Value: "managed Ansible environment"}}
 		if cliSpec != nil {

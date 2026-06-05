@@ -1,6 +1,6 @@
 # Managed Ansible venv package install fails with Errno 2
 
-**Symptom:** `bootwright apply bastion` plans only an `install ansible-core`
+**Symptom:** `bootwright bastion setup` plans only an `install ansible-core`
 bootstrap step, then pip fails with `Could not install packages due to an
 OSError: [Errno 2] No such file or directory`.
 

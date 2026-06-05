@@ -33,7 +33,7 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 }
 
 func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
+	return newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
 		use:           "apply",
 		short:         "Apply the provisioning graph",
 		stageSelector: true,
@@ -50,10 +50,6 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
   # Install selected container and storage clusters, addons, and integrations
   bootwright apply --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
 	})
-	cmd.AddCommand(
-		retargetCommand(newBastionApplyCmd(stdin, stdout, stderr), "bastion", "Install bastion prerequisites"),
-	)
-	return cmd
 }
 
 func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {

@@ -83,7 +83,7 @@ KVM and permission to manage libvirt on the provider host.
    create the `proxy-credentials` secret in [common-steps.md](common-steps.md)
    first, then rerun it with `--sensitive`.
 
-5. Follow [common-steps.md](common-steps.md) to create secrets, apply bastion
+5. Follow [common-steps.md](common-steps.md) to create secrets, set up bastion
    dependencies, provision infra, install, verify, and destroy the cluster.
 
 To apply every fixture from the repository root, then tear it down before the

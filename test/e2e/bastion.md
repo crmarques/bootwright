@@ -133,17 +133,17 @@ rerun it with `--sensitive`.
 ## Bootstrap Bastion Dependencies
 
 The first check is expected to report missing tools on a fresh bastion. The
-apply installs the Bootwright-managed Ansible runtime and release-specific
-OpenShift CLIs declared by the active context.
+`bastion setup` installs the Bootwright-managed Ansible runtime and
+release-specific OpenShift CLIs declared by the active context.
 
 ```bash
 bootwright check bastion || true
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright check bastion || true
 ```
 
 In an externally proxied environment, create `proxy-credentials` first as shown
-in [common-steps.md](common-steps.md), then run the bastion apply.
+in [common-steps.md](common-steps.md), then run `bootwright bastion setup`.
 
 ## Tear Down — Bastion State
 

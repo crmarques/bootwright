@@ -1,7 +1,7 @@
 # Ansible DNF Unavailable Repo
 
 **Symptom:** `bootwright apply --stage infra` fails during
-`host_base : Install base host packages`, or `bootwright apply bastion` fails
+`host_base : Install base host packages`, or `bootwright bastion setup` fails
 while installing controller Python, with a package-manager metadata/repository
 error like:
 

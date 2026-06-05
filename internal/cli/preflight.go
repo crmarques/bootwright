@@ -23,7 +23,7 @@ const (
 func collectBastionChecks(deps preflightDeps) []preflightCheck {
 	checks := []preflightCheck{
 		pythonVersionCheck(deps),
-		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
+		binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright bastion setup", deps),
 		binaryCheck(checkGroupControllerTools, "tar", nil, "install tar on PATH", deps),
 	}
 	if deps.uid() != 0 {
@@ -51,9 +51,9 @@ func pythonVersionCheck(deps preflightDeps) preflightCheck {
 		if major > 3 || (major == 3 && minor >= 12) {
 			return okCheck(checkGroupControllerTools, name, path+" "+ver)
 		}
-		return failCheck(checkGroupControllerTools, name, path+" is "+ver, "Ansible runtime bootstrap requires Python 3.12 or newer", "bootwright apply bastion")
+		return failCheck(checkGroupControllerTools, name, path+" is "+ver, "Ansible runtime bootstrap requires Python 3.12 or newer", "bootwright bastion setup")
 	}
-	return failCheck(checkGroupControllerTools, name, "not found", "Bootwright cannot run the managed Ansible runtime", "bootwright apply bastion")
+	return failCheck(checkGroupControllerTools, name, "not found", "Bootwright cannot run the managed Ansible runtime", "bootwright bastion setup")
 }
 
 type preflightCheck = output.Check
@@ -91,8 +91,8 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
 		checks = append(checks,
-			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright apply bastion", deps),
-			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright apply bastion", deps),
+			binaryCheck(checkGroupControllerTools, "ansible-playbook", []string{filepath.Join(ansibleVenvDir(), "bin")}, "bootwright bastion setup", deps),
+			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright bastion setup", deps),
 		)
 	}
 	if phaseInScope("machine-infra", selected, hasState) && stateNeedsKubeVirt(state) {

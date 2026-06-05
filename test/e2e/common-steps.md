@@ -21,7 +21,7 @@ The case context input references four or five secrets through
 | `<cluster-name>-cluster-admin-ssh-key` | Context-local generated SSH key pair | OpenShift node SSH access |
 | `bastion-host-ssh` | `~/.ssh/bootwright-ssh-key` | Bastion→host SSH |
 | `openshift-pull-secret` | Context-local, set from the pull-secret JSON | `render installer`, `apply --stage clusters` |
-| `proxy-credentials` (optional) | Context-local generated or set — see [proxy.md](proxy.md) | `apply bastion`, install-config proxy block |
+| `proxy-credentials` (optional) | Context-local generated or set — see [proxy.md](proxy.md) | `bastion setup`, install-config proxy block |
 | `bmc-credentials` | Context-local generated or set | `apply --stage infra`, `apply --stage clusters` |
 
 Confirm the provider-host SSH key pair, then set the pull secret:
@@ -59,12 +59,12 @@ sudo find "/var/lib/bootwright/contexts/$CASE/secrets" -maxdepth 1 -type f -prin
 ## 2. Apply The Context To The Bastion
 
 Installs release-specific OpenShift CLIs declared by the context input.
-`apply bastion` strips ambient proxy variables and uses the proxy selected by
+`bastion setup` strips ambient proxy variables and uses the proxy selected by
 `Environment.spec.proxyFor.bootwright` from desired state.
 
 ```bash
 bootwright check bastion
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 ```
 
 Managed Squid is **not** running yet at this point — the bastion phase

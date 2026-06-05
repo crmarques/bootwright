@@ -262,7 +262,7 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretNextStepHints(state, contextName, secretsDir)...)
-		hints = append(hints, "bootwright apply bastion --yes", "bootwright check all", "bootwright render effective")
+		hints = append(hints, "bootwright bastion setup --yes", "bootwright check all", "bootwright render effective")
 		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints, "bootwright plan")

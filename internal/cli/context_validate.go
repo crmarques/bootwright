@@ -328,7 +328,7 @@ func contextValidateNextSteps(checks []output.Check) []string {
 		steps = append(steps, check.Remediation)
 	}
 	if len(steps) == 0 {
-		return []string{"bootwright apply bastion --yes", "bootwright check all"}
+		return []string{"bootwright bastion setup --yes", "bootwright check all"}
 	}
 	return steps
 }

@@ -29,7 +29,7 @@ bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secre
 bootwright secret generate
 bootwright secret materialize
 bootwright host trust
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright check all
 bootwright render effective
 bootwright plan
@@ -175,7 +175,7 @@ bootwright host trust
 bootwright secret list
 bootwright print-env [--sensitive]
 bootwright check syntax
-bootwright apply bastion --yes
+bootwright bastion setup --yes
 bootwright check all
 bootwright render effective
 bootwright plan
@@ -197,12 +197,12 @@ bootwright destroy infra --yes
 bootwright destroy infra --scope artifact-server --yes
 ```
 
-The CLI is organized around workflow command groups. `apply bastion` remains a
+The CLI is organized around workflow command groups. `bastion setup` remains a
 separate prerequisite command. Graph apply uses `--stage infra|clusters`;
 omitting `--stage` applies the full graph. Top-level groups are `validate`,
-`context`, `cluster`,
-`example`, `print-env`, `secret`, `check`, `status`, `plan`, `render`,
-`apply`, `destroy`, and `version`. The formal CLI contract lives in
+`context`, `host`, `bastion`, `cluster`, `container-cluster`, `example`,
+`print-env`, `media`, `secret`, `check`, `status`, `plan`, `render`, `apply`,
+`destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
