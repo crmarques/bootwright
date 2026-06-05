@@ -66,7 +66,7 @@ The fixture references that ISO with:
 ```yaml
 spec:
   type: iso
-  url: media:rhel-9.8-x86_64-boot.iso
+  url: local-media:rhel-9.8-x86_64-boot.iso
 ```
 
 ## Run

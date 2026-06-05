@@ -33,7 +33,7 @@ func TestMediaCLIAddListRemove(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode media list: %v\n%s", err, stdout)
 	}
-	if len(report.Media) != 1 || report.Media[0].Name != "rhel.iso" || report.Media[0].Reference != "media:rhel.iso" {
+	if len(report.Media) != 1 || report.Media[0].Name != "rhel.iso" || report.Media[0].Reference != "local-media:rhel.iso" {
 		t.Fatalf("report = %#v", report)
 	}
 

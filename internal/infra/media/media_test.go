@@ -25,7 +25,7 @@ func TestAddListRemoveFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddFile: %v", err)
 	}
-	if entry.Name != "rhel.iso" || entry.Reference != "media:rhel.iso" || entry.SHA256 != sum {
+	if entry.Name != "rhel.iso" || entry.Reference != "local-media:rhel.iso" || entry.SHA256 != sum {
 		t.Fatalf("entry = %#v", entry)
 	}
 	data, err := os.ReadFile(entry.Path)
@@ -135,7 +135,7 @@ func TestResolveISOReferences(t *testing.T) {
 		in   string
 		kind string
 	}{
-		{name: "media", in: "media:rhel.iso", kind: "media"},
+		{name: "media", in: "local-media:rhel.iso", kind: "media"},
 		{name: "file", in: "file:///tmp/rhel.iso", kind: "file"},
 		{name: "http", in: "http://example.test/rhel.iso", kind: "url"},
 		{name: "https", in: "https://example.test/rhel.iso", kind: "url"},
@@ -151,7 +151,7 @@ func TestResolveISOReferences(t *testing.T) {
 			}
 		})
 	}
-	for _, in := range []string{"media:../rhel.iso", "ftp://example.test/rhel.iso", "file://host/rhel.iso", "https://user:pass@example.test/rhel.iso"} {
+	for _, in := range []string{"local-media:../rhel.iso", "media:rhel.iso", "ftp://example.test/rhel.iso", "file://host/rhel.iso", "https://user:pass@example.test/rhel.iso"} {
 		if _, err := Resolve(in); err == nil {
 			t.Fatalf("Resolve(%q) succeeded", in)
 		}
@@ -160,7 +160,7 @@ func TestResolveISOReferences(t *testing.T) {
 
 func TestResolveExistingRejectsMissingMedia(t *testing.T) {
 	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
-	_, err := ResolveExisting("media:rhel.iso")
+	_, err := ResolveExisting("local-media:rhel.iso")
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("ResolveExisting missing media err = %v", err)
 	}

@@ -65,8 +65,8 @@ The desired-state API is defined in `api/v1alpha1` and specified in
 Shared parsing and resolution must live behind one reusable package or adapter
 before provider-specific roles consume it. ISO references are resolved by the
 Bootwright managed media resolver; providers, OS installers, and future
-user-supplied ISO fields must not duplicate `media:`, `file://`, or HTTP(S)
-parsing.
+user-supplied ISO fields must not duplicate `local-media:`, `file://`, or
+HTTP(S) parsing.
 
 ## Ownership Boundaries
 

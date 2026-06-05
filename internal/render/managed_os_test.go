@@ -34,10 +34,10 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	}
 	osInstall := first["osInstall"].(map[string]any)
 	image := osInstall["image"].(map[string]any)
-	if image["kind"] != "media" || image["key"] != "rhel-9-x86_64-dvd.iso" {
+	if image["kind"] != "media" || image["key"] != "rhel-9.8-x86_64-boot.iso" {
 		t.Fatalf("image vars = %v", image)
 	}
-	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9-x86_64-dvd.iso") {
+	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.8-x86_64-boot.iso") {
 		t.Fatalf("image path = %v", image["path"])
 	}
 	ks := osInstall["kickstart"].(map[string]any)

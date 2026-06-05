@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	Scheme  = "media"
+	Scheme  = "local-media"
 	DirName = "media"
+
+	kindManaged = "media"
 
 	fileMode = 0o644
 	dirMode  = 0o700
@@ -103,7 +105,7 @@ func ResolveExisting(value string) (Resolved, error) {
 		return Resolved{}, err
 	}
 	switch resolved.Kind {
-	case Scheme, "file":
+	case kindManaged, "file":
 		info, err := os.Lstat(resolved.Path)
 		if errors.Is(err, os.ErrNotExist) {
 			return Resolved{}, fmt.Errorf("ISO media %s not found", resolved.Path)
@@ -131,7 +133,7 @@ func Resolve(value string) (Resolved, error) {
 		if err != nil {
 			return Resolved{}, err
 		}
-		return Resolved{Original: value, Kind: Scheme, Key: key, Path: path}, nil
+		return Resolved{Original: value, Kind: kindManaged, Key: key, Path: path}, nil
 	}
 	u, err := url.Parse(value)
 	if err != nil {
@@ -162,7 +164,7 @@ func Resolve(value string) (Resolved, error) {
 		}
 		return Resolved{Original: value, Kind: "url", URL: value}, nil
 	default:
-		return Resolved{}, fmt.Errorf("ISO reference %q must use media:, file://, http://, or https://", value)
+		return Resolved{}, fmt.Errorf("ISO reference %q must use local-media:, file://, http://, or https://", value)
 	}
 }
 
