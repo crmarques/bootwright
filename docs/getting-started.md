@@ -247,6 +247,14 @@ running work, and concise failures. Native Ansible, `oc`, SSH, SCP, Ceph, and
 installer process output is kept under the run, task, and cluster logs in
 Bootwright storage.
 
+`destroy` uses the same stage selector shape as `apply`. Use
+`destroy --stage infra` to tear down current-context infrastructure; omit
+`--clusters` when you want Bootwright to sweep every context-owned VM that a
+provider adapter can identify. Use `destroy --stage infra --clusters <name>`
+for focused infrastructure teardown. Use `destroy --stage clusters` to remove
+OpenShift cluster install runtime state without removing VMs or provider
+infrastructure.
+
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an
 interrupted process leaves only a stale ledger, the next `apply` or `destroy`
@@ -272,8 +280,8 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright apply --stage infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage clusters --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --dry-run --output json` | Supported | Dry-run apply plan |
-| `bootwright destroy infra --dry-run --output json` | Supported | Dry-run destroy plan |
-| `bootwright destroy container-cluster --dry-run --output json` | Supported | Dry-run destroy plan |
+| `bootwright destroy --stage infra --dry-run --output json` | Supported | Dry-run destroy plan |
+| `bootwright destroy --stage clusters --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
 | `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
 

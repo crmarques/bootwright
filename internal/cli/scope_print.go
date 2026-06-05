@@ -127,10 +127,10 @@ func phaseList(selected []Phase) string {
 // printDestroyPreview lists the user-visible resources `destroy` will
 // remove for the current scope, before the confirmation prompt. The
 // preview is concise on purpose: the user can read the YAML for full
-// detail. The output differs by scope because the two destroy targets
-// remove very different things: `destroy container-cluster` removes only the
-// root-managed per-cluster runtime dir on the controller; `destroy infra`
-// tears down VMs, networks, provider services, and infra component services.
+// detail. The output differs by scope because the two destroy stages remove
+// very different things: cluster destroy removes only the root-managed
+// per-cluster runtime dir on the controller; infra destroy tears down VMs,
+// networks, provider services, and infra component services.
 func printDestroyPreview(w io.Writer, scope scopeSpec, clustersDir string, state v1alpha1.State) {
 	switch scope.name {
 	case "container-cluster":
@@ -156,7 +156,7 @@ func printDestroyClustersPreview(w io.Writer, clustersDir string, state v1alpha1
 		items = append(items, output.Item{Label: "cluster " + name, Detail: "runtime dir " + filepath.Join(clustersDir, name, "runtime")})
 	}
 	p.List(items)
-	p.Warning("destroy container-cluster", "does not power off VMs, undefine networks, or remove machine services; run destroy infra for that")
+	p.Warning("destroy clusters", "does not power off VMs, undefine networks, or remove machine services; run destroy --stage infra for that")
 }
 
 func printDestroyInfraPreview(w io.Writer, state v1alpha1.State) {

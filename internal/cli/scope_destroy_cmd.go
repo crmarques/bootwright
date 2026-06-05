@@ -14,27 +14,64 @@ import (
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
+type scopeDestroyOptions struct {
+	use           string
+	short         string
+	example       string
+	stageSelector bool
+	commandLabel  string
+}
+
 func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	return newScopeDestroyCmdWithOptions(scope, stdin, stdout, stderr, scopeDestroyOptions{})
+}
+
+func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
 		flags         scopeCommonFlags
 		dryRun        bool
 		check         bool
 		askBecomePass bool
 		yes           bool
+		stage         string
 	)
+	use := "destroy"
+	if options.use != "" {
+		use = options.use
+	}
+	short := "Destroy " + scope.name + " runtime state"
+	if options.short != "" {
+		short = options.short
+	}
+	example := scopeDestroyExample(scope.name)
+	if options.example != "" {
+		example = options.example
+	}
+	commandLabel := scope.name + " destroy"
+	if options.commandLabel != "" {
+		commandLabel = options.commandLabel
+	}
 	cmd := &cobra.Command{
-		Use:     "destroy",
-		Short:   "Destroy " + scope.name + " runtime state",
+		Use:     use,
+		Short:   short,
 		Args:    cobra.NoArgs,
-		Example: scopeDestroyExample(scope.name),
+		Example: example,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible commands without executing them")
 	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the destroy confirmation prompt")
-	registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
-	if scope.name == "infra" {
+	if options.stageSelector {
+		flags.output = outputText
+		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
+		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster names to destroy")
+	} else {
+		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
+	}
+	if !options.stageSelector && scope.name == "infra" {
 		if f := cmd.Flags().Lookup("scope"); f != nil {
 			f.Usage = "comma-separated ContainerCluster names to destroy, or artifact-server to remove only the generated artifact publication service"
 		}
@@ -42,6 +79,22 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
 			return failErr(2, err)
+		}
+		runScope := scope
+		runCommandLabel := commandLabel
+		if options.stageSelector {
+			if strings.TrimSpace(stage) == "" {
+				if !destroyTopLevelFlagChanged(c) {
+					return c.Help()
+				}
+				return failErr(2, fmt.Errorf("--stage must be one of infra, clusters"))
+			}
+			var err error
+			runScope, err = destroyStageScope(stage)
+			if err != nil {
+				return failErr(2, err)
+			}
+			runCommandLabel = destroyStageCommandLabel(stage, commandLabel)
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
@@ -51,7 +104,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
-			p.Command(scope.name + " destroy")
+			p.Command(runCommandLabel)
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -59,27 +112,26 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if err != nil {
 			return failErr(1, err)
 		}
-		artifactServerOnly := isInfraArtifactServerDestroyScope(scope, flags.clusterScope)
-		// For `destroy infra --scope`, refuse to proceed when scoped
-		// clusters share a provider service component with unscoped
-		// clusters: the renderer keys container names and state dirs
-		// per (provider, name), so destroying a shared instance breaks
-		// the unscoped consumers silently.
-		if scope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
+		artifactServerOnly := !options.stageSelector && isInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
+		// For scoped infra destroy, refuse to proceed when selected clusters
+		// share a provider service component with unscoped clusters: the
+		// renderer keys container names and state dirs per (provider, name), so
+		// destroying a shared instance breaks the unscoped consumers silently.
+		if runScope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
 			selectedNames, _, err := clusterRootNamesForTarget(state, flags.clusterScope)
 			if err != nil {
 				return failErr(1, err)
 			}
 			if conflicts := stategraph.SharedDestroyConflicts(state, selectedNames); len(conflicts) > 0 {
-				return failErr(1, formatDestroyScopeConflicts(conflicts))
+				return failErr(1, formatDestroyScopeConflicts(conflicts, destroyClusterScopeFlag(options.stageSelector)))
 			}
 		}
 		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " destroy"}})
+			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
-		playbook := scope.destroyPlaybook
-		artifactsBaseName := scope.artifactsBaseName + "-destroy"
-		workflowLabel := scope.name + " destroy"
+		playbook := runScope.destroyPlaybook
+		artifactsBaseName := runScope.artifactsBaseName + "-destroy"
+		workflowLabel := runCommandLabel
 		var plan scopedWorkflowPlan
 		if artifactServerOnly {
 			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun)
@@ -87,16 +139,19 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 			artifactsBaseName = infraDestroyArtifactServerArtifactsBaseName
 			workflowLabel = "infra destroy artifact-server"
 		} else {
-			plan, err = prepareScopedWorkflow(state, scope, flags.clusterScope, askBecomePass, dryRun)
+			plan, err = prepareScopedWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun)
 			if err != nil {
 				return failErr(1, err)
+			}
+			if runScope.name == "infra" && strings.TrimSpace(flags.clusterScope) == "" {
+				plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_infra_destroy_context_sweep=true")
 			}
 		}
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, destroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
 		}
 		if !dryRun {
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
@@ -106,7 +161,7 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.state)
 		} else {
-			printDestroyPreview(stdout, scope, clustersDir, plan.state)
+			printDestroyPreview(stdout, runScope, clustersDir, plan.state)
 		}
 		printDestroySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
 		if !dryRun && !yes && !plan.noRemoteWork {
@@ -177,6 +232,47 @@ func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stde
 		return nil
 	}
 	return cmd
+}
+
+func destroyTopLevelFlagChanged(cmd *cobra.Command) bool {
+	for _, name := range []string{"ansible-playbook", "ask-become-pass", "check", "clusters", "dry-run", "output", "stage", "yes"} {
+		if cmd.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func destroyStageScope(stage string) (scopeSpec, error) {
+	switch strings.TrimSpace(stage) {
+	case "infra":
+		return infraScope, nil
+	case "clusters":
+		return containerClusterScope, nil
+	default:
+		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters")
+	}
+}
+
+func destroyStageCommandLabel(stage, defaultLabel string) string {
+	if strings.TrimSpace(stage) == "" {
+		return defaultLabel
+	}
+	return strings.TrimSpace(stage) + " destroy"
+}
+
+func destroyDryRunReportScope(scope scopeSpec, stage string, stageSelector bool) scopeSpec {
+	if stageSelector && strings.TrimSpace(stage) == "clusters" {
+		scope.name = "clusters"
+	}
+	return scope
+}
+
+func destroyClusterScopeFlag(stageSelector bool) string {
+	if stageSelector {
+		return "--clusters"
+	}
+	return "--scope"
 }
 
 func scopeDestroyExample(scopeName string) string {

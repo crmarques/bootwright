@@ -74,6 +74,7 @@ func TestClusterTargets(t *testing.T) {
 	for _, args := range [][]string{
 		{"check", "clusters", "--help"},
 		{"check", "container-cluster", "--help"},
+		{"destroy", "--help"},
 		{"destroy", "container-cluster", "--help"},
 		{"apply", "--help"},
 		{"bastion", "setup", "--help"},
@@ -111,7 +112,7 @@ func TestClusterTargets(t *testing.T) {
 	if code == 0 {
 		t.Fatal("bootwright destroy cluster unexpectedly succeeded")
 	}
-	if !strings.Contains(stderr, `invalid argument "cluster"`) {
+	if !strings.Contains(stderr, `unknown command "cluster"`) {
 		t.Fatalf("destroy cluster stderr %q does not reject generic destroy target", stderr)
 	}
 }
@@ -143,6 +144,23 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	}
 }
 
+func TestDestroyHelpMatchesTargetExecutionModels(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster names"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("destroy help missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, reject := range []string{"--scope", "--cluster ", "Subcommand Flags"} {
+		if strings.Contains(stdout, reject) {
+			t.Fatalf("destroy help exposes removed flag or help section %q:\n%s", reject, stdout)
+		}
+	}
+}
+
 func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
 	for _, stage := range []string{"container", "storage", "install", "addons"} {
 		_, stderr, code := runCLI(t, "apply", "--stage", stage, "--dry-run")
@@ -160,6 +178,27 @@ func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
 		}
 		if !strings.Contains(stdout+stderr, "unknown flag: "+flag) {
 			t.Fatalf("apply %s did not reject old flag, stdout=%q stderr=%q", flag, stdout, stderr)
+		}
+	}
+}
+
+func TestDestroyRejectsRemovedStagesAndFlags(t *testing.T) {
+	for _, stage := range []string{"container", "storage", "install", "addons"} {
+		_, stderr, code := runCLI(t, "destroy", "--stage", stage, "--dry-run")
+		if code == 0 {
+			t.Fatalf("destroy --stage %s unexpectedly succeeded", stage)
+		}
+		if !strings.Contains(stderr, "--stage must be one of infra, clusters") {
+			t.Fatalf("destroy --stage %s stderr = %q", stage, stderr)
+		}
+	}
+	for _, flag := range []string{"--scope", "--cluster"} {
+		stdout, stderr, code := runCLI(t, "destroy", flag, "sno-libvirt", "--dry-run")
+		if code == 0 {
+			t.Fatalf("destroy %s unexpectedly succeeded", flag)
+		}
+		if !strings.Contains(stdout+stderr, "unknown flag: "+flag) {
+			t.Fatalf("destroy %s did not reject old flag, stdout=%q stderr=%q", flag, stdout, stderr)
 		}
 	}
 }
@@ -427,6 +466,77 @@ func TestDestroyInfraArtifactServerScopeDryRunJSON(t *testing.T) {
 	}
 	if !slices.Contains(report.ExtraVars, infraComponentServiceScopeExtraVarName+"=artifact-server") {
 		t.Fatalf("extra vars missing artifact-server scope: %#v", report.ExtraVars)
+	}
+}
+
+func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --stage infra dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "infra" || report.Action != "destroy" || !report.DryRun {
+		t.Fatalf("unexpected dry-run report header: %+v", report)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_infra_destroy_context_sweep=true") {
+		t.Fatalf("unscoped infra destroy must enable context sweep: %#v", report.ExtraVars)
+	}
+
+	stdout, stderr, code = runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("scoped destroy --stage infra dry-run exited %d, stderr=%q", code, stderr)
+	}
+	report = scopeDryRunReport{}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if slices.Contains(report.ExtraVars, "bootwright_infra_destroy_context_sweep=true") {
+		t.Fatalf("scoped infra destroy must not enable context sweep: %#v", report.ExtraVars)
+	}
+}
+
+func TestDestroyStageClustersDryRunJSON(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --stage clusters dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
+		t.Fatalf("unexpected dry-run report header: %+v", report)
+	}
+	if !reflect.DeepEqual(report.Phases, []string{"container-cluster"}) {
+		t.Fatalf("phases = %#v, want container-cluster", report.Phases)
+	}
+	if report.Playbook != containerClusterScope.destroyPlaybook {
+		t.Fatalf("playbook = %q, want %q", report.Playbook, containerClusterScope.destroyPlaybook)
 	}
 }
 
@@ -1465,6 +1575,10 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"apply"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"destroy"}, want: false},
+		{args: []string{"destroy", "--stage", "infra"}, want: true},
+		{args: []string{"destroy", "--stage", "clusters"}, want: true},
+		{args: []string{"destroy", "--stage", "bogus"}, want: false},
+		{args: []string{"destroy", "cluster"}, want: false},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"render"}, want: false},
 		{args: []string{"render", "--scope", "managed-01"}, want: false},
@@ -1533,6 +1647,9 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
 		{args: []string{"apply"}, want: true},
+		{args: []string{"destroy", "--stage", "infra"}, want: true},
+		{args: []string{"destroy", "--stage=clusters"}, want: true},
+		{args: []string{"destroy", "--stage", "bogus"}, want: false},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"destroy", "container-cluster"}, want: true},
 		{args: []string{"check", "infra"}, want: false},

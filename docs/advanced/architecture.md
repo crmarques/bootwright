@@ -64,6 +64,11 @@ Omitting `--stage` runs the full graph: `infra`, then `clusters`.
 `--clusters` accepts a comma-separated mix of `ContainerCluster` and
 `StorageCluster` names.
 
+Destroy uses the same stage selector shape. `destroy --stage infra` tears down
+provider infrastructure and, when unscoped, sweeps current-context VMs that
+provider adapters can identify. `destroy --stage clusters` removes cluster
+install runtime state without removing provider VMs.
+
 Every apply writes a current run ledger under the context state directory.
 `bootwright status` reads that ledger without contacting provider hosts, BMCs,
 or clusters, and `bootwright status --watch` follows it until the run reaches a

@@ -41,7 +41,9 @@ bootwright cluster access-info
 `apply` is the normal convergence path. Use `--stage infra` to prepare
 providers, infra services, and selected machines, or `--stage clusters` to
 install selected container and storage clusters, add-ons, and integrations.
-Use `--clusters <name>[,<name>...]` for focused recovery.
+Use `--clusters <name>[,<name>...]` for focused recovery. `destroy` uses the
+same `--stage infra|clusters` and `--clusters` selector shape. Unscoped
+`destroy --stage infra` performs current-context VM cleanup.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -192,14 +194,15 @@ bootwright apply --stage clusters --clusters ceph-stretch --yes
 bootwright apply --stage clusters --yes
 bootwright check addons
 bootwright status
-bootwright destroy container-cluster --yes
-bootwright destroy infra --yes
+bootwright destroy --stage clusters --yes
+bootwright destroy --stage infra --yes
 bootwright destroy infra --scope artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. `bastion setup` remains a
-separate prerequisite command. Graph apply uses `--stage infra|clusters`;
-omitting `--stage` applies the full graph. Top-level groups are `validate`,
+separate prerequisite command. Graph apply and destroy use
+`--stage infra|clusters`; omitting `--stage` applies the full graph for
+`apply`, while `destroy` requires a stage. Top-level groups are `validate`,
 `context`, `host`, `bastion`, `cluster`, `container-cluster`, `example`,
 `print-env`, `media`, `secret`, `check`, `status`, `plan`, `render`, `apply`,
 `destroy`, and `version`. The formal CLI contract lives in
@@ -217,6 +220,9 @@ the normal end-to-end workflow.
 `bootwright apply --stage clusters` provisions selected storage clusters,
 OpenShift or OKD clusters, bound add-ons, and declared storage integrations as
 dependency-ready tasks. Use `--clusters` for scoped maintenance or recovery.
+`bootwright destroy --stage infra` removes selected infrastructure; without
+`--clusters` it also sweeps current-context VM artifacts provider adapters can
+identify.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

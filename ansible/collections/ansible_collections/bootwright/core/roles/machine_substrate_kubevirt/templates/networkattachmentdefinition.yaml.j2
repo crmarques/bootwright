@@ -5,6 +5,7 @@ metadata:
   name: {{ network.name }}
   namespace: {{ network_namespace }}
   labels:
+    bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
     bootwright.io/network: {{ network.name }}
     bootwright.io/managed-by: bootwright

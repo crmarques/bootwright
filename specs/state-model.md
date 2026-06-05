@@ -428,5 +428,11 @@ Rules:
   storage-infra work.
 - `apply --stage clusters` includes storage-cluster, container-cluster, and
   add-ons work.
+- `destroy --stage infra` tears down infrastructure for the current context.
+  Without `--clusters`, it must also remove all context-owned VMs that provider
+  adapters can identify. With `--clusters`, it is limited to the selected
+  `ContainerCluster` names and must not run context-wide VM cleanup.
+- `destroy --stage clusters` removes OpenShift cluster install runtime state
+  for selected or all `ContainerCluster` names.
 - `bootwright host trust` records SSH server-key trust for declared machines.
 - Rendered effective state must not include secret bytes.

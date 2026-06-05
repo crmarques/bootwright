@@ -1,16 +1,20 @@
 ---
 - name: Destroy cluster infrastructure
-  # Mirror machine_infra/apply.yml: target the renderer-emitted group of
-  # machines that back a cluster substrate. Using
-  # bootwright_provider_hosts here would silently skip libvirt-only hosts
-  # that don't also back a provider-scoped service.
-  hosts: bootwright_infra_hosts
+  hosts: bootwright_provider_hosts:bootwright_infra_hosts
   gather_subset:
     - "!all"
     - min
   become: true
 
   vars:
+    bootwright_host_libvirt_providers: >-
+      {{
+        bootwright_providers | default([])
+        | selectattr('capabilities.type', 'equalto', 'libvirt')
+        | selectattr('capabilities.libvirt.machineRef', 'defined')
+        | selectattr('capabilities.libvirt.machineRef', 'equalto', bootwright_host_name)
+        | list
+      }}
     bootwright_host_machine_components: >-
       {{
         bootwright_clusters | default([])
@@ -28,12 +32,19 @@
       }}
 
   tasks:
-    - name: Skip when host has no cluster substrate
-      ansible.builtin.meta: end_host
-      when: bootwright_host_clusters | length == 0
-
     - name: Destroy substrate per cluster on this host
       ansible.builtin.include_tasks: tasks/machine_infra_destroy_cluster.yml
       loop: "{{ bootwright_host_clusters }}"
       loop_control:
         loop_var: bootwright_cluster_name
+      when: bootwright_host_clusters | length > 0
+
+    - name: Sweep current-context libvirt domains
+      ansible.builtin.include_tasks: tasks/machine_infra_destroy_libvirt_context.yml
+      loop: "{{ bootwright_host_libvirt_providers }}"
+      loop_control:
+        loop_var: bootwright_libvirt_provider
+        label: "{{ bootwright_libvirt_provider.name }}"
+      when:
+        - bootwright_infra_destroy_context_sweep | default(false) | bool
+        - bootwright_host_libvirt_providers | length > 0

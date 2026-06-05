@@ -5,6 +5,7 @@ metadata:
   name: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
   namespace: {{ bootwright_component.kubevirt.namespace }}
   labels:
+    bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}
     bootwright.io/cluster: {{ bootwright_current_cluster.name }}
     bootwright.io/node: {{ bootwright_component.name }}
     bootwright.io/role: {{ bootwright_kubevirt_node.value.role }}
@@ -14,6 +15,7 @@ spec:
   template:
     metadata:
       labels:
+        bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}
         bootwright.io/cluster: {{ bootwright_current_cluster.name }}
         bootwright.io/node: {{ bootwright_component.name }}
         kubevirt.io/vm: {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}

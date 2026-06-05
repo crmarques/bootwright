@@ -125,15 +125,24 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 }
 
 func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "destroy <target>",
-		Short: "Tear down a previously applied target",
-	}
+	cmd := newScopeDestroyCmdWithOptions(allScope, stdin, stdout, stderr, scopeDestroyOptions{
+		use:           "destroy",
+		short:         "Tear down a previously applied target",
+		stageSelector: true,
+		commandLabel:  "destroy",
+		example: `  # Preview infrastructure teardown for the full current context
+  bootwright destroy --stage infra --dry-run
+
+  # Destroy infrastructure for selected clusters only
+  bootwright destroy --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
+
+  # Remove selected OpenShift cluster install state
+  bootwright destroy --stage clusters --clusters dc1-ocp --yes`,
+	})
 	cmd.AddCommand(
 		retargetCommand(newScopeDestroyCmd(infraScope, stdin, stdout, stderr), "infra", "Tear down infrastructure hosts and substrate"),
 		retargetCommand(newScopeDestroyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Tear down OpenShift cluster install state"),
 	)
-	requireSubcommand(cmd)
 	return cmd
 }
 

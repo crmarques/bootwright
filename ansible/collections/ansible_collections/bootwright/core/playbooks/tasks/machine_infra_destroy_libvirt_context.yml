@@ -1,0 +1,85 @@
+---
+- name: Resolve current-context libvirt cleanup paths
+  ansible.builtin.set_fact:
+    bootwright_libvirt_context_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters"
+    bootwright_libvirt_context_uri: "{{ bootwright_libvirt_provider.capabilities.libvirt.uri | default('qemu:///system', true) }}"
+  changed_when: false
+
+- name: List libvirt domains for current-context sweep
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_context_uri }}"
+      - list
+      - --all
+      - --name
+  register: bootwright_libvirt_domain_list
+  changed_when: false
+
+- name: Inspect libvirt domain block devices
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_context_uri }}"
+      - domblklist
+      - "{{ bootwright_libvirt_domain_name }}"
+      - --details
+  loop: "{{ bootwright_libvirt_domain_list.stdout_lines | default([]) | reject('equalto', '') | list }}"
+  loop_control:
+    loop_var: bootwright_libvirt_domain_name
+    label: "{{ bootwright_libvirt_domain_name }}"
+  register: bootwright_libvirt_domain_blocklists
+  changed_when: false
+  failed_when: false
+
+- name: Initialize current-context libvirt domains
+  ansible.builtin.set_fact:
+    bootwright_libvirt_context_domains: []
+  changed_when: false
+
+- name: Select libvirt domains using current-context storage
+  ansible.builtin.set_fact:
+    bootwright_libvirt_context_domains: "{{ bootwright_libvirt_context_domains + [item.bootwright_libvirt_domain_name] }}"
+  loop: "{{ bootwright_libvirt_domain_blocklists.results | default([]) }}"
+  loop_control:
+    label: "{{ item.bootwright_libvirt_domain_name | default('') }}"
+  when:
+    - item.rc | default(1) == 0
+    - (bootwright_libvirt_context_storage_root ~ '/') in (item.stdout | default(''))
+  changed_when: false
+
+- name: Stop current-context libvirt domains
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_context_uri }}"
+      - destroy
+      - "{{ item }}"
+  loop: "{{ bootwright_libvirt_context_domains }}"
+  register: bootwright_libvirt_context_domain_stop
+  changed_when: bootwright_libvirt_context_domain_stop.rc == 0
+  failed_when: false
+
+- name: Undefine current-context libvirt domains
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_context_uri }}"
+      - undefine
+      - "{{ item }}"
+  loop: "{{ bootwright_libvirt_context_domains }}"
+  register: bootwright_libvirt_context_domain_undefine
+  changed_when: bootwright_libvirt_context_domain_undefine.rc == 0
+  failed_when:
+    - bootwright_libvirt_context_domain_undefine.rc != 0
+    - "'Domain not found' not in (bootwright_libvirt_context_domain_undefine.stderr | default(''))"
+    - "'failed to get domain' not in (bootwright_libvirt_context_domain_undefine.stderr | default(''))"
+
+- name: Remove current-context libvirt storage directory
+  ansible.builtin.file:
+    path: "{{ bootwright_libvirt_context_storage_root }}"
+    state: absent

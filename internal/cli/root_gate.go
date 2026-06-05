@@ -150,11 +150,10 @@ func argsNeedLocalRoot(args []string) bool {
 		return false
 	case "validate":
 		return !argsHaveInputFileFlag(args[1:])
-	case "apply", "destroy":
-		if args[0] == "destroy" && len(args) == 1 {
-			return false
-		}
+	case "apply":
 		return true
+	case "destroy":
+		return destroyArgsNeedLocalRoot(args[1:])
 	case "bastion":
 		if len(args) == 1 {
 			return false
@@ -286,9 +285,34 @@ func argsMayUseBecome(args []string) bool {
 	}
 	switch args[0] {
 	case "destroy":
-		switch args[1] {
-		case "infra", "container-cluster":
-			return true
+		return destroyArgsMayUseBecome(args[1:])
+	}
+	return false
+}
+
+func destroyArgsMayUseBecome(args []string) bool {
+	return destroyArgsSelectRootfulTarget(args)
+}
+
+func destroyArgsNeedLocalRoot(args []string) bool {
+	return destroyArgsSelectRootfulTarget(args)
+}
+
+func destroyArgsSelectRootfulTarget(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "infra", "container-cluster":
+		return true
+	}
+	for i, arg := range args {
+		if arg == "--stage" && i+1 < len(args) {
+			return args[i+1] == "infra" || args[i+1] == "clusters"
+		}
+		if strings.HasPrefix(arg, "--stage=") {
+			stage := strings.TrimPrefix(arg, "--stage=")
+			return stage == "infra" || stage == "clusters"
 		}
 	}
 	return false

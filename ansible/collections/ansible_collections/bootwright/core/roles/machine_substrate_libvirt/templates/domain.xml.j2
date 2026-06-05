@@ -1,6 +1,13 @@
 <domain type='kvm'>
   <name>{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}</name>
   <uuid>{{ bootwright_libvirt_domain_uuid }}</uuid>
+  <metadata>
+    <bootwright:resource xmlns:bootwright='https://bootwright.io/libvirt/metadata/1.0'>
+      <bootwright:context>{{ bootwright_clusters_dir | dirname | basename }}</bootwright:context>
+      <bootwright:cluster>{{ bootwright_current_cluster.name }}</bootwright:cluster>
+      <bootwright:machine>{{ bootwright_component.name }}</bootwright:machine>
+    </bootwright:resource>
+  </metadata>
   <memory unit='MiB'>{{ bootwright_component.profile.memoryMiB }}</memory>
   <currentMemory unit='MiB'>{{ bootwright_component.profile.memoryMiB }}</currentMemory>
   <vcpu placement='static'>{{ bootwright_component.profile.cpu }}</vcpu>

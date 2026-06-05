@@ -276,7 +276,7 @@ func TestInventoryUsesGeneratedHostSSHPrivateKeyPath(t *testing.T) {
 	}
 }
 
-func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
+func TestInventoryKeepsLibvirtProviderHostsForContextDestroy(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "001-sno-libvirt")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
@@ -316,8 +316,13 @@ func TestInventoryIgnoresUnusedProviderCapabilities(t *testing.T) {
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	if _, ok := hosts["unused-host"]; ok {
-		t.Fatalf("inventory included unused provider capability host: %v", hosts)
+	if _, ok := hosts["unused-host"]; !ok {
+		t.Fatalf("inventory must include libvirt provider host for context destroy cleanup: %v", hosts)
+	}
+	children := all["children"].(map[string]any)
+	providerHosts := children[render.GroupProviderHosts].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := providerHosts["unused-host"]; !ok {
+		t.Fatalf("%s must include libvirt provider host: %v", render.GroupProviderHosts, providerHosts)
 	}
 }
 

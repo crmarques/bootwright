@@ -161,16 +161,16 @@ func validateClusterNames(state v1alpha1.State, names []string) error {
 // formatDestroyScopeConflicts builds an actionable error message that
 // lists every shared machine service and names the unscoped clusters
 // that would break if the destroy proceeded.
-func formatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict) error {
+func formatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict, flagName string) error {
 	var b strings.Builder
-	b.WriteString("--scope would destroy shared machine service(s) that other clusters still depend on:\n")
+	b.WriteString(flagName + " would destroy shared machine service(s) that other clusters still depend on:\n")
 	for _, c := range conflicts {
 		b.WriteString(fmt.Sprintf("  - %s %s/%s shared by scoped {%s} and unscoped {%s}\n",
 			c.Slot, c.Provider, c.Name,
 			strings.Join(c.ScopedClusters, ", "),
 			strings.Join(c.UnscopedClusters, ", ")))
 	}
-	b.WriteString("re-run without --scope to destroy everything, or extend --scope to include the unscoped clusters")
+	b.WriteString("re-run without " + flagName + " to destroy everything, or extend " + flagName + " to include the unscoped clusters")
 	return fmt.Errorf("%s", b.String())
 }
 

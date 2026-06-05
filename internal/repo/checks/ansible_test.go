@@ -1946,6 +1946,66 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	if strings.Contains(domainXML, "<source file='{{ bootwright_libvirt_machine_root }}/disk.qcow2'/>") {
 		t.Fatalf("domain XML must not source disks from private Bootwright state")
 	}
+	for _, want := range []string{
+		"<metadata>",
+		"bootwright:context",
+		"{{ bootwright_clusters_dir | dirname | basename }}",
+		"bootwright:cluster",
+		"bootwright:machine",
+	} {
+		if !strings.Contains(domainXML, want) {
+			t.Fatalf("domain XML missing context ownership metadata %q", want)
+		}
+	}
+}
+
+func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
+	if len(plays) != 1 {
+		t.Fatalf("task_machine_infra_destroy plays = %d, want 1", len(plays))
+	}
+	if got := plays[0]["hosts"]; got != "bootwright_provider_hosts:bootwright_infra_hosts" {
+		t.Fatalf("machine infra destroy hosts = %v", got)
+	}
+	tasks := nestedAnsibleTasks(t, plays[0], "tasks")
+	sweep := tasks[findAnsibleTask(t, tasks, "Sweep current-context libvirt domains")]
+	when := fmt.Sprint(sweep["when"])
+	for _, want := range []string{
+		"bootwright_infra_destroy_context_sweep",
+		"bootwright_host_libvirt_providers",
+	} {
+		if !strings.Contains(when, want) {
+			t.Fatalf("context sweep when missing %q: %v", want, sweep["when"])
+		}
+	}
+
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra_destroy_libvirt_context.yml")
+	for _, want := range []string{
+		"/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters",
+		"virsh",
+		"domblklist",
+		"bootwright_libvirt_context_storage_root ~ '/'",
+		"destroy",
+		"undefine",
+		"Remove current-context libvirt storage directory",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("libvirt context sweep missing %q", want)
+		}
+	}
+}
+
+func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
+	for _, path := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/virtualmachine.yaml.j2",
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/datavolume-root.yaml.j2",
+		"ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/templates/networkattachmentdefinition.yaml.j2",
+	} {
+		body := readRepoFile(t, path)
+		if !strings.Contains(body, "bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}") {
+			t.Fatalf("%s missing context ownership label", path)
+		}
+	}
 }
 
 func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {

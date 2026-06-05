@@ -51,7 +51,17 @@ func infraReferencedHosts(state v1alpha1.State) map[string]bool {
 }
 
 func providerReferencedHosts(state v1alpha1.State) map[string]bool {
-	return mergeHostSets(providerServiceReferencedHosts(state), providerHostSetupReferencedHosts(state))
+	return mergeHostSets(mergeHostSets(providerServiceReferencedHosts(state), providerHostSetupReferencedHosts(state)), providerCapabilityReferencedHosts(state))
+}
+
+func providerCapabilityReferencedHosts(state v1alpha1.State) map[string]bool {
+	out := map[string]bool{}
+	for _, provider := range state.InfraProviders {
+		if provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil && provider.Spec.Libvirt.MachineRef.Name != "" {
+			out[provider.Spec.Libvirt.MachineRef.Name] = true
+		}
+	}
+	return out
 }
 
 func providerServiceReferencedHosts(state v1alpha1.State) map[string]bool {
