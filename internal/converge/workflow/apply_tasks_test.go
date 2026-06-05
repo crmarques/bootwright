@@ -360,6 +360,42 @@ func TestRunApplyTaskGraphHonorsCountedHostSlots(t *testing.T) {
 	}
 }
 
+func TestRunApplyTaskGraphLimitsManagedOSForksToRedfishSlots(t *testing.T) {
+	dir := t.TempDir()
+	state := minimalState()
+	runner := &fakeRunner{}
+	task := ApplyTask{
+		Entry: TaskLedgerEntry{
+			ID:     "osinstall.ceph-libvirt",
+			Kind:   ApplyTaskKindManagedMachineOS,
+			Label:  "managed OS ceph-libvirt machines",
+			Status: TaskStatusPending,
+		},
+		Playbook:     "bootwright.core.task_managed_machine_os_apply",
+		State:        state,
+		Forks:        3,
+		RedfishSlots: 3,
+	}
+	_, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        filepath.Join(dir, "clusters"),
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         filepath.Join(dir, "secrets"),
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseStorageInfra}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1, ParallelismRedfish: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	if runner.lastSpec.Forks != 2 {
+		t.Fatalf("managed OS forks = %d, want Redfish-limited 2", runner.lastSpec.Forks)
+	}
+}
+
 func TestRunApplyTaskGraphReportsLeaseHeartbeatFailure(t *testing.T) {
 	dir := t.TempDir()
 	oldSave := saveRunLease
@@ -1232,15 +1268,24 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 	}
 
 	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.lab-host", "provider.lab-host")
-	for _, machine := range []string{"ceph-0", "ceph-1", "ceph-2"} {
-		taskID := "osinstall.ceph-libvirt." + machine
-		task := assertTaskPresent(t, tasks, taskID)
-		assertTaskDeps(t, tasks, taskID, "provider.lab-host", "osprepare.ceph-libvirt.lab-host")
-		if task.Entry.HostSlotKey != "host:lab-host:machine" || task.Entry.HostSlotCount != 1 {
-			t.Fatalf("%s host slot = %q/%d, want host:lab-host:machine/1", taskID, task.Entry.HostSlotKey, task.Entry.HostSlotCount)
-		}
+	task := assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.lab-host", "osprepare.ceph-libvirt.lab-host")
+	if task.Limit != render.ManagedOSGroupName("ceph-libvirt") {
+		t.Fatalf("managed OS limit = %q, want %q", task.Limit, render.ManagedOSGroupName("ceph-libvirt"))
 	}
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.lab-host", "osinstall.ceph-libvirt.ceph-0", "osinstall.ceph-libvirt.ceph-1", "osinstall.ceph-libvirt.ceph-2")
+	if task.Forks != 3 {
+		t.Fatalf("managed OS forks = %d, want 3", task.Forks)
+	}
+	if task.RedfishSlots != 3 {
+		t.Fatalf("managed OS RedfishSlots = %d, want 3", task.RedfishSlots)
+	}
+	if !reflect.DeepEqual(task.ExtraVarPairs, []string{"bootwright_task_managed_os_group_name=ceph-libvirt"}) {
+		t.Fatalf("managed OS extra vars = %v", task.ExtraVarPairs)
+	}
+	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-0")
+	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-1")
+	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-2")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.lab-host", "osinstall.ceph-libvirt")
 	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.lab-host", "storageinfra.ceph-libvirt")
 }
 

@@ -44,40 +44,37 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			managedOSMachines := managedOSMachineNames(state, cluster)
 			if len(managedOSMachines) > 0 {
 				prepareDepsByHost := planStorageManagedOSPrepareTasks(&tasks, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+				taskID := "osinstall." + cluster.Metadata.Name
+				deps := append([]string(nil), machineServiceTaskIDs...)
+				seenPrepareDeps := map[string]bool{}
 				for _, machineName := range managedOSMachines {
-					taskID := "osinstall." + cluster.Metadata.Name + "." + machineName
 					host := applyMachineHost(state, machineName)
-					deps := append([]string(nil), machineServiceTaskIDs...)
 					if prepareID := prepareDepsByHost[host]; prepareID != "" {
-						deps = append(deps, prepareID)
+						if !seenPrepareDeps[prepareID] {
+							deps = append(deps, prepareID)
+							seenPrepareDeps[prepareID] = true
+						}
 					}
-					hostSlotKey := applyMachineHostSlotKey(state, machineName)
-					managedOSDeps = append(managedOSDeps, taskID)
-					tasks = append(tasks, ApplyTask{
-						Entry: TaskLedgerEntry{
-							ID:            taskID,
-							Kind:          ApplyTaskKindManagedMachineOS,
-							Label:         "managed OS " + cluster.Metadata.Name + "/" + machineName,
-							Cluster:       cluster.Metadata.Name,
-							ClusterKind:   ApplyClusterKindStorage,
-							Node:          machineName,
-							Host:          host,
-							Status:        TaskStatusPending,
-							Dependencies:  deps,
-							ResourceKeys:  applyMachineExclusiveResourceKeys(state, cluster.Metadata.Name, machineName),
-							HostSlotKey:   hostSlotKey,
-							HostSlotCount: 1,
-						},
-						Playbook:      applyManagedMachineOSPlaybook,
-						Limit:         render.ManagedOSHostName(cluster.Metadata.Name, machineName),
-						ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name, "bootwright_task_machine_name=" + machineName},
-						State:         storageTaskState(state, cluster.Metadata.Name),
-						Forks:         1,
-						RedfishSlots:  1,
-						HostSlotKey:   hostSlotKey,
-						HostSlotCount: 1,
-					})
 				}
+				managedOSDeps = append(managedOSDeps, taskID)
+				tasks = append(tasks, ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindManagedMachineOS,
+						Label:        "managed OS " + cluster.Metadata.Name + " machines",
+						Cluster:      cluster.Metadata.Name,
+						ClusterKind:  ApplyClusterKindStorage,
+						Status:       TaskStatusPending,
+						Dependencies: deps,
+						ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
+					},
+					Playbook:      applyManagedMachineOSPlaybook,
+					Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
+					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
+					State:         storageTaskState(state, cluster.Metadata.Name),
+					Forks:         len(managedOSMachines),
+					RedfishSlots:  len(managedOSMachines),
+				})
 			}
 			taskID := "storageinfra." + cluster.Metadata.Name
 			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
@@ -468,6 +465,21 @@ func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machin
 		return []string{applyNodeRedfishResource(state, clusterName, machineName)}
 	}
 	return nil
+}
+
+func applyManagedOSResourceKeys(state v1alpha1.State, clusterName string, machineNames []string) []string {
+	var out []string
+	for _, machineName := range machineNames {
+		for _, key := range applyMachineExclusiveResourceKeys(state, clusterName, machineName) {
+			out = appendUniqueString(out, key)
+		}
+		if applyMachineProviderType(state, machineName) == v1alpha1.ProvisionerLibvirt {
+			if host := applyMachineHost(state, machineName); host != "" {
+				out = appendUniqueString(out, hostMutationResource(host))
+			}
+		}
+	}
+	return out
 }
 
 func applyMachineProviderType(state v1alpha1.State, machineName string) string {

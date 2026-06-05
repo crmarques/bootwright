@@ -31,7 +31,6 @@
           - bootwright_current_os_group is mapping
           - bootwright_current_os_group.name | default('') == bootwright_machine_task_cluster_name
           - bootwright_task_managed_os_group_name | default('') == bootwright_machine_task_cluster_name
-          - bootwright_task_machine_name | default('') == bootwright_machine_task_machine_name
         fail_msg: >-
           Could not resolve managed OS group {{ bootwright_machine_task_cluster_name | default('<unset>') }}
           for machine task host {{ inventory_hostname }}.
