@@ -9,6 +9,8 @@ The current fixture keeps only state supported by the current code path:
 
 - one provided libvirt host named `lab-host`
 - three lean managed Ceph VMs named `ceph-0`, `ceph-1`, and `ceph-2`
+- a tiny `ceph-node` libvirt profile: 1 vCPU, 2048 MiB RAM, a 16 GiB root
+  disk, and two 1 GiB OSD data disks per VM
 - an external DNS catalog entry named `lab-dns` at `192.168.134.1`
 - Ceph MON, MGR, OSD, MDS, RGW, and ingress roles on all three nodes
 - RBD, CephFS metadata, CephFS data, and RGW pools
@@ -84,9 +86,10 @@ bootwright apply --stage clusters --clusters ceph-libvirt --yes
 ```
 
 The infra stage prepares the bastion/provider host, starts the emulated BMC,
-creates the three VMs with root and data disks, installs RHEL through virtual
-media, waits for SSH, and records managed SSH trust. The clusters stage runs the
-existing Ceph prerequisites and cephadm flow against the three installed nodes.
+creates the three VMs with a root disk and two small OSD data disks, installs
+RHEL through virtual media, waits for SSH, and records managed SSH trust. The
+clusters stage runs the existing Ceph prerequisites and cephadm flow against the
+three installed nodes.
 
 ## Laptop DNS
 

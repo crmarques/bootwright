@@ -4,6 +4,7 @@ metadata:
   name: rhel-9-x86-64-dvd
 spec:
   type: iso
+
   mediaType: dvd
 
   url: local-media:rhel-9.8-x86_64-dvd.iso
