@@ -14,5 +14,6 @@
 - name: Resolve BMC state paths
   ansible.builtin.set_fact:
     bootwright_bmc_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_bmc_provider_name }}"
+    bootwright_bmc_temp_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_bmc_provider_name }}/tmp"
     bootwright_bmc_vmedia_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/{{ bootwright_bmc_provider_name }}/vmedia"
   changed_when: false

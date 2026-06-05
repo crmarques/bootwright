@@ -5,6 +5,9 @@ Wants=libvirtd.service network-online.target
 
 [Service]
 Type=simple
+Environment=TMPDIR={{ bootwright_bmc_temp_root }}
+Environment=TMP={{ bootwright_bmc_temp_root }}
+Environment=TEMP={{ bootwright_bmc_temp_root }}
 ExecStart={{ bootwright_bmc_root }}/venv/bin/sushy-emulator --config {{ bootwright_bmc_root }}/sushy.conf
 Restart=on-failure
 RestartSec=5

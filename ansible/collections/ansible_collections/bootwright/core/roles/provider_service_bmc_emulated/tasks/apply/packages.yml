@@ -11,6 +11,14 @@
     - "{{ bootwright_bmc_root }}/state"
     - "{{ bootwright_bmc_vmedia_root }}"
 
+- name: Create BMC emulator temp directory
+  ansible.builtin.file:
+    path: "{{ bootwright_bmc_temp_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
 - name: Load BMC package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 

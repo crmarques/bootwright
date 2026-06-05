@@ -17,14 +17,22 @@
 
 - name: Initialize Redfish virtual media insertion status
   ansible.builtin.set_fact:
-    bootwright_redfish_vmedia_attached: false
+    bootwright_redfish_vmedia_backend_attached: "{{ bootwright_redfish_vmedia_backend_attached | default(false) | bool }}"
+    bootwright_redfish_vmedia_attached: "{{ bootwright_redfish_vmedia_backend_attached | default(false) | bool }}"
+    bootwright_redfish_vmedia_backend_attached_image_redacted: >-
+      {{
+        (bootwright_redfish_vmedia_backend_image | default('')
+        | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+        if (bootwright_agent_iso_publish_token | default('') | length) > 0
+        else (bootwright_redfish_vmedia_backend_image | default(''))
+      }}
     bootwright_redfish_vmedia_resource_attached: false
     bootwright_redfish_vmedia_task_attached: false
     bootwright_redfish_insert_task_status:
       attempt: 0
-      insertStatus: not attempted
+      insertStatus: "{{ 'skipped-direct-backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'not attempted' }}"
       url: ""
-      httpStatus: not attempted
+      httpStatus: "{{ 'skipped-direct-backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'not attempted' }}"
       taskState: ""
       taskStatus: ""
       messages: []
@@ -32,11 +40,18 @@
     bootwright_redfish_vmedia_status:
       insertAttempt: 0
       member: "{{ bootwright_redfish_vmedia_member }}"
-      status: not attempted
-      inserted: false
-      image: ""
-      imageName: ""
-      connectedVia: ""
+      status: "{{ 'pre-attached' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'not attempted' }}"
+      inserted: "{{ bootwright_redfish_vmedia_backend_attached | default(false) | bool }}"
+      image: "{{ bootwright_redfish_vmedia_backend_image | default('') }}"
+      imageRedacted: >-
+        {{
+          (bootwright_redfish_vmedia_backend_image | default('')
+          | replace(bootwright_agent_iso_publish_token, '<redacted>'))
+          if (bootwright_agent_iso_publish_token | default('') | length) > 0
+          else (bootwright_redfish_vmedia_backend_image | default(''))
+        }}
+      imageName: "{{ bootwright_redfish_vmedia_backend_image_name | default('') }}"
+      connectedVia: "{{ bootwright_redfish_vmedia_backend | default('') }}"
       mediaTypes: []
       attempts: 0
       requestedTransferProtocolType: "{{ bootwright_redfish_vmedia_transfer_protocol }}"
@@ -49,14 +64,14 @@
       httpsTransferCertVerification: ""
       httpsTransferCertVerificationPatchStatus: not attempted
       patchFallbackStatus: not attempted
-      insertStatus: not attempted
+      insertStatus: "{{ 'skipped-direct-backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'not attempted' }}"
       insertTaskURL: ""
-      insertTaskHTTPStatus: not attempted
+      insertTaskHTTPStatus: "{{ 'skipped-direct-backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'not attempted' }}"
       insertTaskState: ""
       insertTaskStatus: ""
       insertTaskMessages: []
       insertTaskMessagesRedacted: []
-      insertTaskMounted: false
+      insertTaskMounted: "{{ bootwright_redfish_vmedia_backend_attached | default(false) | bool }}"
   changed_when: false
 
 - name: Refresh Redfish manager SecurityService for HTTPS file transfer
@@ -198,12 +213,13 @@
       Observed HttpsTransferCertVerification={{ bootwright_redfish_vmedia_status.httpsTransferCertVerification if (bootwright_redfish_vmedia_status.httpsTransferCertVerification | string | length) > 0 else '<not reported>' }},
       HttpsTransferCertVerification PATCH status={{ bootwright_redfish_vmedia_status.httpsTransferCertVerificationPatchStatus }},
       Attach PATCH fallback status={{ bootwright_redfish_vmedia_status.patchFallbackStatus }},
+      Direct backend attachment={{ bootwright_redfish_vmedia_backend_attached | default(false) }},
       Resource attachment match={{ bootwright_redfish_vmedia_resource_attached | default(false) }},
       InsertMedia task attachment accepted={{ bootwright_redfish_vmedia_task_attached | default(false) }},
       HTTP status={{ bootwright_redfish_vmedia_status.status }}.
     success_msg: >-
       Redfish virtual media attachment accepted on {{ bootwright_redfish_vmedia_status.member }}
-      via {{ 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},
+      via {{ 'direct media backend' if (bootwright_redfish_vmedia_backend_attached | default(false) | bool) else 'VirtualMedia resource' if (bootwright_redfish_vmedia_resource_attached | default(false) | bool) else 'InsertMedia task' if (bootwright_redfish_vmedia_task_attached | default(false) | bool) else 'unknown source' }},
       with Image={{ bootwright_redfish_vmedia_status.imageRedacted | default('<not reported>', true) }},
       Inserted={{ bootwright_redfish_vmedia_status.inserted }},
       ConnectedVia={{ bootwright_redfish_vmedia_status.connectedVia | default('<not reported>', true) }},

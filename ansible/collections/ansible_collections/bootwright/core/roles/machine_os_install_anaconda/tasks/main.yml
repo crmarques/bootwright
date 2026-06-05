@@ -43,15 +43,20 @@
     bootwright_os_install_token: "{{ (bootwright_current_os_group.name ~ '-' ~ bootwright_component.name ~ '-osinstall') | to_uuid }}"
   changed_when: false
 
+- name: Resolve managed OS virtual media paths
+  ansible.builtin.set_fact:
+    bootwright_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+    bootwright_os_fetch_url: "{{ bootwright_component.boot.agentIso.fetchUrl | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+  changed_when: false
+
 - name: Resolve managed OS install files
   ansible.builtin.set_fact:
     bootwright_os_source_iso: "{{ bootwright_os_install_root }}/source.iso"
     bootwright_os_source_id_path: "{{ bootwright_os_install_root }}/source.id"
     bootwright_os_kickstart_path: "{{ bootwright_os_install_root }}/ks.cfg"
-    bootwright_os_install_iso: "{{ bootwright_os_install_root }}/install.iso"
+    bootwright_os_install_iso: "{{ bootwright_os_stage_path }}"
+    bootwright_os_legacy_install_iso: "{{ bootwright_os_install_root }}/install.iso"
     bootwright_os_install_tmpdir: "{{ bootwright_os_install_root }}/tmp"
-    bootwright_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
-    bootwright_os_fetch_url: "{{ bootwright_component.boot.agentIso.fetchUrl | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
   changed_when: false
 
 - name: Resolve managed OS install source path
@@ -124,7 +129,7 @@
         state: directory
         owner: root
         group: root
-        mode: "0755"
+        mode: "0700"
 
     - name: Load Anaconda package list
       ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
@@ -219,6 +224,19 @@
       register: bootwright_os_kickstart
       no_log: "{{ bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool }}"
 
+    - name: Create managed OS virtual media directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_iso | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove legacy private managed OS install ISO path
+      ansible.builtin.file:
+        path: "{{ bootwright_os_legacy_install_iso }}"
+        state: absent
+
     - name: Stat managed OS install ISO
       ansible.builtin.stat:
         path: "{{ bootwright_os_install_iso }}"
@@ -274,73 +292,23 @@
         TEMP: "{{ bootwright_os_install_tmpdir }}"
       when: bootwright_os_install_iso_rebuild_needed | bool
 
-    - name: Create managed OS virtual media stage directory
+    - name: Set managed OS virtual media permissions
       ansible.builtin.file:
-        path: "{{ bootwright_os_stage_path | dirname }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Stat managed OS install ISO for virtual media stage
-      ansible.builtin.stat:
         path: "{{ bootwright_os_install_iso }}"
-        get_checksum: false
-      register: bootwright_os_install_iso_stage_source
-
-    - name: Stat managed OS staged virtual media ISO
-      ansible.builtin.stat:
-        path: "{{ bootwright_os_stage_path }}"
-        get_checksum: false
-      register: bootwright_os_stage_iso_stat
-
-    - name: Resolve managed OS virtual media stage state
-      ansible.builtin.set_fact:
-        bootwright_os_stage_iso_linked: >-
-          {{
-            (bootwright_os_install_iso_stage_source.stat.exists | default(false))
-            and (bootwright_os_stage_iso_stat.stat.exists | default(false))
-            and ((bootwright_os_install_iso_stage_source.stat.dev | default('source')) == (bootwright_os_stage_iso_stat.stat.dev | default('stage')))
-            and ((bootwright_os_install_iso_stage_source.stat.inode | default('source')) == (bootwright_os_stage_iso_stat.stat.inode | default('stage')))
-          }}
-      changed_when: false
-
-    - name: Link managed OS install ISO into virtual media stage
-      ansible.builtin.command:
-        argv:
-          - ln
-          - -f
-          - "{{ bootwright_os_install_iso }}"
-          - "{{ bootwright_os_stage_path }}"
-      register: bootwright_os_stage_link
-      failed_when: false
-      changed_when: bootwright_os_stage_link.rc == 0
-      when: not (bootwright_os_stage_iso_linked | bool)
-
-    - name: Copy managed OS install ISO into virtual media stage when linking is unsupported
-      ansible.builtin.command:
-        argv:
-          - cp
-          - --reflink=auto
-          - --remove-destination
-          - "{{ bootwright_os_install_iso }}"
-          - "{{ bootwright_os_stage_path }}"
-      when:
-        - not (bootwright_os_stage_iso_linked | bool)
-        - (bootwright_os_stage_link.rc | default(1) | int) != 0
-
-    - name: Set managed OS virtual media stage permissions
-      ansible.builtin.file:
-        path: "{{ bootwright_os_stage_path }}"
         state: file
         owner: root
         group: root
         mode: "0644"
 
-    - name: Prepare provider virtual media before managed OS boot
-      ansible.builtin.include_role:
-        name: "{{ bootwright_component.mediaPrepareRole }}"
-      when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
+    - name: Restore managed OS virtual media labels
+      ansible.builtin.command:
+        argv:
+          - restorecon
+          - -RFv
+          - "{{ bootwright_os_install_iso | dirname }}"
+      register: bootwright_os_install_iso_restorecon
+      changed_when: bootwright_os_install_iso_restorecon.stdout | length > 0
+      when: ansible_selinux.status | default('disabled') == 'enabled'
 
     - name: Resolve managed OS Redfish boot component
       ansible.builtin.set_fact:
@@ -351,11 +319,23 @@
                 'agentIso': bootwright_component.boot.agentIso | combine({
                   'stagePath': bootwright_os_stage_path,
                   'fetchUrl': bootwright_os_fetch_url
+                }),
+                'media': (bootwright_component.boot.media | default({})) | combine({
+                  'libvirt': ((bootwright_component.boot.media | default({})).libvirt | default({})) | combine({
+                    'bootOrder': 'cdrom-first'
+                  })
                 })
               }, recursive=True)
             }, recursive=True)
           }}
       changed_when: false
+
+    - name: Prepare provider virtual media before managed OS boot
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.mediaPrepareRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+      when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
 
     - name: Boot managed OS installer through Redfish virtual media
       ansible.builtin.include_role:
@@ -373,6 +353,14 @@
     timeout: 1800
   delegate_to: localhost
   changed_when: false
+
+- name: Clean managed OS virtual media after SSH is ready
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.mediaPrepareRole }}"
+  vars:
+    bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+    bootwright_redfish_action_effective: cleanup
+  when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
 
 - name: Record managed OS SSH host key
   ansible.builtin.include_tasks: ssh_trust.yml

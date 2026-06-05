@@ -18,9 +18,11 @@ import (
 const bootwrightCollectionRoleRoot = "ansible/collections/ansible_collections/bootwright/core/roles"
 
 func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/eject.yml")
-	task := tasks[findAnsibleTask(t, tasks, "Eject source-backed virtual media from {{ bootwright_libvirt_media_scope }} domain")]
+	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/eject.yml")
+	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
+	task := ejectTasks[findAnsibleTask(t, ejectTasks, "Eject source-backed virtual media from {{ bootwright_libvirt_media_scope }} domain")]
 	script := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/files/eject_libvirt_media.sh")
+	insertScript := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/files/insert_libvirt_media.py")
 
 	if strings.Contains(script, "${#") {
 		t.Fatalf("libvirt media cleanup script uses Bash syntax that Ansible parses as a Jinja comment")
@@ -48,8 +50,69 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		t.Fatalf("%s is not a command task", task["name"])
 	}
 	argv, ok := command["argv"].(string)
-	if !ok || !strings.Contains(argv, "/tmp/bootwright-libvirt-media-eject.sh") {
+	if !ok || !strings.Contains(argv, "/var/tmp/bootwright-libvirt-media-eject.sh") {
 		t.Fatalf("libvirt media cleanup command must invoke installed helper script, got %v", command["argv"])
+	}
+
+	for _, want := range []string{
+		"tempfile.NamedTemporaryFile(",
+		"dir=tmpdir",
+		"virsh(uri, \"define\", tmp.name)",
+		"remove_cdroms(devices)",
+		"add_cdrom(devices, source_iso",
+		"set_boot_order(root, boot_order)",
+		"devices = [\"cdrom\", \"hd\"] if boot_order == \"cdrom-first\" else [\"hd\", \"cdrom\"]",
+	} {
+		if !strings.Contains(insertScript, want) {
+			t.Fatalf("libvirt media insert helper missing %q", want)
+		}
+	}
+
+	resolveIdx := findAnsibleTask(t, mainTasks, "Resolve direct libvirt virtual media insert state")
+	installIdx := findAnsibleTask(t, mainTasks, "Install virtual media insert helper")
+	insertIdx := findAnsibleTask(t, mainTasks, "Insert staged virtual media directly into libvirt domain")
+	recordIdx := findAnsibleTask(t, mainTasks, "Record direct libvirt virtual media attachment")
+	if !(resolveIdx < installIdx && installIdx < insertIdx && insertIdx < recordIdx) {
+		t.Fatalf("libvirt media role must resolve, install helper, insert media, then record backend attachment")
+	}
+	resolveFacts, ok := mainTasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", mainTasks[resolveIdx]["name"])
+	}
+	if got := fmt.Sprint(resolveFacts["bootwright_libvirt_media_insert_requested"]); !strings.Contains(got, "bootwright_redfish_action_effective") {
+		t.Fatalf("%s must only request direct insert for boot actions, got %s", mainTasks[resolveIdx]["name"], got)
+	}
+	if got := fmt.Sprint(resolveFacts["bootwright_libvirt_media_boot_order"]); !strings.Contains(got, "bootOrder") || !strings.Contains(got, "disk-first") {
+		t.Fatalf("%s must resolve optional libvirt media boot order with disk-first default, got %s", mainTasks[resolveIdx]["name"], got)
+	}
+	insertCommand, ok := mainTasks[insertIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", mainTasks[insertIdx]["name"])
+	}
+	if _, ok := mainTasks[insertIdx]["no_log"]; ok {
+		t.Fatalf("%s must not hide virsh stderr when direct libvirt media insertion fails", mainTasks[insertIdx]["name"])
+	}
+	insertArgv := fmt.Sprint(insertCommand["argv"])
+	for _, want := range []string{"/var/tmp/bootwright-libvirt-media-insert.py", "bootwright_component.boot.agentIso.stagePath", "bootwright_libvirt_media_boot_order"} {
+		if !strings.Contains(insertArgv, want) {
+			t.Fatalf("%s argv missing %q: %v", mainTasks[insertIdx]["name"], want, insertCommand["argv"])
+		}
+	}
+	insertEnv, ok := mainTasks[insertIdx]["environment"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must set helper temp environment", mainTasks[insertIdx]["name"])
+	}
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if got := insertEnv[key]; got != "{{ bootwright_libvirt_media_stage_dir }}" {
+			t.Fatalf("%s environment %s got %v, want bootwright_libvirt_media_stage_dir", mainTasks[insertIdx]["name"], key, got)
+		}
+	}
+	recordFacts, ok := mainTasks[recordIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", mainTasks[recordIdx]["name"])
+	}
+	if recordFacts["bootwright_redfish_vmedia_backend_attached"] != true || recordFacts["bootwright_redfish_vmedia_backend"] != "libvirt-direct" {
+		t.Fatalf("%s must mark direct libvirt virtual media attached, got %v", mainTasks[recordIdx]["name"], recordFacts)
 	}
 }
 
@@ -379,13 +442,29 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
 	validateSourceIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install source")
 	resolvePathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install paths")
+	resolveVirtualMediaPathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS virtual media paths")
 	resolveFilesIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install files")
 	resolveSourcePathIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install source path")
+	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
+	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
+	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
+	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
 	if validateSourceIdx >= resolvePathsIdx {
 		t.Fatalf("Anaconda role must validate install source before resolving install paths")
 	}
-	if !(resolvePathsIdx < resolveFilesIdx && resolveFilesIdx < resolveSourcePathIdx) {
-		t.Fatalf("Anaconda role must resolve install files before the effective source path")
+	if !(resolvePathsIdx < resolveVirtualMediaPathsIdx && resolveVirtualMediaPathsIdx < resolveFilesIdx && resolveFilesIdx < resolveSourcePathIdx) {
+		t.Fatalf("Anaconda role must resolve virtual media paths before install files and the effective source path")
+	}
+	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
+		t.Fatalf("Anaconda role must clean managed OS virtual media after SSH is ready and before host-key trust")
+	}
+	assertIncludeRoleName(t, topTasks[cleanupMediaIdx], "{{ bootwright_component.mediaPrepareRole }}")
+	cleanupVars, ok := topTasks[cleanupMediaIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[cleanupMediaIdx]["name"], topTasks[cleanupMediaIdx])
+	}
+	if cleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupVars["bootwright_redfish_action_effective"] != "cleanup" {
+		t.Fatalf("%s must clean resolved managed OS media, got vars=%v", topTasks[cleanupMediaIdx]["name"], cleanupVars)
 	}
 	validateSource, ok := topTasks[validateSourceIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -398,10 +477,16 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", topTasks[resolveFilesIdx]["name"])
 	}
-	for _, want := range []string{"bootwright_os_source_iso", "bootwright_os_source_id_path", "bootwright_os_install_iso", "bootwright_os_install_tmpdir"} {
+	for _, want := range []string{"bootwright_os_source_iso", "bootwright_os_source_id_path", "bootwright_os_install_iso", "bootwright_os_legacy_install_iso", "bootwright_os_install_tmpdir"} {
 		if _, ok := resolveFiles[want]; !ok {
 			t.Fatalf("%s missing %s", topTasks[resolveFilesIdx]["name"], want)
 		}
+	}
+	if resolveFiles["bootwright_os_install_iso"] != "{{ bootwright_os_stage_path }}" {
+		t.Fatalf("%s must build the attach ISO directly at the virtual media stage path, got %v", topTasks[resolveFilesIdx]["name"], resolveFiles["bootwright_os_install_iso"])
+	}
+	if resolveFiles["bootwright_os_legacy_install_iso"] != "{{ bootwright_os_install_root }}/install.iso" {
+		t.Fatalf("%s legacy private install ISO got %v", topTasks[resolveFilesIdx]["name"], resolveFiles["bootwright_os_legacy_install_iso"])
 	}
 	resolveSourcePath, ok := topTasks[resolveSourcePathIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
@@ -414,7 +499,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		}
 	}
 
-	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Install managed OS from virtual media")], "block")
+	tasks := nestedAnsibleTasks(t, topTasks[installBlockIdx], "block")
 	loadIdx := findAnsibleTask(t, tasks, "Load Anaconda package list")
 	installIdx := findAnsibleTask(t, tasks, "Install Anaconda ISO tooling packages")
 	verifyIdx := findAnsibleTask(t, tasks, "Verify mkksiso is available")
@@ -443,13 +528,15 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	sourceStatIdx := findAnsibleTask(t, tasks, "Stat managed ISO source")
 	sourceIdentityIdx := findAnsibleTask(t, tasks, "Record managed ISO source identity")
 	checksumIdx := findAnsibleTask(t, tasks, "Verify managed ISO checksum")
+	createMediaDirIdx := findAnsibleTask(t, tasks, "Create managed OS virtual media directory")
+	removeLegacyIdx := findAnsibleTask(t, tasks, "Remove legacy private managed OS install ISO path")
 	statISOIdx := findAnsibleTask(t, tasks, "Stat managed OS install ISO")
 	rebuildStateIdx := findAnsibleTask(t, tasks, "Resolve managed OS install ISO rebuild state")
 	removeStaleIdx := findAnsibleTask(t, tasks, "Remove stale managed OS install ISO before rebuild")
 	resetTmpIdx := findAnsibleTask(t, tasks, "Reset managed OS install ISO temp directory before rebuild")
 	createTmpIdx := findAnsibleTask(t, tasks, "Create managed OS install ISO temp directory")
 	buildISOIdx := findAnsibleTask(t, tasks, "Build managed OS install ISO")
-	if !(copyIdx < sourceStatIdx && downloadIdx < sourceStatIdx && sourceStatIdx < sourceIdentityIdx && sourceIdentityIdx < checksumIdx && sourceIdentityIdx < statISOIdx) {
+	if !(copyIdx < sourceStatIdx && downloadIdx < sourceStatIdx && sourceStatIdx < sourceIdentityIdx && sourceIdentityIdx < checksumIdx && sourceIdentityIdx < createMediaDirIdx && createMediaDirIdx < removeLegacyIdx && removeLegacyIdx < statISOIdx) {
 		t.Fatalf("Anaconda role must resolve source metadata before checksum and rebuild decisions")
 	}
 	sourceStat, ok := tasks[sourceStatIdx]["ansible.builtin.stat"].(map[string]any)
@@ -468,6 +555,20 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		if !strings.Contains(sourceIdentityContent, want) {
 			t.Fatalf("%s source identity missing %q: %s", tasks[sourceIdentityIdx]["name"], want, sourceIdentityContent)
 		}
+	}
+	createMediaDir, ok := tasks[createMediaDirIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a file task", tasks[createMediaDirIdx]["name"])
+	}
+	if createMediaDir["path"] != "{{ bootwright_os_install_iso | dirname }}" || createMediaDir["state"] != "directory" || createMediaDir["mode"] != "0755" {
+		t.Fatalf("%s must create the published virtual media directory, got %v", tasks[createMediaDirIdx]["name"], createMediaDir)
+	}
+	removeLegacy, ok := tasks[removeLegacyIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a file task", tasks[removeLegacyIdx]["name"])
+	}
+	if removeLegacy["path"] != "{{ bootwright_os_legacy_install_iso }}" || removeLegacy["state"] != "absent" {
+		t.Fatalf("%s must remove the old private attach ISO path, got %v", tasks[removeLegacyIdx]["name"], removeLegacy)
 	}
 	checksumCommand, ok := tasks[checksumIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -537,43 +638,61 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if findAnsibleTaskIndex(tasks, "Stage managed OS install ISO for virtual media") >= 0 {
 		t.Fatalf("Anaconda role must not stage install.iso with ansible.builtin.copy")
 	}
-	stageSourceStatIdx := findAnsibleTask(t, tasks, "Stat managed OS install ISO for virtual media stage")
-	stageStatIdx := findAnsibleTask(t, tasks, "Stat managed OS staged virtual media ISO")
-	stageStateIdx := findAnsibleTask(t, tasks, "Resolve managed OS virtual media stage state")
-	stageLinkIdx := findAnsibleTask(t, tasks, "Link managed OS install ISO into virtual media stage")
-	stageCopyIdx := findAnsibleTask(t, tasks, "Copy managed OS install ISO into virtual media stage when linking is unsupported")
-	stagePermsIdx := findAnsibleTask(t, tasks, "Set managed OS virtual media stage permissions")
-	if !(stageSourceStatIdx < stageStatIdx && stageStatIdx < stageStateIdx && stageStateIdx < stageLinkIdx && stageLinkIdx < stageCopyIdx && stageCopyIdx < stagePermsIdx) {
-		t.Fatalf("Anaconda role must hardlink stage ISO before falling back to reflink copy")
-	}
-	stageSourceStat, ok := tasks[stageSourceStatIdx]["ansible.builtin.stat"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s is not a stat task", tasks[stageSourceStatIdx]["name"])
-	}
-	if stageSourceStat["path"] != "{{ bootwright_os_install_iso }}" || stageSourceStat["get_checksum"] != false {
-		t.Fatalf("%s must stat install.iso without checksumming it, got %v", tasks[stageSourceStatIdx]["name"], stageSourceStat)
-	}
-	stageLink, ok := tasks[stageLinkIdx]["ansible.builtin.command"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s is not a command task", tasks[stageLinkIdx]["name"])
-	}
-	if got := fmt.Sprint(stageLink["argv"]); !strings.Contains(got, "ln") || !strings.Contains(got, "-f") || !strings.Contains(got, "bootwright_os_install_iso") || !strings.Contains(got, "bootwright_os_stage_path") {
-		t.Fatalf("%s must hardlink install.iso into the stage path, got argv=%v", tasks[stageLinkIdx]["name"], stageLink["argv"])
-	}
-	if got := tasks[stageLinkIdx]["failed_when"]; got != false {
-		t.Fatalf("%s must allow fallback after hardlink failure, got failed_when=%v", tasks[stageLinkIdx]["name"], got)
-	}
-	stageCopy, ok := tasks[stageCopyIdx]["ansible.builtin.command"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s is not a command task", tasks[stageCopyIdx]["name"])
-	}
-	for _, want := range []string{"cp", "--reflink=auto", "--remove-destination", "bootwright_os_install_iso", "bootwright_os_stage_path"} {
-		if got := fmt.Sprint(stageCopy["argv"]); !strings.Contains(got, want) {
-			t.Fatalf("%s fallback copy missing %q, got argv=%v", tasks[stageCopyIdx]["name"], want, stageCopy["argv"])
+	for _, forbidden := range []string{
+		"Stat managed OS install ISO for virtual media stage",
+		"Stat managed OS staged virtual media ISO",
+		"Resolve managed OS virtual media stage state",
+		"Link managed OS install ISO into virtual media stage",
+		"Copy managed OS install ISO into virtual media stage when linking is unsupported",
+	} {
+		if findAnsibleTaskIndex(tasks, forbidden) >= 0 {
+			t.Fatalf("Anaconda role must build directly into virtual media stage instead of running %q", forbidden)
 		}
 	}
-	if got := tasks[stageCopyIdx]["when"]; !stringListContains(got, "not (bootwright_os_stage_iso_linked | bool)") || !stringListContains(got, "(bootwright_os_stage_link.rc | default(1) | int) != 0") {
-		t.Fatalf("%s must only copy when hardlinking was needed and failed, got when=%v", tasks[stageCopyIdx]["name"], got)
+	stagePermsIdx := findAnsibleTask(t, tasks, "Set managed OS virtual media permissions")
+	restoreLabelsIdx := findAnsibleTask(t, tasks, "Restore managed OS virtual media labels")
+	resolveBootComponentIdx := findAnsibleTask(t, tasks, "Resolve managed OS Redfish boot component")
+	prepareMediaIdx := findAnsibleTask(t, tasks, "Prepare provider virtual media before managed OS boot")
+	bootMediaIdx := findAnsibleTask(t, tasks, "Boot managed OS installer through Redfish virtual media")
+	if !(buildISOIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx) {
+		t.Fatalf("Anaconda role must resolve tokenized boot component before media preparation and boot")
+	}
+	stagePerms, ok := tasks[stagePermsIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a file task", tasks[stagePermsIdx]["name"])
+	}
+	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "0644" {
+		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
+	}
+	restoreLabels, ok := tasks[restoreLabelsIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[restoreLabelsIdx]["name"])
+	}
+	restoreLabelsArgv := fmt.Sprint(restoreLabels["argv"])
+	for _, want := range []string{"restorecon", "-RFv", "bootwright_os_install_iso | dirname"} {
+		if !strings.Contains(restoreLabelsArgv, want) {
+			t.Fatalf("%s argv missing %q: %v", tasks[restoreLabelsIdx]["name"], want, restoreLabels["argv"])
+		}
+	}
+	if got := tasks[restoreLabelsIdx]["when"]; got != "ansible_selinux.status | default('disabled') == 'enabled'" {
+		t.Fatalf("%s must only run with SELinux enabled, got when=%v", tasks[restoreLabelsIdx]["name"], got)
+	}
+	resolveBootComponent, ok := tasks[resolveBootComponentIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", tasks[resolveBootComponentIdx]["name"])
+	}
+	resolveBootExpr := fmt.Sprint(resolveBootComponent["bootwright_managed_os_boot_component"])
+	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "cdrom-first"} {
+		if !strings.Contains(resolveBootExpr, want) {
+			t.Fatalf("%s must resolve %q before media preparation: %s", tasks[resolveBootComponentIdx]["name"], want, resolveBootExpr)
+		}
+	}
+	prepareVars, ok := tasks[prepareMediaIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass resolved component vars, got %v", tasks[prepareMediaIdx]["name"], tasks[prepareMediaIdx])
+	}
+	if prepareVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" {
+		t.Fatalf("%s must use resolved managed OS boot component, got vars=%v", tasks[prepareMediaIdx]["name"], prepareVars)
 	}
 	redHat := readAnsibleStringListVar(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/vars/os/RedHat.yml", "bootwright_machine_os_install_anaconda_packages")
 	assertContainsAll(t, redHat, []string{"lorax"})
@@ -585,6 +704,7 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		t.Fatalf("Kickstart template must not use an inline conditional around the SSH key lookup")
 	}
 	for _, want := range []string{
+		"reboot --eject",
 		"{% set rhsm = installer.rhsm | default({}) %}",
 		"{% if rhsm.enabled | default(false) %}",
 		"rhsm --organization=\"{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}\" --activation-key=\"{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}\"",
@@ -592,6 +712,9 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"url --url={{ installer.sourceURL }}",
 		"{% else %}",
 		"cdrom",
+		"bootloader --location=mbr --boot-drive={{ storage.rootDisk }}",
+		"part swap --recommended --ondisk={{ storage.rootDisk }}",
+		"part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}",
 		"{% set ssh_key = '' %}",
 		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
 		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
@@ -753,6 +876,10 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mediaPrepareIdx := findAnsibleTask(t, prepareTasks, "Run virtual-media backend preparation")
 	preLiveIdx := findAnsibleTask(t, mediaTasks, "Clean stale running virtual media before insert")
 	preConfigIdx := findAnsibleTask(t, mediaTasks, "Clean stale persistent virtual media before insert")
+	resolveDirectMediaIdx := findAnsibleTask(t, mediaTasks, "Resolve direct libvirt virtual media insert state")
+	installDirectMediaIdx := findAnsibleTask(t, mediaTasks, "Install virtual media insert helper")
+	insertDirectMediaIdx := findAnsibleTask(t, mediaTasks, "Insert staged virtual media directly into libvirt domain")
+	recordDirectMediaIdx := findAnsibleTask(t, mediaTasks, "Record direct libvirt virtual media attachment")
 	protocolIdx := findAnsibleTask(t, powerTasks, "Resolve virtual media transfer protocol")
 	initInsertIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish virtual media insertion status")
 	securityRefreshIdx := findAnsibleTask(t, powerTasks, "Refresh Redfish manager SecurityService for HTTPS file transfer")
@@ -834,6 +961,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(preLiveIdx < preConfigIdx) {
 		t.Fatalf("media cleanup must process running state before persistent state")
 	}
+	if !(preConfigIdx < resolveDirectMediaIdx && resolveDirectMediaIdx < installDirectMediaIdx && installDirectMediaIdx < insertDirectMediaIdx && insertDirectMediaIdx < recordDirectMediaIdx) {
+		t.Fatalf("libvirt media preparation must clean stale media before direct insert and backend attachment recording")
+	}
 	if !(protocolIdx < initInsertIdx && initInsertIdx < securityRefreshIdx && securityRefreshIdx < securityResolveIdx && securityResolveIdx < securityPatchIdx && securityPatchIdx < securityCaptureIdx && securityCaptureIdx < retryInsertIdx && retryInsertIdx < confirmMediaIdx && confirmMediaIdx < systemRefreshIdx && systemRefreshIdx < systemPreconditionIdx && systemPreconditionIdx < resetActionsIdx && resetActionsIdx < resetTargetIdx && resetTargetIdx < resetActionInfoIdx && resetActionInfoIdx < resolvePowerOnResetTypeIdx && resolvePowerOnResetTypeIdx < cdBootIdx && cdBootIdx < confirmCDBootIdx) {
 		t.Fatalf("boot_redfish must retry virtual media insertion before setting CD boot")
 	}
@@ -856,6 +986,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeRoleName(t, prepareTasks[mediaPrepareIdx], "{{ bootwright_component.mediaPrepareRole }}")
 	assertIncludeTasksFile(t, mediaTasks[preLiveIdx], "eject.yml")
 	assertIncludeTasksFile(t, mediaTasks[preConfigIdx], "eject.yml")
+	if got := mediaTasks[insertDirectMediaIdx]["when"]; got != "bootwright_libvirt_media_insert_requested | bool" {
+		t.Fatalf("%s must only run for boot actions, got when=%v", mediaTasks[insertDirectMediaIdx]["name"], got)
+	}
 	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject.yml")
 	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_attempt.yml")
 	assertIncludeTasksApplyWhen(t, powerTasks[retryInsertIdx], "not (bootwright_redfish_vmedia_attached | bool)")
@@ -871,6 +1004,20 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if got := powerTasks[retryInsertIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
 		t.Fatalf("virtual media retry loop must stop once attached, got when=%v", got)
+	}
+	initInsertFacts, ok := powerTasks[initInsertIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", powerTasks[initInsertIdx]["name"])
+	}
+	for _, want := range []string{
+		"bootwright_redfish_vmedia_backend_attached",
+		"bootwright_redfish_vmedia_backend | default",
+		"skipped-direct-backend",
+		"pre-attached",
+	} {
+		if got := fmt.Sprint(initInsertFacts); !strings.Contains(got, want) {
+			t.Fatalf("%s must honor direct backend attachment, missing %q in %v", powerTasks[initInsertIdx]["name"], want, initInsertFacts)
+		}
 	}
 	if got, ok := powerTasks[retryInsertIdx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_insert_media_retries") {
 		t.Fatalf("virtual media retry loop must use configured retry count, got loop=%v", powerTasks[retryInsertIdx]["loop"])
@@ -2206,7 +2353,8 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 	sushyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/sushy.yml")
 	destroyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/destroy.yml")
 	poolXML := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/vmedia/pool.xml.j2")
-	systemd := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/vmedia/systemd.service.j2")
+	vmediaSystemd := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/vmedia/systemd.service.j2")
+	sushySystemd := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/templates/sushy/systemd.service.j2")
 
 	factsIdx := findAnsibleTask(t, factsTasks, "Resolve BMC state paths")
 	facts, ok := factsTasks[factsIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -2220,10 +2368,22 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 	if strings.Contains(vmediaRoot, "bootwright_bmc_root") || strings.Contains(vmediaRoot, "bootwright_provider_state_dir }}/bmc") {
 		t.Fatalf("emulated BMC vmedia root must not live under private provider state, got %v", vmediaRoot)
 	}
+	tempRoot := fmt.Sprint(facts["bootwright_bmc_temp_root"])
+	if !strings.Contains(tempRoot, "bootwright_bmc_provider_name") || !strings.HasSuffix(tempRoot, "/tmp") {
+		t.Fatalf("emulated BMC temp root must live under provider state tmp, got %v", tempRoot)
+	}
 
 	dirsIdx := findAnsibleTask(t, packagesTasks, "Create BMC state directories")
 	if !stringListContains(packagesTasks[dirsIdx]["loop"], "{{ bootwright_bmc_vmedia_root }}") {
 		t.Fatalf("%s must create the separate vmedia root, got %v", packagesTasks[dirsIdx]["name"], packagesTasks[dirsIdx]["loop"])
+	}
+	tempDirIdx := findAnsibleTask(t, packagesTasks, "Create BMC emulator temp directory")
+	tempDir, ok := packagesTasks[tempDirIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", packagesTasks[tempDirIdx]["name"])
+	}
+	if tempDir["path"] != "{{ bootwright_bmc_temp_root }}" || tempDir["mode"] != "0700" {
+		t.Fatalf("%s must create private BMC temp root, got %v", packagesTasks[tempDirIdx]["name"], tempDir)
 	}
 
 	probeIdx := findAnsibleTask(t, sushyTasks, "Probe existing libvirt vmedia storage pool")
@@ -2266,12 +2426,21 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 		t.Fatalf("%s must restart on vmedia pool replacement, got %v", sushyTasks[ensureIdx]["name"], got)
 	}
 
-	for _, body := range []string{poolXML, systemd} {
+	for _, body := range []string{poolXML, vmediaSystemd} {
 		if !strings.Contains(body, "{{ bootwright_bmc_vmedia_root }}") {
 			t.Fatalf("emulated BMC vmedia templates must use bootwright_bmc_vmedia_root")
 		}
 		if strings.Contains(body, "<path>{{ bootwright_bmc_root }}/vmedia</path>") || strings.Contains(body, "--directory {{ bootwright_bmc_root }}/vmedia") {
 			t.Fatalf("emulated BMC vmedia templates must not use bootwright_bmc_root/vmedia")
+		}
+	}
+	for _, want := range []string{
+		"Environment=TMPDIR={{ bootwright_bmc_temp_root }}",
+		"Environment=TMP={{ bootwright_bmc_temp_root }}",
+		"Environment=TEMP={{ bootwright_bmc_temp_root }}",
+	} {
+		if !strings.Contains(sushySystemd, want) {
+			t.Fatalf("sushy systemd unit must pin Python temp files outside /tmp, missing %q", want)
 		}
 	}
 

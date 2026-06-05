@@ -3,7 +3,7 @@ text
 eula --agreed
 firstboot --disable
 skipx
-reboot
+reboot --eject
 {% set installer = bootwright_component.osInstall.installer | default({}) %}
 {% set rhsm = installer.rhsm | default({}) %}
 {% if rhsm.enabled | default(false) %}
@@ -35,8 +35,10 @@ repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}
 ignoredisk --only-use={{ storage.rootDisk }}
 zerombr
 clearpart --all --initlabel --drives={{ storage.rootDisk }}
+bootloader --location=mbr --boot-drive={{ storage.rootDisk }}
 reqpart --add-boot
-part / --fstype=xfs --grow --ondisk={{ storage.rootDisk }}
+part swap --recommended --ondisk={{ storage.rootDisk }}
+part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}
 {% else %}
 zerombr
 clearpart --all --initlabel

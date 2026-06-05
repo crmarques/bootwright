@@ -72,6 +72,13 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if network["ip"] != "192.168.134.20" || network["netmask"] != "255.255.255.0" {
 		t.Fatalf("kickstart network = %v", network)
 	}
+	if got := network["device"]; got != "52:54:00:0f:07:d2" {
+		t.Fatalf("kickstart network device = %v, want deterministic libvirt MAC", got)
+	}
+	storage := ks["storage"].(map[string]any)
+	if storage["rootDisk"] != "vda" {
+		t.Fatalf("kickstart storage = %v", storage)
+	}
 	boot := first["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
 	if !strings.Contains(iso["stagePath"].(string), "os-ceph-libvirt-ceph-0.iso") {

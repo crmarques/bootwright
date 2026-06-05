@@ -13,3 +13,50 @@
     bootwright_libvirt_media_domblklist_args:
       - --inactive
     bootwright_libvirt_media_change_media_arg: --config
+
+- name: Resolve direct libvirt virtual media insert state
+  ansible.builtin.set_fact:
+    bootwright_libvirt_media_insert_requested: "{{ (bootwright_redfish_action_effective | default('boot')) == 'boot' }}"
+    bootwright_libvirt_media_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
+    bootwright_libvirt_media_boot_order: "{{ bootwright_component.boot.media.libvirt.bootOrder | default('disk-first') }}"
+  changed_when: false
+  no_log: true
+
+- name: Install virtual media insert helper
+  ansible.builtin.copy:
+    src: insert_libvirt_media.py
+    dest: /var/tmp/bootwright-libvirt-media-insert.py
+    owner: root
+    group: root
+    mode: "0700"
+  delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"
+  become: true
+  when: bootwright_libvirt_media_insert_requested | bool
+
+- name: Insert staged virtual media directly into libvirt domain
+  ansible.builtin.command:
+    argv:
+      - /var/tmp/bootwright-libvirt-media-insert.py
+      - "{{ bootwright_component.boot.media.libvirt.uri }}"
+      - "{{ bootwright_component.boot.media.libvirt.domain }}"
+      - "{{ bootwright_component.boot.agentIso.stagePath }}"
+      - "{{ bootwright_libvirt_media_boot_order }}"
+  environment:
+    TMPDIR: "{{ bootwright_libvirt_media_stage_dir }}"
+    TMP: "{{ bootwright_libvirt_media_stage_dir }}"
+    TEMP: "{{ bootwright_libvirt_media_stage_dir }}"
+  register: bootwright_libvirt_media_insert
+  changed_when: bootwright_libvirt_media_insert.stdout is search('(?m)^changed=true$')
+  delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"
+  become: true
+  when: bootwright_libvirt_media_insert_requested | bool
+
+- name: Record direct libvirt virtual media attachment
+  ansible.builtin.set_fact:
+    bootwright_redfish_vmedia_backend_attached: true
+    bootwright_redfish_vmedia_backend: libvirt-direct
+    bootwright_redfish_vmedia_backend_image: "{{ bootwright_component.boot.agentIso.fetchUrl }}"
+    bootwright_redfish_vmedia_backend_image_name: "{{ bootwright_component.boot.agentIso.stagePath | basename }}"
+  changed_when: false
+  no_log: true
+  when: bootwright_libvirt_media_insert_requested | bool
