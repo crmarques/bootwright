@@ -39,8 +39,8 @@ EMBED_COLLECTIONS_DIR = $(BUNDLE_WORK_DIR)/collections
 EMBED_COLLECTIONS_ABS_DIR = $(abspath $(EMBED_COLLECTIONS_DIR))
 COLLECTIONS_STAMP = $(EMBED_COLLECTIONS_DIR)/.stamp
 ANSIBLE_GALAXY_ENV = \
-	ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local \
-	ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote \
+	ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local \
+	ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote \
 	ANSIBLE_COLLECTIONS_PATH=$(EMBED_COLLECTIONS_ABS_DIR) \
 	ANSIBLE_COLLECTIONS_PATHS=$(EMBED_COLLECTIONS_ABS_DIR)
 GOFMT_FILES = $(shell find api cmd internal -type f -name '*.go' -print)
@@ -49,7 +49,7 @@ GO_TEST_CHECK_FLAGS ?= -vet=off
 GO_TEST_RACE_FLAGS ?= -vet=off -race
 BOOTWRIGHT_COLLECTIONS_DIR = $(abspath $(ANSIBLE_SRC_DIR)/collections)
 BOOTWRIGHT_COLLECTION_ROOT = $(ANSIBLE_SRC_DIR)/collections/ansible_collections/bootwright/core
-ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/tmp/bootwright-ansible-remote ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
+ANSIBLE_SYNTAX_ENV = ANSIBLE_LOCAL_TEMP=/var/tmp/bootwright-ansible-local ANSIBLE_REMOTE_TEMP=/var/tmp/bootwright-ansible-remote ANSIBLE_COLLECTIONS_PATH=$(BOOTWRIGHT_COLLECTIONS_DIR):$(EMBED_COLLECTIONS_ABS_DIR)
 ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.check_become \
 	bootwright.core.check_preflight \

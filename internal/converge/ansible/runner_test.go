@@ -153,9 +153,9 @@ printf 'remote_tmp=%s\n' "$ANSIBLE_REMOTE_TMP"
 		t.Fatalf("Run: %v", err)
 	}
 	for _, want := range []string{
-		"local=/tmp\n",
-		"remote_temp=/tmp\n",
-		"remote_tmp=/tmp\n",
+		"local=/var/tmp\n",
+		"remote_temp=/var/tmp\n",
+		"remote_tmp=/var/tmp\n",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())

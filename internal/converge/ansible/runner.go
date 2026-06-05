@@ -19,7 +19,7 @@ import (
 const OutputLogName = "ansible-output.log"
 
 // SystemTempDir is the controller and managed-host temp root used for Ansible.
-const SystemTempDir = "/tmp"
+const SystemTempDir = "/var/tmp"
 
 var systemTempEnv = []struct {
 	key   string

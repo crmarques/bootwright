@@ -6,7 +6,7 @@ Error and constraint knowledge extracted from code history. Match the reported s
 | --- | --- | --- |
 | Ansible / sudo | `Duplicate become password prompt`; apply hangs mid-play on sudo | [sudo-ansible-duplicate-prompt.md](sudo-ansible-duplicate-prompt.md) |
 | Ansible / sudo | `sudo: sorry, you must have a tty to run sudo`; `sudo: a password is required`; `Install controller OS packages` | [ansible-sudo-requiretty.md](ansible-sudo-requiretty.md) |
-| Ansible / remote tmp | `can't open file '<home-dir>/.ansible/tmp`; `[Errno 13] Permission denied`; `AnsiballZ_setup.py` | [ansible-remote-tmp-permission.md](ansible-remote-tmp-permission.md) |
+| Ansible / remote tmp | `can't open file '<home-dir>/.ansible/tmp`; `[Errno 13] Permission denied`; `No space left on device`; `AnsiballZ_setup.py`; `AnsiballZ_uri.py` | [ansible-remote-tmp-permission.md](ansible-remote-tmp-permission.md) |
 | Ansible / sudo | `bootwright apply <target>` auto-sudo cannot find ansible; `ModuleNotFoundError` under sudo | [pip-user-sudo-pythonpath.md](pip-user-sudo-pythonpath.md) |
 | Ansible / sudo | `Ensure tmp working directory exists`; permission denied under root-owned controller temp paths | [ansible-controller-clis-root-temp.md](ansible-controller-clis-root-temp.md) |
 | Ansible / Galaxy | `Unexpected Exception`; `'results'`; `Skipping Galaxy server`; `community.general` | [ansible-galaxy-results-build.md](ansible-galaxy-results-build.md) |

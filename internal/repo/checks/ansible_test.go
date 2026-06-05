@@ -379,8 +379,13 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
 	validateSourceIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install source")
 	resolvePathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install paths")
+	resolveFilesIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install files")
+	resolveSourcePathIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install source path")
 	if validateSourceIdx >= resolvePathsIdx {
 		t.Fatalf("Anaconda role must validate install source before resolving install paths")
+	}
+	if !(resolvePathsIdx < resolveFilesIdx && resolveFilesIdx < resolveSourcePathIdx) {
+		t.Fatalf("Anaconda role must resolve install files before the effective source path")
 	}
 	validateSource, ok := topTasks[validateSourceIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -388,6 +393,25 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	}
 	if got := fmt.Sprint(validateSource["that"]); !strings.Contains(got, "mediaType") || !strings.Contains(got, "installer.sourceURL") || !strings.Contains(got, "installer.rhsm.enabled") {
 		t.Fatalf("Anaconda install source validation must reject boot media without sourceURL or RHSM, got %v", validateSource["that"])
+	}
+	resolveFiles, ok := topTasks[resolveFilesIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", topTasks[resolveFilesIdx]["name"])
+	}
+	for _, want := range []string{"bootwright_os_source_iso", "bootwright_os_source_id_path", "bootwright_os_install_iso", "bootwright_os_install_tmpdir"} {
+		if _, ok := resolveFiles[want]; !ok {
+			t.Fatalf("%s missing %s", topTasks[resolveFilesIdx]["name"], want)
+		}
+	}
+	resolveSourcePath, ok := topTasks[resolveSourcePathIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", topTasks[resolveSourcePathIdx]["name"])
+	}
+	sourcePathExpr := fmt.Sprint(resolveSourcePath["bootwright_os_source_iso_effective"])
+	for _, want := range []string{"sourceOnTarget", "bootwright_component.osInstall.image.path", "bootwright_os_source_iso"} {
+		if !strings.Contains(sourcePathExpr, want) {
+			t.Fatalf("%s effective source path missing %q: %s", topTasks[resolveSourcePathIdx]["name"], want, sourcePathExpr)
+		}
 	}
 
 	tasks := nestedAnsibleTasks(t, topTasks[findAnsibleTask(t, topTasks, "Install managed OS from virtual media")], "block")
@@ -409,8 +433,147 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a copy task", tasks[copyIdx]["name"])
 	}
-	if got, _ := copyTask["remote_src"].(string); !strings.Contains(got, "sourceOnTarget") {
-		t.Fatalf("%s remote_src must use rendered sourceOnTarget, got %q", tasks[copyIdx]["name"], got)
+	if got := copyTask["remote_src"]; got != false {
+		t.Fatalf("%s must not remote-copy provider-local sources, got remote_src=%v", tasks[copyIdx]["name"], got)
+	}
+	if got := tasks[copyIdx]["when"]; !stringListContains(got, "bootwright_component.osInstall.image.kind in ['media', 'file']") || !stringListContains(got, "not (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)") {
+		t.Fatalf("%s must skip sources already present on the provider host, got when=%v", tasks[copyIdx]["name"], got)
+	}
+	downloadIdx := findAnsibleTask(t, tasks, "Download managed ISO source on provider host")
+	sourceStatIdx := findAnsibleTask(t, tasks, "Stat managed ISO source")
+	sourceIdentityIdx := findAnsibleTask(t, tasks, "Record managed ISO source identity")
+	checksumIdx := findAnsibleTask(t, tasks, "Verify managed ISO checksum")
+	statISOIdx := findAnsibleTask(t, tasks, "Stat managed OS install ISO")
+	rebuildStateIdx := findAnsibleTask(t, tasks, "Resolve managed OS install ISO rebuild state")
+	removeStaleIdx := findAnsibleTask(t, tasks, "Remove stale managed OS install ISO before rebuild")
+	resetTmpIdx := findAnsibleTask(t, tasks, "Reset managed OS install ISO temp directory before rebuild")
+	createTmpIdx := findAnsibleTask(t, tasks, "Create managed OS install ISO temp directory")
+	buildISOIdx := findAnsibleTask(t, tasks, "Build managed OS install ISO")
+	if !(copyIdx < sourceStatIdx && downloadIdx < sourceStatIdx && sourceStatIdx < sourceIdentityIdx && sourceIdentityIdx < checksumIdx && sourceIdentityIdx < statISOIdx) {
+		t.Fatalf("Anaconda role must resolve source metadata before checksum and rebuild decisions")
+	}
+	sourceStat, ok := tasks[sourceStatIdx]["ansible.builtin.stat"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a stat task", tasks[sourceStatIdx]["name"])
+	}
+	if sourceStat["path"] != "{{ bootwright_os_source_iso_effective }}" || sourceStat["get_checksum"] != false {
+		t.Fatalf("%s must stat the effective source without checksumming it, got %v", tasks[sourceStatIdx]["name"], sourceStat)
+	}
+	sourceIdentity, ok := tasks[sourceIdentityIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a copy task", tasks[sourceIdentityIdx]["name"])
+	}
+	sourceIdentityContent := fmt.Sprint(sourceIdentity["content"])
+	for _, want := range []string{"bootwright_os_source_iso_effective", "bootwright_os_source_stat.stat.size", "bootwright_os_source_stat.stat.mtime"} {
+		if !strings.Contains(sourceIdentityContent, want) {
+			t.Fatalf("%s source identity missing %q: %s", tasks[sourceIdentityIdx]["name"], want, sourceIdentityContent)
+		}
+	}
+	checksumCommand, ok := tasks[checksumIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[checksumIdx]["name"])
+	}
+	if got := fmt.Sprint(checksumCommand["argv"]); !strings.Contains(got, "bootwright_os_source_iso_effective") {
+		t.Fatalf("%s must checksum the effective source ISO, got argv=%v", tasks[checksumIdx]["name"], checksumCommand["argv"])
+	}
+	statISO, ok := tasks[statISOIdx]["ansible.builtin.stat"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a stat task", tasks[statISOIdx]["name"])
+	}
+	if statISO["path"] != "{{ bootwright_os_install_iso }}" || statISO["get_checksum"] != false {
+		t.Fatalf("%s must stat install.iso without checksumming it, got %v", tasks[statISOIdx]["name"], statISO)
+	}
+	if !(statISOIdx < rebuildStateIdx && rebuildStateIdx < removeStaleIdx && removeStaleIdx < resetTmpIdx && resetTmpIdx < createTmpIdx && createTmpIdx < buildISOIdx) {
+		t.Fatalf("Anaconda role must remove stale install.iso and reset temp state before mkksiso")
+	}
+	rebuildFact, ok := tasks[rebuildStateIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", tasks[rebuildStateIdx]["name"])
+	}
+	rebuildExpr := fmt.Sprint(rebuildFact["bootwright_os_install_iso_rebuild_needed"])
+	for _, want := range []string{
+		"bootwright_os_source_copy.changed",
+		"bootwright_os_source_download.changed",
+		"bootwright_os_source_identity.changed",
+		"bootwright_os_kickstart.changed",
+		"bootwright_os_install_iso_stat.stat.exists",
+	} {
+		if !strings.Contains(rebuildExpr, want) {
+			t.Fatalf("%s rebuild expression missing %q: %s", tasks[rebuildStateIdx]["name"], want, rebuildExpr)
+		}
+	}
+	if got := tasks[rebuildStateIdx]["changed_when"]; got != false {
+		t.Fatalf("%s must not report changes, got %v", tasks[rebuildStateIdx]["name"], got)
+	}
+	removeStale, ok := tasks[removeStaleIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a file task", tasks[removeStaleIdx]["name"])
+	}
+	if removeStale["path"] != "{{ bootwright_os_install_iso }}" || removeStale["state"] != "absent" {
+		t.Fatalf("%s must remove bootwright_os_install_iso, got %v", tasks[removeStaleIdx]["name"], removeStale)
+	}
+	if got := tasks[removeStaleIdx]["when"]; !stringListContains(got, "bootwright_os_install_iso_rebuild_needed | bool") || !stringListContains(got, "bootwright_os_install_iso_stat.stat.exists | default(false)") {
+		t.Fatalf("%s must only remove an existing ISO when rebuild is needed, got when=%v", tasks[removeStaleIdx]["name"], got)
+	}
+	if got := tasks[buildISOIdx]["when"]; got != "bootwright_os_install_iso_rebuild_needed | bool" {
+		t.Fatalf("%s must use resolved rebuild state, got when=%v", tasks[buildISOIdx]["name"], got)
+	}
+	buildCommand, ok := tasks[buildISOIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[buildISOIdx]["name"])
+	}
+	if got := fmt.Sprint(buildCommand["argv"]); !strings.Contains(got, "bootwright_os_source_iso_effective") {
+		t.Fatalf("%s must use the effective source ISO, got argv=%v", tasks[buildISOIdx]["name"], buildCommand["argv"])
+	}
+	buildEnv, ok := tasks[buildISOIdx]["environment"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must set mkksiso temp environment", tasks[buildISOIdx]["name"])
+	}
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if got := buildEnv[key]; got != "{{ bootwright_os_install_tmpdir }}" {
+			t.Fatalf("%s environment %s got %v, want bootwright_os_install_tmpdir", tasks[buildISOIdx]["name"], key, got)
+		}
+	}
+	if findAnsibleTaskIndex(tasks, "Stage managed OS install ISO for virtual media") >= 0 {
+		t.Fatalf("Anaconda role must not stage install.iso with ansible.builtin.copy")
+	}
+	stageSourceStatIdx := findAnsibleTask(t, tasks, "Stat managed OS install ISO for virtual media stage")
+	stageStatIdx := findAnsibleTask(t, tasks, "Stat managed OS staged virtual media ISO")
+	stageStateIdx := findAnsibleTask(t, tasks, "Resolve managed OS virtual media stage state")
+	stageLinkIdx := findAnsibleTask(t, tasks, "Link managed OS install ISO into virtual media stage")
+	stageCopyIdx := findAnsibleTask(t, tasks, "Copy managed OS install ISO into virtual media stage when linking is unsupported")
+	stagePermsIdx := findAnsibleTask(t, tasks, "Set managed OS virtual media stage permissions")
+	if !(stageSourceStatIdx < stageStatIdx && stageStatIdx < stageStateIdx && stageStateIdx < stageLinkIdx && stageLinkIdx < stageCopyIdx && stageCopyIdx < stagePermsIdx) {
+		t.Fatalf("Anaconda role must hardlink stage ISO before falling back to reflink copy")
+	}
+	stageSourceStat, ok := tasks[stageSourceStatIdx]["ansible.builtin.stat"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a stat task", tasks[stageSourceStatIdx]["name"])
+	}
+	if stageSourceStat["path"] != "{{ bootwright_os_install_iso }}" || stageSourceStat["get_checksum"] != false {
+		t.Fatalf("%s must stat install.iso without checksumming it, got %v", tasks[stageSourceStatIdx]["name"], stageSourceStat)
+	}
+	stageLink, ok := tasks[stageLinkIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[stageLinkIdx]["name"])
+	}
+	if got := fmt.Sprint(stageLink["argv"]); !strings.Contains(got, "ln") || !strings.Contains(got, "-f") || !strings.Contains(got, "bootwright_os_install_iso") || !strings.Contains(got, "bootwright_os_stage_path") {
+		t.Fatalf("%s must hardlink install.iso into the stage path, got argv=%v", tasks[stageLinkIdx]["name"], stageLink["argv"])
+	}
+	if got := tasks[stageLinkIdx]["failed_when"]; got != false {
+		t.Fatalf("%s must allow fallback after hardlink failure, got failed_when=%v", tasks[stageLinkIdx]["name"], got)
+	}
+	stageCopy, ok := tasks[stageCopyIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[stageCopyIdx]["name"])
+	}
+	for _, want := range []string{"cp", "--reflink=auto", "--remove-destination", "bootwright_os_install_iso", "bootwright_os_stage_path"} {
+		if got := fmt.Sprint(stageCopy["argv"]); !strings.Contains(got, want) {
+			t.Fatalf("%s fallback copy missing %q, got argv=%v", tasks[stageCopyIdx]["name"], want, stageCopy["argv"])
+		}
+	}
+	if got := tasks[stageCopyIdx]["when"]; !stringListContains(got, "not (bootwright_os_stage_iso_linked | bool)") || !stringListContains(got, "(bootwright_os_stage_link.rc | default(1) | int) != 0") {
+		t.Fatalf("%s must only copy when hardlinking was needed and failed, got when=%v", tasks[stageCopyIdx]["name"], got)
 	}
 	redHat := readAnsibleStringListVar(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/vars/os/RedHat.yml", "bootwright_machine_os_install_anaconda_packages")
 	assertContainsAll(t, redHat, []string{"lorax"})
@@ -2266,15 +2429,15 @@ func TestAnsibleRemoteBecomeTempConfig(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s must explicitly configure local_tmp for controller temp files", path)
 		}
-		if localTmp != "/tmp" {
-			t.Fatalf("%s local_tmp must use /tmp so controller Ansible does not depend on writable home dirs; got %q", path, localTmp)
+		if localTmp != "/var/tmp" {
+			t.Fatalf("%s local_tmp must use /var/tmp so controller Ansible does not depend on writable home dirs or tmpfs capacity; got %q", path, localTmp)
 		}
 		tmp, ok := ansibleCfgValue(cfg, "defaults", "remote_tmp")
 		if !ok {
 			t.Fatalf("%s must explicitly configure remote_tmp for remote become tasks", path)
 		}
-		if tmp != "/tmp" {
-			t.Fatalf("%s remote_tmp must use /tmp so sudo-root modules are readable outside restricted home dirs; got %q", path, tmp)
+		if tmp != "/var/tmp" {
+			t.Fatalf("%s remote_tmp must use /var/tmp so sudo-root modules are readable outside restricted home dirs without depending on small tmpfs capacity; got %q", path, tmp)
 		}
 		value, ok := ansibleCfgValue(cfg, "ssh_connection", "pipelining")
 		if !ok {

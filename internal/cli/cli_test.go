@@ -2652,8 +2652,8 @@ func TestControllerCLIAnsibleEnvForcesSystemTemps(t *testing.T) {
 		"ANSIBLE_REMOTE_TEMP",
 		"ANSIBLE_REMOTE_TMP",
 	} {
-		if got := env[key]; got != "/tmp" {
-			t.Fatalf("%s = %q, want /tmp", key, got)
+		if got := env[key]; got != "/var/tmp" {
+			t.Fatalf("%s = %q, want /var/tmp", key, got)
 		}
 	}
 }
