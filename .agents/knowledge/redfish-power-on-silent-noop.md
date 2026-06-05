@@ -16,9 +16,10 @@ inserted vmedia file) are invisible to the BMC client — Reset returns
 204 and install_agent enters `wait-for install-complete`, waiting
 forever for an agent that was never running.
 
-**Fix:** After Reset(On), poll the System resource until
-`PowerState == On` before handing off to wait-for. boot_redfish runs
-this poll automatically using
+**Fix:** Discover the advertised `#ComputerSystem.Reset` target and metadata
+before powering on, and prefer `ForceOn` over `On` when the BMC exposes it.
+After the power-on reset request, poll the System resource until
+`PowerState == On` before handing off to wait-for. boot_redfish runs this poll
+automatically using
 `bootwright_redfish_power_state_retries` /
 `bootwright_redfish_power_state_delay_seconds`.
-

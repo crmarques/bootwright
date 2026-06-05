@@ -109,6 +109,16 @@ def bootwright_redfish_vmm_control_actions(actions, action_info_results):
     return supported
 
 
+def bootwright_redfish_power_on_reset_type(resource, action_info_results=None):
+    values = _reset_type_allowable_values(resource, action_info_results)
+    if not values:
+        return "On"
+    for candidate in ("ForceOn", "On", "PushPowerButton"):
+        if candidate in values:
+            return candidate
+    return "On"
+
+
 def bootwright_redfish_vmedia_attached(resource, expected_image, expected_protocol=""):
     if not isinstance(resource, dict):
         return False
@@ -188,6 +198,66 @@ def _action_info_accepts_vmm_control(action_info):
     return {"Connect", "Disconnect"}.issubset(
         {value for value in values if isinstance(value, str)}
     )
+
+
+def _reset_type_allowable_values(resource, action_info_results):
+    values = []
+    for action in _action_objects(resource, "#ComputerSystem.Reset"):
+        values.extend(_string_list(action.get("ResetType@Redfish.AllowableValues")))
+
+    if isinstance(action_info_results, dict):
+        action_info_results = action_info_results.get("results", [])
+    if isinstance(action_info_results, list):
+        for result in action_info_results:
+            if not isinstance(result, dict) or _status_code(result.get("status")) != 200:
+                continue
+            values.extend(_action_info_parameter_values(result.get("json"), "ResetType"))
+
+    seen = set()
+    ordered = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            ordered.append(value)
+    return ordered
+
+
+def _action_objects(resource, action_name):
+    if not isinstance(resource, dict) or not isinstance(action_name, str) or not action_name:
+        return []
+    actions = []
+    container = resource.get("Actions")
+    if isinstance(container, dict) and isinstance(container.get(action_name), dict):
+        actions.append(container[action_name])
+    oem = resource.get("Oem")
+    if isinstance(oem, dict):
+        for value in oem.values():
+            if not isinstance(value, dict):
+                continue
+            container = value.get("Actions")
+            if isinstance(container, dict) and isinstance(container.get(action_name), dict):
+                actions.append(container[action_name])
+    return actions
+
+
+def _action_info_parameter_values(action_info, parameter_name):
+    if not isinstance(action_info, dict):
+        return []
+    parameters = action_info.get("Parameters")
+    if not isinstance(parameters, list):
+        return []
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            continue
+        if parameter.get("Name") == parameter_name:
+            return _string_list(parameter.get("AllowableValues"))
+    return []
+
+
+def _string_list(value):
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
 
 
 def _status_code(value):
@@ -270,5 +340,6 @@ class FilterModule:
             "bootwright_redfish_mac_validation": bootwright_redfish_mac_validation,
             "bootwright_redfish_url": bootwright_redfish_url,
             "bootwright_redfish_vmedia_attached": bootwright_redfish_vmedia_attached,
+            "bootwright_redfish_power_on_reset_type": bootwright_redfish_power_on_reset_type,
             "bootwright_redfish_vmm_control_actions": bootwright_redfish_vmm_control_actions,
         }

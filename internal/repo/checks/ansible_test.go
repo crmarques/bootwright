@@ -573,8 +573,12 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	securityCaptureIdx := findAnsibleTask(t, powerTasks, "Capture Redfish HTTPS transfer certificate verification status")
 	retryInsertIdx := findAnsibleTask(t, powerTasks, "Retry Redfish virtual media insertion until attached")
 	confirmMediaIdx := findAnsibleTask(t, powerTasks, "Confirm agent ISO is attached as virtual media")
-	systemRefreshIdx := findAnsibleTask(t, powerTasks, "Refresh Redfish system metadata before CD boot override")
+	systemRefreshIdx := findAnsibleTask(t, powerTasks, "Refresh Redfish system metadata before reset and boot override")
 	systemPreconditionIdx := findAnsibleTask(t, powerTasks, "Resolve Redfish system PATCH precondition")
+	resetActionsIdx := findAnsibleTask(t, powerTasks, "Resolve Redfish reset action metadata")
+	resetTargetIdx := findAnsibleTask(t, powerTasks, "Resolve Redfish reset action target")
+	resetActionInfoIdx := findAnsibleTask(t, powerTasks, "Probe Redfish Reset ActionInfo")
+	resolvePowerOnResetTypeIdx := findAnsibleTask(t, powerTasks, "Resolve Redfish power-on reset type")
 	cdBootIdx := findAnsibleTask(t, powerTasks, "Set one-time boot to CD")
 	confirmCDBootIdx := findAnsibleTask(t, powerTasks, "Confirm one-time CD boot override was accepted")
 	forceOffIdx := findAnsibleTask(t, powerTasks, "Force power off (tolerate already-off)")
@@ -642,7 +646,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(preLiveIdx < preConfigIdx) {
 		t.Fatalf("media cleanup must process running state before persistent state")
 	}
-	if !(protocolIdx < initInsertIdx && initInsertIdx < securityRefreshIdx && securityRefreshIdx < securityResolveIdx && securityResolveIdx < securityPatchIdx && securityPatchIdx < securityCaptureIdx && securityCaptureIdx < retryInsertIdx && retryInsertIdx < confirmMediaIdx && confirmMediaIdx < systemRefreshIdx && systemRefreshIdx < systemPreconditionIdx && systemPreconditionIdx < cdBootIdx && cdBootIdx < confirmCDBootIdx) {
+	if !(protocolIdx < initInsertIdx && initInsertIdx < securityRefreshIdx && securityRefreshIdx < securityResolveIdx && securityResolveIdx < securityPatchIdx && securityPatchIdx < securityCaptureIdx && securityCaptureIdx < retryInsertIdx && retryInsertIdx < confirmMediaIdx && confirmMediaIdx < systemRefreshIdx && systemRefreshIdx < systemPreconditionIdx && systemPreconditionIdx < resetActionsIdx && resetActionsIdx < resetTargetIdx && resetTargetIdx < resetActionInfoIdx && resetActionInfoIdx < resolvePowerOnResetTypeIdx && resolvePowerOnResetTypeIdx < cdBootIdx && cdBootIdx < confirmCDBootIdx) {
 		t.Fatalf("boot_redfish must retry virtual media insertion before setting CD boot")
 	}
 	if !(confirmCDBootIdx < forceOffIdx && forceOffIdx < initPowerOffIdx && initPowerOffIdx < waitPowerOffIdx && waitPowerOffIdx < confirmPowerOffIdx && confirmPowerOffIdx < powerOnIdx && powerOnIdx < confirmPowerOnRequestIdx && confirmPowerOnRequestIdx < initPowerOnIdx && initPowerOnIdx < waitPowerOnIdx && waitPowerOnIdx < confirmPowerOnIdx) {
@@ -685,9 +689,57 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	assertSleepCommand(t, insertAttemptTasks[retryDelayIdx], "{{ bootwright_redfish_insert_media_retry_delay_seconds }}")
 	assertSleepCommand(t, powerStateTasks[powerStateDelayIdx], "{{ bootwright_redfish_power_state_delay_seconds }}")
+	resetActionsFact, ok := powerTasks[resetActionsIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact task", powerTasks[resetActionsIdx]["name"])
+	}
+	if got := resetActionsFact["bootwright_redfish_system_reset_actions"].(string); !strings.Contains(got, "bootwright_redfish_action_descriptors") || !strings.Contains(got, "#ComputerSystem.Reset") {
+		t.Fatalf("reset action metadata must use ComputerSystem.Reset descriptors, got %v", got)
+	}
+	if got := resetActionsFact["bootwright_redfish_system_default_reset_target"].(string); !strings.Contains(got, "/Actions/ComputerSystem.Reset") {
+		t.Fatalf("reset action fallback target must use the standard ComputerSystem.Reset path, got %v", got)
+	}
+	resetTargetFact, ok := powerTasks[resetTargetIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact task", powerTasks[resetTargetIdx]["name"])
+	}
+	resetTarget, ok := resetTargetFact["bootwright_redfish_system_reset_target"].(string)
+	if !ok || !strings.Contains(resetTarget, "selectattr('source', 'equalto', 'standard')") || !strings.Contains(resetTarget, "bootwright_redfish_system_default_reset_target") {
+		t.Fatalf("reset target must prefer advertised standard action and keep fallback, got %v", resetTarget)
+	}
+	resetActionInfoURI, ok := powerTasks[resetActionInfoIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri body", powerTasks[resetActionInfoIdx]["name"])
+	}
+	if got, ok := resetActionInfoURI["url"].(string); !ok || !strings.Contains(got, "item.actionInfo") {
+		t.Fatalf("reset ActionInfo probe must use the advertised ActionInfo URL, got %v", resetActionInfoURI["url"])
+	}
+	if got, ok := powerTasks[resetActionInfoIdx]["loop"].(string); !ok || !strings.Contains(got, "selectattr('actionInfo', 'defined')") {
+		t.Fatalf("reset ActionInfo probe must only fetch actions that advertise ActionInfo, got %v", powerTasks[resetActionInfoIdx]["loop"])
+	}
+	resetTypeFact, ok := powerTasks[resolvePowerOnResetTypeIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact task", powerTasks[resolvePowerOnResetTypeIdx]["name"])
+	}
+	if got := resetTypeFact["bootwright_redfish_power_on_reset_type"].(string); !strings.Contains(got, "bootwright_redfish_power_on_reset_type") || !strings.Contains(got, "bootwright_redfish_reset_action_info_probe") {
+		t.Fatalf("power-on reset type must resolve from system metadata and ActionInfo, got %v", got)
+	}
+	for _, idx := range []int{forceOffIdx, powerOnIdx} {
+		resetURI, ok := powerTasks[idx]["ansible.builtin.uri"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no uri body", powerTasks[idx]["name"])
+		}
+		if got := resetURI["url"]; got != "{{ bootwright_redfish_system_reset_target | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
+			t.Fatalf("%s must use the resolved Reset action target, got %v", powerTasks[idx]["name"], got)
+		}
+	}
 	powerOnURI, ok := powerTasks[powerOnIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s has no uri body", powerTasks[powerOnIdx]["name"])
+	}
+	powerOnBody, ok := powerOnURI["body"].(map[string]any)
+	if !ok || powerOnBody["ResetType"] != "{{ bootwright_redfish_power_on_reset_type }}" {
+		t.Fatalf("power-on body must use resolved ResetType, got %v", powerOnURI["body"])
 	}
 	if got := powerOnURI["status_code"]; !intListEqual(got, []int{200, 202, 204, 409, 500}) {
 		t.Fatalf("Power on status_code got %v, want [200 202 204 409 500]", got)
@@ -704,6 +756,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	}
 	if !strings.Contains(fmt.Sprint(powerOnAssert["that"]), "[200, 202, 204, 409, 500]") {
 		t.Fatalf("Power on request assertion must tolerate retriable Redfish statuses, got %v", powerOnAssert["that"])
+	}
+	if !strings.Contains(powerOnAssert["fail_msg"].(string), "ResetType") || !strings.Contains(powerOnAssert["success_msg"].(string), "ResetType") {
+		t.Fatalf("power-on request assertion must report the selected ResetType, got %v", powerOnAssert)
 	}
 	mediaCandidatesAssert, ok := prepareTasks[confirmMediaCandidatesIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {

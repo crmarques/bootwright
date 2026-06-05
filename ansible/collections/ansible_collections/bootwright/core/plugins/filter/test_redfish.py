@@ -18,6 +18,7 @@ bootwright_redfish_action_descriptors = _module.bootwright_redfish_action_descri
 bootwright_redfish_action_targets = _module.bootwright_redfish_action_targets
 bootwright_redfish_ethernet_macs = _module.bootwright_redfish_ethernet_macs
 bootwright_redfish_mac_validation = _module.bootwright_redfish_mac_validation
+bootwright_redfish_power_on_reset_type = _module.bootwright_redfish_power_on_reset_type
 bootwright_redfish_url = _module.bootwright_redfish_url
 bootwright_redfish_vmedia_attached = _module.bootwright_redfish_vmedia_attached
 bootwright_redfish_vmm_control_actions = _module.bootwright_redfish_vmm_control_actions
@@ -179,6 +180,54 @@ class RedfishVMMControlActions(unittest.TestCase):
         got = bootwright_redfish_vmm_control_actions(actions, results)
 
         self.assertEqual(got, [])
+
+
+class RedfishPowerOnResetType(unittest.TestCase):
+    def test_prefers_advertised_force_on(self):
+        resource = {
+            "Actions": {
+                "#ComputerSystem.Reset": {
+                    "target": "/systems/1/reset",
+                    "ResetType@Redfish.AllowableValues": ["On", "ForceOn", "ForceOff"],
+                },
+            },
+        }
+
+        got = bootwright_redfish_power_on_reset_type(resource)
+
+        self.assertEqual(got, "ForceOn")
+
+    def test_uses_action_info_when_inline_values_are_absent(self):
+        resource = {
+            "Actions": {
+                "#ComputerSystem.Reset": {
+                    "target": "/systems/1/reset",
+                    "@Redfish.ActionInfo": "/systems/1/reset-action-info",
+                },
+            },
+        }
+        results = {
+            "results": [
+                {
+                    "status": 200,
+                    "json": {
+                        "Parameters": [
+                            {
+                                "Name": "ResetType",
+                                "AllowableValues": ["PushPowerButton", "ForceOff"],
+                            },
+                        ],
+                    },
+                },
+            ],
+        }
+
+        got = bootwright_redfish_power_on_reset_type(resource, results)
+
+        self.assertEqual(got, "PushPowerButton")
+
+    def test_defaults_to_on_without_metadata(self):
+        self.assertEqual(bootwright_redfish_power_on_reset_type({}), "On")
 
 
 class RedfishURL(unittest.TestCase):

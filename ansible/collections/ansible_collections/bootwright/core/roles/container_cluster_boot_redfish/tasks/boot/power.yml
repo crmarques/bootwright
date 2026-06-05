@@ -213,7 +213,7 @@
       TaskStatus={{ bootwright_redfish_vmedia_status.insertTaskStatus | default('<not reported>', true) }},
       TaskMounted={{ bootwright_redfish_vmedia_status.insertTaskMounted | default(false) }}.
 
-- name: Refresh Redfish system metadata before CD boot override
+- name: Refresh Redfish system metadata before reset and boot override
   ansible.builtin.uri:
     url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: GET
@@ -228,7 +228,6 @@
   failed_when: false
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-  when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
 
 - name: Resolve Redfish system PATCH precondition
   ansible.builtin.set_fact:
@@ -241,6 +240,58 @@
       }}
   changed_when: false
   when: bootwright_component.boot.redfish.setBootSource | default(true) | bool
+
+- name: Resolve Redfish reset action metadata
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_reset_actions: "{{ (bootwright_redfish_system_boot_probe.json | default({})) | bootwright.core.bootwright_redfish_action_descriptors('#ComputerSystem.Reset') }}"
+    bootwright_redfish_system_default_reset_target: "{{ '/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset' }}"
+  changed_when: false
+
+- name: Resolve Redfish reset action target
+  ansible.builtin.set_fact:
+    bootwright_redfish_system_reset_target: >-
+      {{
+        (
+          bootwright_redfish_system_reset_actions
+          | selectattr('source', 'equalto', 'standard')
+          | map(attribute='target')
+          | list
+          | first
+        )
+        | default(
+          (
+            bootwright_redfish_system_reset_actions
+            | map(attribute='target')
+            | list
+            | first
+          ),
+          true
+        )
+        | default(bootwright_redfish_system_default_reset_target, true)
+      }}
+  changed_when: false
+
+- name: Probe Redfish Reset ActionInfo
+  ansible.builtin.uri:
+    url: "{{ item.actionInfo | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    method: GET
+    return_content: true
+    status_code: [200, 404]
+    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
+    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
+    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
+    timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_reset_action_info_probe
+  failed_when: false
+  changed_when: false
+  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  loop: "{{ bootwright_redfish_system_reset_actions | selectattr('actionInfo', 'defined') | list }}"
+
+- name: Resolve Redfish power-on reset type
+  ansible.builtin.set_fact:
+    bootwright_redfish_power_on_reset_type: "{{ (bootwright_redfish_system_boot_probe.json | default({})) | bootwright.core.bootwright_redfish_power_on_reset_type(bootwright_redfish_reset_action_info_probe | default({})) }}"
+  changed_when: false
 
 - name: Set one-time boot to CD
   ansible.builtin.uri:
@@ -281,7 +332,7 @@
 
 - name: Force power off (tolerate already-off)
   ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset') | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_system_reset_target | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: POST
     body_format: json
     body:
@@ -336,11 +387,11 @@
 
 - name: Power on
   ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/Actions/ComputerSystem.Reset') | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
+    url: "{{ bootwright_redfish_system_reset_target | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
     method: POST
     body_format: json
     body:
-      ResetType: "On"
+      ResetType: "{{ bootwright_redfish_power_on_reset_type }}"
     status_code: [200, 202, 204, 409, 500]
     validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
     force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
@@ -359,10 +410,12 @@
     fail_msg: >-
       Redfish BMC returned unexpected power-on HTTP status for system
       {{ bootwright_redfish_system_id }}:
-      {{ bootwright_redfish_power_on_request.status | default('unknown') }}.
+      {{ bootwright_redfish_power_on_request.status | default('unknown') }}
+      using ResetType={{ bootwright_redfish_power_on_reset_type }}.
     success_msg: >-
       Redfish power-on request for system {{ bootwright_redfish_system_id }}
-      returned HTTP status {{ bootwright_redfish_power_on_request.status | default('unknown') }};
+      returned HTTP status {{ bootwright_redfish_power_on_request.status | default('unknown') }}
+      using ResetType={{ bootwright_redfish_power_on_reset_type }};
       verifying PowerState=On next.
 
 - name: Initialize Redfish power state wait for PowerState=On
@@ -395,6 +448,7 @@
     fail_msg: >-
       Redfish BMC did not report PowerState=On for system
       {{ bootwright_redfish_power_state_status.systemID }} after power-on.
+      ResetType={{ bootwright_redfish_power_on_reset_type }},
       Last HTTP status={{ bootwright_redfish_power_state_status.httpStatus }},
       observed PowerState={{ bootwright_redfish_power_state_status.powerState }},
       attempts={{ bootwright_redfish_power_state_status.attempts }} of
