@@ -37,18 +37,28 @@ making changes, load only the specs that match the user request.
 - For any implementation request that changes repo-tracked files, use the
   `/.agents/skills/parallel-implementation/` skill before editing. Agents must
   work from an isolated temporary worktree and may touch the primary `main`
-  worktree only for final clean fast-forward integration. If the primary
-  `main` worktree has uncommitted changes, complete edits and validation in the
-  temporary worktree and report a blocked handoff for manual integration.
+  worktree only after the user explicitly approves commit or integration after
+  review/testing. If the primary `main` worktree has uncommitted changes,
+  complete edits and validation in the temporary worktree and report a blocked
+  handoff for manual integration.
+- Do not commit, push, or fast-forward implementation fixes immediately. Leave
+  changes available for user review/testing and wait for explicit approval
+  before creating commits or integrating into `main`.
 - When adding or changing CLI user-facing human output, always use the
   centralized `internal/cli/output` component. Keep the documented raw-output
   exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
   process passthrough such as Ansible streams.
 - After completing the intended edit set for any implementation request that
-  changes repo-tracked files, run `make check` once before handoff. Do not run
-  it repeatedly during the same request unless later edits can invalidate the
-  previous result. If `make check` cannot run or fails, report the blocker
-  instead of a successful handoff.
+  changes code, run basic targeted validations first. Before the final
+  aggregate check, refresh or rebase the temporary worktree against current
+  local `main`; if that changes the effective tree, perform needed fixes and
+  rerun the affected basic validations. Then run `make check` once as the last
+  validation step before handoff. Do not run `make check` earlier or repeatedly
+  unless later edits can invalidate the previous result. If `make check` cannot
+  run or fails, report the blocker instead of a successful handoff.
+- Whenever `make check` is required, treat it as the final validation command
+  for the request after targeted validation and current-`main` refresh have
+  completed.
 - During investigation or iterative fixes, prefer the smallest direct targeted
   command that answers the current question. Do not run aggregate checks or
   their member commands in a way that duplicates a final completed `make check`
@@ -58,18 +68,24 @@ making changes, load only the specs that match the user request.
 
 ## Handoff Format
 
-Use Conventional Commits (`type(scope): subject`):
+Use Conventional Commits (`type(scope): subject`) when asked to commit or when
+providing a commit subject after user review/testing:
 
 - Generate ONLY one short subject line (no body). Max 72 chars.
-- For a successful standard request handoff, output ONLY that one
-  subject line. Do NOT append summaries, file lists, verification
-  details, or commit questions. If request processing is blocked or
-  required verification cannot complete, report the blocker instead.
+- For an implementation/fix handoff where changes are intentionally left
+  uncommitted for user review/testing, report the temporary worktree path and
+  whether basic validation, current-`main` refresh/rebase, and final
+  `make check` completed. If request processing is blocked or required
+  verification cannot complete, report the blocker instead.
+- After the user explicitly approves commit/integration, output ONLY the
+  conventional-commit subject line. Do NOT append summaries, file lists,
+  verification details, or commit questions.
 - Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`,
   `build`, `ci`, `chore`, `revert`.
 - Use a scope when obvious (package/module/folder).
 
 Examples:
 
-- Success: `docs(agents): shorten standard handoff`
+- Ready for review/test: `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`
+- Commit-approved success: `docs(agents): shorten standard handoff`
 - Blocked: `Blocked: make check could not complete`

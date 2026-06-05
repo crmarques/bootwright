@@ -15,7 +15,7 @@ and coding agents. Load only the specs and skills needed for the current task.
 | Skill | Use When |
 | --- | --- |
 | `definition-stewardship` | Changing specs, ADRs, docs, examples, E2E fixture names, or agent guidance |
-| `parallel-implementation` | Isolating implementation work in temporary worktrees before integration |
+| `parallel-implementation` | Isolating implementation work in temporary worktrees before review and integration |
 | `architecture` | Designing OpenShift behavior, provider boundaries, multi-cluster provisioning, or lab Redfish emulation |
 | `repo-stewardship` | Changing repository layout, generated-output boundaries, tests, or security hygiene |
 | `security-analysis` | Reviewing secrets, credentials, permissions, command execution, supply chain, or TLS/trust handling |
@@ -51,11 +51,20 @@ not scan or bulk-load the full knowledge directory.
   process passthrough such as Ansible streams.
 - `v1alpha1` can break cleanly: do not add migrations, aliases, compatibility
   shims, or legacy examples.
+- Do not commit, push, or fast-forward implementation fixes immediately. Leave
+  changes available for user review/testing and wait for explicit approval
+  before creating commits or integrating into `main`.
 - After completing the intended edit set for any implementation request that
-  changes repo-tracked files, run `make check` once before handoff. Do not run
-  it repeatedly during the same request unless later edits can invalidate the
-  previous result. If `make check` cannot run or fails, report the blocker
-  instead of a successful handoff.
+  changes code, run basic targeted validations first. Before the final
+  aggregate check, refresh or rebase the temporary worktree against current
+  local `main`; if that changes the effective tree, perform needed fixes and
+  rerun the affected basic validations. Then run `make check` once as the last
+  validation step before handoff. Do not run `make check` earlier or repeatedly
+  unless later edits can invalidate the previous result. If `make check` cannot
+  run or fails, report the blocker instead of a successful handoff.
+- Whenever `make check` is required, treat it as the final validation command
+  for the request after targeted validation and current-`main` refresh have
+  completed.
 - During investigation or iterative fixes, prefer the smallest direct targeted
   command that answers the current question. Do not run aggregate checks or
   their member commands in a way that duplicates a final completed `make check`

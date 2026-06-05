@@ -20,9 +20,12 @@ in the primary `main` worktree.
 - Record whether the primary `main` worktree was dirty at task start.
 - Always create an isolated temporary branch and worktree from local `main`
   before editing.
-- Use the primary worktree only for read-only inspection and, when it is clean,
-  final fast-forward integration into `main`.
+- Use the primary worktree only for read-only inspection until the user
+  explicitly approves commit or integration after review/testing.
 - Do not stash, reset, force-update, or commit unrelated user changes.
+- Do not commit task changes, push, or fast-forward `main` immediately after
+  implementing a fix. Leave the temporary worktree available for user
+  review/testing until the user explicitly approves the next step.
 
 ## Isolated Worktree Workflow
 
@@ -44,19 +47,35 @@ in the primary `main` worktree.
 - For multiple parallel workers, split disjoint write scopes and assign each
   worker a separate `work/<scope-slug>-<base8>-<timestamp>` branch and matching
   `/tmp/bootwright-worktrees/<scope-slug>-<base8>-<timestamp>` worktree.
-- The coordinating agent reviews, integrates, resolves conflicts, and runs the
-  final validation for the combined result.
+- The coordinating agent reviews, combines worker output, resolves conflicts,
+  and runs the final validation sequence for the combined result.
 
-## Completion
+## Pre-Handoff Validation
 
-- Run all task validation from the temporary worktree.
-- Commit the task changes on the temporary branch.
-- If local `main` advanced after `base_sha`, rebase the temporary branch onto
-  current local `main`.
-- Rerun required validation when rebase changes the effective final tree.
+- Run basic targeted validation from the temporary worktree first.
+- Before running `make check`, refresh the temporary change set against current
+  local `main`.
+  - If the task changes are still uncommitted, use a non-committing replay
+    flow, such as applying the temporary worktree diff onto a fresh worktree
+    created from current `main`.
+  - If the user has already approved a commit or the task branch already
+    contains task commits, rebase the temporary branch onto current local
+    `main`.
+- If refresh or rebase changes the effective final tree, perform needed fixes
+  and rerun the affected basic validations.
+- Run `make check` once as the last validation command before handoff. Do not
+  run it earlier in the request.
+- Leave changes uncommitted in the temporary worktree for user review/testing
+  unless the user has explicitly approved commit or integration after review.
 - If the primary `main` worktree was dirty at task start, stop after validation
-  and the temporary branch commit. Report a blocked handoff for manual
-  integration.
+  and report a blocked handoff for manual integration.
+
+## After User Approval
+
+- Commit the reviewed task changes on the temporary branch.
+- If local `main` advanced after the last refresh, rebase the temporary branch
+  onto current local `main`.
+- Rerun required validation when rebase changes the effective final tree.
 - If the primary `main` worktree was clean at task start and remains clean at
   integration time, fast-forward `main` to the temporary branch.
 - After successful integration, remove the temporary worktree and delete the
