@@ -68,18 +68,42 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		}
 	}
 
+	actionIdx := findAnsibleTask(t, mainTasks, "Resolve direct libvirt virtual media action")
+	validateActionIdx := findAnsibleTask(t, mainTasks, "Validate direct libvirt virtual media action")
+	runningCleanIdx := findAnsibleTask(t, mainTasks, "Clean stale running virtual media before insert")
+	persistentCleanIdx := findAnsibleTask(t, mainTasks, "Clean stale persistent virtual media before insert")
 	resolveIdx := findAnsibleTask(t, mainTasks, "Resolve direct libvirt virtual media insert state")
 	installIdx := findAnsibleTask(t, mainTasks, "Install virtual media insert helper")
 	insertIdx := findAnsibleTask(t, mainTasks, "Insert staged virtual media directly into libvirt domain")
 	recordIdx := findAnsibleTask(t, mainTasks, "Record direct libvirt virtual media attachment")
-	if !(resolveIdx < installIdx && installIdx < insertIdx && insertIdx < recordIdx) {
+	if !(actionIdx < validateActionIdx && validateActionIdx < runningCleanIdx && runningCleanIdx < persistentCleanIdx && persistentCleanIdx < resolveIdx && resolveIdx < installIdx && installIdx < insertIdx && insertIdx < recordIdx) {
 		t.Fatalf("libvirt media role must resolve, install helper, insert media, then record backend attachment")
+	}
+	actionFacts, ok := mainTasks[actionIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a set_fact task", mainTasks[actionIdx]["name"])
+	}
+	if got := actionFacts["bootwright_libvirt_media_action"]; got != "{{ bootwright_redfish_action_effective | default('boot') }}" {
+		t.Fatalf("%s must default to boot action, got %v", mainTasks[actionIdx]["name"], got)
+	}
+	validateAction, ok := mainTasks[validateActionIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", mainTasks[validateActionIdx]["name"])
+	}
+	if got := fmt.Sprint(validateAction["that"]); !strings.Contains(got, "cleanup_persistent") {
+		t.Fatalf("%s must allow persistent-only cleanup, got %v", mainTasks[validateActionIdx]["name"], validateAction["that"])
+	}
+	if got := mainTasks[runningCleanIdx]["when"]; got != "bootwright_libvirt_media_action in ['boot', 'cleanup']" {
+		t.Fatalf("%s must not run for persistent-only cleanup, got when=%v", mainTasks[runningCleanIdx]["name"], got)
+	}
+	if got := mainTasks[persistentCleanIdx]["when"]; got != "bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']" {
+		t.Fatalf("%s must run for persistent-only cleanup, got when=%v", mainTasks[persistentCleanIdx]["name"], got)
 	}
 	resolveFacts, ok := mainTasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", mainTasks[resolveIdx]["name"])
 	}
-	if got := fmt.Sprint(resolveFacts["bootwright_libvirt_media_insert_requested"]); !strings.Contains(got, "bootwright_redfish_action_effective") {
+	if got := fmt.Sprint(resolveFacts["bootwright_libvirt_media_insert_requested"]); !strings.Contains(got, "bootwright_libvirt_media_action") {
 		t.Fatalf("%s must only request direct insert for boot actions, got %s", mainTasks[resolveIdx]["name"], got)
 	}
 	if got := fmt.Sprint(resolveFacts["bootwright_libvirt_media_boot_order"]); !strings.Contains(got, "bootOrder") || !strings.Contains(got, "disk-first") {
@@ -686,8 +710,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	resolveBootComponentIdx := findAnsibleTask(t, tasks, "Resolve managed OS Redfish boot component")
 	prepareMediaIdx := findAnsibleTask(t, tasks, "Prepare provider virtual media before managed OS boot")
 	bootMediaIdx := findAnsibleTask(t, tasks, "Boot managed OS installer through Redfish virtual media")
-	if !(buildISOIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx) {
-		t.Fatalf("Anaconda role must resolve tokenized boot component before media preparation and boot")
+	persistentCleanupIdx := findAnsibleTask(t, tasks, "Clean managed OS persistent virtual media after installer boot")
+	if !(buildISOIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx && bootMediaIdx < persistentCleanupIdx) {
+		t.Fatalf("Anaconda role must resolve tokenized boot component before media preparation, boot, and persistent cleanup")
 	}
 	stagePerms, ok := tasks[stagePermsIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok {
@@ -714,7 +739,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s is not a set_fact task", tasks[resolveBootComponentIdx]["name"])
 	}
 	resolveBootExpr := fmt.Sprint(resolveBootComponent["bootwright_managed_os_boot_component"])
-	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "cdrom-first"} {
+	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "disk-first"} {
 		if !strings.Contains(resolveBootExpr, want) {
 			t.Fatalf("%s must resolve %q before media preparation: %s", tasks[resolveBootComponentIdx]["name"], want, resolveBootExpr)
 		}
@@ -725,6 +750,13 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	}
 	if prepareVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" {
 		t.Fatalf("%s must use resolved managed OS boot component, got vars=%v", tasks[prepareMediaIdx]["name"], prepareVars)
+	}
+	persistentCleanupVars, ok := tasks[persistentCleanupIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass persistent cleanup vars, got %v", tasks[persistentCleanupIdx]["name"], tasks[persistentCleanupIdx])
+	}
+	if persistentCleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || persistentCleanupVars["bootwright_redfish_action_effective"] != "cleanup_persistent" {
+		t.Fatalf("%s must clean only persistent managed OS media, got vars=%v", tasks[persistentCleanupIdx]["name"], persistentCleanupVars)
 	}
 	redHat := readAnsibleStringListVar(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/vars/os/RedHat.yml", "bootwright_machine_os_install_anaconda_packages")
 	assertContainsAll(t, redHat, []string{"lorax"})

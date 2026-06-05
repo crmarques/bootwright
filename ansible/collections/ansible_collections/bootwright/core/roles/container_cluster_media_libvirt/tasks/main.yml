@@ -1,10 +1,22 @@
 ---
+- name: Resolve direct libvirt virtual media action
+  ansible.builtin.set_fact:
+    bootwright_libvirt_media_action: "{{ bootwright_redfish_action_effective | default('boot') }}"
+  changed_when: false
+
+- name: Validate direct libvirt virtual media action
+  ansible.builtin.assert:
+    that:
+      - bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']
+    fail_msg: "Unsupported direct libvirt virtual media action {{ bootwright_libvirt_media_action }}"
+
 - name: Clean stale running virtual media before insert
   ansible.builtin.include_tasks: eject.yml
   vars:
     bootwright_libvirt_media_scope: running
     bootwright_libvirt_media_domblklist_args: []
     bootwright_libvirt_media_change_media_arg: --live
+  when: bootwright_libvirt_media_action in ['boot', 'cleanup']
 
 - name: Clean stale persistent virtual media before insert
   ansible.builtin.include_tasks: eject.yml
@@ -13,10 +25,11 @@
     bootwright_libvirt_media_domblklist_args:
       - --inactive
     bootwright_libvirt_media_change_media_arg: --config
+  when: bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']
 
 - name: Resolve direct libvirt virtual media insert state
   ansible.builtin.set_fact:
-    bootwright_libvirt_media_insert_requested: "{{ (bootwright_redfish_action_effective | default('boot')) == 'boot' }}"
+    bootwright_libvirt_media_insert_requested: "{{ bootwright_libvirt_media_action == 'boot' }}"
     bootwright_libvirt_media_stage_dir: "{{ bootwright_component.boot.agentIso.stagePath | dirname }}"
     bootwright_libvirt_media_boot_order: "{{ bootwright_component.boot.media.libvirt.bootOrder | default('disk-first') }}"
   changed_when: false
