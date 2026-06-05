@@ -65,11 +65,21 @@ func validateProviderSpec(provider v1alpha1.InfraProvider, machines map[string]v
 		errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s, %s, %s}",
 			prefix, provider.Spec.Type, v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerBareMetal, v1alpha1.ProvisionerVSphere, v1alpha1.ProvisionerKubeVirt))
 	}
+	if providerArtifactAccessSet(provider.Spec.ArtifactAccess) {
+		errs = append(errs, prefix+".artifactAccess is not valid on InfraProvider; use Environment.spec.defaults.artifactAccess or ContainerCluster.spec.install.artifactAccess")
+	}
 	errs = append(errs, validateUniqueCapabilityNames(provider, "networkAttachments", capabilityNames(provider.Spec.NetworkAttachments, func(x v1alpha1.NetworkAttachmentCapability) string { return x.Name }))...)
 	for _, attachment := range provider.Spec.NetworkAttachments {
 		errs = append(errs, validateProviderNetworkAttachment(provider, attachment)...)
 	}
 	return errs
+}
+
+func providerArtifactAccessSet(access v1alpha1.ProviderArtifactAccess) bool {
+	return access.ServerRef.Name != "" ||
+		access.RedfishVirtualMedia.EndpointRef.Name != "" ||
+		access.MachineBoot.EndpointRef.Name != "" ||
+		access.OSInstall.EndpointRef.Name != ""
 }
 
 func rejectProviderArms(prefix string, provider v1alpha1.InfraProvider, keep string) []string {
@@ -287,7 +297,19 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 	if set != 1 {
 		errs = append(errs, fmt.Sprintf("%s must set exactly one of {libvirt, vsphere, kubevirt, bareMetal} (got %d)", prefix, set))
 	}
+	if kind := v1alpha1.NetworkAttachmentKind(attachment); kind != "" && provider.Spec.Type != "" && kind != provider.Spec.Type {
+		errs = append(errs, fmt.Sprintf("%s.%s must be empty when InfraProvider/%s spec.type=%s", prefix, networkAttachmentArmField(kind), provider.Metadata.Name, provider.Spec.Type))
+	}
 	return errs
+}
+
+func networkAttachmentArmField(kind string) string {
+	switch kind {
+	case v1alpha1.ProvisionerBareMetal:
+		return "bareMetal"
+	default:
+		return kind
+	}
 }
 
 func capabilityNames[T any](items []T, name func(T) string) []string {

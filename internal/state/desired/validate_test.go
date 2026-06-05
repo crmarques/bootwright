@@ -735,6 +735,120 @@ spec:
 	}
 }
 
+func TestSchemaCompatibilityValidationRejectsKnownIncompatibleFields(t *testing.T) {
+	cases := []struct {
+		name          string
+		mutate        func(map[string]string)
+		wantSubstring string
+	}{
+		{
+			name: "provider-artifact-access",
+			mutate: func(files map[string]string) {
+				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "  bareMetal: {}\n", "  bareMetal: {}\n  artifactAccess:\n    serverRef:\n      name: default\n", 1)
+			},
+			wantSubstring: "InfraProvider/rack spec.artifactAccess is not valid on InfraProvider",
+		},
+		{
+			name: "provider-network-attachment-arm",
+			mutate: func(files map[string]string) {
+				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "      bareMetal: {}\n", "      libvirt:\n        bridge: br0\n", 1)
+			},
+			wantSubstring: "InfraProvider/rack spec.networkAttachments[cluster-net].libvirt must be empty when InfraProvider/rack spec.type=baremetal",
+		},
+		{
+			name: "cluster-artifact-access-provider-ref",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    artifactAccess:\n", "    artifactAccess:\n      providerRef:\n        name: rack\n", 1)
+			},
+			wantSubstring: "ContainerCluster/sno spec.install.artifactAccess.providerRef is not valid",
+		},
+		{
+			name: "environment-artifact-access-provider-ref",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", "  defaults:\n    artifactAccess:\n      providerRef:\n        name: rack\n\n  infraComponents:\n", 1)
+			},
+			wantSubstring: "Environment/env spec.defaults.artifactAccess.providerRef is not valid",
+		},
+		{
+			name: "external-name-resolution-endpoint",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        type: external\n        ip: 192.168.132.53\n        endpoint: cluster\n    artifactServers:\n", 1)
+			},
+			wantSubstring: "spec.infraComponents.nameResolution[0].endpoint is only valid for managed nameResolution entries",
+		},
+		{
+			name: "external-registry-component-ref",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        type: external\n        url: registry.example.test:5000\n        componentRef:\n          name: artifact-server\n    artifactServers:\n", 1)
+			},
+			wantSubstring: "spec.infraComponents.registries[0].componentRef is only valid for managed registry entries",
+		},
+		{
+			name: "managed-registry-url",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        type: managed\n        componentRef:\n          name: mirror-registry\n        url: registry.example.test:5000\n    artifactServers:\n", 1)
+				files["service-machines.yaml"] = strings.Replace(files["service-machines.yaml"], "capabilities: [container-runtime]", "capabilities: [container-runtime, registry]", 1)
+				files["infra-component.yaml"] += `---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata: { name: mirror-registry }
+spec:
+  registry:
+    type: mirrorRegistry
+    machineRef:
+      name: services-host
+`
+			},
+			wantSubstring: "spec.infraComponents.registries[0].url is only valid for external registry entries",
+		},
+		{
+			name: "machine-install-hostname-source",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata: { name: rhel-iso }
+spec:
+  type: iso
+  url: local-media:rhel-9.4.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata: { name: rhel }
+spec:
+  os:
+    family: rhel
+    version: "9.4"
+    architecture: x86_64
+  installer:
+    type: anaconda
+    anaconda:
+      imageRef:
+        name: rhel-iso
+  customizations:
+    hostname:
+      source: static
+`
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.hostname.source "static" must be "machineName"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			tc.mutate(files)
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantSubstring)
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
 func TestEnvironmentNTPSourcesValidateTypedEntries(t *testing.T) {
 	files := baselineFilesWithNTPComponent()
 	files["environment.yaml"] = environmentYAMLWithNTPSources(`      - name: external

@@ -72,11 +72,16 @@ func validateEnvironments(state v1alpha1.State) []string {
 }
 
 func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
-	return validateNodeSSHSpec(
+	var errs []string
+	if env.Spec.Defaults.ArtifactAccess.ProviderRef.Name != "" {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.artifactAccess.providerRef is not valid; select artifact servers with serverRef", env.Metadata.Name))
+	}
+	errs = append(errs, validateNodeSSHSpec(
 		fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name),
 		env.Spec.Defaults.Install.NodeSSH,
 		false,
-	)
+	)...)
+	return errs
 }
 
 func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {
@@ -428,6 +433,9 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed nameResolution entries")
 			}
+			if entry.Endpoint != "" {
+				errs = append(errs, owner+".endpoint is only valid for managed nameResolution entries")
+			}
 		case v1alpha1.EnvironmentComponentManaged:
 			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
 				return c.Spec.NameResolution != nil
@@ -506,10 +514,30 @@ func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components 
 			if entry.URL == "" {
 				errs = append(errs, owner+".url is required for external registry entries")
 			}
+			if entry.ComponentRef.Name != "" {
+				errs = append(errs, owner+".componentRef is only valid for managed registry entries")
+			}
+			if entry.Endpoint != "" {
+				errs = append(errs, owner+".endpoint is only valid for managed registry entries")
+			}
 		case v1alpha1.EnvironmentComponentManaged:
 			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
 				return c.Spec.Registry != nil
 			}, "registry")...)
+			if entry.URL != "" {
+				errs = append(errs, owner+".url is only valid for external registry entries")
+			}
+			if entry.Endpoint != "" {
+				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.Registry != nil {
+					endpoints := map[string]bool{}
+					for _, endpoint := range component.Spec.Registry.Endpoints {
+						endpoints[endpoint.Name] = true
+					}
+					if !endpoints[entry.Endpoint] {
+						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.registry.endpoints", owner, entry.Endpoint))
+					}
+				}
+			}
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}

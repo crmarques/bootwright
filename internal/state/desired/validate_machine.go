@@ -564,6 +564,22 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		} else if _, ok := images[imageRef]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef.name %q does not match any MachineImage", prefix, imageRef))
 		}
+		for i, repo := range profile.Spec.Installer.Anaconda.Repositories {
+			owner := fmt.Sprintf("%s.installer.anaconda.repositories[%d]", prefix, i)
+			if repo.ID == "" {
+				errs = append(errs, owner+".id is required")
+			}
+			if repo.BaseURL == "" {
+				errs = append(errs, owner+".baseURL is required")
+			}
+		}
+		customizations := profile.Spec.Customizations
+		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
+			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
+		}
+		if source := customizations.Storage.RootDevice.Source; source != "" && source != v1alpha1.MachineInstallRootDeviceMachine {
+			errs = append(errs, fmt.Sprintf("%s.customizations.storage.rootDevice.source %q must be %q", prefix, source, v1alpha1.MachineInstallRootDeviceMachine))
+		}
 	}
 	return errs
 }

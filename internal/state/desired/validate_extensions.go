@@ -303,6 +303,9 @@ func validateClusterAddonReadiness(extension v1alpha1.ClusterAddon) []string {
 		owner := fmt.Sprintf("%s.checks[%d]", prefix, i)
 		switch check.Type {
 		case v1alpha1.ClusterAddonReadinessCSVSucceeded:
+			if check.APIVersion != "" || check.Kind != "" || check.Name != "" || check.Condition != nil {
+				errs = append(errs, owner+".type=csvSucceeded must not set apiVersion, kind, name, or condition")
+			}
 			if check.Namespace == "" {
 				errs = append(errs, owner+".namespace is required")
 			}
@@ -310,6 +313,9 @@ func validateClusterAddonReadiness(extension v1alpha1.ClusterAddon) []string {
 				errs = append(errs, owner+".subscription is required")
 			}
 		case v1alpha1.ClusterAddonReadinessCondition:
+			if check.Subscription != "" {
+				errs = append(errs, owner+".subscription is only valid when type=csvSucceeded")
+			}
 			if check.APIVersion == "" {
 				errs = append(errs, owner+".apiVersion is required")
 			}
@@ -330,6 +336,12 @@ func validateClusterAddonReadiness(extension v1alpha1.ClusterAddon) []string {
 				errs = append(errs, owner+".condition.status is required")
 			}
 		case v1alpha1.ClusterAddonReadinessResourceExists:
+			if check.Subscription != "" {
+				errs = append(errs, owner+".subscription is only valid when type=csvSucceeded")
+			}
+			if check.Condition != nil {
+				errs = append(errs, owner+".condition is only valid when type=condition")
+			}
 			if check.APIVersion == "" {
 				errs = append(errs, owner+".apiVersion is required")
 			}

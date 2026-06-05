@@ -212,6 +212,13 @@ spec:
 			wantSubstring: `installPlanApproval "Sometimes" must be one of {Automatic, Manual}`,
 		},
 		{
+			name: "csv-readiness-condition-arm",
+			files: map[string]string{
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "        subscription: hco-operatorhub\n", "        subscription: hco-operatorhub\n        condition:\n          type: Available\n          status: \"True\"\n", 1),
+			},
+			wantSubstring: "type=csvSucceeded must not set apiVersion, kind, name, or condition",
+		},
+		{
 			name: "missing-custom-resource-namespace",
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "        metadata:\n          name: kubevirt-hyperconverged\n          namespace: openshift-cnv", "        metadata:\n          name: kubevirt-hyperconverged", 1),

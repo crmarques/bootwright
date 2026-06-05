@@ -168,6 +168,42 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	}
 }
 
+func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.StoragePoolCephSpec)
+		want string
+	}{
+		{
+			name: "erasure-coded-missing-arm",
+			edit: func(spec *v1alpha1.StoragePoolCephSpec) {
+				spec.Type = v1alpha1.StoragePoolTypeErasureCode
+			},
+			want: "ceph.erasureCoded is required when ceph.type=erasure-coded",
+		},
+		{
+			name: "erasure-coded-replicated-arm",
+			edit: func(spec *v1alpha1.StoragePoolCephSpec) {
+				spec.Type = v1alpha1.StoragePoolTypeErasureCode
+				spec.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
+				spec.Replicated.Size = 3
+			},
+			want: "ceph.type=erasure-coded must not set replicated",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			state.StorageClusters[0].Spec.Ceph.Topology.Stretch = nil
+			tc.edit(&state.StoragePools[0].Spec.Ceph)
+			got := strings.Join(validateStorage(state), "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStorageAttachmentRequiresDataFoundationProvider(t *testing.T) {
 	state := storageValidationState()
 	state.ClusterAddons[0].Spec.Provides = nil

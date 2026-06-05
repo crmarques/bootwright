@@ -172,6 +172,9 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 }
 
 func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifactAccess, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	if access.ProviderRef.Name != "" {
+		return []string{owner + ".artifactAccess.providerRef is not valid; select artifact servers with serverRef"}
+	}
 	if access.ServerRef.Name == "" &&
 		access.RedfishVirtualMedia.EndpointRef.Name == "" &&
 		access.ContainerClusterInstall.EndpointRef.Name == "" &&
