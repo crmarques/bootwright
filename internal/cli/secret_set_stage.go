@@ -14,8 +14,8 @@ import (
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
-func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool) (int, error) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate)
+func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool, yes bool) (int, error) {
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(stdin, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate, yes)
 	if err != nil {
 		return 1, err
 	}
@@ -23,8 +23,11 @@ func runSecretSetWithLocalRoot(ctx context.Context, stdin io.Reader, stdout, std
 	return runWithLocalRoot(ctx, rootArgs, rootStdin, stdout, stderr, false)
 }
 
-func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool) ([]string, io.Reader, func(), error) {
+func stagedSecretSetRootArgs(stdin io.Reader, name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password string, passwordStdin, generate bool, yes bool) ([]string, io.Reader, func(), error) {
 	rootArgs := []string{"secret", "set", name}
+	if yes {
+		rootArgs = append(rootArgs, "--yes")
+	}
 	rootStdin := stdin
 	tempDir := ""
 	cleanup := func() {

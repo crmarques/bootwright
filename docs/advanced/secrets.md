@@ -122,7 +122,8 @@ secret bytes by default.
 
 `bootwright secret set` writes into the current context secrets directory, so
 context-local entries can be declared as scalar list items or single-key list
-items with omitted/null values.
+items with omitted/null values. Replacing an existing context-local secret
+prompts for confirmation unless the command includes `--yes`.
 `bootwright secret generate` only materializes entries declared as `generated:`.
 `bootwright secret materialize` runs generated materialization and, when
 `secretStorage.mode: context`, copies external `file:` entries into the context

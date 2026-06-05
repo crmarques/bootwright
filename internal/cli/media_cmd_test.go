@@ -63,4 +63,36 @@ func TestMediaCLIRejectsInvalidAndDuplicate(t *testing.T) {
 	if code == 0 || !strings.Contains(stderr, "already exists") {
 		t.Fatalf("duplicate code=%d stderr=%q", code, stderr)
 	}
+	replacement := filepath.Join(t.TempDir(), "replacement.iso")
+	if err := os.WriteFile(replacement, []byte("replacement bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runCLI(t, "media", "add", "rhel.iso", "--from-file", replacement, "--force")
+	if code == 0 {
+		t.Fatal("media add --force without --yes unexpectedly succeeded")
+	}
+	if !strings.Contains(stdout, "Replace media rhel.iso") {
+		t.Fatalf("stdout missing media replacement prompt: %q", stdout)
+	}
+	if !strings.Contains(stderr, "media add aborted") {
+		t.Fatalf("stderr missing media add abort: %q", stderr)
+	}
+	stored, err := os.ReadFile(filepath.Join(media.StoreDir(), "rhel.iso"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != "iso bytes" {
+		t.Fatalf("aborted media replacement changed stored bytes: %q", stored)
+	}
+	stdout, stderr, code = runCLIWithInput(t, "y\n", "media", "add", "rhel.iso", "--from-file", replacement, "--force")
+	if code != 0 {
+		t.Fatalf("confirmed media replacement exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stored, err = os.ReadFile(filepath.Join(media.StoreDir(), "rhel.iso"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != "replacement bytes" {
+		t.Fatalf("confirmed media replacement stored bytes = %q", stored)
+	}
 }

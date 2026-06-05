@@ -885,11 +885,28 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 	if err := os.WriteFile(sourceEnvironment, append(body, []byte(marker)...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code = runCLI(t, "context", "update", "test", "-f", source)
+	stdout, stderr, code = runCLI(t, "context", "update", "test", "-f", source)
+	if code == 0 {
+		t.Fatal("context update without --yes unexpectedly succeeded")
+	}
+	if !strings.Contains(stdout, "Replace input files for context test") {
+		t.Fatalf("stdout missing update confirmation prompt: %q", stdout)
+	}
+	if !strings.Contains(stderr, "context update aborted") {
+		t.Fatalf("stderr missing update abort: %q", stderr)
+	}
+	updated, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(updated), marker) {
+		t.Fatalf("context update without confirmation replaced input files:\n%s", updated)
+	}
+	_, stderr, code = runCLI(t, "context", "update", "test", "-f", source, "--yes")
 	if code != 0 {
 		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
 	}
-	updated, err := os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
+	updated, err = os.ReadFile(filepath.Join(ctx.InputDir, "environment.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -951,7 +968,7 @@ spec:
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code = runCLI(t, "context", "update", "test", "-f", replacement)
+	stdout, stderr, code = runCLI(t, "context", "update", "test", "-f", replacement, "--yes")
 	if code != 0 {
 		t.Fatalf("context update exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -1826,7 +1843,7 @@ func TestSecretSetStagesFileInputBeforeSudo(t *testing.T) {
 }
 
 func TestSecretSetStagesPasswordInputBeforeSudo(t *testing.T) {
-	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "", "proxy", "", true, false)
+	rootArgs, rootStdin, cleanup, err := stagedSecretSetRootArgs(strings.NewReader("s3cr3t\n"), "proxy-credentials", "", "", "", "", "", "proxy", "", true, false, false)
 	if err != nil {
 		t.Fatalf("stagedSecretSetRootArgs: %v", err)
 	}
@@ -1861,7 +1878,7 @@ func TestSecretSetStagesRawFileInputBeforeSudo(t *testing.T) {
 	if err := os.WriteFile(source, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rootArgs, _, cleanup, err := stagedSecretSetRootArgs(strings.NewReader(""), "shared-ceph-external-details", "", "", "", source, "", "", "", false, false)
+	rootArgs, _, cleanup, err := stagedSecretSetRootArgs(strings.NewReader(""), "shared-ceph-external-details", "", "", "", source, "", "", "", false, false, false)
 	if err != nil {
 		t.Fatalf("stagedSecretSetRootArgs: %v", err)
 	}
@@ -1915,6 +1932,41 @@ func TestSecretSetRawFileWritesContextSecret(t *testing.T) {
 		if strings.Contains(stream, "external-fsid") {
 			t.Fatalf("secret output leaked raw secret body: stdout=%q stderr=%q", stdout, stderr)
 		}
+	}
+
+	replacement := filepath.Join(t.TempDir(), "external-details-replacement.json")
+	replacementBody := []byte("[{\"name\":\"rook-ceph-mon\",\"kind\":\"Secret\",\"data\":{\"fsid\":\"replacement-fsid\"}}]\n")
+	if err := os.WriteFile(replacement, replacementBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "secret", "set", "shared-ceph-external-details", "--raw-file", replacement)
+	if code == 0 {
+		t.Fatal("secret set overwrite without --yes unexpectedly succeeded")
+	}
+	if !strings.Contains(stdout, "Replace secret shared-ceph-external-details") {
+		t.Fatalf("stdout missing secret overwrite prompt: %q", stdout)
+	}
+	if !strings.Contains(stderr, "secret set aborted") {
+		t.Fatalf("stderr missing secret set abort: %q", stderr)
+	}
+	got, err = secret.NewContextStore(ctx.Name, ctx.SecretsDir).Read(secret.MaterialKey{Name: "shared-ceph-external-details", Role: secret.MaterialPrimary})
+	if err != nil {
+		t.Fatalf("read raw secret after aborted overwrite: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("aborted overwrite changed raw secret = %q, want %q", got, body)
+	}
+
+	stdout, stderr, code = runCLIWithInput(t, "y\n", "secret", "set", "shared-ceph-external-details", "--raw-file", replacement)
+	if code != 0 {
+		t.Fatalf("secret set overwrite confirmation exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	got, err = secret.NewContextStore(ctx.Name, ctx.SecretsDir).Read(secret.MaterialKey{Name: "shared-ceph-external-details", Role: secret.MaterialPrimary})
+	if err != nil {
+		t.Fatalf("read raw secret after confirmed overwrite: %v", err)
+	}
+	if string(got) != string(replacementBody) {
+		t.Fatalf("confirmed overwrite raw secret = %q, want %q", got, replacementBody)
 	}
 }
 
@@ -3384,9 +3436,13 @@ func TestStatusWatchStopsWhenApplyLedgerIsStale(t *testing.T) {
 }
 
 func runCLI(t *testing.T, args ...string) (string, string, int) {
+	return runCLIWithInput(t, "", args...)
+}
+
+func runCLIWithInput(t *testing.T, input string, args ...string) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), args, strings.NewReader(""), &stdout, &stderr)
+	code := Run(context.Background(), args, strings.NewReader(input), &stdout, &stderr)
 	return stdout.String(), stderr.String(), code
 }
 

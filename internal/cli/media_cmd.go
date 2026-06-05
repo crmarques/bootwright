@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -23,7 +24,7 @@ func newMediaCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		Long:  "Manage non-secret ISO media under /var/lib/bootwright/media.",
 	}
 	cmd.AddCommand(
-		newMediaAddCmd(stdout),
+		newMediaAddCmd(stdin, stdout),
 		newMediaListCmd(stdout),
 		newMediaRemoveCmd(stdin, stdout),
 	)
@@ -31,12 +32,13 @@ func newMediaCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newMediaAddCmd(stdout io.Writer) *cobra.Command {
+func newMediaAddCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var (
 		fromFile string
 		fromURL  string
 		sum      string
 		force    bool
+		yes      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "add <filename.iso>",
@@ -49,13 +51,20 @@ func newMediaAddCmd(stdout io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&fromURL, "from-url", "", "download ISO bytes from an HTTP(S) URL")
 	cmd.Flags().StringVar(&sum, "sha256", "", "expected ISO SHA-256 checksum")
 	cmd.Flags().BoolVar(&force, "force", false, "replace an existing media entry")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the replace confirmation prompt")
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
 		if (fromFile == "") == (fromURL == "") {
 			return failf(2, "exactly one of --from-file or --from-url is required")
 		}
+		exists, err := mediaEntryExists(args[0])
+		if err != nil {
+			return failErr(1, err)
+		}
+		if exists && force && !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace media %s in %s? [y/N] (default: no): ", args[0], media.StoreDir())) {
+			return failErr(1, errors.New("media add aborted"))
+		}
 		var (
 			entry media.Entry
-			err   error
 		)
 		if fromFile != "" {
 			entry, err = media.AddFile(args[0], fromFile, sum, force)
@@ -71,6 +80,21 @@ func newMediaAddCmd(stdout io.Writer) *cobra.Command {
 		return nil
 	}
 	return cmd
+}
+
+func mediaEntryExists(key string) (bool, error) {
+	path, err := media.Path(key)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("stat media target %s: %w", path, err)
+	}
+	return true, nil
 }
 
 func newMediaListCmd(stdout io.Writer) *cobra.Command {

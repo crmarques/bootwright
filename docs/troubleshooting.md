@@ -110,5 +110,7 @@ the ISO, verify reachability from the BMC network and prefer an IP-address
 directory after import and only want to refresh inputs, rerun:
 
 ```text
-bootwright context update <context-name> -f <input-dir>
+bootwright context update <context-name> -f <input-dir> --yes
 ```
+
+Omit `--yes` to review and confirm the input replacement interactively.

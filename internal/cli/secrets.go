@@ -20,7 +20,7 @@ func newSecretCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Co
 		Short: "Manage local install secret material",
 	}
 	cmd.AddCommand(
-		newSecretSetCmd(stdout),
+		newSecretSetCmd(stdin, stdout),
 		newSecretMaterializeCmd(stdout, stderr),
 		newSecretGenerateCmd(stdout, stderr),
 		newSecretListCmd(stdout),

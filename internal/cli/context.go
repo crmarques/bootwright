@@ -73,7 +73,7 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 			return failErr(1, err)
 		}
 		if exists && !yes {
-			return failf(1, "context %q already exists; rerun with --yes to replace it or `bootwright context update %s -f <path>` to refresh inputs", name, name)
+			return failf(1, "context %q already exists; rerun with --yes to replace it or `bootwright context update %s -f <path> --yes` to refresh inputs", name, name)
 		}
 		prepared, err := contextstore.PrepareContextImport(name, files)
 		if err != nil {
@@ -121,18 +121,20 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 
 func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var files []string
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "update <ctx-name>",
 		Short: "Update desired-state input files for an existing context",
 		Args:  cobra.ExactArgs(1),
-		Example: `  bootwright context update lab -f ./input
+		Example: `  bootwright context update lab -f ./input --yes
   bootwright context update lab -f ./environment.yaml -f ./service-machines.yaml`,
 	}
 	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the update confirmation prompt")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if shouldRunContextRootChild() {
-			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "update", name}, files, false, stdin, stdout, stderr)
+			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "update", name}, files, yes, stdin, stdout, stderr)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -166,6 +168,9 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		}
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
+		}
+		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace input files for context %s under %s? [y/N] (default: no): ", name, ctx.InputDir)) {
+			return failErr(1, errors.New("context update aborted"))
 		}
 		copied, err := prepared.Commit()
 		if err != nil {

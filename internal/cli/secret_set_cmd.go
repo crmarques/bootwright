@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-func newSecretSetCmd(stdout io.Writer) *cobra.Command {
+func newSecretSetCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var (
 		pullSecret    string
 		rawFile       string
@@ -26,6 +26,7 @@ func newSecretSetCmd(stdout io.Writer) *cobra.Command {
 		password      string
 		passwordStdin bool
 		generate      bool
+		yes           bool
 	)
 	cmd := &cobra.Command{
 		Use:   "set <name>",
@@ -67,6 +68,7 @@ provides. Use --generate for test fixtures.`,
 	cmd.Flags().StringVar(&password, "password", "", "password (mutually exclusive with --password-stdin and --generate)")
 	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read password from stdin instead of --password")
 	cmd.Flags().BoolVar(&generate, "generate", false, "generate a strong random password (intended for test fixtures)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the overwrite confirmation prompt")
 	cf := addCommonFlags()
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		name := args[0]
@@ -105,7 +107,7 @@ provides. Use --generate for test fixtures.`,
 			return failf(2, "--pull-secret, --tls-cert/--tls-key, --raw-file, --from-file, --password, --password-stdin, and --generate are mutually exclusive")
 		}
 		if shouldRunLocalRootChild() {
-			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate)
+			code, err := runSecretSetWithLocalRoot(c.Context(), c.InOrStdin(), stdout, c.ErrOrStderr(), name, pullSecret, tlsCert, tlsKey, rawFile, fromFile, username, password, passwordStdin, generate, yes)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -120,20 +122,20 @@ provides. Use --generate for test fixtures.`,
 		}
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if pullSecret != "" {
-			return runSecretSetPullSecret(stdout, name, pullSecret, ctx.Name, ctx.SecretsDir)
+			return runSecretSetPullSecret(stdin, stdout, name, pullSecret, ctx.Name, ctx.SecretsDir, yes)
 		}
 		if tlsCert != "" {
-			return runSecretSetTLS(stdout, name, tlsCert, tlsKey, ctx.Name, ctx.SecretsDir)
+			return runSecretSetTLS(stdin, stdout, name, tlsCert, tlsKey, ctx.Name, ctx.SecretsDir, yes)
 		}
 		if rawFile != "" {
-			return runSecretSetRawFile(stdout, name, rawFile, ctx.Name, ctx.SecretsDir)
+			return runSecretSetRawFile(stdin, stdout, name, rawFile, ctx.Name, ctx.SecretsDir, yes)
 		}
-		return runSecretSetCredentials(c, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.Name, ctx.SecretsDir)
+		return runSecretSetCredentials(c, stdin, stdout, name, fromFile, username, password, passwordStdin, generate, ctx.Name, ctx.SecretsDir, yes)
 	}
 	return cmd
 }
 
-func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, contextName, secretsDir string) error {
+func runSecretSetTLS(stdin io.Reader, stdout io.Writer, name, certFile, keyFile, contextName, secretsDir string, yes bool) error {
 	certData, err := os.ReadFile(certFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read TLS certificate file %s: %w", certFile, err))
@@ -156,6 +158,9 @@ func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, contextName, sec
 	if err != nil {
 		return failErr(1, err)
 	}
+	if err := confirmSecretSetOverwrite(stdin, stdout, name, secretsDir, certExists || keyExists, yes); err != nil {
+		return err
+	}
 	if err := store.Write(certKey, certData); err != nil {
 		return failErr(1, err)
 	}
@@ -172,7 +177,7 @@ func runSecretSetTLS(stdout io.Writer, name, certFile, keyFile, contextName, sec
 	return nil
 }
 
-func runSecretSetPullSecret(stdout io.Writer, name, fromFile, contextName, secretsDir string) error {
+func runSecretSetPullSecret(stdin io.Reader, stdout io.Writer, name, fromFile, contextName, secretsDir string, yes bool) error {
 	data, err := os.ReadFile(fromFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read pull secret file %s: %w", fromFile, err))
@@ -185,6 +190,9 @@ func runSecretSetPullSecret(stdout io.Writer, name, fromFile, contextName, secre
 	exists, err := store.Exists(key)
 	if err != nil {
 		return failErr(1, err)
+	}
+	if err := confirmSecretSetOverwrite(stdin, stdout, name, secretsDir, exists, yes); err != nil {
+		return err
 	}
 	if err := store.Write(key, data); err != nil {
 		return failErr(1, err)
@@ -199,7 +207,7 @@ func runSecretSetPullSecret(stdout io.Writer, name, fromFile, contextName, secre
 	return nil
 }
 
-func runSecretSetRawFile(stdout io.Writer, name, fromFile, contextName, secretsDir string) error {
+func runSecretSetRawFile(stdin io.Reader, stdout io.Writer, name, fromFile, contextName, secretsDir string, yes bool) error {
 	data, err := os.ReadFile(fromFile)
 	if err != nil {
 		return failErr(1, fmt.Errorf("read raw secret file %s: %w", fromFile, err))
@@ -209,6 +217,9 @@ func runSecretSetRawFile(stdout io.Writer, name, fromFile, contextName, secretsD
 	exists, err := store.Exists(key)
 	if err != nil {
 		return failErr(1, err)
+	}
+	if err := confirmSecretSetOverwrite(stdin, stdout, name, secretsDir, exists, yes); err != nil {
+		return err
 	}
 	if err := store.Write(key, data); err != nil {
 		return failErr(1, err)
@@ -223,7 +234,7 @@ func runSecretSetRawFile(stdout io.Writer, name, fromFile, contextName, secretsD
 	return nil
 }
 
-func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile, username, password string, passwordStdin, generate bool, contextName, secretsDir string) error {
+func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer, name, fromFile, username, password string, passwordStdin, generate bool, contextName, secretsDir string, yes bool) error {
 	var resolvedUser, resolvedPass string
 	switch {
 	case fromFile != "":
@@ -277,6 +288,9 @@ func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile,
 	if err != nil {
 		return failErr(1, err)
 	}
+	if err := confirmSecretSetOverwrite(stdin, stdout, name, secretsDir, exists, yes); err != nil {
+		return err
+	}
 	payload := []byte(resolvedUser + ":" + resolvedPass + "\n")
 	if err := store.Write(key, payload); err != nil {
 		return failErr(1, err)
@@ -292,5 +306,15 @@ func runSecretSetCredentials(c *cobra.Command, stdout io.Writer, name, fromFile,
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, message)
+	return nil
+}
+
+func confirmSecretSetOverwrite(stdin io.Reader, stdout io.Writer, name, secretsDir string, exists bool, yes bool) error {
+	if !exists || yes {
+		return nil
+	}
+	if !confirm(stdin, stdout, fmt.Sprintf("Replace secret %s in %s? [y/N] (default: no): ", name, secretsDir)) {
+		return failErr(1, errors.New("secret set aborted"))
+	}
 	return nil
 }

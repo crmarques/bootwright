@@ -143,7 +143,7 @@ Create the context from the edited directory:
 ```text
 bootwright validate -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
-bootwright context update lab -f ./my-sno-lab
+bootwright context update lab -f ./my-sno-lab --yes
 bootwright context current
 bootwright context validate
 bootwright secret list
@@ -159,9 +159,10 @@ selection. Run `bootwright ...` as your user; if you run
 selection instead.
 
 Re-run `context init` with `--yes` to replace the entire context directory, or
-use `bootwright context update lab -f <input-dir>` to replace only
+use `bootwright context update lab -f <input-dir> --yes` to replace only
 `input/` while preserving secrets, rendered output, runtime data, run history,
-and managed host/service files.
+and managed host/service files. Omit `--yes` when you want Bootwright to ask
+for confirmation before replacing imported inputs.
 
 ## 4. Set Secrets
 

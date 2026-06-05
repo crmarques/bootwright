@@ -261,7 +261,7 @@ func ensureWritableTarget(target string, force bool) error {
 		return fmt.Errorf("media target %s must be a regular file", target)
 	}
 	if !force {
-		return fmt.Errorf("media %q already exists; use --force to replace it", filepath.Base(target))
+		return fmt.Errorf("media %q already exists; use --force to replace it, then confirm or add --yes", filepath.Base(target))
 	}
 	return nil
 }
