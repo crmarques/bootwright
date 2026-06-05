@@ -1,6 +1,4 @@
 ---
-bootwright_redfish_power_settle_seconds: 5
-
 bootwright_redfish_request_timeout: 60
 
 bootwright_redfish_insert_media_retries: 3

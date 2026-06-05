@@ -270,6 +270,7 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/sushy.yml",
 	} {
@@ -467,6 +468,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
 	mediaTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
 	powerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml")
+	powerStateTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml")
 	insertAttemptTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml")
 	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml")
 	postTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
@@ -499,6 +501,19 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	systemPreconditionIdx := findAnsibleTask(t, powerTasks, "Resolve Redfish system PATCH precondition")
 	cdBootIdx := findAnsibleTask(t, powerTasks, "Set one-time boot to CD")
 	confirmCDBootIdx := findAnsibleTask(t, powerTasks, "Confirm one-time CD boot override was accepted")
+	forceOffIdx := findAnsibleTask(t, powerTasks, "Force power off (tolerate already-off)")
+	initPowerOffIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish power state wait for PowerState=Off")
+	waitPowerOffIdx := findAnsibleTask(t, powerTasks, "Wait for BMC to report PowerState=Off")
+	confirmPowerOffIdx := findAnsibleTask(t, powerTasks, "Confirm BMC reports PowerState=Off before power on")
+	powerOnIdx := findAnsibleTask(t, powerTasks, "Power on")
+	confirmPowerOnRequestIdx := findAnsibleTask(t, powerTasks, "Confirm Redfish power-on request was accepted")
+	initPowerOnIdx := findAnsibleTask(t, powerTasks, "Initialize Redfish power state wait for PowerState=On")
+	waitPowerOnIdx := findAnsibleTask(t, powerTasks, "Wait for BMC to report PowerState=On")
+	confirmPowerOnIdx := findAnsibleTask(t, powerTasks, "Confirm BMC reports PowerState=On")
+	powerStateProbeIdx := findAnsibleTask(t, powerStateTasks, "Probe Redfish system power state")
+	powerStateCaptureIdx := findAnsibleTask(t, powerStateTasks, "Capture Redfish system power state status")
+	powerStateResolveIdx := findAnsibleTask(t, powerStateTasks, "Resolve Redfish system power state result")
+	powerStateDelayIdx := findAnsibleTask(t, powerStateTasks, "Wait before retrying Redfish power state probe")
 	retryDelayIdx := findAnsibleTask(t, insertAttemptTasks, "Wait before retrying Redfish virtual media insertion")
 	retryEjectIdx := findAnsibleTask(t, insertAttemptTasks, "Eject virtual media before retrying insertion")
 	refreshMediaIdx := findAnsibleTask(t, insertAttemptTasks, "Refresh virtual media metadata before PATCH operations")
@@ -554,6 +569,12 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(protocolIdx < initInsertIdx && initInsertIdx < securityRefreshIdx && securityRefreshIdx < securityResolveIdx && securityResolveIdx < securityPatchIdx && securityPatchIdx < securityCaptureIdx && securityCaptureIdx < retryInsertIdx && retryInsertIdx < confirmMediaIdx && confirmMediaIdx < systemRefreshIdx && systemRefreshIdx < systemPreconditionIdx && systemPreconditionIdx < cdBootIdx && cdBootIdx < confirmCDBootIdx) {
 		t.Fatalf("boot_redfish must retry virtual media insertion before setting CD boot")
 	}
+	if !(confirmCDBootIdx < forceOffIdx && forceOffIdx < initPowerOffIdx && initPowerOffIdx < waitPowerOffIdx && waitPowerOffIdx < confirmPowerOffIdx && confirmPowerOffIdx < powerOnIdx && powerOnIdx < confirmPowerOnRequestIdx && confirmPowerOnRequestIdx < initPowerOnIdx && initPowerOnIdx < waitPowerOnIdx && waitPowerOnIdx < confirmPowerOnIdx) {
+		t.Fatalf("boot_redfish must wait for power-off before power-on and then confirm PowerState=On")
+	}
+	if !(powerStateProbeIdx < powerStateCaptureIdx && powerStateCaptureIdx < powerStateResolveIdx && powerStateResolveIdx < powerStateDelayIdx) {
+		t.Fatalf("boot_redfish power state probe must capture sanitized status before resolving retry state")
+	}
 	if !(retryDelayIdx < retryEjectIdx && retryEjectIdx < refreshMediaIdx && refreshMediaIdx < mediaPreconditionIdx && mediaPreconditionIdx < verifyCertIdx && verifyCertIdx < standardBodyIdx && standardBodyIdx < vmmBodyIdx && vmmBodyIdx < insertIdx && insertIdx < requestStatusIdx && requestStatusIdx < taskRefIdx && taskRefIdx < taskURLIdx && taskURLIdx < waitTaskIdx && waitTaskIdx < captureTaskIdx && captureTaskIdx < taskResultIdx && taskResultIdx < failedTaskProbeIdx && failedTaskProbeIdx < mountedTaskProbeIdx && mountedTaskProbeIdx < waitMediaIdx && waitMediaIdx < resolveProbeAfterInsertIdx && resolveProbeAfterInsertIdx < patchPreconditionIdx && patchPreconditionIdx < patchAttemptIdx && patchAttemptIdx < patchMediaIdx && patchMediaIdx < waitPatchMediaIdx && waitPatchMediaIdx < resolveProbeAfterPatchIdx && resolveProbeAfterPatchIdx < captureMediaIdx && captureMediaIdx < resolveAttachmentSourcesIdx && resolveAttachmentSourcesIdx < resolveAttachedIdx) {
 		t.Fatalf("boot_redfish insert attempt must verify async task and virtual media insertion before reporting success")
 	}
@@ -570,6 +591,16 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeTasksFile(t, prepareTasks[redfishEjectIdx], "eject.yml")
 	assertIncludeTasksFile(t, powerTasks[retryInsertIdx], "../media/insert_attempt.yml")
 	assertIncludeTasksApplyWhen(t, powerTasks[retryInsertIdx], "not (bootwright_redfish_vmedia_attached | bool)")
+	for _, idx := range []int{waitPowerOffIdx, waitPowerOnIdx} {
+		assertIncludeTasksFile(t, powerTasks[idx], "power_state_probe.yml")
+		assertIncludeTasksApplyWhen(t, powerTasks[idx], "not (bootwright_redfish_power_state_reached | bool)")
+		if got := powerTasks[idx]["when"]; got != "not (bootwright_redfish_power_state_reached | bool)" {
+			t.Fatalf("%s must stop once the expected power state is reached, got when=%v", powerTasks[idx]["name"], got)
+		}
+		if got, ok := powerTasks[idx]["loop"].(string); !ok || !strings.Contains(got, "bootwright_redfish_power_state_retries") {
+			t.Fatalf("%s must use configured power-state retries, got loop=%v", powerTasks[idx]["name"], powerTasks[idx]["loop"])
+		}
+	}
 	if got := powerTasks[retryInsertIdx]["when"]; got != "not (bootwright_redfish_vmedia_attached | bool)" {
 		t.Fatalf("virtual media retry loop must stop once attached, got when=%v", got)
 	}
@@ -705,6 +736,27 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertURIHeader(t, powerTasks[securityPatchIdx], "If-Match", "{{ bootwright_redfish_security_service_if_match }}")
 	if got := powerTasks[securityPatchIdx]["when"]; !stringListContains(got, "bootwright_redfish_vmedia_transfer_protocol == 'HTTPS'") || !stringListContains(got, "bootwright_redfish_security_service_https_transfer_supported | default(false) | bool") || !stringListContains(got, "bootwright_redfish_security_service_https_transfer_enabled | default(false) | bool") {
 		t.Fatalf("SecurityService PATCH must only run when supported and enabled, got when=%v", got)
+	}
+	powerStateURI, ok := powerStateTasks[powerStateProbeIdx]["ansible.builtin.uri"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no uri body", powerStateTasks[powerStateProbeIdx]["name"])
+	}
+	if got := powerStateTasks[powerStateProbeIdx]["no_log"]; !strings.Contains(fmt.Sprint(got), "bootwright_redfish_cred_path") {
+		t.Fatalf("power state probe must hide uri output when credentials are used, got no_log=%v", got)
+	}
+	if got := powerStateURI["url"]; got != "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}" {
+		t.Fatalf("power state probe must use the resolved system resource, got %v", got)
+	}
+	if _, ok := powerStateTasks[powerStateProbeIdx]["until"]; ok {
+		t.Fatalf("power state probe must not fail with a censored until result")
+	}
+	powerStateFact, ok := powerStateTasks[powerStateCaptureIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no set_fact task", powerStateTasks[powerStateCaptureIdx]["name"])
+	}
+	powerStateStatus, ok := powerStateFact["bootwright_redfish_power_state_status"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(powerStateStatus["powerState"]), "PowerState") || !strings.Contains(fmt.Sprint(powerStateStatus["httpStatus"]), "status") {
+		t.Fatalf("power state status must capture sanitized PowerState and HTTP status, got %v", powerStateFact)
 	}
 	restoreVMediaURI, ok := restoreTasks[restoreVMediaIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {
@@ -1456,6 +1508,7 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/stage/validate.yml",
 	} {

@@ -296,9 +296,43 @@
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
-- name: Wait for power state to settle
-  ansible.builtin.pause:
-    seconds: "{{ bootwright_redfish_power_settle_seconds }}"
+- name: Initialize Redfish power state wait for PowerState=Off
+  ansible.builtin.set_fact:
+    bootwright_redfish_power_state_expected: "Off"
+    bootwright_redfish_power_state_reached: false
+    bootwright_redfish_power_state_status:
+      expected: "Off"
+      systemID: "{{ bootwright_redfish_system_id }}"
+      httpStatus: not attempted
+      powerState: not attempted
+      attempts: 0
+      retries: "{{ bootwright_redfish_power_state_retries | int }}"
+  changed_when: false
+
+- name: Wait for BMC to report PowerState=Off
+  ansible.builtin.include_tasks:
+    file: power_state_probe.yml
+    apply:
+      when: not (bootwright_redfish_power_state_reached | bool)
+  loop: "{{ range(1, (bootwright_redfish_power_state_retries | int) + 1) | list }}"
+  loop_control:
+    loop_var: bootwright_redfish_power_state_attempt
+  when: not (bootwright_redfish_power_state_reached | bool)
+
+- name: Confirm BMC reports PowerState=Off before power on
+  ansible.builtin.assert:
+    that:
+      - bootwright_redfish_power_state_reached | bool
+    fail_msg: >-
+      Redfish BMC did not settle to PowerState=Off for system
+      {{ bootwright_redfish_power_state_status.systemID }} after ForceOff.
+      Last HTTP status={{ bootwright_redfish_power_state_status.httpStatus }},
+      observed PowerState={{ bootwright_redfish_power_state_status.powerState }},
+      attempts={{ bootwright_redfish_power_state_status.attempts }} of
+      {{ bootwright_redfish_power_state_status.retries }}.
+    success_msg: >-
+      Redfish BMC reports PowerState=Off for system
+      {{ bootwright_redfish_power_state_status.systemID }}.
 
 - name: Power on
   ansible.builtin.uri:
@@ -313,20 +347,56 @@
     url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
+  register: bootwright_redfish_power_on_request
+  failed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
 
+- name: Confirm Redfish power-on request was accepted
+  ansible.builtin.assert:
+    that:
+      - (bootwright_redfish_power_on_request.status | default(0) | int) in [200, 202, 204]
+    fail_msg: >-
+      Redfish BMC rejected power-on for system
+      {{ bootwright_redfish_system_id }} with HTTP status
+      {{ bootwright_redfish_power_on_request.status | default('unknown') }}.
+    success_msg: >-
+      Redfish BMC accepted power-on for system
+      {{ bootwright_redfish_system_id }}.
+
+- name: Initialize Redfish power state wait for PowerState=On
+  ansible.builtin.set_fact:
+    bootwright_redfish_power_state_expected: "On"
+    bootwright_redfish_power_state_reached: false
+    bootwright_redfish_power_state_status:
+      expected: "On"
+      systemID: "{{ bootwright_redfish_system_id }}"
+      httpStatus: not attempted
+      powerState: not attempted
+      attempts: 0
+      retries: "{{ bootwright_redfish_power_state_retries | int }}"
+  changed_when: false
+
 - name: Wait for BMC to report PowerState=On
-  ansible.builtin.uri:
-    url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id) | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
-    method: GET
-    return_content: true
-    validate_certs: "{{ bootwright_component.boot.redfish.validateCerts }}"
-    force_basic_auth: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
-    url_username: "{{ bootwright_redfish_credentials.username | default(omit) }}"
-    url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
-    timeout: "{{ bootwright_redfish_request_timeout }}"
-  register: bootwright_redfish_power_state_probe
-  until: (bootwright_redfish_power_state_probe.json.PowerState | default('')) == 'On'
-  retries: "{{ bootwright_redfish_power_state_retries }}"
-  delay: "{{ bootwright_redfish_power_state_delay_seconds }}"
-  no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"
+  ansible.builtin.include_tasks:
+    file: power_state_probe.yml
+    apply:
+      when: not (bootwright_redfish_power_state_reached | bool)
+  loop: "{{ range(1, (bootwright_redfish_power_state_retries | int) + 1) | list }}"
+  loop_control:
+    loop_var: bootwright_redfish_power_state_attempt
+  when: not (bootwright_redfish_power_state_reached | bool)
+
+- name: Confirm BMC reports PowerState=On
+  ansible.builtin.assert:
+    that:
+      - bootwright_redfish_power_state_reached | bool
+    fail_msg: >-
+      Redfish BMC did not report PowerState=On for system
+      {{ bootwright_redfish_power_state_status.systemID }} after power-on.
+      Last HTTP status={{ bootwright_redfish_power_state_status.httpStatus }},
+      observed PowerState={{ bootwright_redfish_power_state_status.powerState }},
+      attempts={{ bootwright_redfish_power_state_status.attempts }} of
+      {{ bootwright_redfish_power_state_status.retries }}.
+    success_msg: >-
+      Redfish BMC reports PowerState=On for system
+      {{ bootwright_redfish_power_state_status.systemID }}.
