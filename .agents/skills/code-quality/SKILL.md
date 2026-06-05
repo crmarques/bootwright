@@ -11,8 +11,9 @@ methods, types, variables, imports, or fields are left behind.
 
 ## Required Checks
 
-Run from the repo root before declaring an implementation task done, and
-report any check that could not be run, including the reason:
+Run focused checks from the repo root when they directly answer the current
+implementation question, and report any check that could not be run, including
+the reason:
 
 - `gofmt -l .` — must print nothing. If anything is listed, run
   `gofmt -w` on the listed paths and re-run.
@@ -25,11 +26,9 @@ report any check that could not be run, including the reason:
   `go install honnef.co/go/tools/cmd/staticcheck@v0.7.0`
   and ensure `$(go env GOPATH)/bin` is on `PATH`.
 
-If `make check` has already completed for the final edit set, it satisfies
-the `go vet ./...`, plain `go test ./...`, and `go test -race ./...`
-coverage above. Do not rerun those commands just to satisfy this skill; run
-only the checks not covered by `make check`, such as `go build ./...` and
-`staticcheck ./...`.
+Before declaring an implementation task done, run `make check-fast` through the
+implementation validation skill. Do not run `make check` by yourself; run it
+only when the user explicitly requests that full gate.
 
 ## Standards
 
@@ -91,10 +90,10 @@ only the checks not covered by `make check`, such as `go build ./...` and
 
 ## Method
 
-- Before finishing, run the checks above and fix every finding within
-  the scope of the change.
+- Before finishing, run `make check-fast` and fix every finding within the
+  scope of the change.
 - When deleting a function, also delete its tests and any helpers it
-  was the last caller of; re-run `staticcheck` to surface the next
+  was the last caller of; run `staticcheck` when needed to surface the next
   layer of newly-unused code, and repeat until clean.
 - When a finding is genuinely out of scope, surface it as a note in
   the handoff rather than silently expanding the diff.

@@ -21,11 +21,11 @@ likely touched.
 This is a deep code review. Do not edit files during the review unless the user
 explicitly asks you to fix findings now or selects findings to implement.
 Do not run `make check` while executing this review prompt unless the user
-explicitly asks for it. Use targeted, read-only commands such as
+explicitly asks for that full gate. Use targeted, read-only commands such as
 `bootwright check syntax`, focused render or plan inspection, narrow searches,
 and existing test evidence. If the user asks you to fix findings during the
-same turn, implement the smallest safe fixes and run only the focused
-validation that proves those fixes.
+same turn, implement the smallest safe fixes in a temporary worktree and run
+`make check-fast` after the intended edit set is complete.
 
 ## Expected User Input
 
@@ -404,7 +404,8 @@ If the user asks you to fix findings:
 4. Preserve generated-output and secret boundaries.
 5. Use project-local validation skills, including implementation validation,
    before finishing.
-6. Run the repo-required checks once after the intended edit set is complete.
+6. Run `make check-fast` once after the intended edit set is complete and
+   after any needed rebase adjustments.
 
 For fix-mode handoff, follow the repository's current handoff instructions and
 report blockers when required validation cannot run or fails.

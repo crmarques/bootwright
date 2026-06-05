@@ -11,24 +11,18 @@ changes, also run the checks from `definition-stewardship`.
 
 - During investigation or iterative fixes, run the smallest direct targeted
   command that answers the current question instead of an aggregate target.
-- After completing the intended edit set for any implementation request that
-  changes code, run basic targeted validations first. Examples include
-  formatting, focused unit tests, syntax checks, and for definition-only
-  changes, checks required by `definition-stewardship`.
-- Before running `make check`, refresh or rebase the temporary worktree against
-  current local `main`. If the refresh changes the effective final tree,
-  perform needed fixes and rerun the affected basic validations.
-- Run `make check` once as the last validation command before handoff.
-- Do not run `make check` repeatedly during the same request unless later edits
-  can invalidate the previous result. If post-`make check` fixes are needed,
-  repeat the sequence: basic targeted validation, current-`main` refresh when
-  needed, then one final `make check`.
-- Treat a completed `make check` as covering its member commands for the final
-  edit set; do not rerun those member commands unless later edits or failure
-  diagnosis require it.
-- Current `make check` runs `go vet ./...`, plain `go test ./...`,
-  `go test -race ./...`, clean-copy plain `go test ./...`, Python tests,
-  Ansible syntax checks, stale-term checks, and CLI file-size checks.
-- If `make check` cannot run or fails, report the blocker instead of a
+- After completing the intended edit set for any implementation request, run
+  `make check-fast` from the temporary worktree. Do not run `make check` by
+  yourself; run it only when the user explicitly requests that full gate.
+- After `make check-fast`, check whether the temporary branch is ready to merge
+  into current local `main`.
+- If local `main` has advanced or the temporary branch is not ready, rebase the
+  temporary branch onto current local `main`, perform needed fixes or
+  adjustments, rerun `make check-fast`, and repeat until the branch is ready or
+  a real blocker remains.
+- Current `make check-fast` runs the cheap local guardrails: CLI file-size,
+  Go source visibility, gofmt, stale-term, Containerfile pinning, and E2E
+  dependency checks.
+- If `make check-fast` cannot run or fails, report the blocker instead of a
   successful handoff.
 - Report any validation command that could not be run, including the reason.

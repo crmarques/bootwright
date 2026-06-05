@@ -1,7 +1,9 @@
 # Agent Entrypoint
 
 This repository is governed by the project specs in `/specs/`. Before
-making changes, load only the specs that match the user request.
+making changes, load the repo information, specs, skills, code, examples,
+and current worktree state needed to complete the user request. Do not start
+editing from partial context.
 
 ## Required Load Order
 
@@ -35,36 +37,38 @@ making changes, load only the specs that match the user request.
 - Keep docs and specs concise. Add implementation detail only when it is
   needed by current code or an accepted decision.
 - For any implementation request that changes repo-tracked files, use the
-  `/.agents/skills/parallel-implementation/` skill before editing. Agents must
-  work from an isolated temporary worktree and may touch the primary `main`
-  worktree only after the user explicitly approves commit or integration after
-  review/testing. If the primary `main` worktree has uncommitted changes,
-  complete edits and validation in the temporary worktree and report a blocked
-  handoff for manual integration.
-- Do not commit, push, or fast-forward implementation fixes immediately. Leave
-  changes available for user review/testing and wait for explicit approval
-  before creating commits or integrating into `main`.
+  `/.agents/skills/parallel-implementation/` skill before editing. Agents are
+  already authorized to create a temporary branch and worktree from local
+  `main`; do not ask before doing so. Agents must work from that isolated
+  temporary worktree and may touch the primary `main` worktree only after the
+  user explicitly approves merge.
+- Do not commit, push, merge, or fast-forward implementation fixes immediately.
+  Leave changes available for user review/testing and wait for explicit merge
+  approval before committing task changes or integrating into `main`.
 - When adding or changing CLI user-facing human output, always use the
   centralized `internal/cli/output` component. Keep the documented raw-output
   exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
   process passthrough such as Ansible streams.
-- After completing the intended edit set for any implementation request that
-  changes code, run basic targeted validations first. Before the final
-  aggregate check, refresh or rebase the temporary worktree against current
-  local `main`; if that changes the effective tree, perform needed fixes and
-  rerun the affected basic validations. Then run `make check` once as the last
-  validation step before handoff. Do not run `make check` earlier or repeatedly
-  unless later edits can invalidate the previous result. If `make check` cannot
-  run or fails, report the blocker instead of a successful handoff.
-- Whenever `make check` is required, treat it as the final validation command
-  for the request after targeted validation and current-`main` refresh have
-  completed.
+- After completing the intended edit set for any implementation request, run
+  only the repository fast check: `make check-fast`. Do not run `make check`
+  by yourself; run it only when the user explicitly requests that full gate.
+- After `make check-fast`, check whether the temporary branch is ready to merge
+  into current local `main`. If local `main` has advanced or the branch is not
+  ready, rebase the temporary branch onto local `main`, fix conflicts or needed
+  adjustments, rerun `make check-fast`, and repeat until the branch is ready
+  or a real blocker remains.
+- If the primary `main` worktree has uncommitted changes when integration is
+  considered, report that `main` is not ready instead of touching unrelated
+  user changes.
 - During investigation or iterative fixes, prefer the smallest direct targeted
-  command that answers the current question. Do not run aggregate checks or
-  their member commands in a way that duplicates a final completed `make check`
-  unless later edits or failure diagnosis require it.
+  command that answers the current question. Do not run aggregate checks unless
+  the user explicitly requested them.
 - Before completing implementation work, use the
   `/.agents/skills/implementation-validation/` skill.
+- Once the temporary branch is ready for `main`, ask the user whether merge can
+  proceed. A response such as "go" authorizes creating the task commit if
+  needed, final rebase if local `main` advanced, merge into `main`, and deletion
+  of the temporary worktree and branch; do not ask separately for those steps.
 
 ## Handoff Format
 
@@ -74,10 +78,10 @@ providing a commit subject after user review/testing:
 - Generate ONLY one short subject line (no body). Max 72 chars.
 - For an implementation/fix handoff where changes are intentionally left
   uncommitted for user review/testing, report the temporary worktree path and
-  whether basic validation, current-`main` refresh/rebase, and final
-  `make check` completed. If request processing is blocked or required
+  branch, whether `make check-fast` completed, and whether the branch is ready
+  to merge into local `main`. If request processing is blocked or required
   verification cannot complete, report the blocker instead.
-- After the user explicitly approves commit/integration, output ONLY the
+- After the user explicitly approves merge and integration succeeds, output ONLY the
   conventional-commit subject line. Do NOT append summaries, file lists,
   verification details, or commit questions.
 - Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`,
@@ -88,4 +92,4 @@ Examples:
 
 - Ready for review/test: `/tmp/bootwright-worktrees/<task-slug>-<base8>-<timestamp>`
 - Commit-approved success: `docs(agents): shorten standard handoff`
-- Blocked: `Blocked: make check could not complete`
+- Blocked: `Blocked: make check-fast could not complete`

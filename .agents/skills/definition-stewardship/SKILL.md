@@ -29,10 +29,11 @@ or project-local agent guidance.
 
 ## Required Checks
 
-Run the maintained stale-term check before finishing:
+Run the repository fast check before finishing. It includes the maintained
+stale-term check:
 
 ```text
-make stale-term-check
+make check-fast
 ```
 
 Report any failure only when it is intentionally deferred to the next

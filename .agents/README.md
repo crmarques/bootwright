@@ -1,7 +1,8 @@
 # Project-Local Agent Guidance
 
 Project definitions live in `/specs/` and are the source of truth for humans
-and coding agents. Load only the specs and skills needed for the current task.
+and coding agents. Load the repo information, specs, skills, code, examples,
+and current worktree state needed for the current task before editing.
 
 ## Required Load Order
 
@@ -51,23 +52,29 @@ not scan or bulk-load the full knowledge directory.
   process passthrough such as Ansible streams.
 - `v1alpha1` can break cleanly: do not add migrations, aliases, compatibility
   shims, or legacy examples.
-- Do not commit, push, or fast-forward implementation fixes immediately. Leave
-  changes available for user review/testing and wait for explicit approval
-  before creating commits or integrating into `main`.
-- After completing the intended edit set for any implementation request that
-  changes code, run basic targeted validations first. Before the final
-  aggregate check, refresh or rebase the temporary worktree against current
-  local `main`; if that changes the effective tree, perform needed fixes and
-  rerun the affected basic validations. Then run `make check` once as the last
-  validation step before handoff. Do not run `make check` earlier or repeatedly
-  unless later edits can invalidate the previous result. If `make check` cannot
-  run or fails, report the blocker instead of a successful handoff.
-- Whenever `make check` is required, treat it as the final validation command
-  for the request after targeted validation and current-`main` refresh have
-  completed.
+- Implementation requests that change repo-tracked files must use
+  `parallel-implementation`: create a temporary branch and worktree from local
+  `main` without asking, then edit only inside that worktree.
+- Do not commit, push, merge, or fast-forward implementation fixes immediately.
+  Leave changes available for user review/testing and wait for explicit merge
+  approval before creating task commits or integrating into `main`.
+- After completing the intended edit set for any implementation request, run
+  only `make check-fast`. Do not run `make check` by yourself; run it only when
+  the user explicitly requests that full gate.
+- After `make check-fast`, check whether the temporary branch is ready to merge
+  into current local `main`. If local `main` has advanced or the branch is not
+  ready, rebase the temporary branch onto local `main`, fix conflicts or needed
+  adjustments, rerun `make check-fast`, and repeat until the branch is ready
+  or a real blocker remains.
+- If the primary `main` worktree has uncommitted changes when integration is
+  considered, report that `main` is not ready instead of touching unrelated
+  user changes.
 - During investigation or iterative fixes, prefer the smallest direct targeted
-  command that answers the current question. Do not run aggregate checks or
-  their member commands in a way that duplicates a final completed `make check`
-  unless later edits or failure diagnosis require it.
+  command that answers the current question. Do not run aggregate checks unless
+  the user explicitly requested them.
+- Once the temporary branch is ready for `main`, ask the user whether merge can
+  proceed. A response such as "go" authorizes creating the task commit if
+  needed, final rebase if local `main` advanced, merge into `main`, and deletion
+  of the temporary worktree and branch; do not ask separately for those steps.
 - Before completing implementation work, run the validation required by the
   applicable skills and report anything that could not be run.
