@@ -51,3 +51,132 @@ func TestMachineImageURLRejectsRetiredMediaReference(t *testing.T) {
 		t.Fatalf("error = %q", errs[0])
 	}
 }
+
+func TestMachineImageBootISORequiresInstallSource(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted boot ISO without install source")
+	}
+	if !strings.Contains(errs[0], "installSource is required") {
+		t.Fatalf("error = %q", errs[0])
+	}
+}
+
+func TestMachineImageBootISOAcceptsInstallSourceRepositories(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			InstallSource: v1alpha1.MachineImageInstallSource{
+				Type: v1alpha1.MachineImageInstallSourceTypeURL,
+				Repositories: []v1alpha1.MachineInstallRepository{
+					{ID: "baseos", BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
+					{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+				},
+			},
+		},
+	}}})
+	if len(errs) != 0 {
+		t.Fatalf("validateMachineImages errors = %v", errs)
+	}
+}
+
+func TestMachineImageBootISOAcceptsRHSMInstallSource(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			InstallSource: v1alpha1.MachineImageInstallSource{
+				Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
+				RHSM: &v1alpha1.MachineImageRHSMSource{
+					OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+				},
+			},
+		},
+	}}})
+	if len(errs) != 0 {
+		t.Fatalf("validateMachineImages errors = %v", errs)
+	}
+}
+
+func TestMachineImageRHSMInstallSourceRequiresRefs(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			InstallSource: v1alpha1.MachineImageInstallSource{
+				Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
+				RHSM: &v1alpha1.MachineImageRHSMSource{},
+			},
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted RHSM source without refs")
+	}
+	if !strings.Contains(strings.Join(errs, "\n"), "organizationRef.name is required") {
+		t.Fatalf("errors = %v", errs)
+	}
+	if !strings.Contains(strings.Join(errs, "\n"), "activationKeyRef.name is required") {
+		t.Fatalf("errors = %v", errs)
+	}
+}
+
+func TestMachineImageRHSMSecretRefsMustBeDeclared(t *testing.T) {
+	errs := validateSecretReferences(v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Metadata: v1alpha1.Metadata{Name: "env"},
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: v1alpha1.EnvironmentSecrets{
+					"redhat-org": {},
+				},
+			},
+		}},
+		MachineImages: []v1alpha1.MachineImage{{
+			Metadata: v1alpha1.Metadata{Name: "rhel"},
+			Spec: v1alpha1.MachineImageSpec{
+				InstallSource: v1alpha1.MachineImageInstallSource{
+					RHSM: &v1alpha1.MachineImageRHSMSource{
+						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					},
+				},
+			},
+		}},
+	})
+	if len(errs) == 0 {
+		t.Fatal("validateSecretReferences accepted undeclared RHSM secret ref")
+	}
+	if !strings.Contains(errs[0], "redhat-activation-key") {
+		t.Fatalf("error = %q", errs[0])
+	}
+}
+
+func TestMachineImageBootISOInferredFromFilename(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type: v1alpha1.MachineImageTypeISO,
+			URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted inferred boot ISO without install source")
+	}
+	if !strings.Contains(errs[0], "installSource is required") {
+		t.Fatalf("error = %q", errs[0])
+	}
+}

@@ -138,7 +138,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
 			wantStageHost: "lab-host",
-			wantStagePath: "{{ bootwright_provider_state_dir }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
+			wantStagePath: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 			wantFetchURL:  "http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 		},
 		{
@@ -173,6 +173,23 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			redfish, ok := boot["redfish"].(map[string]any)
 			if !ok {
 				t.Fatalf("boot missing redfish: %v", boot)
+			}
+			readiness, ok := boot["readiness"].(map[string]any)
+			if !ok {
+				t.Fatalf("boot missing readiness: %v", boot)
+			}
+			if got := readiness["type"]; got != "ssh" {
+				t.Errorf("readiness.type got %v, want ssh", got)
+			}
+			ssh, ok := readiness["ssh"].(map[string]any)
+			if !ok {
+				t.Fatalf("readiness missing ssh: %v", readiness)
+			}
+			if got := ssh["user"]; got != "core" {
+				t.Errorf("readiness.ssh.user got %v, want core", got)
+			}
+			if got := ssh["port"]; got != 22 {
+				t.Errorf("readiness.ssh.port got %v, want 22", got)
 			}
 			if got := redfish["baseUrl"]; got != tc.wantBaseURL {
 				t.Errorf("redfish.baseUrl got %v, want %s", got, tc.wantBaseURL)

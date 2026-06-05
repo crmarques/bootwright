@@ -112,11 +112,26 @@ type MachineImage struct {
 }
 
 type MachineImageSpec struct {
-	Type        string      `yaml:"type" json:"type"`
-	URL         string      `yaml:"url" json:"url"`
-	Checksum    string      `yaml:"checksum,omitempty" json:"checksum,omitempty"`
-	TrustRefs   []SecretRef `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
-	HeadersRefs []SecretRef `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
+	Type          string                    `yaml:"type" json:"type"`
+	MediaType     string                    `yaml:"mediaType,omitempty" json:"mediaType,omitempty"`
+	URL           string                    `yaml:"url" json:"url"`
+	InstallSource MachineImageInstallSource `yaml:"installSource,omitempty" json:"installSource,omitempty"`
+	Checksum      string                    `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+	TrustRefs     []SecretRef               `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
+	HeadersRefs   []SecretRef               `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
+}
+
+type MachineImageInstallSource struct {
+	Type         string                     `yaml:"type,omitempty" json:"type,omitempty"`
+	URL          string                     `yaml:"url,omitempty" json:"url,omitempty"`
+	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
+	RHSM         *MachineImageRHSMSource    `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
+}
+
+type MachineImageRHSMSource struct {
+	OrganizationRef   SecretRef `yaml:"organizationRef" json:"organizationRef"`
+	ActivationKeyRef  SecretRef `yaml:"activationKeyRef" json:"activationKeyRef"`
+	ConnectToInsights bool      `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
 }
 
 type MachineInstallProfile struct {

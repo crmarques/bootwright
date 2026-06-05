@@ -100,7 +100,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	}
 	systemID := ansibleUUIDv5(clusterName + "-" + m.Name)
 
-	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
+	stageDir := fmt.Sprintf("/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
 		"redfish": map[string]any{
 			"baseUrl":       fmt.Sprintf("http://%s:%d", hostAddr, port),
@@ -108,6 +108,13 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 			"credentialRef": credRef,
 			"validateCerts": false,
 			"setBootSource": false,
+		},
+		"readiness": map[string]any{
+			"type": "ssh",
+			"ssh": map[string]any{
+				"user": "core",
+				"port": 22,
+			},
 		},
 		"agentIso": map[string]any{
 			"stageHost": machineRef,
@@ -136,6 +143,13 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 			"credentialRef": bmc.CredentialsRef.Name,
 			"validateCerts": !bmc.DisableCertificateVerification,
 			"setBootSource": true,
+		},
+		"readiness": map[string]any{
+			"type": "ssh",
+			"ssh": map[string]any{
+				"user": "core",
+				"port": 22,
+			},
 		},
 		"agentIso": map[string]any{
 			"stageHost": stageHost,

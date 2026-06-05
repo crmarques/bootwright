@@ -52,6 +52,10 @@ const (
 	MachineCapabilityCephNode         = "ceph-node"
 	MachineInstallProfileTypeAnaconda = "anaconda"
 	MachineImageTypeISO               = "iso"
+	MachineImageMediaTypeDVD          = "dvd"
+	MachineImageMediaTypeBoot         = "boot"
+	MachineImageInstallSourceTypeURL  = "url"
+	MachineImageInstallSourceTypeRHSM = "redhatCDN"
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
 

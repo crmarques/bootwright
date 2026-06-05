@@ -9,7 +9,7 @@
   loop:
     - "{{ bootwright_bmc_root }}"
     - "{{ bootwright_bmc_root }}/state"
-    - "{{ bootwright_bmc_root }}/vmedia"
+    - "{{ bootwright_bmc_vmedia_root }}"
 
 - name: Load BMC package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
@@ -18,6 +18,16 @@
   ansible.builtin.package:
     name: "{{ bootwright_bmc_packages }}"
     state: present
+
+- name: Restore BMC vmedia storage labels
+  ansible.builtin.command:
+    argv:
+      - restorecon
+      - -RFv
+      - "{{ bootwright_bmc_vmedia_root }}"
+  register: bootwright_bmc_vmedia_restorecon
+  changed_when: bootwright_bmc_vmedia_restorecon.stdout | length > 0
+  when: ansible_selinux.status | default('disabled') == 'enabled'
 
 - name: Create sushy-tools virtualenv
   ansible.builtin.command:

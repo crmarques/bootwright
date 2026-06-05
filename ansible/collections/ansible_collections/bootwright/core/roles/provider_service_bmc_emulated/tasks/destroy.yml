@@ -3,6 +3,7 @@
   ansible.builtin.set_fact:
     bootwright_bmc_provider_name: "{{ bootwright_component.providerName }}"
     bootwright_bmc_root: "{{ bootwright_provider_state_dir }}/bmc/{{ bootwright_component.providerName }}"
+    bootwright_bmc_vmedia_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/{{ bootwright_component.providerName }}/vmedia"
     bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
   changed_when: false
 
@@ -50,5 +51,8 @@
 
 - name: Remove BMC state directory
   ansible.builtin.file:
-    path: "{{ bootwright_bmc_root }}"
+    path: "{{ item }}"
     state: absent
+  loop:
+    - "{{ bootwright_bmc_root }}"
+    - "{{ bootwright_bmc_vmedia_root }}"

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -43,14 +44,25 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	}
 	osInstall := first["osInstall"].(map[string]any)
 	image := osInstall["image"].(map[string]any)
-	if image["kind"] != "media" || image["key"] != "rhel-9.8-x86_64-boot.iso" {
+	if image["kind"] != "media" || image["key"] != "rhel-9.8-x86_64-dvd.iso" {
 		t.Fatalf("image vars = %v", image)
 	}
-	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.8-x86_64-boot.iso") {
+	if image["mediaType"] != "dvd" {
+		t.Fatalf("image mediaType = %v", image["mediaType"])
+	}
+	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.8-x86_64-dvd.iso") {
 		t.Fatalf("image path = %v", image["path"])
 	}
 	if image["sourceOnTarget"] != true {
 		t.Fatalf("sourceOnTarget = %v, want true for controller-local provider host", image["sourceOnTarget"])
+	}
+	installer := osInstall["installer"].(map[string]any)
+	if _, ok := installer["sourceURL"]; ok {
+		t.Fatalf("installer.sourceURL = %v, want omitted for DVD media", installer["sourceURL"])
+	}
+	repositories := installer["repositories"].([]any)
+	if len(repositories) != 0 {
+		t.Fatalf("installer.repositories = %v", repositories)
 	}
 	ks := osInstall["kickstart"].(map[string]any)
 	if ks["hostname"] != "ceph-0" {
@@ -64,6 +76,90 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	iso := boot["agentIso"].(map[string]any)
 	if !strings.Contains(iso["stagePath"].(string), "os-ceph-libvirt-ceph-0.iso") {
 		t.Fatalf("managed OS stagePath = %v", iso["stagePath"])
+	}
+	readiness := boot["readiness"].(map[string]any)
+	if readiness["type"] != "none" {
+		t.Fatalf("managed OS boot readiness = %v, want none", readiness)
+	}
+}
+
+func TestManagedOSInstallKeepsProfileRepositoriesAdditional(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.MachineInstallProfiles[0].Spec.Installer.Anaconda.Repositories = append(state.MachineInstallProfiles[0].Spec.Installer.Anaconda.Repositories,
+		v1alpha1.MachineInstallRepository{ID: "extras", BaseURL: "https://repos.example.test/rhel/9/extras/x86_64/os/"},
+	)
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
+	if _, ok := installer["sourceURL"]; ok {
+		t.Fatalf("installer.sourceURL = %v, want omitted for DVD media", installer["sourceURL"])
+	}
+	repositories := installer["repositories"].([]any)
+	if len(repositories) != 1 {
+		t.Fatalf("repositories = %v", repositories)
+	}
+}
+
+func TestManagedOSInstallUsesImageSourceURL(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
+		URL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+		Repositories: []v1alpha1.MachineInstallRepository{
+			{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+		},
+	}
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
+	if got := installer["sourceURL"]; got != "https://repos.example.test/rhel/9/BaseOS/x86_64/os/" {
+		t.Fatalf("installer.sourceURL = %v", got)
+	}
+	repositories := installer["repositories"].([]any)
+	if len(repositories) != 1 {
+		t.Fatalf("repositories = %v", repositories)
+	}
+}
+
+func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
+	state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
+	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
+		Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
+		RHSM: &v1alpha1.MachineImageRHSMSource{
+			OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
+			ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
+			ConnectToInsights: true,
+		},
+	}
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	installer := first["osInstall"].(map[string]any)["installer"].(map[string]any)
+	rhsm := installer["rhsm"].(map[string]any)
+	if rhsm["organizationPath"] != "/context/secrets/redhat-org" {
+		t.Fatalf("rhsm.organizationPath = %v", rhsm["organizationPath"])
+	}
+	if rhsm["activationKeyPath"] != "/context/secrets/redhat-activation-key" {
+		t.Fatalf("rhsm.activationKeyPath = %v", rhsm["activationKeyPath"])
+	}
+	if rhsm["connectToInsights"] != true {
+		t.Fatalf("rhsm.connectToInsights = %v", rhsm["connectToInsights"])
 	}
 }
 

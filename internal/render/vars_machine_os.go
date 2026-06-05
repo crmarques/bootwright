@@ -30,7 +30,13 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, secretsDir string) 
 			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, secretsDir)
 			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, secretsDir); len(osInstall) > 0 {
 				component["osInstall"] = osInstall
-				component["boot"] = machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name))
+				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name))
+				if boot != nil {
+					boot["readiness"] = map[string]any{
+						"type": "none",
+					}
+					component["boot"] = boot
+				}
 				components = append(components, component)
 			}
 		}
@@ -104,6 +110,18 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		return nil
 	}
 	env := primaryEnvironment(state)
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.InstallSource, env, secretsDir)
+	profileRepositories := machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories)
+	installer := map[string]any{
+		"type":         profile.Spec.Installer.Type,
+		"repositories": append(imageRepositories, profileRepositories...),
+	}
+	if sourceURL != "" {
+		installer["sourceURL"] = sourceURL
+	}
+	if len(rhsm) > 0 {
+		installer["rhsm"] = rhsm
+	}
 	out := map[string]any{
 		"profileName": profile.Metadata.Name,
 		"os": map[string]any{
@@ -111,11 +129,8 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"version":      profile.Spec.OS.Version,
 			"architecture": profile.Spec.OS.Architecture,
 		},
-		"installer": map[string]any{
-			"type":         profile.Spec.Installer.Type,
-			"repositories": machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories),
-		},
-		"image": machineOSInstallImageVars(resolved, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m)),
+		"installer": installer,
+		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m)),
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(profile, machine),
 			"sshUser":                machine.Spec.Access.SSH.User,
@@ -140,12 +155,19 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	return out
 }
 
-func machineOSInstallImageVars(resolved media.Resolved, checksum string, sourceOnTarget bool) map[string]any {
+func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool) map[string]any {
 	normalizedChecksum, _ := media.NormalizeSHA256(checksum)
+	if mediaType == "" {
+		mediaType = v1alpha1.MachineImageMediaTypeDVD
+		if strings.HasSuffix(strings.ToLower(resolved.Original), "boot.iso") {
+			mediaType = v1alpha1.MachineImageMediaTypeBoot
+		}
+	}
 	out := map[string]any{
-		"kind":     resolved.Kind,
-		"original": resolved.Original,
-		"checksum": normalizedChecksum,
+		"kind":      resolved.Kind,
+		"mediaType": mediaType,
+		"original":  resolved.Original,
+		"checksum":  normalizedChecksum,
 	}
 	if sourceOnTarget && (resolved.Key != "" || resolved.Kind == "file") {
 		out["sourceOnTarget"] = true
@@ -172,6 +194,24 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 		return false
 	}
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
+}
+
+func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
+	sourceURL := source.URL
+	repos := source.Repositories
+	start := 0
+	if sourceURL == "" && len(repos) > 0 {
+		sourceURL = repos[0].BaseURL
+		start = 1
+	}
+	rhsm := map[string]any{}
+	if source.RHSM != nil {
+		rhsm["enabled"] = true
+		rhsm["organizationPath"] = secret.ResolvePath(source.RHSM.OrganizationRef.Name, env, secretsDir)
+		rhsm["activationKeyPath"] = secret.ResolvePath(source.RHSM.ActivationKeyRef.Name, env, secretsDir)
+		rhsm["connectToInsights"] = source.RHSM.ConnectToInsights
+	}
+	return sourceURL, machineInstallRepositoryVars(repos[start:]), rhsm
 }
 
 func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []any {

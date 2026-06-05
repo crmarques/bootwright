@@ -328,6 +328,10 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		for i, ref := range image.Spec.HeadersRefs {
 			require(fmt.Sprintf("MachineImage/%s spec.headersRefs[%d]", image.Metadata.Name, i), ref)
 		}
+		if rhsm := image.Spec.InstallSource.RHSM; rhsm != nil {
+			require(fmt.Sprintf("MachineImage/%s spec.installSource.rhsm.organizationRef", image.Metadata.Name), rhsm.OrganizationRef)
+			require(fmt.Sprintf("MachineImage/%s spec.installSource.rhsm.activationKeyRef", image.Metadata.Name), rhsm.ActivationKeyRef)
+		}
 	}
 	for _, profile := range state.MachineInstallProfiles {
 		if profile.Spec.Installer.Anaconda == nil {

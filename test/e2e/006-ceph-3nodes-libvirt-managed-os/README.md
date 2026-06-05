@@ -36,7 +36,7 @@ or Ansible changes.
 
 ## Prerequisites
 
-- A RHEL 9 x86_64 DVD ISO stored locally on the bastion.
+- A RHEL 9.8 x86_64 DVD ISO stored locally on the bastion.
 - Valid Red Hat registry credentials for Ceph container images.
 
 Bootwright owns lab host preparation for this fixture. After
@@ -58,7 +58,7 @@ chmod 600 ~/.ssh/bootwright-ssh-key
 Register the RHEL ISO in the root-managed media store before applying:
 
 ```bash
-bootwright media add rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel.iso
+bootwright media add rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel.iso
 ```
 
 The fixture references that ISO with:
@@ -66,7 +66,8 @@ The fixture references that ISO with:
 ```yaml
 spec:
   type: iso
-  url: local-media:rhel-9.8-x86_64-boot.iso
+  mediaType: dvd
+  url: local-media:rhel-9.8-x86_64-dvd.iso
 ```
 
 ## Run

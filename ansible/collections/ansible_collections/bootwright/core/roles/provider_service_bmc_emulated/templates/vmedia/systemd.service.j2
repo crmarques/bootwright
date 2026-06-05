@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m http.server {{ bootwright_bmc_vmedia_port }} --bind 127.0.0.1 --directory {{ bootwright_bmc_root }}/vmedia
+ExecStart=/usr/bin/python3 -m http.server {{ bootwright_bmc_vmedia_port }} --bind 127.0.0.1 --directory {{ bootwright_bmc_vmedia_root }}
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:{{ bootwright_bmc_root }}/vmedia.log

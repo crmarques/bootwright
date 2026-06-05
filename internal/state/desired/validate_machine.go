@@ -3,6 +3,7 @@ package desiredstate
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"dario.cat/mergo"
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -516,11 +517,16 @@ func validateMachineImages(state v1alpha1.State) []string {
 		if image.Spec.Type != v1alpha1.MachineImageTypeISO {
 			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, image.Spec.Type, v1alpha1.MachineImageTypeISO))
 		}
+		mediaType := machineImageMediaType(image)
+		if image.Spec.MediaType != "" && mediaType == "" {
+			errs = append(errs, fmt.Sprintf("%s.mediaType %q must be one of: %s, %s", prefix, image.Spec.MediaType, v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot))
+		}
 		if image.Spec.URL == "" {
 			errs = append(errs, prefix+".url is required")
 		} else if err := media.ValidateISOReference(image.Spec.URL); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.url %s", prefix, err))
 		}
+		errs = append(errs, validateMachineImageInstallSource(prefix, mediaType, image.Spec.InstallSource)...)
 		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 		}
@@ -564,21 +570,109 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		} else if _, ok := images[imageRef]; !ok {
 			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef.name %q does not match any MachineImage", prefix, imageRef))
 		}
-		for i, repo := range profile.Spec.Installer.Anaconda.Repositories {
-			owner := fmt.Sprintf("%s.installer.anaconda.repositories[%d]", prefix, i)
-			if repo.ID == "" {
-				errs = append(errs, owner+".id is required")
-			}
-			if repo.BaseURL == "" {
-				errs = append(errs, owner+".baseURL is required")
-			}
-		}
+		errs = append(errs, validateMachineInstallRepositories(prefix+".installer.anaconda.repositories", profile.Spec.Installer.Anaconda.Repositories)...)
 		customizations := profile.Spec.Customizations
 		if source := customizations.Hostname.Source; source != "" && source != v1alpha1.MachineInstallHostnameMachineName {
 			errs = append(errs, fmt.Sprintf("%s.customizations.hostname.source %q must be %q", prefix, source, v1alpha1.MachineInstallHostnameMachineName))
 		}
 		if source := customizations.Storage.RootDevice.Source; source != "" && source != v1alpha1.MachineInstallRootDeviceMachine {
 			errs = append(errs, fmt.Sprintf("%s.customizations.storage.rootDevice.source %q must be %q", prefix, source, v1alpha1.MachineInstallRootDeviceMachine))
+		}
+	}
+	return errs
+}
+
+func machineImageMediaType(image v1alpha1.MachineImage) string {
+	switch image.Spec.MediaType {
+	case "", v1alpha1.MachineImageMediaTypeDVD:
+		if image.Spec.MediaType == "" && strings.HasSuffix(strings.ToLower(image.Spec.URL), "boot.iso") {
+			return v1alpha1.MachineImageMediaTypeBoot
+		}
+		return v1alpha1.MachineImageMediaTypeDVD
+	case v1alpha1.MachineImageMediaTypeBoot:
+		return v1alpha1.MachineImageMediaTypeBoot
+	default:
+		return ""
+	}
+}
+
+func validateMachineImageInstallSource(prefix, mediaType string, installSource v1alpha1.MachineImageInstallSource) []string {
+	var errs []string
+	sourceType := machineImageInstallSourceType(installSource)
+	if installSource.Type != "" && sourceType == "" {
+		return []string{fmt.Sprintf("%s.installSource.type %q must be one of: %s, %s", prefix, installSource.Type, v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM)}
+	}
+	if mediaType == v1alpha1.MachineImageMediaTypeBoot && sourceType == "" {
+		errs = append(errs, prefix+".installSource is required when mediaType is boot")
+	}
+	switch sourceType {
+	case "":
+		return errs
+	case v1alpha1.MachineImageInstallSourceTypeURL:
+		if installSource.RHSM != nil {
+			errs = append(errs, prefix+".installSource.rhsm must be empty when installSource.type is url")
+		}
+		if installSource.URL == "" && len(installSource.Repositories) == 0 {
+			errs = append(errs, prefix+".installSource.url or installSource.repositories is required when installSource.type is url")
+		}
+		if installSource.URL != "" && !httpURL(installSource.URL) {
+			errs = append(errs, prefix+".installSource.url must be http:// or https://")
+		}
+		errs = append(errs, validateMachineInstallRepositories(prefix+".installSource.repositories", installSource.Repositories)...)
+		for i, repo := range installSource.Repositories {
+			if repo.BaseURL != "" && !httpURL(repo.BaseURL) {
+				errs = append(errs, fmt.Sprintf("%s.installSource.repositories[%d].baseURL must be http:// or https://", prefix, i))
+			}
+		}
+	case v1alpha1.MachineImageInstallSourceTypeRHSM:
+		if installSource.URL != "" {
+			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is redhatCDN")
+		}
+		if len(installSource.Repositories) > 0 {
+			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is redhatCDN")
+		}
+		if installSource.RHSM == nil {
+			errs = append(errs, prefix+".installSource.rhsm is required when installSource.type is redhatCDN")
+			return errs
+		}
+		if installSource.RHSM.OrganizationRef.Name == "" {
+			errs = append(errs, prefix+".installSource.rhsm.organizationRef.name is required")
+		}
+		if installSource.RHSM.ActivationKeyRef.Name == "" {
+			errs = append(errs, prefix+".installSource.rhsm.activationKeyRef.name is required")
+		}
+	}
+	return errs
+}
+
+func machineImageInstallSourceType(installSource v1alpha1.MachineImageInstallSource) string {
+	switch installSource.Type {
+	case v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM:
+		return installSource.Type
+	case "":
+		if installSource.RHSM != nil {
+			return v1alpha1.MachineImageInstallSourceTypeRHSM
+		}
+		if installSource.URL != "" || len(installSource.Repositories) > 0 {
+			return v1alpha1.MachineImageInstallSourceTypeURL
+		}
+	}
+	return ""
+}
+
+func httpURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+func validateMachineInstallRepositories(prefix string, repos []v1alpha1.MachineInstallRepository) []string {
+	var errs []string
+	for i, repo := range repos {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if repo.ID == "" {
+			errs = append(errs, owner+".id is required")
+		}
+		if repo.BaseURL == "" {
+			errs = append(errs, owner+".baseURL is required")
 		}
 	}
 	return errs

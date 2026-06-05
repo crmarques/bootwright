@@ -166,9 +166,10 @@ Rules:
 apiVersion: bootwright.io/v1alpha1
 kind: MachineImage
 metadata:
-  name: rhel-94-boot-iso
+  name: rhel-94-dvd-iso
 spec:
   type: iso
+  mediaType: dvd
   url: local-media:rhel-9.4-x86_64-dvd.iso
   checksum: sha256:0000000000000000000000000000000000000000000000000000000000000000
   trustRefs:
@@ -178,6 +179,18 @@ spec:
 Rules:
 
 - `spec.type` currently accepts `iso`.
+- `spec.mediaType` accepts `dvd` or `boot`. When omitted, Bootwright treats
+  normal install media as `dvd` and filenames ending in `boot.iso` as `boot`.
+- `spec.installSource` is required for `mediaType: boot`. It accepts
+  `type: url` for a plain HTTP(S) install tree or `type: redhatCDN` for an
+  RHSM-backed Red Hat CDN install.
+- `installSource.type: url` can set `url` as the primary Anaconda install
+  tree. Alternatively, `repositories[0].baseURL` becomes the primary install
+  tree and subsequent repositories become additional Kickstart `repo` entries.
+- `installSource.type: redhatCDN` sets `rhsm.organizationRef.name` and
+  `rhsm.activationKeyRef.name`. Both secret refs point to
+  `Environment.spec.secrets` entries; secret bytes are read only from runtime
+  secret material when Bootwright renders the Kickstart.
 - `url` is required and accepts `local-media:<filename.iso>`, `file://`
   absolute paths, `http://`, or `https://`.
 - `local-media:<filename.iso>` resolves to the root-managed ISO media store
@@ -209,10 +222,10 @@ spec:
     type: anaconda
     anaconda:
       imageRef:
-        name: rhel-94-boot-iso
+        name: rhel-94-dvd-iso
       repositories:
-        - id: baseos
-          baseURL: https://repos.example.test/rhel/9.4/BaseOS/x86_64/os/
+        - id: extras
+          baseURL: https://repos.example.test/rhel/9.4/extras/x86_64/os/
   customizations:
     hostname:
       source: machineName
@@ -234,6 +247,9 @@ Rules:
 
 - `spec.installer.type` currently accepts `anaconda`.
 - `spec.installer.anaconda.imageRef.name` references a `MachineImage`.
+- `spec.installer.anaconda.repositories[]` declares additional Anaconda
+  repositories for the profile. The primary boot-ISO install source is owned by
+  the referenced `MachineImage`.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.

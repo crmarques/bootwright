@@ -16,16 +16,59 @@
     bootwright_libvirt_network_uuid: "{{ (bootwright_current_cluster.name ~ '-net') | to_uuid }}"
     bootwright_libvirt_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt"
     bootwright_libvirt_machine_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt/machines/{{ bootwright_component.name }}"
+    bootwright_libvirt_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
     bootwright_libvirt_domain_uuid: "{{ (bootwright_current_cluster.name ~ '-' ~ bootwright_component.name) | to_uuid }}"
   changed_when: false
 
-- name: Create per-machine libvirt state directory
+- name: Create per-machine libvirt state directories
   ansible.builtin.file:
-    path: "{{ bootwright_libvirt_machine_root }}"
+    path: "{{ item.path }}"
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ bootwright_libvirt_machine_root }}", mode: "0755" }
+    - { path: "{{ bootwright_libvirt_storage_root }}", mode: "0755" }
+
+- name: Probe libvirt runtime users
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ item }}"
+  register: bootwright_libvirt_runtime_user_probe
+  changed_when: false
+  failed_when: false
+  loop:
+    - qemu
+    - libvirt-qemu
+
+- name: Resolve libvirt runtime storage access
+  ansible.builtin.set_fact:
+    bootwright_libvirt_runtime_users: "{{ bootwright_libvirt_runtime_user_probe.results | default([]) | selectattr('rc', 'eq', 0) | map(attribute='item') | list }}"
+    bootwright_libvirt_disk_paths: >-
+      {{
+        [bootwright_libvirt_storage_root ~ '/disk.qcow2']
+        + (
+          bootwright_component.profile.dataDisks | default([])
+          | map(attribute='name')
+          | map('regex_replace', '^', bootwright_libvirt_storage_root ~ '/data-')
+          | map('regex_replace', '$', '.qcow2')
+          | list
+        )
+      }}
+  changed_when: false
+
+- name: Select libvirt runtime user
+  ansible.builtin.set_fact:
+    bootwright_libvirt_runtime_user: "{{ bootwright_libvirt_runtime_users | first | default('') }}"
+  changed_when: false
+
+- name: Assert libvirt runtime user
+  ansible.builtin.fail:
+    msg: "No libvirt QEMU runtime user found; expected qemu or libvirt-qemu."
+  when: bootwright_libvirt_runtime_user == ""
 
 - name: Locate QEMU emulator
   ansible.builtin.stat:
@@ -46,6 +89,54 @@
     msg: "No QEMU emulator found; install qemu-kvm."
   when: bootwright_libvirt_qemu_emulator == ""
 
+- name: Check existing machine disk locations
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: bootwright_libvirt_machine_disk_locations
+  loop:
+    - "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
+    - "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
+
+- name: Migrate machine disk to libvirt storage
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
+      - "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
+  when:
+    - bootwright_libvirt_machine_disk_locations.results[0].stat.exists | default(false)
+    - not (bootwright_libvirt_machine_disk_locations.results[1].stat.exists | default(false))
+
+- name: Check existing machine data disk source locations
+  ansible.builtin.stat:
+    path: "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+  register: bootwright_libvirt_machine_data_disk_source_locations
+  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check existing machine data disk storage locations
+  ansible.builtin.stat:
+    path: "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
+  register: bootwright_libvirt_machine_data_disk_storage_locations
+  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Migrate machine data disks to libvirt storage
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+      - "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
+  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
+  when:
+    - bootwright_libvirt_machine_data_disk_source_locations.results[ansible_loop.index0].stat.exists | default(false)
+    - not (bootwright_libvirt_machine_data_disk_storage_locations.results[ansible_loop.index0].stat.exists | default(false))
+
 - name: Create machine disk
   ansible.builtin.command:
     argv:
@@ -53,10 +144,10 @@
       - create
       - -f
       - qcow2
-      - "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
+      - "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
       - "{{ bootwright_component.profile.diskGiB }}G"
   args:
-    creates: "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
+    creates: "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
 
 - name: Create machine data disks
   ansible.builtin.command:
@@ -65,13 +156,33 @@
       - create
       - -f
       - qcow2
-      - "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+      - "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
       - "{{ item.sizeGiB }}G"
   args:
-    creates: "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
+    creates: "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
   loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
   loop_control:
     label: "{{ item.name }}"
+
+- name: Align libvirt disk image ownership
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: "{{ bootwright_libvirt_runtime_user }}"
+    group: root
+    mode: "0600"
+  loop: "{{ bootwright_libvirt_disk_paths }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Restore libvirt storage labels
+  ansible.builtin.command:
+    argv:
+      - restorecon
+      - -RFv
+      - "{{ bootwright_libvirt_storage_root }}"
+  register: bootwright_libvirt_storage_restorecon
+  changed_when: bootwright_libvirt_storage_restorecon.stdout | length > 0
+  when: ansible_selinux.status | default('disabled') == 'enabled'
 
 - name: Render libvirt domain XML
   ansible.builtin.template:

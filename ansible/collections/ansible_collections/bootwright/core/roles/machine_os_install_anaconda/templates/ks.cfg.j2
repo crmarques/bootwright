@@ -4,7 +4,15 @@ eula --agreed
 firstboot --disable
 skipx
 reboot
+{% set installer = bootwright_component.osInstall.installer | default({}) %}
+{% set rhsm = installer.rhsm | default({}) %}
+{% if rhsm.enabled | default(false) %}
+rhsm --organization="{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}" --activation-key="{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}"{% if rhsm.connectToInsights | default(false) %} --connect-to-insights{% endif %}
+{% elif installer.sourceURL | default('') | length > 0 %}
+url --url={{ installer.sourceURL }}
+{% else %}
 cdrom
+{% endif %}
 lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
@@ -18,7 +26,7 @@ network --device={{ net.device | default('link') }} --bootproto=static --ip={{ n
 network --device={{ net.device | default('link') }} --bootproto=dhcp{% if net.dnsServers | default([]) | length > 0 %} --nameserver={{ net.dnsServers | join(',') }}{% endif %} --activate --onboot=yes --hostname={{ ks.hostname }}
 {% endif %}
 
-{% for repo in bootwright_component.osInstall.installer.repositories | default([]) %}
+{% for repo in installer.repositories | default([]) %}
 repo --name="{{ repo.id }}" --baseurl={{ repo.baseURL }}
 {% endfor %}
 
