@@ -55,9 +55,10 @@ not scan or bulk-load the full knowledge directory.
 - Implementation requests that change repo-tracked files must use
   `parallel-implementation`: create a temporary branch and worktree from local
   `main` without asking, then edit only inside that worktree.
-- Do not commit, push, merge, or fast-forward implementation fixes immediately.
-  Leave changes available for user review/testing and wait for explicit merge
-  approval before creating task commits or integrating into `main`.
+- Do not push, merge, or fast-forward implementation fixes immediately. Task
+  commits on the temporary branch are already authorized after the intended
+  edit set is complete; do not ask before creating them. Leave `main`
+  integration pending explicit merge approval.
 - After completing the intended edit set for any implementation request, run
   only `make check-fast`. Do not run `make check` by yourself; run it only when
   the user explicitly requests that full gate.
@@ -73,8 +74,8 @@ not scan or bulk-load the full knowledge directory.
   command that answers the current question. Do not run aggregate checks unless
   the user explicitly requested them.
 - Once the temporary branch is ready for `main`, ask the user whether merge can
-  proceed. A response such as "go" authorizes creating the task commit if
-  needed, final rebase if local `main` advanced, merge into `main`, and deletion
-  of the temporary worktree and branch; do not ask separately for those steps.
+  proceed. A response such as "go" authorizes final rebase if local `main`
+  advanced, merge into `main`, and deletion of the temporary worktree and
+  branch; do not ask separately for those steps.
 - Before completing implementation work, run the validation required by the
   applicable skills and report anything that could not be run.

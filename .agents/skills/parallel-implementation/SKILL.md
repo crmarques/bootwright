@@ -26,9 +26,10 @@ never directly in the primary `main` worktree.
 - Use the primary worktree only for read-only inspection until the user
   explicitly approves merge after review/testing.
 - Do not stash, reset, force-update, or commit unrelated user changes.
-- Do not commit task changes, push, merge, or fast-forward `main` immediately
-  after implementing a fix. Leave the temporary worktree available for user
-  review/testing until the user explicitly approves merge.
+- Do not push, merge, or fast-forward `main` immediately after implementing a
+  fix. Task commits on the temporary branch are preauthorized after the
+  intended edit set is complete; do not ask before creating them. Leave `main`
+  integration pending explicit merge approval.
 
 ## Isolated Worktree Workflow
 
@@ -60,16 +61,20 @@ never directly in the primary `main` worktree.
 - After the intended edit set is complete, run `make check-fast` from the
   temporary worktree. Do not run `make check` by yourself; run it only when the
   user explicitly requests that full gate.
+- Commit the task changes on the temporary branch after `make check-fast`
+  passes. This is preauthorized; do not ask the user before committing in the
+  temporary branch.
 - After `make check-fast`, check whether the temporary branch is ready to merge
   into current local `main`.
 - If local `main` has advanced or the temporary branch is not ready, rebase the
   temporary branch onto current local `main`. This is preauthorized; do not ask
   the user before rebasing.
 - If rebase changes the effective final tree or exposes conflicts, perform
-  needed fixes or adjustments and rerun `make check-fast`.
-- Repeat the readiness, rebase, fix, and `make check-fast` loop until the
-  branch is ready to merge or a real blocker remains.
-- Leave changes uncommitted in the temporary worktree for user review/testing
+  needed fixes or adjustments, rerun `make check-fast`, and commit those
+  adjustments on the temporary branch without asking.
+- Repeat the readiness, rebase, fix, `make check-fast`, and temp-branch commit
+  loop until the branch is ready to merge or a real blocker remains.
+- Leave changes committed on the temporary branch for user review/testing
   unless the user has explicitly approved merge after review.
 - If the primary `main` worktree has uncommitted changes when integration is
   considered, keep the temporary worktree and report that `main` is not ready
@@ -78,11 +83,9 @@ never directly in the primary `main` worktree.
 
 ## After Merge Approval
 
-- A response such as "go" authorizes creating the task commit, final rebase
-  when local `main` advanced, merge into `main`, temporary worktree removal,
-  and temporary branch deletion. Do not ask separately for those steps.
-- Commit the reviewed task changes on the temporary branch when they are still
-  uncommitted.
+- A response such as "go" authorizes final rebase when local `main` advanced,
+  merge into `main`, temporary worktree removal, and temporary branch deletion.
+  Do not ask separately for those steps.
 - If local `main` advanced after the last refresh, rebase the temporary branch
   onto current local `main`.
 - Rerun `make check-fast` when rebase changes the effective final tree.

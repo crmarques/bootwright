@@ -42,9 +42,10 @@ editing from partial context.
   `main`; do not ask before doing so. Agents must work from that isolated
   temporary worktree and may touch the primary `main` worktree only after the
   user explicitly approves merge.
-- Do not commit, push, merge, or fast-forward implementation fixes immediately.
-  Leave changes available for user review/testing and wait for explicit merge
-  approval before committing task changes or integrating into `main`.
+- Do not push, merge, or fast-forward implementation fixes immediately. Task
+  commits on the temporary branch are already authorized after the intended
+  edit set is complete; do not ask before creating them. Leave `main`
+  integration pending explicit merge approval.
 - When adding or changing CLI user-facing human output, always use the
   centralized `internal/cli/output` component. Keep the documented raw-output
   exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
@@ -66,9 +67,9 @@ editing from partial context.
 - Before completing implementation work, use the
   `/.agents/skills/implementation-validation/` skill.
 - Once the temporary branch is ready for `main`, ask the user whether merge can
-  proceed. A response such as "go" authorizes creating the task commit if
-  needed, final rebase if local `main` advanced, merge into `main`, and deletion
-  of the temporary worktree and branch; do not ask separately for those steps.
+  proceed. A response such as "go" authorizes final rebase if local `main`
+  advanced, merge into `main`, and deletion of the temporary worktree and
+  branch; do not ask separately for those steps.
 
 ## Handoff Format
 
@@ -76,11 +77,11 @@ Use Conventional Commits (`type(scope): subject`) when asked to commit or when
 providing a commit subject after user review/testing:
 
 - Generate ONLY one short subject line (no body). Max 72 chars.
-- For an implementation/fix handoff where changes are intentionally left
-  uncommitted for user review/testing, report the temporary worktree path and
-  branch, whether `make check-fast` completed, and whether the branch is ready
-  to merge into local `main`. If request processing is blocked or required
-  verification cannot complete, report the blocker instead.
+- For an implementation/fix handoff where changes are intentionally left on a
+  temporary branch for user review/testing, report the temporary worktree path,
+  branch, task commit, whether `make check-fast` completed, and whether the
+  branch is ready to merge into local `main`. If request processing is blocked
+  or required verification cannot complete, report the blocker instead.
 - After the user explicitly approves merge and integration succeeds, output ONLY the
   conventional-commit subject line. Do NOT append summaries, file lists,
   verification details, or commit questions.
