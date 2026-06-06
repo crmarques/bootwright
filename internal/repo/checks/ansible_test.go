@@ -2666,6 +2666,22 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 	assertIncludeRoleName(t, decoded[findAnsibleTask(t, decoded, "Apply Ceph storage cluster")], "bootwright.core.storage_cluster_cephadm")
 }
 
+func TestOwnershipHelperWritesTimezoneQualifiedTimestamps(t *testing.T) {
+	for _, path := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/resource.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/package_apply_one.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/package_remove_one.yml",
+	} {
+		body := readRepoFile(t, path)
+		if strings.Contains(body, "now(utc=true).isoformat()") {
+			t.Fatalf("%s must not write naive UTC timestamps with isoformat()", path)
+		}
+		if !strings.Contains(body, "now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')") {
+			t.Fatalf("%s must write RFC3339 UTC timestamps with a Z suffix", path)
+		}
+	}
+}
+
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
 	for _, name := range []string{

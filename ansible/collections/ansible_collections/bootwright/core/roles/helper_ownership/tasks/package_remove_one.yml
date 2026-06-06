@@ -48,7 +48,7 @@
     owner: root
     group: root
     mode: "0600"
-    content: "{{ bootwright_ownership_package_record | combine({'requiredBy': bootwright_ownership_package_remaining_required_by, 'updatedAt': now(utc=true).isoformat()}) | to_nice_json }}\n"
+    content: "{{ bootwright_ownership_package_record | combine({'requiredBy': bootwright_ownership_package_remaining_required_by, 'updatedAt': now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')}) | to_nice_json }}\n"
   when:
     - bootwright_ownership_package_record_stat.stat.exists | default(false)
     - bootwright_ownership_package_remaining_required_by | default([]) | length > 0

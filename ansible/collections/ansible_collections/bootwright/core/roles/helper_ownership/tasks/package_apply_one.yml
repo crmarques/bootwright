@@ -43,7 +43,7 @@
       package: "{{ bootwright_ownership_package_name }}"
       requiredBy: "{{ (bootwright_ownership_existing_required_list + [bootwright_ownership_required_by]) | unique | list }}"
       preexisting: "{{ bootwright_ownership_existing_package_record.preexisting | default(bootwright_ownership_package_name in (ansible_facts.packages | default({}))) | bool }}"
-      updatedAt: "{{ now(utc=true).isoformat() }}"
+      updatedAt: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"
   changed_when: false
 
 - name: Write package ownership record

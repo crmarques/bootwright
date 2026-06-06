@@ -40,5 +40,5 @@
       {{
         bootwright_ownership_record_base
         | combine(bootwright_ownership_fields | default({}), recursive=True)
-        | combine({'updatedAt': now(utc=true).isoformat()}, recursive=True)
+        | combine({'updatedAt': now(utc=true).strftime('%Y-%m-%dT%H:%M:%S.%fZ')}, recursive=True)
       }}

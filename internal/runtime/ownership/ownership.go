@@ -35,6 +35,52 @@ type ResourceRecord struct {
 
 var safeSegmentRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
+func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		APIVersion string            `json:"apiVersion"`
+		Kind       string            `json:"kind"`
+		Name       string            `json:"name"`
+		Owner      string            `json:"owner"`
+		Context    string            `json:"context,omitempty"`
+		Host       string            `json:"host,omitempty"`
+		Provider   string            `json:"provider,omitempty"`
+		Cluster    string            `json:"cluster,omitempty"`
+		Machine    string            `json:"machine,omitempty"`
+		Paths      []string          `json:"paths,omitempty"`
+		HostFacts  map[string]string `json:"hostFacts,omitempty"`
+		Labels     map[string]string `json:"labels,omitempty"`
+		Attributes map[string]string `json:"attributes,omitempty"`
+		UpdatedAt  string            `json:"updatedAt"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*record = ResourceRecord{
+		APIVersion: wire.APIVersion,
+		Kind:       wire.Kind,
+		Name:       wire.Name,
+		Owner:      wire.Owner,
+		Context:    wire.Context,
+		Host:       wire.Host,
+		Provider:   wire.Provider,
+		Cluster:    wire.Cluster,
+		Machine:    wire.Machine,
+		Paths:      wire.Paths,
+		HostFacts:  wire.HostFacts,
+		Labels:     wire.Labels,
+		Attributes: wire.Attributes,
+	}
+	if strings.TrimSpace(wire.UpdatedAt) == "" {
+		return nil
+	}
+	updatedAt, err := parseOwnershipTimestamp(wire.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("updatedAt: %w", err)
+	}
+	record.UpdatedAt = updatedAt
+	return nil
+}
+
 func ResourcePath(root string, record ResourceRecord) (string, error) {
 	if err := validateSegment(record.Kind); err != nil {
 		return "", fmt.Errorf("kind: %w", err)
@@ -170,4 +216,19 @@ func sensitiveString(value string) bool {
 		}
 	}
 	return false
+}
+
+func parseOwnershipTimestamp(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	for _, layout := range []string{"2006-01-02T15:04:05.999999999", "2006-01-02T15:04:05"} {
+		if t, err := time.ParseInLocation(layout, value, time.UTC); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("%q must be RFC3339 or UTC timestamp without timezone", value)
 }
