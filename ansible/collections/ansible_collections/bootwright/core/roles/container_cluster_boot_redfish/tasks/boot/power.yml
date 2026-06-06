@@ -366,6 +366,7 @@
 - name: Initialize Redfish power state wait for PowerState=Off
   ansible.builtin.set_fact:
     bootwright_redfish_power_state_expected: "Off"
+    bootwright_redfish_power_state_wait_label: Redfish boot ForceOff
     bootwright_redfish_power_state_reached: false
     bootwright_redfish_power_state_status:
       expected: "Off"
@@ -437,6 +438,7 @@
 - name: Initialize Redfish power state wait for PowerState=On
   ansible.builtin.set_fact:
     bootwright_redfish_power_state_expected: "On"
+    bootwright_redfish_power_state_wait_label: Redfish boot power-on
     bootwright_redfish_power_state_reached: false
     bootwright_redfish_power_state_status:
       expected: "On"

@@ -487,6 +487,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	readMarkerIdx := findAnsibleTask(t, topTasks, "Read managed OS install marker before install")
 	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse reachable managed OS without matching Bootwright marker")
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
+	waitPowerOffIdx := findAnsibleTask(t, topTasks, "Wait for managed OS installer shutdown")
+	cleanupAfterShutdownIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after installer shutdown")
+	powerOnDiskIdx := findAnsibleTask(t, topTasks, "Power on managed OS from installed disk")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
 	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
@@ -508,8 +511,35 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !(readMarkerIdx < refuseMarkerIdx && refuseMarkerIdx < installBlockIdx) {
 		t.Fatalf("Anaconda role must check the managed OS marker before the install block")
 	}
-	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
-		t.Fatalf("Anaconda role must clean managed OS virtual media after SSH is ready and before host-key trust")
+	if !(installBlockIdx < waitPowerOffIdx && waitPowerOffIdx < cleanupAfterShutdownIdx && cleanupAfterShutdownIdx < powerOnDiskIdx && powerOnDiskIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
+		t.Fatalf("Anaconda role must power off, clean virtual media, power on from disk, and then wait for SSH")
+	}
+	assertIncludeRoleName(t, topTasks[waitPowerOffIdx], "{{ bootwright_component.bootApplyRole }}")
+	waitPowerOffVars, ok := topTasks[waitPowerOffIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass wait vars, got %v", topTasks[waitPowerOffIdx]["name"], topTasks[waitPowerOffIdx])
+	}
+	if waitPowerOffVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" ||
+		waitPowerOffVars["bootwright_redfish_action"] != "wait_power_off" ||
+		waitPowerOffVars["bootwright_redfish_power_state_retries"] != "{{ bootwright_machine_os_install_poweroff_retries }}" ||
+		waitPowerOffVars["bootwright_redfish_power_state_delay_seconds"] != "{{ bootwright_machine_os_install_poweroff_delay_seconds }}" {
+		t.Fatalf("%s must wait for installer power-off with managed OS retry defaults, got vars=%v", topTasks[waitPowerOffIdx]["name"], waitPowerOffVars)
+	}
+	assertIncludeRoleName(t, topTasks[cleanupAfterShutdownIdx], "{{ bootwright_component.mediaPrepareRole }}")
+	cleanupAfterShutdownVars, ok := topTasks[cleanupAfterShutdownIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[cleanupAfterShutdownIdx]["name"], topTasks[cleanupAfterShutdownIdx])
+	}
+	if cleanupAfterShutdownVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupAfterShutdownVars["bootwright_redfish_action_effective"] != "cleanup" {
+		t.Fatalf("%s must clean live and persistent managed OS media before disk power-on, got vars=%v", topTasks[cleanupAfterShutdownIdx]["name"], cleanupAfterShutdownVars)
+	}
+	assertIncludeRoleName(t, topTasks[powerOnDiskIdx], "{{ bootwright_component.bootApplyRole }}")
+	powerOnDiskVars, ok := topTasks[powerOnDiskIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass power-on vars, got %v", topTasks[powerOnDiskIdx]["name"], topTasks[powerOnDiskIdx])
+	}
+	if powerOnDiskVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || powerOnDiskVars["bootwright_redfish_action"] != "power_on_disk" {
+		t.Fatalf("%s must power on from disk after media cleanup, got vars=%v", topTasks[powerOnDiskIdx]["name"], powerOnDiskVars)
 	}
 	if !(recordHostKeyIdx < verifySSHIdx && verifySSHIdx < writeMarkerIdx) {
 		t.Fatalf("Anaconda role must write the managed OS marker after SSH verification")
@@ -739,7 +769,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s is not a set_fact task", tasks[resolveBootComponentIdx]["name"])
 	}
 	resolveBootExpr := fmt.Sprint(resolveBootComponent["bootwright_managed_os_boot_component"])
-	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "disk-first"} {
+	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "cdrom-first"} {
 		if !strings.Contains(resolveBootExpr, want) {
 			t.Fatalf("%s must resolve %q before media preparation: %s", tasks[resolveBootComponentIdx]["name"], want, resolveBootExpr)
 		}
@@ -768,7 +798,7 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		t.Fatalf("Kickstart template must not use an inline conditional around the SSH key lookup")
 	}
 	for _, want := range []string{
-		"reboot --eject",
+		"poweroff",
 		"{% set rhsm = installer.rhsm | default({}) %}",
 		"{% if rhsm.enabled | default(false) %}",
 		"rhsm --organization=\"{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}\" --activation-key=\"{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}\"",
@@ -886,19 +916,35 @@ func TestBootRedfishSSHAuthProbeUsesCallerDuringInternalSudo(t *testing.T) {
 
 func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml")
+	validateActionIdx := findAnsibleTask(t, mainTasks, "Validate selected Redfish boot action")
+	systemIdx := findAnsibleTask(t, mainTasks, "Resolve Redfish system")
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
 	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
 	bootSequenceIdx := findAnsibleTask(t, mainTasks, "Boot node from Redfish virtual media")
+	waitPowerOffActionIdx := findAnsibleTask(t, mainTasks, "Wait for Redfish system to power off")
+	powerOnDiskActionIdx := findAnsibleTask(t, mainTasks, "Power on Redfish system from disk")
 	bootSequenceTasks := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "block")
 	bootSequenceAlways := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "always")
 	powerIdx := findAnsibleTask(t, bootSequenceTasks, "Power node from virtual media")
 	postIdx := findAnsibleTask(t, bootSequenceTasks, "Set post-boot Redfish boot device")
 	restoreIdx := findAnsibleTask(t, bootSequenceAlways, "Restore Redfish certificate verification settings")
-	if !(prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx) {
-		t.Fatalf("boot_redfish imports must run media_prepare and MAC validation before boot sequence")
+	if !(validateActionIdx < systemIdx && systemIdx < prepareIdx && prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx && bootSequenceIdx < waitPowerOffActionIdx && waitPowerOffActionIdx < powerOnDiskActionIdx) {
+		t.Fatalf("boot_redfish imports must resolve the system, run media_prepare, boot sequence, and managed power actions in order")
 	}
 	if !(powerIdx < postIdx) {
 		t.Fatalf("boot_redfish boot sequence must run power before post_boot")
+	}
+	validateAction, ok := mainTasks[validateActionIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", mainTasks[validateActionIdx]["name"])
+	}
+	for _, want := range []string{"boot", "cleanup_media", "wait_power_off", "power_on_disk"} {
+		if !strings.Contains(fmt.Sprint(validateAction["that"]), want) {
+			t.Fatalf("boot_redfish action validation missing %q: %v", want, validateAction["that"])
+		}
+	}
+	if got := mainTasks[prepareIdx]["when"]; got != "bootwright_redfish_action_effective in ['boot', 'cleanup_media']" {
+		t.Fatalf("boot_redfish media preparation must only run for media actions, got when=%v", got)
 	}
 	for _, want := range []string{
 		"bootwright_redfish_action_effective == 'boot'",
@@ -915,11 +961,15 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeTasksFile(t, bootSequenceTasks[powerIdx], "boot/power.yml")
 	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "boot/post_boot.yml")
 	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "media/restore_certificate_verification.yml")
+	assertIncludeTasksFile(t, mainTasks[systemIdx], "stage/system.yml")
+	assertIncludeTasksFile(t, mainTasks[waitPowerOffActionIdx], "boot/wait_power_off.yml")
+	assertIncludeTasksFile(t, mainTasks[powerOnDiskActionIdx], "boot/power_on_disk.yml")
 	if len(bootSequenceAlways) != 1 {
 		t.Fatalf("boot_redfish boot sequence always block should only restore Redfish certificate settings, got %d tasks", len(bootSequenceAlways))
 	}
 
 	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
+	systemTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/stage/system.yml")
 	mediaTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
 	powerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml")
 	powerStateTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml")
@@ -927,6 +977,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml")
 	postTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml")
 	restoreTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/restore_certificate_verification.yml")
+	discoverSystemIdx := findAnsibleTask(t, systemTasks, "Discover Redfish System ID")
+	resolveSystemIdx := findAnsibleTask(t, systemTasks, "Resolve effective Redfish System ID")
 	managerListIdx := findAnsibleTask(t, prepareTasks, "List Redfish managers")
 	managerMediaIdx := findAnsibleTask(t, prepareTasks, "List VirtualMedia members for Redfish managers")
 	probeMediaIdx := findAnsibleTask(t, prepareTasks, "Probe Redfish VirtualMedia members")
@@ -975,6 +1027,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	powerStateProbeIdx := findAnsibleTask(t, powerStateTasks, "Probe Redfish system power state")
 	powerStateCaptureIdx := findAnsibleTask(t, powerStateTasks, "Capture Redfish system power state status")
 	powerStateResolveIdx := findAnsibleTask(t, powerStateTasks, "Resolve Redfish system power state result")
+	powerStateReportIdx := findAnsibleTask(t, powerStateTasks, "Report Redfish system power state wait status")
 	powerStateDelayIdx := findAnsibleTask(t, powerStateTasks, "Wait before retrying Redfish power state probe")
 	retryDelayIdx := findAnsibleTask(t, insertAttemptTasks, "Wait before retrying Redfish virtual media insertion")
 	retryEjectIdx := findAnsibleTask(t, insertAttemptTasks, "Eject virtual media before retrying insertion")
@@ -1016,6 +1069,9 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	restoreSecurityPreconditionIdx := findAnsibleTask(t, restoreTasks, "Resolve Redfish manager SecurityService restore PATCH precondition")
 	restoreSecurityIdx := findAnsibleTask(t, restoreTasks, "Restore Redfish HTTPS transfer certificate verification")
 
+	if !(discoverSystemIdx < resolveSystemIdx) {
+		t.Fatalf("boot_redfish must discover Redfish system ID before media and power actions")
+	}
 	if !(managerListIdx < managerMediaIdx && managerMediaIdx < probeMediaIdx && probeMediaIdx < resolveMediaIdx && resolveMediaIdx < resolveManagerIdx && resolveManagerIdx < resolveSecurityServiceIdx && resolveSecurityServiceIdx < resolveActionIdx && resolveActionIdx < resolveActionCandidatesIdx && resolveActionCandidatesIdx < actionInfoIdx && actionInfoIdx < supportedVMMIdx && supportedVMMIdx < effectiveActionIdx && effectiveActionIdx < redfishEjectIdx && redfishEjectIdx < mediaPrepareIdx) {
 		t.Fatalf("boot_redfish must discover manager-scoped virtual media and action targets before eject/prep")
 	}
@@ -1037,8 +1093,8 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !(confirmCDBootIdx < forceOffIdx && forceOffIdx < initPowerOffIdx && initPowerOffIdx < waitPowerOffIdx && waitPowerOffIdx < confirmPowerOffIdx && confirmPowerOffIdx < powerOnIdx && powerOnIdx < confirmPowerOnRequestIdx && confirmPowerOnRequestIdx < initPowerOnIdx && initPowerOnIdx < waitPowerOnIdx && waitPowerOnIdx < confirmPowerOnIdx) {
 		t.Fatalf("boot_redfish must wait for power-off before power-on and then confirm PowerState=On")
 	}
-	if !(powerStateProbeIdx < powerStateCaptureIdx && powerStateCaptureIdx < powerStateResolveIdx && powerStateResolveIdx < powerStateDelayIdx) {
-		t.Fatalf("boot_redfish power state probe must capture sanitized status before resolving retry state")
+	if !(powerStateProbeIdx < powerStateCaptureIdx && powerStateCaptureIdx < powerStateResolveIdx && powerStateResolveIdx < powerStateReportIdx && powerStateReportIdx < powerStateDelayIdx) {
+		t.Fatalf("boot_redfish power state probe must capture and report sanitized status before sleeping")
 	}
 	if !(retryDelayIdx < retryEjectIdx && retryEjectIdx < refreshMediaIdx && refreshMediaIdx < mediaPreconditionIdx && mediaPreconditionIdx < verifyCertIdx && verifyCertIdx < standardBodyIdx && standardBodyIdx < vmmBodyIdx && vmmBodyIdx < insertIdx && insertIdx < requestStatusIdx && requestStatusIdx < taskRefIdx && taskRefIdx < taskURLIdx && taskURLIdx < waitTaskIdx && waitTaskIdx < captureTaskIdx && captureTaskIdx < taskResultIdx && taskResultIdx < failedTaskProbeIdx && failedTaskProbeIdx < mountedTaskProbeIdx && mountedTaskProbeIdx < waitMediaIdx && waitMediaIdx < resolveProbeAfterInsertIdx && resolveProbeAfterInsertIdx < patchPreconditionIdx && patchPreconditionIdx < patchAttemptIdx && patchAttemptIdx < patchMediaIdx && patchMediaIdx < waitPatchMediaIdx && waitPatchMediaIdx < resolveProbeAfterPatchIdx && resolveProbeAfterPatchIdx < captureMediaIdx && captureMediaIdx < resolveAttachmentSourcesIdx && resolveAttachmentSourcesIdx < resolveAttachedIdx) {
 		t.Fatalf("boot_redfish insert attempt must verify async task and virtual media insertion before reporting success")
@@ -1312,6 +1368,19 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	powerStateStatus, ok := powerStateFact["bootwright_redfish_power_state_status"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(powerStateStatus["powerState"]), "PowerState") || !strings.Contains(fmt.Sprint(powerStateStatus["httpStatus"]), "status") {
 		t.Fatalf("power state status must capture sanitized PowerState and HTTP status, got %v", powerStateFact)
+	}
+	powerStateReport, ok := powerStateTasks[powerStateReportIdx]["ansible.builtin.debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no debug body", powerStateTasks[powerStateReportIdx]["name"])
+	}
+	powerStateReportMsg := fmt.Sprint(powerStateReport["msg"])
+	for _, want := range []string{"bootwright_redfish_power_state_wait_label", "expected=", "observed=", "attempt="} {
+		if !strings.Contains(powerStateReportMsg, want) {
+			t.Fatalf("power state wait report missing %q: %s", want, powerStateReportMsg)
+		}
+	}
+	if _, ok := powerStateTasks[powerStateReportIdx]["when"]; ok {
+		t.Fatalf("power state wait report must print the reached attempt before later loop iterations skip the host")
 	}
 	restoreVMediaURI, ok := restoreTasks[restoreVMediaIdx]["ansible.builtin.uri"].(map[string]any)
 	if !ok {

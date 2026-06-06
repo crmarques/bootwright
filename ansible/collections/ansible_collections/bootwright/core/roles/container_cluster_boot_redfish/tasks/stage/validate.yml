@@ -4,11 +4,11 @@
     that:
       - (bootwright_component.boot.redfish.baseUrl | default('') | length) > 0
       - >-
-        bootwright_redfish_action_effective == 'cleanup_media'
+        bootwright_redfish_action_effective != 'boot'
         or (bootwright_component.boot.agentIso.fetchUrl | default('') | length) > 0
     fail_msg: >-
-      boot_redfish needs the renderer to project
-      bootwright_component.boot.{redfish.baseUrl,agentIso.fetchUrl}. An empty
-      agentIso.fetchUrl means the cluster has no reachable artifact server;
+      boot_redfish needs the renderer to project bootwright_component.boot.redfish.baseUrl
+      and, for boot actions, bootwright_component.boot.agentIso.fetchUrl. An
+      empty agentIso.fetchUrl means the cluster has no reachable artifact server;
       declare an InfraComponent.spec.artifactServer endpoint and bind the
       ContainerCluster install artifact access endpoint the BMC must use.

@@ -373,7 +373,7 @@
                 }),
                 'media': (bootwright_component.boot.media | default({})) | combine({
                   'libvirt': ((bootwright_component.boot.media | default({})).libvirt | default({})) | combine({
-                    'bootOrder': 'disk-first'
+                    'bootOrder': 'cdrom-first'
                   })
                 })
               }, recursive=True)
@@ -403,6 +403,34 @@
         bootwright_component: "{{ bootwright_managed_os_boot_component }}"
         bootwright_redfish_action_effective: cleanup_persistent
       when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
+
+- name: Wait for managed OS installer shutdown
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.bootApplyRole }}"
+  vars:
+    bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+    bootwright_redfish_action: wait_power_off
+    bootwright_redfish_power_state_retries: "{{ bootwright_machine_os_install_poweroff_retries }}"
+    bootwright_redfish_power_state_delay_seconds: "{{ bootwright_machine_os_install_poweroff_delay_seconds }}"
+  when: not (bootwright_managed_os_already_ready | bool)
+
+- name: Clean managed OS virtual media after installer shutdown
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.mediaPrepareRole }}"
+  vars:
+    bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+    bootwright_redfish_action_effective: cleanup
+  when:
+    - not (bootwright_managed_os_already_ready | bool)
+    - (bootwright_component.mediaPrepareRole | default('') | length) > 0
+
+- name: Power on managed OS from installed disk
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.bootApplyRole }}"
+  vars:
+    bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+    bootwright_redfish_action: power_on_disk
+  when: not (bootwright_managed_os_already_ready | bool)
 
 - name: Wait for managed OS SSH port
   ansible.builtin.wait_for:

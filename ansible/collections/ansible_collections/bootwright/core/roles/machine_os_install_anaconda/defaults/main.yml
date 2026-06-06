@@ -1,0 +1,3 @@
+---
+bootwright_machine_os_install_poweroff_retries: 360
+bootwright_machine_os_install_poweroff_delay_seconds: 5

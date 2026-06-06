@@ -7,7 +7,7 @@
 - name: Validate selected Redfish boot action
   ansible.builtin.assert:
     that:
-      - bootwright_redfish_action_effective in ['boot', 'cleanup_media']
+      - bootwright_redfish_action_effective in ['boot', 'cleanup_media', 'wait_power_off', 'power_on_disk']
     fail_msg: "Unsupported boot_redfish action {{ bootwright_redfish_action_effective }}"
 
 - name: Validate Redfish boot inputs
@@ -16,8 +16,12 @@
 - name: Load Redfish credentials
   ansible.builtin.import_tasks: stage/credentials.yml
 
+- name: Resolve Redfish system
+  ansible.builtin.import_tasks: stage/system.yml
+
 - name: Prepare Redfish virtual media
   ansible.builtin.import_tasks: media/prepare.yml
+  when: bootwright_redfish_action_effective in ['boot', 'cleanup_media']
 
 - name: Validate declared MACs against Redfish inventory
   ansible.builtin.import_tasks: validation/macs.yml
@@ -37,3 +41,11 @@
   always:
     - name: Restore Redfish certificate verification settings
       ansible.builtin.import_tasks: media/restore_certificate_verification.yml
+
+- name: Wait for Redfish system to power off
+  ansible.builtin.import_tasks: boot/wait_power_off.yml
+  when: bootwright_redfish_action_effective == 'wait_power_off'
+
+- name: Power on Redfish system from disk
+  ansible.builtin.import_tasks: boot/power_on_disk.yml
+  when: bootwright_redfish_action_effective == 'power_on_disk'

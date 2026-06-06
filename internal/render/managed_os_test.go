@@ -95,6 +95,10 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if readiness["type"] != "none" {
 		t.Fatalf("managed OS boot readiness = %v, want none", readiness)
 	}
+	redfish := boot["redfish"].(map[string]any)
+	if redfish["setBootSource"] != false {
+		t.Fatalf("managed OS libvirt Redfish setBootSource = %v, want false", redfish["setBootSource"])
+	}
 }
 
 func TestManagedOSInstallKeepsProfileRepositoriesAdditional(t *testing.T) {

@@ -30,6 +30,16 @@
     bootwright_redfish_power_state_reached: "{{ (bootwright_redfish_power_state_status.powerState | default('')) == bootwright_redfish_power_state_expected }}"
   changed_when: false
 
+- name: Report Redfish system power state wait status
+  ansible.builtin.debug:
+    msg: >-
+      {{ bootwright_redfish_power_state_wait_label | default('Redfish power state wait') }}:
+      system={{ bootwright_redfish_power_state_status.systemID }},
+      expected={{ bootwright_redfish_power_state_status.expected }},
+      observed={{ bootwright_redfish_power_state_status.powerState }},
+      HTTP status={{ bootwright_redfish_power_state_status.httpStatus }},
+      attempt={{ bootwright_redfish_power_state_status.attempts }}/{{ bootwright_redfish_power_state_status.retries }}.
+
 - name: Wait before retrying Redfish power state probe
   ansible.builtin.command:
     argv:
