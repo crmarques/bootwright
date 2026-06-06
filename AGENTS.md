@@ -1,93 +1,84 @@
 # Agent Entrypoint
 
-This repository is governed by the project specs in `/specs/`. Before
-making changes, load the repo information, specs, skills, code, examples,
-and current worktree state needed to complete the user request. Do not start
-editing from partial context.
+This repository is governed by the project specs in `/specs/`. Load the repo
+information, specs, skills, code, examples, and current worktree state needed for
+the task before editing. Do not start from partial context.
 
-## Required Load Order
+## Load Order
 
-1. Read `/.agents/README.md`.
-2. Read `/specs/README.md`.
-3. Read `/specs/index.md`.
-4. Load the referenced domain specs needed for the task.
-5. If a project-local skill applies, read it from `/.agents/skills/`.
+1. This file.
+2. `/.agents/README.md` — the skills and knowledge catalog.
+3. `/specs/README.md` and `/specs/index.md`, then only the task-relevant specs.
+4. The skill(s) the catalog maps to the task, from `/.agents/skills/`.
 
-## Operating Rules
+## Core Invariants
 
-- Preserve the long-term goal: automated, declarative provisioning of
-  fleets of OpenShift clusters from bare hardware to installed clusters.
-  Day-2 GitOps publication of fleet content (package catalogs, KRC/SRC
-  bootstrap) lives in a separate project; do not reintroduce it here.
-- Treat the initial scope as direct openshift-install-agent runs against
-  cluster nodes (single-node and multi-node), while keeping provider
-  abstractions open for libvirt, bare metal, vSphere, OpenShift
-  Virtualization, and other substrates.
-- Handle provider and BMC supplier variations through generic capability
-  discovery, advertised metadata, and normalized adapters first. Keep
-  unavoidable supplier-specific workarounds isolated, minimal, tested, and
-  documented in `.agents/knowledge/`.
-- Prefer declarative desired state, idempotent orchestration, typed
-  schemas, deterministic rendering, and testable adapters.
-- Prefer official CLI capabilities from the tools Bootwright drives
-  (for example `openshift-install`) before adding custom orchestration
-  behavior around the same operation.
-- Do not introduce secrets, kubeconfigs, pull secrets, private keys,
-  tokens, or environment-specific credentials into versioned content.
-- Keep docs and specs concise. Add implementation detail only when it is
-  needed by current code or an accepted decision.
-- For any implementation request that changes repo-tracked files, use the
-  `/.agents/skills/parallel-implementation/` skill before editing. Agents are
-  already authorized to create a temporary branch and worktree from local
-  `main`; do not ask before doing so. Agents must work from that isolated
-  temporary worktree and may touch the primary `main` worktree only after the
-  user explicitly approves merge.
-- Do not push, merge, or fast-forward implementation fixes immediately. Task
-  commits on the temporary branch are already authorized after the intended
-  edit set is complete; do not ask before creating them. Leave `main`
-  integration pending explicit merge approval.
-- When adding or changing CLI user-facing human output, always use the
-  centralized `internal/cli/output` component. Keep the documented raw-output
-  exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
-  process passthrough such as Ansible streams.
-- After completing the intended edit set for any implementation request, run
-  only the repository fast check: `make check-fast`. Do not run `make check`
-  by yourself; run it only when the user explicitly requests that full gate.
-- After `make check-fast`, check whether the temporary branch is ready to merge
-  into current local `main`. If local `main` has advanced or the branch is not
-  ready, rebase the temporary branch onto local `main`, fix conflicts or needed
-  adjustments, rerun `make check-fast`, and repeat until the branch is ready
-  or a real blocker remains.
-- If the primary `main` worktree has uncommitted changes when integration is
-  considered, report that `main` is not ready instead of touching unrelated
-  user changes.
-- During investigation or iterative fixes, prefer the smallest direct targeted
-  command that answers the current question. Do not run aggregate checks unless
-  the user explicitly requested them.
-- Before completing implementation work, use the
-  `/.agents/skills/implementation-validation/` skill.
-- Once the temporary branch is ready for `main`, ask the user whether merge can
-  proceed. A response such as "go" authorizes final rebase if local `main`
-  advanced, merge into `main`, and deletion of the temporary worktree and
-  branch; do not ask separately for those steps.
+These hold for every change; verify their current form in `/specs/` when a task
+depends on them.
+
+- **Scope.** Automated declarative provisioning of fleets of OpenShift and OKD
+  clusters from bare or virtualized substrates to installed clusters, plus
+  cluster-bound bootstrap add-ons. Day-2 GitOps publication of fleet content
+  (package catalogs, KRC/SRC bootstrap) is a separate project; do not reintroduce
+  it. Initial execution scope is direct `openshift-install agent` runs against
+  single-node and multi-node machines.
+- **Provider neutrality.** Keep substrate abstractions open for libvirt, bare
+  metal, vSphere, OpenShift Virtualization, and future providers. Handle provider
+  and BMC variation through capability discovery, advertised metadata, and
+  normalized adapters first; keep unavoidable supplier workarounds isolated,
+  minimal, tested, and documented in `.agents/knowledge/`.
+- **Product API.** Desired-state YAML is the user-facing API: declarative,
+  idempotent, typed, deterministic. Generated installer files, inventories, and
+  rendered outputs are outputs, not authored source of truth.
+- **Drive official tools.** Prefer native capabilities of the tools Bootwright
+  drives (for example `openshift-install`) before adding custom orchestration
+  around the same operation.
+- **Secrets.** Never put secrets, kubeconfigs, pull secrets, private keys, tokens,
+  or environment-specific credentials in versioned content.
+- **Output.** CLI human output goes through the centralized `internal/cli/output`
+  component. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
+  and external process passthrough such as Ansible streams.
+- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases,
+  compatibility shims, or legacy examples.
+- **Definitions.** Keep docs and specs concise. Specs own normative rules; docs
+  teach workflows and link back. Add implementation detail only when current code
+  or an accepted decision needs it.
+
+## Implementation Workflow
+
+For any request that changes repo-tracked files — including docs, examples, and
+agent guidance — use the `implementation-worktree` skill **before editing**. That
+skill and `implementation-validation` own the full procedure; the contract in
+brief:
+
+- Create a temporary branch and worktree from local `main` (preauthorized — do not
+  ask). Edit only inside it; use the primary `main` worktree for read-only
+  inspection until the user explicitly approves merge.
+- During investigation, run the smallest targeted command that answers the current
+  question; do not run aggregate checks unless the user asks.
+- After the intended edit set, run `make check-fast` (not `make check` unless the
+  user requests that gate), then the readiness/rebase loop. Task commits on the
+  temporary branch are preauthorized; do not ask.
+- Leave `main` integration pending explicit merge approval. If `main` is dirty at
+  integration time, report that it is not ready instead of touching unrelated
+  changes. A response such as "go" authorizes the final rebase, merge, and cleanup.
 
 ## Handoff Format
 
 Use Conventional Commits (`type(scope): subject`) when asked to commit or when
-providing a commit subject after user review/testing:
+giving a commit subject after user review/testing:
 
 - Generate ONLY one short subject line (no body). Max 72 chars.
-- For an implementation/fix handoff where changes are intentionally left on a
-  temporary branch for user review/testing, report the temporary worktree path,
-  branch, task commit, whether `make check-fast` completed, and whether the
-  branch is ready to merge into local `main`. If request processing is blocked
-  or required verification cannot complete, report the blocker instead.
-- After the user explicitly approves merge and integration succeeds, output ONLY the
-  conventional-commit subject line. Do NOT append summaries, file lists,
-  verification details, or commit questions.
-- Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`,
-  `build`, `ci`, `chore`, `revert`.
-- Use a scope when obvious (package/module/folder).
+- For an implementation/fix handoff left on a temporary branch for review/testing,
+  report the temporary worktree path, branch, task commit, whether `make
+  check-fast` completed, and whether the branch is ready to merge into local
+  `main`. If processing is blocked or required verification cannot complete, report
+  the blocker instead.
+- After the user approves merge and integration succeeds, output ONLY the
+  conventional-commit subject line — no summaries, file lists, verification
+  details, or commit questions.
+- Allowed types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
+  `chore`, `revert`. Use a scope when obvious (package/module/folder).
 
 Examples:
 
