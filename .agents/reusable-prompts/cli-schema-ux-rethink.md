@@ -1,413 +1,255 @@
 # CLI and Input Schema UX Rethink
 
-You are a product-minded principal engineer reviewing **Bootwright** from first
-principles. Your job is to rethink the operator experience for the CLI and the
-user-authored input file schemas, then propose the best coherent alternative.
+You are a product-minded principal engineer rethinking **Bootwright** from first
+principles. Bootwright automates declarative, idempotent provisioning of fleets
+of OpenShift and OKD clusters from bare hardware or virtualized substrates to
+installed clusters. Desired-state YAML is the user-facing API; the CLI carries an
+operator from a fresh input set to "desired state achieved."
 
-Start by understanding the project objectives. Bootwright automates
-declarative provisioning of fleets of OpenShift and OKD clusters from bare
-hardware or virtualized substrates to installed clusters. Desired-state YAML is
-the user-facing API. The CLI should guide an operator from a fresh input set to
-the point where the declared desired state has been achieved, with clear
-validation, rendering, apply, status, recovery, and safety behavior.
+Your job: surface the boldest improvements to the operator experience — the CLI
+and the user-authored schemas — that you can actually defend. Think past what
+exists. Then gate every idea on whether it *aggregates*: removes cognitive load,
+prevents an error class, unlocks a real scenario, or sharpens fact ownership. A
+proposal that only trades one acceptable shape for another, equally acceptable
+shape is noise — name it and drop it.
 
 This is a design critique and proposal. Do not edit files unless the user
 explicitly asks for follow-up implementation.
 
-## How to Ground Yourself
+## The Two Tests Every Proposal Must Pass
 
-Load current repository facts before judging the design:
+1. **Out of the box.** Would this occur to someone who started from the operator's
+   job instead of from the current code? If you are only reshuffling existing
+   concepts, push harder before writing it down.
+2. **Aggregation.** State the net gain in one sentence: *which* operator error,
+   confusion, friction, or duplicated fact disappears, and at *what* cost in
+   explicitness or risk. If you cannot, the change is non-aggregating — reject it
+   and say so, even if the new form is "cleaner." Difference is not improvement.
 
-1. `AGENTS.md` when present, then `.agents/README.md`.
-2. `specs/README.md` and `specs/index.md`.
-3. The specs that define objectives, UX principles, schema ownership, CLI
-   contract, safety, and generated-output boundaries, usually
-   `specs/domain.md`, `specs/state-model.md`, `specs/architecture.md`, and
+Reject loudly. Listing what you deliberately did **not** change, and why, is as
+valuable as the proposals — it proves the survivors earned their place.
+
+## Ground Yourself
+
+Load current repository facts before judging; do not anchor to older vocabulary
+or to memory of this prompt. Read until you have enough, then stop:
+
+1. `AGENTS.md`, then `.agents/README.md`.
+2. `specs/README.md` and `specs/index.md`, then the specs that define objectives,
+   ownership, CLI contract, safety, and generated-output boundaries — typically
+   `specs/domain.md`, `specs/state-model.md`, `specs/architecture.md`,
    `specs/security.md`.
-4. Current user-facing docs such as `README.md` and `docs/`.
-5. Canonical examples, scaffolds, fixture inputs, and E2E desired-state files
-   that show how users are expected to author inputs.
-6. Current CLI help or command behavior only when needed to verify what an
-   operator actually sees.
-
-Useful read-only commands:
+3. `README.md` and `docs/` for the taught workflow.
+4. Canonical examples and E2E fixtures under `examples/` and `test/` that show how
+   users actually author inputs — start from the smallest single-node case.
+5. Current CLI help, validation output, or rendered tree only to verify what an
+   operator literally sees.
 
 ```bash
 git status --short
-rg --files specs docs .agents test examples
-rg -n 'apiVersion:\s*bootwright|kind:|bootwright ' README.md docs specs test examples .agents
+rg --files specs docs test examples .agents
+rg -n 'apiVersion:\s*bootwright|^kind:' specs examples test
 ```
 
-If examples are absent or being refactored, use the current specs, docs, and
-fixtures instead. Do not install dependencies or require internet access for
-this review.
+Do not install dependencies or require network access.
 
 ## Durable Guardrails
 
-Verify these in the current specs before relying on them:
+Verify in the current specs before relying on these; do not propose anything that
+violates them:
 
-- Stay within Bootwright's scope: direct provisioning to installed clusters and
-  declared cluster-bound bootstrap components. Day-2 fleet content publication
-  belongs elsewhere unless the current specs say otherwise.
-- Desired-state YAML remains declarative, idempotent, typed, deterministic,
-  and safe to commit.
-- Generated installer files, inventories, rendered outputs, and runtime state
-  are outputs, not authored source of truth.
-- Every operational fact should have one owning kind. Do not improve UX by
-  duplicating facts across layers.
-- Pressure-test attribute ownership, not just kind ownership. For each
-  important field, ask whether it belongs on the current object or should move
-  to another object that actually owns the intent. Lower-layer objects such as
-  `Host`, `InfraProvider`, `InfraComponent`, and provider inventories should
-  expose their own reachability, capabilities, services, and substrate facts;
-  they should not know, select, or refer to upper-layer consumers such as
-  `ContainerCluster`, `StorageCluster`, or future cluster types. Consumer
-  intent should reference downward instead.
-- Keep provider abstractions open for libvirt, bare metal, vSphere, OpenShift
-  Virtualization, and future substrates.
-- Prefer official CLI capabilities from tools Bootwright drives before
-  inventing custom orchestration around the same operation.
-- Secrets, kubeconfigs, pull secrets, private keys, tokens, and credentials
-  must never appear in versioned content, examples, proposed snippets, or
-  generated reviewable output.
-- CLI human output must use the centralized output component in implementation
-  follow-up work. Raw-output exceptions stay raw: JSON, shell exports, Cobra
-  help, prompts, and external process passthrough.
-- If the API is still `v1alpha1`, you may propose clean breaking schema
-  improvements, but do not propose migrations, aliases, compatibility shims,
-  or legacy examples.
+- **Scope.** Direct provisioning to installed clusters plus cluster-bound
+  bootstrap add-ons. Day-2 fleet content publication lives elsewhere.
+- **Product API.** Desired-state YAML stays declarative, idempotent, typed,
+  deterministic, and safe to commit. Generated installer files, inventories,
+  rendered outputs, and runtime state are outputs, not authored source of truth.
+- **One owner per fact.** Never improve UX by duplicating a fact across layers.
+  Pressure-test *attribute* ownership, not just kind ownership: lower-layer
+  objects (`Machine`, `InfraProvider`, `InfraComponent`, provider inventories)
+  expose their own reachability, capabilities, services, and substrate facts and
+  must not know, select, or refer to upper-layer consumers (`ContainerCluster`,
+  `StorageCluster`, future cluster types). Consumer intent references downward.
+- **Provider neutrality.** Keep abstractions open for libvirt, bare metal,
+  vSphere, OpenShift Virtualization, and future substrates; hide supplier and BMC
+  variation behind capabilities and adapters.
+- **Drive official tools.** Prefer native capabilities of the tools Bootwright
+  drives (e.g. `openshift-install`, cephadm) before inventing orchestration
+  around the same operation.
+- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
+  never appear in versioned content, examples, proposed snippets, or rendered
+  reviewable output.
+- **Output.** CLI human output uses the centralized output component in any
+  follow-up. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
+  external process passthrough.
+- **Clean break.** While the API is `v1alpha1`, propose clean breaking
+  improvements freely — but never migrations, aliases, compatibility shims, or
+  legacy examples.
 
-## Review Posture
+## Posture
 
-Treat the current CLI and schemas as provisional evidence, not as design
-constraints to preserve. No kind, field, file, command, scope, default, or
-workflow earns its place merely because it already exists. Start from the
-project objectives and the best operator UX possible, then ask which current
-definitions deserve to survive.
+Treat the current CLI and schema as evidence, not as constraints. No kind, field,
+command, default, or file earns its place by existing. Start from the operator's
+job and the best possible UX, then ask which current definitions deserve to
+survive a comparison with credible alternatives. Take a position; prefer one
+strong, concrete recommendation over a hedge.
 
-Take a position. The goal is not to make the current model look coherent; the
-goal is a better user-facing contract. A current definition should be kept only
-when it remains the best option after comparing it with credible alternatives.
-At the same time, do not change something just to be different: if a new
-alternative has no clear user-facing gain, lower cognitive load, better safety,
-or stronger operational elegance, keep the current state and say why.
+Judge alternatives against: can an operator know what to do next and recover from
+mistakes without reading code; can inputs describe desired state in natural
+language with predictable ownership; does the model stay declarative, safe,
+automatable, and provider-neutral; does it cut concepts and make common edits
+small and bounded; can real install scenarios be expressed without generated
+files, overrides, or hidden side channels; do commands, flags, kinds, fields,
+references, and labels use the words an operator would naturally reach for.
 
-Evaluate alternatives through:
+## Provocations
 
-- **User experience:** Can an operator understand what to do next and recover
-  from mistakes without reading implementation code?
-- **Authoring clarity:** Can input files describe desired state in easy,
-  meaningful language with predictable fact ownership?
-- **Best practices:** Does the model stay declarative, safe, automatable,
-  testable, and provider-neutral?
-- **Elegance:** Does the design reduce cognitive load, avoid unnecessary
-  concepts, and make common workflows small, bounded edits?
-- **Completeness:** Can real install scenarios be expressed without using
-  generated files, overrides, or hidden side channels?
-- **Schema economy:** Does every kind, attribute, reference, and file boundary
-  earn its place, or could it be removed, defaulted, derived, replaced, or
-  moved to a clearer owner without losing meaningful desired-state intent?
-- **Naming clarity:** Do commands, flags, parameters, kinds, object names,
-  field names, selectors, references, generated paths, and output labels use
-  the words an operator would naturally expect?
+Use these to break out of the current shape, not as a checklist. Spend effort
+where the operator pain is highest.
 
-## First-Principles Questions
+**Operator journey.** From an empty context, what are the first three commands —
+and is that sequence discoverable, or does it require knowing Bootwright
+internals? Where is the first cliff (SSH keys, pull secrets, provider access, BMC
+reachability, DNS, secret stores)? After a partial apply failure: what does the
+operator see, what resumes safely, what diagnoses, what cleans up, and what state
+remains? Where do the validate / plan / render / apply / status / destroy
+mutation boundaries sit, and can a user predict exactly what mutates? Does the
+same flow run in automation — JSON output, no prompts, explicit approval for
+mutations, stable exit codes? Which command names should be kept, renamed,
+collapsed, or split?
 
-Use these as provocations, not a checklist.
+**Authoring.** What is the smallest safe input that installs one useful cluster,
+and does the repo teach that shape first? Can users start compact and expand only
+for multi-cluster, multi-provider, disconnected, proxied, external-storage, or
+managed-service needs? For each major fact, can a user predict the one owning
+object and file — or has an upper-layer concern leaked downward? Which fields
+expose `openshift-install`, Ansible, Redfish, Ceph, or filesystem mechanics
+instead of operator intent? Which common intents have no first-class field and so
+become overrides, raw manifests, or generated-file edits? Do the file boundaries
+support review, copy/paste reuse, provider swaps, and mode swaps?
 
-### Project Objective Fit
+**Naming and language.** Treat naming as UX. Is the name the word an operator
+would search for or type? Does it describe intent, not mechanics? Is one concept
+named identically across CLI, YAML, docs, errors, rendered files, and status? Does
+it scale from single-cluster to fleet, storage, add-on, and disconnected
+workflows? Rename only when the current name is ambiguous, implementation-shaped,
+stale, inconsistent, or likely to push facts to the wrong place — and the clean
+break clearly buys discoverability, readability, or consistency.
 
-- What is Bootwright trying to make simple for operators?
-- Which user jobs are core to the product, and which are out of scope?
-- What does "desired state achieved" mean for context setup, secret material,
-  infrastructure, storage, cluster install, add-ons, generated artifacts,
-  and status?
-- Which concepts are unavoidable because they reflect the domain, and which
-  exist only because of current implementation mechanics?
-- If the repository had no existing schema or CLI, what model would best serve
-  these objectives? Which current definitions would you intentionally recreate,
-  and which would you leave behind?
+## Schema Economy
 
-### End-to-End CLI Experience
+Treat every authored line as a cost. Classify each kind, section, and major field
+in scope, grounded in real usage evidence (specs, API types, validation,
+rendering, examples, fixtures, docs, CLI behavior). A field present in a type but
+not meaningfully validated, rendered, taught, or needed by a core workflow is
+suspect until defended.
 
-- Starting from a fresh checkout or empty context, what should the operator do
-  first, second, and third?
-- Does the CLI reveal a coherent workflow from input creation/import through
-  validation, secret materialization, render preview, apply, status, access,
-  recovery, and destroy?
-- Which command names, scopes, flags, outputs, and confirmations feel natural?
-  Which ones make the user learn Bootwright internals?
-- Can the same flow work in automation with JSON output, no prompts, explicit
-  approvals for mutations, and stable exit behavior?
-- Where should dry-run, plan, check, render, and status boundaries sit so the
-  user can predict what mutates state?
-- What does the user do after partial failure? Which command resumes safely,
-  which command diagnoses, and which command cleans up?
-- How should the CLI communicate progress until the desired state is achieved?
-  Consider task graphs, per-cluster logs, skipped work, blocked work, and
-  next steps.
-- Are command names, subcommands, scopes, flags, parameters, output labels, and
-  help text consistent with the workflow users are trying to perform? Which
-  names should be kept, renamed, collapsed, or split?
+- **Keep** — expresses intent that cannot be inferred safely.
+- **Default** — should vanish from examples behind a clear, *inspectable* default.
+- **Derive** — computable deterministically from another owned fact.
+- **Replace** — right concept, wrong name, shape, or owner.
+- **Remove** — unused, redundant, mechanics-shaped, or not worth its cost.
 
-### Input File and Schema Experience
+When you propose a default, say where the operator inspects the effective value
+and how validation prevents surprise. Defaults shrink the file set; they must not
+hide cross-object bindings or scope selection. Aim for the smallest complete input
+set that still teaches the object graph — a new user should see which objects bind
+together and which behavior emerges only after normalization.
 
-- What is the smallest safe input shape that can install one useful cluster?
-- Can users start compactly and expand only when they need multi-cluster,
-  multi-provider, disconnected, proxied, external storage, or managed service
-  behavior?
-- Does each kind earn its existence? If a kind disappeared, what user-visible
-  capability or reuse would be lost?
-- Does each schema attribute earn its existence? For every major field in
-  scope, decide whether it is truly needed, actively used, better expressed as
-  a default, derivable from other desired state, replaceable by a clearer
-  field, or removable.
-- For each major fact, can a user predict exactly one owning object and file?
-- For each major attribute, is it on the object that owns the fact or intent,
-  or has an upper-layer concern leaked into a lower-layer object? For example,
-  provider and host objects should describe available machines, services,
-  addresses, attachments, and capabilities without encoding whether that
-  infrastructure will later serve a container cluster, storage cluster, or a
-  future supported workload type.
-- Are defaults used as much as possible to keep authored inputs small, while
-  still being visible enough that object bindings and emergent behavior do not
-  surprise a new user?
-- Which fields expose `openshift-install`, Ansible, Redfish, Ceph, or
-  filesystem mechanics instead of operator intent?
-- Which common intents are missing first-class fields and therefore likely to
-  become overrides, raw manifests, or generated-file edits?
-- Do file boundaries support review, copy/paste reuse, provider swaps, mode
-  swaps, and efficient declaration, or could resources be grouped, selected,
-  or layered in a clearer way?
-- Are object names and references meaningful in reviews and validation errors?
-- Could a more compact, layered, or task-oriented schema describe the same
-  desired state more clearly without breaking ownership rules?
-- What is the leanest final file set that a new user can understand without
-  hiding critical bindings behind surprising defaults?
+## Alternatives
 
-### Naming and Language
+Develop three credible alternatives, then choose one:
 
-Reevaluate naming from scratch. Treat naming as UX, not polish. For every
-important command, flag, parameter, kind, object name, attribute, reference,
-selector, generated path, status, and output label in the reviewed scope:
+- **Conservative** — keep the kind model; improve naming, examples, CLI flow,
+  validation, scaffolding.
+- **Reshaped** — same scope; reorganize commands, files, kind boundaries, or
+  defaults around a clearer operator journey.
+- **Ambitious** — the cleanest `v1alpha1` model you would actually want, even with
+  breaking schema or CLI changes.
 
-- Is the name the word an operator would naturally search for or type?
-- Does it describe user intent instead of implementation mechanics?
-- Does the same concept use one name everywhere across CLI, YAML, docs,
-  examples, validation errors, rendered files, and status output?
-- Does the name scale from single-cluster examples to multi-cluster,
-  multi-provider, storage, add-on, and disconnected workflows?
-- Could a shorter, clearer, or more domain-specific name remove explanation?
-- Would renaming create enough UX benefit to justify the `v1alpha1` clean
-  break, docs updates, fixture changes, and test changes?
+For each: what the operator experience becomes, what the user authors, which
+artifacts change, what gets simpler, which schema/fields/files become unnecessary,
+which names change and why, which defaults enter the model and how users inspect
+them, and what gets riskier or less explicit — then accept or reject it, applying
+the Aggregation test.
 
-Recommend keeping current names when alternatives do not clearly improve
-discoverability, readability, or consistency. Recommend renaming when the
-current name is ambiguous, implementation-shaped, stale, inconsistent, too
-broad, too narrow, or likely to make users put facts in the wrong place.
-
-### Schema Necessity and File Efficiency
-
-Pressure-test the schema and file layout as if every authored line has a cost.
-For each kind, major section, and field in the reviewed scope:
-
-- **Keep:** It expresses user intent that cannot be inferred safely.
-- **Default:** It should usually disappear from examples because a clear,
-  documented default is better.
-- **Derive:** It can be computed deterministically from another owned fact.
-- **Replace:** It represents the right concept with the wrong name, shape, or
-  owner.
-- **Remove:** It is unused, redundant, implementation-shaped, or not worth its
-  cognitive cost.
-
-Ground the classification in usage evidence from specs, API types, validation,
-rendering, examples, fixtures, docs, and CLI behavior. A field that exists in a
-type but is not meaningfully validated, rendered, taught, or needed by a core
-workflow should be treated as suspect until defended.
-
-When proposing defaults, explain where the user can inspect the effective
-value and how validation prevents surprising behavior. Defaults should shrink
-the file set, not hide important cross-object bindings or scope selection.
-
-When proposing a file layout, optimize for the smallest complete input set that
-still teaches the object graph. A new user should be able to see which objects
-bind together, which facts are inherited by default, and which behavior emerges
-only after normalization.
-
-### Alternative Design Exploration
-
-Develop at least three credible alternatives before choosing one:
-
-- **Conservative:** Preserve the current kind model and improve naming,
-  examples, CLI flow, validation, and scaffolding.
-- **Reshaped:** Keep the same product scope, but reorganize commands, files,
-  kind boundaries, or defaults around a clearer operator journey.
-- **Ambitious:** Propose the cleanest user-facing model you would want for
-  `v1alpha1`, even if it requires breaking schema or CLI changes.
-
-For each alternative, state:
-
-- What the operator experience becomes.
-- What input shape the user authors.
-- Which current artifacts would change.
-- What gets simpler.
-- Which schemas, fields, references, or files become unnecessary.
-- Which commands, flags, parameters, kinds, fields, selectors, references, or
-  output labels would be renamed, and why.
-- Which defaults become part of the authoring model and how users discover
-  their effective values.
-- What gets riskier or less explicit.
-- Why you would accept or reject it.
-
-Then choose one best alternative and defend it. Prefer one coherent
-recommendation over a bag of unrelated improvements. If the best alternative is
-the current state plus focused refinements, defend that explicitly by showing
-why larger changes do not buy enough UX, safety, clarity, or elegance.
+Pick one and defend it as a coherent whole, not a bag of unrelated tweaks. If the
+best answer is the current state plus focused refinements, defend *that* by
+showing why larger changes do not buy enough UX, safety, clarity, or elegance.
 
 ## Evidence Standards
 
-Base claims on current repository evidence:
-
 - Cite real specs, docs, examples, fixtures, commands, kinds, and fields.
-- Distinguish proven findings from hypotheses.
-- Do not invent commands, schema fields, providers, install modes, or behavior.
-- If a recommendation changes the schema, explain the user-facing benefit and
-  why the clean break is worth it.
-- If a recommendation removes or replaces a schema field, cite evidence that
-  the field is unused, redundant, surprising, implementation-shaped, or better
-  represented elsewhere.
-- If a recommendation keeps an existing definition, state the clear reason:
-  user intent, safer defaults, provider neutrality, understandable bindings,
-  lower operational risk, or lack of meaningful gain from alternatives.
-- If a recommendation changes the CLI, define the mutation boundary,
-  automation behavior, and recovery path.
-- If a recommendation changes naming, state the old name, proposed name,
-  affected surfaces, user-facing benefit, and validation/docs/examples that
-  must change.
-- If a recommendation changes examples or scaffolds, show the target learning
-  path and the minimal useful input set.
+  Distinguish proven findings from hypotheses. Invent nothing.
+- To remove or replace a field, cite evidence it is unused, redundant, surprising,
+  mechanics-shaped, or better owned elsewhere.
+- To keep a definition, give the clear reason: irreducible intent, safer default,
+  provider neutrality, understandable binding, lower risk, or no real gain from
+  alternatives.
+- To change the CLI, define the mutation boundary, automation behavior, and
+  recovery path. To change a name, give old → new, affected surfaces, the
+  user-facing benefit, and the validation/docs/examples that must change.
 
 ## Output Format
 
 # Bootwright CLI and Input Schema UX Rethink
 
-## 1. Project Objectives
-
-Briefly restate Bootwright's objective, the core operator jobs, and the point
-where the desired state can be considered achieved.
+## 1. Objective and Verdict
+Restate Bootwright's objective, the core operator jobs, and what "desired state
+achieved" means. Lead with your single highest-leverage recommendation.
 
 ## 2. Current Experience Diagnosis
-
-Summarize the current CLI journey and input authoring model. Name the biggest
-UX and schema problems, ordered by user impact, with evidence.
+The current CLI journey and authoring model, with the biggest UX and schema
+problems ordered by user impact and backed by evidence.
 
 ## 3. From-Scratch Operator Journey
+The ideal flow from empty context to achieved desired state — create/import,
+validate, materialize secrets, preview effective state and rendered output,
+converge infra then clusters (storage and add-ons included), monitor and inspect,
+access, recover from failure, destroy/reset safely. Use current commands where
+already right; mark proposals as proposals.
 
-Describe the ideal workflow from the beginning to achieved desired state.
-Use current commands where they are already right. Mark proposed commands,
-flags, outputs, prompts, or state transitions as proposals.
-
-Cover:
-
-- create or import inputs
-- validate before context mutation
-- provide or generate secret material
-- preview effective state and rendered outputs
-- converge infrastructure, then clusters with storage and add-ons included
-- monitor progress and inspect logs
-- access installed clusters
-- recover from failure
-- destroy or reset safely
-
-## 4. Desired-State Authoring Critique
-
-Review the input files and schemas with a critical view:
-
-- Which kinds and files should remain as-is.
-- Which should be renamed, combined, split, hidden behind scaffolding, or made
-  more explicit.
-- Which kinds, fields, references, or file declarations are truly needed, and
-  which should be defaulted, derived, replaced, or removed.
-- Which fields are hard to author, ambiguous, too implementation-shaped, or
-  missing.
-- Which defaults are desirable, which are dangerous, and how users should
-  inspect effective values before apply.
-- Which file boundaries help or hurt readability, reuse, efficient
-  declaration, and object binding comprehension.
-- Which kind, object, field, selector, and reference names help or hurt the
-  user's mental model, and which should be renamed.
-- What the minimal useful authoring shape should be, including the smallest
-  final file set that remains understandable to a new user.
+## 4. Authoring Critique
+Per kind/file/major field in scope: keep, rename, combine, split, scaffold,
+default, derive, replace, or remove — each with the aggregation gain or the reason
+to leave it alone. Call out mechanics leaks, missing first-class intents,
+dangerous vs. desirable defaults, and the minimal useful file set.
 
 ## 5. Alternatives Considered
+Conservative, reshaped, ambitious — concrete enough that a maintainer can tell
+what changes, each with an accept/reject verdict.
 
-Present the conservative, reshaped, and ambitious alternatives. Keep each one
-concrete enough that a maintainer can tell what would change.
+## 6. Recommended Alternative
+The chosen design: target CLI flow (mark read-only vs. mutating); target input
+layout and schema posture; naming changes; schema keep/default/derive/replace/
+remove; key behavior changes; expected user-visible improvements; `v1alpha1` break
+implications; risks and mitigations.
 
-## 6. Recommended Best Alternative
+## 7. Target Shape
+If you change input organization or schema, show a concise, secret-free file tree
+and representative YAML using current vocabulary, with defaults shrinking the
+authored files and bindings that must stay explicit called out. If you change the
+CLI, show the command flow with read-only vs. mutating noted.
 
-Choose the best alternative considering UX, best practices, elegance,
-operational safety, provider neutrality, and implementation feasibility.
+## 8. Deliberately Unchanged
+What you considered changing and chose to keep, each with the reason it survived —
+proof the proposals are aggregating, not cosmetic.
 
-Include:
-
-- target CLI flow
-- target input layout and schema posture
-- naming changes for commands, flags, parameters, kinds, objects, attributes,
-  selectors, references, generated paths, and output labels
-- schema elements to keep, default, derive, replace, or remove
-- key behavior changes
-- expected user-visible improvements
-- compatibility or `v1alpha1` break implications
-- risks and mitigations
-
-## 7. Proposed Target Shape
-
-If you recommend changing input organization or schema shape, show a concise
-example file tree and representative YAML snippets. Keep snippets secret-free
-and aligned with current project vocabulary.
-
-Show how defaults shrink the authored files, and identify any bindings that
-must remain explicit so new users can understand why behavior emerges.
-
-If you recommend changing the CLI, show the proposed command flow with short
-notes about which commands mutate state and which are read-only.
-
-## 8. Implementation Plan
-
-Group work into:
-
-- **Now:** small, high-confidence changes to docs, examples, help text,
-  diagnostics, scaffolding, or validation.
-- **Next:** schema or CLI changes that need agreement but are near-term and
-  testable.
-- **Later:** larger model changes or experience improvements that depend on
-  unresolved design decisions.
-
-For each item include:
-
-- **Change:** one concrete change.
-- **Why:** the user problem it solves.
-- **Evidence:** repo paths, commands, kinds, or fields.
-- **Artifacts:** likely files, tests, fixtures, docs, or examples touched.
-- **Validation:** how to prove it works.
-- **Acceptance criterion:** the observable result for users.
-
-End with the single first follow-up change that would create the most clarity
-for the least risk.
+## 9. Implementation Plan
+**Now** (docs, examples, help text, diagnostics, scaffolding, validation),
+**Next** (schema/CLI changes that need agreement but are near-term and testable),
+**Later** (larger model changes blocked on open decisions). Per item: **Change**,
+**Why** (user problem), **Evidence** (paths/commands/kinds/fields), **Artifacts**,
+**Validation**, **Acceptance criterion**. End with the single first follow-up
+change that creates the most clarity for the least risk.
 
 ## Constraints
 
-- Keep recommendations inside the current project scope.
-- Treat desired-state YAML as the product API.
-- Keep generated artifacts as outputs, not user edit points.
-- Preserve one-owner fact ownership.
-- Prefer lean, clean, meaningful schema over exhaustive knobs. Remove,
-  replace, default, or derive fields that do not carry clear user intent.
-- Use defaults aggressively where they simplify authoring, but require an
-  inspectable effective state so defaults do not create unexpected behavior.
-- Keep the final proposed file set as small as possible while preserving clear
-  object bindings for new users.
-- Keep provider and BMC variation behind capabilities and adapters.
-- Keep all examples and snippets safe to commit.
-- Prefer fewer, stronger recommendations over many weak ones.
+- Stay inside Bootwright's scope; treat desired-state YAML as the product API and
+  generated artifacts as outputs, not edit points.
+- Preserve one-owner fact ownership; keep provider and BMC variation behind
+  capabilities and adapters; keep every snippet safe to commit.
+- Prefer lean, meaningful schema over exhaustive knobs; default aggressively but
+  keep an inspectable effective state; keep the final file set as small as it can
+  be without hiding bindings.
+- Every recommendation must pass the Aggregation test. Prefer fewer, stronger
+  recommendations, and say plainly when the current state should stand.

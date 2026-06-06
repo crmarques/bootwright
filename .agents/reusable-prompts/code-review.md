@@ -1,469 +1,233 @@
 # Code and Scripts Audit and Improvement Plan
 
-You are an experienced senior engineer auditing **Bootwright**, a
-desired-state orchestrator for OpenShift cluster provisioning. The project is
-primarily Go with embedded Ansible and supporting scripts.
+You are a senior engineer auditing **Bootwright**, a desired-state orchestrator
+that provisions fleets of OpenShift and OKD clusters — primarily Go with embedded
+Ansible and supporting scripts. Review the current implementation and produce a
+practical, prioritized fix plan grounded in the evidence you find. The deliverable
+**is** the audit report and plan, not a plan for how to review.
 
-Your task is to execute a review of the current repository implementation, then
-produce a practical, prioritized implementation plan based on the evidence you
-found. Do not output a plan for how to perform the review unless a required
-scope is genuinely missing and cannot be inferred from the repository. The final
-artifact is the audit report and implementation plan.
+Non-mutating by default: inspect files, run safe read-only checks, gather
+evidence. Do not edit implementation files unless the user explicitly asks for a
+follow-up fix slice (see *Edit Mode*).
 
-This is a non-mutating review by default: inspect files, run safe read-only
-checks, and gather evidence, but do not edit implementation files unless the
-user explicitly asks for a follow-up fix slice.
+This prompt owns **implementation quality and safety**: correctness, dead code,
+duplication, error handling, shell/Ansible/CI safety, security, supply chain,
+naming-as-code-quality, and test gaps. For architecture/package-boundary redesign
+use `architecture.md`; for schema or user-facing UX use `specs-ux.md` or
+`cli-schema-ux-rethink.md`. Out of scope here: broad architecture redesign, schema
+changes, large rewrites, and dependency churn.
 
-Give equal weight to:
+Weight findings across implementation quality, surface hygiene (dead/duplicated
+code, unclear ownership), script/automation safety, operational reliability
+(explicit, recoverable failures), security, naming/domain language, and test
+strategy that proves fixes without real clusters, infrastructure, or network.
 
-1. **Implementation quality.** Code should be readable, idiomatic, cohesive,
-   testable, and easy to change inside the existing architecture.
-2. **Code surface hygiene.** Unused code, duplicated code paths, duplicated
-   domain rules, and unclear ownership are security and maintenance risks.
-   Confirm usage before judging, then recommend dropping dead code or
-   centralizing duplicated behavior behind the domain component that owns it.
-3. **Script and automation safety.** Shell scripts, Make targets, CI jobs, and
-   Ansible tasks should be deterministic, idempotent where applicable, clear
-   about side effects, and safe around paths, credentials, and external tools.
-4. **Operational reliability.** Failures should be explicit, actionable, and
-   recoverable without leaving confusing partial state.
-5. **Security.** Secrets, credentials, kubeconfigs, pull secrets, private keys,
-   tokens, unsafe command execution, weak file permissions, and supply-chain
-   risks must be treated as first-class audit concerns.
-6. **Naming and domain language.** Package, type, function, script, file,
-   directory, role, variable, Make target, workflow, and domain names should
-   make ownership and intent obvious. Propose better names when the current
-   names hide responsibility, preserve stale concepts, duplicate concepts, or
-   make newcomers place behavior in the wrong component.
-7. **Test strategy.** The plan should identify focused tests or checks that
-   prove the recommended improvements without requiring real OpenShift
-   clusters, external infrastructure, or internet access.
+## The Two Tests Every Finding Must Pass
 
-Out of scope: broad architecture redesign, desired-state UX redesign, schema
-changes, large rewrites, dependency churn, and implementation edits unless the
-user explicitly requests that follow-up.
+1. **Evidence.** Confirm it is real before reporting it — trace usage before
+   calling code dead, confirm both sites before calling logic duplicated, cite
+   `path:line` (or the directory/role/target and the trace you followed for
+   structural findings). Separate proven findings from hypotheses; a hypothesis is
+   allowed only with the smallest verification step to confirm or reject it. Invent
+   no facts, vulnerabilities, or future requirements.
+2. **Aggregation.** State the net gain in one sentence: which correctness,
+   security, reliability, or maintenance risk shrinks, and at what change cost.
+   Reject churn — a stylistic rename, a mechanical `set -euo pipefail`, or a new
+   abstraction that centralizes no real responsibility is noise. Difference is not
+   improvement. Prefer the smallest behavior-preserving fix; recommend a broad
+   rewrite only when a small local change cannot address the issue.
 
-## How to Ground Yourself
+"No findings in this category" is a valid, useful result. Listing patterns that
+looked like findings but cleared on inspection proves the audit was rigorous, not
+thin.
 
-The repository is the source of truth. Load current state instead of relying on
-memory, then gather enough evidence to support concrete findings before writing
-the report. Execute this grounding pass in order, and stop expanding scope once
-the evidence is sufficient:
+## Ground Yourself
 
-1. `AGENTS.md` when present, then `.agents/README.md` for operating rules.
-2. `specs/README.md` and `specs/index.md` to select relevant specs.
-3. Task-relevant specs, usually `domain.md`, `architecture.md`,
-   `state-model.md`, and `security.md` for implementation audits.
-4. Project-local skills when available:
-   - `.agents/skills/code-quality/`
-   - `.agents/skills/security-analysis/`
-   - `.agents/skills/repo-stewardship/` when repository layout, generated
-     outputs, tests, or security hygiene are in scope
-5. Inspect the repository tree and package structure.
-6. Inspect representative Go packages, Ansible roles/playbooks, scripts,
-   Makefiles, CI workflows, examples, and tests that are relevant to the audit
-   scope.
-7. Run available non-mutating checks and targeted searches that confirm or
-   reject suspected findings.
+The repo is the source of truth; load current state instead of relying on memory,
+and trust the repo if names, taxonomy, substrates, or layout have changed. Read
+until the evidence supports concrete findings, then stop expanding scope:
 
-If command names, package names, role taxonomy, supported substrates, or file
-layouts have changed since you last saw the project, trust the current repo.
-
-Useful commands:
+1. `AGENTS.md` and `.agents/README.md` — operating rules.
+2. `specs/README.md`, `specs/index.md`, then the task-relevant specs — usually
+   `domain.md`, `architecture.md`, `state-model.md`, `security.md`.
+3. Project-local skills when they apply: `.agents/skills/code-quality/`,
+   `.agents/skills/security-analysis/`, `.agents/skills/repo-stewardship/`.
+4. The repo tree and package structure, then representative Go packages, Ansible
+   roles/playbooks, scripts, Makefiles, CI workflows, examples, and tests in scope.
 
 ```bash
 git status --short
 rg --files
-rg -n '<suspect-symbol>|<domain-rule>|<duplicated-branch>' internal api ansible scripts docs specs test
-go list ./...
-go test ./...
-go vet ./...
-gofmt -l .
+rg -n '<suspect-symbol>|<domain-rule>|<duplicated-branch>' internal api ansible scripts specs test
+go list ./... ; go test ./... ; go vet ./... ; gofmt -l .
+shellcheck scripts/* test/**/*.sh        # when available
+ansible-lint ; ansible-playbook --syntax-check <playbook>   # when available
 ```
 
-For scripts and automation, use these when the tools are already available:
-
-```bash
-shellcheck scripts/* test/**/*.sh
-ansible-lint
-ansible-playbook --syntax-check <playbook>
-```
-
-Do not install new tools or fetch dependencies for a review-only audit unless
-the user explicitly allows it. Report any useful check that could not be run.
-When a check cannot run without mutation, missing tools, network access, or
-unavailable infrastructure, record the limitation instead of replacing evidence
-with speculation.
+Do not install tools or fetch dependencies for a review-only audit unless the user
+allows it. When a check needs mutation, missing tools, network, or unavailable
+infrastructure, record the limitation instead of substituting speculation.
 
 ## Durable Guardrails
 
-Verify these in the current repo before relying on them. Do not recommend
-changes that violate them:
+Verify each in the current repo before relying on it; do not recommend anything
+that violates them:
 
-- Stay within Bootwright's stated scope. Day-2 fleet publication concerns
-  belong to a separate project unless the specs explicitly say otherwise.
-- Desired-state YAML is the user-facing API. Generated artifacts are outputs,
-  not authored source of truth.
-- Keep provider abstractions open for supported substrates. Do not hard-code
-  behavior to the current lab, one vendor, one topology, or one install mode.
-- Prefer official CLI capabilities from tools Bootwright drives before adding
-  custom orchestration around the same operation.
-- Secrets, kubeconfigs, pull secrets, private keys, tokens, and
-  environment-specific credentials must never appear in versioned content,
-  examples, logs, generated docs, or recommended snippets.
-- CLI user-facing human output must use `internal/cli/output`. Keep raw-output
-  exceptions raw: JSON output, shell exports, Cobra help, prompts, and external
-  process passthrough such as Ansible streams.
-- Respect the Go and Ansible responsibility split. Go owns CLI behavior, input
-  loading and validation, normalization, rendering, Bootwright storage intent,
-  task planning, and orchestration. Ansible owns configuration and installation
-  steps executed on the bastion and target hosts or clusters.
-- `v1alpha1` can break cleanly. Do not propose migrations, aliases,
-  compatibility shims, or legacy examples.
-- Do not propose broad rewrites when a small local change would address the
-  issue.
+- **Scope.** Stay inside Bootwright's stated scope; Day-2 fleet publication lives
+  elsewhere unless the specs say otherwise.
+- **Product API.** Desired-state YAML is the user API; generated artifacts are
+  outputs, not authored source of truth.
+- **Provider neutrality.** Keep abstractions open for supported substrates; do not
+  hard-code to the current lab, one vendor, one topology, or one install mode.
+- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
+  never appear in versioned content, examples, logs, generated docs, or snippets.
+- **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
+  stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
+- **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
+  rendering, storage intent, task planning, locking, ledgers, status, and
+  orchestration. Ansible executes configuration and installation on the bastion and
+  target hosts/clusters. Confirm the spec's exact wording before relying on it.
+- **Clean break.** `v1alpha1` may break cleanly: no migrations, aliases, shims, or
+  legacy examples.
 
-## Review Posture
+## Priority Order
 
-Base findings on repository evidence. Do not invent facts, vulnerabilities, or
-future requirements.
+Triage findings in this order, and let it drive both severity and the plan:
 
-Prioritize issues in this order:
-
-1. Correctness, data loss, security exposure, or unsafe side effects.
-2. Reliability problems that make failures hard to diagnose or recover from.
+1. Correctness, data loss, security exposure, unsafe side effects.
+2. Reliability problems that make failure hard to diagnose or recover from.
 3. Test gaps around behavior that can break users.
-4. Unused code, duplicated code, duplicated domain rules, unclear ownership,
-   or responsibility drift that can preserve stale behavior.
-5. Maintainability issues that create repeated errors or high change cost.
-6. Naming, readability, and local simplification opportunities that materially
-   improve discoverability, responsibility boundaries, or domain consistency.
+4. Dead code, duplicated logic or domain rules, unclear ownership, responsibility
+   drift that preserves stale behavior.
+5. Maintainability issues that cause repeated errors or high change cost.
+6. Naming, readability, and local simplification that materially improve
+   discoverability, ownership boundaries, or domain consistency.
 7. Efficiency improvements with a clear operational payoff.
 
-For every finding, cite a real path and line number whenever possible. If the
-evidence is structural rather than line-local, cite the directory, package,
-role, Make target, or workflow and explain the trace you followed.
+## What to Look For
 
-Separate proven findings from hypotheses. A hypothesis is acceptable only when
-the plan includes the smallest verification step needed to confirm or reject
-it.
+Pick the lenses with teeth for the scope; do not run every bullet. Apply
+domain-driven discipline throughout: a domain rule, invariant, or decision lives in
+the package that owns it, and adapters, CLI commands, renderers, and tests consume
+that owner instead of reimplementing it.
 
-## Audit Criteria
+**Go.** Unwrapped or vague errors; ignored errors or command results; panics on
+normal paths; global mutable state that blocks tests or concurrency; unsafe path
+joins, temp-file handling, cleanup, or permissions; shell invocation where direct
+`exec.Command` args are safer; missing context/cancellation/timeout; resource
+leaks and misplaced `defer`; CLI commands embedding domain logic that belongs in
+loaders, renderers, orchestrators, or roles; tests needing real infrastructure
+where a fake would prove the behavior.
 
-### Go Implementation
+**Go↔Ansible drift.** Go directly configuring or installing on hosts/clusters
+instead of rendering intent and orchestrating; Ansible making CLI, validation,
+desired-state-ownership, rendering, storage-intent, planning, locking, or status
+decisions. A fact computed in a role that the renderer could have written into vars
+is a leak. Per drift: current owner, correct owner, the boundary contract, and the
+smallest refactor that moves it back without duplicating logic.
 
-Look for:
+**Scripts, Make, CI.** Names that hide side effects, target host, or workflow
+stage; unquoted vars, unsafe globbing, word splitting, path traversal; broad
+cleanup (`rm -rf`) without constrained paths; pipelines that swallow failures;
+unsafe temp creation/cleanup; commands built by string interpolation where arrays
+or fixed args are safer; assumptions about cwd, user, PATH, OS, tools, network, or
+writable locations; missing preflight checks; secrets in command traces, logs, or
+generated files; non-idempotent scripts that look rerun-safe; hard-coded
+environment-specific paths/users/hosts; targets not `.PHONY` or doing more than
+their name implies; destructive targets without scoping; unpinned actions, images,
+tools, or versions; CI that skips relevant checks or has no offline path. Do not
+recommend `set -euo pipefail` mechanically — name the failure mode it prevents and
+the conditionals that need care.
 
-- unclear package responsibility or dependency direction
-- exported or unexported functions, types, packages, files, feature paths, or
-  tests that are no longer used by a current workflow
-- duplicated implementations of the same domain rule, validation,
-  normalization, rendering, permission, path, redaction, output, or command
-  construction behavior
-- CLI commands embedding domain logic that belongs in loaders, renderers,
-  orchestrators, or Ansible roles
-- duplicated validation, rendering, command construction, or filesystem logic
-- vague or unwrapped errors
-- ignored errors or ignored command results
-- panics in normal execution paths
-- global mutable state that blocks tests or concurrent operation
-- unsafe path joins, temp file handling, cleanup, or file permissions
-- shell invocation where direct `exec.Command` arguments would be safer
-- missing context propagation, cancellation, or timeouts where applicable
-- resource leaks and incorrect `defer` placement
-- tests that require real infrastructure when a fake would prove the behavior
+**Ansible.** Non-idempotent tasks; shell/command where a module fits, or without
+intentional `changed_when`/`failed_when`; missing `no_log` for sensitive values;
+weak permissions on credential or runtime-state files; hidden assumptions about
+controller or remote-host shape; variable defaults masking missing required input;
+handlers that fire unpredictably; roles blurring provider, shared-service,
+cluster-infra, or OpenShift responsibilities; unused or duplicated roles/tasks/
+vars/templates that should be deleted or centralized.
 
-Confirm suspected dead code with references from `rg`, package boundaries,
-tests, rendered outputs, CLI wiring, and Ansible consumers before reporting it.
-When code is unused, recommend deleting it rather than preserving it for
-speculative future use. When code is duplicated, recommend one domain-owned
-implementation that other components call. Prefer small, behavior-preserving
-refactors over new abstractions; add an abstraction only when it centralizes a
-real responsibility, removes meaningful duplication, or matches an established
-local pattern.
+**Security and supply chain.** Committed secrets or examples teaching unsafe secret
+placement; command injection and unsafe templating; path traversal and unsafe
+archive extraction; world-readable sensitive runtime material; TLS verification
+disabled without a documented narrow reason; downloads or artifacts without
+checksum/version/digest pinning; mutable image tags (`latest`); excessive
+privilege, sudo, service-account scope, or BMC access; logs/errors/telemetry
+leaking private host data or secret material; stale security-sensitive paths
+(privilege, redaction, command exec, TLS, secret handling) that can diverge from
+the maintained path. Report only what code evidence supports.
 
-Apply domain-driven design discipline: domain concepts, invariants, and
-decisions should live in the package that owns the domain responsibility.
-Adapters, CLI commands, Ansible renderers, and tests should consume that owner
-instead of reimplementing the same rule locally.
+**Duplication and dead code.** One domain rule in multiple packages or roles; one
+concept as several types/structs/helpers, or several names; one name reused for
+different concepts; adapter-specific code leaking into shared orchestration;
+CLI-local copies of validation/normalization/rendering/security behavior; tests
+exercising stale helpers; comments/docs/examples preserving abandoned concepts.
+Confirm with `rg`, package boundaries, tests, rendered outputs, CLI wiring, and
+Ansible consumers before reporting. Default unused code to deletion; default
+duplication to one domain-owned implementation the others call — define the
+smallest refactor slice and the tests proving callers now share it.
 
-Review naming as part of code quality, not as cosmetic cleanup. Check package,
-type, struct, interface, function, method, variable, file, directory, script,
-role, task, Make target, workflow, and domain names for stale vocabulary,
-ambiguous ownership, implementation-shaped names, duplicated concepts, and
-names that no longer match current behavior. When a rename is worth proposing,
-state the current name, the better name, the affected artifacts, the user or
-maintainer benefit, and the smallest migration path. Keep the current name
-when the alternative is only stylistically different or does not clearly
-improve correctness, discoverability, or responsibility boundaries.
+**Naming** (as code quality, not cosmetics). Flag stale vocabulary, ambiguous
+ownership, implementation-shaped names, duplicated concepts, and names that no
+longer match behavior across packages, types, functions, files, roles, tasks, Make
+targets, and domain terms. Propose a rename only with a clear correctness,
+discoverability, or ownership gain — give current name, better name, affected
+artifacts, benefit, and the smallest migration path. Otherwise keep it.
 
-### Go and Ansible Responsibility Split
-
-Audit for drift from the required execution model:
-
-- Go code should own all CLI command behavior, input selection, strict decode,
-  normalization, validation, rendering, effective-state construction,
-  Bootwright storage desired-state logic, task graph planning, locking,
-  ledgers, status, and orchestration decisions.
-- Ansible scripts should own configuration and installation steps that execute
-  on the bastion and target hosts or clusters, including package/tool setup,
-  host service configuration, provider host mutations, node boot preparation,
-  cluster installation commands, and host or cluster-side operational steps.
-
-Flag drift when Go starts performing host or cluster configuration or
-installation steps directly instead of rendering intent and orchestrating
-Ansible execution. Also flag drift when Ansible starts making CLI policy,
-input validation, desired-state ownership, rendering, storage intent, task
-planning, scheduling, locking, or status decisions that should be made in Go.
-
-For every drift finding, identify the current owner, the correct owner, the
-contract that should cross the boundary, and the smallest refactor that moves
-the behavior back to the proper side without duplicating logic.
-
-### Scripts and Shell
-
-Look for:
-
-- script and directory names that hide side effects, required context, target
-  host, or workflow stage
-- unquoted variables, unsafe globbing, word splitting, or path traversal risks
-- broad cleanup commands, especially `rm -rf`, without constrained paths
-- missing or misleading strict-mode behavior
-- pipelines that hide failures
-- temp files or directories without safe creation and cleanup
-- commands built through string interpolation when arrays or fixed arguments
-  would be safer
-- assumptions about current working directory, user, PATH, OS, installed tools,
-  network access, or writable locations
-- missing preflight checks for required external tools
-- secrets printed in command traces, logs, errors, or generated files
-- non-idempotent scripts that look safe to rerun
-- hard-coded environment-specific paths, usernames, cluster names, or hosts
-
-Do not recommend `set -euo pipefail` mechanically. Explain the failure mode it
-would prevent, and note any functions or conditionals that would need care.
-
-### Ansible
-
-Look for:
-
-- role, task, variable, template, inventory, and directory names that obscure
-  host scope, domain ownership, idempotency expectation, or generated-input
-  boundaries
-- tasks that are not idempotent
-- shell or command tasks where a module should be used instead
-- shell or command tasks without intentional `changed_when` and `failed_when`
-- missing `no_log` for sensitive values
-- weak permissions on files containing credentials or runtime state
-- hidden assumptions about controller state or remote host shape
-- duplicated tasks across roles
-- variable defaults that mask missing required input
-- handlers that can fire unpredictably
-- roles that blur provider, shared-service, cluster-infra, or OpenShift
-  responsibilities
-- behavior that is hard to test without real infrastructure
-- unused roles, tasks, variables, templates, handlers, or duplicated role logic
-  that should be deleted or centralized in the layer that owns the behavior
-
-### Makefiles and CI
-
-Look for:
-
-- target, job, workflow, script, and artifact names that imply broader or
-  narrower behavior than they actually perform
-- targets that are not declared `.PHONY` where appropriate
-- targets that do more than their names imply
-- destructive targets without clear scoping or safeguards
-- inconsistent use of repo-local paths
-- CI jobs that skip relevant checks or duplicate local validation poorly
-- unpinned actions, images, tools, or versions
-- credentials or secrets exposed through logs, environment dumps, artifacts, or
-  command traces
-- network-dependent checks that should have an offline path
-
-### Security and Supply Chain
-
-Look for:
-
-- committed secrets or examples that teach unsafe secret placement
-- command injection and unsafe templating
-- path traversal and unsafe archive extraction
-- world-readable files containing sensitive runtime material
-- TLS verification disabled without a documented, narrow reason
-- downloads or generated artifacts without checksum, version, or digest pinning
-- mutable container image tags such as `latest`
-- excessive privileges, sudo use, service account scope, or BMC access
-- logs, errors, or telemetry that leak private host data or secret material
-- unused or duplicated security-sensitive code paths, because stale privilege,
-  path validation, redaction, command execution, TLS, or secret-handling logic
-  can diverge from the maintained path
-
-Only report security issues supported by code evidence.
-
-### Domain Ownership and Duplication
-
-Look across Go, Ansible, scripts, tests, fixtures, and docs for responsibility
-drift:
-
-- one domain rule implemented in multiple packages or roles
-- one concept represented by multiple types, structs, variables, or helpers
-- one concept represented by several names, or one name reused for different
-  concepts
-- adapter-specific code leaking into shared orchestration
-- CLI-specific copies of validation, normalization, rendering, or security
-  behavior
-- tests exercising stale helpers instead of current workflows
-- comments, docs, or examples preserving abandoned concepts
-
-Treat confirmed duplication as a maintenance and security finding. The
-recommended fix should remove the duplicate or route callers through the
-single domain-owned implementation. If the duplicate cannot be removed safely
-in one step, define the smallest refactor slice and the tests that prove
-callers now share the centralized behavior.
-
-### Tests
-
-Look for missing or weak coverage around:
-
-- desired-state parsing, normalization, and validation
-- rendered installer, Ansible, or lock-file output
-- command construction and external process failure handling
-- filesystem permissions, cleanup, and path validation
-- secret redaction and sensitive-output gates
-- script dry-run or preflight behavior
-- Ansible idempotency and generated variable shape
-- regression tests for any high-confidence finding
-
-## Improvement-Plan Posture
-
-Turn findings into an actionable implementation plan, not a backlog dump and not
-a plan to plan the review. Each recommended item should include:
-
-- the user or maintainer outcome
-- evidence from the repo
-- affected files, packages, roles, scripts, or workflows
-- the smallest safe implementation approach
-- validation commands or tests that prove the implementation worked
-- risk of change: Low, Medium, or High
-
-Plan in phases:
-
-- **Now:** high-confidence safety, correctness, reliability, and test fixes
-  that are small enough to review safely.
-- **Next:** medium-sized refactors or automation cleanup that benefit from a
-  short design pass or sequencing.
-- **Later:** larger consolidation, toolchain policy, or cross-cutting cleanup
-  that should not block immediate fixes.
-
-Do not propose compatibility shims, feature flags, or new dependencies unless
-the evidence shows they are necessary.
-
-When the finding is unused code, the implementation plan should default to
-deletion. When the finding is duplicated code or duplicated responsibility, the
-implementation plan should default to a focused refactor to one clean, direct,
-domain-owned implementation used by the other components. Keep code lean; do not
-preserve unused branches, speculative helpers, or parallel implementations
-without a current workflow and a clear owner.
+**Tests.** Missing or weak coverage around desired-state parse/normalize/validate;
+rendered installer, Ansible, or lock-file output; command construction and external
+process failure; filesystem permissions/cleanup/path validation; secret redaction
+and sensitive-output gates; script dry-run/preflight; Ansible idempotency and
+generated-variable shape; and a regression test for each high-confidence finding.
 
 ## Output Format
 
-Cite concrete files, functions, tasks, Make targets, workflows, and tests from
-the current repo. Keep the report concise enough that a maintainer can act on
-it.
+Cite concrete files, functions, tasks, targets, workflows, and tests. Keep it
+actionable.
 
-# Code and Scripts Audit and Improvement Plan
+# Bootwright Code and Scripts Audit
 
 ## 1. Executive Summary
-
-Three to seven bullets, ordered by importance. Each bullet names the affected
-area and the recommended direction.
+Three to seven bullets ordered by importance; each names the area and the
+recommended direction. Lead with the single highest-priority fix.
 
 ## 2. Findings
+Severity order. Per finding: **Severity** (Critical/High/Medium/Low), **Area** (Go
+/ Scripts / Ansible / Integration / Make / CI / Tests / Security / Docs),
+**Location** (`path:line`), **Evidence**, **Impact**, **Recommendation** (minimal
+in-scope fix), **Validation** (the check that proves it). Say "none" for an empty
+category instead of inventing weak issues.
 
-List findings in severity order. For each:
-
-- **Severity:** Critical / High / Medium / Low
-- **Area:** Go / Scripts / Ansible / Integration / Make / CI / Tests /
-  Security / Docs
-- **Location:** `path:line` where possible
-- **Evidence:** what the repo shows
-- **Impact:** why it matters
-- **Recommendation:** minimal in-scope fix
-- **Validation:** test or check that should prove the fix
-
-If there are no findings in a category, say so briefly instead of inventing
-weak issues.
-
-## 3. Script and Automation Review
-
-Call out script, Makefile, CI, and Ansible risks separately from Go package
-quality. Include shell safety, idempotency, generated-output boundaries,
-external tool assumptions, and secret handling.
+## 3. Deliberately Unchanged
+Patterns that looked like findings but cleared on inspection, and churn you
+declined (stylistic renames, mechanical hardening, speculative abstractions) — each
+with the one-line reason. Proof the findings aggregate rather than pad.
 
 ## 4. Test and Validation Gaps
-
-Name specific tests or checks to add or improve. Avoid generic "add more
-tests" recommendations.
+Specific tests or checks to add or improve — no generic "add more tests."
 
 ## 5. Improvement Plan
-
-Use phased bullets:
-
-- **Now:** immediate, low-risk fixes.
-- **Next:** sequenced cleanup or refactors.
-- **Later:** larger work that needs agreement or should follow evidence from
-  earlier phases.
-
-Each item should include affected artifacts, implementation approach,
-validation, and risk of change.
-
-Include naming improvements only when they are worth the churn. For each
-recommended rename, list the old name, proposed name, affected code/scripts/
-files/directories/docs/tests, benefit, risk, and validation needed to prove the
-rename did not leave stale references.
+**Now** (high-confidence safety/correctness/reliability/test fixes small enough to
+review safely), **Next** (medium refactors or automation cleanup that benefit from
+a short design pass), **Later** (larger consolidation or toolchain policy that
+should not block immediate fixes). Per item: affected artifacts, smallest safe
+approach, validation commands/tests, and **Risk** (Low/Medium/High). Default unused
+code to deletion and duplication to one domain-owned implementation. Propose no
+shims, flags, or new dependencies unless evidence shows they are necessary. End
+with any open question that blocks a safe plan or changes prioritization.
 
 ## 6. Checks Run
+Commands run and a one-line result each; then useful checks not run, with the
+reason.
 
-List commands run and summarize results. List checks that would be useful but
-were not run, with the reason.
+## Edit Mode (only if the user explicitly requests fixes)
 
-## 7. Open Questions
-
-List only questions that block a safe plan or materially change prioritization.
-
-## If Edit Mode Is Explicitly Requested
-
-If the user asks you to implement fixes after the audit report and
-implementation plan exist:
-
-1. Confirm the selected plan slice and affected files before editing unless the
-   user already specified them.
-2. Keep changes small and behavior-preserving unless fixing a proven bug.
-3. Delete confirmed unused code instead of parking it behind comments or
-   unused helpers.
-4. Refactor confirmed duplication into a single domain-owned component and
-   update callers to use it.
-5. Add or adjust focused tests for changed behavior.
-6. Use the repo's validation skills, including implementation validation,
-   before finishing.
-7. Report any validation that could not run.
-
-For edit-mode output, summarize only:
-
-- changes made
-- files changed
-- tests/checks run
-- remaining follow-up items
-
-Important constraints:
-
-- Do not invent facts.
-- Do not make broad architectural redesign recommendations here.
-- Do not change behavior unless explicitly requested or necessary to fix a
-  proven bug.
-- Do not introduce dependencies without strong justification.
-- Do not remove functionality.
-- Do not hide errors.
-- Do not weaken security for convenience.
-- Do not store or print secrets.
-- Prefer small, reviewable changes.
+Confirm the selected plan slice and affected files first (unless given). Keep
+changes small and behavior-preserving unless fixing a proven bug. Delete confirmed
+dead code rather than parking it behind comments; route confirmed duplication
+through one domain-owned component and update callers; add or adjust focused tests
+for changed behavior. Run the repo's validation skills (including implementation
+validation) before finishing and report any that could not run. Summarize only:
+changes made, files changed, checks run, remaining follow-ups. Do not invent facts,
+redesign architecture, change behavior beyond the fix, add dependencies, remove
+functionality, hide errors, weaken security, or print secrets.

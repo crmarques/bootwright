@@ -1,365 +1,217 @@
-# Specs, UX, Desired-State Audit, and Improvement Plan
+# Specs, UX, and Desired-State Audit
 
-You are a product-minded staff engineer reviewing **Bootwright** as a
-desired-state orchestrator for OpenShift cluster provisioning.
+You are a product-minded staff engineer auditing **Bootwright** — a desired-state
+orchestrator that provisions fleets of OpenShift and OKD clusters from bare or
+virtualized substrates to installed clusters. Desired-state YAML is the
+user-facing API.
 
-Your job is to pressure-test the user-facing contract, then propose a
-prioritized improvement plan. Review the product definition, operator
-journey, and desired-state authoring model; do not perform implementation
-or spec edits unless the user explicitly asks for follow-up changes. Give
-equal weight to:
+Pressure-test the current user-facing contract and turn the findings into a
+prioritized improvement plan. Give equal weight to three lenses:
 
-1. **Operator UX.** A real operator should be able to go from a fresh
-   checkout to an installed cluster by following the CLI, docs, and
-   examples without learning the repository internals.
-2. **Desired-state authoring.** The input files should be complete enough
-   to express real fleet intent, simple enough to author by hand, and
-   structured so users can predict where each fact belongs.
-3. **Definition quality.** Specs should constrain behavior precisely
-   enough that two implementers would agree on every accept/reject case,
-   while keeping room for future providers, topologies, and install modes.
+1. **Operator UX.** A real operator goes from a fresh checkout to an installed
+   cluster by following the CLI, docs, and examples — without learning repo
+   internals.
+2. **Authoring.** Input files are complete enough to express real fleet intent,
+   simple enough to write by hand, and structured so a user predicts where each
+   fact belongs.
+3. **Definition quality.** Specs constrain behavior precisely enough that two
+   implementers would agree on every accept/reject case, while leaving room for
+   future providers, topologies, and install modes.
 
-Out of scope: line-by-line code review, package structure review,
-performance tuning, and implementation refactors unless they are needed
-to explain a user-visible gap.
+This third lens is what this prompt owns. For a from-scratch, three-alternatives
+*rethink* of the CLI and schema, use `cli-schema-ux-rethink.md` instead; here the
+job is to audit the *current* contract and produce an actionable plan.
 
-## How to Ground Yourself
+Out of scope: line-by-line code review, package structure, performance, and
+refactors unless they explain a user-visible gap. Do not edit files unless the
+user explicitly asks for follow-up changes.
 
-The repository is the source of truth. Load current definitions instead
-of relying on memory. Read in this order, and stop once you have enough
-evidence:
+## The Two Tests Every Proposal Must Pass
 
-1. `AGENTS.md` and `.agents/README.md` for load order and operating
-   rules.
-2. `specs/README.md` and `specs/index.md` to select the relevant specs.
-3. The task-relevant spec files and ADRs, especially the desired-state
-   schema, CLI contract, UX principles, and accepted design decisions.
-4. `README.md`, `docs/`, and other user-facing guides that teach the
-   current workflow.
-5. User-authored input examples, scaffolds, or E2E fixture desired-state
-   files that represent canonical authoring shapes.
-6. Current CLI help, validation output, rendered tree shape, or other
-   public behavior only when needed to verify what the user experiences.
+1. **Out of the box.** Would this occur to someone reasoning from the operator's
+   problem rather than from the current code? Don't stop at "docs match code" or
+   "the validator accepts it" — ask whether the user-facing model is the *right*
+   model.
+2. **Aggregation.** State the net gain in one sentence: which operator error,
+   confusion, duplicated fact, or ambiguous accept/reject rule disappears, and at
+   what cost in explicitness or risk. A tighter spec that makes a fuzzy rule
+   enumerable aggregates even when no schema changes. A change that swaps one
+   acceptable shape for another, equally acceptable shape does not — reject it and
+   say so. Difference is not improvement.
 
-If kind names, command names, supported providers, install modes, or file
-layouts have evolved, trust the current repo. Do not anchor findings to
-older vocabulary.
+"No change needed" is a valid, valuable finding when the evidence supports it.
+Listing what you deliberately leave alone proves the survivors earned their place.
 
-Useful read-only commands:
+## Ground Yourself
+
+The repository is the source of truth; load current definitions instead of
+relying on memory, and do not anchor findings to older vocabulary. Read until you
+have enough evidence, then stop:
+
+1. `AGENTS.md` and `.agents/README.md` for load order and operating rules.
+2. `specs/README.md` and `specs/index.md`, then the task-relevant specs and ADRs —
+   especially the desired-state schema, CLI contract, UX principles, and accepted
+   decisions.
+3. `README.md` and `docs/` for the taught workflow.
+4. User-authored examples, scaffolds, and E2E fixtures under `examples/` and
+   `test/` that represent canonical authoring shapes — start from the smallest
+   single-node case.
+5. Current CLI help, validation output, or rendered tree only to verify what the
+   user experiences.
 
 ```bash
 git status --short
-rg --files specs docs test .agents
-rg -n 'apiVersion:\s*bootwright' specs docs test .agents
+rg --files specs docs test examples .agents
+rg -n 'apiVersion:\s*bootwright|^kind:' specs examples test
 ```
 
-Include `examples/` in those searches when that directory exists.
-
-Run validation or tests only if the toolchain is already present. Do not
-install dependencies.
+Run validation or tests only if the toolchain is already present. Do not install
+dependencies.
 
 ## Durable Guardrails
 
-Verify these in the current specs before relying on them. Do not propose
-changes that violate them:
+Verify in the current specs before relying on these; do not propose anything that
+violates them:
 
-- Stay within Bootwright's stated scope. Day-2 fleet publication concerns
-  belong to a separate project unless the specs explicitly say otherwise.
-- Desired-state YAML is the user API. Generated artifacts are readable
-  debugging outputs, not user edit points.
-- The user-authored schema must stay declarative, idempotent, typed, and
-  reproducible.
-- Do not lock the design to one substrate, topology, or install mode.
-  Provider abstraction must remain open to the substrates the specs claim
-  to support.
-- Respect the current API stability promise. If the API version is
-  unstable, do not propose migrations, aliases, or compatibility shims. If
-  it is stable, treat schema changes with the corresponding migration cost.
-- Secrets, kubeconfigs, pull secrets, private keys, tokens, and
-  environment-specific credentials must never appear in versioned content,
-  examples, snippets, or recommendations.
+- **Scope.** Direct provisioning to installed clusters plus cluster-bound
+  bootstrap add-ons. Day-2 fleet content publication lives elsewhere.
+- **Product API.** Desired-state YAML stays declarative, idempotent, typed,
+  deterministic, and reproducible. Generated artifacts are readable debugging
+  outputs, not user edit points.
+- **One owner per fact.** Lower-layer objects (`Machine`, `InfraProvider`,
+  `InfraComponent`, provider inventories) own reachability, capabilities,
+  services, and substrate facts and must not refer upward to consumers
+  (`ContainerCluster`, `StorageCluster`, future cluster types). Consumer intent
+  references downward.
+- **Provider neutrality.** Keep abstractions open for libvirt, bare metal,
+  vSphere, OpenShift Virtualization, and future substrates; hide supplier and BMC
+  variation behind capabilities and adapters.
+- **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
+  never appear in versioned content, examples, snippets, or recommendations.
+- **Clean break.** While the API is `v1alpha1`, propose clean breaking
+  improvements freely — but never migrations, aliases, compatibility shims, or
+  legacy examples. State why each break is worth it and what tests or fixtures
+  must change.
 
-## Review Posture
+## Posture
 
-This is a design critique. Do not stop at "docs match code" or "the
-validator accepts it." Ask whether the user-facing model is the right
-model:
+This is a design critique that ends in a plan, not a backlog dump. Take a position
+and defend it. Each proposed change carries a clear user-visible outcome, repo
+evidence, affected artifacts, a validation approach, and an acceptance criterion.
 
-- Can an operator author the desired state from the problem they have,
-  or must they understand implementation mechanics first?
-- Does each kind, file, and field earn its place?
-- Can a user make common changes with small, bounded edits?
-- Does validation explain the model, or only reject bad YAML?
-- Are there missing first-class fields that users will otherwise route
-  through overrides or generated files?
-- Are there fields that expose tool internals instead of user intent?
-- Can the same design scale from a lab to multi-cluster, multi-provider
-  fleet authoring?
-
-Take a position and defend it. "No change needed" is valid only when the
-evidence supports it.
-
-## Improvement-Plan Posture
-
-Turn findings into an actionable plan, not a backlog dump. Each proposed
-change should have a clear user-visible outcome, evidence from the repo,
-affected artifacts, validation approach, dependencies, and an acceptance
-criterion.
-
-Plan in phases:
-
-- **Now:** small, high-confidence changes that remove operator confusion,
-  close spec/doc contradictions, or make validation/actionability clearer.
-- **Next:** schema, CLI, example, or workflow changes that need design
-  agreement but are still near-term and testable.
-- **Later:** larger model changes, provider expansions, or experience
-  improvements that depend on unresolved decisions.
-
-Separate recommendation types so the user can choose a follow-up:
-
-- **Spec clarification:** tighter accept/reject rules or ownership language.
-- **Authoring model:** kind, field, file-boundary, or example-shape changes.
-- **CLI and workflow UX:** command flow, help text, dry-run, output, status,
-  recovery, or automation behavior.
-- **Validation and safety:** error messages, secret handling, trust material,
-  generated-output boundaries, and destructive-action safeguards.
-- **Evidence gap:** places where more observation is needed before changing
-  the contract.
-
-Do not propose migrations, aliases, compatibility shims, or legacy examples
-for `v1alpha1`. If a recommendation changes the schema, state why the
-user-facing benefit is worth the clean break and what tests or fixtures
-must change.
+Ask the hard questions: can an operator author desired state from the problem they
+have, or must they understand mechanics first? Does each kind, file, and field
+earn its place? Are common changes small, bounded edits? Does validation explain
+the model or only reject bad YAML? Are there missing first-class fields that users
+will route through overrides or generated files, or fields that expose tool
+internals instead of intent? Does the design scale from a lab to a multi-cluster,
+multi-provider fleet?
 
 ## Provocations
 
-Use these prompts to reason about CLI UX and file input schemas. Prefer
-one strong, concrete recommendation over several hedged observations.
+Use these to find the highest-impact gaps, not as a checklist.
 
-### Operator Journey
+**Operator journey.** A new user runs CLI help — what do they naturally run next?
+Walk checkout → first converged cluster, counting hidden prerequisites (SSH keys,
+pull secrets, provider access, BMC reachability, DNS, state dirs, secret stores);
+where is the first cliff? Does help text reveal the task sequence, required
+inputs, dry-run behavior, output paths, and destructive actions? Pick three
+plausible failures across load/validate/render/apply: for each, what does the user
+see, what do they rerun, what state remains, what cleanup is safe? Can CI run
+non-interactively with machine-readable failure and no prompts for destructive or
+long operations? Inspecting the generated tree, can a user tell "yours to edit"
+from "ours to regenerate" by names and paths?
 
-- **First five minutes.** A new user runs the CLI help. What command do
-  they naturally run next? Walk from checkout to first converged cluster,
-  counting hidden prerequisites such as SSH keys, pull secrets, provider
-  access, BMC reachability, DNS, state directories, and secret stores.
-  Where is the first cliff?
-- **Help text as workflow.** Does help text reveal the task sequence,
-  required inputs, dry-run behavior, output paths, and destructive
-  actions? Which command or flag would a user guess that does not exist?
-- **Failure recovery.** Pick three plausible failures across load,
-  validation, render, and apply. For each: what does the user see, what
-  do they rerun, what state remains, and what cleanup is safe?
-- **Automation ergonomics.** Can CI or a GitOps-adjacent pipeline run
-  non-interactively, get machine-readable failure, and avoid prompts for
-  destructive or long-running operations?
-- **Generated tree as a contract.** Users will inspect generated files
-  while debugging. Can they quickly find the inputs, rendered installer
-  assets, effective state, logs, and runtime outputs for one cluster? Is
-  "yours to edit" vs. "ours to regenerate" visible from names and paths?
+**Authoring.** Count the concepts a user must hold to author a working cluster —
+which are real domain concepts and which are tooling artifacts to remove, combine,
+rename, or scaffold? For each major fact, name the one owning kind and file, and
+flag duplicates, overrides, or hidden defaults. What is the smallest safe input
+that installs one cluster, and does the repo teach that shape before advanced
+cases? Can a user start compact and expand only for multi-provider, disconnected,
+external-service, or special-networking needs? Walk a real provider swap and a
+real mode swap (connected/disconnected, proxied/direct, managed/external,
+single/multi-node): list the files that change, those that must not, and any edit
+that reveals a layer leak.
 
-### Desired-State Authoring
-
-- **Mental model load.** Count the concepts a user must hold to author a
-  working cluster. Which are real domain concepts, and which are artifacts
-  of tooling? Remove, combine, rename, or scaffold concepts that do not
-  earn their cognitive cost.
-- **Fact ownership.** For every important fact, identify exactly one
-  owning kind and file. Flag duplicates, overrides, hidden defaults, or
-  facts that users would reasonably put in multiple places.
-- **File boundaries.** Review whether the file layout makes authoring,
-  review, copy/paste reuse, and provider swaps easy. Are shared fleet
-  facts, substrate facts, cluster wiring, and OpenShift intent separated
-  in a way an operator would predict?
-- **Minimal useful example.** What is the smallest safe input set that
-  installs one cluster? Does the repo teach that shape before advanced
-  multi-provider or disconnected cases?
-- **Progressive disclosure.** Can users start with a compact authoring
-  shape and expand only when they need multi-provider, explicit hardware,
-  disconnected install, external services, or special networking?
-- **Provider swap invariant.** If the specs promise that swapping a
-  substrate leaves higher-layer files unchanged, walk a real swap using
-  current examples or fixtures. Which files change, which should not, and
-  which edits reveal a layer leak?
-- **Mode swap invariant.** Switching connected/disconnected,
-  proxied/direct, managed/external services, and single-node/multi-node
-  should require small, bounded edits. List every field that changes and
-  every field that becomes invalid.
-- **Naming ergonomics.** Are object names, capability names, component
-  slots, network names, and secret names predictable in reviews and error
-  messages? Flag names that encode implementation details or age poorly.
-- **Schema completeness.** Identify real operator intent that cannot be
-  expressed cleanly today. Decide whether it belongs as a first-class
-  field, a documented external prerequisite, or out of scope.
-
-### Spec and Validation Design
-
-- **Accept/reject precision.** Pick non-trivial rules and decide whether
-  the spec gives enumerable accept/reject behavior. Text that describes a
-  behavior without constraining it is a spec defect.
-- **Explicit ownership over absence.** Hidden defaults and "field absent
-  means special behavior" are UX hazards. Prefer explicit structural
-  choices where they improve readability and validation.
-- **Reference clarity.** Can users predict how references resolve, where
-  names are scoped, and what error they get for a missing or ambiguous
-  reference?
-- **Escape hatches.** Overrides and pass-throughs must not become the
-  normal path for missing schema. Check whether owned fields are defended
-  and whether common overrides deserve first-class modeling.
-- **Extension cost.** Pick one provider, capability, topology, or install
-  mode the specs want to support. What authoring surfaces must change? If
-  it requires shotgun edits across unrelated layers, propose a cleaner
-  definition.
-- **Validation UX.** Good validation should tell the user the owning
-  field, the invalid value, the rule, and the smallest fix. Flag messages
-  that force users to read source or generated files.
-- **Security and trust material.** Confirm secret and trust references are
-  usable without committing secret bytes. Flag any workflow that tempts
-  users to paste sensitive values into desired-state files.
+**Spec and validation.** Pick non-trivial rules: does the spec give enumerable
+accept/reject behavior, or describe a behavior without constraining it (a spec
+defect)? Prefer explicit structural choices over "field absent means special
+behavior." Can users predict how references resolve, where names are scoped, and
+what error a missing/ambiguous reference yields? Are overrides and pass-throughs
+becoming the normal path for missing schema? Pick one provider, capability,
+topology, or install mode the specs want to support — what authoring surfaces must
+change, and does it require shotgun edits across unrelated layers? Does validation
+name the owning field, the invalid value, the rule, and the smallest fix? Are
+secret and trust references usable without committing secret bytes?
 
 ## Output Format
 
-Cite real files, kinds, commands, examples, and ADRs from the current
-repo. Do not invent behavior. Use the project's current vocabulary.
+Cite real files, kinds, commands, examples, and ADRs. Invent nothing. Use current
+project vocabulary.
 
-# Bootwright Specs, UX, Authoring Review, and Improvement Plan
+# Bootwright Specs, UX, and Authoring Audit
 
 ## 1. Executive Summary
-
-Three to seven bullets ordered by severity. Each bullet names the
-artifact, the user impact, and the proposed plan move.
+Three to seven bullets ordered by user impact; each names the artifact, the impact,
+and the proposed plan move. Lead with the single highest-leverage change.
 
 ## 2. First-Five-Minutes Journey
-
-Narrate a new user's path from checkout to first cluster using the current
-CLI, docs, and examples. Mark every undocumented prerequisite or
-out-of-band artifact. End with a verdict: tractable, painful, or broken.
+A new user's path from checkout to first cluster using the current CLI, docs, and
+examples. Mark every undocumented prerequisite or out-of-band artifact. End with a
+verdict: tractable, painful, or broken.
 
 ## 3. Desired-State Mental Model
-
-For each current kind or top-level authoring unit:
-
-- **Owns:** one sentence.
-- **Predictability:** whether a user would know this fact belongs here.
-- **Cognitive cost:** what the user must understand before editing it.
-- **Change:** one concrete improvement, or "none" if it is already right.
-
-Then state whether the layer decomposition is load-bearing or accidental.
+Per current kind or top-level authoring unit: **Owns** (one sentence),
+**Predictability** (would a user know this fact belongs here), **Cognitive cost**,
+**Change** (one concrete improvement, or "none — already right"). Then state
+whether the layer decomposition is load-bearing or accidental.
 
 ## 4. Input File and Schema Design
+Per canonical example/scaffold/fixture set: **Path**, **Purpose**, **Strengths**,
+**Mixed concerns or mechanics leaks**, **Simplification or completeness change**.
+Call out missing minimal examples, overlap, and layouts that hurt review or reuse.
 
-Review canonical examples, scaffolds, or fixture desired-state sets:
-
-- **Path**
-- **Purpose**
-- **Strengths**
-- **Mixed concerns or implementation leaks**
-- **Simplification or completeness change**
-
-Call out missing minimal examples, overlapping examples, or file layouts
-that make review and reuse harder than necessary.
-
-## 5. CLI Contract Review
-
-Evaluate the command and target model from a user perspective. Cover help
-text, dry-run behavior, scoping, destructive-action confirmation,
-non-interactive use, output locations, and error actionability.
-
-For each issue:
-
-- **Severity:** Critical / High / Medium / Low
-- **Evidence:** command, help text, spec, doc, or example path
-- **Problem**
-- **User impact**
-- **Recommendation**
+## 5. CLI, Validation, and Safety
+Per issue: **Severity** (Critical/High/Medium/Low), **Evidence** (command, help,
+spec, doc, example path), **Problem**, **User impact**, **Recommendation**. Cover
+help text, dry-run, scoping, destructive-action confirmation, non-interactive use,
+output locations, error actionability, secret/trust handling, and generated-output
+boundaries.
 
 ## 6. Swap and Evolution Invariants
+For provider/substrate swap, connected↔disconnected, proxied↔direct,
+managed↔external, single↔multi-node: the files that should change, those that must
+not, and any edit that reveals a schema leak.
 
-Walk the important invariants promised by the current specs, using real
-input sets where available:
+## 7. Spec Design Critique
+Step back from coherence: does each kind/file earn its existence; are common tasks
+small bounded edits; is missing intent modeled, documented as external, or truly
+out of scope; does the schema scale to larger fleets and future providers; where
+does the API leak implementation detail; which extension points are clean and
+which need reshaping. Show target authoring shape or UX flow only if you recommend
+changing file layout, scaffolds, command flow, or examples — keep it concise and
+grounded in current vocabulary, marking new commands/flags as proposals.
 
-- Provider or substrate swap.
-- Connected vs. disconnected.
-- Proxied vs. direct.
-- Managed vs. external services.
-- Single-node vs. multi-node.
+## 8. Deliberately Unchanged
+What you considered changing and chose to keep, each with the reason it survived —
+proof the proposals aggregate rather than churn.
 
-For each, list the files that should change, the files that should remain
-unchanged, and any edits that reveal a schema leak.
-
-## 7. Validation, Safety, and Error UX
-
-List gaps where the specs, docs, examples, and public behavior disagree
-or leave users without an actionable fix. Include secret handling, trust
-material, generated artifacts, and override/pass-through safety.
-
-Use severity / evidence / problem / recommendation for each item.
-
-## 8. Spec Design Critique
-
-Step back from coherence and judge whether the definitions make desired
-state authoring more complete and simpler. Take a position on:
-
-- Whether each kind or file earns its existence.
-- Whether common authoring tasks are small, bounded edits.
-- Whether missing intent is modeled, documented as external, or truly out
-  of scope.
-- Whether the schema scales to larger fleets and future providers.
-- Whether the API leaks implementation detail.
-- Which extension points are clean and which need reshaping.
-
-## 9. Recommended Authoring Shape
-
-Show the target input layout only if you recommend changing file names,
-splitting, grouping, scaffold output, or example organization. Keep it
-concise and grounded in the current kind model unless you explicitly argue
-that the model should change.
-
-## 10. Recommended UX Flow
-
-Sketch the workflow you would publish in a getting-started guide using
-current commands where they exist. Mark new commands, flags, diagnostics,
-or scaffolds as proposals and justify each by observed friction.
-
-## 11. Prioritized Improvement Plan
-
-Group recommendations into **Now**, **Next**, and **Later**.
-
-For each plan item:
-
-- **Change:** one concrete change.
-- **Type:** Clarify, Tighten, Reshape, or Evidence gap.
-- **Why:** the user-visible problem it fixes.
-- **Evidence:** spec, doc, example, command, or observed behavior.
-- **Artifacts:** files, commands, examples, tests, or fixtures likely touched.
-- **Validation:** how to prove the change is complete.
-- **Acceptance criterion:** the observable result a reviewer should expect.
-
-Use **Clarify** for docs, examples, help text, naming, and diagnostics
-that do not change schema or CLI shape. Use **Tighten** for validation,
-safer defaults, owned-field defense, and spec/behavior drift fixes. Use
-**Reshape** for schema, file-layout, or CLI-model changes that require an
-explicit design decision.
-
-End with the smallest coherent first follow-up change you recommend.
-
-## 12. Quick Wins
-
-Low-risk, high-leverage changes that can be completed in under a day.
-
-## 13. Open Questions
-
-Short, answerable decisions that cannot be resolved from the repository
-alone. Do not pad.
+## 9. Prioritized Plan
+Group into **Now** (docs, examples, help text, naming, diagnostics — no schema/CLI
+shape change), **Next** (validation, safer defaults, owned-field defense,
+spec/behavior drift — needs agreement, near-term, testable), **Later** (schema,
+file-layout, or CLI-model changes blocked on a design decision). Per item:
+**Change**, **Type** (Clarify / Tighten / Reshape / Evidence gap), **Why** (the
+user-visible problem), **Evidence** (spec/doc/example/command path), **Artifacts**,
+**Validation**, **Acceptance criterion**. End with the smallest coherent first
+follow-up change.
 
 ## Constraints
 
-- Cite current repo evidence. No invented commands, providers, fields, or
-  behavior.
-- Use current project vocabulary and kind names.
-- Keep recommendations aligned with the current specs and operating
-  rules.
-- Treat user-authored YAML as the product API.
-- Prefer schema and CLI improvements that make authoring simpler and more
-  complete without coupling the prompt to implementation details.
-- Keep secrets out of every recommendation and snippet.
-- If something is already right, say so briefly and move on.
+- Cite current repo evidence; use current vocabulary and kind names; keep
+  recommendations aligned with the current specs and operating rules.
+- Treat user-authored YAML as the product API and generated artifacts as outputs.
+- Prefer schema and CLI improvements that make authoring simpler and more complete
+  without coupling to implementation detail; keep every snippet safe to commit.
+- Every recommendation must pass the Aggregation test. Prefer fewer, stronger
+  recommendations; when something is already right, say so briefly and move on.
