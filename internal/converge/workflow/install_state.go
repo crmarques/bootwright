@@ -68,8 +68,16 @@ type ClusterConnectionRecord struct {
 }
 
 type ClusterInstallNodeRecord struct {
-	Booted   bool       `json:"booted"`
-	BootedAt *time.Time `json:"bootedAt,omitempty"`
+	ISOCreated           bool       `json:"isoCreated,omitempty"`
+	ISOCreatedAt         *time.Time `json:"isoCreatedAt,omitempty"`
+	BootRequested        bool       `json:"bootRequested,omitempty"`
+	BootRequestedAt      *time.Time `json:"bootRequestedAt,omitempty"`
+	BootVerified         bool       `json:"bootVerified,omitempty"`
+	BootVerifiedAt       *time.Time `json:"bootVerifiedAt,omitempty"`
+	InstallWaitStarted   bool       `json:"installWaitStarted,omitempty"`
+	InstallWaitStartedAt *time.Time `json:"installWaitStartedAt,omitempty"`
+	Booted               bool       `json:"booted"`
+	BootedAt             *time.Time `json:"bootedAt,omitempty"`
 }
 
 type ClusterAvailabilityChecker interface {
@@ -309,6 +317,12 @@ func MarkClusterInstallTaskStarted(clustersDir, contextName, secretsDir, runID s
 	record.RunID = runID
 	record.UpdatedAt = now.UTC()
 	record.InstalledAt = nil
+	switch task.Entry.Kind {
+	case ApplyTaskKindNodeBoot:
+		record.Nodes = bootRequestedClusterNodes(record.Nodes, task.State, task.Entry.Cluster, now)
+	case ApplyTaskKindInstallWait:
+		record.Nodes = installWaitStartedClusterNodes(record.Nodes, task.State, task.Entry.Cluster, now)
+	}
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		return err
 	}
@@ -348,8 +362,13 @@ func MarkClusterInstallTaskSucceeded(clustersDir, contextName, secretsDir, runID
 	} else {
 		record.Status = ClusterInstallStatusInstalling
 	}
-	if task.Entry.Kind == ApplyTaskKindNodeBoot {
-		record.Nodes = bootedClusterNodes(task.State, task.Entry.Cluster, now)
+	switch task.Entry.Kind {
+	case ApplyTaskKindClusterISO:
+		record.Nodes = isoCreatedClusterNodes(record.Nodes, task.State, task.Entry.Cluster, now)
+	case ApplyTaskKindNodeBoot:
+		record.Nodes = bootedClusterNodes(record.Nodes, task.State, task.Entry.Cluster, now)
+	case ApplyTaskKindInstallWait:
+		record.Nodes = installWaitStartedClusterNodes(record.Nodes, task.State, task.Entry.Cluster, now)
 	}
 	if err := SaveClusterInstallRecord(clustersDir, record); err != nil {
 		return err
@@ -553,15 +572,54 @@ func isClusterInstallTaskKind(kind string) bool {
 	}
 }
 
-func bootedClusterNodes(state v1alpha1.State, clusterName string, now time.Time) map[string]ClusterInstallNodeRecord {
+func isoCreatedClusterNodes(existing map[string]ClusterInstallNodeRecord, state v1alpha1.State, clusterName string, now time.Time) map[string]ClusterInstallNodeRecord {
+	return updateClusterInstallNodeRecords(existing, state, clusterName, now, func(record *ClusterInstallNodeRecord, t time.Time) {
+		record.ISOCreated = true
+		record.ISOCreatedAt = &t
+	})
+}
+
+func bootRequestedClusterNodes(existing map[string]ClusterInstallNodeRecord, state v1alpha1.State, clusterName string, now time.Time) map[string]ClusterInstallNodeRecord {
+	return updateClusterInstallNodeRecords(existing, state, clusterName, now, func(record *ClusterInstallNodeRecord, t time.Time) {
+		record.BootRequested = true
+		record.BootRequestedAt = &t
+	})
+}
+
+func bootedClusterNodes(existing map[string]ClusterInstallNodeRecord, state v1alpha1.State, clusterName string, now time.Time) map[string]ClusterInstallNodeRecord {
+	return updateClusterInstallNodeRecords(existing, state, clusterName, now, func(record *ClusterInstallNodeRecord, t time.Time) {
+		if !record.BootRequested {
+			record.BootRequested = true
+			record.BootRequestedAt = &t
+		}
+		record.BootVerified = true
+		record.BootVerifiedAt = &t
+		record.Booted = true
+		record.BootedAt = &t
+	})
+}
+
+func installWaitStartedClusterNodes(existing map[string]ClusterInstallNodeRecord, state v1alpha1.State, clusterName string, now time.Time) map[string]ClusterInstallNodeRecord {
+	return updateClusterInstallNodeRecords(existing, state, clusterName, now, func(record *ClusterInstallNodeRecord, t time.Time) {
+		record.InstallWaitStarted = true
+		record.InstallWaitStartedAt = &t
+	})
+}
+
+func updateClusterInstallNodeRecords(existing map[string]ClusterInstallNodeRecord, state v1alpha1.State, clusterName string, now time.Time, update func(*ClusterInstallNodeRecord, time.Time)) map[string]ClusterInstallNodeRecord {
 	names := applyClusterMachineNames(state, clusterName)
 	if len(names) == 0 {
-		return nil
+		return existing
 	}
 	t := now.UTC()
-	out := make(map[string]ClusterInstallNodeRecord, len(names))
+	out := make(map[string]ClusterInstallNodeRecord, len(existing)+len(names))
+	for name, record := range existing {
+		out[name] = record
+	}
 	for _, name := range names {
-		out[name] = ClusterInstallNodeRecord{Booted: true, BootedAt: &t}
+		record := out[name]
+		update(&record, t)
+		out[name] = record
 	}
 	return out
 }

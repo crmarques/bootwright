@@ -43,6 +43,13 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 		t.Fatalf("profile dataDisks = %v", dataDisks)
 	}
 	osInstall := first["osInstall"].(map[string]any)
+	marker := osInstall["marker"].(map[string]any)
+	if marker["owner"] != "bootwright" || marker["path"] != "/etc/bootwright/install-marker.json" {
+		t.Fatalf("marker vars = %v", marker)
+	}
+	if hash, ok := marker["desiredHash"].(string); !ok || !strings.HasPrefix(hash, "sha256:") {
+		t.Fatalf("marker desiredHash = %v, want sha256", marker["desiredHash"])
+	}
 	image := osInstall["image"].(map[string]any)
 	if image["kind"] != "media" || image["key"] != "rhel-9.8-x86_64-dvd.iso" {
 		t.Fatalf("image vars = %v", image)

@@ -124,6 +124,13 @@ Generated output boundaries are part of the safety contract:
   restrictive file modes.
 - Per-cluster install records live at
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/install-record.json`.
+- Per-resource convergence safety records live under
+  `/var/lib/bootwright/contexts/<context>/runs/safety/`. They may contain
+  owner identity, non-secret desired hashes, observed-state classifications,
+  and task/resource identifiers, but never secret bytes.
+- Managed machine OS install markers live on the installed machine at
+  `/etc/bootwright/install-marker.json` by default. The marker contains
+  Bootwright ownership metadata and a non-secret desired hash only.
 - `bootwright render --output-dir <dir> --sensitive` writes
   operator-requested secret-inlined tool inputs under `<dir>` with restrictive
   file modes. The command must fail without `--sensitive`.

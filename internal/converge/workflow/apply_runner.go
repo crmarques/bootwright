@@ -78,5 +78,12 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}
+	safetyStatus := ConvergeSafetyStatusReconciled
+	if result.Skipped {
+		safetyStatus = ConvergeSafetyStatusSkipped
+	}
+	if recordErr := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, safetyStatus, now); recordErr != nil {
+		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
+	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 }

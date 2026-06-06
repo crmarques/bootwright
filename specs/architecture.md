@@ -132,6 +132,17 @@ These boundaries are reflected in rendering:
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.
 
+Convergence is resumable by default. Each mutating workflow task must run
+under its existing resource lock, derive a non-secret desired hash and
+Bootwright owner identity, probe current reality when the task has a reliable
+probe, and classify the result as matching, safe drift, foreign, unknown, or
+destructive drift. Matching work is skipped, safe Bootwright-owned drift may be
+reconciled, and foreign, unknown, or destructive drift fails closed unless the
+task defines a narrow command-scoped `--override` path. Generic task safety
+records are durable non-secret evidence; concrete probes such as cluster
+install records, add-on records, managed OS markers, provider metadata, and
+storage comparison results decide whether a rerun can skip or must fail.
+
 Shared machine services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about
 them. The graph owns service identity, consuming clusters, machine placement,

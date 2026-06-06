@@ -98,6 +98,22 @@ func TestOpenShiftManagedVIPFixture(t *testing.T) {
 	}
 }
 
+func TestEnvironmentSafetyDestroyProtectionValidation(t *testing.T) {
+	for _, value := range []string{v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride} {
+		t.Run(value, func(t *testing.T) {
+			dir := t.TempDir()
+			files := newBaselineFiles()
+			files["environment.yaml"] = strings.Replace(newEnvironmentYAML,
+				"  baseDomain: bootwright.test\n",
+				"  baseDomain: bootwright.test\n  safety:\n    destroyProtection: "+value+"\n", 1)
+			writeFiles(t, dir, files)
+			if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+				t.Fatalf("LoadNormalizeValidate: %v", err)
+			}
+		})
+	}
+}
+
 func TestContainerClusterNetworkingValidation(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -620,6 +636,13 @@ spec:
 				"  baseDomain: bootwright.test\n",
 				"  baseDomain: bootwright.test\n  secretStorage: { mode: invalid }\n", 1)},
 			wantSubstring: `spec.secretStorage.mode "invalid" must be one of {source, context}`,
+		},
+		{
+			name: "destroy-protection-rejected",
+			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
+				"  baseDomain: bootwright.test\n",
+				"  baseDomain: bootwright.test\n  safety:\n    destroyProtection: production\n", 1)},
+			wantSubstring: `spec.safety.destroyProtection "production" must be one of {allow, requiredOverride}`,
 		},
 		{
 			name: "generated-ssh-key-type-rejected",

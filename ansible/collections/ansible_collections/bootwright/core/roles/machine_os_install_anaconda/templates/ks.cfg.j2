@@ -75,5 +75,13 @@ chmod 0440 /etc/sudoers.d/99-bootwright-wheel
 {% if not (ks.passwordAuthentication | default(false)) %}
 sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
 {% endif %}
+{% set marker = bootwright_component.osInstall.marker | default({}) %}
+{% if marker.path | default('') | length > 0 %}
+mkdir -p {{ marker.path | dirname }}
+cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'
+{{ marker | to_nice_json }}
+BOOTWRIGHT_INSTALL_MARKER
+chmod 0644 {{ marker.path }}
+{% endif %}
 systemctl enable sshd
 %end

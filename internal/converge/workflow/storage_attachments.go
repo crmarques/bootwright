@@ -81,6 +81,9 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 			return applyTaskResult{id: task.Entry.ID, err: err}
 		}
 	}
+	if err := MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, ConvergeSafetyStatusReconciled, time.Now()); err != nil {
+		return applyTaskResult{id: task.Entry.ID, err: err}
+	}
 	return applyTaskResult{id: task.Entry.ID}
 }
 

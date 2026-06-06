@@ -33,6 +33,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		check         bool
 		askBecomePass bool
 		yes           bool
+		override      bool
 		stage         string
 	)
 	use := "destroy"
@@ -62,6 +63,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 	cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the destroy confirmation prompt")
+	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	if options.stageSelector {
 		flags.output = outputText
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
@@ -147,17 +149,25 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 				plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_infra_destroy_context_sweep=true")
 			}
 		}
+		destroySafety := workflow.EvaluateDestroySafety(plan.state, override)
+		if override {
+			plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_destroy_override=true")
+		}
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, destroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, destroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, destroyDryRunSafetyReport(destroySafety, override), 0)
+		}
+		if !dryRun && destroySafety.RequiredOverride {
+			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
 		}
 		if !dryRun {
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
 		}
+		printDestroySafety(stdout, destroySafety, override, dryRun)
 		if artifactServerOnly {
 			printDestroyArtifactServerPreview(stdout, plan.state)
 		} else {
@@ -235,12 +245,37 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 }
 
 func destroyTopLevelFlagChanged(cmd *cobra.Command) bool {
-	for _, name := range []string{"ansible-playbook", "ask-become-pass", "check", "clusters", "dry-run", "output", "stage", "yes"} {
+	for _, name := range []string{"ansible-playbook", "ask-become-pass", "check", "clusters", "dry-run", "output", "override", "stage", "yes"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
 	}
 	return false
+}
+
+func destroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override bool) *scopeDryRunDestroySafety {
+	if len(decision.Reasons) == 0 {
+		return nil
+	}
+	return &scopeDryRunDestroySafety{
+		OverrideRequired: decision.RequiredOverride,
+		Override:         override,
+		Reasons:          append([]string(nil), decision.Reasons...),
+	}
+}
+
+func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {
+	if len(decision.Reasons) == 0 {
+		return
+	}
+	message := decision.Summary()
+	if override {
+		cliout.NewContinuation(stdout).Warning("destroy override", message+"; --override supplied for this command only")
+		return
+	}
+	if dryRun {
+		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --override")
+	}
 }
 
 func destroyStageScope(stage string) (scopeSpec, error) {

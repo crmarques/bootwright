@@ -260,6 +260,12 @@ blocked while the previous apply ledger has a fresh process lease. If an
 interrupted process leaves only a stale ledger, the next `apply` or `destroy`
 marks it cancelled before continuing.
 
+To protect an environment from accidental teardown, set
+`Environment.spec.safety.destroyProtection: requiredOverride`. Protected
+destroy commands fail unless that same command includes `--override`.
+`--yes` only skips the confirmation prompt; it does not authorize protected
+destroy. Dry-run destroy output reports the protection without mutating state.
+
 Stable JSON output is intentionally limited. Use these forms for automation:
 
 | Command | JSON support | Behavior |
@@ -283,7 +289,8 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright destroy --stage infra --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright destroy --stage clusters --dry-run --output json` | Supported | Dry-run destroy plan |
 | `bootwright apply ... --yes` | Not JSON | Mutates selected scope |
-| `bootwright destroy ... --yes` | Not JSON | Destroys selected scope |
+| `bootwright destroy ... --yes` | Not JSON | Destroys selected scope when not protected |
+| `bootwright destroy ... --override --yes` | Not JSON | Destroys protected selected scope |
 
 For mutating automation, run the apply or destroy command with `--yes`, then
 poll `bootwright status --output json` or `bootwright status --watch`.

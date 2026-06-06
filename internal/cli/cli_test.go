@@ -540,6 +540,86 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	}
 }
 
+func TestProtectedDestroyRequiresOverrideBeyondYes(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--yes",
+		"--ask-become-pass=false",
+	)
+	if code == 0 {
+		t.Fatalf("protected destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	for _, want := range []string{"destroyProtection=requiredOverride", "requires --override"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("protected destroy stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stdout, "Start") || strings.Contains(stdout, "Bundle") {
+		t.Fatalf("protected destroy progressed to workflow setup\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestProtectedDestroyDryRunReportsProtection(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("protected destroy dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.DestroySafety == nil {
+		t.Fatalf("dry-run report missing destroy safety: %+v", report)
+	}
+	if !report.DestroySafety.OverrideRequired || report.DestroySafety.Override {
+		t.Fatalf("destroy safety = %+v, want required without override", report.DestroySafety)
+	}
+	if got := strings.Join(report.DestroySafety.Reasons, "\n"); !strings.Contains(got, "destroyProtection=requiredOverride") {
+		t.Fatalf("destroy safety reasons = %q", got)
+	}
+}
+
+func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--override",
+		"--yes",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("protected destroy override exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.DestroySafety == nil {
+		t.Fatalf("dry-run report missing destroy safety: %+v", report)
+	}
+	if report.DestroySafety.OverrideRequired || !report.DestroySafety.Override {
+		t.Fatalf("destroy safety = %+v, want override supplied and no requirement remaining", report.DestroySafety)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_destroy_override=true") {
+		t.Fatalf("extra vars missing destroy override: %+v", report.ExtraVars)
+	}
+}
+
 func TestScopedCheckDryRunJSONDoesNotPromptForBecome(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -3741,6 +3821,35 @@ func initTestContext(t *testing.T, fixtureName string) contextstore.Context {
 	t.Helper()
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath(fixtureName))
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := contextstore.NewContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ctx
+}
+
+func initProtectedTestContext(t *testing.T, fixtureName string) contextstore.Context {
+	t.Helper()
+	setTestHomeAndRoot(t)
+	inputDir := copyFixtureYAML(t, fixtureName)
+	path := filepath.Join(inputDir, "environment.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read environment fixture: %v", err)
+	}
+	body := strings.Replace(string(data),
+		"  baseDomain:",
+		"  safety:\n    destroyProtection: "+v1alpha1.EnvironmentDestroyProtectionRequiredOverride+"\n  baseDomain:", 1)
+	if body == string(data) {
+		t.Fatal("environment fixture did not contain spec.baseDomain")
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write protected environment fixture: %v", err)
+	}
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", inputDir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}

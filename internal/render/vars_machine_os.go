@@ -1,6 +1,9 @@
 package render
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -152,7 +155,21 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"trustDir":       sshtrust.DirForSecrets(secretsDir),
 		}
 	}
+	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
 	return out
+}
+
+func machineOSInstallMarkerVars(osInstall map[string]any, clusterName, machineName, profileName string) map[string]any {
+	data, _ := json.Marshal(osInstall)
+	sum := sha256.Sum256(data)
+	return map[string]any{
+		"owner":       "bootwright",
+		"cluster":     clusterName,
+		"machine":     machineName,
+		"profile":     profileName,
+		"path":        "/etc/bootwright/install-marker.json",
+		"desiredHash": "sha256:" + hex.EncodeToString(sum[:]),
+	}
 }
 
 func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool) map[string]any {

@@ -36,5 +36,12 @@ func runOneExtensionTask(ctx context.Context, stdout io.Writer, stderr io.Writer
 	default:
 		err = fmt.Errorf("unsupported addon task kind %s", task.Entry.Kind)
 	}
+	if err == nil {
+		status := ConvergeSafetyStatusReconciled
+		if result.Skipped {
+			status = ConvergeSafetyStatusSkipped
+		}
+		err = MarkApplyTaskConvergeSafety(runsDir, opts.ContextName, runID, task, status, time.Now())
+	}
 	return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, skippedReason: result.Reason, err: err}
 }

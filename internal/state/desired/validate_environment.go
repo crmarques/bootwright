@@ -57,6 +57,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		if env.Spec.BaseDomain == "" {
 			errs = append(errs, fmt.Sprintf("Environment/%s spec.baseDomain is required", env.Metadata.Name))
 		}
+		errs = append(errs, validateEnvironmentSafety(env)...)
 		errs = append(errs, validateEnvironmentDefaults(env)...)
 		errs = append(errs, validateEnvironmentSecretStorage(env)...)
 		errs = append(errs, validateEnvironmentResources(env)...)
@@ -69,6 +70,19 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateComponentImages(env)...)
 	}
 	return errs
+}
+
+func validateEnvironmentSafety(env v1alpha1.Environment) []string {
+	switch env.Spec.Safety.DestroyProtection {
+	case "", v1alpha1.EnvironmentDestroyProtectionAllow, v1alpha1.EnvironmentDestroyProtectionRequiredOverride:
+		return nil
+	default:
+		return []string{fmt.Sprintf("Environment/%s spec.safety.destroyProtection %q must be one of {%s, %s}",
+			env.Metadata.Name,
+			env.Spec.Safety.DestroyProtection,
+			v1alpha1.EnvironmentDestroyProtectionAllow,
+			v1alpha1.EnvironmentDestroyProtectionRequiredOverride)}
+	}
 }
 
 func validateEnvironmentDefaults(env v1alpha1.Environment) []string {

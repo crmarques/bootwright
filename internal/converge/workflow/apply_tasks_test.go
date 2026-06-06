@@ -208,6 +208,56 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 	if !strings.HasSuffix(runner.lastSpec.Playbook, "bootwright.core.task_provider_services_apply") {
 		t.Fatalf("playbook = %q", runner.lastSpec.Playbook)
 	}
+	record, found, err := LoadConvergeSafetyRecord(runsDir, "providerServices/provider.service-host")
+	if err != nil || !found {
+		t.Fatalf("LoadConvergeSafetyRecord found=%v err=%v", found, err)
+	}
+	wantHash, err := ApplyTaskDesiredHash(task)
+	if err != nil {
+		t.Fatalf("ApplyTaskDesiredHash: %v", err)
+	}
+	if record.DesiredHash != wantHash || record.Owner.Manager != ConvergeSafetyOwner || record.Status != ConvergeSafetyStatusReconciled {
+		t.Fatalf("safety record = %+v, want Bootwright reconciled record with desired hash %s", record, wantHash)
+	}
+	if record.Observation.Classification != ConvergeSafetyUnknown {
+		t.Fatalf("safety observation = %+v, want unknown generic provider observation", record.Observation)
+	}
+}
+
+func TestConvergeSafetyClassification(t *testing.T) {
+	const desiredHash = "sha256:desired"
+	cases := []struct {
+		name   string
+		record ConvergeSafetyRecord
+		want   ConvergeSafetyClassification
+	}{
+		{
+			name: "missing",
+			want: ConvergeSafetyMissing,
+		},
+		{
+			name:   "match",
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
+			want:   ConvergeSafetyMatch,
+		},
+		{
+			name:   "drift",
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: "sha256:old", Owner: ConvergeSafetyOwnerIdentity{Manager: ConvergeSafetyOwner}},
+			want:   ConvergeSafetyDrift,
+		},
+		{
+			name:   "foreign",
+			record: ConvergeSafetyRecord{ResourceID: "resource", DesiredHash: desiredHash, Owner: ConvergeSafetyOwnerIdentity{Manager: "other"}},
+			want:   ConvergeSafetyForeign,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ClassifyConvergeSafety(tc.record, desiredHash, ConvergeSafetyOwner); got != tc.want {
+				t.Fatalf("ClassifyConvergeSafety = %s, want %s", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestRunApplyTaskGraphFailsWhenTasksCannotMakeProgress(t *testing.T) {
@@ -693,6 +743,55 @@ func TestRunApplyTaskGraphResumesPostBootInstallAtWait(t *testing.T) {
 	}
 	if connection.IngressBaseDomain != "apps.sno-libvirt.bootwright.test" {
 		t.Fatalf("connection ingress base domain = %q", connection.IngressBaseDomain)
+	}
+}
+
+func TestClusterInstallRecordTracksNodeSafePoints(t *testing.T) {
+	dir := t.TempDir()
+	state := loadWorkflowFixtureState(t, "001-sno-libvirt")
+	secretsDir := writeWorkflowInstallerSecrets(t, dir)
+	clustersDir := filepath.Join(dir, "clusters")
+	runner := &fakeRunner{}
+	ledger, err := RunApplyTaskGraph(context.Background(), io.Discard, io.Discard, filepath.Join(dir, "runs"), RunOptions{
+		State:              state,
+		RenderedDir:        filepath.Join(dir, "rendered"),
+		ClustersDir:        clustersDir,
+		RunsDir:            filepath.Join(dir, "runs"),
+		SecretsDir:         secretsDir,
+		ManagedServicesDir: filepath.Join(dir, "managed-services"),
+		ProviderStateDir:   filepath.Join(dir, "provider-state"),
+		BundleDir:          filepath.Join(dir, "bundle"),
+	}, applyContainerClusterTarget(), "", PlanApplyTasks(applyContainerClusterTarget(), state), ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+		return runner
+	})
+	if err != nil {
+		t.Fatalf("RunApplyTaskGraph: %v", err)
+	}
+	if ledger.Status != RunStatusOK {
+		t.Fatalf("ledger status = %s, want ok", ledger.Status)
+	}
+	record, found, err := LoadClusterInstallRecord(clustersDir, "sno-libvirt")
+	if err != nil || !found {
+		t.Fatalf("LoadClusterInstallRecord found=%v err=%v", found, err)
+	}
+	if record.Status != ClusterInstallStatusInstalled || record.Phase != ClusterInstallPhaseComplete {
+		t.Fatalf("record = %+v, want installed complete", record)
+	}
+	if len(record.Nodes) != 1 {
+		t.Fatalf("node records = %+v, want one node", record.Nodes)
+	}
+	node := record.Nodes["master-0"]
+	if !node.ISOCreated || node.ISOCreatedAt == nil {
+		t.Fatalf("node ISO safe point = %+v, want set", node)
+	}
+	if !node.BootRequested || node.BootRequestedAt == nil {
+		t.Fatalf("node boot requested safe point = %+v, want set", node)
+	}
+	if !node.BootVerified || node.BootVerifiedAt == nil || !node.Booted || node.BootedAt == nil {
+		t.Fatalf("node boot verified safe point = %+v, want set", node)
+	}
+	if !node.InstallWaitStarted || node.InstallWaitStartedAt == nil {
+		t.Fatalf("node install wait safe point = %+v, want set", node)
 	}
 }
 

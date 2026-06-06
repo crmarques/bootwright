@@ -111,6 +111,9 @@ const (
 	EnvironmentComponentExternal = "external"
 	EnvironmentComponentManaged  = "managed"
 
+	EnvironmentDestroyProtectionAllow            = "allow"
+	EnvironmentDestroyProtectionRequiredOverride = "requiredOverride"
+
 	SecretStorageModeSource  = "source"
 	SecretStorageModeContext = "context"
 

@@ -454,23 +454,41 @@ func TestMachineInfraPreparePreparesHostPackages(t *testing.T) {
 
 func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
+	validateInputsIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install inputs")
 	validateSourceIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install source")
 	resolvePathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install paths")
 	resolveVirtualMediaPathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS virtual media paths")
 	resolveFilesIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install files")
 	resolveSourcePathIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install source path")
+	readMarkerIdx := findAnsibleTask(t, topTasks, "Read managed OS install marker before install")
+	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse reachable managed OS without matching Bootwright marker")
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
 	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
+	verifySSHIdx := findAnsibleTask(t, topTasks, "Verify managed OS SSH authentication")
+	writeMarkerIdx := findAnsibleTask(t, topTasks, "Write managed OS install marker")
+	validateInputs, ok := topTasks[validateInputsIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", topTasks[validateInputsIdx]["name"])
+	}
+	if got := fmt.Sprint(validateInputs["that"]); !strings.Contains(got, "osInstall.marker.path") || !strings.Contains(got, "osInstall.marker.desiredHash") {
+		t.Fatalf("Anaconda input validation must require marker path and desired hash, got %v", validateInputs["that"])
+	}
 	if validateSourceIdx >= resolvePathsIdx {
 		t.Fatalf("Anaconda role must validate install source before resolving install paths")
 	}
 	if !(resolvePathsIdx < resolveVirtualMediaPathsIdx && resolveVirtualMediaPathsIdx < resolveFilesIdx && resolveFilesIdx < resolveSourcePathIdx) {
 		t.Fatalf("Anaconda role must resolve virtual media paths before install files and the effective source path")
 	}
+	if !(readMarkerIdx < refuseMarkerIdx && refuseMarkerIdx < installBlockIdx) {
+		t.Fatalf("Anaconda role must check the managed OS marker before the install block")
+	}
 	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
 		t.Fatalf("Anaconda role must clean managed OS virtual media after SSH is ready and before host-key trust")
+	}
+	if !(recordHostKeyIdx < verifySSHIdx && verifySSHIdx < writeMarkerIdx) {
+		t.Fatalf("Anaconda role must write the managed OS marker after SSH verification")
 	}
 	assertIncludeRoleName(t, topTasks[cleanupMediaIdx], "{{ bootwright_component.mediaPrepareRole }}")
 	cleanupVars, ok := topTasks[cleanupMediaIdx]["vars"].(map[string]any)
@@ -491,7 +509,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not a set_fact task", topTasks[resolveFilesIdx]["name"])
 	}
-	for _, want := range []string{"bootwright_os_source_iso", "bootwright_os_source_id_path", "bootwright_os_install_iso", "bootwright_os_legacy_install_iso", "bootwright_os_install_tmpdir"} {
+	for _, want := range []string{"bootwright_os_source_iso", "bootwright_os_source_id_path", "bootwright_os_install_iso", "bootwright_os_legacy_install_iso", "bootwright_os_install_tmpdir", "bootwright_os_marker_path", "bootwright_os_marker_desired_hash", "bootwright_os_marker_payload"} {
 		if _, ok := resolveFiles[want]; !ok {
 			t.Fatalf("%s missing %s", topTasks[resolveFilesIdx]["name"], want)
 		}
@@ -732,6 +750,9 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"{% set ssh_key = '' %}",
 		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
 		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
+		"{% set marker = bootwright_component.osInstall.marker | default({}) %}",
+		"cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'",
+		"{{ marker | to_nice_json }}",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Kickstart template missing %q", want)

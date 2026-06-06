@@ -136,6 +136,9 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # Destroy infrastructure for selected clusters only
   bootwright destroy --stage infra --clusters dc1-ocp,dc1-child-ocp --yes
 
+  # Destroy a protected environment
+  bootwright destroy --stage infra --override --yes
+
   # Remove selected OpenShift cluster install state
   bootwright destroy --stage clusters --clusters dc1-ocp --yes`,
 	})

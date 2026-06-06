@@ -57,6 +57,9 @@ Rules:
 - Every referenced Bootwright resource must also be selected.
 - `containerClusters[]` and `storageClusters[]`, when set, are the effective
   fleet selection lists for render, apply, status, destroy, and check flows.
+- `safety.destroyProtection`, when set, must be `allow` or
+  `requiredOverride`. Empty means `allow`. Bootwright never infers protection
+  from environment names, context names, labels, or cluster names.
 - `defaults.install.pullSecretRef` and `defaults.install.nodeSSH` fill omitted
   cluster install values only.
 - `defaults.artifactAccess`, when set, is copied into selected
@@ -434,5 +437,12 @@ Rules:
   `ContainerCluster` names and must not run context-wide VM cleanup.
 - `destroy --stage clusters` removes OpenShift cluster install runtime state
   for selected or all `ContainerCluster` names.
+- `destroy --stage infra|clusters --override` is required when selected state
+  contains `Environment.spec.safety.destroyProtection: requiredOverride`.
+  `--yes` only skips the confirmation prompt and never implies `--override`.
+- `apply --override` is command-scoped. It may continue past
+  Bootwright-owned unsafe mismatch checks that have an explicit override path,
+  but it must not bypass active-run leases, validation, secret checks, or
+  foreign-resource ownership failures.
 - `bootwright host trust` records SSH server-key trust for declared machines.
 - Rendered effective state must not include secret bytes.

@@ -68,6 +68,9 @@ Destroy uses the same stage selector shape. `destroy --stage infra` tears down
 provider infrastructure and, when unscoped, sweeps current-context VMs that
 provider adapters can identify. `destroy --stage clusters` removes cluster
 install runtime state without removing provider VMs.
+When `Environment.spec.safety.destroyProtection` is `requiredOverride`,
+mutating destroy requires `--override` on that command. `--yes` only skips the
+confirmation prompt.
 
 Every apply writes a current run ledger under the context state directory.
 `bootwright status` reads that ledger without contacting provider hosts, BMCs,

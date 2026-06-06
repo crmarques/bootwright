@@ -22,6 +22,7 @@ type Environment struct {
 type EnvironmentSpec struct {
 	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
 	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
+	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`
@@ -32,6 +33,10 @@ type EnvironmentSpec struct {
 	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	Secrets           EnvironmentSecrets                       `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
+}
+
+type EnvironmentSafetySpec struct {
+	DestroyProtection string `yaml:"destroyProtection,omitempty" json:"destroyProtection,omitempty"`
 }
 
 type EnvironmentDefaultsSpec struct {

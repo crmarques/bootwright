@@ -9,9 +9,11 @@
       - (bootwright_component.osInstall.ssh.address | default('') | length) > 0
       - (bootwright_component.osInstall.ssh.user | default('') | length) > 0
       - (bootwright_component.osInstall.ssh.privateKeyPath | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.path | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.desiredHash | default('') | length) > 0
       - bootwright_component.boot is mapping
       - bootwright_component.boot.agentIso is mapping
-    fail_msg: "managed Anaconda OS install needs image, kickstart, SSH, and boot virtual-media vars"
+    fail_msg: "managed Anaconda OS install needs image, kickstart, SSH, marker, and boot virtual-media vars"
 
 - name: Validate managed Anaconda install source
   ansible.builtin.assert:
@@ -57,6 +59,9 @@
     bootwright_os_install_iso: "{{ bootwright_os_stage_path }}"
     bootwright_os_legacy_install_iso: "{{ bootwright_os_install_root }}/install.iso"
     bootwright_os_install_tmpdir: "{{ bootwright_os_install_root }}/tmp"
+    bootwright_os_marker_path: "{{ bootwright_component.osInstall.marker.path }}"
+    bootwright_os_marker_desired_hash: "{{ bootwright_component.osInstall.marker.desiredHash }}"
+    bootwright_os_marker_payload: "{{ bootwright_component.osInstall.marker | to_json }}"
   changed_when: false
 
 - name: Resolve managed OS install source path
@@ -119,6 +124,52 @@
   ansible.builtin.set_fact:
     bootwright_managed_os_already_ready: "{{ (bootwright_os_pre_ssh_auth.rc | default(1) | int) == 0 }}"
   changed_when: false
+
+- name: Read managed OS install marker before install
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - "cat {{ bootwright_os_marker_path | quote }}"
+  delegate_to: localhost
+  register: bootwright_os_pre_marker
+  failed_when: false
+  changed_when: false
+  when: bootwright_managed_os_already_ready | bool
+
+- name: Resolve managed OS install marker match
+  ansible.builtin.set_fact:
+    bootwright_os_pre_marker_matches: >-
+      {{
+        (bootwright_os_pre_marker.rc | default(1) | int) == 0
+        and (
+          ('"owner": "bootwright"' in (bootwright_os_pre_marker.stdout | default('')))
+          or ('"owner":"bootwright"' in (bootwright_os_pre_marker.stdout | default('')))
+        )
+        and (bootwright_os_marker_desired_hash in (bootwright_os_pre_marker.stdout | default('')))
+      }}
+  changed_when: false
+  when: bootwright_managed_os_already_ready | bool
+
+- name: Refuse reachable managed OS without matching Bootwright marker
+  ansible.builtin.fail:
+    msg: >-
+      managed OS at {{ bootwright_component.osInstall.ssh.address }} accepts SSH
+      but {{ bootwright_os_marker_path }} is absent or does not match desired hash
+      {{ bootwright_os_marker_desired_hash }}; refusing to reinstall, wipe, or
+      adopt without --override
+  when:
+    - bootwright_managed_os_already_ready | bool
+    - not (bootwright_os_pre_marker_matches | default(false) | bool)
+    - not (bootwright_install_override | default(false) | bool)
 
 - name: Install managed OS from virtual media
   when: not (bootwright_managed_os_already_ready | bool)
@@ -389,4 +440,25 @@
   retries: 60
   delay: 10
   until: bootwright_os_ssh_auth.rc == 0
+  changed_when: false
+
+- name: Write managed OS install marker
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - >-
+        sudo install -d -m 0755 {{ bootwright_os_marker_path | dirname | quote }}
+        && printf '%s\n' {{ bootwright_os_marker_payload | quote }}
+        | sudo tee {{ bootwright_os_marker_path | quote }} >/dev/null
+        && sudo chmod 0644 {{ bootwright_os_marker_path | quote }}
+  delegate_to: localhost
   changed_when: false
