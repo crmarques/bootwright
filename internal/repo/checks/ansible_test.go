@@ -487,9 +487,6 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	readMarkerIdx := findAnsibleTask(t, topTasks, "Read managed OS install marker before install")
 	refuseMarkerIdx := findAnsibleTask(t, topTasks, "Refuse reachable managed OS without matching Bootwright marker")
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
-	waitPowerOffIdx := findAnsibleTask(t, topTasks, "Wait for managed OS installer shutdown")
-	cleanupAfterShutdownIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after installer shutdown")
-	powerOnDiskIdx := findAnsibleTask(t, topTasks, "Power on managed OS from installed disk")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
 	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
@@ -511,35 +508,8 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !(readMarkerIdx < refuseMarkerIdx && refuseMarkerIdx < installBlockIdx) {
 		t.Fatalf("Anaconda role must check the managed OS marker before the install block")
 	}
-	if !(installBlockIdx < waitPowerOffIdx && waitPowerOffIdx < cleanupAfterShutdownIdx && cleanupAfterShutdownIdx < powerOnDiskIdx && powerOnDiskIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
-		t.Fatalf("Anaconda role must power off, clean virtual media, power on from disk, and then wait for SSH")
-	}
-	assertIncludeRoleName(t, topTasks[waitPowerOffIdx], "{{ bootwright_component.bootApplyRole }}")
-	waitPowerOffVars, ok := topTasks[waitPowerOffIdx]["vars"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s must pass wait vars, got %v", topTasks[waitPowerOffIdx]["name"], topTasks[waitPowerOffIdx])
-	}
-	if waitPowerOffVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" ||
-		waitPowerOffVars["bootwright_redfish_action"] != "wait_power_off" ||
-		waitPowerOffVars["bootwright_redfish_power_state_retries"] != "{{ bootwright_machine_os_install_poweroff_retries }}" ||
-		waitPowerOffVars["bootwright_redfish_power_state_delay_seconds"] != "{{ bootwright_machine_os_install_poweroff_delay_seconds }}" {
-		t.Fatalf("%s must wait for installer power-off with managed OS retry defaults, got vars=%v", topTasks[waitPowerOffIdx]["name"], waitPowerOffVars)
-	}
-	assertIncludeRoleName(t, topTasks[cleanupAfterShutdownIdx], "{{ bootwright_component.mediaPrepareRole }}")
-	cleanupAfterShutdownVars, ok := topTasks[cleanupAfterShutdownIdx]["vars"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[cleanupAfterShutdownIdx]["name"], topTasks[cleanupAfterShutdownIdx])
-	}
-	if cleanupAfterShutdownVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupAfterShutdownVars["bootwright_redfish_action_effective"] != "cleanup" {
-		t.Fatalf("%s must clean live and persistent managed OS media before disk power-on, got vars=%v", topTasks[cleanupAfterShutdownIdx]["name"], cleanupAfterShutdownVars)
-	}
-	assertIncludeRoleName(t, topTasks[powerOnDiskIdx], "{{ bootwright_component.bootApplyRole }}")
-	powerOnDiskVars, ok := topTasks[powerOnDiskIdx]["vars"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s must pass power-on vars, got %v", topTasks[powerOnDiskIdx]["name"], topTasks[powerOnDiskIdx])
-	}
-	if powerOnDiskVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || powerOnDiskVars["bootwright_redfish_action"] != "power_on_disk" {
-		t.Fatalf("%s must power on from disk after media cleanup, got vars=%v", topTasks[powerOnDiskIdx]["name"], powerOnDiskVars)
+	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
+		t.Fatalf("Anaconda role must let Kickstart reboot, wait for SSH, and then clean managed OS virtual media")
 	}
 	if !(recordHostKeyIdx < verifySSHIdx && verifySSHIdx < writeMarkerIdx) {
 		t.Fatalf("Anaconda role must write the managed OS marker after SSH verification")
@@ -769,7 +739,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s is not a set_fact task", tasks[resolveBootComponentIdx]["name"])
 	}
 	resolveBootExpr := fmt.Sprint(resolveBootComponent["bootwright_managed_os_boot_component"])
-	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "cdrom-first"} {
+	for _, want := range []string{"bootwright_os_stage_path", "bootwright_os_fetch_url", "bootOrder", "disk-first"} {
 		if !strings.Contains(resolveBootExpr, want) {
 			t.Fatalf("%s must resolve %q before media preparation: %s", tasks[resolveBootComponentIdx]["name"], want, resolveBootExpr)
 		}
@@ -798,7 +768,7 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		t.Fatalf("Kickstart template must not use an inline conditional around the SSH key lookup")
 	}
 	for _, want := range []string{
-		"poweroff",
+		"reboot",
 		"{% set rhsm = installer.rhsm | default({}) %}",
 		"{% if rhsm.enabled | default(false) %}",
 		"rhsm --organization=\"{{ lookup('ansible.builtin.file', rhsm.organizationPath) | trim }}\" --activation-key=\"{{ lookup('ansible.builtin.file', rhsm.activationKeyPath) | trim }}\"",
@@ -818,6 +788,11 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("Kickstart template missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"reboot --eject", "poweroff"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Kickstart template must rely on boot control, not %q", forbidden)
 		}
 	}
 }
@@ -921,15 +896,13 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	prepareIdx := findAnsibleTask(t, mainTasks, "Prepare Redfish virtual media")
 	validateMACsIdx := findAnsibleTask(t, mainTasks, "Validate declared MACs against Redfish inventory")
 	bootSequenceIdx := findAnsibleTask(t, mainTasks, "Boot node from Redfish virtual media")
-	waitPowerOffActionIdx := findAnsibleTask(t, mainTasks, "Wait for Redfish system to power off")
-	powerOnDiskActionIdx := findAnsibleTask(t, mainTasks, "Power on Redfish system from disk")
 	bootSequenceTasks := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "block")
 	bootSequenceAlways := nestedAnsibleTasks(t, mainTasks[bootSequenceIdx], "always")
 	powerIdx := findAnsibleTask(t, bootSequenceTasks, "Power node from virtual media")
 	postIdx := findAnsibleTask(t, bootSequenceTasks, "Set post-boot Redfish boot device")
 	restoreIdx := findAnsibleTask(t, bootSequenceAlways, "Restore Redfish certificate verification settings")
-	if !(validateActionIdx < systemIdx && systemIdx < prepareIdx && prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx && bootSequenceIdx < waitPowerOffActionIdx && waitPowerOffActionIdx < powerOnDiskActionIdx) {
-		t.Fatalf("boot_redfish imports must resolve the system, run media_prepare, boot sequence, and managed power actions in order")
+	if !(validateActionIdx < systemIdx && systemIdx < prepareIdx && prepareIdx < validateMACsIdx && validateMACsIdx < bootSequenceIdx) {
+		t.Fatalf("boot_redfish imports must resolve the system, run media_prepare, and boot sequence in order")
 	}
 	if !(powerIdx < postIdx) {
 		t.Fatalf("boot_redfish boot sequence must run power before post_boot")
@@ -938,9 +911,14 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not an assert task", mainTasks[validateActionIdx]["name"])
 	}
-	for _, want := range []string{"boot", "cleanup_media", "wait_power_off", "power_on_disk"} {
+	for _, want := range []string{"boot", "cleanup_media"} {
 		if !strings.Contains(fmt.Sprint(validateAction["that"]), want) {
 			t.Fatalf("boot_redfish action validation missing %q: %v", want, validateAction["that"])
+		}
+	}
+	for _, forbidden := range []string{"wait_power_off", "power_on_disk"} {
+		if strings.Contains(fmt.Sprint(validateAction["that"]), forbidden) {
+			t.Fatalf("boot_redfish action validation must not keep managed-only action %q: %v", forbidden, validateAction["that"])
 		}
 	}
 	if got := mainTasks[prepareIdx]["when"]; got != "bootwright_redfish_action_effective in ['boot', 'cleanup_media']" {
@@ -962,8 +940,6 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	assertIncludeTasksFile(t, bootSequenceTasks[postIdx], "boot/post_boot.yml")
 	assertIncludeTasksFile(t, bootSequenceAlways[restoreIdx], "media/restore_certificate_verification.yml")
 	assertIncludeTasksFile(t, mainTasks[systemIdx], "stage/system.yml")
-	assertIncludeTasksFile(t, mainTasks[waitPowerOffActionIdx], "boot/wait_power_off.yml")
-	assertIncludeTasksFile(t, mainTasks[powerOnDiskActionIdx], "boot/power_on_disk.yml")
 	if len(bootSequenceAlways) != 1 {
 		t.Fatalf("boot_redfish boot sequence always block should only restore Redfish certificate settings, got %d tasks", len(bootSequenceAlways))
 	}

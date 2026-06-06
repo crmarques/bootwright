@@ -3,7 +3,7 @@ text
 eula --agreed
 firstboot --disable
 skipx
-poweroff
+reboot
 {% set installer = bootwright_component.osInstall.installer | default({}) %}
 {% set rhsm = installer.rhsm | default({}) %}
 {% if rhsm.enabled | default(false) %}
