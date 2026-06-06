@@ -5,6 +5,7 @@
     - "!all"
     - min
   become: true
+  any_errors_fatal: true
   environment: "{{ bootwright_proxy_env | default({}) }}"
 
   pre_tasks:

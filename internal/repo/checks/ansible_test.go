@@ -227,6 +227,9 @@ func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
 	if got := plays[0]["strategy"]; got == "free" {
 		t.Fatalf("%s must use Ansible's default linear strategy so per-task host results stay grouped", path)
 	}
+	if got := plays[0]["any_errors_fatal"]; got != true {
+		t.Fatalf("%s must stop all selected managed OS machines when one host fails an unsafe-state guard, got any_errors_fatal=%v", path, got)
+	}
 }
 
 func TestShellTasksDeclareChangeAndFailure(t *testing.T) {
