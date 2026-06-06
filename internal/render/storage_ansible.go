@@ -60,11 +60,11 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
 }
 
-func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephNode, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	nodeName := node.Name
 	entry := map[string]any{}
 	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.Access.SSH != nil {
-		entry = machineInventoryEntry(machine, env, secretsDir, localPolicy)
+		entry = machineInventoryEntry(machine, env, paths, localPolicy)
 	} else {
 		entry["ansible_host"] = topology.NodeAddress(state, cluster, nodeName)
 	}
@@ -75,7 +75,7 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	return entry
 }
 
-func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
+func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	env := primaryEnvironment(state)
 	var out []any
 	for _, cluster := range managedStorageClusters(state) {
@@ -101,10 +101,10 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 			},
 			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
 		}
-		if registry := storageRegistryVars(ceph.Cephadm.Registry, env, secretsDir); len(registry) > 0 {
+		if registry := storageRegistryVars(ceph.Cephadm.Registry, env, paths.SecretsDir); len(registry) > 0 {
 			entry["registry"] = registry
 		}
-		if clusterSSH := storageClusterSSHVars(state, cluster, env, secretsDir); len(clusterSSH) > 0 {
+		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
 		}
 		out = append(out, entry)
@@ -112,7 +112,7 @@ func storageClustersVars(state v1alpha1.State, secretsDir string) []any {
 	return out
 }
 
-func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) map[string]any {
+func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, paths PathOptions) map[string]any {
 	if len(cluster.Spec.Ceph.Topology.Nodes) == 0 {
 		return nil
 	}
@@ -124,13 +124,13 @@ func storageClusterSSHVars(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	if machine.Spec.Access.SSH.User != "" {
 		out["user"] = machine.Spec.Access.SSH.User
 	}
-	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir); privatePath != "" {
+	if privatePath := secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); privatePath != "" {
 		out["privateKeyPath"] = privatePath
 	}
-	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir); publicPath != "" {
+	if publicPath := secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); publicPath != "" {
 		out["publicKeyPath"] = publicPath
 	}
-	if knownHostsPath := machineKnownHostsPath(machine, env, secretsDir); knownHostsPath != "" {
+	if knownHostsPath := machineKnownHostsPath(machine, env, paths); knownHostsPath != "" {
 		out["knownHostsPath"] = knownHostsPath
 	}
 	return out

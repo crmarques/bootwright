@@ -17,7 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
-func managedMachineOSInstallGroupsVars(state v1alpha1.State, secretsDir string) []any {
+func managedMachineOSInstallGroupsVars(state v1alpha1.State, paths PathOptions) []any {
 	var out []any
 	for _, cluster := range managedStorageClusters(state) {
 		ci, ok := storageClusterInstall(state, cluster)
@@ -30,8 +30,8 @@ func managedMachineOSInstallGroupsVars(state v1alpha1.State, secretsDir string) 
 			if !ok || !v1alpha1.MachineInstallsOS(machine) {
 				continue
 			}
-			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, secretsDir)
-			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, secretsDir); len(osInstall) > 0 {
+			component := machineComponentVars(state, ci, m, cluster.Metadata.Name, paths.SecretsDir)
+			if osInstall := machineOSInstallVars(state, ci, m, machine, cluster.Metadata.Name, paths); len(osInstall) > 0 {
 				component["osInstall"] = osInstall
 				boot := machineBootVarsWithISO(state, ci, m, cluster.Metadata.Name, fmt.Sprintf("os-%s-%s.iso", cluster.Metadata.Name, m.Name))
 				if boot != nil {
@@ -96,7 +96,7 @@ func storageClusterInstall(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}, len(machines) > 0
 }
 
-func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName, secretsDir string) map[string]any {
+func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, machine v1alpha1.Machine, clusterName string, paths PathOptions) map[string]any {
 	if machine.Spec.Access.SSH == nil {
 		return nil
 	}
@@ -113,7 +113,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		return nil
 	}
 	env := primaryEnvironment(state)
-	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.InstallSource, env, secretsDir)
+	sourceURL, imageRepositories, rhsm := machineImageInstallSourceVars(image.Spec.InstallSource, env, paths.SecretsDir)
 	profileRepositories := machineInstallRepositoryVars(profile.Spec.Installer.Anaconda.Repositories)
 	installer := map[string]any{
 		"type":         profile.Spec.Installer.Type,
@@ -137,7 +137,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"kickstart": map[string]any{
 			"hostname":               machineInstallHostname(profile, machine),
 			"sshUser":                machine.Spec.Access.SSH.User,
-			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
+			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
 			"packages":               append([]string(nil), profile.Spec.Customizations.Packages...),
@@ -150,9 +150,9 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		out["ssh"] = map[string]any{
 			"address":        v1alpha1.MachineSSHAddress(machine),
 			"user":           machine.Spec.Access.SSH.User,
-			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
-			"knownHostsPath": machineKnownHostsPath(machine, env, secretsDir),
-			"trustDir":       sshtrust.DirForSecrets(secretsDir),
+			"privateKeyPath": secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
+			"knownHostsPath": machineKnownHostsPath(machine, env, paths),
+			"trustDir":       sshtrust.DirForSecrets(paths.trustSecretsDir()),
 		}
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)

@@ -39,7 +39,10 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
 	defer os.RemoveAll(runtimeSecretsDir)
-	result, err := render.All(renderDir, opts.ClustersDir, runtimeSecretsDir, task.State)
+	result, err := render.AllWithPathOptions(renderDir, opts.ClustersDir, render.PathOptions{
+		SecretsDir:      runtimeSecretsDir,
+		TrustSecretsDir: opts.SecretsDir,
+	}, task.State)
 	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
@@ -59,6 +62,7 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 		ContextName:        contextName,
 		ContextSecretsDir:  opts.SecretsDir,
 		SecretsDir:         runtimeSecretsDir,
+		TrustSecretsDir:    opts.SecretsDir,
 		TaskRoot:           taskRoot,
 		BundleDir:          opts.BundleDir,
 		Executable:         opts.Executable,
@@ -92,6 +96,7 @@ type storageAttachmentExternalDetailsOptions struct {
 	ContextName        string
 	ContextSecretsDir  string
 	SecretsDir         string
+	TrustSecretsDir    string
 	TaskRoot           string
 	BundleDir          string
 	Executable         string
@@ -152,7 +157,7 @@ type externalDetailsSSHTarget struct {
 }
 
 func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.State, cluster v1alpha1.StorageCluster, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
-	targets, err := storageExportSSHExternalDetailsTargets(state, cluster, opts.SecretsDir, ssh)
+	targets, err := storageExportSSHExternalDetailsTargets(state, cluster, opts.SecretsDir, opts.TrustSecretsDir, ssh)
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +190,7 @@ func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.
 	return "", fmt.Errorf("StorageExport/%s spec.externalDetails.sshExecution failed on all targets: %s", export.Metadata.Name, strings.Join(failures, "; "))
 }
 
-func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alpha1.StorageCluster, secretsDir string, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) ([]externalDetailsSSHTarget, error) {
+func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alpha1.StorageCluster, secretsDir, trustSecretsDir string, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) ([]externalDetailsSSHTarget, error) {
 	env := workflowPrimaryEnvironment(state)
 	if len(ssh.MachineRefs) > 0 {
 		machines := map[string]v1alpha1.Machine{}
@@ -211,7 +216,7 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 				address:        address,
 				user:           machine.Spec.Access.SSH.User,
 				keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
-				knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir),
+				knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir, trustSecretsDir),
 			})
 		}
 		return targets, nil
@@ -241,18 +246,21 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 		address:        address,
 		user:           machine.Spec.Access.SSH.User,
 		keyPath:        secret.ResolveSSHPrivateKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, secretsDir),
-		knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir),
+		knownHostsPath: workflowMachineKnownHostsPath(machine, env, secretsDir, trustSecretsDir),
 	}}, nil
 }
 
-func workflowMachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string) string {
+func workflowMachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Environment, secretsDir, trustSecretsDir string) string {
 	if machine.Spec.Access.SSH == nil {
 		return ""
 	}
 	if machine.Spec.Access.SSH.KnownHostsRef.Name != "" {
 		return secret.ResolvePath(machine.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
 	}
-	return sshtrust.KnownHostsPathForSecrets(secretsDir)
+	if trustSecretsDir == "" {
+		trustSecretsDir = secretsDir
+	}
+	return sshtrust.KnownHostsPathForSecrets(trustSecretsDir)
 }
 
 func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {

@@ -26,18 +26,30 @@ import (
 // needs to filter hosts by machineRef in its task body. Provider and
 // InfraComponent layers target their own host groups for service convergence.
 func Inventory(state v1alpha1.State, secretsDir string) map[string]any {
-	return InventoryWithLocalityPolicy(state, secretsDir, locality.DefaultPolicy)
+	return InventoryWithPathOptions(state, PathOptions{SecretsDir: secretsDir})
+}
+
+func InventoryWithPathOptions(state v1alpha1.State, paths PathOptions) map[string]any {
+	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, paths, locality.DefaultPolicy, nil)
 }
 
 func InventoryWithLocalityPolicy(state v1alpha1.State, secretsDir string, localPolicy locality.Policy) map[string]any {
-	return InventoryWithLocalityPolicyAndOwnershipRecords(state, secretsDir, localPolicy, nil)
+	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, nil)
 }
 
 func InventoryWithOwnershipRecords(state v1alpha1.State, secretsDir string, records []ownership.ResourceRecord) map[string]any {
-	return InventoryWithLocalityPolicyAndOwnershipRecords(state, secretsDir, locality.DefaultPolicy, records)
+	return InventoryWithOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, records)
+}
+
+func InventoryWithOwnershipRecordsAndPathOptions(state v1alpha1.State, paths PathOptions, records []ownership.ResourceRecord) map[string]any {
+	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, paths, locality.DefaultPolicy, records)
 }
 
 func InventoryWithLocalityPolicyAndOwnershipRecords(state v1alpha1.State, secretsDir string, localPolicy locality.Policy, records []ownership.ResourceRecord) map[string]any {
+	return InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state, PathOptions{SecretsDir: secretsDir}, localPolicy, records)
+}
+
+func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1.State, paths PathOptions, localPolicy locality.Policy, records []ownership.ResourceRecord) map[string]any {
 	infraHostSet := infraReferencedHosts(state)
 	providerHostSet := providerReferencedHosts(state)
 	infraComponentHostSet := infraComponentReferencedHosts(state)
@@ -65,11 +77,11 @@ func InventoryWithLocalityPolicyAndOwnershipRecords(state v1alpha1.State, secret
 		if !ok || h.Spec.Access.SSH == nil {
 			continue
 		}
-		hosts[name] = machineInventoryEntry(h, env, secretsDir, localPolicy)
+		hosts[name] = machineInventoryEntry(h, env, paths, localPolicy)
 	}
 	for _, cluster := range managedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			hosts[storageInventoryHostName(cluster, node.Name)] = storageNodeInventoryEntry(state, cluster, node, env, secretsDir, localPolicy)
+			hosts[storageInventoryHostName(cluster, node.Name)] = storageNodeInventoryEntry(state, cluster, node, env, paths, localPolicy)
 		}
 	}
 	for name, entry := range recorded.Hosts {
@@ -96,7 +108,7 @@ func InventoryWithLocalityPolicyAndOwnershipRecords(state v1alpha1.State, secret
 			hosts[hostName] = entry
 		}
 	}
-	for name, entry := range machineTaskHostEntries(state, env, secretsDir, localPolicy) {
+	for name, entry := range machineTaskHostEntries(state, env, paths, localPolicy) {
 		hosts[name] = entry
 	}
 	children := map[string]any{
@@ -167,7 +179,7 @@ func ManagedOSHostName(clusterName, machineName string) string {
 	return "machine__storage__" + clusterName + "__" + machineName
 }
 
-func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	sshAddress := v1alpha1.MachineSSHAddress(h)
 	entry := map[string]any{
 		"ansible_host":         sshAddress,
@@ -180,23 +192,23 @@ func machineInventoryEntry(h v1alpha1.Machine, env *v1alpha1.Environment, secret
 	if h.Spec.Access.SSH.User != "" {
 		entry["ansible_user"] = h.Spec.Access.SSH.User
 	}
-	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, env, secretsDir); path != "" {
+	if path := secret.ResolveSSHPrivateKeyPath(h.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir); path != "" {
 		entry["ansible_ssh_private_key_file"] = path
 	}
-	if path := machineKnownHostsPath(h, env, secretsDir); path != "" {
+	if path := machineKnownHostsPath(h, env, paths); path != "" {
 		entry["ansible_ssh_common_args"] = sshCommonArgs(path)
 	}
 	return entry
 }
 
-func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, secretsDir string) string {
+func machineKnownHostsPath(h v1alpha1.Machine, env *v1alpha1.Environment, paths PathOptions) string {
 	if h.Spec.Access.SSH == nil {
 		return ""
 	}
 	if h.Spec.Access.SSH.KnownHostsRef.Name != "" {
-		return secret.ResolvePath(h.Spec.Access.SSH.KnownHostsRef.Name, env, secretsDir)
+		return secret.ResolvePath(h.Spec.Access.SSH.KnownHostsRef.Name, env, paths.SecretsDir)
 	}
-	return sshtrust.KnownHostsPathForSecrets(secretsDir)
+	return sshtrust.KnownHostsPathForSecrets(paths.trustSecretsDir())
 }
 
 func sshCommonArgs(knownHostsPath string) string {
@@ -267,7 +279,7 @@ func machineTaskHostSets(state v1alpha1.State) (map[string]bool, map[string]map[
 	return all, byGroup
 }
 
-func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, secretsDir string, localPolicy locality.Policy) map[string]any {
+func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
 	out := map[string]any{}
 	add := func(hostName, clusterName, machineName string, machine v1alpha1.InstallMachine) {
 		providerHost := machineHostRef(state, machine)
@@ -278,7 +290,7 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, sec
 		if !ok || providerMachine.Spec.Access.SSH == nil {
 			return
 		}
-		entry := machineInventoryEntry(providerMachine, env, secretsDir, localPolicy)
+		entry := machineInventoryEntry(providerMachine, env, paths, localPolicy)
 		entry["bootwright_machine_task_cluster_name"] = clusterName
 		entry["bootwright_machine_task_machine_name"] = machineName
 		entry["bootwright_machine_task_provider_host_name"] = providerHost

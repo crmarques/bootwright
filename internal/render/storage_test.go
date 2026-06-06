@@ -190,6 +190,60 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	}
 }
 
+func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	runtimeSecretsDir := filepath.Join(t.TempDir(), "task", "runtime", "secrets")
+	contextSecretsDir := filepath.Join(t.TempDir(), "context", "secrets")
+	contextKnownHosts := filepath.Join(filepath.Dir(contextSecretsDir), "trust", "ssh", "known_hosts")
+
+	result, err := render.AllWithPathOptions(t.TempDir(), t.TempDir(), render.PathOptions{
+		SecretsDir:      runtimeSecretsDir,
+		TrustSecretsDir: contextSecretsDir,
+	}, state)
+	if err != nil {
+		t.Fatalf("render.AllWithPathOptions: %v", err)
+	}
+
+	inventory := readYAMLDoc(t, result.InventoryPath)
+	hosts := inventory["all"].(map[string]any)["hosts"].(map[string]any)
+	seed := hosts[render.StorageSeedHostName("ceph-libvirt")].(map[string]any)
+	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
+		t.Fatalf("seed private key path = %v, want runtime secret path", got)
+	}
+	commonArgs, _ := seed["ansible_ssh_common_args"].(string)
+	if !strings.Contains(commonArgs, "UserKnownHostsFile="+contextKnownHosts) {
+		t.Fatalf("seed ssh args = %q, want context known_hosts %s", commonArgs, contextKnownHosts)
+	}
+	if strings.Contains(commonArgs, filepath.Join(filepath.Dir(runtimeSecretsDir), "trust", "ssh", "known_hosts")) {
+		t.Fatalf("seed ssh args used task-local known_hosts: %q", commonArgs)
+	}
+
+	vars := readYAMLDoc(t, result.VarsPath)
+	storageCluster := storageClusterByName(t, vars, "ceph-libvirt")
+	clusterSSH := storageCluster["clusterSSH"].(map[string]any)
+	if got := clusterSSH["privateKeyPath"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
+		t.Fatalf("cluster ssh private key path = %v, want runtime secret path", got)
+	}
+	if got := clusterSSH["knownHostsPath"]; got != contextKnownHosts {
+		t.Fatalf("cluster ssh known hosts path = %v, want %s", got, contextKnownHosts)
+	}
+
+	managedOS := managedOSComponentByName(t, vars, "ceph-libvirt", "ceph-0")
+	ssh := managedOS["osInstall"].(map[string]any)["ssh"].(map[string]any)
+	if got := ssh["privateKeyPath"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
+		t.Fatalf("managed OS private key path = %v, want runtime secret path", got)
+	}
+	if got := ssh["knownHostsPath"]; got != contextKnownHosts {
+		t.Fatalf("managed OS known hosts path = %v, want %s", got, contextKnownHosts)
+	}
+	if got := ssh["trustDir"]; got != filepath.Dir(contextKnownHosts) {
+		t.Fatalf("managed OS trust dir = %v, want %s", got, filepath.Dir(contextKnownHosts))
+	}
+}
+
 func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecret(t *testing.T) {
 	sourceDir := t.TempDir()
 	secretPath := filepath.Join(sourceDir, "shared-ceph-external-cluster-details.json")
@@ -228,6 +282,36 @@ func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecre
 	if details != secretJSON {
 		t.Fatalf("sensitive external details = %s, want %s", details, secretJSON)
 	}
+}
+
+func storageClusterByName(t *testing.T, vars map[string]any, name string) map[string]any {
+	t.Helper()
+	for _, item := range vars["bootwright_storage_clusters"].([]any) {
+		cluster := item.(map[string]any)
+		if cluster["name"] == name {
+			return cluster
+		}
+	}
+	t.Fatalf("storage cluster %s not found in %#v", name, vars["bootwright_storage_clusters"])
+	return nil
+}
+
+func managedOSComponentByName(t *testing.T, vars map[string]any, groupName, componentName string) map[string]any {
+	t.Helper()
+	for _, item := range vars["bootwright_managed_os_install_groups"].([]any) {
+		group := item.(map[string]any)
+		if group["name"] != groupName {
+			continue
+		}
+		for _, rawComponent := range group["components"].([]any) {
+			component := rawComponent.(map[string]any)
+			if component["name"] == componentName {
+				return component
+			}
+		}
+	}
+	t.Fatalf("managed OS component %s/%s not found", groupName, componentName)
+	return nil
 }
 
 func readYAMLDoc(t *testing.T, path string) map[string]any {

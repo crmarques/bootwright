@@ -27,6 +27,10 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 }
 
 func VarsWithSecretsDirAndOwnership(state v1alpha1.State, secretsDir string, ownershipRecords []ownership.ResourceRecord) map[string]any {
+	return VarsWithPathOptionsAndOwnership(state, PathOptions{SecretsDir: secretsDir}, ownershipRecords)
+}
+
+func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ownershipRecords []ownership.ResourceRecord) map[string]any {
 	env := primaryEnvironment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
@@ -41,11 +45,11 @@ func VarsWithSecretsDirAndOwnership(state v1alpha1.State, secretsDir string, own
 			"baseDomain":             environmentBaseDomain(env),
 			"endpoints":              endpointsVars(state, ci),
 			"networks":               clusterNetworksVars(state, ci),
-			"components":             componentsVars(state, ci, ocp, secretsDir),
+			"components":             componentsVars(state, ci, ocp, paths.SecretsDir),
 			"nodes":                  nodesVars(ocp),
 			"agentIsoPublishTargets": agentISOPublishTargets(state, ci, ocp),
 		}
-		if keyPath := nodeSSHPrivateKeyPath(env, ocp, secretsDir); keyPath != "" {
+		if keyPath := nodeSSHPrivateKeyPath(env, ocp, paths.SecretsDir); keyPath != "" {
 			entry["nodeSSHPrivateKeyPath"] = keyPath
 		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
@@ -70,10 +74,10 @@ func VarsWithSecretsDirAndOwnership(state v1alpha1.State, secretsDir string, own
 	if setups := providerMachineSetupsVars(state); len(setups) > 0 {
 		out["bootwright_provider_machine_setups"] = setups
 	}
-	if storageClusters := storageClustersVars(state, secretsDir); len(storageClusters) > 0 {
+	if storageClusters := storageClustersVars(state, paths); len(storageClusters) > 0 {
 		out["bootwright_storage_clusters"] = storageClusters
 	}
-	if osInstallGroups := managedMachineOSInstallGroupsVars(state, secretsDir); len(osInstallGroups) > 0 {
+	if osInstallGroups := managedMachineOSInstallGroupsVars(state, paths); len(osInstallGroups) > 0 {
 		out["bootwright_managed_os_install_groups"] = osInstallGroups
 	}
 	if proxyVars := bootwrightProxyVars(state, env); len(proxyVars) > 0 {

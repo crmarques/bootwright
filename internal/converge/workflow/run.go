@@ -136,7 +136,10 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		defer os.RemoveAll(runtimeSecretsDir)
 		runSecretsDir = runtimeSecretsDir
 	}
-	result, err := render.AllWithOwnershipRecords(renderDir, opts.ClustersDir, runSecretsDir, opts.State, ownershipRecords)
+	result, err := render.AllWithOwnershipRecordsAndPathOptions(renderDir, opts.ClustersDir, render.PathOptions{
+		SecretsDir:      runSecretsDir,
+		TrustSecretsDir: opts.SecretsDir,
+	}, opts.State, ownershipRecords)
 	if err != nil {
 		return RunResult{}, err
 	}

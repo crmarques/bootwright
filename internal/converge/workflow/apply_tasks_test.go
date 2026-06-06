@@ -1316,7 +1316,7 @@ func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 			Type:       v1alpha1.StorageClusterTypeCeph,
 			Management: v1alpha1.StorageClusterManagementExternal,
 		},
-	}, secretsDir, ssh)
+	}, secretsDir, "", ssh)
 	if err != nil {
 		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
 	}
@@ -1353,6 +1353,31 @@ func TestStorageExportSSHExternalDetailsTargetsUseMachineRefs(t *testing.T) {
 	}
 	if strings.Contains(commonArgs, "/dev/null") {
 		t.Fatalf("machine ref ansible_ssh_common_args must not discard known hosts: %q", commonArgs)
+	}
+}
+
+func TestStorageExportSSHExternalDetailsTargetsUseContextTrustWhenKnownHostsRefOmitted(t *testing.T) {
+	state := storageAttachmentPlanningState()
+	state.Machines[0].Spec.Access.SSH.KnownHostsRef = v1alpha1.SecretRef{}
+	ssh := &v1alpha1.StorageExportExternalDetailsSSHExecution{
+		Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+	}
+	secretsDir := filepath.Join(t.TempDir(), "runtime", "secrets")
+	trustSecretsDir := filepath.Join(t.TempDir(), "context", "secrets")
+
+	targets, err := storageExportSSHExternalDetailsTargets(state, state.StorageClusters[0], secretsDir, trustSecretsDir, ssh)
+	if err != nil {
+		t.Fatalf("storageExportSSHExternalDetailsTargets: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets got %d, want 1", len(targets))
+	}
+	if got := targets[0].keyPath; got != filepath.Join(secretsDir, "ceph-node-ssh") {
+		t.Fatalf("key path = %s, want runtime secret path", got)
+	}
+	wantKnownHosts := filepath.Join(filepath.Dir(trustSecretsDir), "trust", "ssh", "known_hosts")
+	if got := targets[0].knownHostsPath; got != wantKnownHosts {
+		t.Fatalf("known hosts path = %s, want %s", got, wantKnownHosts)
 	}
 }
 

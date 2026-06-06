@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -137,6 +138,43 @@ func TestRunExecutesRunnerWhenNotDryRun(t *testing.T) {
 	}
 	if reporter.dryRunLabel != "" {
 		t.Fatalf("non-dry-run must not report dry-run, got %q", reporter.dryRunLabel)
+	}
+}
+
+func TestRunUsesContextManagedKnownHostsWithRuntimeSecrets(t *testing.T) {
+	renderedDir := t.TempDir()
+	contextSecretsDir := filepath.Join(t.TempDir(), "context", "secrets")
+	runner := &fakeRunner{}
+	if _, err := Run(context.Background(), RunOptions{
+		State:              storageSSHState(),
+		RenderedDir:        renderedDir,
+		ClustersDir:        t.TempDir(),
+		RunsDir:            t.TempDir(),
+		SecretsDir:         contextSecretsDir,
+		ManagedServicesDir: "/var/lib/bootwright",
+		ProviderStateDir:   "/var/lib/bootwright/provider-state",
+		BundleDir:          t.TempDir(),
+		Playbook:           "bootwright.core.task_storage_cluster_apply",
+		ArtifactsBaseName:  "storage",
+	}, runner, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	data, err := os.ReadFile(runner.lastSpec.Inventory)
+	if err != nil {
+		t.Fatalf("read inventory: %v", err)
+	}
+	inventory := string(data)
+	runtimeSecretsDir := filepath.Join(filepath.Dir(renderedDir), "runtime", "secrets")
+	contextKnownHosts := filepath.Join(filepath.Dir(contextSecretsDir), "trust", "ssh", "known_hosts")
+	taskKnownHosts := filepath.Join(filepath.Dir(runtimeSecretsDir), "trust", "ssh", "known_hosts")
+	if !strings.Contains(inventory, filepath.Join(runtimeSecretsDir, "ceph-node-ssh")) {
+		t.Fatalf("inventory missing runtime private key path %s:\n%s", runtimeSecretsDir, inventory)
+	}
+	if !strings.Contains(inventory, "UserKnownHostsFile="+contextKnownHosts) {
+		t.Fatalf("inventory missing context known_hosts %s:\n%s", contextKnownHosts, inventory)
+	}
+	if strings.Contains(inventory, "UserKnownHostsFile="+taskKnownHosts) {
+		t.Fatalf("inventory used task-local known_hosts %s:\n%s", taskKnownHosts, inventory)
 	}
 }
 
@@ -287,6 +325,45 @@ func writeStub(path string) error {
 		return err
 	}
 	return f.Close()
+}
+
+func storageSSHState() v1alpha1.State {
+	return v1alpha1.State{
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.0.2.10"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{
+						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+						KeyRef:     v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+					},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Cephadm: v1alpha1.StorageCephadmSpec{
+						Bootstrap: v1alpha1.StorageCephadmBootstrap{
+							SeedNode: "ceph-0",
+						},
+					},
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{{
+							Name:       "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+						}},
+					},
+				},
+			},
+		}},
+	}
 }
 
 // TestRunSkipsAnsibleWhenLimitMatchesNoHosts pins the test-002 fix:
