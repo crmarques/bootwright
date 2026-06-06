@@ -172,6 +172,9 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace input files for context %s under %s? [y/N] (default: no): ", name, ctx.InputDir)) {
 			return failErr(1, errors.New("context update aborted"))
 		}
+		if err := contextstore.EnsureDirs(ctx); err != nil {
+			return failErr(1, err)
+		}
 		copied, err := prepared.Commit()
 		if err != nil {
 			return failErr(1, err)

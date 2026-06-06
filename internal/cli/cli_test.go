@@ -1066,6 +1066,9 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}
+	if err := os.RemoveAll(ctx.OwnershipDir); err != nil {
+		t.Fatal(err)
+	}
 	sourceEnvironment := filepath.Join(source, "environment.yaml")
 	body, err := os.ReadFile(sourceEnvironment)
 	if err != nil {
@@ -1115,6 +1118,16 @@ func TestContextUpdateReplacesOnlyInputFiles(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("%s = %q, want %q", path, got, want)
 		}
+	}
+	info, err := os.Stat(ctx.OwnershipDir)
+	if err != nil {
+		t.Fatalf("ownership directory was not recreated: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("%s is not a directory", ctx.OwnershipDir)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("ownership directory mode = %#o, want 0700", got)
 	}
 }
 
