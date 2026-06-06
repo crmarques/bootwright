@@ -418,6 +418,40 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 	if !strings.Contains(failedWhen, "not in [0, 1]") {
 		t.Fatalf("%s must tolerate ssh-keyscan rc=1 while waiting for keys, got %s", scan["name"], failedWhen)
 	}
+	record := tasks[findAnsibleTask(t, tasks, "Record managed OS SSH known_hosts entries")]
+	knownHosts, ok := record["ansible.builtin.known_hosts"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must use known_hosts, got %v", record["name"], record)
+	}
+	if knownHosts["path"] != "{{ bootwright_component.osInstall.ssh.knownHostsPath }}" {
+		t.Fatalf("%s path = %v", record["name"], knownHosts["path"])
+	}
+	if knownHosts["name"] != "{{ bootwright_component.osInstall.ssh.address }}" {
+		t.Fatalf("%s name = %v", record["name"], knownHosts["name"])
+	}
+	if knownHosts["key"] != "{{ item }}" {
+		t.Fatalf("%s key = %v, want loop item", record["name"], knownHosts["key"])
+	}
+	loop := fmt.Sprint(record["loop"])
+	for _, want := range []string{"stdout_lines", "reject('match', '^#')", "list"} {
+		if !strings.Contains(loop, want) {
+			t.Fatalf("%s loop missing %q: %s", record["name"], want, loop)
+		}
+	}
+	if strings.Contains(loop, "first") {
+		t.Fatalf("%s must record every scanned key, got loop %s", record["name"], loop)
+	}
+	if record["delegate_to"] != "localhost" {
+		t.Fatalf("%s must write controller-local trust, got delegate_to=%v", record["name"], record["delegate_to"])
+	}
+	restrict := tasks[findAnsibleTask(t, tasks, "Restrict managed OS SSH known_hosts file")]
+	fileTask, ok := restrict["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must set file permissions, got %v", restrict["name"], restrict)
+	}
+	if fileTask["path"] != "{{ bootwright_component.osInstall.ssh.knownHostsPath }}" || fileTask["mode"] != "0600" {
+		t.Fatalf("%s file task = %v", restrict["name"], fileTask)
+	}
 
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
 	pre := mainTasks[findAnsibleTask(t, mainTasks, "Record managed OS SSH host key before install when reachable")]

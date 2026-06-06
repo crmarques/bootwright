@@ -27,14 +27,23 @@
     mode: "0700"
   delegate_to: localhost
 
-- name: Record managed OS SSH known_hosts entry
-  ansible.builtin.lineinfile:
+- name: Record managed OS SSH known_hosts entries
+  ansible.builtin.known_hosts:
     path: "{{ bootwright_component.osInstall.ssh.knownHostsPath }}"
-    create: true
+    name: "{{ bootwright_component.osInstall.ssh.address }}"
+    key: "{{ item }}"
+    state: present
+  loop: "{{ bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list }}"
+  loop_control:
+    label: "{{ bootwright_component.osInstall.ssh.address }}"
+  delegate_to: localhost
+  when: (bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list | length) > 0
+
+- name: Restrict managed OS SSH known_hosts file
+  ansible.builtin.file:
+    path: "{{ bootwright_component.osInstall.ssh.knownHostsPath }}"
     owner: root
     group: root
     mode: "0600"
-    regexp: "^{{ bootwright_component.osInstall.ssh.address | regex_escape }}[ ,]"
-    line: "{{ bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list | first }}"
   delegate_to: localhost
   when: (bootwright_os_ssh_keyscan.stdout_lines | reject('match', '^#') | list | length) > 0
