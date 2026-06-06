@@ -67,13 +67,54 @@
     tasks_from: package_apply.yml
   vars:
     bootwright_ownership_packages:
-      - cephadm
       - firewalld
       - lvm2
       - podman
       - chrony
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Probe cephadm CLI before package fallback
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - version
+  register: bootwright_cephadm_initial_probe
+  changed_when: false
+  failed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Install cephadm package on storage node when available
+  ansible.builtin.package:
+    name: cephadm
+    state: present
+  register: bootwright_cephadm_package_install
+  failed_when: false
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_cephadm_initial_probe.rc | default(1) != 0
+
+- name: Create cephadm package ownership directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_cephadm_package_install.changed | default(false)
+
+- name: Write cephadm package ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply_one.yml
+  vars:
+    bootwright_ownership_package_name: cephadm
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_cephadm_package_install.changed | default(false)
 
 - name: Start storage node services
   ansible.builtin.service:
@@ -94,6 +135,19 @@
       - version
   register: bootwright_cephadm_version
   changed_when: false
+  failed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Fail when cephadm CLI is unavailable
+  ansible.builtin.assert:
+    that:
+      - bootwright_cephadm_version.rc == 0
+    fail_msg: >-
+      cephadm CLI is required on storage node {{ bootwright_current_storage_node.name }}.
+      Install cephadm through the managed OS MachineInstallProfile repositories and
+      customizations.packages, preinstall it on provided OS nodes, or enable a package
+      repository that provides cephadm before applying managed storage.
+      Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Install cephadm registry trust on storage node

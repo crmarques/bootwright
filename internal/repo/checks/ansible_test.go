@@ -2651,13 +2651,42 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok {
 		t.Fatalf("Ceph prerequisite task missing vars: %v", prereqs)
 	}
-	for _, name := range []string{"cephadm", "podman", "lvm2", "chrony", "firewalld"} {
+	for _, name := range []string{"podman", "lvm2", "chrony", "firewalld"} {
 		if !stringListContains(vars["bootwright_ownership_packages"], name) {
 			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, vars["bootwright_ownership_packages"])
 		}
 	}
+	if stringListContains(vars["bootwright_ownership_packages"], "cephadm") {
+		t.Fatalf("cephadm must not be installed in the owned prerequisite package batch: %v", vars["bootwright_ownership_packages"])
+	}
 	if got := fmt.Sprint(prereqs["delegate_to"]); strings.Contains(got, "item.inventoryHost") || got != "<nil>" {
 		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
+	}
+
+	initialProbeIdx := findAnsibleTask(t, mainTasks, "Probe cephadm CLI before package fallback")
+	cephadmPackageIdx := findAnsibleTask(t, mainTasks, "Install cephadm package on storage node when available")
+	recordCephadmIdx := findAnsibleTask(t, mainTasks, "Write cephadm package ownership record")
+	servicesIdx := findAnsibleTask(t, mainTasks, "Start storage node services")
+	verifyCephadmIdx := findAnsibleTask(t, mainTasks, "Verify cephadm CLI on storage node")
+	failCephadmIdx := findAnsibleTask(t, mainTasks, "Fail when cephadm CLI is unavailable")
+	if !(initialProbeIdx < cephadmPackageIdx && cephadmPackageIdx < recordCephadmIdx && recordCephadmIdx < servicesIdx && servicesIdx < verifyCephadmIdx && verifyCephadmIdx < failCephadmIdx) {
+		t.Fatalf("Cephadm fallback must run after distro prereqs and before storage services/verification")
+	}
+	cephadmPackage := mainTasks[cephadmPackageIdx]
+	if got := cephadmPackage["failed_when"]; got != false {
+		t.Fatalf("cephadm package fallback must not fail the package batch, got failed_when=%v", got)
+	}
+	cephadmPackageBody, ok := cephadmPackage["ansible.builtin.package"].(map[string]any)
+	if !ok || cephadmPackageBody["name"] != "cephadm" {
+		t.Fatalf("cephadm package fallback must install cephadm directly, got %v", cephadmPackage)
+	}
+	assertIncludeRoleName(t, mainTasks[recordCephadmIdx], "bootwright.core.helper_ownership")
+	if got := mainTasks[verifyCephadmIdx]["failed_when"]; got != false {
+		t.Fatalf("cephadm verify must leave failure handling to the targeted assert, got failed_when=%v", got)
+	}
+	failCephadm, ok := mainTasks[failCephadmIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(failCephadm["fail_msg"]), "MachineInstallProfile") {
+		t.Fatalf("cephadm unavailable assert must point to managed OS package ownership, got %v", failCephadm)
 	}
 
 	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")
