@@ -39,7 +39,8 @@ or Ansible changes.
 ## Prerequisites
 
 - A RHEL 9.8 x86_64 DVD ISO stored locally on the bastion.
-- Valid Red Hat registry credentials for Ceph container images.
+- Valid `registry.redhat.io` credentials for Ceph container images, stored in
+  the Bootwright secret named `ceph-registry-credentials`.
 
 Bootwright owns lab host preparation for this fixture. After
 `bootwright bastion setup --yes` and
@@ -72,13 +73,46 @@ spec:
   url: local-media:rhel-9.8-x86_64-dvd.iso
 ```
 
+## Red Hat Registry Credentials
+
+Get `ceph-registry-credentials` from a Red Hat Registry Service Account:
+<https://access.redhat.com/terms-based-registry/>. Create or select a service
+account, then copy the token username exactly, including the generated prefix
+such as `12345678|bootwright-ceph`, and the token password. Red Hat documents
+the registry authentication flow at
+<https://access.redhat.com/articles/RegistryAuthentication>.
+
+Use a service account token for this fixture instead of a personal Red Hat
+Customer Portal password. The account must be entitled to pull the Ceph images
+from `registry.redhat.io`.
+
+Bootwright stores this secret as `username:password` credentials. To avoid
+writing the token to a local plaintext file, set it with stdin:
+
+```bash
+read -rsp 'registry.redhat.io token password: ' REDHAT_REGISTRY_PASSWORD
+printf '\n'
+printf '%s\n' "$REDHAT_REGISTRY_PASSWORD" | \
+  bootwright secret set ceph-registry-credentials \
+    --username '12345678|bootwright-ceph' --password-stdin --yes
+unset REDHAT_REGISTRY_PASSWORD
+```
+
+Replace `12345678|bootwright-ceph` with the service account username shown in
+the Red Hat service account page.
+
 ## Run
 
 ```bash
 bootwright context init 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret materialize
-bootwright secret set ceph-registry-credentials --from-file /path/to/registry-credentials.txt
+read -rsp 'registry.redhat.io token password: ' REDHAT_REGISTRY_PASSWORD
+printf '\n'
+printf '%s\n' "$REDHAT_REGISTRY_PASSWORD" | \
+  bootwright secret set ceph-registry-credentials \
+    --username '<registry-service-account-username>' --password-stdin --yes
+unset REDHAT_REGISTRY_PASSWORD
 bootwright host trust --hosts lab-host --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-libvirt --yes
