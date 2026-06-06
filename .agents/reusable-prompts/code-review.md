@@ -116,8 +116,10 @@ normal paths; global mutable state that blocks tests or concurrency; unsafe path
 joins, temp-file handling, cleanup, or permissions; shell invocation where direct
 `exec.Command` args are safer; missing context/cancellation/timeout; resource
 leaks and misplaced `defer`; CLI commands embedding domain logic that belongs in
-loaders, renderers, orchestrators, or roles; tests needing real infrastructure
-where a fake would prove the behavior.
+loaders, renderers, orchestrators, or roles; missing or poorly named non-mutating
+desired-vs-real state-check command; `--override` changing more than the narrow
+documented safety barrier; tests needing real infrastructure where a fake would
+prove the behavior.
 
 **Go↔Ansible drift.** Go directly configuring or installing on hosts/clusters
 instead of rendering intent and orchestrating; Ansible making CLI, validation,
@@ -157,6 +159,15 @@ leaking private host data or secret material; stale security-sensitive paths
 (privilege, redaction, command exec, TLS, secret handling) that can diverge from
 the maintained path. Report only what code evidence supports.
 
+**State-check implementation.** Audit whether implementation code gives users a
+safe way to ask "does selected desired state match live reality?" without
+mutation. The command must have a clear name, load the same selected graph as
+apply/destroy, probe reality safely, report root absence succinctly, and report
+granular drift when roots exist, including missing declared resources and
+undeclared live resources such as Ceph pools, filesystems, gateways, add-ons, VMs,
+services, endpoints, or storage exports. Check text and JSON output, exit codes,
+permission/root behavior, and behavior with and without `--override`.
+
 **Duplication and dead code.** One domain rule in multiple packages or roles; one
 concept as several types/structs/helpers, or several names; one name reused for
 different concepts; adapter-specific code leaking into shared orchestration;
@@ -178,7 +189,9 @@ artifacts, benefit, and the smallest migration path. Otherwise keep it.
 rendered installer, Ansible, or lock-file output; command construction and external
 process failure; filesystem permissions/cleanup/path validation; secret redaction
 and sensitive-output gates; script dry-run/preflight; Ansible idempotency and
-generated-variable shape; and a regression test for each high-confidence finding.
+generated-variable shape; non-mutating desired-vs-real state checks; `--override`
+vs. no-override behavior; objective drift reports for absent roots and partially
+present resources; and a regression test for each high-confidence finding.
 
 ## Output Format
 

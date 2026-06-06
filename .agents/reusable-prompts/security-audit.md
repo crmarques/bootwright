@@ -111,17 +111,24 @@ no explicit operator-intent signal: scoped target selection, confirmation prompt
 `--yes` for non-interactive runs, `--dry-run` previews where supported, and output
 naming the current context, selected clusters, affected hosts, BMC targets,
 KubeVirt namespaces, storage objects, and installed-cluster resources *before*
-mutating. Destructive paths that do not fail closed when ownership is ambiguous,
-fingerprints are stale, shared services are still consumed, a lock cannot be
-acquired, a kubeconfig or trust source is outside the declared secret boundary, or
-a requested scope reaches resources outside the selected desired-state graph.
-Ansible tasks not idempotent across reruns: shell/command without intentional
+mutating. A well-named, non-mutating desired-vs-real state-check command must
+exist; it must report selected-root absence succinctly and granular drift for
+existing roots, such as missing or undeclared Ceph pools, add-ons, VMs, services,
+endpoints, or storage exports. Destructive paths that do not fail closed when
+ownership is ambiguous, fingerprints are stale, shared services are still
+consumed, a lock cannot be acquired, a kubeconfig or trust source is outside the
+declared secret boundary, or a requested scope reaches resources outside the
+selected desired-state graph. Evaluate commands with and without `--override`;
+the flag may alter only the documented command-scoped unsafe-mismatch path and
+must never make read-only checks mutate or suppress drift. Ansible tasks not
+idempotent across reruns: shell/command without intentional
 `changed_when`/`failed_when`/`creates`/`removes`, read-only probes marked changed,
-cleanup that fails on already-absent resources, privileged partial state left after
-failure. Provider/BMC/VM/storage/cluster mutations that bypass capability checks,
-locks, ownership records, official-tool idempotency, or adapter boundaries. Missing
-tests proving a second identical apply, role run, destroy preview, or aborted
-confirmation is a no-op or a safe refusal.
+cleanup that fails on already-absent resources, privileged partial state left
+after failure. Provider/BMC/VM/storage/cluster mutations that bypass capability
+checks, locks, ownership records, official-tool idempotency, or adapter
+boundaries. Missing tests proving a second identical apply, role run, destroy
+preview, state-check run, `--override`/no-override pair, or aborted confirmation
+is a no-op, a precise drift report, or a safe refusal.
 
 **Trust, TLS, and installer security.** TLS verification disabled without a narrow
 documented reason; weak or hard-coded certs, keys, algorithms, or trust bundles;

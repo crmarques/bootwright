@@ -32,6 +32,10 @@ description. Treat "explicit" narrowly:
 - A `check`, `status`, `render`, `plan`, `validate`, help, discovery, or probe
   flow is read-only unless the current specs document a narrow non-destructive
   runtime record write.
+- Bootwright must provide a well-named, non-mutating command whose sole purpose
+  is to compare selected desired state with live reality. Audit whether the name
+  communicates "state comparison" instead of convergence or cleanup, and propose a
+  better name when the current CLI lacks one or overloads a mutating command.
 - A repeated `apply` with unchanged desired state should skip or prove matching
   state. It must not reinstall clusters, wipe disks, remove VMs, reset BMCs,
   delete storage, remove packages, clear namespaces, delete cluster resources, or
@@ -39,6 +43,10 @@ description. Treat "explicit" narrowly:
 - An `apply` that sees foreign, unknown, stale, shared, or destructive drift must
   fail closed unless the task has a narrow, command-scoped override path and the
   operator supplied that override.
+- Every audited flow must be evaluated both with and without `--override` when
+  the command supports it. `--override` may permit only the documented unsafe
+  mismatch path for convergent or destructive commands; it must not turn a
+  read-only state check into a mutating command or broaden scope silently.
 - A `destroy`, `reset`, `cleanup`, `remove`, `purge`, `wipe`, or replacement
   path is destructive only when the command, flags, and selected desired state
   authorize that exact scope. `--yes` skips confirmation only; it is not
@@ -71,6 +79,8 @@ blocking question when it changes the verdict:
   explicit destroy, scoped cleanup, or unknown.
 - **Destruction authorization**: yes/no, with the exact text, command, or
   environment description that authorizes it.
+- **Override pair**: when the command accepts `--override`, the expected behavior
+  with and without it, and the exact safety refusal or continuation it changes.
 
 If no scenario input file is provided and the review depends on it, ask one
 blocking question for the file. You may still audit generic safety guidance and
@@ -173,6 +183,15 @@ help, examples, and tests for:
 
 - Read-only command guarantees for `check`, `status`, `render`, validation,
   planning, help, discovery, and probes.
+- Desired-vs-real state checking: a well-named command exists, is explicitly
+  non-mutating, loads the same selected desired-state graph as converge/destroy,
+  probes live state safely, and reports whether reality matches authored intent.
+- State-check report quality: when a selected cluster or storage cluster is
+  wholly absent, the report says that succinctly instead of dumping every child
+  object as missing; when the root exists, the report names material differences
+  at the owned-resource level, such as missing declared Ceph pools,
+  filesystems, gateways, add-ons, VMs, services, or extra live resources not
+  declared in input files.
 - `apply` idempotency rules: desired hashes, ownership identity, probes, skip
   behavior, safe drift reconciliation, foreign/unknown/destructive drift refusal,
   and command-scoped overrides.
@@ -181,6 +200,9 @@ help, examples, and tests for:
 - Confirmation semantics: `--yes` vs. `--override`, non-interactive behavior,
   output that names affected context/resources before mutation, and no hidden
   broadening from environment names.
+- Override semantics across flows: for every supported command, compare behavior
+  with and without `--override`, and verify that read-only state checks ignore,
+  reject, or strictly no-op the flag rather than mutating or suppressing drift.
 - Runtime-state trust: when ownership records, install records, safety records,
   leases, generated hashes, and provider metadata are sufficient evidence, and
   when live probes are still required.
@@ -215,28 +237,36 @@ Walk these checkpoints:
 3. **Authorization.** What exact command flag, environment field, or scenario
    statement authorizes destructive behavior? Are `destroyProtection`,
    `--override`, and confirmation prompts enforced before mutation?
-4. **Reality probe.** Before a mutating task, what probes current state? Is the
-   probe reliable for matching, absent, foreign, shared, destructive drift,
-   unknown, and partially completed states?
-5. **Ownership and fingerprints.** Does the task derive a non-secret desired hash
+4. **Override pair.** If the command supports `--override`, walk the same
+   scenario without it and with it. Which refusal disappears, which mutations
+   become allowed, and which read-only guarantees must remain unchanged?
+5. **State comparison command.** Can the operator run a clearly named,
+   non-mutating command to compare selected desired state against live reality?
+   Does it detect root absence, partial presence, missing desired resources,
+   undeclared live resources, and drifted attributes without converging or
+   cleaning anything?
+6. **Reality probe.** Before a mutating task or state-comparison verdict, what
+   probes current state? Is the probe reliable for matching, absent, foreign,
+   shared, destructive drift, unknown, and partially completed states?
+7. **Ownership and fingerprints.** Does the task derive a non-secret desired hash
    and Bootwright owner identity? Are records namespaced by context and resource?
    Can stale records authorize deletion of current foreign resources?
-6. **Planning and locks.** Are leases and resource locks acquired before
+8. **Planning and locks.** Are leases and resource locks acquired before
    mutation? Do scoped applies avoid context-wide sweeps? Do nested providers,
    BMCs, KubeVirt namespaces, storage seeds, and shared service machines have
    appropriate locks?
-7. **Generated contract.** Does Go render enough explicit vars for Ansible to
+9. **Generated contract.** Does Go render enough explicit vars for Ansible to
    decide safely without recomputing ownership, selection, paths, or desired
    state? Are generated paths constrained to context-owned roots?
-8. **Ansible and script execution.** Which tasks actually mutate? Are read-only
+10. **Ansible and script execution.** Which tasks actually mutate? Are read-only
    probes `changed_when: false`? Are cleanup tasks guarded by explicit
    authorization, ownership, scope, and live state? Are handlers triggered only by
    real changes?
-9. **External tools.** Check `openshift-install`, `virsh`, `oc`, `kubectl`,
+11. **External tools.** Check `openshift-install`, `virsh`, `oc`, `kubectl`,
    `ceph`, `cephadm`, `podman`, `systemctl`, `nmstatectl`, `mkfs`, disk tools,
    Redfish calls, and file removals for explicit args, safe scopes, dry-run
    availability, idempotent behavior, and clear errors.
-10. **Final state and rerun.** After success, failure, interruption, aborted
+12. **Final state and rerun.** After success, failure, interruption, aborted
     confirmation, or partial mutation, what records exist and what reruns? Does
     the same command become a no-op, resume safely, or fail closed?
 
@@ -252,6 +282,15 @@ removal, disk partitioning or formatting, Redfish reset/power change, virtual
 media eject/replace, `oc delete`, namespace deletion, Ceph removal, package
 removal, service disabling, context-wide cleanup, broad file deletion, and
 cluster install runtime deletion.
+
+**Desired-vs-real state checking.** Bootwright needs a non-mutating command with
+a good name for "compare desired state to live state." Audit the full path for
+that command: selection, probes, permissions, output, exit codes, JSON shape, and
+tests. The report should be smart and objective: if the selected cluster is
+absent, say the desired cluster is absent; if it exists, report granular
+differences such as a declared Ceph pool missing, an undeclared live pool present,
+wrong placement, missing storage export, missing add-on readiness, extra VM,
+wrong BMC/media state, or drifted service endpoint.
 
 **Unnecessary mutating work.** Tasks that run on every apply even when state
 matches; read-only probes marked changed; service restarts from false changes;
@@ -278,6 +317,12 @@ It must not use delete-and-recreate as a generic convergence strategy. If a
 provider requires replacement, the operator should see and explicitly authorize
 the destructive replacement path.
 
+**Override safety.** For every command supporting `--override`, audit both
+variants. Without override, unsafe mismatch, destructive drift, protected destroy,
+or ambiguous ownership should fail before mutation. With override, only the
+documented command-scoped safety barrier should change. Read-only state checking
+must remain read-only and should still report drift rather than hiding it.
+
 **Go-Ansible contract.** Go should classify intent, scope, ownership, locks, and
 safe drift before rendering and launching Ansible. Ansible should not infer
 selected resources, broad cleanup scope, context sweep behavior, or operator
@@ -300,7 +345,8 @@ Do not stop at guidance review. Audit the implementation surface that can affect
 the scenarios:
 
 - CLI command setup, flag parsing, pre-run validation, root/sudo handoff,
-  confirmation prompts, non-interactive behavior, and output routing.
+  confirmation prompts, non-interactive behavior, `--override` behavior, the
+  desired-vs-real state-check command, and output routing.
 - Desired-state selection, strict decode, normalization, validation, and scoped
   graph closure.
 - Planner, scheduler, resource locks, leases, ledgers, ownership records,
@@ -335,7 +381,8 @@ that clearly and name the highest residual risk.
 ## 2. Scenario Input and Assumptions
 The scenario file(s) reviewed; each scenario extracted from them; command intent;
 current environment state; expected behavior; destruction authorization yes/no
-with evidence; missing facts and whether they block a verdict.
+with evidence; expected behavior with and without `--override` when supported;
+missing facts and whether they block a verdict.
 
 ## 3. Safety Guidance Review
 Current specs, docs, AGENTS rules, reusable prompts, CLI/help text, examples, and
@@ -346,8 +393,9 @@ and should remain unchanged.
 ## 4. Scenario Flow Trace
 The trace matrix for each scenario. Include CLI path, selection, validation,
 planning, locks, records, generated contract, Ansible/script path, external
-commands, and final side effect. Mark verdict as **safe**, **unsafe**, **unproven**,
-or **out of scope**.
+commands, the desired-vs-real state-check path, override/no-override behavior,
+and final side effect. Mark verdict as **safe**, **unsafe**, **unproven**, or
+**out of scope**.
 
 ## 5. Findings
 Severity order. Per finding: **Severity** (Critical/High/Medium/Low), **Type**
@@ -373,7 +421,9 @@ trace cleared them.
 Existing tests that prove safety; missing tests for each finding; useful checks
 that could not run. Include focused regression tests for no-op rerun, read-only
 commands, confirmation abort, destroy protection, foreign ownership, stale
-records, scoped destroy, and Ansible role idempotency when relevant.
+records, scoped destroy, `--override` vs. no-override behavior, non-mutating
+desired-vs-real state checks, absent-root reporting, granular drift reporting,
+and Ansible role idempotency when relevant.
 
 ## 9. Improvement Plan
 Group into **Now** (high-confidence safety fixes and regression tests small

@@ -100,6 +100,10 @@ anything that violates them:
   never appear in versioned content, examples, logs, generated docs, or snippets.
 - **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
   stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
+- **State checking.** A well-named command must let the operator compare selected
+  desired state with live reality without mutation. Trace both `--override` and
+  no-override behavior where supported; override must not make this read-only
+  check mutate or hide drift.
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,
   rendering, storage intent, planning, locking, ledgers, status, orchestration;
   Ansible executes configuration and installation on the bastion and targets.
@@ -126,17 +130,25 @@ Walk each reviewed flow in order, then record it in the matrix below:
    vars, service-graph outputs, and provider inputs.
 7. **Planning and orchestration.** Verify task-graph dependencies, scopes,
    concurrency locks, install records, apply ledgers, leases, and status data.
-8. **Go↔Ansible contract.** Check every var, generated path, inventory group, host
+8. **Desired-vs-real state check.** If the flow includes state inspection, trace
+   the non-mutating command that compares desired and real state. Confirm it
+   reports absent selected roots succinctly, but reports granular drift when roots
+   exist, such as missing declared resources or undeclared live Ceph pools,
+   add-ons, VMs, services, endpoints, or storage exports.
+9. **Override pair.** For commands accepting `--override`, trace the same scenario
+   with and without it. Confirm only the documented unsafe-mismatch behavior
+   changes, and no read-only flow mutates or suppresses drift.
+10. **Go↔Ansible contract.** Check every var, generated path, inventory group, host
    target, role input, and expected output Ansible consumes.
-9. **Ansible execution.** Review playbooks, roles, tasks, handlers, templates,
+11. **Ansible execution.** Review playbooks, roles, tasks, handlers, templates,
    shell commands, idempotency markers (`changed_when`, `failed_when`, `creates`,
    `removes`), `no_log`, file modes, and cleanup.
-10. **External commands.** Verify `openshift-install`, provider CLIs, sudo,
+12. **External commands.** Verify `openshift-install`, provider CLIs, sudo,
     container-runtime calls, BMC actions, and filesystem writes use explicit
     arguments, safe paths, context, cancellation, and clear errors.
-11. **Final output.** Compare final user-visible output, generated files, runtime
+13. **Final output.** Compare final user-visible output, generated files, runtime
     state, logs, and side effects against the original intent and specs.
-12. **Tests.** Which tests already prove the behavior, and which focused tests are
+14. **Tests.** Which tests already prove the behavior, and which focused tests are
     missing?
 
 **Trace matrix** (one row per non-trivial flow): **Intent** (user-owned fact or
@@ -164,7 +176,10 @@ nondeterministic rendering; wrong installer platform output; wrong machine, MAC,
 hostname, endpoint, DNS, proxy, mirror, trust, or certificate data; task-graph
 ordering, scope, resume, install-record, or ledger mistakes; locks that miss shared
 hosts or BMC targets; errors swallowed, wrapped too vaguely, or reported after side
-effects; tests that pass only because fixtures miss the path.
+effects; missing non-mutating desired-vs-real state check; state-check reports that
+explode an absent cluster into noisy child diffs instead of one absence; state-check
+reports that hide missing or undeclared live resources after the root exists; tests
+that pass only because fixtures miss the path.
 
 **Go↔Ansible contract.** Generated var names not matching role expectations;
 missing required defaults or vars that mask missing input; roles relying on implicit
@@ -202,8 +217,9 @@ example that could not be traced, with the reason.
 
 ## 2. Flow Trace
 The trace matrix for each reviewed flow — compact but complete enough to show how
-intent reaches final output. Call out silent behavior changes and spec/code
-disagreements as you go.
+intent reaches final output. Include desired-vs-real state-check behavior and
+`--override` vs. no-override behavior when supported. Call out silent behavior
+changes and spec/code disagreements as you go.
 
 ## 3. Findings
 Severity order. Per finding: **Severity** (Critical/High/Medium/Low), **Type** (Bug
@@ -229,8 +245,10 @@ run and why. Then group fix-ready work into **Now** (high-confidence correctness
 safety/drift fixes small enough to implement immediately), **Next** (changes needing
 sequencing, a short design pass, or broader coverage), **Later** (larger cleanup
 that should follow evidence from earlier fixes). Per item: affected artifacts,
-approach, validation, and **Risk** (Low/Medium/High). End with any open question
-that blocks a safe fix or changes prioritization.
+approach, validation, and **Risk** (Low/Medium/High). Include tests for
+non-mutating desired-vs-real checks, absent-root reporting, granular drift
+reporting, and `--override`/no-override pairs when relevant. End with any open
+question that blocks a safe fix or changes prioritization.
 
 ## Fix Mode (only if the user explicitly requests fixes)
 

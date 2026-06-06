@@ -88,6 +88,10 @@ violates them:
   variation behind capabilities and adapters.
 - **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
   never appear in versioned content, examples, snippets, or recommendations.
+- **State checking.** The public contract must give operators a well-named,
+  non-mutating command to compare selected desired state with live reality. The
+  spec/UX must distinguish this from `status`, `render`, `apply`, `destroy`, and
+  dry-run, and define how `--override` behaves or is rejected without mutation.
 - **Clean break.** While the API is `v1alpha1`, propose clean breaking
   improvements freely — but never migrations, aliases, compatibility shims, or
   legacy examples. State why each break is worth it and what tests or fixtures
@@ -119,8 +123,12 @@ inputs, dry-run behavior, output paths, and destructive actions? Pick three
 plausible failures across load/validate/render/apply: for each, what does the user
 see, what do they rerun, what state remains, what cleanup is safe? Can CI run
 non-interactively with machine-readable failure and no prompts for destructive or
-long operations? Inspecting the generated tree, can a user tell "yours to edit"
-from "ours to regenerate" by names and paths?
+long operations? Can a user run a non-mutating desired-vs-real state check before
+choosing apply or destroy, and does its output stay smart: whole selected cluster
+absent is one clear absence, while an existing cluster or storage cluster reports
+specific drift such as missing or undeclared Ceph pools, add-ons, VMs, services,
+endpoints, or storage exports? Inspecting the generated tree, can a user tell
+"yours to edit" from "ours to regenerate" by names and paths?
 
 **Authoring.** Count the concepts a user must hold to author a working cluster —
 which are real domain concepts and which are tooling artifacts to remove, combine,
@@ -175,7 +183,8 @@ Call out missing minimal examples, overlap, and layouts that hurt review or reus
 Per issue: **Severity** (Critical/High/Medium/Low), **Evidence** (command, help,
 spec, doc, example path), **Problem**, **User impact**, **Recommendation**. Cover
 help text, dry-run, scoping, destructive-action confirmation, non-interactive use,
-output locations, error actionability, secret/trust handling, and generated-output
+output locations, error actionability, secret/trust handling, desired-vs-real
+state checking, `--override` vs. no-override behavior, and generated-output
 boundaries.
 
 ## 6. Swap and Evolution Invariants
@@ -213,5 +222,8 @@ follow-up change.
 - Treat user-authored YAML as the product API and generated artifacts as outputs.
 - Prefer schema and CLI improvements that make authoring simpler and more complete
   without coupling to implementation detail; keep every snippet safe to commit.
+- Require a non-mutating state-check contract with a good command name and
+  objective reports: succinct root absence, granular drift for existing roots,
+  and no mutation or report suppression from `--override`.
 - Every recommendation must pass the Aggregation test. Prefer fewer, stronger
   recommendations; when something is already right, say so briefly and move on.

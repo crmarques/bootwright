@@ -81,6 +81,11 @@ violates them:
 - **Output.** CLI human output uses the centralized output component in any
   follow-up. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
   external process passthrough.
+- **State checking.** The CLI must include a well-named, non-mutating command for
+  comparing selected desired state with live reality. Do not accept a UX where
+  users must infer drift from `apply`, `destroy`, logs, or generated files.
+  Evaluate behavior both with and without `--override` for commands that support
+  it; override must never make the state-check command mutate or hide drift.
 - **Clean break.** While the API is `v1alpha1`, propose clean breaking
   improvements freely — but never migrations, aliases, compatibility shims, or
   legacy examples.
@@ -115,7 +120,12 @@ remains? Where do the validate / plan / render / apply / status / destroy
 mutation boundaries sit, and can a user predict exactly what mutates? Does the
 same flow run in automation — JSON output, no prompts, explicit approval for
 mutations, stable exit codes? Which command names should be kept, renamed,
-collapsed, or split?
+collapsed, or split? Which command lets the operator ask "does live state match
+this desired state?" without mutation, and is its name better than overloading a
+converge or status command? If the whole selected cluster is absent, does it say
+that succinctly; if the cluster exists, does it report material drift such as
+missing or undeclared Ceph pools, add-ons, VMs, services, endpoints, or storage
+exports?
 
 **Authoring.** What is the smallest safe input that installs one useful cluster,
 and does the repo teach that shape first? Can users start compact and expand only
@@ -186,8 +196,12 @@ showing why larger changes do not buy enough UX, safety, clarity, or elegance.
   provider neutrality, understandable binding, lower risk, or no real gain from
   alternatives.
 - To change the CLI, define the mutation boundary, automation behavior, and
-  recovery path. To change a name, give old → new, affected surfaces, the
-  user-facing benefit, and the validation/docs/examples that must change.
+  recovery path. Include `--override` vs. no-override behavior where relevant.
+  To add or rename a desired-vs-real state-check command, define its non-mutating
+  contract, report granularity, exit codes, JSON shape, and how it differs from
+  `status`, `render`, `apply`, and `destroy`. To change a name, give old → new,
+  affected surfaces, the user-facing benefit, and the validation/docs/examples
+  that must change.
 
 ## Output Format
 
@@ -204,9 +218,10 @@ problems ordered by user impact and backed by evidence.
 ## 3. From-Scratch Operator Journey
 The ideal flow from empty context to achieved desired state — create/import,
 validate, materialize secrets, preview effective state and rendered output,
-converge infra then clusters (storage and add-ons included), monitor and inspect,
-access, recover from failure, destroy/reset safely. Use current commands where
-already right; mark proposals as proposals.
+compare desired state with live reality using the non-mutating state-check
+command, converge infra then clusters (storage and add-ons included), monitor and
+inspect, access, recover from failure, destroy/reset safely. Use current commands
+where already right; mark proposals as proposals.
 
 ## 4. Authoring Critique
 Per kind/file/major field in scope: keep, rename, combine, split, scaffold,
@@ -222,7 +237,8 @@ what changes, each with an accept/reject verdict.
 The chosen design: target CLI flow (mark read-only vs. mutating); target input
 layout and schema posture; naming changes; schema keep/default/derive/replace/
 remove; key behavior changes; expected user-visible improvements; `v1alpha1` break
-implications; risks and mitigations.
+implications; risks and mitigations. Explicitly include the desired-vs-real
+state-check command name and why it is not confused with convergence or cleanup.
 
 ## 7. Target Shape
 If you change input organization or schema, show a concise, secret-free file tree
@@ -251,5 +267,8 @@ change that creates the most clarity for the least risk.
 - Prefer lean, meaningful schema over exhaustive knobs; default aggressively but
   keep an inspectable effective state; keep the final file set as small as it can
   be without hiding bindings.
+- Require a non-mutating state-check UX that reports absence at the right level
+  and detailed drift only when live roots exist; do not let `--override` change
+  read-only behavior.
 - Every recommendation must pass the Aggregation test. Prefer fewer, stronger
   recommendations, and say plainly when the current state should stand.
