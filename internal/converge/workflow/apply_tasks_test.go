@@ -1403,6 +1403,33 @@ func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.
 	assertTaskResourceKeys(t, tasks, "boot.child-ocp", "kubevirt:metal-ocp:bootwright-child-ocp")
 }
 
+func TestPlanApplyAllOrdersKubeVirtManagedCephAfterHostReadiness(t *testing.T) {
+	state := kubeVirtCephPlanningState(true)
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+
+	assertTaskDeps(t, tasks, "osinstall.ceph-vms", "wait.metal-ocp", "addon.metal-ocp.openshift-virtualization.wait")
+	assertTaskResourceKeys(t, tasks, "osinstall.ceph-vms", "kubevirt:metal-ocp:bootwright-child-ocp")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-vms", "osinstall.ceph-vms")
+	assertTaskDeps(t, tasks, "storage.ceph-vms", "storageinfra.ceph-vms")
+}
+
+func TestPlanApplyAllRejectsKubeVirtManagedCephWithoutHostCapability(t *testing.T) {
+	state := kubeVirtCephPlanningState(true)
+	state.ClusterAddonBindings = nil
+
+	_, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err == nil {
+		t.Fatal("PlanApplyTasksChecked succeeded, want missing kubevirt capability error")
+	}
+	if !strings.Contains(err.Error(), `machine Machine/ceph-0 uses KubeVirt hostClusterRef "metal-ocp"`) {
+		t.Fatalf("error = %v, want managed Ceph KubeVirt hostClusterRef context", err)
+	}
+}
+
 func TestPlanApplyClustersSkipsUnselectedKubeVirtHostDependencies(t *testing.T) {
 	state := kubeVirtChildPlanningState(false)
 
@@ -1664,6 +1691,52 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			},
 		}},
 	}
+}
+
+func kubeVirtCephPlanningState(includeParent bool) v1alpha1.State {
+	state := kubeVirtChildPlanningState(includeParent)
+	state.ContainerClusters = nil
+	if includeParent {
+		state.ContainerClusters = []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "metal-ocp"}}}
+	}
+	state.Machines = []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+			Substrate: v1alpha1.MachineSubstrate{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "child-kubevirt-provider"},
+				ProfileRef:  v1alpha1.LocalObjectReference{Name: "sno"},
+			},
+			OS: v1alpha1.MachineOSSpec{
+				Provided:   v1alpha1.BoolPtr(false),
+				ProfileRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.20"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{
+					AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
+					KeyRef:     v1alpha1.SecretRef{Name: "ceph-ssh"},
+				},
+			},
+		},
+	}}
+	state.StorageClusters = []v1alpha1.StorageCluster{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-vms"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Type: v1alpha1.StorageClusterTypeCeph,
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Topology: v1alpha1.StorageCephTopology{
+					Nodes: []v1alpha1.StorageCephNode{{
+						Name:       "ceph-0",
+						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+						Site:       "dc1",
+						Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
+					}},
+				},
+			},
+		},
+	}}
+	return state
 }
 
 func applyTaskIDs(tasks []ApplyTask) []string {

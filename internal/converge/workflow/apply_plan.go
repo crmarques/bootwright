@@ -20,17 +20,20 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	for _, phase := range target.PhaseNames {
 		phaseSet[phase] = true
 	}
-	var tasks []ApplyTask
-	kubeVirtDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseContainerCluster] && phaseSet[ApplyPhaseAddons] {
+	graph := NewActivityGraph()
+	addAvailableMachineOSCapabilities(graph, state)
+	kubeVirtReqsByCluster := map[string][]CapabilityRef{}
+	if phaseSet[ApplyPhaseClusterInstall] || phaseSet[ApplyPhaseContainerCluster] {
 		var err error
-		kubeVirtDepsByCluster, err = kubeVirtHostClusterApplyDeps(state)
+		kubeVirtReqsByCluster, err = kubeVirtHostClusterApplyCapabilities(state)
 		if err != nil {
 			return nil, err
 		}
 	}
-	machineServiceTasks, machineServiceTaskIDs := planMachineServiceTasks(state, phaseSet)
-	tasks = append(tasks, machineServiceTasks...)
+	machineServiceTaskIDs, err := planMachineServiceActivities(graph, state, phaseSet)
+	if err != nil {
+		return nil, err
+	}
 	storageInfraDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseStorageInfra] {
 		for _, cluster := range state.StorageClusters {
@@ -43,7 +46,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			managedOSDeps := []string{}
 			managedOSMachines := managedOSMachineNames(state, cluster)
 			if len(managedOSMachines) > 0 {
-				prepareDepsByHost := planStorageManagedOSPrepareTasks(&tasks, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+				prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+				if err != nil {
+					return nil, err
+				}
 				taskID := "osinstall." + cluster.Metadata.Name
 				deps := append([]string(nil), machineServiceTaskIDs...)
 				seenPrepareDeps := map[string]bool{}
@@ -57,46 +63,69 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					}
 				}
 				managedOSDeps = append(managedOSDeps, taskID)
-				tasks = append(tasks, ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:           taskID,
-						Kind:         ApplyTaskKindManagedMachineOS,
-						Label:        "managed OS " + cluster.Metadata.Name + " machines",
-						Cluster:      cluster.Metadata.Name,
-						ClusterKind:  ApplyClusterKindStorage,
-						Status:       TaskStatusPending,
-						Dependencies: deps,
-						ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
+				requires, err := kubeVirtHostClusterApplyCapabilitiesForMachines(state, managedOSMachines)
+				if err != nil {
+					return nil, err
+				}
+				provides := make([]CapabilityRef, 0, len(managedOSMachines)*2)
+				for _, machineName := range managedOSMachines {
+					provides = append(provides, machineInstantiatedCapability(machineName), machineOSReadyCapability(machineName))
+				}
+				if err := graph.Add(Activity{
+					ID:                   taskID,
+					Kind:                 ActivityKindManagedOSInstall,
+					Requires:             requires,
+					Provides:             provides,
+					ExplicitDependencies: deps,
+					Task: ApplyTask{
+						Entry: TaskLedgerEntry{
+							ID:           taskID,
+							Kind:         ApplyTaskKindManagedMachineOS,
+							Label:        "managed OS " + cluster.Metadata.Name + " machines",
+							Cluster:      cluster.Metadata.Name,
+							ClusterKind:  ApplyClusterKindStorage,
+							Status:       TaskStatusPending,
+							ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
+						},
+						Playbook:      applyManagedMachineOSPlaybook,
+						Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
+						ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
+						State:         storageTaskState(state, cluster.Metadata.Name),
+						Forks:         len(managedOSMachines),
+						RedfishSlots:  len(managedOSMachines),
 					},
-					Playbook:      applyManagedMachineOSPlaybook,
-					Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
-					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
-					State:         storageTaskState(state, cluster.Metadata.Name),
-					Forks:         len(managedOSMachines),
-					RedfishSlots:  len(managedOSMachines),
-				})
+				}); err != nil {
+					return nil, err
+				}
 			}
 			taskID := "storageinfra." + cluster.Metadata.Name
 			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 			deps := append([]string(nil), machineServiceTaskIDs...)
 			deps = append(deps, managedOSDeps...)
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           taskID,
-					Kind:         ApplyTaskKindStorageInfra,
-					Label:        "storage infra " + cluster.Metadata.Name,
-					Cluster:      cluster.Metadata.Name,
-					ClusterKind:  ApplyClusterKindStorage,
-					Status:       TaskStatusPending,
-					Dependencies: deps,
-					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+			if err := graph.Add(Activity{
+				ID:                   taskID,
+				Kind:                 ActivityKindStorageNodePrepare,
+				Provides:             []CapabilityRef{{Kind: "storage.nodes-ready", Name: cluster.Metadata.Name}},
+				ExplicitDependencies: deps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindStorageInfra,
+						Label:        "storage infra " + cluster.Metadata.Name,
+						Cluster:      cluster.Metadata.Name,
+						ClusterKind:  ApplyClusterKindStorage,
+						Status:       TaskStatusPending,
+						ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+					},
+					Playbook:      applyStoragePlaybook,
+					Limit:         render.StorageClusterGroupName(cluster.Metadata.Name),
+					ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
+					State:         storageTaskState(state, cluster.Metadata.Name),
+					Forks:         storageClusterNodeCount(cluster),
 				},
-				Playbook:      applyStoragePlaybook,
-				Limit:         render.StorageClusterGroupName(cluster.Metadata.Name),
-				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
-				State:         storageTaskState(state, cluster.Metadata.Name),
-				Forks:         storageClusterNodeCount(cluster),
-			})
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	storageDepsByCluster := map[string][]string{}
@@ -112,22 +141,29 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			storageDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 			deps := append([]string(nil), machineServiceTaskIDs...)
 			deps = append(deps, storageInfraDepsByCluster[cluster.Metadata.Name]...)
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           taskID,
-					Kind:         ApplyTaskKindStorageCluster,
-					Label:        "storage " + cluster.Metadata.Name,
-					Cluster:      cluster.Metadata.Name,
-					ClusterKind:  ApplyClusterKindStorage,
-					Status:       TaskStatusPending,
-					Dependencies: deps,
-					ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+			if err := graph.Add(Activity{
+				ID:                   taskID,
+				Kind:                 ActivityKindStorageClusterProvision,
+				Provides:             []CapabilityRef{{Kind: "storage.cluster-ready", Name: cluster.Metadata.Name}},
+				ExplicitDependencies: deps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindStorageCluster,
+						Label:        "storage " + cluster.Metadata.Name,
+						Cluster:      cluster.Metadata.Name,
+						ClusterKind:  ApplyClusterKindStorage,
+						Status:       TaskStatusPending,
+						ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
+					},
+					Playbook:      applyStoragePlaybook,
+					Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
+					ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
+					State:         storageTaskState(state, cluster.Metadata.Name),
 				},
-				Playbook:      applyStoragePlaybook,
-				Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
-				ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
-				State:         storageTaskState(state, cluster.Metadata.Name),
-			})
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	infraDepsByCluster := map[string][]string{}
@@ -137,8 +173,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
 			baseDeps := append([]string(nil), machineServiceTaskIDs...)
-			baseDeps = append(baseDeps, kubeVirtDepsByCluster[name]...)
-			prepareDepsByHost := planContainerMachinePrepareTasks(&tasks, state, name, infraHosts, baseDeps)
+			prepareDepsByHost, err := planContainerMachinePrepareTasks(graph, state, name, infraHosts, baseDeps)
+			if err != nil {
+				return nil, err
+			}
 			machineTaskIDsByHost := map[string][]string{}
 			for _, machineName := range applyClusterMachineNames(state, name) {
 				host := applyMachineHost(state, machineName)
@@ -152,29 +190,37 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 				}
 				hostSlotKey := applyMachineHostSlotKey(state, machineName)
 				machineTaskIDsByHost[host] = append(machineTaskIDsByHost[host], taskID)
-				tasks = append(tasks, ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:            taskID,
-						Kind:          ApplyTaskKindClusterInstall,
-						Label:         "machine infra " + name + "/" + machineName,
-						Cluster:       name,
-						ClusterKind:   ApplyClusterKindContainer,
-						Node:          machineName,
-						Host:          host,
-						ResourceKeys:  applyMachineExclusiveResourceKeys(state, name, machineName),
+				if err := graph.Add(Activity{
+					ID:                   taskID,
+					Kind:                 ActivityKindMachineInstantiate,
+					Requires:             kubeVirtReqsByCluster[name],
+					Provides:             []CapabilityRef{machineInstantiatedCapability(machineName)},
+					ExplicitDependencies: deps,
+					Task: ApplyTask{
+						Entry: TaskLedgerEntry{
+							ID:            taskID,
+							Kind:          ApplyTaskKindClusterInstall,
+							Label:         "machine infra " + name + "/" + machineName,
+							Cluster:       name,
+							ClusterKind:   ApplyClusterKindContainer,
+							Node:          machineName,
+							Host:          host,
+							ResourceKeys:  applyMachineExclusiveResourceKeys(state, name, machineName),
+							HostSlotKey:   hostSlotKey,
+							HostSlotCount: 1,
+							Status:        TaskStatusPending,
+						},
+						Playbook:      applyClusterInstallPlaybook,
+						Limit:         render.MachineInfraHostName(name, machineName),
+						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
+						Forks:         1,
+						State:         clusterState,
 						HostSlotKey:   hostSlotKey,
 						HostSlotCount: 1,
-						Status:        TaskStatusPending,
-						Dependencies:  deps,
 					},
-					Playbook:      applyClusterInstallPlaybook,
-					Limit:         render.MachineInfraHostName(name, machineName),
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_machine_name=" + machineName},
-					Forks:         1,
-					State:         clusterState,
-					HostSlotKey:   hostSlotKey,
-					HostSlotCount: 1,
-				})
+				}); err != nil {
+					return nil, err
+				}
 			}
 			for _, host := range infraHosts {
 				taskID := "infrafinalize." + name + "." + host
@@ -184,71 +230,91 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 					deps = append(deps, prepareID)
 				}
 				infraDepsByCluster[name] = append(infraDepsByCluster[name], taskID)
-				tasks = append(tasks, ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:           taskID,
-						Kind:         ApplyTaskKindMachineInfraFinalize,
-						Label:        "machine infra finalize " + name + " on " + host,
-						Cluster:      name,
-						ClusterKind:  ApplyClusterKindContainer,
-						Host:         host,
-						ResourceKeys: []string{hostMutationResource(host)},
-						Status:       TaskStatusPending,
-						Dependencies: deps,
+				if err := graph.Add(Activity{
+					ID:                   taskID,
+					Kind:                 ActivityKindMachineSubstratePrepare,
+					Requires:             kubeVirtReqsByCluster[name],
+					ExplicitDependencies: deps,
+					Task: ApplyTask{
+						Entry: TaskLedgerEntry{
+							ID:           taskID,
+							Kind:         ApplyTaskKindMachineInfraFinalize,
+							Label:        "machine infra finalize " + name + " on " + host,
+							Cluster:      name,
+							ClusterKind:  ApplyClusterKindContainer,
+							Host:         host,
+							ResourceKeys: []string{hostMutationResource(host)},
+							Status:       TaskStatusPending,
+						},
+						Playbook:      applyMachineInfraFinalize,
+						Limit:         host,
+						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
+						Forks:         1,
+						State:         clusterState,
 					},
-					Playbook:      applyMachineInfraFinalize,
-					Limit:         host,
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name, "bootwright_task_provider_host_name=" + host},
-					Forks:         1,
-					State:         clusterState,
-				})
+				}); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 	for _, name := range clusterNames {
 		deps := append([]string(nil), infraDepsByCluster[name]...)
-		deps = append(deps, kubeVirtDepsByCluster[name]...)
 		if phaseSet[ApplyPhaseContainerCluster] {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			isoTaskID := "iso." + name
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           isoTaskID,
-					Kind:         ApplyTaskKindClusterISO,
-					Label:        "iso " + name,
-					Cluster:      name,
-					ClusterKind:  ApplyClusterKindContainer,
-					Status:       TaskStatusPending,
-					Dependencies: deps,
+			if err := graph.Add(Activity{
+				ID:                   isoTaskID,
+				Kind:                 ActivityKindContainerInstallAssets,
+				Requires:             kubeVirtReqsByCluster[name],
+				ExplicitDependencies: deps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          isoTaskID,
+						Kind:        ApplyTaskKindClusterISO,
+						Label:       "iso " + name,
+						Cluster:     name,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					Playbook:      applyCreateISOPlaybook,
+					Limit:         render.GroupOCPHosts,
+					Forks:         1,
+					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+					State:         clusterState,
 				},
-				Playbook:      applyCreateISOPlaybook,
-				Limit:         render.GroupOCPHosts,
-				Forks:         1,
-				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-				State:         clusterState,
-			})
+			}); err != nil {
+				return nil, err
+			}
 			machineNames := applyClusterMachineNames(state, name)
 			bootTaskID := ""
 			if len(machineNames) > 0 {
 				bootTaskID = "boot." + name
-				tasks = append(tasks, ApplyTask{
-					Entry: TaskLedgerEntry{
-						ID:           bootTaskID,
-						Kind:         ApplyTaskKindNodeBoot,
-						Label:        "boot " + name + " nodes",
-						Cluster:      name,
-						ClusterKind:  ApplyClusterKindContainer,
-						ResourceKeys: applyNodeBootResourceKeys(state, name, machineNames),
-						Status:       TaskStatusPending,
-						Dependencies: []string{isoTaskID},
+				if err := graph.Add(Activity{
+					ID:                   bootTaskID,
+					Kind:                 ActivityKindContainerNodeBoot,
+					Requires:             kubeVirtReqsByCluster[name],
+					ExplicitDependencies: []string{isoTaskID},
+					Task: ApplyTask{
+						Entry: TaskLedgerEntry{
+							ID:           bootTaskID,
+							Kind:         ApplyTaskKindNodeBoot,
+							Label:        "boot " + name + " nodes",
+							Cluster:      name,
+							ClusterKind:  ApplyClusterKindContainer,
+							ResourceKeys: applyNodeBootResourceKeys(state, name, machineNames),
+							Status:       TaskStatusPending,
+						},
+						Playbook:      applyBootMachinePlaybook,
+						Limit:         render.AgentNodeGroupName(name),
+						ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+						State:         clusterState,
+						Forks:         len(machineNames),
+						RedfishSlots:  len(machineNames),
 					},
-					Playbook:      applyBootMachinePlaybook,
-					Limit:         render.AgentNodeGroupName(name),
-					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-					State:         clusterState,
-					Forks:         len(machineNames),
-					RedfishSlots:  len(machineNames),
-				})
+				}); err != nil {
+					return nil, err
+				}
 			}
 			waitDeps := []string{}
 			if bootTaskID != "" {
@@ -256,41 +322,48 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			} else {
 				waitDeps = append(waitDeps, isoTaskID)
 			}
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           "wait." + name,
-					Kind:         ApplyTaskKindInstallWait,
-					Label:        "wait install " + name,
-					Cluster:      name,
-					ClusterKind:  ApplyClusterKindContainer,
-					Status:       TaskStatusPending,
-					Dependencies: waitDeps,
+			waitID := "wait." + name
+			if err := graph.Add(Activity{
+				ID:                   waitID,
+				Kind:                 ActivityKindContainerInstallWait,
+				Provides:             []CapabilityRef{clusterInstalledCapability(name)},
+				ExplicitDependencies: waitDeps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          waitID,
+						Kind:        ApplyTaskKindInstallWait,
+						Label:       "wait install " + name,
+						Cluster:     name,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					Playbook:      applyWaitInstallPlaybook,
+					Limit:         render.GroupOCPHosts,
+					Forks:         1,
+					ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
+					State:         clusterState,
 				},
-				Playbook:      applyWaitInstallPlaybook,
-				Limit:         render.GroupOCPHosts,
-				Forks:         1,
-				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + name},
-				State:         clusterState,
-			})
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if phaseSet[ApplyPhaseAddons] {
-		addonTasks, err := planExtensionTasks(state, phaseSet[ApplyPhaseContainerCluster])
-		if err != nil {
-			return tasks, err
+		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseContainerCluster]); err != nil {
+			return nil, err
 		}
-		tasks = append(tasks, addonTasks...)
-		tasks = append(tasks, planStorageAttachmentTasks(state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster)...)
+		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster); err != nil {
+			return nil, err
+		}
 	}
-	return tasks, nil
+	return graph.Lower()
 }
 
-func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]ApplyTask, error) {
+func planExtensionActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool) error {
 	plans, err := extensionplan.BindingPlans(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var tasks []ApplyTask
 	for _, binding := range plans {
 		if !stateHasContainerCluster(state, binding.Cluster) {
 			continue
@@ -303,39 +376,72 @@ func planExtensionTasks(state v1alpha1.State, installPhasePlanned bool) ([]Apply
 			extension := extension
 			applyID := "addon." + binding.Cluster + "." + extension.Name + ".apply"
 			waitID := "addon." + binding.Cluster + "." + extension.Name + ".wait"
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           applyID,
-					Kind:         ApplyTaskKindClusterAddonApply,
-					Label:        "addon " + binding.Cluster + " " + extension.Name + " apply",
-					Cluster:      binding.Cluster,
-					ClusterKind:  ApplyClusterKindContainer,
-					Status:       TaskStatusPending,
-					Dependencies: append([]string(nil), deps...),
+			if err := graph.Add(Activity{
+				ID:                   applyID,
+				Kind:                 ActivityKindClusterAddonApply,
+				ExplicitDependencies: append([]string(nil), deps...),
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          applyID,
+						Kind:        ApplyTaskKindClusterAddonApply,
+						Label:       "addon " + binding.Cluster + " " + extension.Name + " apply",
+						Cluster:     binding.Cluster,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
+					Extension: &extension,
 				},
-				State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
-				Extension: &extension,
-			})
-			tasks = append(tasks, ApplyTask{
-				Entry: TaskLedgerEntry{
-					ID:           waitID,
-					Kind:         ApplyTaskKindClusterAddonWait,
-					Label:        "addon " + binding.Cluster + " " + extension.Name + " wait",
-					Cluster:      binding.Cluster,
-					ClusterKind:  ApplyClusterKindContainer,
-					Status:       TaskStatusPending,
-					Dependencies: []string{applyID},
+			}); err != nil {
+				return err
+			}
+			provides := addonProvidedCapabilities(binding.Cluster, extension.Extension)
+			if err := graph.Add(Activity{
+				ID:                   waitID,
+				Kind:                 ActivityKindClusterAddonWait,
+				Provides:             provides,
+				ExplicitDependencies: []string{applyID},
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:          waitID,
+						Kind:        ApplyTaskKindClusterAddonWait,
+						Label:       "addon " + binding.Cluster + " " + extension.Name + " wait",
+						Cluster:     binding.Cluster,
+						ClusterKind: ApplyClusterKindContainer,
+						Status:      TaskStatusPending,
+					},
+					State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
+					Extension: &extension,
 				},
-				State:     stategraph.FilterStateToClusters(state, []string{binding.Cluster}),
-				Extension: &extension,
-			})
+			}); err != nil {
+				return err
+			}
 			deps = []string{waitID}
 		}
 	}
-	return tasks, nil
+	return nil
 }
 
-func planContainerMachinePrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, clusterName string, hosts []string, deps []string) map[string]string {
+func addAvailableMachineOSCapabilities(graph *ActivityGraph, state v1alpha1.State) {
+	for _, machine := range state.Machines {
+		if v1alpha1.MachineOSProvided(machine) {
+			graph.AddAvailable(machineOSReadyCapability(machine.Metadata.Name))
+		}
+	}
+}
+
+func addonProvidedCapabilities(cluster string, extension v1alpha1.ClusterAddon) []CapabilityRef {
+	out := make([]CapabilityRef, 0, len(extension.Spec.Provides))
+	for _, capability := range extension.Spec.Provides {
+		if capability == "" {
+			continue
+		}
+		out = append(out, addonProvidesCapability(cluster, capability))
+	}
+	return out
+}
+
+func planContainerMachinePrepareTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, hosts []string, deps []string) (map[string]string, error) {
 	out := map[string]string{}
 	clusterState := stategraph.FilterStateToClusters(state, []string{clusterName})
 	for _, host := range hosts {
@@ -344,29 +450,36 @@ func planContainerMachinePrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, 
 		}
 		taskID := "infraprepare." + clusterName + "." + host
 		out[host] = taskID
-		*tasks = append(*tasks, ApplyTask{
-			Entry: TaskLedgerEntry{
-				ID:           taskID,
-				Kind:         ApplyTaskKindMachineInfraPrepare,
-				Label:        "machine infra prepare " + clusterName + " on " + host,
-				Cluster:      clusterName,
-				ClusterKind:  ApplyClusterKindContainer,
-				Host:         host,
-				ResourceKeys: []string{hostMutationResource(host)},
-				Status:       TaskStatusPending,
-				Dependencies: append([]string(nil), deps...),
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			Kind:                 ActivityKindMachineSubstratePrepare,
+			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
+			ExplicitDependencies: append([]string(nil), deps...),
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindMachineInfraPrepare,
+					Label:        "machine infra prepare " + clusterName + " on " + host,
+					Cluster:      clusterName,
+					ClusterKind:  ApplyClusterKindContainer,
+					Host:         host,
+					ResourceKeys: []string{hostMutationResource(host)},
+					Status:       TaskStatusPending,
+				},
+				Playbook:      applyMachineInfraPrepare,
+				Limit:         host,
+				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+				Forks:         1,
+				State:         clusterState,
 			},
-			Playbook:      applyMachineInfraPrepare,
-			Limit:         host,
-			ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
-			Forks:         1,
-			State:         clusterState,
-		})
+		}); err != nil {
+			return nil, err
+		}
 	}
-	return out
+	return out, nil
 }
 
-func planStorageManagedOSPrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, clusterName string, machineNames []string, deps []string) map[string]string {
+func planStorageManagedOSPrepareTasks(graph *ActivityGraph, state v1alpha1.State, clusterName string, machineNames []string, deps []string) (map[string]string, error) {
 	out := map[string]string{}
 	seen := map[string]bool{}
 	for _, machineName := range machineNames {
@@ -377,26 +490,33 @@ func planStorageManagedOSPrepareTasks(tasks *[]ApplyTask, state v1alpha1.State, 
 		seen[host] = true
 		taskID := "osprepare." + clusterName + "." + host
 		out[host] = taskID
-		*tasks = append(*tasks, ApplyTask{
-			Entry: TaskLedgerEntry{
-				ID:           taskID,
-				Kind:         ApplyTaskKindMachineInfraPrepare,
-				Label:        "managed OS prepare " + clusterName + " on " + host,
-				Cluster:      clusterName,
-				ClusterKind:  ApplyClusterKindStorage,
-				Host:         host,
-				ResourceKeys: []string{hostMutationResource(host)},
-				Status:       TaskStatusPending,
-				Dependencies: append([]string(nil), deps...),
+		if err := graph.Add(Activity{
+			ID:                   taskID,
+			Kind:                 ActivityKindMachineSubstratePrepare,
+			Requires:             []CapabilityRef{providerHostReadyCapability(host)},
+			ExplicitDependencies: append([]string(nil), deps...),
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:           taskID,
+					Kind:         ApplyTaskKindMachineInfraPrepare,
+					Label:        "managed OS prepare " + clusterName + " on " + host,
+					Cluster:      clusterName,
+					ClusterKind:  ApplyClusterKindStorage,
+					Host:         host,
+					ResourceKeys: []string{hostMutationResource(host)},
+					Status:       TaskStatusPending,
+				},
+				Playbook:      applyMachineInfraPrepare,
+				Limit:         host,
+				ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
+				Forks:         1,
+				State:         storageTaskState(state, clusterName),
 			},
-			Playbook:      applyMachineInfraPrepare,
-			Limit:         host,
-			ExtraVarPairs: []string{"bootwright_task_cluster_name=" + clusterName, "bootwright_task_provider_host_name=" + host},
-			Forks:         1,
-			State:         storageTaskState(state, clusterName),
-		})
+		}); err != nil {
+			return nil, err
+		}
 	}
-	return out
+	return out, nil
 }
 
 func clusterHostNeedsSubstratePrepare(state v1alpha1.State, clusterName, host string) bool {

@@ -16,8 +16,7 @@ type StorageAttachmentPlan struct {
 	Input   v1alpha1.ClusterAddonBindingInput
 }
 
-func planStorageAttachmentTasks(state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) []ApplyTask {
-	var tasks []ApplyTask
+func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State, installPhasePlanned bool, storageDepsByCluster map[string][]string) error {
 	exportByName := map[string]v1alpha1.StorageExport{}
 	for _, export := range state.StorageExports {
 		exportByName[export.Metadata.Name] = export
@@ -40,21 +39,27 @@ func planStorageAttachmentTasks(state v1alpha1.State, installPhasePlanned bool, 
 		deps = append(deps, "addon."+cluster+"."+effect.Addon.Name+".wait")
 		id := "storageattachment." + cluster + "." + effect.Addon.Name + "." + effect.Input.Name + ".apply"
 		attachmentPlan := StorageAttachmentPlan{Cluster: cluster, Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}
-		tasks = append(tasks, ApplyTask{
-			Entry: TaskLedgerEntry{
-				ID:           id,
-				Kind:         ApplyTaskKindStorageAttachmentApply,
-				Label:        "storage attachment " + cluster + " " + effect.Addon.Name + "/" + effect.Input.Name + " apply",
-				Cluster:      cluster,
-				ClusterKind:  ApplyClusterKindContainer,
-				Status:       TaskStatusPending,
-				Dependencies: deps,
+		if err := graph.Add(Activity{
+			ID:                   id,
+			Kind:                 ActivityKindStorageAttachmentApply,
+			ExplicitDependencies: deps,
+			Task: ApplyTask{
+				Entry: TaskLedgerEntry{
+					ID:          id,
+					Kind:        ApplyTaskKindStorageAttachmentApply,
+					Label:       "storage attachment " + cluster + " " + effect.Addon.Name + "/" + effect.Input.Name + " apply",
+					Cluster:     cluster,
+					ClusterKind: ApplyClusterKindContainer,
+					Status:      TaskStatusPending,
+				},
+				State:             stategraph.FilterStateToClusters(state, []string{cluster}),
+				StorageAttachment: &attachmentPlan,
 			},
-			State:             stategraph.FilterStateToClusters(state, []string{cluster}),
-			StorageAttachment: &attachmentPlan,
-		})
+		}); err != nil {
+			return err
+		}
 	}
-	return tasks
+	return nil
 }
 
 func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {

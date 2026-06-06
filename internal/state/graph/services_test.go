@@ -148,6 +148,30 @@ func TestFilterStateToClustersKeepsReferencedProviders(t *testing.T) {
 	}
 }
 
+func TestFilterStateToClustersExcludesUnconsumedInfraComponentMachines(t *testing.T) {
+	state := sharedManagedServiceState()
+	state.Machines = append(state.Machines, v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "unused-service-host"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime, v1alpha1.MachineCapabilityProxy},
+			OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+		},
+	})
+	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
+		Metadata: v1alpha1.Metadata{Name: "unused-proxy"},
+		Spec: v1alpha1.InfraComponentSpec{Proxy: &v1alpha1.ProxyComponent{
+			Type:       v1alpha1.InfraComponentTypeSquid,
+			MachineRef: v1alpha1.LocalObjectReference{Name: "unused-service-host"},
+			Port:       v1alpha1.DefaultSquidPort,
+		}},
+	})
+
+	filtered := FilterStateToClusters(state, []string{"cluster-a"})
+	if got := namesOfMachines(filtered.Machines); !reflect.DeepEqual(got, []string{"service-host", "cluster-a-master-0"}) {
+		t.Fatalf("machines = %#v, want only selected cluster and consumed service machines", got)
+	}
+}
+
 func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
 	state := sharedManagedServiceState()
 	state.ClusterAddons = []v1alpha1.ClusterAddon{

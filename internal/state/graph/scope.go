@@ -45,7 +45,7 @@ func FilterStateToClusters(state v1alpha1.State, names []string) v1alpha1.State 
 		filteredOCP = append(filteredOCP, ocp)
 		addContainerClusterMachines(selectedMachines, ocp)
 	}
-	addInfraComponentMachines(selectedMachines, state)
+	addSelectedServiceMachines(selectedMachines, state, selectedOCP)
 	state = filterStorageToClusters(state, selectedOCP, selectedMachines)
 	state.ContainerClusters = filteredOCP
 	state = filterMachinesAndProviders(state, selectedMachines)
@@ -293,21 +293,16 @@ func filterMachinesAndProviders(state v1alpha1.State, selectedMachines map[strin
 	return state
 }
 
-func addInfraComponentMachines(out map[string]bool, state v1alpha1.State) {
-	for _, component := range state.InfraComponents {
-		switch {
-		case component.Spec.ArtifactServer != nil && component.Spec.ArtifactServer.MachineRef.Name != "":
-			out[component.Spec.ArtifactServer.MachineRef.Name] = true
-		case component.Spec.LoadBalancer != nil && component.Spec.LoadBalancer.MachineRef.Name != "":
-			out[component.Spec.LoadBalancer.MachineRef.Name] = true
-		case component.Spec.Proxy != nil && component.Spec.Proxy.MachineRef.Name != "":
-			out[component.Spec.Proxy.MachineRef.Name] = true
-		case component.Spec.NameResolution != nil && component.Spec.NameResolution.MachineRef.Name != "":
-			out[component.Spec.NameResolution.MachineRef.Name] = true
-		case component.Spec.NTP != nil && component.Spec.NTP.MachineRef.Name != "":
-			out[component.Spec.NTP.MachineRef.Name] = true
-		case component.Spec.Registry != nil && component.Spec.Registry.MachineRef.Name != "":
-			out[component.Spec.Registry.MachineRef.Name] = true
+func addSelectedServiceMachines(out map[string]bool, state v1alpha1.State, selectedClusters map[string]bool) {
+	for _, service := range ResolveMachineServices(state).Services {
+		if service.MachineRef == "" {
+			continue
+		}
+		for _, consumer := range service.Consumers {
+			if selectedClusters[consumer.Cluster] {
+				out[service.MachineRef] = true
+				break
+			}
 		}
 	}
 }
