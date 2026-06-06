@@ -559,8 +559,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	loadIdx := findAnsibleTask(t, tasks, "Load Anaconda package list")
 	installIdx := findAnsibleTask(t, tasks, "Install Anaconda ISO tooling packages")
 	verifyIdx := findAnsibleTask(t, tasks, "Verify mkksiso is available")
-	if !(loadIdx < installIdx && installIdx < verifyIdx) {
-		t.Fatalf("Anaconda role must install mkksiso packages before verifying mkksiso")
+	assertIdx := findAnsibleTask(t, tasks, "Assert mkksiso is available")
+	if !(loadIdx < installIdx && installIdx < verifyIdx && verifyIdx < assertIdx) {
+		t.Fatalf("Anaconda role must install mkksiso packages before verifying and asserting mkksiso")
 	}
 	pkg, ok := tasks[installIdx]["ansible.builtin.package"].(map[string]any)
 	if !ok {
@@ -568,6 +569,25 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	}
 	if got, _ := pkg["name"].(string); got != "{{ bootwright_machine_os_install_anaconda_packages }}" {
 		t.Fatalf("%s package name got %q", tasks[installIdx]["name"], got)
+	}
+	mkksisoProbe, ok := tasks[verifyIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[verifyIdx]["name"])
+	}
+	for _, want := range []string{"mkksiso", "--help"} {
+		if !stringListContains(mkksisoProbe["argv"], want) {
+			t.Fatalf("%s argv missing %q: %v", tasks[verifyIdx]["name"], want, mkksisoProbe["argv"])
+		}
+	}
+	if got := tasks[verifyIdx]["failed_when"]; got != false {
+		t.Fatalf("%s must leave failure reporting to the assert task, got %v", tasks[verifyIdx]["name"], got)
+	}
+	mkksisoAssert, ok := tasks[assertIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an assert task", tasks[assertIdx]["name"])
+	}
+	if !stringListContains(mkksisoAssert["that"], "bootwright_mkksiso_probe.rc == 0") {
+		t.Fatalf("%s must assert the mkksiso probe result, got %v", tasks[assertIdx]["name"], mkksisoAssert["that"])
 	}
 	copyIdx := findAnsibleTask(t, tasks, "Copy managed ISO source to provider host")
 	copyTask, ok := tasks[copyIdx]["ansible.builtin.copy"].(map[string]any)

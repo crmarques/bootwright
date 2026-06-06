@@ -1,7 +1,9 @@
 ---
 bootwright_machine_setup_libvirt_packages:
   - qemu-kvm
+  - qemu-img
   - libvirt
+  - libvirt-client
   - virt-install
   - python3-libvirt
 bootwright_machine_setup_libvirt_libvirt_service: libvirtd

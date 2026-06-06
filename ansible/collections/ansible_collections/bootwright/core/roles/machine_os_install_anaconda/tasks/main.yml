@@ -194,11 +194,21 @@
     - name: Verify mkksiso is available
       ansible.builtin.command:
         argv:
-          - which
           - mkksiso
-      register: bootwright_mkksiso_path
+          - --help
+      register: bootwright_mkksiso_probe
       changed_when: false
-      failed_when: bootwright_mkksiso_path.rc != 0
+      failed_when: false
+
+    - name: Assert mkksiso is available
+      ansible.builtin.assert:
+        that:
+          - bootwright_mkksiso_probe.rc == 0
+        fail_msg: >-
+          mkksiso is required to build managed Anaconda install media on
+          {{ inventory_hostname }}. Install the package that provides mkksiso
+          (lorax on Red Hat and Fedora hosts) or run this provider on an OS
+          with mkksiso available.
 
     - name: Copy managed ISO source to provider host
       ansible.builtin.copy:

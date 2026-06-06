@@ -6,3 +6,5 @@ bootwright_clis_packages:
   - openssh-clients
   - nmstate
   - procps-ng
+  - tar
+  - gzip
