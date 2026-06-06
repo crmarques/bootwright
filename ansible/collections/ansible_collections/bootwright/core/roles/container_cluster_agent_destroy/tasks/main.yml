@@ -1,7 +1,12 @@
 ---
 - name: Resolve cluster installer runtime dirs
   ansible.builtin.set_fact:
+    bootwright_cluster_runtime_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime"
     bootwright_cluster_installer_runtime_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer"
+    bootwright_cluster_addon_runtime_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/addons"
+    bootwright_cluster_generated_addon_secrets_dir: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/secrets/addons"
+    bootwright_cluster_install_record_path: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/install-record.json"
+    bootwright_cluster_connection_record_path: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/connection.json"
   changed_when: false
 
 - name: Stop stale installer processes
@@ -13,5 +18,13 @@
 
 - name: Remove local cluster installer runtime dir
   ansible.builtin.file:
-    path: "{{ bootwright_cluster_installer_runtime_dir }}"
+    path: "{{ item }}"
     state: absent
+  loop:
+    - "{{ bootwright_cluster_installer_runtime_dir }}"
+    - "{{ bootwright_cluster_addon_runtime_dir }}"
+    - "{{ bootwright_cluster_generated_addon_secrets_dir }}"
+    - "{{ bootwright_cluster_install_record_path }}"
+    - "{{ bootwright_cluster_connection_record_path }}"
+  loop_control:
+    label: "{{ item }}"

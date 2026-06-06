@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 	"github.com/crmarques/bootwright/internal/runtime/root/managedroot"
 	"go.yaml.in/yaml/v3"
 )
@@ -82,6 +83,10 @@ func All(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Res
 	return AllOn(defaultFS, renderedDir, clustersDir, secretsDir, state)
 }
 
+func AllWithOwnershipRecords(renderedDir, clustersDir, secretsDir string, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	return allOn(defaultFS, renderedDir, clustersDir, secretsDir, state, records)
+}
+
 // Effective writes only the normalized effective-state snapshot. It is used by
 // `bootwright render effective` so operators can inspect defaults without
 // rendering installer, Ansible, or storage tool inputs.
@@ -104,6 +109,10 @@ func EffectiveOn(fs FileSystem, renderedDir string, state v1alpha1.State) (Resul
 // AllOn is All parameterised on FileSystem so tests can assert mode invariants
 // without touching disk. Production callers use All.
 func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	return allOn(fs, renderedDir, clustersDir, secretsDir, state, nil)
+}
+
+func allOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
 	result := Result{
 		EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(renderedDir, "bootwright.lock.yaml"),
@@ -131,8 +140,8 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 	}{
 		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
-		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},
+		{path: result.InventoryPath, value: InventoryWithOwnershipRecords(state, secretsDir, records)},
+		{path: result.VarsPath, value: VarsWithSecretsDirAndOwnership(state, secretsDir, records)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {

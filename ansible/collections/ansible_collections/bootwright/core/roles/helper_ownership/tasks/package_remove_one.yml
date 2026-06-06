@@ -1,0 +1,71 @@
+---
+- name: Resolve package ownership record path
+  ansible.builtin.set_fact:
+    bootwright_ownership_package_safe: "{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}"
+    bootwright_ownership_package_record_path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}/{{ bootwright_ownership_package_name | regex_replace('[^A-Za-z0-9_.-]', '_') }}.json"
+  changed_when: false
+
+- name: Stat package ownership record
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_package_record_path }}"
+  register: bootwright_ownership_package_record_stat
+
+- name: Load package ownership record
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ownership_package_record_path }}"
+  register: bootwright_ownership_package_record_slurp
+  when: bootwright_ownership_package_record_stat.stat.exists | default(false)
+
+- name: Decode package ownership record
+  ansible.builtin.set_fact:
+    bootwright_ownership_package_record: "{{ bootwright_ownership_package_record_slurp.content | b64decode | from_json }}"
+  when: bootwright_ownership_package_record_stat.stat.exists | default(false)
+  changed_when: false
+
+- name: Resolve remaining package ownership requirements
+  ansible.builtin.set_fact:
+    bootwright_ownership_package_remaining_required_by: "{{ bootwright_ownership_package_remaining_required_by_next }}"
+  vars:
+    bootwright_ownership_package_required_by_raw: "{{ bootwright_ownership_package_record.requiredBy | default([]) }}"
+    bootwright_ownership_package_required_by_list: >-
+      {{
+        bootwright_ownership_package_required_by_raw
+        if bootwright_ownership_package_required_by_raw is sequence and bootwright_ownership_package_required_by_raw is not string
+        else ([bootwright_ownership_package_required_by_raw] if bootwright_ownership_package_required_by_raw | default('') | length > 0 else [])
+      }}
+    bootwright_ownership_package_remaining_required_by_next: >-
+      {{
+        bootwright_ownership_package_required_by_list
+        if bootwright_ownership_required_by | default('') | length == 0
+        else (bootwright_ownership_package_required_by_list | reject('equalto', bootwright_ownership_required_by) | list)
+      }}
+  when: bootwright_ownership_package_record_stat.stat.exists | default(false)
+  changed_when: false
+
+- name: Update package ownership record for remaining requirements
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ownership_package_record_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ bootwright_ownership_package_record | combine({'requiredBy': bootwright_ownership_package_remaining_required_by, 'updatedAt': now(utc=true).isoformat()}) | to_nice_json }}\n"
+  when:
+    - bootwright_ownership_package_record_stat.stat.exists | default(false)
+    - bootwright_ownership_package_remaining_required_by | default([]) | length > 0
+
+- name: Remove package that Bootwright introduced
+  ansible.builtin.package:
+    name: "{{ bootwright_ownership_package_record.package }}"
+    state: absent
+  when:
+    - bootwright_ownership_package_record_stat.stat.exists | default(false)
+    - not (bootwright_ownership_package_record.preexisting | default(true) | bool)
+    - bootwright_ownership_package_remaining_required_by | default([]) | length == 0
+
+- name: Remove package ownership record
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_package_record_path }}"
+    state: absent
+  when:
+    - bootwright_ownership_package_record_stat.stat.exists | default(false)
+    - bootwright_ownership_package_remaining_required_by | default([]) | length == 0

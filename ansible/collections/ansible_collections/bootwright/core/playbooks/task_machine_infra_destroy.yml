@@ -30,6 +30,12 @@
         | map(attribute='clusterName')
         | unique | list
       }}
+    bootwright_host_infra_ownership_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
+        | list
+      }}
 
   tasks:
     - name: Destroy substrate per cluster on this host
@@ -38,6 +44,17 @@
       loop_control:
         loop_var: bootwright_cluster_name
       when: bootwright_host_clusters | length > 0
+
+    - name: Destroy recorded machine infrastructure resources
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_ownership
+        tasks_from: destroy_resource.yml
+      vars:
+        bootwright_ownership_record: "{{ item }}"
+      loop: "{{ bootwright_host_infra_ownership_records }}"
+      loop_control:
+        label: "{{ item.kind }}/{{ item.name }}"
+      when: item.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
 
     - name: Sweep current-context libvirt domains
       ansible.builtin.include_tasks: tasks/machine_infra_destroy_libvirt_context.yml

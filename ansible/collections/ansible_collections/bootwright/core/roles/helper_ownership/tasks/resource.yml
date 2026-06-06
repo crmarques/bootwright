@@ -1,0 +1,44 @@
+---
+- name: Validate ownership resource identity
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_dir | default('') | length > 0
+      - bootwright_ownership_kind | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: "ownership resource records need safe kind, name, and bootwright_ownership_dir"
+
+- name: Create ownership resource directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write ownership resource record
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{ bootwright_ownership_name }}.json"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ bootwright_ownership_record | to_nice_json }}\n"
+  vars:
+    bootwright_ownership_record_base:
+      apiVersion: bootwright.io/ownership/v1alpha1
+      kind: "{{ bootwright_ownership_kind }}"
+      name: "{{ bootwright_ownership_name }}"
+      owner: bootwright
+      context: "{{ bootwright_clusters_dir | dirname | basename }}"
+      host: "{{ bootwright_host_name | default(inventory_hostname) }}"
+      hostFacts:
+        bootwright_host_name: "{{ bootwright_host_name | default(inventory_hostname) }}"
+        ansible_host: "{{ ansible_host | default('') }}"
+        ansible_user: "{{ ansible_user | default('') }}"
+        ansible_connection: "{{ ansible_connection | default('') }}"
+        ansible_ssh_common_args: "{{ ansible_ssh_common_args | default('') }}"
+    bootwright_ownership_record: >-
+      {{
+        bootwright_ownership_record_base
+        | combine(bootwright_ownership_fields | default({}), recursive=True)
+        | combine({'updatedAt': now(utc=true).isoformat()}, recursive=True)
+      }}

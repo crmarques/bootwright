@@ -39,6 +39,9 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 	if ctx.ProviderStateDir != filepath.Join(wantBase, ProviderStateName) {
 		t.Fatalf("ProviderStateDir = %q", ctx.ProviderStateDir)
 	}
+	if ctx.OwnershipDir != filepath.Join(wantBase, OwnershipName) {
+		t.Fatalf("OwnershipDir = %q", ctx.OwnershipDir)
+	}
 }
 
 func TestDefaultRegistryPathIgnoresSudoUser(t *testing.T) {
@@ -210,6 +213,7 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 		ctx.RunsDir,
 		ctx.ManagedServicesDir,
 		ctx.ProviderStateDir,
+		ctx.OwnershipDir,
 	} {
 		info, err := os.Stat(dir)
 		if err != nil {
@@ -453,6 +457,7 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 		RunsDir:            filepath.Join(home, RunsDirName),
 		ManagedServicesDir: filepath.Join(home, ManagedServicesName),
 		ProviderStateDir:   filepath.Join(home, ProviderStateName),
+		OwnershipDir:       filepath.Join(home, OwnershipName),
 	}
 	if err := SafePurgeBaseDir(ctx); err == nil {
 		t.Fatal("SafePurgeBaseDir unexpectedly removed home")
@@ -471,6 +476,7 @@ func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 		RunsDir:            filepath.Join(baseDir, RunsDirName),
 		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
 		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
+		OwnershipDir:       filepath.Join(baseDir, OwnershipName),
 	}
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		t.Fatal(err)

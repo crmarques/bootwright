@@ -245,6 +245,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
+			OwnershipDir:       ctx.OwnershipDir,
 			Executable:         flags.executable,
 			Playbook:           runScope.applyPlaybook,
 			Limit:              plan.limit,

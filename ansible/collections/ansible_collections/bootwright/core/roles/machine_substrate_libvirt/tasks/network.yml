@@ -63,3 +63,17 @@
     name: "{{ bootwright_libvirt_network_name }}"
     state: active
     autostart: true
+
+- name: Record libvirt network ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: libvirt-network
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      cluster: "{{ bootwright_current_cluster.name }}"
+      attributes:
+        network: "{{ bootwright_libvirt_network_name }}"
+        uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"

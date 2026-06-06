@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 )
 
 // fakeRunner satisfies ansible.Runner without actually exec'ing.
@@ -353,6 +354,20 @@ func TestLimitMatchesNoHostsTable(t *testing.T) {
 				t.Fatalf("LimitMatchesNoHosts(%q) = %v, want %v", tc.limit, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestLimitMatchesNoHostsUsesOwnershipRecords(t *testing.T) {
+	records := []ownership.ResourceRecord{{
+		Kind: "libvirt-domain",
+		Name: "cluster-a-machine-0",
+		Host: "provider-0",
+	}}
+	if got := LimitMatchesNoHostsWithOwnershipRecords(render.GroupInfraHosts, v1alpha1.State{}, records); got {
+		t.Fatalf("LimitMatchesNoHostsWithOwnershipRecords(%q) = true, want false", render.GroupInfraHosts)
+	}
+	if got := LimitMatchesNoHostsWithOwnershipRecords("provider-0", v1alpha1.State{}, records); got {
+		t.Fatal("literal recorded host limit matched no hosts")
 	}
 }
 

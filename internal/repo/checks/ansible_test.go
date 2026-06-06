@@ -2543,13 +2543,17 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 
 	prereqs := mainTasks[findAnsibleTask(t, mainTasks, "Install Ceph prerequisites on storage node")]
-	packages, ok := prereqs["ansible.builtin.package"].(map[string]any)
+	assertIncludeRoleName(t, prereqs, "bootwright.core.helper_ownership")
+	if got := fmt.Sprint(prereqs["ansible.builtin.include_role"]); !strings.Contains(got, "package_apply.yml") {
+		t.Fatalf("Ceph prerequisite task must use package ownership helper, got %v", prereqs)
+	}
+	vars, ok := prereqs["vars"].(map[string]any)
 	if !ok {
-		t.Fatalf("Ceph prerequisite task missing package module: %v", prereqs)
+		t.Fatalf("Ceph prerequisite task missing vars: %v", prereqs)
 	}
 	for _, name := range []string{"cephadm", "podman", "lvm2", "chrony", "firewalld"} {
-		if !stringListContains(packages["name"], name) {
-			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, packages["name"])
+		if !stringListContains(vars["bootwright_ownership_packages"], name) {
+			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, vars["bootwright_ownership_packages"])
 		}
 	}
 	if got := fmt.Sprint(prereqs["delegate_to"]); strings.Contains(got, "item.inventoryHost") || got != "<nil>" {
@@ -3079,8 +3083,12 @@ func TestDestroyClusterRemovesClusterInstallerRuntimeDir(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_destroy/tasks/main.yml")
 	for _, want := range []string{
 		"bootwright_cluster_installer_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/installer\"",
+		"bootwright_cluster_addon_runtime_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/addons\"",
+		"bootwright_cluster_generated_addon_secrets_dir: \"{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/secrets/addons\"",
 		"bootwright_process_cleanup_pattern: \"clusters/{{ bootwright_current_cluster.name }}/runtime/installer/\"",
-		"path: \"{{ bootwright_cluster_installer_runtime_dir }}\"",
+		"- \"{{ bootwright_cluster_installer_runtime_dir }}\"",
+		"- \"{{ bootwright_cluster_addon_runtime_dir }}\"",
+		"- \"{{ bootwright_cluster_generated_addon_secrets_dir }}\"",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("destroy_agent missing %q", want)

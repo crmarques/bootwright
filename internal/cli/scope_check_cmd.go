@@ -81,6 +81,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
+			OwnershipDir:       ctx.OwnershipDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           preflightPlaybookPath,

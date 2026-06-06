@@ -139,8 +139,8 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # Destroy a protected environment
   bootwright destroy --stage infra --override --yes
 
-  # Remove selected OpenShift cluster install state
-  bootwright destroy --stage clusters --clusters dc1-ocp --yes`,
+  # Remove selected cluster-stage runtime and managed storage state
+  bootwright destroy --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
 	})
 	cmd.AddCommand(
 		retargetCommand(newScopeDestroyCmd(infraScope, stdin, stdout, stderr), "infra", "Tear down infrastructure hosts and substrate"),

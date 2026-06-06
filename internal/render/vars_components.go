@@ -1,8 +1,6 @@
 package render
 
 import (
-	"sort"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
@@ -175,51 +173,6 @@ func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerClu
 	return selectedRegistryComponent{entry: entry, component: component}, true
 }
 
-func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
-	out := make([]any, 0, len(ci.Endpoints))
-	names := make([]string, 0, len(ci.Endpoints))
-	for name := range ci.Endpoints {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		e := ci.Endpoints[name]
-		entry := map[string]any{
-			"name": name,
-		}
-		if address := endpointAddress(state, ci, name); address != "" {
-			entry["address"] = address
-		}
-		if e.DNSName != "" {
-			entry["dnsName"] = e.DNSName
-		}
-		if e.Port > 0 {
-			entry["port"] = e.Port
-		}
-		if e.Scheme != "" {
-			entry["scheme"] = e.Scheme
-		}
-		if e.PrefixLength > 0 {
-			entry["prefixLength"] = e.PrefixLength
-		}
-		if len(e.InterfaceNetworks) > 0 {
-			entry["interfaceNetworks"] = stringSliceAny(e.InterfaceNetworks)
-		}
-		if e.Source.Type != "" {
-			source := map[string]any{"type": e.Source.Type}
-			if e.Source.ComponentRef.Name != "" {
-				source["componentRef"] = e.Source.ComponentRef.Name
-			}
-			if e.Source.BindAddress != "" {
-				source["bindAddress"] = e.Source.BindAddress
-			}
-			entry["source"] = source
-		}
-		out = append(out, entry)
-	}
-	return out
-}
-
 func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, secretsDir string) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
@@ -234,8 +187,15 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
 		out["networkAttachment"] = attachment
 	}
-	if machine, ok := stateview.Machine(state, m.Name); ok && len(machine.Metadata.Labels) > 0 {
-		out["labels"] = machine.Metadata.Labels
+	if machine, ok := stateview.Machine(state, m.Name); ok {
+		out["osProvided"] = v1alpha1.MachineOSProvided(machine)
+		out["osManaged"] = !v1alpha1.MachineOSProvided(machine)
+		if root := managedMachineRootDevice(machine); root != "" {
+			out["managedRootDevice"] = root
+		}
+		if len(machine.Metadata.Labels) > 0 {
+			out["labels"] = machine.Metadata.Labels
+		}
 	}
 	applyMachineRoleContract(out, driver.Roles)
 	if ip := machinePrimaryIP(state, ci, m); ip != "" {
@@ -334,6 +294,13 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		out["boot"] = boot
 	}
 	return out
+}
+
+func managedMachineRootDevice(machine v1alpha1.Machine) string {
+	if machine.Spec.OS.Install.RootDeviceHints == nil {
+		return ""
+	}
+	return machine.Spec.OS.Install.RootDeviceHints.DeviceName
 }
 
 func applyMachineRoleContract(out map[string]any, roles support.RoleContract) {

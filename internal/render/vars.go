@@ -5,6 +5,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/proxy"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 )
 
 // Vars produces the per-cluster Ansible variables consumed by the
@@ -22,6 +23,10 @@ func Vars(state v1alpha1.State) map[string]any {
 }
 
 func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any {
+	return VarsWithSecretsDirAndOwnership(state, secretsDir, nil)
+}
+
+func VarsWithSecretsDirAndOwnership(state v1alpha1.State, secretsDir string, ownershipRecords []ownership.ResourceRecord) map[string]any {
 	env := primaryEnvironment(state)
 	clusters := make([]any, 0, len(state.ContainerClusters))
 	for _, ocp := range state.ContainerClusters {
@@ -76,6 +81,10 @@ func VarsWithSecretsDir(state v1alpha1.State, secretsDir string) map[string]any 
 	}
 	if ntpSources := resolvedAdditionalNTPSources(state); len(ntpSources) > 0 {
 		out["bootwright_resolved_ntp_sources"] = stringSliceAny(ntpSources)
+	}
+	if records := ownershipRecordsVars(ownershipRecords); len(records) > 0 {
+		out["bootwright_ownership_records"] = records
+		out["bootwright_ownership_records_by_kind"] = ownershipRecordsByKindVars(ownershipRecords)
 	}
 	return out
 }

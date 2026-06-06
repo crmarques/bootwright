@@ -42,3 +42,11 @@
     path: /etc/sysctl.d/99-bootwright-haproxy.conf
     state: absent
   when: (bootwright_haproxy_remaining.stdout | default('') | trim) | length == 0
+
+- name: Remove HAProxy ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"

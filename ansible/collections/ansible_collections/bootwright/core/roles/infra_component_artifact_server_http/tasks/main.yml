@@ -190,3 +190,22 @@
   loop: "{{ bootwright_component.listeners }}"
   loop_control:
     label: "{{ item.protocol }}:{{ item.port }}"
+
+- name: Record artifact server ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      paths:
+        - "{{ bootwright_artifacts_root }}"
+      labels:
+        bootwright.kind: artifacts
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: artifacts
+        container: "{{ bootwright_artifacts_container_name }}"

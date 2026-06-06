@@ -1,10 +1,19 @@
 ---
+- name: Fail unsupported managed bare-metal machine wipe
+  ansible.builtin.fail:
+    msg: >-
+      Cannot wipe managed bare-metal machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}:
+      no provider-owned disk deletion or reachable managed-OS SSH wipe capability is available.
+      Declare a provider with owned disk cleanup or destroy the declared OS/storage devices manually.
+  when: bootwright_component.osManaged | default(false) | bool
+
 - name: No bare-metal substrate teardown required
   ansible.builtin.debug:
     msg: >-
       substrate_baremetal teardown is a no-op for cluster
       {{ bootwright_current_cluster.name }} / {{ bootwright_component.name }}; operator owns the hardware.
   changed_when: false
+  when: not (bootwright_component.osManaged | default(false) | bool)
 
 - name: Remove cluster baremetal state directory (idempotent)
   ansible.builtin.file:

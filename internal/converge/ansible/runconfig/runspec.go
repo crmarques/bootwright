@@ -22,6 +22,7 @@ type RunSpecConfig struct {
 	SecretsDir         string
 	ManagedServicesDir string
 	ProviderStateDir   string
+	OwnershipDir       string
 	InventoryPath      string
 	VarsPath           string
 	Playbook           string
@@ -61,6 +62,14 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve provider state dir: %w", err)
 	}
+	ownershipDir := cfg.OwnershipDir
+	if strings.TrimSpace(ownershipDir) == "" {
+		ownershipDir = filepath.Join(filepath.Dir(providerStateDirAbs), "ownership")
+	}
+	ownershipDirAbs, err := filepath.Abs(ownershipDir)
+	if err != nil {
+		return ansible.RunSpec{}, fmt.Errorf("resolve ownership dir: %w", err)
+	}
 	artifactsDirAbs, err := filepath.Abs(cfg.ArtifactsDir)
 	if err != nil {
 		return ansible.RunSpec{}, fmt.Errorf("resolve Ansible artifacts dir: %w", err)
@@ -72,6 +81,7 @@ func NewRunSpec(cfg RunSpecConfig) (ansible.RunSpec, error) {
 		"bootwright_secrets_dir=" + secretsDirAbs,
 		"bootwright_managed_services_dir=" + managedServicesDirAbs,
 		"bootwright_provider_state_dir=" + providerStateDirAbs,
+		"bootwright_ownership_dir=" + ownershipDirAbs,
 		"bootwright_ansible_artifacts_dir=" + artifactsDirAbs,
 	}
 	pairs = append(pairs, cfg.ExtraVarPairs...)

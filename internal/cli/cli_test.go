@@ -149,7 +149,7 @@ func TestDestroyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster names"} {
+	for _, want := range []string{"--stage", "infra|clusters", "--clusters", "ContainerCluster or StorageCluster names"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("destroy help missing %q:\n%s", want, stdout)
 		}
@@ -532,11 +532,11 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"container-cluster"}) {
-		t.Fatalf("phases = %#v, want container-cluster", report.Phases)
+	if !reflect.DeepEqual(report.Phases, []string{"storage-cluster", "container-cluster", "addons"}) {
+		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
-	if report.Playbook != containerClusterScope.destroyPlaybook {
-		t.Fatalf("playbook = %q, want %q", report.Playbook, containerClusterScope.destroyPlaybook)
+	if report.Playbook != clustersScope.destroyPlaybook {
+		t.Fatalf("playbook = %q, want %q", report.Playbook, clustersScope.destroyPlaybook)
 	}
 }
 
@@ -3585,6 +3585,39 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	for _, reject := range []string{"storageinfra.ceph-storage", "iso.dc2-metal-ocp"} {
 		if slices.Contains(gotIDs, reject) {
 			t.Fatalf("mixed apply task IDs unexpectedly include %s: %v", reject, gotIDs)
+		}
+	}
+}
+
+func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
+	setTestHomeAndRoot(t)
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code := runCLI(t, "context", "init", "mixed-destroy", "-f", example)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runCLI(t, "destroy", "--stage", "clusters", "--clusters", "dc1-metal-ocp,ceph-storage", "--dry-run", "--output", "json", "--ask-become-pass=false")
+	if code != 0 {
+		t.Fatalf("destroy mixed clusters dry-run json exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode destroy dry-run json: %v\n%s", err, stdout)
+	}
+	if report.Target != "clusters" || report.Playbook != clustersScope.destroyPlaybook {
+		t.Fatalf("destroy target/playbook = %q/%q, want clusters/%q", report.Target, report.Playbook, clustersScope.destroyPlaybook)
+	}
+	if !reflect.DeepEqual(report.Phases, []string{"storage-cluster", "container-cluster", "addons"}) {
+		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
+	}
+	varsData, err := os.ReadFile(report.Render.VarsPath)
+	if err != nil {
+		t.Fatalf("read rendered vars: %v", err)
+	}
+	vars := string(varsData)
+	for _, want := range []string{"name: dc1-metal-ocp", "name: ceph-storage"} {
+		if !strings.Contains(vars, want) {
+			t.Fatalf("destroy rendered vars missing %q:\n%s", want, vars)
 		}
 	}
 }

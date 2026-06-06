@@ -62,14 +62,17 @@
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Install Ceph prerequisites on storage node
-  ansible.builtin.package:
-    name:
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages:
       - cephadm
       - firewalld
       - lvm2
       - podman
       - chrony
-    state: present
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
 - name: Start storage node services
@@ -438,6 +441,25 @@
       become: false
       no_log: true
       when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
+
+    - name: Record storage cluster ownership
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_ownership
+        tasks_from: resource.yml
+      vars:
+        bootwright_ownership_kind: storage-cluster
+        bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+        bootwright_ownership_fields:
+          cluster: "{{ bootwright_selected_storage_cluster.name }}"
+          paths:
+            - /etc/ceph
+            - /var/lib/ceph
+            - /var/log/ceph
+          labels:
+            bootwright.kind: storage-cluster
+          attributes:
+            seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+            remoteWorkDir: "{{ bootwright_ceph_remote_work_dir }}"
   always:
     - name: Remove managed Ceph work directory
       ansible.builtin.file:

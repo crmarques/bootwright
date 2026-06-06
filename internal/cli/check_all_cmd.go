@@ -62,6 +62,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
+			OwnershipDir:       ctx.OwnershipDir,
 			Executable:         executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           "bootwright.core.check_preflight",

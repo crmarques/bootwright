@@ -26,3 +26,23 @@
 
 - name: Configure vmedia HTTP service
   ansible.builtin.import_tasks: apply/vmedia.yml
+
+- name: Record BMC emulator ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: bmc-emulator
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      paths:
+        - "{{ bootwright_bmc_root }}"
+        - "{{ bootwright_bmc_vmedia_root }}"
+        - "/etc/systemd/system/bootwright-sushy-{{ bootwright_component.providerName }}.service"
+        - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_component.providerName }}.service"
+      attributes:
+        redfishUnit: "bootwright-sushy-{{ bootwright_component.providerName }}.service"
+        vmediaUnit: "bootwright-vmedia-{{ bootwright_component.providerName }}.service"
+        redfishPort: "{{ bootwright_component.bmcEmulated.port }}"
+        vmediaPort: "{{ bootwright_component.bmcEmulated.vmediaPort }}"

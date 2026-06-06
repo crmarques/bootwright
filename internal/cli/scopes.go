@@ -26,6 +26,7 @@ var clustersScope = scopeSpec{
 	short:             "Provision storage, OpenShift clusters, addons, and integrations",
 	phaseNames:        []string{"storage-cluster", "container-cluster", "addons"},
 	applyPlaybook:     "bootwright.core.workflow_clusters_apply",
+	destroyPlaybook:   "bootwright.core.workflow_clusters_destroy",
 	artifactsBaseName: "clusters",
 }
 

@@ -83,3 +83,16 @@
   ansible.builtin.file:
     path: "{{ bootwright_libvirt_context_storage_root }}"
     state: absent
+
+- name: Remove current-context libvirt ownership records
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/resources/{{ item }}"
+    state: absent
+  loop:
+    - libvirt-domain
+    - libvirt-network
+
+- name: Remove libvirt host packages introduced by Bootwright
+  ansible.builtin.import_role:
+    name: bootwright.core.machine_setup_libvirt
+    tasks_from: destroy.yml

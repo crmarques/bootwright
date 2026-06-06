@@ -15,6 +15,12 @@
         | list
       }}
     bootwright_machine_provider_services: "{{ bootwright_machine_provider_services_all }}"
+    bootwright_machine_provider_ownership_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
+        | list
+      }}
 
   tasks:
     - name: Destroy provider service roles
@@ -25,3 +31,14 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"
+
+    - name: Destroy recorded provider resources
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_ownership
+        tasks_from: destroy_resource.yml
+      vars:
+        bootwright_ownership_record: "{{ item }}"
+      loop: "{{ bootwright_machine_provider_ownership_records | reverse | list }}"
+      loop_control:
+        label: "{{ item.kind }}/{{ item.name }}"
+      when: item.kind == 'bmc-emulator'

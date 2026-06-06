@@ -1,0 +1,125 @@
+---
+- name: Resolve managed Ceph destroy paths
+  ansible.builtin.set_fact:
+    bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
+
+- name: Resolve current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node_matches: >-
+      {{
+        bootwright_selected_storage_cluster.nodes
+        | default([])
+        | selectattr('inventoryHost', 'equalto', inventory_hostname)
+        | list
+      }}
+  changed_when: false
+
+- name: Validate current storage node context
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_storage_node_matches | length == 1
+    fail_msg: >-
+      Storage node {{ inventory_hostname }} is not declared exactly once in
+      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+
+- name: Set current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node: "{{ bootwright_current_storage_node_matches | first }}"
+  changed_when: false
+
+- name: Validate declared Ceph destroy devices
+  ansible.builtin.assert:
+    that:
+      - item is match('^/dev/(disk/by-id/|mapper/|nvme[0-9]+n[0-9]+|[svx]d[a-z]+)$')
+    fail_msg: >-
+      Refusing to wipe undeclared or unsupported storage device {{ item }}
+      for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}.
+  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+
+- name: Check Ceph fsid on seed host
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - fsid
+  register: bootwright_ceph_fsid
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Remove cephadm cluster on seed host
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --zap-osds
+      - --fsid
+      - "{{ bootwright_ceph_fsid.stdout | trim }}"
+  register: bootwright_cephadm_rm_cluster
+  changed_when: bootwright_cephadm_rm_cluster.rc == 0
+  failed_when: false
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_fsid.rc | default(1) == 0
+    - bootwright_ceph_fsid.stdout | default('') | trim | length > 0
+
+- name: Wipe declared Ceph device signatures
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --all
+      - --force
+      - "{{ item }}"
+  register: bootwright_ceph_wipefs
+  changed_when: true
+  failed_when: bootwright_ceph_wipefs.rc != 0
+  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+
+- name: Zap declared Ceph device partition tables
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --zap-all
+      - "{{ item }}"
+  register: bootwright_ceph_sgdisk
+  changed_when: true
+  failed_when: false
+  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+
+- name: Remove managed Ceph local state
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_ceph_remote_work_dir }}"
+    - /etc/ceph
+    - /var/lib/ceph
+    - /var/log/ceph
+    - /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+
+- name: Remove storage cluster ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+
+- name: Remove Ceph package ownership records
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_remove.yml
+  vars:
+    bootwright_ownership_packages:
+      - cephadm
+      - firewalld
+      - lvm2
+      - podman
+      - chrony
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"

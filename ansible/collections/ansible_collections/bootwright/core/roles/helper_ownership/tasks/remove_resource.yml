@@ -1,0 +1,13 @@
+---
+- name: Validate ownership resource removal identity
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_dir | default('') | length > 0
+      - bootwright_ownership_kind | default('') is match('^[A-Za-z0-9_.-]+$')
+      - bootwright_ownership_name | default('') is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: "ownership resource removal needs safe kind, name, and bootwright_ownership_dir"
+
+- name: Remove ownership resource record
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/resources/{{ bootwright_ownership_kind }}/{{ bootwright_ownership_name }}.json"
+    state: absent

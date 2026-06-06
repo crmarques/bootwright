@@ -3,9 +3,12 @@
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
 - name: Install libvirt host packages
-  ansible.builtin.package:
-    name: "{{ bootwright_machine_setup_libvirt_packages }}"
-    state: present
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages: "{{ bootwright_machine_setup_libvirt_packages }}"
+    bootwright_ownership_required_by: libvirt
 
 - name: Start libvirt service
   ansible.builtin.service:

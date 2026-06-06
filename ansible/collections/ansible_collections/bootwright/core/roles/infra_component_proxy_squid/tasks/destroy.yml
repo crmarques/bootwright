@@ -27,3 +27,11 @@
   ansible.builtin.file:
     path: "{{ bootwright_squid_root }}"
     state: absent
+
+- name: Remove Squid ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"

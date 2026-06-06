@@ -66,8 +66,11 @@ Omitting `--stage` runs the full graph: `infra`, then `clusters`.
 
 Destroy uses the same stage selector shape. `destroy --stage infra` tears down
 provider infrastructure and, when unscoped, sweeps current-context VMs that
-provider adapters can identify. `destroy --stage clusters` removes cluster
-install runtime state without removing provider VMs.
+provider adapters can identify. Destroy also consumes root-managed ownership
+records so resources Bootwright created or configured can be removed after they
+are deleted from desired-state YAML. `destroy --stage clusters` removes
+cluster-stage runtime, managed storage services, add-on records, and generated
+storage attachment records without removing provider VMs.
 When `Environment.spec.safety.destroyProtection` is `requiredOverride`,
 mutating destroy requires `--override` on that command. `--yes` only skips the
 confirmation prompt.

@@ -34,6 +34,7 @@ func TestExtractAnsibleBundleEitherSucceedsOrReportsEmpty(t *testing.T) {
 		filepath.Join(collectionRoot, "playbooks", "workflow_container_cluster_apply.yml"),
 		filepath.Join(collectionRoot, "playbooks", "task_provider_services_apply.yml"),
 		filepath.Join(collectionRoot, "playbooks", "task_machine_infra_apply.yml"),
+		filepath.Join(collectionRoot, "playbooks", "task_storage_cluster_destroy.yml"),
 		filepath.Join(collectionRoot, "roles", "machine_base", "tasks", "main.yml"),
 	} {
 		if _, statErr := os.Stat(filepath.Join(dest, rel)); statErr != nil {

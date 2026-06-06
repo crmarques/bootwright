@@ -89,6 +89,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		{Key: "runs-dir", Value: ctx.RunsDir},
 		{Key: "managed-services-dir", Value: ctx.ManagedServicesDir},
 		{Key: "provider-state-dir", Value: ctx.ProviderStateDir},
+		{Key: "ownership-dir", Value: ctx.OwnershipDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 	})
 

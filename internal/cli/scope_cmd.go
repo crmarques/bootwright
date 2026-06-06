@@ -19,7 +19,7 @@ const (
 	// other remote groups would otherwise be empty and ansible would abort
 	// with "no hosts to target".
 	infraAnsibleLimit    = "bootwright_provider_hosts:bootwright_infra_component_hosts:bootwright_infra_hosts:bootwright_ocp_hosts"
-	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts"
+	clustersAnsibleLimit = "bootwright_infra_hosts:bootwright_ocp_hosts:bootwright_boot_hosts:bootwright_storage_hosts"
 	clusterAnsibleLimit  = "bootwright_ocp_hosts:bootwright_boot_hosts"
 )
 

@@ -27,6 +27,7 @@ const (
 	ClustersDirName     = "clusters"
 	ManagedServicesName = "managed-services"
 	ProviderStateName   = "provider-state"
+	OwnershipName       = "ownership"
 )
 
 type Store struct {
@@ -43,6 +44,7 @@ type Context struct {
 	ClustersDir        string   `yaml:"-" json:"clustersDir"`
 	ManagedServicesDir string   `yaml:"-" json:"managedServicesDir"`
 	ProviderStateDir   string   `yaml:"-" json:"providerStateDir"`
+	OwnershipDir       string   `yaml:"-" json:"ownershipDir"`
 	InputPaths         []string `yaml:"-" json:"inputPaths"`
 }
 
@@ -120,6 +122,7 @@ func newContextAt(name, baseDir string) Context {
 		ClustersDir:        filepath.Join(baseDir, ClustersDirName),
 		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
 		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
+		OwnershipDir:       filepath.Join(baseDir, OwnershipName),
 		InputPaths:         []string{inputDir},
 	}
 }
@@ -320,6 +323,7 @@ func EnsureDirs(ctx Context) error {
 		ctx.ClustersDir,
 		ctx.ManagedServicesDir,
 		ctx.ProviderStateDir,
+		ctx.OwnershipDir,
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
@@ -390,6 +394,7 @@ func ValidateContext(ctx Context) error {
 		"clustersDir":        filepath.Join(baseDir, ClustersDirName),
 		"managedServicesDir": filepath.Join(baseDir, ManagedServicesName),
 		"providerStateDir":   filepath.Join(baseDir, ProviderStateName),
+		"ownershipDir":       filepath.Join(baseDir, OwnershipName),
 	}
 	got := map[string]string{
 		"inputDir":           ctx.InputDir,
@@ -399,6 +404,7 @@ func ValidateContext(ctx Context) error {
 		"clustersDir":        ctx.ClustersDir,
 		"managedServicesDir": ctx.ManagedServicesDir,
 		"providerStateDir":   ctx.ProviderStateDir,
+		"ownershipDir":       ctx.OwnershipDir,
 	}
 	for field, raw := range got {
 		clean, err := cleanPath(raw)

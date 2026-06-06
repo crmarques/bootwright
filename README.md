@@ -220,9 +220,11 @@ the normal end-to-end workflow.
 `bootwright apply --stage clusters` provisions selected storage clusters,
 OpenShift or OKD clusters, bound add-ons, and declared storage integrations as
 dependency-ready tasks. Use `--clusters` for scoped maintenance or recovery.
-`bootwright destroy --stage infra` removes selected infrastructure; without
-`--clusters` it also sweeps current-context VM artifacts provider adapters can
-identify.
+`bootwright destroy --stage clusters` removes cluster-stage runtime, managed
+storage services, add-on records, and generated storage attachment records.
+`bootwright destroy --stage infra` removes selected infrastructure from current
+desired state and Bootwright ownership records; without `--clusters` it also
+sweeps current-context VM artifacts provider adapters can identify.
 
 `bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
 exports concrete external CLI inputs, including

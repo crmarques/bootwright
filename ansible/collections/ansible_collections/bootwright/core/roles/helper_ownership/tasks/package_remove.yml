@@ -1,0 +1,14 @@
+---
+- name: Validate package ownership removal inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_dir | default('') | length > 0
+      - bootwright_ownership_packages | default([]) | length > 0
+    fail_msg: "package ownership removal needs packages and bootwright_ownership_dir"
+
+- name: Remove ownership-gated packages
+  ansible.builtin.include_tasks: package_remove_one.yml
+  loop: "{{ bootwright_ownership_packages }}"
+  loop_control:
+    loop_var: bootwright_ownership_package_name
+    label: "{{ bootwright_ownership_package_name }}"

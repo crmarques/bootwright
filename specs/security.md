@@ -106,6 +106,10 @@ Generated output boundaries are part of the safety contract:
 - Managed ISO media lives under `/var/lib/bootwright/media/`. These files are
   host-local, root-managed, non-secret, and not versioned; licensed media such
   as RHEL ISOs must be supplied by the operator.
+- Runtime ownership records live under
+  `/var/lib/bootwright/contexts/<context>/ownership/`. They are root-managed
+  non-secret JSON records used to destroy resources Bootwright created or
+  configured, including resources no longer present in the input YAML.
 - Placeholder installer output lives under
   `/var/lib/bootwright/contexts/<context>/clusters/<cluster>/rendered/installer/`.
 - Secret-inlined runtime installer output lives under

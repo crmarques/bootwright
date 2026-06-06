@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/ansible/runconfig"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -39,6 +40,7 @@ type RunOptions struct {
 	SecretsDir         string
 	ManagedServicesDir string
 	ProviderStateDir   string
+	OwnershipDir       string
 	Executable         string
 	BundleDir          string
 	Playbook           string
@@ -109,8 +111,16 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 	if strings.TrimSpace(opts.ProviderStateDir) == "" {
 		return RunResult{}, errors.New("provider state dir is required")
 	}
+	ownershipDir := opts.OwnershipDir
+	if strings.TrimSpace(ownershipDir) == "" {
+		ownershipDir = filepath.Join(filepath.Dir(opts.ProviderStateDir), "ownership")
+	}
 	if reporter != nil {
 		reporter.RenderStart()
+	}
+	ownershipRecords, err := loadOwnershipRecordsForRun(opts.Playbook, ownershipDir)
+	if err != nil {
+		return RunResult{}, err
 	}
 	renderDir := opts.RenderDir
 	if renderDir == "" {
@@ -126,7 +136,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		defer os.RemoveAll(runtimeSecretsDir)
 		runSecretsDir = runtimeSecretsDir
 	}
-	result, err := render.All(renderDir, opts.ClustersDir, runSecretsDir, opts.State)
+	result, err := render.AllWithOwnershipRecords(renderDir, opts.ClustersDir, runSecretsDir, opts.State, ownershipRecords)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -151,6 +161,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		SecretsDir:         runSecretsDir,
 		ManagedServicesDir: opts.ManagedServicesDir,
 		ProviderStateDir:   opts.ProviderStateDir,
+		OwnershipDir:       ownershipDir,
 		InventoryPath:      result.InventoryPath,
 		VarsPath:           result.VarsPath,
 		Playbook:           opts.Playbook,
@@ -178,7 +189,7 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		}
 		return RunResult{Render: result, Command: command}, nil
 	}
-	if LimitMatchesNoHosts(opts.Limit, opts.State) {
+	if LimitMatchesNoHostsWithOwnershipRecords(opts.Limit, opts.State, ownershipRecords) {
 		label := opts.Label
 		if label == "" {
 			label = opts.Playbook
@@ -195,6 +206,13 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 		return RunResult{Render: result, Command: command}, err
 	}
 	return RunResult{Render: result, Command: command}, nil
+}
+
+func loadOwnershipRecordsForRun(playbook, ownershipDir string) ([]ownership.ResourceRecord, error) {
+	if !strings.Contains(playbook, "destroy") {
+		return nil, nil
+	}
+	return ownership.LoadResources(ownershipDir)
 }
 
 func runtimeSecretBaseDir(renderDir, artifactsRoot string) string {
@@ -227,12 +245,16 @@ func effectiveContextName(name string) string {
 // colon-separated group lists today, so the simple parse matches the
 // only forms that reach this helper.
 func LimitMatchesNoHosts(limit string, state v1alpha1.State) bool {
+	return LimitMatchesNoHostsWithOwnershipRecords(limit, state, nil)
+}
+
+func LimitMatchesNoHostsWithOwnershipRecords(limit string, state v1alpha1.State, records []ownership.ResourceRecord) bool {
 	limit = strings.TrimSpace(limit)
 	if limit == "" {
 		return false
 	}
-	counts := render.HostGroupCounts(state)
-	members := render.HostGroupMembers(state)
+	counts := render.HostGroupCountsWithOwnershipRecords(state, records)
+	members := render.HostGroupMembersWithOwnershipRecords(state, records)
 	hostSet := map[string]bool{}
 	for _, hosts := range members {
 		for _, host := range hosts {

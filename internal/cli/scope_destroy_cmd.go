@@ -69,7 +69,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster names to destroy")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy")
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
@@ -218,6 +218,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			SecretsDir:         ctx.SecretsDir,
 			ManagedServicesDir: ctx.ManagedServicesDir,
 			ProviderStateDir:   ctx.ProviderStateDir,
+			OwnershipDir:       ctx.OwnershipDir,
 			Executable:         flags.executable,
 			BundleDir:          bundle.Dir,
 			Playbook:           playbook,
@@ -283,7 +284,7 @@ func destroyStageScope(stage string) (scopeSpec, error) {
 	case "infra":
 		return infraScope, nil
 	case "clusters":
-		return containerClusterScope, nil
+		return clustersScope, nil
 	default:
 		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters")
 	}

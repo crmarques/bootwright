@@ -63,3 +63,11 @@
     - "{{ bootwright_kubevirt_iso_dv_name }}"
   register: bootwright_kubevirt_dv_delete
   changed_when: "'deleted' in (bootwright_kubevirt_dv_delete.stdout | default(''))"
+
+- name: Remove KubeVirt machine ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: kubevirt-machine
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"

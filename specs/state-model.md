@@ -432,11 +432,20 @@ Rules:
 - `apply --stage clusters` includes storage-cluster, container-cluster, and
   add-ons work.
 - `destroy --stage infra` tears down infrastructure for the current context.
-  Without `--clusters`, it must also remove all context-owned VMs that provider
-  adapters can identify. With `--clusters`, it is limited to the selected
-  `ContainerCluster` names and must not run context-wide VM cleanup.
-- `destroy --stage clusters` removes OpenShift cluster install runtime state
-  for selected or all `ContainerCluster` names.
+  It uses current desired state plus root-managed ownership records. Without
+  `--clusters`, it must also remove all context-owned VMs that provider
+  adapters can identify. With `--clusters`, it is limited to selected
+  `ContainerCluster` or `StorageCluster` roots and must not run context-wide VM
+  cleanup. Managed machine disk cleanup is limited to provider-owned disks or
+  declared Bootwright-managed devices; Bootwright must not wipe arbitrary
+  visible disks.
+- `destroy --stage clusters` removes cluster-stage runtime for selected or all
+  `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
+  add-on records, generated storage attachment records, and managed storage
+  cluster services/runtime. It does not destroy provider infrastructure.
+- Destroy must remove host packages only when ownership records prove
+  Bootwright installed them and no remaining ownership record on that host
+  still requires the package.
 - `destroy --stage infra|clusters --override` is required when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`.
   `--yes` only skips the confirmation prompt and never implies `--override`.

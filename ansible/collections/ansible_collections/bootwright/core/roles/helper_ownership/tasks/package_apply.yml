@@ -1,0 +1,33 @@
+---
+- name: Validate package ownership apply inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_dir | default('') | length > 0
+      - bootwright_ownership_packages | default([]) | length > 0
+      - bootwright_ownership_required_by | default('') | length > 0
+    fail_msg: "package ownership apply needs packages, required_by, and bootwright_ownership_dir"
+
+- name: Gather installed package facts before ownership apply
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Install owned packages
+  ansible.builtin.package:
+    name: "{{ bootwright_ownership_packages }}"
+    state: present
+
+- name: Create package ownership directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write package ownership records
+  ansible.builtin.include_tasks: package_apply_one.yml
+  vars:
+    bootwright_ownership_package_name: "{{ item }}"
+  loop: "{{ bootwright_ownership_packages }}"
+  loop_control:
+    label: "{{ item }}"

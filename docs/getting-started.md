@@ -251,9 +251,10 @@ Bootwright storage.
 `destroy --stage infra` to tear down current-context infrastructure; omit
 `--clusters` when you want Bootwright to sweep every context-owned VM that a
 provider adapter can identify. Use `destroy --stage infra --clusters <name>`
-for focused infrastructure teardown. Use `destroy --stage clusters` to remove
-OpenShift cluster install runtime state without removing VMs or provider
-infrastructure.
+for focused infrastructure teardown across `ContainerCluster` and
+`StorageCluster` roots. Use `destroy --stage clusters` to remove cluster-stage
+runtime, managed storage services, add-on records, and generated storage
+attachment records without removing VMs or provider infrastructure.
 
 Use `bootwright status --watch` while an apply is running. A new apply is
 blocked while the previous apply ledger has a fresh process lease. If an

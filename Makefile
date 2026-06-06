@@ -76,7 +76,8 @@ ANSIBLE_SYNTAX_PLAYBOOKS = \
 	bootwright.core.task_container_cluster_wait_agent_install \
 	bootwright.core.task_container_cluster_agent_install \
 	bootwright.core.task_container_cluster_agent_destroy \
-	bootwright.core.task_storage_cluster_apply
+	bootwright.core.task_storage_cluster_apply \
+	bootwright.core.task_storage_cluster_destroy
 
 E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 

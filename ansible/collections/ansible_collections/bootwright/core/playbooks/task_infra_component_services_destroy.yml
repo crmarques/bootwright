@@ -24,6 +24,12 @@
         if bootwright_infra_component_service_destroy_scope == 'artifact-server'
         else bootwright_host_infra_component_services_all
       }}
+    bootwright_host_infra_component_ownership_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('host', 'equalto', bootwright_host_name | default(inventory_hostname))
+        | list
+      }}
 
   tasks:
     - name: Validate infra component service destroy scope
@@ -40,3 +46,16 @@
       loop_control:
         loop_var: bootwright_component
         label: "{{ bootwright_component.providerName }}/{{ bootwright_component.kind }}/{{ bootwright_component.name }} via {{ bootwright_component.destroyRole }}"
+
+    - name: Destroy recorded infra component resources
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_ownership
+        tasks_from: destroy_resource.yml
+      vars:
+        bootwright_ownership_record: "{{ item }}"
+      loop: "{{ bootwright_host_infra_component_ownership_records | reverse | list }}"
+      loop_control:
+        label: "{{ item.kind }}/{{ item.name }}"
+      when:
+        - item.kind == 'infra-component'
+        - bootwright_infra_component_service_destroy_scope == '' or (item.labels | default({})).get('bootwright.kind', '') == 'artifacts'

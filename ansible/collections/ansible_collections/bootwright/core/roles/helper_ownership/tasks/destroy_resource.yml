@@ -1,0 +1,130 @@
+---
+- name: Validate ownership destroy record
+  ansible.builtin.assert:
+    that:
+      - bootwright_ownership_record.kind | default('') | length > 0
+      - bootwright_ownership_record.name | default('') | length > 0
+    fail_msg: "ownership resource destroy needs a record with kind and name"
+
+- name: Resolve ownership destroy fields
+  ansible.builtin.set_fact:
+    bootwright_ownership_destroy_kind: "{{ bootwright_ownership_record.kind }}"
+    bootwright_ownership_destroy_name: "{{ bootwright_ownership_record.name }}"
+    bootwright_ownership_destroy_attrs: "{{ bootwright_ownership_record.attributes | default({}) }}"
+    bootwright_ownership_destroy_paths: "{{ bootwright_ownership_record.paths | default([]) }}"
+  changed_when: false
+
+- name: Stop recorded libvirt domain
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_ownership_destroy_attrs.uri | default('qemu:///system', true) }}"
+      - destroy
+      - "{{ bootwright_ownership_destroy_attrs.domain }}"
+  register: bootwright_ownership_libvirt_domain_stop
+  changed_when: bootwright_ownership_libvirt_domain_stop.rc == 0
+  failed_when: false
+  when:
+    - bootwright_ownership_destroy_kind == 'libvirt-domain'
+    - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
+
+- name: Undefine recorded libvirt domain
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_ownership_destroy_attrs.uri | default('qemu:///system', true) }}"
+      - undefine
+      - "{{ bootwright_ownership_destroy_attrs.domain }}"
+  register: bootwright_ownership_libvirt_domain_undefine
+  changed_when: bootwright_ownership_libvirt_domain_undefine.rc == 0
+  failed_when: false
+  when:
+    - bootwright_ownership_destroy_kind == 'libvirt-domain'
+    - bootwright_ownership_destroy_attrs.domain | default('') | length > 0
+
+- name: Stop recorded libvirt network
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_ownership_destroy_attrs.uri | default('qemu:///system', true) }}"
+      - net-destroy
+      - "{{ bootwright_ownership_destroy_attrs.network }}"
+  register: bootwright_ownership_libvirt_network_stop
+  changed_when: bootwright_ownership_libvirt_network_stop.rc == 0
+  failed_when: false
+  when:
+    - bootwright_ownership_destroy_kind == 'libvirt-network'
+    - bootwright_ownership_destroy_attrs.network | default('') | length > 0
+
+- name: Undefine recorded libvirt network
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_ownership_destroy_attrs.uri | default('qemu:///system', true) }}"
+      - net-undefine
+      - "{{ bootwright_ownership_destroy_attrs.network }}"
+  register: bootwright_ownership_libvirt_network_undefine
+  changed_when: bootwright_ownership_libvirt_network_undefine.rc == 0
+  failed_when: false
+  when:
+    - bootwright_ownership_destroy_kind == 'libvirt-network'
+    - bootwright_ownership_destroy_attrs.network | default('') | length > 0
+
+- name: Stop recorded systemd units
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+    daemon_reload: true
+  failed_when: false
+  loop:
+    - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
+    - "{{ bootwright_ownership_destroy_attrs.vmediaUnit | default('') }}"
+  loop_control:
+    label: "{{ item }}"
+  when: item | length > 0
+
+- name: Remove recorded podman container
+  containers.podman.podman_container:
+    name: "{{ bootwright_ownership_destroy_attrs.container }}"
+    state: absent
+  failed_when: false
+  when: bootwright_ownership_destroy_attrs.container | default('') | length > 0
+
+- name: Close recorded firewalld ports
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  failed_when: false
+  loop:
+    - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
+    - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"
+    - "{{ (bootwright_ownership_destroy_attrs.vmediaPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vmediaPort | default('') | string | length) > 0 else '' }}"
+  loop_control:
+    label: "{{ item }}"
+  when: item | length > 0
+
+- name: Remove recorded owned paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ bootwright_ownership_destroy_paths }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - item | length > 0
+    - item is match('^/(var/lib/|var/log/|etc/systemd/system/|etc/sysctl.d/|etc/pki/ca-trust/source/anchors/|tmp/bootwright-)')
+
+- name: Remove destroyed ownership resource record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: "{{ bootwright_ownership_destroy_kind }}"
+    bootwright_ownership_name: "{{ bootwright_ownership_destroy_name }}"

@@ -202,3 +202,22 @@
   community.libvirt.virt:
     command: define
     xml: "{{ bootwright_libvirt_domain_xml_slurp.content | b64decode }}"
+
+- name: Record libvirt domain ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: libvirt-domain
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      cluster: "{{ bootwright_current_cluster.name }}"
+      machine: "{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_libvirt_machine_root }}"
+        - "{{ bootwright_libvirt_storage_root }}"
+      attributes:
+        domain: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+        network: "{{ bootwright_libvirt_network_name }}"
+        uri: "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"

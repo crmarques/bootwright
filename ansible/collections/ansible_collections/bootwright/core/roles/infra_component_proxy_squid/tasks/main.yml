@@ -98,3 +98,23 @@
     permanent: true
     immediate: true
   when: bootwright_firewalld_available | default(false)
+
+- name: Record Squid proxy ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: infra-component
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      paths:
+        - "{{ bootwright_squid_root }}"
+      labels:
+        bootwright.kind: proxy
+        bootwright.provider: "{{ bootwright_component.providerName }}"
+        bootwright.name: "{{ bootwright_component.name }}"
+      attributes:
+        componentKind: proxy
+        container: "{{ bootwright_squid_container_name }}"
+        port: "{{ bootwright_component.port | int }}/tcp"

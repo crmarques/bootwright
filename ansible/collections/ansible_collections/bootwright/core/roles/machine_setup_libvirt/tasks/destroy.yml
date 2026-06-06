@@ -1,0 +1,11 @@
+---
+- name: Load libvirt package list
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+- name: Remove libvirt packages introduced by Bootwright
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_remove.yml
+  vars:
+    bootwright_ownership_packages: "{{ bootwright_machine_setup_libvirt_packages }}"
+    bootwright_ownership_required_by: libvirt

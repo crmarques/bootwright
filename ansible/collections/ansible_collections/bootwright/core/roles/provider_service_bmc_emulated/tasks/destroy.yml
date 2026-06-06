@@ -56,3 +56,11 @@
   loop:
     - "{{ bootwright_bmc_root }}"
     - "{{ bootwright_bmc_vmedia_root }}"
+
+- name: Remove BMC emulator ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: bmc-emulator
+    bootwright_ownership_name: "{{ bootwright_component.providerName }}"

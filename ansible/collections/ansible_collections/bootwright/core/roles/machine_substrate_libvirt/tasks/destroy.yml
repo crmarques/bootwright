@@ -3,6 +3,7 @@
   ansible.builtin.set_fact:
     bootwright_libvirt_network_name: "bw-{{ bootwright_current_cluster.name }}"
     bootwright_libvirt_machine_root: "{{ bootwright_clusters_dir }}/{{ bootwright_current_cluster.name }}/runtime/provider-state/libvirt/machines/{{ bootwright_component.name }}"
+    bootwright_libvirt_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
   changed_when: false
 
 - name: Stop libvirt domain
@@ -24,8 +25,42 @@
     path: "{{ bootwright_libvirt_machine_root }}"
     state: absent
 
+- name: Remove machine storage directory
+  ansible.builtin.file:
+    path: "{{ bootwright_libvirt_storage_root }}"
+    state: absent
+
+- name: Remove libvirt domain ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: libvirt-domain
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+
+- name: Remove managed OS install artifacts
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_ownership_record:
+      kind: managed-os-install
+      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+      attributes: {}
+  when: bootwright_component.osManaged | default(false) | bool
+
 - name: Remove libvirt network (idempotent across machines)
   community.libvirt.virt_net:
     name: "{{ bootwright_libvirt_network_name }}"
     state: absent
   failed_when: false
+
+- name: Remove libvirt network ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: libvirt-network
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}"
