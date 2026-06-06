@@ -114,6 +114,7 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
 		}
 		p.Summary(output.StatusOK, name, "current context")
+		printNextStatusHint(stdout)
 		return nil
 	}
 	return cmd
@@ -198,6 +199,7 @@ func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
 		}
 		p.Summary(output.StatusOK, name, "context input files updated")
+		printNextStatusHint(stdout)
 		return nil
 	}
 	return cmd
@@ -362,39 +364,4 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		return nil
 	}
 	return cmd
-}
-
-func currentContext() (contextstore.Context, error) {
-	_, store, err := loadContextStore()
-	if err != nil {
-		return contextstore.Context{}, err
-	}
-	return contextstore.Current(store)
-}
-
-func loadContextStore() (string, contextstore.Store, error) {
-	registry, err := contextstore.DefaultRegistryPath()
-	if err != nil {
-		return "", contextstore.Store{}, err
-	}
-	store, err := contextstore.Load(registry)
-	if err != nil {
-		return "", contextstore.Store{}, err
-	}
-	return registry, store, nil
-}
-
-func contextFields(ctx contextstore.Context) []output.Field {
-	return []output.Field{
-		{Key: "name", Value: ctx.Name},
-		{Key: "context-dir", Value: ctx.BaseDir},
-		{Key: "input-dir", Value: ctx.InputDir},
-		{Key: "rendered-dir", Value: ctx.RenderedDir},
-		{Key: "secrets-dir", Value: ctx.SecretsDir},
-		{Key: "clusters-dir", Value: ctx.ClustersDir},
-		{Key: "runs-dir", Value: ctx.RunsDir},
-		{Key: "managed-services-dir", Value: ctx.ManagedServicesDir},
-		{Key: "provider-state-dir", Value: ctx.ProviderStateDir},
-		{Key: "ownership-dir", Value: ctx.OwnershipDir},
-	}
 }

@@ -10,6 +10,22 @@ CLI. The context points at the desired-state YAML you edited for your
 environment and stores local state, generated runtime files, and secret
 material outside the repo under `/var/lib/bootwright`.
 
+## Follow The Status Spine
+
+You do not need to memorize the command order below. `bootwright status`
+reports context state and prints the suggested next command for where you are —
+missing secrets, unrendered installers, or an in-flight or failed apply. After
+every step, run it to see what to do next:
+
+```text
+bootwright status
+```
+
+Each preparing and mutating command (`context init`, `secret set`,
+`secret generate`, `host trust`, `bastion setup`, and the rest) ends by pointing
+back to `bootwright status`, so the flow is *do a step, then ask status*. The
+numbered steps below are the same path written out once for reference.
+
 ## 0. Install The CLI
 
 Download the `bootwright` binary for your platform from

@@ -174,6 +174,7 @@ func runSecretSetTLS(stdin io.Reader, stdout io.Writer, name, certFile, keyFile,
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted TLS certificate and key under %s", action, secretsDir))
+	printNextStatusHint(stdout)
 	return nil
 }
 
@@ -204,6 +205,7 @@ func runSecretSetPullSecret(stdin io.Reader, stdout io.Writer, name, fromFile, c
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted pull secret under %s", action, secretsDir))
+	printNextStatusHint(stdout)
 	return nil
 }
 
@@ -231,6 +233,7 @@ func runSecretSetRawFile(stdin io.Reader, stdout io.Writer, name, fromFile, cont
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, fmt.Sprintf("%s encrypted raw secret under %s", action, secretsDir))
+	printNextStatusHint(stdout)
 	return nil
 }
 
@@ -306,6 +309,7 @@ func runSecretSetCredentials(c *cobra.Command, stdin io.Reader, stdout io.Writer
 	p := output.New(stdout)
 	p.Command("secret set")
 	p.Summary(output.StatusOK, name, message)
+	printNextStatusHint(stdout)
 	return nil
 }
 

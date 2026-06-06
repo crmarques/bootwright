@@ -182,6 +182,7 @@ func runHostTrust(ctx context.Context, stdin io.Reader, stdout io.Writer, contex
 	}
 	if opts.Output == outputText {
 		output.NewContinuation(stdout).Summary(output.StatusOK, "host trust", fmt.Sprintf("%d host(s) checked", len(report.Hosts)))
+		printNextStatusHint(stdout)
 	}
 	return report, nil
 }

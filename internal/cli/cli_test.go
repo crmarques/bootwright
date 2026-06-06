@@ -366,6 +366,19 @@ func TestHumanOutputStructuredText(t *testing.T) {
 	}
 }
 
+func TestJourneyCommandsRouteToStatus(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "secret", "generate")
+	if code != 0 {
+		t.Fatalf("secret generate exited %d, stderr=%q\nstdout:\n%s", code, stderr, stdout)
+	}
+	for _, want := range []string{"Next steps", "bootwright status"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("secret generate stdout missing %q (journey commands must route back to the status hub):\n%s", want, stdout)
+		}
+	}
+}
+
 func TestFailedCheckOutputIsActionable(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "check", "infra", "--dry-run")

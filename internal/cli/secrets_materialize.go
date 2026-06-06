@@ -108,12 +108,14 @@ func runSecretMaterialize(stdout io.Writer, command, contextName, secretsDir str
 	p.Command(command)
 	if len(results) == 0 {
 		p.Summary(emptyStatus, command, "no secret requests found")
+		printNextStatusHint(stdout)
 		return nil
 	}
 	for _, result := range results {
 		p.Status(cliout.StatusOK, result.name, result.action)
 	}
 	p.Summary(cliout.StatusOK, command, fmt.Sprintf("%d secret request(s) handled", len(results)))
+	printNextStatusHint(stdout)
 	return nil
 }
 

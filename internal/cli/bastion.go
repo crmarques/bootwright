@@ -159,6 +159,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 			}
 		}
 		output.NewContinuation(stdout).Summary(output.StatusOK, "bastion", "ready")
+		printNextStatusHint(stdout)
 		return nil
 	}
 	return cmd
