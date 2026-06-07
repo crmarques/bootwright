@@ -297,7 +297,18 @@ Rules:
 
 - `spec.machineNetwork[].cidr` is required.
 - `spec.template.networkConfig` is rendered into machine-level installer
-  network config and merged with per-machine overrides.
+  network config and merged deterministically with
+  `Machine.spec.network.config.overrides`. The merge is the same for rendering
+  and validation:
+  - Maps deep-merge; the override value wins on conflict.
+  - A list whose entries all carry a non-empty `name` merges by `name`: an
+    override entry updates the matching base entry, and an override entry whose
+    `name` is not present in the base is appended.
+  - A list whose base and override entries are all maps but not all named merges
+    positionally by index.
+  - Any other list shape (for example scalars, or a mix of named and unnamed
+    map entries) is rejected as an override error naming the owning field,
+    rather than silently dropped.
 - `spec.dnsRefs[]` selects name-resolution catalog entries by name.
 
 ## ContainerCluster
@@ -362,8 +373,24 @@ Rules:
 - `spec.install.platform.type` accepts `bareMetal`, `vsphere`, `none`, or
   `external`.
 - OpenShift standard endpoint slots are `api`, `api-int`, and `ingress`.
-- Endpoint sources accept `external`, `infraComponent`, `openshift`, or
-  `cephadm`.
+- `endpoints.<slot>.source.type` accepts `openshift`, `external`,
+  `infraComponent`, or `cephadm`; an omitted `source.type` defaults to
+  `openshift`. The accepted set and required companion fields are
+  consumer-specific:
+  - **Container `api`, `api-int`, `ingress`** accept only `openshift` (default),
+    `external`, or `infraComponent`; `cephadm` is rejected. `openshift` and
+    `external` require `address`. `infraComponent` requires
+    `source.componentRef.name` pointing at a `loadBalancer` `InfraComponent` and
+    `source.bindAddress`, and must not set `address`.
+  - **Single-node clusters** additionally reject `source.type: openshift` on the
+    `api`, `api-int`, and `ingress` slots.
+  - **`StorageObjectGateway.spec.publicEndpointRef`** requires an endpoint with
+    `source.type: external` and a `dnsName`.
+  - **`StorageObjectGateway` ingress `endpointRef`** requires an endpoint with
+    `source.type: cephadm`, an `address`, and a `prefixLength`.
+  - `source.componentRef` and `source.bindAddress` are valid only when
+    `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
+    or `source.type: infraComponent`.
 - `spec.nodes[].machineRef.name` references a `Machine` with
   `openshift-node` capability and `os.provided: false`.
 - Each node hostname must be unique inside the cluster.
@@ -386,8 +413,170 @@ Rules:
 - `cephadm.addressRef.name`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.bootstrap.seedNode` names a storage topology node.
+- `spec.type` is required and must be `ceph`.
+- Managed clusters require `spec.ceph`; external clusters must not set
+  `spec.ceph`.
+- `spec.ceph.cephadm.bootstrap.seedNode` and
+  `spec.ceph.cephadm.bootstrap.monIP.nodeRef.name` must name
+  `spec.ceph.topology.nodes[]` entries.
+- `spec.ceph.cephadm.registry.url` is required, must not contain whitespace, and
+  must not embed credentials; `registry.credentialsRef.name` is required.
+- `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
+- `spec.ceph.topology.nodes[]` require a unique `name`, a `machineRef` to a
+  `ceph-node` `Machine`, a `site`, and at least one `roles[]` value from
+  `mon`, `mgr`, `osd`, `mds`, `rgw`, `ingress`. All node `Machine`s in one
+  `StorageCluster` must share one SSH user and `keyRef`.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
+- When `spec.ceph.topology.stretch.enabled` is true: `dataSites` must contain
+  exactly two sites; `tiebreaker.site` must be distinct from the data sites;
+  `tiebreaker.node` and `ruleName` are required; `replicatedPoolDefaults` must
+  be `size: 4` and `minSize: 2`; each data site must hold exactly two `mon`
+  nodes and the tiebreaker site exactly one; the tiebreaker node must be
+  mon-only with no OSD `devices`; erasure-coded pools are rejected; and MDS,
+  RGW, and ingress placement must include at least two role-capable hosts per
+  data site.
+
+## StoragePlacementPolicy
+
+`StoragePlacementPolicy` owns reusable Ceph placement and replicated-pool
+defaults for the pools that select it.
+
+Rules:
+
+- `spec.storageClusterRef.name` is required and must reference a managed
+  (non-`external`) `StorageCluster`.
+- `spec.ceph.ruleName` is required.
+- `spec.ceph.failureDomain` and `spec.ceph.replicated.{size,minSize}` are the
+  defaults applied to pools that reference the policy.
+
+## StoragePool
+
+`StoragePool` owns one Ceph pool.
+
+Rules:
+
+- `spec.storageClusterRef.name` is required and must reference a managed
+  `StorageCluster`.
+- `spec.placementPolicyRef.name`, when set, must reference a
+  `StoragePlacementPolicy` on the same `StorageCluster`.
+- `spec.ceph.type` accepts `replicated` (default) or `erasure-coded`.
+  `replicated` must not set `ceph.erasureCoded`. `erasure-coded` requires
+  `ceph.erasureCoded.{dataChunks,codingChunks}`, must not set `ceph.replicated`,
+  and is not allowed on stretch-mode clusters.
+- `spec.ceph.role`, when set, accepts `rbd`, `cephfs-metadata`, `cephfs-data`,
+  or `rgw`. `spec.ceph.application` is the cephadm application override.
+- On stretch-mode clusters, `ceph.replicated.size` must be `4` and `minSize`
+  must be `2` when set.
+
+## StorageFilesystem
+
+`StorageFilesystem` owns one CephFS filesystem and the pools that back it.
+
+Rules:
+
+- `spec.storageClusterRef.name` is required and must reference a managed
+  `StorageCluster`.
+- `spec.cephfs.metadataPoolRef.name` is required and must reference a
+  `StoragePool` on the same `StorageCluster`.
+- `spec.cephfs.dataPoolRefs[]` is required; each must reference a `StoragePool`
+  on the same `StorageCluster`, must differ from the metadata pool, and exactly
+  one must set `default: true`.
+- `spec.cephfs.mds.placement.hosts[]` select topology nodes; on stretch-mode
+  clusters they must cover at least two MDS-capable hosts per data site.
+
+## StorageObjectGateway
+
+`StorageObjectGateway` owns one RGW service and its ingress endpoints.
+
+Rules:
+
+- `spec.storageClusterRef.name` is required and must reference a managed
+  `StorageCluster`.
+- `spec.ceph.serviceID` is required; `spec.ceph.frontendPort` must be in
+  `0`–`65535`.
+- `spec.publicEndpointRef` requires a `ContainerCluster` endpoint with
+  `source.type: external` and a `dnsName`.
+- `spec.ceph.placement.hosts[]` select topology nodes that hold the `rgw` role;
+  on stretch-mode clusters at least two per data site.
+- `spec.ceph.ingresses[]` require a unique `name`, an `endpointRef` to an
+  endpoint with `source.type: cephadm`, an `address`, and a `prefixLength`, and
+  a `placement` over `ingress`-role nodes.
+
+## StorageExport
+
+`StorageExport` owns the exported storage surface consumed by a downstream
+platform.
+
+Rules:
+
+- `spec.type` is required and must be `data-foundation`.
+- `spec.storageClusterRef.name` is required.
+- For managed `StorageCluster`s, `spec.dataFoundation` is required;
+  `dataFoundation.rbdPoolRef` and `cephFSRef` are required and must reference
+  resources on the same `StorageCluster`; `objectGatewayRef` is optional and
+  same-cluster.
+- For external `StorageCluster`s, `spec.dataFoundation` must be empty and
+  `spec.externalDetails` is required.
+- `spec.externalDetails` must set exactly one of `fromSecret`, `generated`, or
+  `sshExecution`. `fromSecret` must be declared in `Environment.spec.secrets`.
+  `generated` is rejected for external clusters. `sshExecution` requires
+  `machineRefs[]` to `ceph-admin` `Machine`s with SSH (for external clusters),
+  `exporter.source: boundDataFoundationAddon`, and `config.rbdDataPoolName`;
+  `config.format`, when set, must be `json`.
+
+## ClusterAddon
+
+`ClusterAddon` owns one post-install bootstrap component.
+
+Rules:
+
+- `spec.type` is required and must be `olm-operator` or `manifest-set`; the two
+  arms are mutually exclusive.
+- `olm-operator` requires `spec.olm` and must not set `manifestSet`.
+  `olm.namespace.name` is required; `olm.subscription` requires `name`,
+  `package`, `channel`, `source`, `sourceNamespace`, and `installPlanApproval`;
+  `installPlanApproval` accepts `Automatic` or `Manual`.
+- `manifest-set` requires `spec.manifestSet.manifests[]` (at least one) and must
+  not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
+  ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
+  symlink, and must exist.
+- `spec.provides[]` accepts `kubevirt` or `data-foundation`; declaring any
+  `provides` value requires at least one `spec.readiness.checks[]` entry.
+- `spec.readiness.timeout` is a Go duration. `spec.readiness.checks[].type`
+  accepts `csvSucceeded` (requires `namespace`, `subscription`), `condition`
+  (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
+  `resourceExists` (requires `apiVersion`, `kind`, `name`).
+- `spec.accepts.inputs[]` declare binding-scoped inputs; each schema property
+  sets exactly one of `refKind` (a known Bootwright kind) or `secretRef`. A
+  data-foundation storage-attachment effect requires an `exportRef` property.
+
+## ClusterAddonProfile
+
+`ClusterAddonProfile` owns a reusable, ordered group of add-ons.
+
+Rules:
+
+- A profile must include at least one of `spec.profiles[]` or `spec.addons[]`.
+- `spec.profiles[].name` must reference a `ClusterAddonProfile`; nesting must be
+  acyclic.
+- `spec.addons[].name` must reference a `ClusterAddon`.
+
+## ClusterAddonBinding
+
+`ClusterAddonBinding` owns the per-cluster binding of add-ons and binding-scoped
+input values.
+
+Rules:
+
+- `spec.clusterRef.name` is required and references a `ContainerCluster`.
+- A binding must include at least one of `spec.addonProfiles[]` or
+  `spec.addons[]`.
+- A given `ClusterAddon` may be applied to one `ContainerCluster` only once
+  across all bindings.
+- `spec.addons[].inputs[]` must be declared by the add-on's
+  `spec.accepts.inputs`, have unique names, and satisfy the input schema's
+  required values.
 
 ## Rendering Contract
 
