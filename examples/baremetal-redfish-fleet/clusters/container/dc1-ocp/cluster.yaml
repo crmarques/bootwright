@@ -22,12 +22,6 @@ spec:
         address: 192.168.141.10
       ingress:
         address: 192.168.141.11
-    artifactAccess:
-      serverRef:
-        name: default
-      redfishVirtualMedia:
-        endpointRef:
-          name: bmc
 
   networking:
     clusterNetwork:

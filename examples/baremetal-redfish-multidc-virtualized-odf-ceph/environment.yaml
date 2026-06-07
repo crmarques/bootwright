@@ -5,6 +5,14 @@ metadata:
 spec:
   baseDomain: bootwright.test
 
+  defaults:
+    artifactAccess:
+      serverRef:
+        name: default
+      redfishVirtualMedia:
+        endpointRef:
+          name: bmc
+
   resources:
     - infra
     - clusters

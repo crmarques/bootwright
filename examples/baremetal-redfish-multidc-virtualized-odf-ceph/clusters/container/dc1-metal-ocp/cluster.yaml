@@ -41,12 +41,6 @@ spec:
         - 192.168.141.0/24
         source:
           type: cephadm
-    artifactAccess:
-      serverRef:
-        name: default
-      redfishVirtualMedia:
-        endpointRef:
-          name: bmc
 
   networking:
     networkType: OVNKubernetes
