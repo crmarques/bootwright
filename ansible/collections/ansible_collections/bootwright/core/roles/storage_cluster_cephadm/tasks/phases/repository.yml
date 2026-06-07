@@ -9,10 +9,11 @@
 - name: Validate community Ceph storage node OS
   ansible.builtin.assert:
     that:
-      - ansible_system == 'Linux'
+      - ansible_os_family == 'RedHat'
     fail_msg: >-
-      Ceph distribution oss requires Linux storage nodes;
-      {{ bootwright_current_storage_node.name }} reported {{ ansible_system | default('<unknown>') }}.
+      Ceph distribution oss is supported on RHEL-family storage nodes only;
+      {{ bootwright_current_storage_node.name }} reported
+      {{ ansible_distribution | default('<unknown>') }} (os_family {{ ansible_os_family | default('<unknown>') }}).
   when: bootwright_ceph_provider_name == 'oss'
 
 - name: Validate vendor Ceph storage node OS
@@ -25,6 +26,9 @@
       {{ bootwright_current_storage_node.name }} reported
       {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}.
   when: bootwright_ceph_provider_name in ['redhat', 'ibm']
+
+- name: Load Ceph storage node OS variables
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
 - name: Run provider-specific Ceph repository preparation
   ansible.builtin.include_tasks: "../providers/{{ bootwright_ceph_provider_name }}.yml"

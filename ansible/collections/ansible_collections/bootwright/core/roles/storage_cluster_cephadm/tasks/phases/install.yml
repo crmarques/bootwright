@@ -56,7 +56,7 @@
 - name: Install cephadm registry trust on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_ceph_registry_trust_path }}"
-    dest: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+    dest: "{{ bootwright_ceph_ca_trust_anchor_path }}"
     owner: root
     group: root
     mode: "0644"
@@ -65,8 +65,7 @@
 
 - name: Update storage node trust store
   ansible.builtin.command:
-    argv:
-      - update-ca-trust
+    argv: "{{ bootwright_ceph_ca_trust_update_argv }}"
   changed_when: bootwright_ceph_registry_trust.changed | default(false)
   when: bootwright_ceph_registry_trust.changed | default(false)
 

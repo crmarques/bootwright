@@ -1,4 +1,7 @@
 ---
+- name: Load Ceph storage node OS variables
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
 - name: Resolve managed Ceph destroy paths
   ansible.builtin.set_fact:
     bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
@@ -101,7 +104,7 @@
     - /etc/ceph
     - /var/lib/ceph
     - /var/log/ceph
-    - /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+    - "{{ bootwright_ceph_ca_trust_anchor_path }}"
 
 - name: Remove storage cluster ownership record
   ansible.builtin.include_role:
@@ -116,10 +119,5 @@
     name: bootwright.core.helper_ownership
     tasks_from: package_remove.yml
   vars:
-    bootwright_ownership_packages:
-      - cephadm
-      - firewalld
-      - lvm2
-      - podman
-      - chrony
+    bootwright_ownership_packages: "{{ bootwright_ceph_managed_packages }}"
     bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"

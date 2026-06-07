@@ -1,0 +1,18 @@
+---
+bootwright_ceph_node_services:
+  - chronyd
+  - firewalld
+bootwright_ceph_default_prerequisite_packages:
+  - firewalld
+  - lvm2
+  - podman
+  - chrony
+bootwright_ceph_managed_packages:
+  - cephadm
+  - firewalld
+  - lvm2
+  - podman
+  - chrony
+bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+bootwright_ceph_ca_trust_update_argv:
+  - update-ca-trust
