@@ -186,7 +186,8 @@ check-gofmt:
 	@test -z "$$(gofmt -l $(GOFMT_FILES))" || { gofmt -l $(GOFMT_FILES); exit 1; }
 
 go-test-clean-checkout:
-	@tmp=$$(mktemp -d); \
+	@set -e; \
+	tmp=$$(mktemp -d); \
 	work=$$tmp/work; \
 	trap 'rm -rf "$$tmp"' EXIT; \
 	mkdir -p "$$work"; \
@@ -265,7 +266,7 @@ cli-file-size-check:
 
 containerfile-pin-check:
 	@files=$$(find . -type f -name Containerfile -print | sort); \
-	awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile base image must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } END { exit status }' $$files
+	awk 'BEGIN { status = 0 } /^FROM[[:space:]]/ && $$2 != "scratch" && $$2 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile base image must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } /^#[[:space:]]*syntax[[:space:]]*=/ && $$0 !~ /@sha256:[0-9a-f]{64}$$/ { printf "%s:%d: Containerfile syntax directive must be digest-pinned: %s\n", FILENAME, FNR, $$0; status = 1 } END { exit status }' $$files
 
 validate: build
 	HOME=$(TEST_HOME) $(BIN_DIR)/$(BINARY) context init validate -f test/e2e/001-sno-libvirt --yes

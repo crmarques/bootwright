@@ -46,6 +46,9 @@ jobs:
           python3 -m pip install --disable-pip-version-check
           ansible-core==2.21.0
 
+      - name: Go test
+        run: go test ./...
+
       - name: Build Linux amd64 CLI
         shell: bash
         run: |

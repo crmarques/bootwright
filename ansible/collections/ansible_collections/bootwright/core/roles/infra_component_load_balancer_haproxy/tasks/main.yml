@@ -60,6 +60,15 @@
       - -f
       - /usr/local/etc/haproxy/haproxy.cfg
 
+- name: Open HAProxy frontend ports on host firewall
+  ansible.posix.firewalld:
+    port: "{{ item }}/tcp"
+    state: enabled
+    permanent: true
+    immediate: true
+  loop: "{{ bootwright_component.frontends | map(attribute='ports') | flatten | map(attribute='listenPort') | unique | list }}"
+  when: bootwright_firewalld_available | default(false)
+
 - name: Record HAProxy ownership
   ansible.builtin.include_role:
     name: bootwright.core.helper_ownership

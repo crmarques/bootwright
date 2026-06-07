@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -288,6 +289,16 @@ func copyFile(w io.Writer, source string) error {
 	return nil
 }
 
+var mediaDownloadClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   30 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+	},
+}
+
 func copyURL(w io.Writer, sourceURL string) error {
 	u, err := url.Parse(strings.TrimSpace(sourceURL))
 	if err != nil {
@@ -299,7 +310,7 @@ func copyURL(w io.Writer, sourceURL string) error {
 	if u.User != nil {
 		return errors.New("--from-url must not embed credentials")
 	}
-	resp, err := http.Get(u.String())
+	resp, err := mediaDownloadClient.Get(u.String())
 	if err != nil {
 		return fmt.Errorf("download ISO %s: %w", u.String(), err)
 	}

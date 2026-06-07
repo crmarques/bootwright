@@ -282,7 +282,7 @@ func validateServingCertificateCoverage(state v1alpha1.State, ocp v1alpha1.Conta
 		if env != nil {
 			baseDomain = env.Spec.BaseDomain
 		}
-		probe := "console-openshift-console.apps." + ocp.Metadata.Name + "." + baseDomain
+		probe := ClusterConsoleHostname(ocp.Metadata.Name, baseDomain)
 		pair := pairs[ingress.DefaultCertificateRef.Name]
 		if err := secret.CertificateBundleCoversDNSName([]byte(pair.Cert), probe); err != nil {
 			return fmt.Errorf("%s: serving certificate %s does not cover ingress wildcard *.apps.%s.%s: %w", ocp.Metadata.Name, ingress.DefaultCertificateRef.Name, ocp.Metadata.Name, baseDomain, err)

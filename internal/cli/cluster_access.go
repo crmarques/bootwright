@@ -156,14 +156,14 @@ func clusterAPIURL(name, baseDomain string) string {
 	if baseDomain == "" {
 		return ""
 	}
-	return fmt.Sprintf("https://api.%s.%s:6443", name, baseDomain)
+	return render.ClusterAPIURL(name, baseDomain)
 }
 
 func clusterConsoleURL(name, baseDomain string) string {
 	if baseDomain == "" {
 		return ""
 	}
-	return fmt.Sprintf("https://console-openshift-console.apps.%s.%s", name, baseDomain)
+	return render.ClusterConsoleURL(name, baseDomain)
 }
 
 func clusterAccessBaseDomain(state v1alpha1.State) string {

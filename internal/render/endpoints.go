@@ -51,3 +51,19 @@ func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInstall, name stri
 func endpointNetworkConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, address string) (v1alpha1.NetworkConfig, bool) {
 	return stateview.EndpointNetworkConfig(state, ci, address)
 }
+
+func ClusterIngressBaseDomain(clusterName, baseDomain string) string {
+	return "apps." + clusterName + "." + baseDomain
+}
+
+func ClusterConsoleHostname(clusterName, baseDomain string) string {
+	return "console-openshift-console." + ClusterIngressBaseDomain(clusterName, baseDomain)
+}
+
+func ClusterAPIURL(clusterName, baseDomain string) string {
+	return "https://api." + clusterName + "." + baseDomain + ":6443"
+}
+
+func ClusterConsoleURL(clusterName, baseDomain string) string {
+	return "https://" + ClusterConsoleHostname(clusterName, baseDomain)
+}

@@ -359,7 +359,7 @@
         state: file
         owner: root
         group: root
-        mode: "0644"
+        mode: "{{ '0600' if (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) else '0644' }}"
 
     - name: Restore managed OS virtual media labels
       ansible.builtin.command:

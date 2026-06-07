@@ -509,9 +509,9 @@ func clusterConnectionRecord(clustersDir, clusterName string, environments []v1a
 	if baseDomain == "" {
 		return record
 	}
-	record.IngressBaseDomain = "apps." + clusterName + "." + baseDomain
-	record.APIURL = "https://api." + clusterName + "." + baseDomain + ":6443"
-	record.ConsoleURL = "https://console-openshift-console.apps." + clusterName + "." + baseDomain
+	record.IngressBaseDomain = render.ClusterIngressBaseDomain(clusterName, baseDomain)
+	record.APIURL = render.ClusterAPIURL(clusterName, baseDomain)
+	record.ConsoleURL = render.ClusterConsoleURL(clusterName, baseDomain)
 	return record
 }
 
