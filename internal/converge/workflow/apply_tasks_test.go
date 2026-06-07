@@ -1568,10 +1568,6 @@ func storageAttachmentPlanningState() v1alpha1.State {
 							SeedNode: "ceph-0",
 							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
 						},
-						Registry: v1alpha1.StorageCephadmRegistry{
-							URL:            "registry.redhat.io",
-							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
-						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{

@@ -1,0 +1,30 @@
+---
+- name: Gather storage node OS facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+
+- name: Validate community Ceph storage node OS
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Linux'
+    fail_msg: >-
+      Ceph distribution oss requires Linux storage nodes;
+      {{ bootwright_current_storage_node.name }} reported {{ ansible_system | default('<unknown>') }}.
+  when: bootwright_ceph_provider_name == 'oss'
+
+- name: Validate vendor Ceph storage node OS
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_version in (bootwright_ceph_provider.runtimeOS.exactVersions | default([]))
+    fail_msg: >-
+      {{ bootwright_ceph_provider.runtimeOS.message | default('selected Ceph distribution is incompatible with this storage node OS') }};
+      {{ bootwright_current_storage_node.name }} reported
+      {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}.
+  when: bootwright_ceph_provider_name in ['redhat', 'ibm']
+
+- name: Run provider-specific Ceph repository preparation
+  ansible.builtin.include_tasks: "../providers/{{ bootwright_ceph_provider_name }}.yml"

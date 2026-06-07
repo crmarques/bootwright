@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
+	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
@@ -91,6 +92,34 @@ func validateCrossLayer(state v1alpha1.State) []string {
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedMachineServices(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
+	errs = append(errs, validateMachineImageEntitlements(state)...)
+	return errs
+}
+
+func validateMachineImageEntitlements(state v1alpha1.State) []string {
+	env := primaryEnvironment(&state)
+	var errs []string
+	for _, image := range state.MachineImages {
+		source := image.Spec.InstallSource
+		if machineImageInstallSourceType(source) != v1alpha1.MachineImageInstallSourceTypeRHSM {
+			continue
+		}
+		ref := source.EntitlementRef.Name
+		if ref == "" {
+			continue
+		}
+		entitlement, ok := entitlements.Find(env, ref)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q does not match any Environment.spec.entitlements[].name", image.Metadata.Name, ref))
+			continue
+		}
+		if entitlement.Provider != v1alpha1.EntitlementProviderRedHat {
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q resolves to provider %q, want %q", image.Metadata.Name, ref, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
+		}
+		if entitlement.Product != v1alpha1.EntitlementProductRHEL {
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q resolves to product %q, want %q", image.Metadata.Name, ref, entitlement.Product, v1alpha1.EntitlementProductRHEL))
+		}
+	}
 	return errs
 }
 
@@ -310,6 +339,17 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
 		require(owner+".trustBundleRef", registries.Mirror.TrustBundleRef)
 	}
+	for i, entitlement := range env.Spec.Entitlements {
+		owner := fmt.Sprintf("Environment/%s spec.entitlements[%d]", env.Metadata.Name, i)
+		if entitlement.RHSM != nil {
+			require(owner+".rhsm.organizationRef", entitlement.RHSM.OrganizationRef)
+			require(owner+".rhsm.activationKeyRef", entitlement.RHSM.ActivationKeyRef)
+		}
+		if entitlement.Registry != nil {
+			require(owner+".registry.credentialsRef", entitlement.Registry.CredentialsRef)
+			require(owner+".registry.trustBundleRef", entitlement.Registry.TrustBundleRef)
+		}
+	}
 	for _, machine := range state.Machines {
 		if machine.Spec.Access.SSH != nil {
 			requireSSHKey(fmt.Sprintf("Machine/%s spec.access.ssh.keyRef", machine.Metadata.Name), machine.Spec.Access.SSH.KeyRef)
@@ -327,10 +367,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 		for i, ref := range image.Spec.HeadersRefs {
 			require(fmt.Sprintf("MachineImage/%s spec.headersRefs[%d]", image.Metadata.Name, i), ref)
-		}
-		if rhsm := image.Spec.InstallSource.RHSM; rhsm != nil {
-			require(fmt.Sprintf("MachineImage/%s spec.installSource.rhsm.organizationRef", image.Metadata.Name), rhsm.OrganizationRef)
-			require(fmt.Sprintf("MachineImage/%s spec.installSource.rhsm.activationKeyRef", image.Metadata.Name), rhsm.ActivationKeyRef)
 		}
 	}
 	for _, profile := range state.MachineInstallProfiles {
@@ -379,13 +415,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 				requireTLS(fmt.Sprintf("ContainerCluster/%s install.servingCertificates.ingress.defaultCertificateRef", ocp.Metadata.Name), ingress.DefaultCertificateRef)
 			}
 		}
-	}
-	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Ceph == nil {
-			continue
-		}
-		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.credentialsRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef)
-		require(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.registry.trustBundleRef", cluster.Metadata.Name), cluster.Spec.Ceph.Cephadm.Registry.TrustBundleRef)
 	}
 	for _, effective := range addoninputs.EffectiveAddons(state) {
 		accepted := map[string]v1alpha1.ClusterAddonAcceptedInput{}

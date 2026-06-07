@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/infra/media"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
@@ -222,11 +223,15 @@ func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, en
 		start = 1
 	}
 	rhsm := map[string]any{}
-	if source.RHSM != nil {
+	if source.EntitlementRef.Name != "" {
+		resolved, ok := entitlements.Resolve(env, source.EntitlementRef.Name, "", secretsDir)
+		if !ok {
+			return sourceURL, machineInstallRepositoryVars(repos[start:]), rhsm
+		}
 		rhsm["enabled"] = true
-		rhsm["organizationPath"] = secret.ResolvePath(source.RHSM.OrganizationRef.Name, env, secretsDir)
-		rhsm["activationKeyPath"] = secret.ResolvePath(source.RHSM.ActivationKeyRef.Name, env, secretsDir)
-		rhsm["connectToInsights"] = source.RHSM.ConnectToInsights
+		rhsm["organizationPath"] = resolved.RHSM.OrganizationPath
+		rhsm["activationKeyPath"] = resolved.RHSM.ActivationKeyPath
+		rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
 	}
 	return sourceURL, machineInstallRepositoryVars(repos[start:]), rhsm
 }

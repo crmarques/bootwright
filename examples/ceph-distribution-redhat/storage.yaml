@@ -1,0 +1,25 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-redhat
+spec:
+  type: ceph
+
+  ceph:
+    distribution: redhat
+    entitlementRef:
+      name: rhcs
+    cephadm:
+      bootstrap:
+        seedNode: ceph-0
+        monIP:
+          nodeRef:
+            name: ceph-0
+    topology:
+      nodes:
+        - name: ceph-0
+          site: lab
+          roles:
+            - mon
+          machineRef:
+            name: ceph-0

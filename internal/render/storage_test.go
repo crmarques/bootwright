@@ -152,7 +152,11 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := ceph["lateServicesSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/late-services.yaml" {
 		t.Fatalf("lateServicesSpecPath = %v", got)
 	}
-	registry := cluster["registry"].(map[string]any)
+	provider := cluster["provider"].(map[string]any)
+	if got := provider["distribution"]; got != v1alpha1.StorageCephDistributionRedHat {
+		t.Fatalf("provider distribution = %v, want redhat", got)
+	}
+	registry := provider["registry"].(map[string]any)
 	if got := registry["url"]; got != "registry.redhat.io" {
 		t.Fatalf("registry url = %v", got)
 	}

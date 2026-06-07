@@ -32,6 +32,7 @@ type EnvironmentSpec struct {
 	Registries        *EnvironmentRegistriesSpec               `yaml:"registries,omitempty" json:"registries,omitempty"`
 	InstallTrust      *EnvironmentInstallTrustSpec             `yaml:"installTrust,omitempty" json:"installTrust,omitempty"`
 	Secrets           EnvironmentSecrets                       `yaml:"secrets,omitempty" json:"secrets,omitempty"`
+	Entitlements      []EnvironmentEntitlement                 `yaml:"entitlements,omitempty" json:"entitlements,omitempty"`
 	ComponentImages   map[string]map[string]ComponentImageSpec `yaml:"componentImages,omitempty" json:"componentImages,omitempty"`
 }
 
@@ -56,6 +57,31 @@ type EnvironmentProxyForSpec struct {
 
 type EnvironmentSecretStorageSpec struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+}
+
+type EnvironmentEntitlement struct {
+	Name     string                          `yaml:"name" json:"name"`
+	Provider string                          `yaml:"provider" json:"provider"`
+	Product  string                          `yaml:"product" json:"product"`
+	RHSM     *EnvironmentEntitlementRHSM     `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
+	Registry *EnvironmentEntitlementRegistry `yaml:"registry,omitempty" json:"registry,omitempty"`
+	License  *EnvironmentEntitlementLicense  `yaml:"license,omitempty" json:"license,omitempty"`
+}
+
+type EnvironmentEntitlementRHSM struct {
+	OrganizationRef   SecretRef `yaml:"organizationRef,omitempty" json:"organizationRef,omitempty"`
+	ActivationKeyRef  SecretRef `yaml:"activationKeyRef,omitempty" json:"activationKeyRef,omitempty"`
+	ConnectToInsights bool      `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
+}
+
+type EnvironmentEntitlementRegistry struct {
+	URL            string    `yaml:"url,omitempty" json:"url,omitempty"`
+	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
+	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
+}
+
+type EnvironmentEntitlementLicense struct {
+	Accept bool `yaml:"accept,omitempty" json:"accept,omitempty"`
 }
 
 type EnvironmentInfraComponentsSpec struct {

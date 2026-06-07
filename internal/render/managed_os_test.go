@@ -51,13 +51,13 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 		t.Fatalf("marker desiredHash = %v, want sha256", marker["desiredHash"])
 	}
 	image := osInstall["image"].(map[string]any)
-	if image["kind"] != "media" || image["key"] != "rhel-9.8-x86_64-dvd.iso" {
+	if image["kind"] != "media" || image["key"] != "rhel-9.7-x86_64-dvd.iso" {
 		t.Fatalf("image vars = %v", image)
 	}
 	if image["mediaType"] != "dvd" {
 		t.Fatalf("image mediaType = %v", image["mediaType"])
 	}
-	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.8-x86_64-dvd.iso") {
+	if !strings.HasSuffix(image["path"].(string), "/media/rhel-9.7-x86_64-dvd.iso") {
 		t.Fatalf("image path = %v", image["path"])
 	}
 	if image["sourceOnTarget"] != true {
@@ -155,14 +155,20 @@ func TestManagedOSInstallUsesRHSMInstallSource(t *testing.T) {
 	}
 	state.Environments[0].Spec.Secrets["redhat-org"] = v1alpha1.EnvironmentSecretSpec{}
 	state.Environments[0].Spec.Secrets["redhat-activation-key"] = v1alpha1.EnvironmentSecretSpec{}
-	state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
-	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
-		Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
-		RHSM: &v1alpha1.MachineImageRHSMSource{
+	state.Environments[0].Spec.Entitlements = append(state.Environments[0].Spec.Entitlements, v1alpha1.EnvironmentEntitlement{
+		Name:     "rhel",
+		Provider: v1alpha1.EntitlementProviderRedHat,
+		Product:  v1alpha1.EntitlementProductRHEL,
+		RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
 			OrganizationRef:   v1alpha1.SecretRef{Name: "redhat-org"},
 			ActivationKeyRef:  v1alpha1.SecretRef{Name: "redhat-activation-key"},
 			ConnectToInsights: true,
 		},
+	})
+	state.MachineImages[0].Spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
+	state.MachineImages[0].Spec.InstallSource = v1alpha1.MachineImageInstallSource{
+		Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
+		EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 	}
 
 	vars := VarsWithSecretsDir(state, "/context/secrets")

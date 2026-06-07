@@ -301,14 +301,33 @@ bootwright_storage_clusters:
   - name: ceph-stretch
     seedHost: storage__ceph-stretch
     storageGroup: bootwright_storage_hosts_ceph_stretch
+    provider:
+      name: redhat
+      distribution: redhat
+      requiresRHSM: true
+      requiresRegistry: true
+      requiresLicense: false
+      prerequisitePackages:
+        - firewalld
+        - lvm2
+        - podman
+        - chrony
+      cephadmPackage: cephadm
+      entitlement:
+        name: rhcs
+        provider: redhat
+        product: ceph
+      rhsm:
+        organizationPath: /var/lib/bootwright/contexts/lab/secrets/redhat-org
+        activationKeyPath: /var/lib/bootwright/contexts/lab/secrets/redhat-activation-key
+      registry:
+        url: registry.redhat.io
+        credentialsPath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-credentials
+        trustBundlePath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-ca
     remoteWorkDir: /tmp/bootwright-storage-ceph-stretch
     resultPath: "{{ bootwright_ansible_artifacts_dir }}/storage-result.json"
     clusterNetworkCIDRs:
       - 192.168.133.0/24
-    registry:
-      url: registry.redhat.io
-      credentialsPath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-credentials
-      trustBundlePath: /var/lib/bootwright/contexts/lab/secrets/ceph-registry-ca
     nodes:
       - name: ceph-dc1-0
         inventoryHost: storage__ceph-stretch

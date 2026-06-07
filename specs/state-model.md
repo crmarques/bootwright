@@ -71,6 +71,11 @@ Rules:
 - `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
   catalog entries by name. Omitted values default to `none`.
 - `secrets` declares names, not bytes.
+- `entitlements[]` declares named subscription, registry entitlement, and
+  license references for products that need vendor-controlled access. It
+  accepts `provider: community | redhat | ibm` and
+  `product: ceph | rhel | openshift | ibm-storage-ceph`; referenced secret
+  material still lives in `Environment.spec.secrets`.
 
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
@@ -190,10 +195,9 @@ Rules:
 - `installSource.type: url` can set `url` as the primary Anaconda install
   tree. Alternatively, `repositories[0].baseURL` becomes the primary install
   tree and subsequent repositories become additional Kickstart `repo` entries.
-- `installSource.type: redhatCDN` sets `rhsm.organizationRef.name` and
-  `rhsm.activationKeyRef.name`. Both secret refs point to
-  `Environment.spec.secrets` entries; secret bytes are read only from runtime
-  secret material when Bootwright renders the Kickstart.
+- `installSource.type: redhatCDN` sets `entitlementRef.name`, which must
+  resolve to a Red Hat `rhel` entitlement. RHSM organization and activation
+  key secret refs are owned by that Environment entitlement.
 - `url` is required and accepts `local-media:<filename.iso>`, `file://`
   absolute paths, `http://`, or `https://`.
 - `local-media:<filename.iso>` resolves to the root-managed ISO media store
@@ -421,6 +425,18 @@ Rules:
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
 - Managed storage seed/admin operations use `Machine.spec.access.ssh`.
+- Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
+  omitted means `oss`.
+- `distribution: oss` uses upstream/community Ceph package and image sources
+  and must not set `entitlementRef`.
+- `distribution: redhat` requires `entitlementRef.name` to resolve to a Red
+  Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
+  access come from that entitlement and must not mix with upstream Ceph
+  packages or images.
+- `distribution: ibm` requires `entitlementRef.name` to resolve to an IBM
+  `ibm-storage-ceph` entitlement with accepted license terms. IBM Storage Ceph
+  repositories, registry access, and license acceptance come from that
+  entitlement and must not mix with upstream Ceph packages or images.
 - `cephadm.addressRef.name`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.bootstrap.seedNode` names a storage topology node.

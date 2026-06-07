@@ -688,8 +688,8 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 	case "":
 		return errs
 	case v1alpha1.MachineImageInstallSourceTypeURL:
-		if installSource.RHSM != nil {
-			errs = append(errs, prefix+".installSource.rhsm must be empty when installSource.type is url")
+		if installSource.EntitlementRef.Name != "" {
+			errs = append(errs, prefix+".installSource.entitlementRef.name must be empty when installSource.type is url")
 		}
 		if installSource.URL == "" && len(installSource.Repositories) == 0 {
 			errs = append(errs, prefix+".installSource.url or installSource.repositories is required when installSource.type is url")
@@ -710,15 +710,8 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 		if len(installSource.Repositories) > 0 {
 			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is redhatCDN")
 		}
-		if installSource.RHSM == nil {
-			errs = append(errs, prefix+".installSource.rhsm is required when installSource.type is redhatCDN")
-			return errs
-		}
-		if installSource.RHSM.OrganizationRef.Name == "" {
-			errs = append(errs, prefix+".installSource.rhsm.organizationRef.name is required")
-		}
-		if installSource.RHSM.ActivationKeyRef.Name == "" {
-			errs = append(errs, prefix+".installSource.rhsm.activationKeyRef.name is required")
+		if installSource.EntitlementRef.Name == "" {
+			errs = append(errs, prefix+".installSource.entitlementRef.name is required when installSource.type is redhatCDN")
 		}
 	}
 	return errs
@@ -729,7 +722,7 @@ func machineImageInstallSourceType(installSource v1alpha1.MachineImageInstallSou
 	case v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM:
 		return installSource.Type
 	case "":
-		if installSource.RHSM != nil {
+		if installSource.EntitlementRef.Name != "" {
 			return v1alpha1.MachineImageInstallSourceTypeRHSM
 		}
 		if installSource.URL != "" || len(installSource.Repositories) > 0 {

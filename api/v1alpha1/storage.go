@@ -15,21 +15,16 @@ type StorageClusterSpec struct {
 }
 
 type StorageClusterCephSpec struct {
-	Cephadm  StorageCephadmSpec  `yaml:"cephadm" json:"cephadm"`
-	Networks StorageCephNetworks `yaml:"networks,omitempty" json:"networks,omitempty"`
-	Topology StorageCephTopology `yaml:"topology" json:"topology"`
+	Distribution   string               `yaml:"distribution,omitempty" json:"distribution,omitempty"`
+	EntitlementRef LocalObjectReference `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
+	Cephadm        StorageCephadmSpec   `yaml:"cephadm" json:"cephadm"`
+	Networks       StorageCephNetworks  `yaml:"networks,omitempty" json:"networks,omitempty"`
+	Topology       StorageCephTopology  `yaml:"topology" json:"topology"`
 }
 
 type StorageCephadmSpec struct {
 	AddressRef LocalObjectReference    `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
 	Bootstrap  StorageCephadmBootstrap `yaml:"bootstrap" json:"bootstrap"`
-	Registry   StorageCephadmRegistry  `yaml:"registry,omitempty" json:"registry,omitempty"`
-}
-
-type StorageCephadmRegistry struct {
-	URL            string    `yaml:"url,omitempty" json:"url,omitempty"`
-	CredentialsRef SecretRef `yaml:"credentialsRef,omitempty" json:"credentialsRef,omitempty"`
-	TrustBundleRef SecretRef `yaml:"trustBundleRef,omitempty" json:"trustBundleRef,omitempty"`
 }
 
 type StorageCephadmBootstrap struct {

@@ -90,7 +90,7 @@ func TestMachineImageBootISOAcceptsInstallSourceRepositories(t *testing.T) {
 	}
 }
 
-func TestMachineImageBootISOAcceptsRHSMInstallSource(t *testing.T) {
+func TestMachineImageBootISOAcceptsRedHatCDNEntitlementRef(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
@@ -98,11 +98,8 @@ func TestMachineImageBootISOAcceptsRHSMInstallSource(t *testing.T) {
 			MediaType: v1alpha1.MachineImageMediaTypeBoot,
 			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
 			InstallSource: v1alpha1.MachineImageInstallSource{
-				Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
-				RHSM: &v1alpha1.MachineImageRHSMSource{
-					OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-				},
+				Type:           v1alpha1.MachineImageInstallSourceTypeRHSM,
+				EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 			},
 		},
 	}}})
@@ -111,7 +108,7 @@ func TestMachineImageBootISOAcceptsRHSMInstallSource(t *testing.T) {
 	}
 }
 
-func TestMachineImageRHSMInstallSourceRequiresRefs(t *testing.T) {
+func TestMachineImageRedHatCDNInstallSourceRequiresEntitlementRef(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
@@ -120,22 +117,18 @@ func TestMachineImageRHSMInstallSourceRequiresRefs(t *testing.T) {
 			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
 			InstallSource: v1alpha1.MachineImageInstallSource{
 				Type: v1alpha1.MachineImageInstallSourceTypeRHSM,
-				RHSM: &v1alpha1.MachineImageRHSMSource{},
 			},
 		},
 	}}})
 	if len(errs) == 0 {
-		t.Fatal("validateMachineImages accepted RHSM source without refs")
+		t.Fatal("validateMachineImages accepted redhatCDN source without entitlementRef")
 	}
-	if !strings.Contains(strings.Join(errs, "\n"), "organizationRef.name is required") {
-		t.Fatalf("errors = %v", errs)
-	}
-	if !strings.Contains(strings.Join(errs, "\n"), "activationKeyRef.name is required") {
+	if !strings.Contains(strings.Join(errs, "\n"), "entitlementRef.name is required") {
 		t.Fatalf("errors = %v", errs)
 	}
 }
 
-func TestMachineImageRHSMSecretRefsMustBeDeclared(t *testing.T) {
+func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 	errs := validateSecretReferences(v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
 			Metadata: v1alpha1.Metadata{Name: "env"},
@@ -143,22 +136,28 @@ func TestMachineImageRHSMSecretRefsMustBeDeclared(t *testing.T) {
 				Secrets: v1alpha1.EnvironmentSecrets{
 					"redhat-org": {},
 				},
+				Entitlements: []v1alpha1.EnvironmentEntitlement{{
+					Name:     "rhel",
+					Provider: v1alpha1.EntitlementProviderRedHat,
+					Product:  v1alpha1.EntitlementProductRHEL,
+					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					},
+				}},
 			},
 		}},
 		MachineImages: []v1alpha1.MachineImage{{
 			Metadata: v1alpha1.Metadata{Name: "rhel"},
 			Spec: v1alpha1.MachineImageSpec{
 				InstallSource: v1alpha1.MachineImageInstallSource{
-					RHSM: &v1alpha1.MachineImageRHSMSource{
-						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
-						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
-					},
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 				},
 			},
 		}},
 	})
 	if len(errs) == 0 {
-		t.Fatal("validateSecretReferences accepted undeclared RHSM secret ref")
+		t.Fatal("validateSecretReferences accepted undeclared entitlement RHSM secret ref")
 	}
 	if !strings.Contains(errs[0], "redhat-activation-key") {
 		t.Fatalf("error = %q", errs[0])

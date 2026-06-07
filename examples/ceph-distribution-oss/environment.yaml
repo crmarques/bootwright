@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-distribution-oss
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            comment: bootwright-ceph-node

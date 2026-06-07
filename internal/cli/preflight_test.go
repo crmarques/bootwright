@@ -286,11 +286,27 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
-			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
-				"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
-				"ceph-known-hosts":          {},
-				"ceph-registry-credentials": {},
-			}},
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
+					"ceph-known-hosts":          {},
+					"ceph-registry-credentials": {},
+					"redhat-org":                {},
+					"redhat-activation-key":     {},
+				},
+				Entitlements: []v1alpha1.EnvironmentEntitlement{{
+					Name:     "rhcs",
+					Provider: v1alpha1.EntitlementProviderRedHat,
+					Product:  v1alpha1.EntitlementProductCeph,
+					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					},
+					Registry: &v1alpha1.EnvironmentEntitlementRegistry{
+						CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+					},
+				}},
+			},
 		}},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
@@ -314,12 +330,8 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 			Spec: v1alpha1.StorageClusterSpec{
 				Type: v1alpha1.StorageClusterTypeCeph,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
-					Cephadm: v1alpha1.StorageCephadmSpec{
-						Registry: v1alpha1.StorageCephadmRegistry{
-							URL:            "registry.redhat.io",
-							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
-						},
-					},
+					Distribution:   v1alpha1.StorageCephDistributionRedHat,
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 					Topology: v1alpha1.StorageCephTopology{
 						Nodes: []v1alpha1.StorageCephNode{{
 							Name:       "ceph-0",
@@ -344,7 +356,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 	for _, name := range []string{"ansible-playbook", "python3", "ssh", "scp"} {
 		assertPreflightCheckStatus(t, checks, name, "OK")
 	}
-	assertPreflightCheckStatus(t, checks, "ceph cephadm registry credentialsRef", "FAIL")
+	assertPreflightCheckStatus(t, checks, "StorageCluster/ceph ceph entitlementRef registry credentialsRef", "FAIL")
 }
 
 func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {

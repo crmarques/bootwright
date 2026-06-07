@@ -81,8 +81,10 @@ schedules an Ansible storage task that SSHes to the RHEL Ceph seed node,
 prepares every declared storage node, runs cephadm there, and applies generated
 core services, storage operations, late RGW/MDS services, and Data Foundation
 credential operations from the rendered storage tree. The managed Ceph
-declaration includes a cephadm registry URL and credential reference; it does
-not embed registry secrets in desired state. For imported storage,
+declaration selects `spec.ceph.distribution`. Upstream/community installs use
+`distribution: oss`; Red Hat and IBM installs reference named
+`Environment.spec.entitlements[]` entries for RHSM, registry entitlement, and
+license material. Secret bytes never appear in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
 `storage-export-attachment` effect, bindings provide `exportRef`, and

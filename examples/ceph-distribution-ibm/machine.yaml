@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+
+  os:
+    provided: true
+
+  addresses:
+    - name: ssh
+      address: 192.0.2.30
+
+  access:
+    ssh:
+      user: root
+      keyRef:
+        name: ceph-node-ssh
+      addressRef:
+        name: ssh

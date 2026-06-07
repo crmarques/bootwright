@@ -1,0 +1,67 @@
+---
+- name: Load rendered Ceph operations
+  ansible.builtin.set_fact:
+    bootwright_ceph_operations: >-
+      {{
+        (lookup('ansible.builtin.file', bootwright_selected_storage_cluster.ceph.operationsPath)
+        | from_yaml).operations | default([])
+      }}
+  delegate_to: localhost
+  become: false
+
+- name: Resolve managed Ceph work paths
+  ansible.builtin.set_fact:
+    bootwright_ceph_provider: "{{ bootwright_selected_storage_cluster.provider | default({}) }}"
+    bootwright_ceph_provider_name: "{{ bootwright_selected_storage_cluster.provider.name | default('oss') }}"
+    bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
+    bootwright_ceph_remote_bootstrap_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/bootstrap-spec.yaml"
+    bootwright_ceph_remote_core_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/core-services.yaml"
+    bootwright_ceph_remote_late_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/late-services.yaml"
+    bootwright_ceph_remote_operations: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/operations.yaml"
+    bootwright_ceph_remote_private_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key"
+    bootwright_ceph_remote_public_key: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/cluster-ssh-key.pub"
+    bootwright_ceph_remote_known_hosts: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/known_hosts"
+    bootwright_ceph_remote_ssh_config: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/ssh_config"
+    bootwright_ceph_remote_registry_json: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/registry-login.json"
+    bootwright_ceph_registry_url: "{{ bootwright_selected_storage_cluster.provider.registry.url | default('') }}"
+    bootwright_ceph_registry_credentials_path: "{{ bootwright_selected_storage_cluster.provider.registry.credentialsPath | default('') }}"
+    bootwright_ceph_registry_trust_path: "{{ bootwright_selected_storage_cluster.provider.registry.trustBundlePath | default('') }}"
+    bootwright_ceph_rhsm_organization_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.organizationPath | default('') }}"
+    bootwright_ceph_rhsm_activation_key_path: "{{ bootwright_selected_storage_cluster.provider.rhsm.activationKeyPath | default('') }}"
+
+- name: Load cephadm registry credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_credentials
+    tasks_from: load
+  vars:
+    bootwright_creds_path: "{{ bootwright_ceph_registry_credentials_path }}"
+    bootwright_creds_var: bootwright_ceph_registry_credentials
+    bootwright_creds_label: "cephadm registry credentialsRef {{ bootwright_ceph_registry_credentials_path }}"
+  when: bootwright_ceph_registry_credentials_path | length > 0
+
+- name: Resolve current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node_matches: >-
+      {{
+        bootwright_selected_storage_cluster.nodes
+        | default([])
+        | selectattr('inventoryHost', 'equalto', inventory_hostname)
+        | list
+      }}
+  changed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Validate current storage node context
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_storage_node_matches | length == 1
+    fail_msg: >-
+      Storage node {{ inventory_hostname }} is not declared exactly once in
+      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool
+
+- name: Set current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_node: "{{ bootwright_current_storage_node_matches | first }}"
+  changed_when: false
+  when: not bootwright_task_storage_skip_prereqs | default(false) | bool

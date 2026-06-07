@@ -65,6 +65,7 @@ func validateEnvironments(state v1alpha1.State) []string {
 		errs = append(errs, validateEnvironmentStorageClusters(env, state)...)
 		errs = append(errs, validateEnvironmentInfraComponents(env, state)...)
 		errs = append(errs, validateEnvironmentSecrets(env)...)
+		errs = append(errs, validateEnvironmentEntitlements(env)...)
 		errs = append(errs, validateEnvironmentRegistries(env)...)
 		errs = append(errs, validateEnvironmentInstallTrust(env)...)
 		errs = append(errs, validateComponentImages(env)...)
@@ -106,6 +107,113 @@ func validateEnvironmentSecretStorage(env v1alpha1.Environment) []string {
 		return []string{fmt.Sprintf("Environment/%s spec.secretStorage.mode %q must be one of {%s, %s}",
 			env.Metadata.Name, env.Spec.SecretStorage.Mode, v1alpha1.SecretStorageModeSource, v1alpha1.SecretStorageModeContext)}
 	}
+}
+
+func validateEnvironmentEntitlements(env v1alpha1.Environment) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, entitlement := range env.Spec.Entitlements {
+		owner := fmt.Sprintf("Environment/%s spec.entitlements[%d]", env.Metadata.Name, i)
+		errs = append(errs, validateNamedEnvironmentComponent(owner, entitlement.Name, seen)...)
+		errs = append(errs, validateEnvironmentEntitlementProviderProduct(owner, entitlement)...)
+		errs = append(errs, validateEnvironmentEntitlementRegistry(owner+".registry", entitlement.Registry)...)
+		switch entitlement.Product {
+		case v1alpha1.EntitlementProductRHEL:
+			errs = append(errs, validateEnvironmentEntitlementRHSMRequired(owner+".rhsm", entitlement.RHSM)...)
+		case v1alpha1.EntitlementProductCeph:
+			if entitlement.Provider == v1alpha1.EntitlementProviderRedHat {
+				errs = append(errs, validateEnvironmentEntitlementRHSMRequired(owner+".rhsm", entitlement.RHSM)...)
+				errs = append(errs, validateEnvironmentEntitlementRegistryCredentialsRequired(owner+".registry", entitlement.Registry)...)
+			}
+		case v1alpha1.EntitlementProductIBMStorageCeph:
+			errs = append(errs, validateEnvironmentEntitlementRHSMRequired(owner+".rhsm", entitlement.RHSM)...)
+			errs = append(errs, validateEnvironmentEntitlementRegistryCredentialsRequired(owner+".registry", entitlement.Registry)...)
+			if entitlement.License == nil || !entitlement.License.Accept {
+				errs = append(errs, owner+".license.accept must be true for IBM Storage Ceph")
+			}
+		}
+	}
+	return errs
+}
+
+func validateEnvironmentEntitlementProviderProduct(owner string, entitlement v1alpha1.EnvironmentEntitlement) []string {
+	var errs []string
+	switch entitlement.Provider {
+	case v1alpha1.EntitlementProviderCommunity, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProviderIBM:
+	case "":
+		errs = append(errs, owner+".provider is required")
+	default:
+		errs = append(errs, fmt.Sprintf("%s.provider %q must be one of {%s, %s, %s}",
+			owner, entitlement.Provider, v1alpha1.EntitlementProviderCommunity, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProviderIBM))
+	}
+	switch entitlement.Product {
+	case v1alpha1.EntitlementProductCeph, v1alpha1.EntitlementProductRHEL, v1alpha1.EntitlementProductOpenShift, v1alpha1.EntitlementProductIBMStorageCeph:
+	case "":
+		errs = append(errs, owner+".product is required")
+	default:
+		errs = append(errs, fmt.Sprintf("%s.product %q must be one of {%s, %s, %s, %s}",
+			owner, entitlement.Product, v1alpha1.EntitlementProductCeph, v1alpha1.EntitlementProductRHEL, v1alpha1.EntitlementProductOpenShift, v1alpha1.EntitlementProductIBMStorageCeph))
+	}
+	if entitlement.Provider == "" || entitlement.Product == "" {
+		return errs
+	}
+	if environmentEntitlementProviderProductAllowed(entitlement.Provider, entitlement.Product) {
+		return errs
+	}
+	return append(errs, fmt.Sprintf("%s provider/product %s/%s is not supported", owner, entitlement.Provider, entitlement.Product))
+}
+
+func environmentEntitlementProviderProductAllowed(provider, product string) bool {
+	switch provider {
+	case v1alpha1.EntitlementProviderCommunity:
+		return product == v1alpha1.EntitlementProductCeph || product == v1alpha1.EntitlementProductOpenShift
+	case v1alpha1.EntitlementProviderRedHat:
+		return product == v1alpha1.EntitlementProductCeph || product == v1alpha1.EntitlementProductRHEL || product == v1alpha1.EntitlementProductOpenShift
+	case v1alpha1.EntitlementProviderIBM:
+		return product == v1alpha1.EntitlementProductIBMStorageCeph
+	default:
+		return false
+	}
+}
+
+func validateEnvironmentEntitlementRHSMRequired(owner string, rhsm *v1alpha1.EnvironmentEntitlementRHSM) []string {
+	if rhsm == nil {
+		return []string{owner + " is required"}
+	}
+	var errs []string
+	if rhsm.OrganizationRef.Name == "" {
+		errs = append(errs, owner+".organizationRef.name is required")
+	}
+	if rhsm.ActivationKeyRef.Name == "" {
+		errs = append(errs, owner+".activationKeyRef.name is required")
+	}
+	return errs
+}
+
+func validateEnvironmentEntitlementRegistryCredentialsRequired(owner string, registry *v1alpha1.EnvironmentEntitlementRegistry) []string {
+	if registry == nil {
+		return []string{owner + ".credentialsRef.name is required"}
+	}
+	if registry.CredentialsRef.Name == "" {
+		return []string{owner + ".credentialsRef.name is required"}
+	}
+	return nil
+}
+
+func validateEnvironmentEntitlementRegistry(owner string, registry *v1alpha1.EnvironmentEntitlementRegistry) []string {
+	if registry == nil {
+		return nil
+	}
+	var errs []string
+	if registry.URL != "" {
+		if strings.ContainsAny(registry.URL, " \t\r\n") {
+			errs = append(errs, owner+".url must not contain whitespace")
+		}
+		if proxyURLHasInlineCredentials(registry.URL) || strings.Contains(registry.URL, "@") {
+			errs = append(errs, owner+".url must not embed credentials; use credentialsRef")
+		}
+	}
+	return errs
 }
 
 func validateEnvironmentContainerClusters(env v1alpha1.Environment, state v1alpha1.State) []string {

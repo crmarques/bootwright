@@ -15,22 +15,6 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		if ref := cluster.Spec.Ceph.Cephadm.Registry.CredentialsRef; ref.Name != "" {
-			out = append(out, secretRefRequirement{
-				refName: ref.Name,
-				label:   cluster.Metadata.Name + " cephadm registry credentialsRef",
-				phases:  []string{"storage-cluster"},
-				role:    secret.MaterialPrimary,
-			})
-		}
-		if ref := cluster.Spec.Ceph.Cephadm.Registry.TrustBundleRef; ref.Name != "" {
-			out = append(out, secretRefRequirement{
-				refName: ref.Name,
-				label:   cluster.Metadata.Name + " cephadm registry trustBundleRef",
-				phases:  []string{"storage-cluster"},
-				role:    secret.MaterialPrimary,
-			})
-		}
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machine, ok := topology.NodeMachine(state, cluster, node.Name)
 			if !ok {

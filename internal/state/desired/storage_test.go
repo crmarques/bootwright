@@ -135,25 +135,43 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: `must include at least two mds-capable hosts in data site "dc2"`,
 		},
 		{
-			name: "missing-cephadm-registry-url",
+			name: "invalid-ceph-distribution",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.URL = ""
+				state.StorageClusters[0].Spec.Ceph.Distribution = "enterprise"
 			},
-			want: "cephadm.registry.url is required",
+			want: `spec.ceph.distribution "enterprise" must be one of`,
 		},
 		{
-			name: "registry-url-embeds-credentials",
+			name: "oss-entitlement-ref",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.URL = "user:password@registry.example.test"
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 			},
-			want: "cephadm.registry.url must not embed credentials; use credentialsRef",
+			want: "spec.ceph.entitlementRef.name must be empty when distribution=oss",
 		},
 		{
-			name: "missing-cephadm-registry-credentials",
+			name: "redhat-missing-entitlement-ref",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Cephadm.Registry.CredentialsRef = v1alpha1.SecretRef{}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 			},
-			want: "cephadm.registry.credentialsRef.name is required",
+			want: "spec.ceph.entitlementRef.name is required when distribution requires subscription or license handling",
+		},
+		{
+			name: "redhat-wrong-entitlement-provider",
+			edit: func(state *v1alpha1.State) {
+				state.Environments = []v1alpha1.Environment{{
+					Metadata: v1alpha1.Metadata{Name: "env"},
+					Spec: v1alpha1.EnvironmentSpec{
+						Entitlements: []v1alpha1.EnvironmentEntitlement{{
+							Name:     "ceph-entitlement",
+							Provider: v1alpha1.EntitlementProviderIBM,
+							Product:  v1alpha1.EntitlementProductIBMStorageCeph,
+						}},
+					},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+			},
+			want: `resolves to provider "ibm", want "redhat"`,
 		},
 	}
 	for _, tc := range cases {
@@ -226,6 +244,9 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	mon := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.MonIP
 	if mon.NodeRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.SeedNode {
 		t.Fatalf("mon node name = %q, want seed node", mon.NodeRef.Name)
+	}
+	if got := state.StorageClusters[0].Spec.Ceph.Distribution; got != v1alpha1.StorageCephDistributionOSS {
+		t.Fatalf("ceph distribution = %q, want oss", got)
 	}
 	if mon.AddressRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.AddressRef.Name {
 		t.Fatalf("mon addressRef = %q, want cephadm addressRef", mon.AddressRef.Name)
@@ -516,10 +537,6 @@ func storageValidationState() v1alpha1.State {
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
 							SeedNode: "ceph-dc1-0",
 							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
-						},
-						Registry: v1alpha1.StorageCephadmRegistry{
-							URL:            "registry.redhat.io",
-							CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{

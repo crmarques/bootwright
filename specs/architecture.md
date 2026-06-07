@@ -79,8 +79,8 @@ HTTP(S) parsing.
 ## Ownership Boundaries
 
 - `Environment` owns fleet-wide defaults, context resource selection, cluster
-  selection, secret sources, service access catalog entries, registry mirrors,
-  and component images.
+  selection, secret sources, entitlement entries, service access catalog
+  entries, registry mirrors, and component images.
 - `Machine` owns substrate binding, provided-vs-installed OS state, install
   network, named addresses, SSH, hardware inventory, root-device hints, and
   capabilities.

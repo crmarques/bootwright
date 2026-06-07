@@ -44,6 +44,21 @@ spec:
           sshKeyPair:
             comment: bootwright-ceph-storage-cluster-admin
     - ceph-registry-credentials
+    - redhat-org
+    - redhat-activation-key
+
+  entitlements:
+    - name: rhcs
+      provider: redhat
+      product: ceph
+      rhsm:
+        organizationRef:
+          name: redhat-org
+        activationKeyRef:
+          name: redhat-activation-key
+      registry:
+        credentialsRef:
+          name: ceph-registry-credentials
 
   infraComponents:
     artifactServers:

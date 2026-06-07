@@ -122,16 +122,10 @@ type MachineImageSpec struct {
 }
 
 type MachineImageInstallSource struct {
-	Type         string                     `yaml:"type,omitempty" json:"type,omitempty"`
-	URL          string                     `yaml:"url,omitempty" json:"url,omitempty"`
-	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
-	RHSM         *MachineImageRHSMSource    `yaml:"rhsm,omitempty" json:"rhsm,omitempty"`
-}
-
-type MachineImageRHSMSource struct {
-	OrganizationRef   SecretRef `yaml:"organizationRef" json:"organizationRef"`
-	ActivationKeyRef  SecretRef `yaml:"activationKeyRef" json:"activationKeyRef"`
-	ConnectToInsights bool      `yaml:"connectToInsights,omitempty" json:"connectToInsights,omitempty"`
+	Type           string                     `yaml:"type,omitempty" json:"type,omitempty"`
+	URL            string                     `yaml:"url,omitempty" json:"url,omitempty"`
+	Repositories   []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
+	EntitlementRef LocalObjectReference       `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 }
 
 type MachineInstallProfile struct {

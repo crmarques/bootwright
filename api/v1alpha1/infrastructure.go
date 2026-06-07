@@ -119,6 +119,15 @@ const (
 
 	SSHKeyPairTypeEd25519 = "ed25519"
 
+	EntitlementProviderCommunity = "community"
+	EntitlementProviderRedHat    = "redhat"
+	EntitlementProviderIBM       = "ibm"
+
+	EntitlementProductCeph           = "ceph"
+	EntitlementProductRHEL           = "rhel"
+	EntitlementProductOpenShift      = "openshift"
+	EntitlementProductIBMStorageCeph = "ibm-storage-ceph"
+
 	InfraComponentTypeHAProxy        = "haProxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"
@@ -196,6 +205,10 @@ const (
 
 	StorageClusterManagementManaged  = "managed"
 	StorageClusterManagementExternal = "external"
+
+	StorageCephDistributionOSS    = "oss"
+	StorageCephDistributionRedHat = "redhat"
+	StorageCephDistributionIBM    = "ibm"
 
 	StorageCephRoleMON     = "mon"
 	StorageCephRoleMGR     = "mgr"

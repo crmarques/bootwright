@@ -38,7 +38,8 @@ or Ansible changes.
 
 ## Prerequisites
 
-- A RHEL 9.8 x86_64 DVD ISO stored locally on the bastion.
+- A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
+- A Red Hat subscription activation key entitled for Red Hat Ceph Storage.
 - Valid `registry.redhat.io` credentials for Ceph container images, stored in
   the Bootwright secret named `ceph-registry-credentials`.
 
@@ -61,7 +62,7 @@ chmod 600 ~/.ssh/bootwright-ssh-key
 Register the RHEL ISO in the root-managed media store before applying:
 
 ```bash
-bootwright media add rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel.iso
+bootwright media add rhel-9.7-x86_64-dvd.iso --from-file /path/to/rhel.iso
 ```
 
 The fixture references that ISO with:
@@ -70,10 +71,28 @@ The fixture references that ISO with:
 spec:
   type: iso
   mediaType: dvd
-  url: local-media:rhel-9.8-x86_64-dvd.iso
+  url: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
-## Red Hat Registry Credentials
+## Red Hat Entitlement And Registry Credentials
+
+The fixture declares a Red Hat Ceph entitlement named `rhcs`. Store the RHSM
+organization ID and activation key in the Bootwright secrets named `redhat-org`
+and `redhat-activation-key`:
+
+```bash
+read -rsp 'RHSM organization ID: ' REDHAT_ORG
+printf '\n'
+printf '%s\n' "$REDHAT_ORG" | \
+  bootwright secret set redhat-org --raw-file /dev/stdin --yes
+unset REDHAT_ORG
+
+read -rsp 'RHSM activation key: ' REDHAT_ACTIVATION_KEY
+printf '\n'
+printf '%s\n' "$REDHAT_ACTIVATION_KEY" | \
+  bootwright secret set redhat-activation-key --raw-file /dev/stdin --yes
+unset REDHAT_ACTIVATION_KEY
+```
 
 Get `ceph-registry-credentials` from a Red Hat Registry Service Account:
 <https://access.redhat.com/terms-based-registry/>. Create or select a service
@@ -107,6 +126,16 @@ the Red Hat service account page.
 bootwright context init 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret materialize
+read -rsp 'RHSM organization ID: ' REDHAT_ORG
+printf '\n'
+printf '%s\n' "$REDHAT_ORG" | \
+  bootwright secret set redhat-org --raw-file /dev/stdin --yes
+unset REDHAT_ORG
+read -rsp 'RHSM activation key: ' REDHAT_ACTIVATION_KEY
+printf '\n'
+printf '%s\n' "$REDHAT_ACTIVATION_KEY" | \
+  bootwright secret set redhat-activation-key --raw-file /dev/stdin --yes
+unset REDHAT_ACTIVATION_KEY
 read -rsp 'registry.redhat.io token password: ' REDHAT_REGISTRY_PASSWORD
 printf '\n'
 printf '%s\n' "$REDHAT_REGISTRY_PASSWORD" | \

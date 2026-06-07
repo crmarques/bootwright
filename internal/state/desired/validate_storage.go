@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
+	"github.com/crmarques/bootwright/internal/entitlements"
 )
 
 func validateStorage(state v1alpha1.State) []string {
@@ -19,8 +20,10 @@ func validateStorage(state v1alpha1.State) []string {
 	gateways := indexStorageObjectGateways(state.StorageObjectGateways)
 	exports := indexStorageExports(state.StorageExports)
 	machines := indexMachines(state.Machines)
+	installProfiles := indexMachineInstallProfiles(state.MachineInstallProfiles)
+	env := primaryEnvironment(&state)
 
-	errs = append(errs, validateStorageClusters(state.StorageClusters, machines)...)
+	errs = append(errs, validateStorageClusters(state.StorageClusters, machines, installProfiles, env)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
@@ -30,7 +33,7 @@ func validateStorage(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for _, cluster := range items {
@@ -68,16 +71,18 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[strin
 			continue
 		}
 		if cluster.Spec.Ceph != nil {
-			errs = append(errs, validateStorageClusterCeph(cluster, machines)...)
+			errs = append(errs, validateStorageClusterCeph(cluster, machines, installProfiles, env)...)
 		}
 	}
 	return errs
 }
 
-func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
+	errs = append(errs, validateStorageCephDistribution(prefix, cluster, env)...)
+	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.publicCIDRs[%d]", prefix, i), cidr)...)
@@ -90,6 +95,85 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
 	return errs
+}
+
+func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageCluster, env *v1alpha1.Environment) []string {
+	distribution := storageCephDistribution(cluster)
+	if cluster.Spec.Ceph.Distribution != "" && distribution == "" {
+		return []string{fmt.Sprintf("%s.distribution %q must be one of {%s, %s, %s}",
+			prefix, cluster.Spec.Ceph.Distribution, v1alpha1.StorageCephDistributionOSS, v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM)}
+	}
+	ref := cluster.Spec.Ceph.EntitlementRef.Name
+	switch distribution {
+	case v1alpha1.StorageCephDistributionOSS:
+		if ref != "" {
+			return []string{prefix + ".entitlementRef.name must be empty when distribution=oss"}
+		}
+		return nil
+	case v1alpha1.StorageCephDistributionRedHat:
+		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderRedHat, v1alpha1.EntitlementProductCeph)
+	case v1alpha1.StorageCephDistributionIBM:
+		return validateStorageCephDistributionEntitlement(prefix, env, ref, v1alpha1.EntitlementProviderIBM, v1alpha1.EntitlementProductIBMStorageCeph)
+	default:
+		return nil
+	}
+}
+
+func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Environment, ref, provider, product string) []string {
+	if ref == "" {
+		return []string{prefix + ".entitlementRef.name is required when distribution requires subscription or license handling"}
+	}
+	entitlement, ok := entitlements.Find(env, ref)
+	if !ok {
+		return []string{fmt.Sprintf("%s.entitlementRef.name %q does not match any Environment.spec.entitlements[].name", prefix, ref)}
+	}
+	var errs []string
+	if entitlement.Provider != provider {
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef.name %q resolves to provider %q, want %q", prefix, ref, entitlement.Provider, provider))
+	}
+	if entitlement.Product != product {
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef.name %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
+	}
+	return errs
+}
+
+func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {
+	distribution := storageCephDistribution(cluster)
+	if distribution == v1alpha1.StorageCephDistributionOSS {
+		return nil
+	}
+	var errs []string
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		machine, ok := machines[node.MachineRef.Name]
+		if !ok || machine.Spec.OS.ProfileRef.Name == "" {
+			continue
+		}
+		profile, ok := installProfiles[machine.Spec.OS.ProfileRef.Name]
+		if !ok {
+			continue
+		}
+		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Name, profile.Metadata.Name)
+		if strings.ToLower(profile.Spec.OS.Family) != "rhel" {
+			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
+			continue
+		}
+		if !storageCephDistributionSupportsRHELVersion(distribution, profile.Spec.OS.Version) {
+			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q; supported RHEL versions are 9.6, 9.7, 10, or 10.1", owner, profile.Spec.OS.Version, distribution))
+		}
+	}
+	return errs
+}
+
+func storageCephDistributionSupportsRHELVersion(distribution, version string) bool {
+	if distribution != v1alpha1.StorageCephDistributionRedHat && distribution != v1alpha1.StorageCephDistributionIBM {
+		return true
+	}
+	switch version {
+	case "9", "10", "9.6", "9.7", "10.0", "10.1":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
@@ -108,22 +192,6 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
 		}
 		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.monIP.addressRef.name", cluster, mon.NodeRef.Name, mon.AddressRef.Name, machines, adm.AddressRef.Name)...)
-	}
-	errs = append(errs, validateStorageCephadmRegistry(prefix+".registry", adm.Registry)...)
-	return errs
-}
-
-func validateStorageCephadmRegistry(prefix string, registry v1alpha1.StorageCephadmRegistry) []string {
-	var errs []string
-	if registry.URL == "" {
-		errs = append(errs, prefix+".url is required")
-	} else if strings.ContainsAny(registry.URL, " \t\r\n") {
-		errs = append(errs, prefix+".url must not contain whitespace")
-	} else if strings.Contains(registry.URL, "@") {
-		errs = append(errs, prefix+".url must not embed credentials; use credentialsRef")
-	}
-	if registry.CredentialsRef.Name == "" {
-		errs = append(errs, prefix+".credentialsRef.name is required")
 	}
 	return errs
 }
@@ -823,6 +891,18 @@ func storageClusterManagement(cluster v1alpha1.StorageCluster) string {
 
 func storageClusterExternal(cluster v1alpha1.StorageCluster) bool {
 	return storageClusterManagement(cluster) == v1alpha1.StorageClusterManagementExternal
+}
+
+func storageCephDistribution(cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Distribution == "" {
+		return v1alpha1.StorageCephDistributionOSS
+	}
+	switch cluster.Spec.Ceph.Distribution {
+	case v1alpha1.StorageCephDistributionOSS, v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
+		return cluster.Spec.Ceph.Distribution
+	default:
+		return ""
+	}
 }
 
 func storageCephNodeExists(cluster v1alpha1.StorageCluster, name string) bool {

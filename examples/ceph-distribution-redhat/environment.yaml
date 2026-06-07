@@ -1,0 +1,28 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-distribution-redhat
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            comment: bootwright-ceph-node
+    - redhat-org
+    - redhat-activation-key
+    - redhat-registry-credentials
+
+  entitlements:
+    - name: rhcs
+      provider: redhat
+      product: ceph
+      rhsm:
+        organizationRef:
+          name: redhat-org
+        activationKeyRef:
+          name: redhat-activation-key
+      registry:
+        credentialsRef:
+          name: redhat-registry-credentials

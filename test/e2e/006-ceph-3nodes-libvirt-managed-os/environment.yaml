@@ -8,6 +8,19 @@ spec:
   storageClusters:
     - ceph-libvirt
 
+  entitlements:
+    - name: rhcs
+      provider: redhat
+      product: ceph
+      rhsm:
+        organizationRef:
+          name: redhat-org
+        activationKeyRef:
+          name: redhat-activation-key
+      registry:
+        credentialsRef:
+          name: ceph-registry-credentials
+
   infraComponents:
     nameResolution:
       - name: lab-dns
@@ -30,3 +43,5 @@ spec:
         generated:
           credentials:
             username: replace-with-registry-user
+    - redhat-org
+    - redhat-activation-key

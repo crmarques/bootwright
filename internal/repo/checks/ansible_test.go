@@ -2634,7 +2634,36 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 
 func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/main.yml")
-	registryLogin := mainTasks[findAnsibleTask(t, mainTasks, "Log storage node into cephadm registry")]
+	for _, name := range []string{
+		"Prepare Ceph repository and subscription",
+		"Install Ceph host dependencies",
+		"Install cephadm and Ceph host tooling",
+		"Bootstrap and converge Ceph cluster",
+	} {
+		task := mainTasks[findAnsibleTask(t, mainTasks, name)]
+		if _, ok := task["ansible.builtin.include_tasks"]; !ok {
+			t.Fatalf("storage role main task %q must include a phase file", name)
+		}
+	}
+
+	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
+	gatherIdx := findAnsibleTask(t, repositoryTasks, "Gather storage node OS facts")
+	providerIdx := findAnsibleTask(t, repositoryTasks, "Run provider-specific Ceph repository preparation")
+	if !(gatherIdx < providerIdx) {
+		t.Fatalf("storage repository phase must gather OS facts before provider preparation")
+	}
+	for _, rel := range []string{
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/redhat.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/ibm.yml",
+	} {
+		if tasks := readAnsibleTasks(t, rel); len(tasks) == 0 {
+			t.Fatalf("%s has no tasks", rel)
+		}
+	}
+
+	installTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
+	registryLogin := installTasks[findAnsibleTask(t, installTasks, "Log storage node into cephadm registry")]
 	if got := registryLogin["no_log"]; got != true {
 		t.Fatalf("registry login must be no_log, got %v", got)
 	}
@@ -2642,7 +2671,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("registry login must use podman_login, got %v", registryLogin)
 	}
 
-	prereqs := mainTasks[findAnsibleTask(t, mainTasks, "Install Ceph prerequisites on storage node")]
+	dependencyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/dependencies.yml")
+	prereqs := dependencyTasks[findAnsibleTask(t, dependencyTasks, "Install Ceph prerequisites on storage node")]
 	assertIncludeRoleName(t, prereqs, "bootwright.core.helper_ownership")
 	if got := fmt.Sprint(prereqs["ansible.builtin.include_role"]); !strings.Contains(got, "package_apply.yml") {
 		t.Fatalf("Ceph prerequisite task must use package ownership helper, got %v", prereqs)
@@ -2651,46 +2681,43 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok {
 		t.Fatalf("Ceph prerequisite task missing vars: %v", prereqs)
 	}
-	for _, name := range []string{"podman", "lvm2", "chrony", "firewalld"} {
-		if !stringListContains(vars["bootwright_ownership_packages"], name) {
-			t.Fatalf("Ceph prerequisite packages missing %s: %v", name, vars["bootwright_ownership_packages"])
-		}
-	}
-	if stringListContains(vars["bootwright_ownership_packages"], "cephadm") {
-		t.Fatalf("cephadm must not be installed in the owned prerequisite package batch: %v", vars["bootwright_ownership_packages"])
+	if got := fmt.Sprint(vars["bootwright_ownership_packages"]); !strings.Contains(got, "bootwright_ceph_provider.prerequisitePackages") {
+		t.Fatalf("Ceph prerequisite packages must come from provider projection, got %v", vars["bootwright_ownership_packages"])
 	}
 	if got := fmt.Sprint(prereqs["delegate_to"]); strings.Contains(got, "item.inventoryHost") || got != "<nil>" {
 		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
 	}
 
-	initialProbeIdx := findAnsibleTask(t, mainTasks, "Probe cephadm CLI before package fallback")
-	cephadmPackageIdx := findAnsibleTask(t, mainTasks, "Install cephadm package on storage node when available")
-	recordCephadmIdx := findAnsibleTask(t, mainTasks, "Write cephadm package ownership record")
-	servicesIdx := findAnsibleTask(t, mainTasks, "Start storage node services")
-	verifyCephadmIdx := findAnsibleTask(t, mainTasks, "Verify cephadm CLI on storage node")
-	failCephadmIdx := findAnsibleTask(t, mainTasks, "Fail when cephadm CLI is unavailable")
-	if !(initialProbeIdx < cephadmPackageIdx && cephadmPackageIdx < recordCephadmIdx && recordCephadmIdx < servicesIdx && servicesIdx < verifyCephadmIdx && verifyCephadmIdx < failCephadmIdx) {
+	initialProbeIdx := findAnsibleTask(t, installTasks, "Probe cephadm CLI before package fallback")
+	cephadmPackageIdx := findAnsibleTask(t, installTasks, "Install cephadm package on storage node when available")
+	recordCephadmIdx := findAnsibleTask(t, installTasks, "Write cephadm package ownership record")
+	verifyCephadmIdx := findAnsibleTask(t, installTasks, "Verify cephadm CLI on storage node")
+	failCephadmIdx := findAnsibleTask(t, installTasks, "Fail when cephadm CLI is unavailable")
+	if !(initialProbeIdx < cephadmPackageIdx && cephadmPackageIdx < recordCephadmIdx && recordCephadmIdx < verifyCephadmIdx && verifyCephadmIdx < failCephadmIdx) {
 		t.Fatalf("Cephadm fallback must run after distro prereqs and before storage services/verification")
 	}
-	cephadmPackage := mainTasks[cephadmPackageIdx]
+	cephadmPackage := installTasks[cephadmPackageIdx]
 	if got := cephadmPackage["failed_when"]; got != false {
 		t.Fatalf("cephadm package fallback must not fail the package batch, got failed_when=%v", got)
 	}
 	cephadmPackageBody, ok := cephadmPackage["ansible.builtin.package"].(map[string]any)
-	if !ok || cephadmPackageBody["name"] != "cephadm" {
-		t.Fatalf("cephadm package fallback must install cephadm directly, got %v", cephadmPackage)
+	if !ok || !strings.Contains(fmt.Sprint(cephadmPackageBody["name"]), "bootwright_ceph_provider.cephadmPackage") {
+		t.Fatalf("cephadm package fallback must install provider-selected cephadm package, got %v", cephadmPackage)
 	}
-	assertIncludeRoleName(t, mainTasks[recordCephadmIdx], "bootwright.core.helper_ownership")
-	if got := mainTasks[verifyCephadmIdx]["failed_when"]; got != false {
+	assertIncludeRoleName(t, installTasks[recordCephadmIdx], "bootwright.core.helper_ownership")
+	if got := installTasks[verifyCephadmIdx]["failed_when"]; got != false {
 		t.Fatalf("cephadm verify must leave failure handling to the targeted assert, got failed_when=%v", got)
 	}
-	failCephadm, ok := mainTasks[failCephadmIdx]["ansible.builtin.assert"].(map[string]any)
+	failCephadm, ok := installTasks[failCephadmIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(failCephadm["fail_msg"]), "MachineInstallProfile") {
 		t.Fatalf("cephadm unavailable assert must point to managed OS package ownership, got %v", failCephadm)
 	}
 
-	block := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "block")
+	bootstrapTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	bootstrap := bootstrapTasks[findAnsibleTask(t, bootstrapTasks, "Apply managed Ceph cluster through cephadm")]
+	block := nestedAnsibleTasks(t, bootstrap, "block")
 	for _, name := range []string{
+		"Copy cephadm registry JSON",
 		"Copy cephadm cluster private SSH key",
 		"Copy cephadm cluster public SSH key",
 		"Capture base Data Foundation external-cluster secrets",
@@ -2700,6 +2727,11 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		if got := task["no_log"]; got != true {
 			t.Fatalf("%s must be no_log, got %v", name, got)
 		}
+	}
+	resolveBootstrap := block[findAnsibleTask(t, block, "Resolve cephadm bootstrap command")]
+	bootstrapArgv := fmt.Sprint(resolveBootstrap["ansible.builtin.set_fact"])
+	if !strings.Contains(bootstrapArgv, "--registry-json") || strings.Contains(bootstrapArgv, "--registry-password") || strings.Contains(bootstrapArgv, "--registry-username") {
+		t.Fatalf("bootstrap argv must use registry JSON without username/password arguments, got %v", resolveBootstrap)
 	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")
@@ -2730,7 +2762,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("storage result must be written locally, got delegate_to=%v", got)
 	}
 
-	always := nestedAnsibleTasks(t, mainTasks[findAnsibleTask(t, mainTasks, "Apply managed Ceph cluster through cephadm")], "always")
+	always := nestedAnsibleTasks(t, bootstrap, "always")
 	cleanup := always[findAnsibleTask(t, always, "Remove managed Ceph work directory")]
 	fileTask, ok := cleanup["ansible.builtin.file"].(map[string]any)
 	if !ok || fileTask["state"] != "absent" {

@@ -123,6 +123,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				phases:  []string{"container-cluster"},
 			})
 		}
+		out = append(out, collectEntitlementSecretRefRequirements(state, env)...)
 	}
 
 	for _, machine := range state.Machines {

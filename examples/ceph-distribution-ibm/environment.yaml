@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-distribution-ibm
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            comment: bootwright-ceph-node
+    - ibm-rhsm-org
+    - ibm-rhsm-activation-key
+    - ibm-registry-credentials
+
+  entitlements:
+    - name: ibm-storage-ceph
+      provider: ibm
+      product: ibm-storage-ceph
+      rhsm:
+        organizationRef:
+          name: ibm-rhsm-org
+        activationKeyRef:
+          name: ibm-rhsm-activation-key
+      registry:
+        credentialsRef:
+          name: ibm-registry-credentials
+      license:
+        accept: true

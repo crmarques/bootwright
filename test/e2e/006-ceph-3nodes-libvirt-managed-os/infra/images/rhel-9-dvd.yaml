@@ -7,4 +7,4 @@ spec:
 
   mediaType: dvd
 
-  url: local-media:rhel-9.8-x86_64-dvd.iso
+  url: local-media:rhel-9.7-x86_64-dvd.iso

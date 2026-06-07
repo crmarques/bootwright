@@ -5,6 +5,7 @@ import (
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/storage/cephprovider"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
@@ -80,11 +81,13 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 	var out []any
 	for _, cluster := range managedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
+		provider := cephprovider.Select(cluster, env, paths.SecretsDir)
 		asset := StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
 			"seedHost":            StorageSeedHostName(cluster.Metadata.Name),
 			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
+			"provider":            cephprovider.Vars(provider),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,
 			"resultPath":          "{{ bootwright_ansible_artifacts_dir }}/storage-result.json",
 			"clusterNetworkCIDRs": append([]string(nil), ceph.Networks.ClusterCIDRs...),
@@ -100,9 +103,6 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"operationsPath":       asset.OperationsPath,
 			},
 			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
-		}
-		if registry := storageRegistryVars(ceph.Cephadm.Registry, env, paths.SecretsDir); len(registry) > 0 {
-			entry["registry"] = registry
 		}
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
@@ -145,20 +145,6 @@ func storageNodesVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 			"address":       topology.NodeAddress(state, cluster, node.Name),
 			"devices":       append([]string(nil), node.Devices...),
 		})
-	}
-	return out
-}
-
-func storageRegistryVars(registry v1alpha1.StorageCephadmRegistry, env *v1alpha1.Environment, secretsDir string) map[string]any {
-	out := map[string]any{}
-	if registry.URL != "" {
-		out["url"] = registry.URL
-	}
-	if registry.CredentialsRef.Name != "" {
-		out["credentialsPath"] = secret.ResolveMaterialPath(registry.CredentialsRef.Name, env, secretsDir, secret.MaterialPrimary)
-	}
-	if registry.TrustBundleRef.Name != "" {
-		out["trustBundlePath"] = secret.ResolveMaterialPath(registry.TrustBundleRef.Name, env, secretsDir, secret.MaterialPrimary)
 	}
 	return out
 }

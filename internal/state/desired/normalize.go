@@ -260,6 +260,9 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if cluster.Spec.Ceph == nil {
 		return
 	}
+	if cluster.Spec.Ceph.Distribution == "" {
+		cluster.Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionOSS
+	}
 	adm := &cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.MonIP.NodeRef.Name == "" {
 		adm.Bootstrap.MonIP.NodeRef.Name = adm.Bootstrap.SeedNode

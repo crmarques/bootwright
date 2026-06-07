@@ -1,0 +1,105 @@
+---
+- name: Probe cephadm CLI before package fallback
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - version
+  register: bootwright_cephadm_initial_probe
+  changed_when: false
+  failed_when: false
+
+- name: Install cephadm package on storage node when available
+  ansible.builtin.package:
+    name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
+    state: present
+  register: bootwright_cephadm_package_install
+  failed_when: false
+  when: bootwright_cephadm_initial_probe.rc | default(1) != 0
+
+- name: Create cephadm package ownership directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: bootwright_cephadm_package_install.changed | default(false)
+
+- name: Write cephadm package ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply_one.yml
+  vars:
+    bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  when: bootwright_cephadm_package_install.changed | default(false)
+
+- name: Verify cephadm CLI on storage node
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - version
+  register: bootwright_cephadm_version
+  changed_when: false
+  failed_when: false
+
+- name: Fail when cephadm CLI is unavailable
+  ansible.builtin.assert:
+    that:
+      - bootwright_cephadm_version.rc == 0
+    fail_msg: >-
+      cephadm CLI is required on storage node {{ bootwright_current_storage_node.name }} for Ceph
+      distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
+      provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
+      Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}
+
+- name: Install cephadm registry trust on storage node
+  ansible.builtin.copy:
+    src: "{{ bootwright_ceph_registry_trust_path }}"
+    dest: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
+    owner: root
+    group: root
+    mode: "0644"
+  register: bootwright_ceph_registry_trust
+  when: bootwright_ceph_registry_trust_path | length > 0
+
+- name: Update storage node trust store
+  ansible.builtin.command:
+    argv:
+      - update-ca-trust
+  changed_when: bootwright_ceph_registry_trust.changed | default(false)
+  when: bootwright_ceph_registry_trust.changed | default(false)
+
+- name: Log storage node into cephadm registry
+  containers.podman.podman_login:
+    registry: "{{ bootwright_ceph_registry_url }}"
+    username: "{{ bootwright_ceph_registry_credentials.username }}"
+    password: "{{ bootwright_ceph_registry_credentials.password }}"
+  no_log: true
+  when:
+    - bootwright_ceph_registry_url | length > 0
+    - bootwright_ceph_registry_credentials is defined
+
+- name: Authorize cephadm cluster SSH key on storage node
+  ansible.posix.authorized_key:
+    user: "{{ bootwright_selected_storage_cluster.clusterSSH.user | default('root') }}"
+    key: "{{ lookup('ansible.builtin.file', bootwright_selected_storage_cluster.clusterSSH.publicKeyPath) }}"
+    state: present
+    manage_dir: true
+  no_log: true
+  when:
+    - bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+
+- name: Check declared OSD devices are empty
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item }}"
+  register: bootwright_ceph_device_check
+  changed_when: false
+  failed_when: bootwright_ceph_device_check.rc != 0 or (bootwright_ceph_device_check.stdout | regex_search('\\S'))
+  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"

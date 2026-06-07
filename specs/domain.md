@@ -15,7 +15,7 @@ Operators author desired state as seventeen YAML kinds:
 
 | Kind | Question it answers |
 | --- | --- |
-| `Environment` | What defaults, selected resource files, secrets, proxy, mirrors, and component image pins apply to the fleet? |
+| `Environment` | What defaults, selected resource files, secrets, entitlements, proxy, mirrors, and component image pins apply to the fleet? |
 | `Machine` | Which raw, Bootwright-installed, or OS-ready machine should be used, and what substrate, OS, network, SSH, and capability facts does it own? |
 | `MachineImage` | Which bootable OS install media can Bootwright customize and serve? |
 | `MachineInstallProfile` | How should Bootwright install and customize an OS on a managed machine? |

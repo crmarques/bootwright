@@ -1,0 +1,19 @@
+---
+- name: Install Ceph prerequisites on storage node
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages: "{{ bootwright_ceph_provider.prerequisitePackages | default(['firewalld', 'lvm2', 'podman', 'chrony']) }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+
+- name: Start storage node services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - chronyd
+    - firewalld
+  loop_control:
+    label: "{{ bootwright_current_storage_node.name }} {{ item }}"

@@ -6,6 +6,9 @@ spec:
   type: ceph
 
   ceph:
+    distribution: redhat
+    entitlementRef:
+      name: rhcs
     cephadm:
       addressRef:
         name: ssh
@@ -14,10 +17,6 @@ spec:
         monIP:
           nodeRef:
             name: ceph-dc1-0
-      registry:
-        url: registry.redhat.io
-        credentialsRef:
-          name: ceph-registry-credentials
     networks:
       publicCIDRs:
       - 192.168.141.0/24
