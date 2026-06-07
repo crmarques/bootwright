@@ -296,6 +296,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright check container-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright check storage-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
 | `bootwright check all --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright check addons --output json` | Supported | Read-only addon preflight |
 | `bootwright render effective --output json` | Supported | Writes normalized desired state |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
