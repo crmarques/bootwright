@@ -93,9 +93,28 @@ func clusterRootNamesForTarget(state v1alpha1.State, scope string) ([]string, []
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return nil, nil, fmt.Errorf("unknown cluster(s): %s", strings.Join(missing, ", "))
+		var available []string
+		for name := range containerKnown {
+			available = append(available, name)
+		}
+		for name := range storageKnown {
+			available = append(available, name)
+		}
+		return nil, nil, fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 	}
 	return containerNames, storageNames, nil
+}
+
+// availableClusterNamesHint formats the declared cluster roots for an
+// unknown-cluster error so an operator can correct a typo from the message
+// alone, mirroring the actionable style of the shared-service conflict errors.
+func availableClusterNamesHint(names []string) string {
+	if len(names) == 0 {
+		return "no ContainerCluster or StorageCluster roots are declared"
+	}
+	sorted := append([]string(nil), names...)
+	sort.Strings(sorted)
+	return "available: " + strings.Join(sorted, ", ")
 }
 
 func clusterNamesForTarget(state v1alpha1.State, scope string) ([]string, error) {
@@ -155,7 +174,11 @@ func validateClusterNames(state v1alpha1.State, names []string) error {
 		return nil
 	}
 	sort.Strings(missing)
-	return fmt.Errorf("unknown cluster(s): %s", strings.Join(missing, ", "))
+	var available []string
+	for name := range known {
+		available = append(available, name)
+	}
+	return fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 }
 
 // formatDestroyScopeConflicts builds an actionable error message that

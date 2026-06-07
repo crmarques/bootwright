@@ -263,6 +263,9 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 	if stateLoaded {
 		hints := []string{"bootwright secret list"}
 		hints = append(hints, secretNextStepHints(state, contextName, secretsDir)...)
+		if statusNeedsHostTrust(state, secretsDir) {
+			hints = append(hints, "bootwright host trust")
+		}
 		hints = append(hints, "bootwright bastion setup --yes", "bootwright check all", "bootwright render effective")
 		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
@@ -291,7 +294,7 @@ func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) [
 	}
 	generatedMissing := false
 	materializedMissing := false
-	contextMissing := ""
+	var contextMissing []string
 	env := primaryEnvironmentForSync(state)
 	for _, entry := range entries {
 		if entry.Present {
@@ -305,8 +308,8 @@ func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) [
 			materializedMissing = true
 			continue
 		}
-		if entry.Type == "context" && contextMissing == "" {
-			contextMissing = entry.Name
+		if entry.Type == "context" {
+			contextMissing = append(contextMissing, entry.Name)
 		}
 	}
 	var hints []string
@@ -316,14 +319,25 @@ func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) [
 	if generatedMissing {
 		hints = append(hints, "bootwright secret generate")
 	}
-	if contextMissing != "" {
-		if contextMissing == v1alpha1.DefaultPullSecretName {
-			hints = append(hints, "bootwright secret set "+contextMissing+" --pull-secret <path>")
+	hints = append(hints, contextSecretSetHints(contextMissing)...)
+	return hints
+}
+
+// contextSecretSetHints emits a `secret set` hint for every missing
+// context-local secret, not just the first, so an operator following the status
+// spine sees the full set of required secrets in one read. The OpenShift pull
+// secret is surfaced first because it is the most universally required and
+// otherwise sorts last among alphabetically-ordered names.
+func contextSecretSetHints(missing []string) []string {
+	var pull, rest []string
+	for _, name := range missing {
+		if name == v1alpha1.DefaultPullSecretName {
+			pull = append(pull, "bootwright secret set "+name+" --pull-secret <path>")
 		} else {
-			hints = append(hints, "bootwright secret set "+contextMissing+" --from-file <path>")
+			rest = append(rest, "bootwright secret set "+name+" --from-file <path>")
 		}
 	}
-	return hints
+	return append(pull, rest...)
 }
 
 func clustersNeedingInstallerRender(state v1alpha1.State, renderedDir, clustersDir string) []string {

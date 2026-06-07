@@ -115,6 +115,16 @@ func machineNeedsManagedHostTrust(machine v1alpha1.Machine, policy locality.Poli
 		!locality.IsControllerLocalMachine(machine, policy)
 }
 
+// statusNeedsHostTrust reports whether the loaded desired state declares
+// machines that require Bootwright-managed SSH host trust whose trust records
+// are absent or stale. The status next-step spine uses it to suggest
+// `bootwright host trust` before the workflow reaches a strict SSH check, so
+// the spine stops silently skipping a mandatory step on remote-host layouts.
+func statusNeedsHostTrust(state v1alpha1.State, secretsDir string) bool {
+	checks := managedHostTrustChecks(state, secretsDir, defaultPreflightDeps, locality.DefaultPolicy, outputFail)
+	return hostTrustHasFailure(checks)
+}
+
 type outputStatus = string
 
 const (
