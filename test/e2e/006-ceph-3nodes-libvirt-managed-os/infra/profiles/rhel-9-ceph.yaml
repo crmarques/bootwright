@@ -31,7 +31,8 @@ spec:
       languages:
         - en_US.UTF-8
       install:
-        - cephadm
+        # cephadm is not on the RHEL DVD; the storage_cluster_cephadm role
+        # installs it post-provision after configuring the Ceph repo.
         - podman
         - lvm2
         - chrony
