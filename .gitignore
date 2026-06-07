@@ -42,4 +42,6 @@ __pycache__/
 
 # GitOpsPackageSet workspace generated output (expanded plan, rendered repos).
 .bootwright/
-examples/.gitignore
+
+# Local scratch area for work-in-progress example fleets (untracked).
+examples/_wip/

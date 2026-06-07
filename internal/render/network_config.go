@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"dario.cat/mergo"
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
 func machineNetworkDefinition(state v1alpha1.State, ci v1alpha1.ClusterInstall, machine v1alpha1.InstallMachine) (v1alpha1.NetworkConfig, bool) {
@@ -26,30 +26,24 @@ func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInsta
 	if !ok {
 		return nil
 	}
-	out := cloneYAMLMap(network.Spec.Template.NetworkConfig)
-	if len(machine.Network.Overrides) > 0 {
-		mergeNetworkConfigOverrides(out, machine.Network.Overrides)
-	}
-	injectMachineInterfaceAddresses(out, machine)
-	return out
+	return nmstate.EffectiveConfig(network.Spec.Template.NetworkConfig, machine.Network.Overrides, machineInterfaceAddresses(machine))
 }
 
-// injectMachineInterfaceAddresses writes each interfaceAddresses[] entry's
-// resolved address into the named NMState interface, so a node's static install
-// IP is authored once in spec.addresses[] instead of duplicated into the
-// NMState override.
-func injectMachineInterfaceAddresses(config map[string]any, machine v1alpha1.InstallMachine) {
+func machineInterfaceAddresses(machine v1alpha1.InstallMachine) []nmstate.InterfaceAddress {
+	var out []nmstate.InterfaceAddress
 	for _, ia := range machine.Network.InterfaceAddresses {
 		ip := installMachineAddress(machine, ia.AddressRef.Name)
 		if ip == "" || ia.Interface == "" {
 			continue
 		}
-		family := ia.Family
-		if family == "" {
-			family = "ipv4"
-		}
-		setInterfaceFamilyAddress(config, ia.Interface, family, ip, ia.PrefixLength)
+		out = append(out, nmstate.InterfaceAddress{
+			Interface:    ia.Interface,
+			Family:       ia.Family,
+			IP:           ip,
+			PrefixLength: ia.PrefixLength,
+		})
 	}
+	return out
 }
 
 func installMachineAddress(machine v1alpha1.InstallMachine, name string) string {
@@ -59,135 +53,6 @@ func installMachineAddress(machine v1alpha1.InstallMachine, name string) string 
 		}
 	}
 	return ""
-}
-
-func setInterfaceFamilyAddress(config map[string]any, ifaceName, family, ip string, prefixLength int) {
-	interfaces, _ := config["interfaces"].([]any)
-	var entry map[string]any
-	for _, item := range interfaces {
-		if m, ok := item.(map[string]any); ok {
-			if name, _ := m["name"].(string); name == ifaceName {
-				entry = m
-				break
-			}
-		}
-	}
-	if entry == nil {
-		entry = map[string]any{"name": ifaceName}
-		interfaces = append(interfaces, entry)
-		config["interfaces"] = interfaces
-	}
-	familyConfig, _ := entry[family].(map[string]any)
-	if familyConfig == nil {
-		familyConfig = map[string]any{}
-		entry[family] = familyConfig
-	}
-	familyConfig["address"] = []any{map[string]any{"ip": ip, "prefix-length": prefixLength}}
-}
-
-func mergeNetworkConfigOverrides(base map[string]any, overrides map[string]any) {
-	patch := cloneYAMLMap(overrides)
-	mergeStructuredSequences(base, patch)
-	_ = mergo.Merge(&base, patch, mergo.WithOverride)
-}
-
-func mergeStructuredSequences(base map[string]any, patch map[string]any) {
-	for key, patchValue := range patch {
-		baseMap, baseIsMap := base[key].(map[string]any)
-		patchMap, patchIsMap := patchValue.(map[string]any)
-		if baseIsMap && patchIsMap {
-			mergeStructuredSequences(baseMap, patchMap)
-			continue
-		}
-		baseSlice, baseIsSlice := base[key].([]any)
-		patchSlice, patchIsSlice := patchValue.([]any)
-		if !baseIsSlice || !patchIsSlice {
-			continue
-		}
-		merged, ok := mergeStructuredSequence(baseSlice, patchSlice)
-		if !ok {
-			continue
-		}
-		base[key] = merged
-		delete(patch, key)
-	}
-}
-
-func mergeStructuredSequence(base []any, patch []any) ([]any, bool) {
-	if len(patch) == 0 {
-		return cloneYAMLValue(base).([]any), true
-	}
-	if sequenceUsesName(patch) {
-		return mergeNamedSequence(base, patch), true
-	}
-	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
-		return mergePositionalMapSequence(base, patch), true
-	}
-	return nil, false
-}
-
-func mergeNamedSequence(base []any, patch []any) []any {
-	out := cloneYAMLValue(base).([]any)
-	index := map[string]map[string]any{}
-	for _, item := range out {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := entry["name"].(string)
-		if name != "" {
-			index[name] = entry
-		}
-	}
-	for _, item := range patch {
-		entry := item.(map[string]any)
-		name := entry["name"].(string)
-		if baseEntry, ok := index[name]; ok {
-			mergeNetworkConfigOverrides(baseEntry, entry)
-			continue
-		}
-		out = append(out, cloneYAMLMap(entry))
-	}
-	return out
-}
-
-func mergePositionalMapSequence(base []any, patch []any) []any {
-	out := cloneYAMLValue(base).([]any)
-	for i, item := range patch {
-		entry := item.(map[string]any)
-		if i < len(out) {
-			baseEntry, ok := out[i].(map[string]any)
-			if ok {
-				mergeNetworkConfigOverrides(baseEntry, entry)
-				continue
-			}
-		}
-		out = append(out, cloneYAMLMap(entry))
-	}
-	return out
-}
-
-func sequenceUsesName(items []any) bool {
-	for _, item := range items {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			return false
-		}
-		name, _ := entry["name"].(string)
-		if name == "" {
-			return false
-		}
-	}
-	return true
-}
-
-func sequenceUsesMaps(items []any) bool {
-	for _, item := range items {
-		if _, ok := item.(map[string]any); !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func networkConfigInterfaceNames(config map[string]any) []string {

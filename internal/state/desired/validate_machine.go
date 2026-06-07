@@ -5,9 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"dario.cat/mergo"
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/media"
+	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
 var validMachineCapabilities = map[string]bool{
@@ -253,18 +253,19 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 		errs = append(errs, prefix+".config.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine")
 	}
 	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
+	injects := machineConfigInterfaceAddresses(machine, config)
 	var effective map[string]any
 	if config.NetworkConfigRef.Name != "" {
 		if n, ok := networks[config.NetworkConfigRef.Name]; ok {
-			errs = append(errs, machineNetworkOverrideShapeErrors(prefix+".config.overrides", n.Spec.Template.NetworkConfig, config.Overrides)...)
-			effective = effectiveMachineNetworkConfig(n.Spec.Template.NetworkConfig, config.Overrides)
+			errs = append(errs, nmstate.ShapeErrors(prefix+".config.overrides", n.Spec.Template.NetworkConfig, config.Overrides)...)
+			effective = nmstate.EffectiveConfig(n.Spec.Template.NetworkConfig, config.Overrides, injects)
 		} else {
 			errs = append(errs, fmt.Sprintf("%s.config.networkConfigRef.name %q does not match any NetworkConfig", prefix, config.NetworkConfigRef.Name))
 		}
 	}
 	if config.Spec != nil {
 		errs = append(errs, validateNetworkConfigSpec(prefix+".config.spec", *config.Spec, map[string]bool{})...)
-		effective = effectiveMachineNetworkConfig(config.Spec.Template.NetworkConfig, nil)
+		effective = nmstate.EffectiveConfig(config.Spec.Template.NetworkConfig, nil, injects)
 	}
 	errs = append(errs, validateMachineInterfaceBindings(prefix+".interfaceBinding", machine, networkInterfaceNames(effective), provider)...)
 	if effective != nil {
@@ -298,6 +299,9 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 				errs = append(errs, fmt.Sprintf("%s.interface %q is duplicated for the same address family", owner, ia.Interface))
 			}
 			seen[key] = true
+			if nmstate.InterfaceHasStaticIP(config.Overrides, ia.Interface) {
+				errs = append(errs, fmt.Sprintf("%s.interface %q install IP is owned by interfaceAddresses; remove the static address from config.overrides", owner, ia.Interface))
+			}
 		}
 		switch ia.Family {
 		case "", "ipv4", "ipv6":
@@ -418,213 +422,30 @@ func networkConfigStaticIPs(config map[string]any) []string {
 	return out
 }
 
-func effectiveMachineNetworkConfig(template, overrides map[string]any) map[string]any {
-	out := cloneMachineNetworkConfig(template)
-	if len(overrides) > 0 {
-		mergeMachineNetworkConfigOverrides(out, cloneMachineNetworkConfig(overrides))
-	}
-	return out
-}
-
-// machineNetworkOverrideShapeErrors reports per-machine NMState override list
-// shapes that the deterministic template+override merge cannot apply, naming the
-// owning field instead of letting the merge silently drop the override. It
-// tracks exactly the merge's structured-sequence path: a list override is only
-// checked where both the template and the override hold a list at the same key,
-// and is rejected unless every override entry is a named map (merge by name) or
-// both lists are positional maps (merge by index).
-func machineNetworkOverrideShapeErrors(prefix string, base, patch map[string]any) []string {
-	if len(patch) == 0 {
+func machineConfigInterfaceAddresses(machine v1alpha1.Machine, config v1alpha1.MachineNetworkConfig) []nmstate.InterfaceAddress {
+	if len(config.InterfaceAddresses) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(patch))
-	for key := range patch {
-		keys = append(keys, key)
+	addresses := map[string]string{}
+	for _, address := range machine.Spec.Addresses {
+		if address.Name != "" {
+			addresses[address.Name] = address.Address
+		}
 	}
-	sort.Strings(keys)
-	var errs []string
-	for _, key := range keys {
-		path := prefix + "." + key
-		patchValue := patch[key]
-		if patchMap, ok := patchValue.(map[string]any); ok {
-			if baseMap, ok := base[key].(map[string]any); ok {
-				errs = append(errs, machineNetworkOverrideShapeErrors(path, baseMap, patchMap)...)
-			}
+	var out []nmstate.InterfaceAddress
+	for _, ia := range config.InterfaceAddresses {
+		ip := addresses[ia.AddressRef.Name]
+		if ip == "" || ia.Interface == "" {
 			continue
 		}
-		patchSlice, patchIsSlice := patchValue.([]any)
-		baseSlice, baseIsSlice := base[key].([]any)
-		if !patchIsSlice || !baseIsSlice {
-			continue
-		}
-		errs = append(errs, machineNetworkOverrideSequenceShapeErrors(path, baseSlice, patchSlice)...)
-	}
-	return errs
-}
-
-func machineNetworkOverrideSequenceShapeErrors(path string, base, patch []any) []string {
-	if len(patch) == 0 {
-		return nil
-	}
-	if sequenceUsesName(patch) {
-		index := map[string]map[string]any{}
-		for _, item := range base {
-			if entry, ok := item.(map[string]any); ok {
-				if name, _ := entry["name"].(string); name != "" {
-					index[name] = entry
-				}
-			}
-		}
-		var errs []string
-		for _, item := range patch {
-			entry := item.(map[string]any)
-			name, _ := entry["name"].(string)
-			baseEntry := index[name]
-			if baseEntry == nil {
-				baseEntry = map[string]any{}
-			}
-			errs = append(errs, machineNetworkOverrideShapeErrors(path+"["+name+"]", baseEntry, entry)...)
-		}
-		return errs
-	}
-	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
-		var errs []string
-		for i, item := range patch {
-			entry := item.(map[string]any)
-			baseEntry := map[string]any{}
-			if i < len(base) {
-				if existing, ok := base[i].(map[string]any); ok {
-					baseEntry = existing
-				}
-			}
-			errs = append(errs, machineNetworkOverrideShapeErrors(fmt.Sprintf("%s[%d]", path, i), baseEntry, entry)...)
-		}
-		return errs
-	}
-	return []string{path + " override list cannot be merged into the NetworkConfig template; entries must be all named maps or a positional list of maps, not scalars or mixed named and unnamed entries"}
-}
-
-func mergeMachineNetworkConfigOverrides(base map[string]any, patch map[string]any) {
-	for key, patchValue := range patch {
-		baseMap, baseIsMap := base[key].(map[string]any)
-		patchMap, patchIsMap := patchValue.(map[string]any)
-		if baseIsMap && patchIsMap {
-			mergeMachineNetworkConfigOverrides(baseMap, patchMap)
-			continue
-		}
-		baseSlice, baseIsSlice := base[key].([]any)
-		patchSlice, patchIsSlice := patchValue.([]any)
-		if !baseIsSlice || !patchIsSlice {
-			continue
-		}
-		merged, ok := mergeMachineNetworkConfigSequence(baseSlice, patchSlice)
-		if !ok {
-			continue
-		}
-		base[key] = merged
-		delete(patch, key)
-	}
-	_ = mergo.Merge(&base, patch, mergo.WithOverride)
-}
-
-func mergeMachineNetworkConfigSequence(base []any, patch []any) ([]any, bool) {
-	if len(patch) == 0 {
-		return cloneMachineNetworkConfigValue(base).([]any), true
-	}
-	if sequenceUsesName(patch) {
-		return mergeMachineNetworkConfigNamedSequence(base, patch), true
-	}
-	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
-		return mergeMachineNetworkConfigPositionalSequence(base, patch), true
-	}
-	return nil, false
-}
-
-func mergeMachineNetworkConfigNamedSequence(base []any, patch []any) []any {
-	out := cloneMachineNetworkConfigValue(base).([]any)
-	index := map[string]map[string]any{}
-	for _, item := range out {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := entry["name"].(string)
-		if name != "" {
-			index[name] = entry
-		}
-	}
-	for _, item := range patch {
-		entry := item.(map[string]any)
-		name := entry["name"].(string)
-		if baseEntry, ok := index[name]; ok {
-			mergeMachineNetworkConfigOverrides(baseEntry, entry)
-			continue
-		}
-		out = append(out, cloneMachineNetworkConfig(entry))
+		out = append(out, nmstate.InterfaceAddress{
+			Interface:    ia.Interface,
+			Family:       ia.Family,
+			IP:           ip,
+			PrefixLength: ia.PrefixLength,
+		})
 	}
 	return out
-}
-
-func mergeMachineNetworkConfigPositionalSequence(base []any, patch []any) []any {
-	out := cloneMachineNetworkConfigValue(base).([]any)
-	for i, item := range patch {
-		entry := item.(map[string]any)
-		if i < len(out) {
-			baseEntry, ok := out[i].(map[string]any)
-			if ok {
-				mergeMachineNetworkConfigOverrides(baseEntry, entry)
-				continue
-			}
-		}
-		out = append(out, cloneMachineNetworkConfig(entry))
-	}
-	return out
-}
-
-func sequenceUsesName(items []any) bool {
-	for _, item := range items {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			return false
-		}
-		name, _ := entry["name"].(string)
-		if name == "" {
-			return false
-		}
-	}
-	return true
-}
-
-func sequenceUsesMaps(items []any) bool {
-	for _, item := range items {
-		if _, ok := item.(map[string]any); !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func cloneMachineNetworkConfig(in map[string]any) map[string]any {
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		out[key] = cloneMachineNetworkConfigValue(value)
-	}
-	return out
-}
-
-func cloneMachineNetworkConfigValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneMachineNetworkConfig(typed)
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneMachineNetworkConfigValue(item))
-		}
-		return out
-	default:
-		return typed
-	}
 }
 
 func validateMachineImages(state v1alpha1.State) []string {

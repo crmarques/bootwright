@@ -22,15 +22,16 @@ a KubeVirt `InfraProvider` through `Machine.spec.substrate.providerRef` and a
 profile through `Machine.spec.substrate.profileRef`, the same way other virtual
 substrates select provider-owned profiles.
 
-KubeVirt profiles use exactly one host reference:
+The KubeVirt `InfraProvider` sets exactly one host reference, alongside its
+`machineProfiles[]`:
 
 - `hostClusterRef` for a Bootwright-managed `ContainerCluster`
 - `kubeconfigRef` for an external virtualization cluster kubeconfig declared in
   `Environment.spec.secrets`
 
 Virtualization-cluster capabilities are advertised by `ClusterAddon.spec.provides`.
-The initial accepted value is `kubevirt`. A child KubeVirt profile with
-`hostClusterRef` is valid only when the referenced parent cluster has a bound
+The initial accepted value is `kubevirt`. A child cluster whose KubeVirt provider
+sets `hostClusterRef` is valid only when the referenced parent cluster has a bound
 add-on that provides `kubevirt`.
 
 The apply graph is responsible for cross-cluster ordering. The full graph and

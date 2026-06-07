@@ -10,6 +10,11 @@ const (
 	IBMRegistryURL    = "cp.icr.io/cp"
 )
 
+const (
+	rhelBaseOSRepo    = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-baseos-rpms"
+	rhelAppStreamRepo = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-appstream-rpms"
+)
+
 type Provider struct {
 	Distribution         string
 	Entitlement          entitlements.Resolved
@@ -55,6 +60,11 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 	case v1alpha1.StorageCephDistributionRedHat:
 		provider.RequiresRHSM = true
 		provider.RequiresRegistry = true
+		provider.Repository.RedHatRepos = []string{
+			rhelBaseOSRepo,
+			rhelAppStreamRepo,
+			"rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms",
+		}
 		provider.RuntimeOS = RuntimeOS{
 			Family:         "rhel",
 			ExactVersions:  []string{"9.6", "9.7", "10", "10.0", "10.1"},
@@ -67,6 +77,7 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		provider.RequiresRHSM = true
 		provider.RequiresRegistry = true
 		provider.RequiresLicense = true
+		provider.Repository.RedHatRepos = []string{rhelBaseOSRepo, rhelAppStreamRepo}
 		provider.Repository.IBMRepoURL = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo"
 		provider.RuntimeOS = RuntimeOS{
 			Family:         "rhel",
@@ -76,8 +87,6 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		if cluster.Spec.Ceph != nil {
 			provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, IBMRegistryURL, secretsDir)
 		}
-	default:
-		provider.Repository.RedHatRepos = nil
 	}
 	return provider
 }

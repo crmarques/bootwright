@@ -82,3 +82,45 @@ func TestSelectIBMProviderProjectsLicenseAndRegistry(t *testing.T) {
 		t.Fatalf("license vars = %#v", license)
 	}
 }
+
+func TestSelectProjectsRedHatReposPerDistribution(t *testing.T) {
+	rhel := func(suffix string) string {
+		return "rhel-{{ ansible_distribution_major_version }}-for-x86_64-" + suffix
+	}
+	cases := []struct {
+		distribution string
+		want         []string
+	}{
+		{v1alpha1.StorageCephDistributionRedHat, []string{
+			rhel("baseos-rpms"),
+			rhel("appstream-rpms"),
+			"rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms",
+		}},
+		{v1alpha1.StorageCephDistributionIBM, []string{
+			rhel("baseos-rpms"),
+			rhel("appstream-rpms"),
+		}},
+	}
+	for _, tc := range cases {
+		cluster := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: tc.distribution,
+		}}}
+		repos := Select(cluster, nil, "/context/secrets").Repository.RedHatRepos
+		if len(repos) != len(tc.want) {
+			t.Fatalf("%s redhatRepos = %#v, want %#v", tc.distribution, repos, tc.want)
+		}
+		for i := range tc.want {
+			if repos[i] != tc.want[i] {
+				t.Fatalf("%s redhatRepos[%d] = %q, want %q", tc.distribution, i, repos[i], tc.want[i])
+			}
+		}
+		repo := Vars(Select(cluster, nil, "/context/secrets"))["repository"].(map[string]any)
+		if _, ok := repo["redhatRepos"].([]string); !ok {
+			t.Fatalf("%s Vars repository.redhatRepos missing or wrong type: %#v", tc.distribution, repo)
+		}
+	}
+	oss := v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{}}}
+	if repos := Select(oss, nil, "/context/secrets").Repository.RedHatRepos; len(repos) != 0 {
+		t.Fatalf("oss redhatRepos = %#v, want none", repos)
+	}
+}

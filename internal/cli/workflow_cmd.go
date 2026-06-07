@@ -102,7 +102,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "write concrete tool input files to this directory")
-	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render with --output-dir")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster and StorageCluster names to render with --output-dir")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "allow writing secret-inlined OpenShift installer files; keep the output directory local and unversioned")
 	cmd.AddCommand(
 		newRenderEffectiveCmd(stdout, stderr),

@@ -32,6 +32,7 @@ ansible/collections/ansible_collections/bootwright/core/
     machine_base          base packages for service-bearing machines
     machine_proxy         proxy facts and persisted proxy settings
     machine_setup_*       substrate setup on provider machines
+    machine_os_install_*  Bootwright-managed OS installation (anaconda)
     helper_*              context, credential, and cleanup helpers
     provider_service_*    provider services, including BMC services
     infra_component_*     machine-bound InfraComponent services
@@ -92,6 +93,18 @@ guardrail tests. Every kind resolves to a real role where a role is meaningful;
 both `bootwright.core.provider_service_bmc_none` and
 `bootwright.core.container_cluster_boot_none` exist so no-op dispatch remains
 explicit.
+
+The registry projects role names only for the provider-discriminated families
+where one kind has several substrate backends to choose between
+(`machine_substrate_*`, `provider_service_bmc_*`, `container_cluster_boot_*`,
+and the optional media hook). Single-implementation roles —
+`machine_os_install_anaconda`, `storage_cluster_cephadm`,
+`container_cluster_agent_install`, `cluster_network_load_balancer_vips` — have no
+alternative to dispatch to, so their task playbooks import them by their exact
+collection name and select them by their owning kind's discriminator (for OS
+install, `MachineInstallProfile.spec.installer.type`). When such a family grows a
+second backend, move it behind a registry projection like the substrate families
+rather than branching inside a playbook.
 
 The projected variable blocks described in
 [`vars-contract.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/vars-contract.md) carry the

@@ -43,10 +43,7 @@
       - subscription-manager
       - repos
       - "--enable={{ item }}"
-  loop:
-    - "rhel-{{ ansible_distribution_major_version }}-for-x86_64-baseos-rpms"
-    - "rhel-{{ ansible_distribution_major_version }}-for-x86_64-appstream-rpms"
-    - "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
+  loop: "{{ bootwright_ceph_provider.repository.redhatRepos }}"
   loop_control:
     label: "{{ item }}"
   changed_when: false

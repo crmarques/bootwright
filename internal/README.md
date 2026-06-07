@@ -18,3 +18,5 @@ Bootwright's desired-state pipeline flows through these internal packages:
 - `cli`: Cobra commands and user-facing output adapters.
 
 Import direction is one-way: schema and state packages do not import render or converge; storage runtime packages do not import render; render does not import CLI; workflow does not import CLI; all human output stays under `cli/output`.
+
+`repo/checks` and `repo/bundlecheck` hold no production code. They are repository-fitness tests that enforce the rules above — the import direction, the CLI-import boundary, the Ansible registry/role consistency, and embedded-collection lock integrity — and run as part of `go test ./...`.

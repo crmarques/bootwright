@@ -320,6 +320,26 @@ func ServiceImagePin(kind, realisation string) (ServiceImage, bool) {
 	return image, image.Type != ""
 }
 
+// PinnableServiceKeys returns every service realisation the registry pins a
+// container image for, sorted. The renderer's image-pin gate is tested against
+// this so a new image-bearing entry cannot be added to the registry without a
+// matching pin path.
+func PinnableServiceKeys() []ServiceKey {
+	var out []ServiceKey
+	for _, s := range serviceSupport {
+		if s.Image.Type != "" {
+			out = append(out, s.Key)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Realisation < out[j].Realisation
+	})
+	return out
+}
+
 func Entries() []DispatchSupport {
 	out := make([]DispatchSupport, 0, len(dispatchSupport))
 	for _, support := range dispatchSupport {

@@ -37,20 +37,10 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	if usesSushyTools(state) {
 		pins = append(pins, ComponentPin{Name: "sushy-tools", Version: defaultSushyToolsVersion, Source: "https://pypi.org/project/sushy-tools/", LookupDate: versionLookupDate})
 	}
-	if usesManagedHAProxy(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)
-	}
-	if usesManagedMirrorRegistry(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)
-	}
-	if usesManagedProxy(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)
-	}
-	if usesManagedDNS(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
-	}
-	if usesManagedArtifacts(state) {
-		pins = appendServicePin(pins, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
+	for _, gate := range servicePinGates {
+		if gate.uses(state) {
+			pins = appendServicePin(pins, gate.key.Kind, gate.key.Realisation)
+		}
 	}
 	for _, version := range openshiftInstallVersions(state) {
 		pins = append(pins, ComponentPin{
@@ -61,6 +51,21 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 		})
 	}
 	return pins
+}
+
+// servicePinGates maps each pinnable managed service to the predicate that
+// decides whether the loaded state actually uses it. The set of keys here must
+// match support.PinnableServiceKeys(); TestServicePinGatesCoverPinnableServices
+// enforces that so a new image-bearing registry entry cannot ship without a pin.
+var servicePinGates = []struct {
+	key  support.ServiceKey
+	uses func(v1alpha1.State) bool
+}{
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotLoadBalancer, Realisation: v1alpha1.InfraComponentTypeHAProxy}, usesManagedHAProxy},
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry}, usesManagedMirrorRegistry},
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid}, usesManagedProxy},
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq}, usesManagedDNS},
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP}, usesManagedArtifacts},
 }
 
 func appendServicePin(pins []ComponentPin, kind, realisation string) []ComponentPin {

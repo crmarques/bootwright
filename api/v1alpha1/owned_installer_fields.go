@@ -19,8 +19,10 @@ type OwnedInstallerFields struct {
 	AgentConfigKeys []string
 }
 
-// OwnedFields returns the renderer's owned-field audit set. Callers MUST treat
-// the returned slices as read-only.
+// OwnedFields returns the renderer's owned-field audit set. It is a test-time
+// drift guard (compared against rendered output by render/owned_test.go), not a
+// runtime input the validator or renderer reads. Callers MUST treat the returned
+// slices as read-only.
 func OwnedFields() OwnedInstallerFields {
 	return OwnedInstallerFields{
 		InstallConfigKeys: []string{

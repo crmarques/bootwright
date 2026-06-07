@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 )
 
 func TestValidateStoragePoolRoleEnum(t *testing.T) {
@@ -82,7 +83,7 @@ func TestMachineNetworkOverrideShapeErrors(t *testing.T) {
 			}},
 		},
 	}
-	if errs := machineNetworkOverrideShapeErrors("spec.network.config.overrides", template, named); len(errs) != 0 {
+	if errs := nmstate.ShapeErrors("spec.network.config.overrides", template, named); len(errs) != 0 {
 		t.Fatalf("named override should be mergeable, got %v", errs)
 	}
 
@@ -93,9 +94,35 @@ func TestMachineNetworkOverrideShapeErrors(t *testing.T) {
 			map[string]any{"name": "secondary"},
 		},
 	}
-	errs := machineNetworkOverrideShapeErrors("spec.network.config.overrides", template, hetero)
+	errs := nmstate.ShapeErrors("spec.network.config.overrides", template, hetero)
 	if !containsSubstring(errs, "spec.network.config.overrides.interfaces override list cannot be merged") {
 		t.Fatalf("expected heterogeneous override error, got %v", errs)
+	}
+}
+
+func TestValidateMachineInterfaceAddressesRejectsOverrideInstallIP(t *testing.T) {
+	machine := v1alpha1.Machine{
+		Metadata: v1alpha1.Metadata{Name: "m"},
+		Spec: v1alpha1.MachineSpec{
+			Addresses: []v1alpha1.MachineAddress{{Name: "ip", Address: "192.0.2.20"}},
+		},
+	}
+	config := v1alpha1.MachineNetworkConfig{
+		NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "net"},
+		InterfaceAddresses: []v1alpha1.MachineInterfaceAddress{{
+			Interface:    "primary",
+			AddressRef:   v1alpha1.LocalObjectReference{Name: "ip"},
+			PrefixLength: 24,
+		}},
+		Overrides: map[string]any{"interfaces": []any{
+			map[string]any{"name": "primary", "ipv4": map[string]any{
+				"address": []any{map[string]any{"ip": "192.0.2.20", "prefix-length": 24}},
+			}},
+		}},
+	}
+	errs := validateMachineInterfaceAddresses("spec.network.config.interfaceAddresses", machine, config)
+	if !containsSubstring(errs, "install IP is owned by interfaceAddresses") {
+		t.Fatalf("expected override install-IP rejection, got %v", errs)
 	}
 }
 

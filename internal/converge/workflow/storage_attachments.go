@@ -111,11 +111,11 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 	binding := plan.Binding
 	input := plan.Input
 	exportRef := addoninputs.LocalObjectReferenceValue(input.Values, "exportRef")
-	export, ok := workflowStorageExportByName(state, exportRef.Name)
+	export, ok := topology.ExportByName(state, exportRef.Name)
 	if !ok {
 		return nil
 	}
-	cluster, ok := workflowStorageClusterByName(state, export.Spec.StorageClusterRef.Name)
+	cluster, ok := topology.ClusterByName(state, export.Spec.StorageClusterRef.Name)
 	if !ok {
 		return fmt.Errorf("StorageCluster/%s not found for storage attachment %s/%s", export.Spec.StorageClusterRef.Name, plan.Addon.Name, input.Name)
 	}
@@ -472,22 +472,4 @@ func storageAttachmentAssetFor(assets []render.StorageAsset, addonName, inputNam
 		}
 	}
 	return render.StorageAttachmentAsset{}
-}
-
-func workflowStorageExportByName(state v1alpha1.State, name string) (v1alpha1.StorageExport, bool) {
-	for _, export := range state.StorageExports {
-		if export.Metadata.Name == name {
-			return export, true
-		}
-	}
-	return v1alpha1.StorageExport{}, false
-}
-
-func workflowStorageClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
-	for _, cluster := range state.StorageClusters {
-		if cluster.Metadata.Name == name {
-			return cluster, true
-		}
-	}
-	return v1alpha1.StorageCluster{}, false
 }

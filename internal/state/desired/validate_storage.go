@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	addoninputs "github.com/crmarques/bootwright/internal/addons/inputs"
 	"github.com/crmarques/bootwright/internal/entitlements"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func validateStorage(state v1alpha1.State) []string {
@@ -303,7 +304,7 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 	}
 	monBySite := map[string]int{}
 	for _, node := range nodes {
-		if storageCephNodeHasRole(node, v1alpha1.StorageCephRoleMON) {
+		if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 			monBySite[node.Site]++
 		}
 		if node.Name == stretch.Tiebreaker.Node {
@@ -811,7 +812,7 @@ func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlac
 			node, ok := storageCephNodeByName(cluster, host)
 			if !ok {
 				errs = append(errs, fmt.Sprintf("%s %q is not listed in StorageCluster/%s spec.ceph.topology.nodes", owner, host, cluster.Metadata.Name))
-			} else if role != "" && !storageCephNodeHasRole(node, role) {
+			} else if role != "" && !topology.NodeHasRole(node, role) {
 				errs = append(errs, fmt.Sprintf("%s %q does not have role %q in StorageCluster/%s", owner, host, role, cluster.Metadata.Name))
 			}
 		}
@@ -830,7 +831,7 @@ func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1a
 	counts := map[string]int{}
 	for _, host := range hosts {
 		node, ok := storageCephNodeByName(cluster, host)
-		if ok && storageCephNodeHasRole(node, role) {
+		if ok && topology.NodeHasRole(node, role) {
 			counts[node.Site]++
 		}
 	}
@@ -920,15 +921,6 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 		}
 	}
 	return v1alpha1.StorageCephNode{}, false
-}
-
-func storageCephNodeHasRole(node v1alpha1.StorageCephNode, role string) bool {
-	for _, item := range node.Roles {
-		if item == role {
-			return true
-		}
-	}
-	return false
 }
 
 func storageCephNodeRolesOnly(node v1alpha1.StorageCephNode, role string) bool {

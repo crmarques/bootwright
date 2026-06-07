@@ -62,13 +62,7 @@ type InfraProviderKubeVirt struct {
 	KubeconfigRef   *SecretRef            `yaml:"kubeconfigRef,omitempty" json:"kubeconfigRef,omitempty"`
 	Namespace       string                `yaml:"namespace" json:"namespace"`
 	StorageClassRef *LocalObjectReference `yaml:"storageClassRef,omitempty" json:"storageClassRef,omitempty"`
-	Requires        KubeVirtRequires      `yaml:"requires,omitempty" json:"requires,omitempty"`
 	MachineProfiles []MachineProfile      `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
-}
-
-type KubeVirtRequires struct {
-	Provides        []string             `yaml:"provides,omitempty" json:"provides,omitempty"`
-	AddonBindingRef LocalObjectReference `yaml:"addonBindingRef,omitempty" json:"addonBindingRef,omitempty"`
 }
 
 type NetworkAttachmentCapability struct {
