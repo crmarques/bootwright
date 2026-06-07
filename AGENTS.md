@@ -69,6 +69,9 @@ Use Conventional Commits (`type(scope): subject`) when asked to commit or when
 giving a commit subject after user review/testing:
 
 - Generate ONLY one short subject line (no body). Max 72 chars.
+- Author every commit as the human only. Never add an agent co-author or
+  attribution trailer (`Co-Authored-By:`, `Generated with …`, or similar); commit
+  metadata carries human authorship, no agent signature.
 - For an implementation/fix handoff left on a temporary branch for review/testing,
   report the temporary worktree path, branch, task commit, whether `make
   check-fast` completed, and whether the branch is ready to merge into local

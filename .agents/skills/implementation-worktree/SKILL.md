@@ -45,7 +45,9 @@ the final validation for the combined result.
   `implementation-validation`: `make check-fast` (never `make check` unless the
   user requests that gate) and the readiness/rebase loop.
 - Commit task changes on the temporary branch once `make check-fast` passes, and
-  commit any rebase fixes the same way (preauthorized — do not ask).
+  commit any rebase fixes the same way (preauthorized — do not ask). Author commits
+  as the human only — no agent co-author or attribution trailer (see AGENTS.md
+  "Handoff Format").
 - Do not push, merge, or fast-forward `main`. Leave changes committed on the
   temporary branch for review/testing; `main` integration stays pending explicit
   merge approval.
