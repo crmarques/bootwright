@@ -33,6 +33,84 @@ func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing
 	}
 }
 
+func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
+						Name:         "lab-dns",
+						Type:         v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "lab-dns"},
+					}},
+				},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "lab-dns"},
+			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
+				Type:        v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef:  v1alpha1.LocalObjectReference{Name: "bastion"},
+				BindAddress: "192.168.134.1",
+				Forwarders:  []string{"1.1.1.1", "9.9.9.9"},
+			}},
+		}},
+		NetworkConfigs: []v1alpha1.NetworkConfig{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-bridge"},
+			Spec:     v1alpha1.NetworkConfigSpec{DNSRefs: []string{"lab-dns"}},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityNameResolution},
+				OS:           v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(true)},
+				Addresses:    []v1alpha1.MachineAddress{{Name: "cluster-lan", Address: "192.168.134.1"}},
+			},
+		}, {
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.MachineSpec{
+				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
+				Network: v1alpha1.MachineNetwork{
+					Config: v1alpha1.MachineNetworkConfig{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "ceph-bridge"},
+					},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-libvirt"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       "ceph",
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{
+						Nodes: []v1alpha1.StorageCephNode{{
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+						}},
+					},
+				},
+			},
+		}},
+	}
+
+	services := infraComponentServicesVars(state)
+	if len(services) != 1 {
+		t.Fatalf("infra component services = %d, want 1: %+v", len(services), services)
+	}
+	service := services[0].(map[string]any)
+	if service["kind"] != v1alpha1.ComponentSlotNameResolution {
+		t.Fatalf("service kind = %v, want %v", service["kind"], v1alpha1.ComponentSlotNameResolution)
+	}
+	if service["machineRef"] != "bastion" {
+		t.Fatalf("service machineRef = %v, want bastion", service["machineRef"])
+	}
+	want := []any{"1.1.1.1", "9.9.9.9"}
+	if got := service["forwarders"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("forwarders = %v, want %v", got, want)
+	}
+}
+
 func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testing.T) {
 	state := dnsRecordsState()
 	state.Environments[0].Spec.InfraComponents.NameResolution = append(state.Environments[0].Spec.InfraComponents.NameResolution, v1alpha1.EnvironmentNameResolutionComponent{

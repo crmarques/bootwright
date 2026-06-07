@@ -1146,6 +1146,39 @@ func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
 	}
 }
 
+func TestNameResolutionComponentForwarderValidation(t *testing.T) {
+	machines := map[string]v1alpha1.Machine{
+		"bastion": {
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
+			},
+		},
+	}
+	component := func(forwarders []string) v1alpha1.InfraComponent {
+		return v1alpha1.InfraComponent{
+			Metadata: v1alpha1.Metadata{Name: "lab-dns"},
+			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
+				Type:       v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
+				Forwarders: forwarders,
+			}},
+		}
+	}
+
+	if errs := validateNameResolutionComponent(component([]string{"1.1.1.1", "9.9.9.9"}), machines); len(errs) != 0 {
+		t.Fatalf("valid forwarders produced errors: %v", errs)
+	}
+
+	errs := strings.Join(validateNameResolutionComponent(component([]string{"", "not-an-ip"}), machines), "\n")
+	if !strings.Contains(errs, "spec.nameResolution.forwarders[0] is required") {
+		t.Fatalf("missing empty-forwarder error: %s", errs)
+	}
+	if !strings.Contains(errs, `spec.nameResolution.forwarders[1] "not-an-ip" is not a valid IP address`) {
+		t.Fatalf("missing invalid-IP error: %s", errs)
+	}
+}
+
 func TestNodeSSHSplitRefsValidate(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML,

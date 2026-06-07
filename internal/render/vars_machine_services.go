@@ -143,6 +143,9 @@ func nameResolutionMachineServiceVars(state v1alpha1.State, service stategraph.M
 	if len(domainRecords) > 0 {
 		out["domainRecords"] = domainRecords
 	}
+	if len(dns.Forwarders) > 0 {
+		out["forwarders"] = stringSliceAny(dns.Forwarders)
+	}
 	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	return out, true
 }

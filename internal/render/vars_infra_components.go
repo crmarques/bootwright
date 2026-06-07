@@ -29,6 +29,9 @@ func infraComponentsVars(state v1alpha1.State) []any {
 			if len(dns.AdditionalIngressHosts) > 0 {
 				v["additionalIngressHosts"] = stringSliceAny(dns.AdditionalIngressHosts)
 			}
+			if len(dns.Forwarders) > 0 {
+				v["forwarders"] = stringSliceAny(dns.Forwarders)
+			}
 			entry["nameResolution"] = v
 		}
 		if ntp := component.Spec.NTP; ntp != nil {

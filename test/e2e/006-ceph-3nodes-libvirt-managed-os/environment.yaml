@@ -11,8 +11,9 @@ spec:
   infraComponents:
     nameResolution:
       - name: lab-dns
-        type: external
-        ip: 192.168.134.1
+        type: managed
+        componentRef:
+          name: lab-dns
 
   secrets:
     - bastion-host-ssh:

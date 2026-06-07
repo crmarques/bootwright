@@ -11,7 +11,10 @@ The current fixture keeps only state supported by the current code path:
 - three lean managed Ceph VMs named `ceph-0`, `ceph-1`, and `ceph-2`
 - a tiny `ceph-node` libvirt profile: 1 vCPU, 2048 MiB RAM, a 16 GiB root
   disk, and two 1 GiB OSD data disks per VM
-- an external DNS catalog entry named `lab-dns` at `192.168.134.1`
+- a managed `lab-dns` dnsmasq name-resolution service on the bastion, bound to
+  `192.168.134.1`, which authoritatively serves lab records and forwards every
+  other query (for example `download.ceph.com` and `quay.io`) to the public
+  resolvers in its `forwarders` list
 - Ceph MON, MGR, OSD, MDS, RGW, and ingress roles on all three nodes
 - RBD, CephFS metadata, CephFS data, and RGW pools
 - the community (OSS) Ceph distribution, so Bootwright configures the upstream
@@ -19,16 +22,20 @@ The current fixture keeps only state supported by the current code path:
   cephadm pulls the matching upstream Ceph image; no Red Hat entitlement or
   registry pull secret is required
 
-The requested managed infra-services VM, managed DNS service, artifact service,
-and storage-owned RGW/dashboard ingress endpoints are listed below as
-implementation work because the current workflow cannot model them without Go
-or Ansible changes.
+The requested managed infra-services VM, artifact service, and storage-owned
+RGW/dashboard ingress endpoints are listed below as implementation work because
+the current workflow cannot model them without Go or Ansible changes. The
+managed DNS service itself now runs on the bastion: a storage cluster schedules
+its `dnsRefs` name-resolution component, and dnsmasq forwards public names so
+the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 
 ## Layout
 
-- `environment.yaml`: base domain, storage cluster selection, DNS catalog, and
-  secret names.
+- `environment.yaml`: base domain, storage cluster selection, the managed
+  `lab-dns` name-resolution reference, and secret names.
 - `infra/machines/*.yaml`: provider host and Ceph VM machine definitions.
+- `infra/components/lab-dns.yaml`: the managed dnsmasq name-resolution
+  `InfraComponent` on the bastion, with its public DNS `forwarders`.
 - `infra/providers/libvirt.yaml`: libvirt provider, BMC emulation defaults, and
   lean VM profile.
 - `infra/networkconfigs/ceph-bridge.yaml`: lab network, resolver, and route
@@ -43,11 +50,15 @@ or Ansible changes.
 ## Prerequisites
 
 - A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
-- Outbound reachability from the Ceph nodes to the upstream Ceph repository
-  (`download.ceph.com`). The OSS distribution adds no subscription-backed repo;
-  Bootwright configures the community repo on each node with cephadm using
-  `spec.ceph.community.release`. For a disconnected lab, set
-  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com`.
+- Working upstream internet on the libvirt host. The Ceph nodes reach the
+  community Ceph repository (`download.ceph.com`) and the cephadm container image
+  (`quay.io/ceph`) through the bastion: the managed `lab-dns` dnsmasq forwards
+  public names to the resolvers in `infra/components/lab-dns.yaml`, and the
+  libvirt NAT network carries egress. The OSS distribution adds no
+  subscription-backed repo; Bootwright configures the community repo on each node
+  with cephadm using `spec.ceph.community.release`. For a disconnected lab, set
+  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com` and
+  point `forwarders` at an internal resolver.
 
 Bootwright owns bastion host preparation for this fixture. After
 `bootwright bastion setup --yes` and
@@ -100,9 +111,10 @@ three installed nodes.
 
 ## Laptop DNS
 
-The fixture configures Ceph machines to use the resolver registered as
-`lab-dns`. Point the laptop resolver at the same DNS endpoint before accessing
-Ceph names such as future dashboard and S3 ingress records.
+The fixture configures Ceph machines to use the Bootwright-managed `lab-dns`
+dnsmasq on the bastion (`192.168.134.1`). Point the laptop resolver at the same
+DNS endpoint before accessing Ceph names such as future dashboard and S3 ingress
+records.
 
 For a temporary `systemd-resolved` setup on the libvirt bridge:
 
@@ -132,8 +144,9 @@ Use the bridge name and DNS IP from `infra/providers/libvirt.yaml` and
 
 The remaining requested desired state needs implementation support:
 
-1. Include managed service machines selected by `InfraComponent` entries in the
-   managed-OS install graph, before running DNS or artifact service tasks.
+1. Host managed infra services (DNS, artifact) on managed-OS service VMs rather
+   than only on the provided bastion. Bastion-hosted managed DNS already works:
+   a storage cluster now schedules its `dnsRefs` name-resolution component.
 2. Add a bootstrap path for artifact publication when the artifact service is
    itself hosted on a managed VM.
 3. Add storage-owned endpoint declarations for Ceph dashboard and RGW ingress
@@ -141,7 +154,8 @@ The remaining requested desired state needs implementation support:
 4. Render cephadm ingress service specs from `StorageObjectGateway` state so
    cephadm installs and configures keepalived and HAProxy itself.
 5. Extend managed DNS rendering with storage endpoint records for dashboard and
-   S3 VIP names.
+   S3 VIP names. Today the storage-cluster dnsmasq emits only the public
+   `forwarders`; it serves no local `host-record`/`address=` entries yet.
 6. Add validation and render tests for the service-VM bootstrap, storage
    endpoints, cephadm ingress, and DNS records, then enable those objects in
    this fixture.

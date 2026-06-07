@@ -1391,9 +1391,10 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion")
+	assertTaskDeps(t, tasks, "osprepare.ceph-libvirt.bastion", "provider.bastion", "infra-component.bastion")
+	assertTaskPresent(t, tasks, "infra-component.bastion")
 	task := assertTaskPresent(t, tasks, "osinstall.ceph-libvirt")
-	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.bastion", "osprepare.ceph-libvirt.bastion")
+	assertTaskDeps(t, tasks, "osinstall.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osprepare.ceph-libvirt.bastion")
 	if task.Limit != render.ManagedOSGroupName("ceph-libvirt") {
 		t.Fatalf("managed OS limit = %q, want %q", task.Limit, render.ManagedOSGroupName("ceph-libvirt"))
 	}
@@ -1409,8 +1410,8 @@ func TestManagedStorageOSInstallTaskPrecedesCephInfra(t *testing.T) {
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-0")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-1")
 	assertTaskMissing(t, tasks, "osinstall.ceph-libvirt.ceph-2")
-	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "osinstall.ceph-libvirt")
-	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "storageinfra.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storageinfra.ceph-libvirt", "provider.bastion", "infra-component.bastion", "osinstall.ceph-libvirt")
+	assertTaskDeps(t, tasks, "storage.ceph-libvirt", "provider.bastion", "infra-component.bastion", "storageinfra.ceph-libvirt")
 }
 
 func TestPlanApplyClustersOrdersKubeVirtChildInfraAfterHostReadiness(t *testing.T) {

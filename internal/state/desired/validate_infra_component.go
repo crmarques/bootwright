@@ -195,6 +195,14 @@ func validateNameResolutionComponent(component v1alpha1.InfraComponent, machines
 	if machine, ok := machines[dns.MachineRef.Name]; ok {
 		errs = append(errs, validateServiceEndpoints(prefix, dns.Endpoints, machine)...)
 	}
+	for i, forwarder := range dns.Forwarders {
+		owner := fmt.Sprintf("%s.forwarders[%d]", prefix, i)
+		if forwarder == "" {
+			errs = append(errs, owner+" is required")
+		} else if net.ParseIP(forwarder) == nil {
+			errs = append(errs, fmt.Sprintf("%s %q is not a valid IP address", owner, forwarder))
+		}
+	}
 	return errs
 }
 

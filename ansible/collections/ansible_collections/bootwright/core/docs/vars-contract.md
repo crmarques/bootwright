@@ -191,6 +191,8 @@ bootwright_clusters:
           - { name: api-int.prod-3node.example.test, address: 192.168.133.10 }
         domainRecords:
           - { name: apps.prod-3node.example.test, address: 192.168.133.11 }
+        forwarders:
+          - 1.1.1.1
       - kind: ntp
         name: ntp-server
         componentName: ntp-server

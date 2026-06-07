@@ -299,6 +299,7 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 		if cluster.Spec.Ceph == nil || (cluster.Spec.Management != "" && cluster.Spec.Management != v1alpha1.StorageClusterManagementManaged) {
 			continue
 		}
+		out = append(out, nameResolutionConsumers(state, cluster.Metadata.Name, cluster.Metadata.Name, storageNetworkDNSRefs(state, cluster))...)
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
 			if !ok || !v1alpha1.MachineInstallsOS(machineObj) {
@@ -420,11 +421,14 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 }
 
 func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
+	return nameResolutionConsumers(state, cluster.Metadata.Name, infra.Metadata.Name, networkDNSRefs(state, infra))
+}
+
+func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallName string, refs map[string]bool) []MachineServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
 		return nil
 	}
-	refs := networkDNSRefs(state, infra)
 	var out []MachineServiceConsumer
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
 		if !refs[entry.Name] || entry.Type != v1alpha1.EnvironmentComponentManaged {
@@ -438,8 +442,8 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 		mergedHosts := append([]string(nil), dns.AdditionalIngressHosts...)
 		mergedHosts = append(mergedHosts, entry.AdditionalIngressHosts...)
 		out = append(out, newServiceConsumer(
-			cluster.Metadata.Name,
-			infra.Metadata.Name,
+			clusterName,
+			clusterInstallName,
 			fmt.Sprintf("NetworkConfig dnsRefs[%s]", entry.Name),
 			v1alpha1.ComponentSlotNameResolution,
 			v1alpha1.KindInfraComponent,
@@ -448,6 +452,27 @@ func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 			map[string]string{"machineRef": dns.MachineRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
 			map[string][]string{"additionalIngressHosts": mergedHosts},
 		))
+	}
+	return out
+}
+
+func storageNetworkDNSRefs(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]bool {
+	out := map[string]bool{}
+	if cluster.Spec.Ceph == nil {
+		return out
+	}
+	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		machine, ok := stateview.Machine(state, node.MachineRef.Name)
+		if !ok {
+			continue
+		}
+		network, ok := stateview.NetworkConfig(state, machine.Spec.Network.Config.NetworkConfigRef.Name)
+		if !ok {
+			continue
+		}
+		for _, ref := range network.Spec.DNSRefs {
+			out[ref] = true
+		}
 	}
 	return out
 }

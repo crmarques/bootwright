@@ -17,3 +17,6 @@ host-record={{ record.name }},{{ record.address }}
 {% for record in bootwright_component.domainRecords | default([]) %}
 address=/{{ record.name }}/{{ record.address }}
 {% endfor %}
+{% for forwarder in bootwright_component.forwarders | default([]) %}
+server={{ forwarder }}
+{% endfor %}

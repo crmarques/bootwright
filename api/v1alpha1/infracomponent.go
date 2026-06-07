@@ -57,6 +57,7 @@ type NameResolutionComponent struct {
 	Port                   int                  `yaml:"port,omitempty" json:"port,omitempty"`
 	Endpoints              []ServiceEndpoint    `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
+	Forwarders             []string             `yaml:"forwarders,omitempty" json:"forwarders,omitempty"`
 }
 
 type NTPComponent struct {

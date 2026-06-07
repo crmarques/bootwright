@@ -344,6 +344,9 @@ Rules:
   arms require compatible machine capabilities.
 - Endpoint entries use `machineAddress` to select a named
   `Machine.spec.addresses[]` value on the placement machine.
+- A `nameResolution` arm authoritatively answers its rendered records and
+  forwards every other query to `forwarders[]` (IP resolvers); with no
+  `forwarders` it answers only local records.
 
 ## NetworkConfig
 
