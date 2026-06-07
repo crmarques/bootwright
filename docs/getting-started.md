@@ -302,6 +302,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright cluster access-info --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
+| `bootwright state-check --output json` | Supported | Read-only desired-vs-reality drift |
 | `bootwright plan --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage clusters --dry-run --output json` | Supported | Dry-run apply plan |

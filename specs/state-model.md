@@ -685,4 +685,16 @@ Rules:
   but it must not bypass active-run leases, validation, secret checks, or
   foreign-resource ownership failures.
 - `bootwright host trust` records SSH server-key trust for declared machines.
+- `bootwright state-check` is a read-only desired-vs-reality report. It never
+  mutates state, writes convergence records, or runs playbooks, and it accepts
+  `--stage`, `--clusters`, and `--output` like the other selection commands. It
+  classifies each selected resource against the durable convergence-safety
+  evidence recorded by the last apply: `missing` (never applied), `match`
+  (applied with the current desired state), `drift` (desired state changed since
+  it was applied), or `foreign` (a non-Bootwright owner). A root whose resources
+  are all `missing` is reported as one absence; a present root reports only the
+  resources that are not in sync. It is distinct from `status` (local readiness
+  and next-step spine), `check` (Ansible preflight), and `plan`/`apply
+  --dry-run` (the intended task graph). `--override` is rejected because
+  state-check neither mutates nor suppresses its report.
 - Rendered effective state must not include secret bytes.
