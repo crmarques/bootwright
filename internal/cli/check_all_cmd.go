@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
 		executable string
 		dryRun     bool
+		output     string
 	)
 	cmd := &cobra.Command{
 		Use:   "all",
@@ -27,10 +29,22 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
+	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json (json requires --dry-run)")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		if err := validateOutputFormat(output); err != nil {
+			return failErr(2, err)
+		}
 		state, err := loadDesiredState(cf)
 		if err != nil {
 			return failErr(1, err)
+		}
+		if output == outputJSON {
+			if !dryRun {
+				return failErr(2, errors.New("--output json is supported with --dry-run for check all"))
+			}
+			scopeFlags := scopeCommonFlags{executable: executable, output: output}
+			selected := phasesForState(allScope.phases(), state)
+			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, allScope, "check", state, selected, preflightPlaybookPath, ansibleLimitForScope(allScope.name), nil, "preflight-"+allScope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		outputpkg(stdout).Command("all check")
 		if err := runBastionChecks(stdout); err != nil {

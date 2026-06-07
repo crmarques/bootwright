@@ -339,6 +339,12 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		default:
 			errs = append(errs, fmt.Sprintf("%s.ceph.type %q must be one of {%s, %s}", prefix, pool.Spec.Ceph.Type, v1alpha1.StoragePoolTypeReplicated, v1alpha1.StoragePoolTypeErasureCode))
 		}
+		switch pool.Spec.Ceph.Role {
+		case "", v1alpha1.StoragePoolRoleRBD, v1alpha1.StoragePoolRoleCephFSMetadata, v1alpha1.StoragePoolRoleCephFSData, v1alpha1.StoragePoolRoleRGW:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.ceph.role %q must be one of {%s, %s, %s, %s}", prefix, pool.Spec.Ceph.Role,
+				v1alpha1.StoragePoolRoleRBD, v1alpha1.StoragePoolRoleCephFSMetadata, v1alpha1.StoragePoolRoleCephFSData, v1alpha1.StoragePoolRoleRGW))
+		}
 		if ok && storageClusterStretchEnabled(cluster) {
 			replicas := pool.Spec.Ceph.Replicated
 			if replicas.Size != 0 && replicas.Size != 4 {

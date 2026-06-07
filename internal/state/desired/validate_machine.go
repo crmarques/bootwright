@@ -255,6 +255,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	var effective map[string]any
 	if config.NetworkConfigRef.Name != "" {
 		if n, ok := networks[config.NetworkConfigRef.Name]; ok {
+			errs = append(errs, machineNetworkOverrideShapeErrors(prefix+".config.overrides", n.Spec.Template.NetworkConfig, config.Overrides)...)
 			effective = effectiveMachineNetworkConfig(n.Spec.Template.NetworkConfig, config.Overrides)
 		} else {
 			errs = append(errs, fmt.Sprintf("%s.config.networkConfigRef.name %q does not match any NetworkConfig", prefix, config.NetworkConfigRef.Name))
@@ -376,6 +377,84 @@ func effectiveMachineNetworkConfig(template, overrides map[string]any) map[strin
 		mergeMachineNetworkConfigOverrides(out, cloneMachineNetworkConfig(overrides))
 	}
 	return out
+}
+
+// machineNetworkOverrideShapeErrors reports per-machine NMState override list
+// shapes that the deterministic template+override merge cannot apply, naming the
+// owning field instead of letting the merge silently drop the override. It
+// tracks exactly the merge's structured-sequence path: a list override is only
+// checked where both the template and the override hold a list at the same key,
+// and is rejected unless every override entry is a named map (merge by name) or
+// both lists are positional maps (merge by index).
+func machineNetworkOverrideShapeErrors(prefix string, base, patch map[string]any) []string {
+	if len(patch) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(patch))
+	for key := range patch {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var errs []string
+	for _, key := range keys {
+		path := prefix + "." + key
+		patchValue := patch[key]
+		if patchMap, ok := patchValue.(map[string]any); ok {
+			if baseMap, ok := base[key].(map[string]any); ok {
+				errs = append(errs, machineNetworkOverrideShapeErrors(path, baseMap, patchMap)...)
+			}
+			continue
+		}
+		patchSlice, patchIsSlice := patchValue.([]any)
+		baseSlice, baseIsSlice := base[key].([]any)
+		if !patchIsSlice || !baseIsSlice {
+			continue
+		}
+		errs = append(errs, machineNetworkOverrideSequenceShapeErrors(path, baseSlice, patchSlice)...)
+	}
+	return errs
+}
+
+func machineNetworkOverrideSequenceShapeErrors(path string, base, patch []any) []string {
+	if len(patch) == 0 {
+		return nil
+	}
+	if sequenceUsesName(patch) {
+		index := map[string]map[string]any{}
+		for _, item := range base {
+			if entry, ok := item.(map[string]any); ok {
+				if name, _ := entry["name"].(string); name != "" {
+					index[name] = entry
+				}
+			}
+		}
+		var errs []string
+		for _, item := range patch {
+			entry := item.(map[string]any)
+			name, _ := entry["name"].(string)
+			baseEntry := index[name]
+			if baseEntry == nil {
+				baseEntry = map[string]any{}
+			}
+			errs = append(errs, machineNetworkOverrideShapeErrors(path+"["+name+"]", baseEntry, entry)...)
+		}
+		return errs
+	}
+	if sequenceUsesMaps(base) && sequenceUsesMaps(patch) {
+		var errs []string
+		for i, item := range patch {
+			entry := item.(map[string]any)
+			baseEntry := map[string]any{}
+			if i < len(base) {
+				if existing, ok := base[i].(map[string]any); ok {
+					baseEntry = existing
+				}
+			}
+			errs = append(errs, machineNetworkOverrideShapeErrors(fmt.Sprintf("%s[%d]", path, i), baseEntry, entry)...)
+		}
+		return errs
+	}
+	return []string{path + " override list cannot be merged into the NetworkConfig template; entries must be all named maps or a positional list of maps, not scalars or mixed named and unnamed entries"}
 }
 
 func mergeMachineNetworkConfigOverrides(base map[string]any, patch map[string]any) {
