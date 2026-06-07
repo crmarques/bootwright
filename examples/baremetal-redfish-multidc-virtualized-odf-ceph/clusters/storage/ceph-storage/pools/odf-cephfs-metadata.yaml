@@ -11,6 +11,3 @@ spec:
 
   ceph:
     role: cephfs-metadata
-    replicated:
-      size: 4
-      minSize: 2

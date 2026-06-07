@@ -316,6 +316,9 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 			} else if policy.Spec.StorageClusterRef.Name != pool.Spec.StorageClusterRef.Name {
 				errs = append(errs, fmt.Sprintf("%s.placementPolicyRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Spec.PlacementPolicyRef.Name, policy.Spec.StorageClusterRef.Name, pool.Spec.StorageClusterRef.Name))
 			}
+			if pool.Spec.Ceph.Replicated.Size != 0 || pool.Spec.Ceph.Replicated.MinSize != 0 {
+				errs = append(errs, prefix+".ceph.replicated must not be set when placementPolicyRef is set; the StoragePlacementPolicy owns replication")
+			}
 		}
 		poolType := pool.Spec.Ceph.Type
 		if poolType == "" {

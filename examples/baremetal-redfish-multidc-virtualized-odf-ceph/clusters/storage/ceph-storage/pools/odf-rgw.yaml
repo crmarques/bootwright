@@ -11,6 +11,3 @@ spec:
 
   ceph:
     role: rgw
-    replicated:
-      size: 4
-      minSize: 2

@@ -11,6 +11,3 @@ spec:
 
   ceph:
     role: rbd
-    replicated:
-      size: 4
-      minSize: 2

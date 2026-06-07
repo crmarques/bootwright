@@ -39,6 +39,33 @@ func TestValidateStoragePoolRoleEnum(t *testing.T) {
 	}
 }
 
+func TestStoragePoolRejectsInlineReplicatedWithPolicy(t *testing.T) {
+	clusters := map[string]v1alpha1.StorageCluster{
+		"ceph": {
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec:     v1alpha1.StorageClusterSpec{Type: v1alpha1.StorageClusterTypeCeph, Management: v1alpha1.StorageClusterManagementManaged},
+		},
+	}
+	policies := map[string]v1alpha1.StoragePlacementPolicy{
+		"pol": {
+			Metadata: v1alpha1.Metadata{Name: "pol"},
+			Spec:     v1alpha1.StoragePlacementPolicySpec{StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"}},
+		},
+	}
+	pool := v1alpha1.StoragePool{
+		Metadata: v1alpha1.Metadata{Name: "rbd"},
+		Spec: v1alpha1.StoragePoolSpec{
+			StorageClusterRef:  v1alpha1.LocalObjectReference{Name: "ceph"},
+			PlacementPolicyRef: v1alpha1.LocalObjectReference{Name: "pol"},
+			Ceph:               v1alpha1.StoragePoolCephSpec{Replicated: v1alpha1.StorageCephPoolReplicas{Size: 3, MinSize: 2}},
+		},
+	}
+	errs := validateStoragePools([]v1alpha1.StoragePool{pool}, clusters, policies)
+	if !containsSubstring(errs, "ceph.replicated must not be set when placementPolicyRef is set") {
+		t.Fatalf("expected policy-owns-replication error, got %v", errs)
+	}
+}
+
 func TestMachineNetworkOverrideShapeErrors(t *testing.T) {
 	template := map[string]any{
 		"interfaces": []any{

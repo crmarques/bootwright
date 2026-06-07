@@ -40,7 +40,7 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if rule := storagePoolCRUSHRule(state, cluster, pool); rule != "" {
 			ops = append(ops, operationInPhase("storage", "set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
 		}
-		replicas := effectivePoolReplicas(cluster, pool)
+		replicas := effectivePoolReplicas(state, cluster, pool)
 		ops = append(ops, operationInPhase("storage", "set-pool-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "size", fmt.Sprint(replicas.Size)))
 		ops = append(ops, operationInPhase("storage", "set-pool-min-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "min_size", fmt.Sprint(replicas.MinSize)))
 		if app := storagePoolApplication(pool); app != "" {
@@ -92,8 +92,22 @@ func operationWithIdempotency(phase, name, kind, resourceName string, command ..
 	return op
 }
 
-func effectivePoolReplicas(cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) v1alpha1.StorageCephPoolReplicas {
+func effectivePoolReplicas(state v1alpha1.State, cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) v1alpha1.StorageCephPoolReplicas {
 	replicas := pool.Spec.Ceph.Replicated
+	if pool.Spec.PlacementPolicyRef.Name != "" {
+		for _, policy := range state.StoragePlacementPolicies {
+			if policy.Metadata.Name != pool.Spec.PlacementPolicyRef.Name {
+				continue
+			}
+			if replicas.Size == 0 {
+				replicas.Size = policy.Spec.Ceph.Replicated.Size
+			}
+			if replicas.MinSize == 0 {
+				replicas.MinSize = policy.Spec.Ceph.Replicated.MinSize
+			}
+			break
+		}
+	}
 	if replicas.Size == 0 && cluster.Spec.Ceph.Topology.Stretch != nil {
 		replicas.Size = cluster.Spec.Ceph.Topology.Stretch.ReplicatedPoolDefaults.Size
 	}

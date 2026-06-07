@@ -396,6 +396,17 @@ Rules:
 - Each node hostname must be unique inside the cluster.
 - Node network input is owned by the referenced `Machine`, not by the cluster
   node entry.
+- `spec.distribution.type` accepts `openshift` (default) or `okd`; `openshift`
+  clusters require a pull secret via `spec.install.pullSecretRef` or the
+  `Environment` default.
+- `spec.install.mode` accepts `connected` (default) or `disconnected`;
+  `spec.install.method` accepts `agent` (default).
+- `spec.nodes[].role` accepts `master` or `worker`; a cluster requires at least
+  one `master` node.
+- `spec.controlPlane.replicas`, when set, must equal the number of `master`
+  nodes. `spec.compute[]` declare worker machine pools; the summed `replicas` of
+  the default worker pool (name omitted or `worker`) must equal the number of
+  `worker` nodes. A single all-`master` topology omits both.
 - Single-node topologies render installer platform `none` unless
   `platform.type: external` is explicit.
 
@@ -459,7 +470,9 @@ Rules:
 - `spec.storageClusterRef.name` is required and must reference a managed
   `StorageCluster`.
 - `spec.placementPolicyRef.name`, when set, must reference a
-  `StoragePlacementPolicy` on the same `StorageCluster`.
+  `StoragePlacementPolicy` on the same `StorageCluster`. The referenced policy
+  owns the pool's replication; `spec.ceph.replicated` must not also be set on
+  the pool.
 - `spec.ceph.type` accepts `replicated` (default) or `erasure-coded`.
   `replicated` must not set `ceph.erasureCoded`. `erasure-coded` requires
   `ceph.erasureCoded.{dataChunks,codingChunks}`, must not set `ceph.replicated`,
