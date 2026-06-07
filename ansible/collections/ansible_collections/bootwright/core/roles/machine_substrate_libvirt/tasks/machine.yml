@@ -47,6 +47,8 @@
 - name: Resolve libvirt runtime storage access
   ansible.builtin.set_fact:
     bootwright_libvirt_runtime_users: "{{ bootwright_libvirt_runtime_user_probe.results | default([]) | selectattr('rc', 'eq', 0) | map(attribute='item') | list }}"
+    bootwright_libvirt_domain_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_libvirt_managed_os_reset: "{{ (bootwright_component.osManaged | default(false) | bool) and (bootwright_install_override | default(false) | bool) }}"
     bootwright_libvirt_disk_paths: >-
       {{
         [bootwright_libvirt_storage_root ~ '/disk.qcow2']
@@ -59,6 +61,51 @@
         )
       }}
   changed_when: false
+
+- name: Stop managed OS libvirt domain for override reinstall
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - destroy
+      - "{{ bootwright_libvirt_domain_name }}"
+  register: bootwright_libvirt_managed_os_reset_stop
+  changed_when: bootwright_libvirt_managed_os_reset_stop.rc == 0
+  failed_when: false
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Undefine managed OS libvirt domain for override reinstall
+  community.libvirt.virt:
+    command: undefine
+    name: "{{ bootwright_libvirt_domain_name }}"
+    flags:
+      - keep_nvram
+  failed_when: false
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Remove managed OS libvirt machine state for override reinstall
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_libvirt_machine_root }}"
+    - "{{ bootwright_libvirt_storage_root }}"
+  loop_control:
+    label: "{{ item }}"
+  when: bootwright_libvirt_managed_os_reset | bool
+
+- name: Recreate managed OS libvirt machine directories after override reset
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ bootwright_libvirt_machine_root }}", mode: "0755" }
+    - { path: "{{ bootwright_libvirt_storage_root }}", mode: "0755" }
+  when: bootwright_libvirt_managed_os_reset | bool
 
 - name: Select libvirt runtime user
   ansible.builtin.set_fact:

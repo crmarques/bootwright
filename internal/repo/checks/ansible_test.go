@@ -2384,6 +2384,10 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 
 	probeIdx := findAnsibleTask(t, tasks, "Probe libvirt runtime users")
 	resolveIdx := findAnsibleTask(t, tasks, "Resolve libvirt runtime storage access")
+	stopResetIdx := findAnsibleTask(t, tasks, "Stop managed OS libvirt domain for override reinstall")
+	undefineResetIdx := findAnsibleTask(t, tasks, "Undefine managed OS libvirt domain for override reinstall")
+	removeResetIdx := findAnsibleTask(t, tasks, "Remove managed OS libvirt machine state for override reinstall")
+	recreateResetIdx := findAnsibleTask(t, tasks, "Recreate managed OS libvirt machine directories after override reset")
 	selectIdx := findAnsibleTask(t, tasks, "Select libvirt runtime user")
 	assertIdx := findAnsibleTask(t, tasks, "Assert libvirt runtime user")
 	migrateDiskIdx := findAnsibleTask(t, tasks, "Migrate machine disk to libvirt storage")
@@ -2393,7 +2397,7 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	ownDiskIdx := findAnsibleTask(t, tasks, "Align libvirt disk image ownership")
 	renderDomainIdx := findAnsibleTask(t, tasks, "Render libvirt domain XML")
 
-	if !(probeIdx < resolveIdx && resolveIdx < selectIdx && selectIdx < assertIdx && assertIdx < migrateDiskIdx && migrateDiskIdx < createDiskIdx && createDataDiskIdx < ownDiskIdx && ownDiskIdx < renderDomainIdx) {
+	if !(probeIdx < resolveIdx && resolveIdx < stopResetIdx && stopResetIdx < undefineResetIdx && undefineResetIdx < removeResetIdx && removeResetIdx < recreateResetIdx && recreateResetIdx < selectIdx && selectIdx < assertIdx && assertIdx < migrateDiskIdx && migrateDiskIdx < createDiskIdx && createDataDiskIdx < ownDiskIdx && ownDiskIdx < renderDomainIdx) {
 		t.Fatalf("libvirt storage tasks must migrate/create/own disks before domain definition")
 	}
 	if migrateDataIdx > createDataDiskIdx {
@@ -2419,16 +2423,37 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s has no set_fact body", tasks[resolveIdx]["name"])
 	}
-	for _, key := range []string{"bootwright_libvirt_runtime_users", "bootwright_libvirt_disk_paths"} {
+	for _, key := range []string{"bootwright_libvirt_runtime_users", "bootwright_libvirt_domain_name", "bootwright_libvirt_managed_os_reset", "bootwright_libvirt_disk_paths"} {
 		if _, ok := resolve[key]; !ok {
 			t.Fatalf("%s missing %s", tasks[resolveIdx]["name"], key)
 		}
+	}
+	if got := fmt.Sprint(resolve["bootwright_libvirt_managed_os_reset"]); !strings.Contains(got, "bootwright_component.osManaged") || !strings.Contains(got, "bootwright_install_override") {
+		t.Fatalf("%s must gate managed OS disk reset on osManaged and install override, got %v", tasks[resolveIdx]["name"], got)
 	}
 	if !strings.Contains(fmt.Sprint(resolve["bootwright_libvirt_disk_paths"]), "bootwright_component.profile.dataDisks") {
 		t.Fatalf("%s must include data disk paths, got %v", tasks[resolveIdx]["name"], resolve["bootwright_libvirt_disk_paths"])
 	}
 	if !strings.Contains(fmt.Sprint(resolve["bootwright_libvirt_disk_paths"]), "bootwright_libvirt_storage_root") {
 		t.Fatalf("%s must point disk paths at libvirt storage, got %v", tasks[resolveIdx]["name"], resolve["bootwright_libvirt_disk_paths"])
+	}
+
+	for _, idx := range []int{stopResetIdx, undefineResetIdx, removeResetIdx, recreateResetIdx} {
+		if got := tasks[idx]["when"]; got != "bootwright_libvirt_managed_os_reset | bool" {
+			t.Fatalf("%s when got %v", tasks[idx]["name"], got)
+		}
+	}
+	removeReset, ok := tasks[removeResetIdx]["ansible.builtin.file"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s has no file body", tasks[removeResetIdx]["name"])
+	}
+	if got := removeReset["state"]; got != "absent" {
+		t.Fatalf("%s state got %v", tasks[removeResetIdx]["name"], got)
+	}
+	for _, want := range []string{"bootwright_libvirt_machine_root", "bootwright_libvirt_storage_root"} {
+		if !strings.Contains(fmt.Sprint(tasks[removeResetIdx]["loop"]), want) {
+			t.Fatalf("%s loop missing %q: %v", tasks[removeResetIdx]["name"], want, tasks[removeResetIdx]["loop"])
+		}
 	}
 
 	ownership, ok := tasks[ownDiskIdx]["ansible.builtin.file"].(map[string]any)

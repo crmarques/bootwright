@@ -33,4 +33,5 @@ Error and constraint knowledge extracted from code history. Match the reported s
 | Redfish / boot | VirtualMedia discovery reports `status=403`; direct `curl -u` to the same BMC URL succeeds; play-level proxy environment intercepts Redfish | [redfish-proxy-bypass.md](redfish-proxy-bypass.md) |
 | Redfish / boot | `Stage agent ISO at the BMC's fetch location`; `Gathering Facts`; `UNREACHABLE`; `Failed to connect to the host via ssh`; `localhost -> bastion`; wrong `ansible_user` | [redfish-local-artifact-staging.md](redfish-local-artifact-staging.md) |
 | Redfish / boot | Reset(On) returns 204 but VM stays `shut off`; install loops on `no route to host` | [redfish-power-on-silent-noop.md](redfish-power-on-silent-noop.md) |
+| Managed OS / libvirt | `Scan managed OS SSH host key`; `Connection reset by peer`; VM console shows wrong RHEL version; `I/O error, dev vda`; `XFS (vda3): log I/O error` | [managed-os-libvirt-stale-disk.md](managed-os-libvirt-stale-disk.md) |
 | Python / Ansible | Python 3.12 CIDR check returns false; VIP not matched to bridge CIDR | [python-312-cidr-filter.md](python-312-cidr-filter.md) |
