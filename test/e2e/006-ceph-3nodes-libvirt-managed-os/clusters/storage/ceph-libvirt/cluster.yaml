@@ -8,9 +8,7 @@ spec:
   management: managed
 
   ceph:
-    distribution: redhat
-    entitlementRef:
-      name: rhcs
+    distribution: oss
     cephadm:
       addressRef:
         name: ssh

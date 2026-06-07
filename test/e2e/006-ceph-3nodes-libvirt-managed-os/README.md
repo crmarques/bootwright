@@ -2,7 +2,7 @@
 
 This fixture provisions a Ceph-only 3-node lab on a laptop libvirt host. It
 uses Bootwright-managed RHEL installation through emulated Redfish virtual media
-before running the existing Ceph storage flow. Each YAML file contains one
+before running the community (OSS) Ceph storage flow. Each YAML file contains one
 desired-state object with short names so the fixture stays easy to inspect.
 
 The current fixture keeps only state supported by the current code path:
@@ -14,6 +14,9 @@ The current fixture keeps only state supported by the current code path:
 - an external DNS catalog entry named `lab-dns` at `192.168.134.1`
 - Ceph MON, MGR, OSD, MDS, RGW, and ingress roles on all three nodes
 - RBD, CephFS metadata, CephFS data, and RGW pools
+- the community (OSS) Ceph distribution, so cephadm pulls the latest stable
+  upstream Ceph release and no Red Hat entitlement or registry pull secret is
+  required
 
 The requested managed infra-services VM, managed DNS service, artifact service,
 and storage-owned RGW/dashboard ingress endpoints are listed below as
@@ -39,9 +42,10 @@ or Ansible changes.
 ## Prerequisites
 
 - A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
-- A Red Hat subscription activation key entitled for Red Hat Ceph Storage.
-- Valid `registry.redhat.io` credentials for Ceph container images, stored in
-  the Bootwright secret named `ceph-registry-credentials`.
+- A repository reachable from the Ceph nodes that provides the community
+  `cephadm` package (for example EPEL or the upstream Ceph repo). The OSS
+  distribution adds no subscription-backed repo, so supply `cephadm` through the
+  managed-OS `MachineInstallProfile` repositories or a preinstalled host package.
 
 Bootwright owns lab host preparation for this fixture. After
 `bootwright bastion setup --yes` and
@@ -74,74 +78,12 @@ spec:
   url: local-media:rhel-9.7-x86_64-dvd.iso
 ```
 
-## Red Hat Entitlement And Registry Credentials
-
-The fixture declares a Red Hat Ceph entitlement named `rhcs`. Store the RHSM
-organization ID and activation key in the Bootwright secrets named `redhat-org`
-and `redhat-activation-key`:
-
-```bash
-read -rsp 'RHSM organization ID: ' REDHAT_ORG
-printf '\n'
-printf '%s\n' "$REDHAT_ORG" | \
-  bootwright secret set redhat-org --raw-file /dev/stdin --yes
-unset REDHAT_ORG
-
-read -rsp 'RHSM activation key: ' REDHAT_ACTIVATION_KEY
-printf '\n'
-printf '%s\n' "$REDHAT_ACTIVATION_KEY" | \
-  bootwright secret set redhat-activation-key --raw-file /dev/stdin --yes
-unset REDHAT_ACTIVATION_KEY
-```
-
-Get `ceph-registry-credentials` from a Red Hat Registry Service Account:
-<https://access.redhat.com/terms-based-registry/>. Create or select a service
-account, then copy the token username exactly, including the generated prefix
-such as `12345678|bootwright-ceph`, and the token password. Red Hat documents
-the registry authentication flow at
-<https://access.redhat.com/articles/RegistryAuthentication>.
-
-Use a service account token for this fixture instead of a personal Red Hat
-Customer Portal password. The account must be entitled to pull the Ceph images
-from `registry.redhat.io`.
-
-Bootwright stores this secret as `username:password` credentials. To avoid
-writing the token to a local plaintext file, set it with stdin:
-
-```bash
-read -rsp 'registry.redhat.io token password: ' REDHAT_REGISTRY_PASSWORD
-printf '\n'
-printf '%s\n' "$REDHAT_REGISTRY_PASSWORD" | \
-  bootwright secret set ceph-registry-credentials \
-    --username '12345678|bootwright-ceph' --password-stdin --yes
-unset REDHAT_REGISTRY_PASSWORD
-```
-
-Replace `12345678|bootwright-ceph` with the service account username shown in
-the Red Hat service account page.
-
 ## Run
 
 ```bash
 bootwright context init 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret materialize
-read -rsp 'RHSM organization ID: ' REDHAT_ORG
-printf '\n'
-printf '%s\n' "$REDHAT_ORG" | \
-  bootwright secret set redhat-org --raw-file /dev/stdin --yes
-unset REDHAT_ORG
-read -rsp 'RHSM activation key: ' REDHAT_ACTIVATION_KEY
-printf '\n'
-printf '%s\n' "$REDHAT_ACTIVATION_KEY" | \
-  bootwright secret set redhat-activation-key --raw-file /dev/stdin --yes
-unset REDHAT_ACTIVATION_KEY
-read -rsp 'registry.redhat.io token password: ' REDHAT_REGISTRY_PASSWORD
-printf '\n'
-printf '%s\n' "$REDHAT_REGISTRY_PASSWORD" | \
-  bootwright secret set ceph-registry-credentials \
-    --username '<registry-service-account-username>' --password-stdin --yes
-unset REDHAT_REGISTRY_PASSWORD
 bootwright host trust --hosts lab-host --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-libvirt --yes
