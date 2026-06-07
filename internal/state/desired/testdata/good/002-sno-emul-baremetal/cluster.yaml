@@ -22,13 +22,11 @@ spec:
         name: sno-vlan
       attachmentRef:
         name: sno-vlan
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.132.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
     interfaceBinding:
       - nicRef:
           name: primary

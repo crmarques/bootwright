@@ -73,6 +73,7 @@ type InstallMachine struct {
 	Source           InstallMachineSource             `yaml:"-" json:"-"`
 	Network          MachineNetworkConfig             `yaml:"-" json:"-"`
 	InterfaceBinding []MachineNetworkInterfaceBinding `yaml:"-" json:"-"`
+	Addresses        []MachineAddress                 `yaml:"-" json:"-"`
 	RootDeviceHints  *RootDeviceHints                 `yaml:"-" json:"-"`
 }
 

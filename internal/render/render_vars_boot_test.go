@@ -2,7 +2,6 @@ package render_test
 
 import (
 	"fmt"
-	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -962,18 +961,12 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
 	machine := machineByName(t, state, state.ContainerClusters[0].Spec.Nodes[0].MachineRef.Name)
 	machine.Metadata.Name = "sno-libvirt-b-master-0"
-	machine.Spec.Network.Config.Overrides = maps.Clone(machine.Spec.Network.Config.Overrides)
-	interfaces := machine.Spec.Network.Config.Overrides["interfaces"].([]any)
-	primary := maps.Clone(interfaces[0].(map[string]any))
-	ipv4 := maps.Clone(primary["ipv4"].(map[string]any))
-	addresses := append([]any(nil), ipv4["address"].([]any)...)
-	address := maps.Clone(addresses[0].(map[string]any))
-	address["ip"] = "192.168.132.30"
-	addresses[0] = address
-	ipv4["address"] = addresses
-	primary["ipv4"] = ipv4
-	interfaces[0] = primary
-	machine.Spec.Network.Config.Overrides["interfaces"] = interfaces
+	machine.Spec.Addresses = append([]v1alpha1.MachineAddress(nil), machine.Spec.Addresses...)
+	for i := range machine.Spec.Addresses {
+		if machine.Spec.Addresses[i].Name == "ip" {
+			machine.Spec.Addresses[i].Address = "192.168.132.30"
+		}
+	}
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected

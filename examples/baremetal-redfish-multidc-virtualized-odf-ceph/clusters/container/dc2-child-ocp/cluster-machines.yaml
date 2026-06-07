@@ -19,13 +19,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.30
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 
@@ -54,13 +52,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.31
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 
@@ -89,13 +85,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.32
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 
@@ -124,13 +118,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.40
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 
@@ -159,13 +151,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.41
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 
@@ -194,13 +184,11 @@ spec:
     config:
       networkConfigRef:
         name: dc2-child-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.152.42
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc2-child-net
 

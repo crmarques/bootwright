@@ -252,6 +252,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		errs = append(errs, prefix+".config.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine")
 	}
+	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
 	var effective map[string]any
 	if config.NetworkConfigRef.Name != "" {
 		if n, ok := networks[config.NetworkConfigRef.Name]; ok {
@@ -268,6 +269,52 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	errs = append(errs, validateMachineInterfaceBindings(prefix+".interfaceBinding", machine, networkInterfaceNames(effective), provider)...)
 	if effective != nil {
 		errs = append(errs, validateMachineNetworkStaticAddresses(prefix+".config", machine, effective)...)
+	}
+	return errs
+}
+
+func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, config v1alpha1.MachineNetworkConfig) []string {
+	if len(config.InterfaceAddresses) == 0 {
+		return nil
+	}
+	var errs []string
+	if config.NetworkConfigRef.Name == "" && config.Spec == nil {
+		errs = append(errs, prefix+" is only valid with config.networkConfigRef or config.spec")
+	}
+	addrNames := map[string]bool{}
+	for _, address := range machine.Spec.Addresses {
+		if address.Name != "" {
+			addrNames[address.Name] = true
+		}
+	}
+	seen := map[string]bool{}
+	for i, ia := range config.InterfaceAddresses {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if ia.Interface == "" {
+			errs = append(errs, owner+".interface is required")
+		} else {
+			key := ia.Interface + "/" + ia.Family
+			if seen[key] {
+				errs = append(errs, fmt.Sprintf("%s.interface %q is duplicated for the same address family", owner, ia.Interface))
+			}
+			seen[key] = true
+		}
+		switch ia.Family {
+		case "", "ipv4", "ipv6":
+		default:
+			errs = append(errs, fmt.Sprintf("%s.family %q must be ipv4 or ipv6", owner, ia.Family))
+		}
+		if ia.AddressRef.Name == "" {
+			errs = append(errs, owner+".addressRef.name is required")
+		} else if !addrNames[ia.AddressRef.Name] {
+			errs = append(errs, fmt.Sprintf("%s.addressRef.name %q does not resolve to spec.addresses[].name", owner, ia.AddressRef.Name))
+		}
+		switch {
+		case ia.PrefixLength < 1 || ia.PrefixLength > 128:
+			errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of range", owner, ia.PrefixLength))
+		case (ia.Family == "" || ia.Family == "ipv4") && ia.PrefixLength > 32:
+			errs = append(errs, fmt.Sprintf("%s.prefixLength %d out of IPv4 range", owner, ia.PrefixLength))
+		}
 	}
 	return errs
 }

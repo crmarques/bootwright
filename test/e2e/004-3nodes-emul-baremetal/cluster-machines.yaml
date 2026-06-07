@@ -22,13 +22,11 @@ spec:
         name: rack1-vlan
       attachmentRef:
         name: rack1-vlan
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
     interfaceBinding:
       - nicRef:
           name: primary
@@ -77,13 +75,11 @@ spec:
         name: rack1-vlan
       attachmentRef:
         name: rack1-vlan
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.21
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
     interfaceBinding:
       - nicRef:
           name: primary
@@ -132,13 +128,11 @@ spec:
         name: rack1-vlan
       attachmentRef:
         name: rack1-vlan
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.22
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
     interfaceBinding:
       - nicRef:
           name: primary

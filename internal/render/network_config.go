@@ -30,7 +30,59 @@ func machineNetworkConfigTemplate(state v1alpha1.State, ci v1alpha1.ClusterInsta
 	if len(machine.Network.Overrides) > 0 {
 		mergeNetworkConfigOverrides(out, machine.Network.Overrides)
 	}
+	injectMachineInterfaceAddresses(out, machine)
 	return out
+}
+
+// injectMachineInterfaceAddresses writes each interfaceAddresses[] entry's
+// resolved address into the named NMState interface, so a node's static install
+// IP is authored once in spec.addresses[] instead of duplicated into the
+// NMState override.
+func injectMachineInterfaceAddresses(config map[string]any, machine v1alpha1.InstallMachine) {
+	for _, ia := range machine.Network.InterfaceAddresses {
+		ip := installMachineAddress(machine, ia.AddressRef.Name)
+		if ip == "" || ia.Interface == "" {
+			continue
+		}
+		family := ia.Family
+		if family == "" {
+			family = "ipv4"
+		}
+		setInterfaceFamilyAddress(config, ia.Interface, family, ip, ia.PrefixLength)
+	}
+}
+
+func installMachineAddress(machine v1alpha1.InstallMachine, name string) string {
+	for _, address := range machine.Addresses {
+		if address.Name == name {
+			return address.Address
+		}
+	}
+	return ""
+}
+
+func setInterfaceFamilyAddress(config map[string]any, ifaceName, family, ip string, prefixLength int) {
+	interfaces, _ := config["interfaces"].([]any)
+	var entry map[string]any
+	for _, item := range interfaces {
+		if m, ok := item.(map[string]any); ok {
+			if name, _ := m["name"].(string); name == ifaceName {
+				entry = m
+				break
+			}
+		}
+	}
+	if entry == nil {
+		entry = map[string]any{"name": ifaceName}
+		interfaces = append(interfaces, entry)
+		config["interfaces"] = interfaces
+	}
+	familyConfig, _ := entry[family].(map[string]any)
+	if familyConfig == nil {
+		familyConfig = map[string]any{}
+		entry[family] = familyConfig
+	}
+	familyConfig["address"] = []any{map[string]any{"ip": ip, "prefix-length": prefixLength}}
 }
 
 func mergeNetworkConfigOverrides(base map[string]any, overrides map[string]any) {

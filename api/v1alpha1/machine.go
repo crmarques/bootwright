@@ -76,10 +76,21 @@ type MachineNetwork struct {
 }
 
 type MachineNetworkConfig struct {
-	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
-	AttachmentRef    LocalObjectReference `yaml:"attachmentRef,omitempty" json:"attachmentRef,omitempty"`
-	Overrides        map[string]any       `yaml:"overrides,omitempty" json:"overrides,omitempty"`
-	Spec             *NetworkConfigSpec   `yaml:"spec,omitempty" json:"spec,omitempty"`
+	NetworkConfigRef   LocalObjectReference      `yaml:"networkConfigRef,omitempty" json:"networkConfigRef,omitempty"`
+	AttachmentRef      LocalObjectReference      `yaml:"attachmentRef,omitempty" json:"attachmentRef,omitempty"`
+	InterfaceAddresses []MachineInterfaceAddress `yaml:"interfaceAddresses,omitempty" json:"interfaceAddresses,omitempty"`
+	Overrides          map[string]any            `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+	Spec               *NetworkConfigSpec        `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+// MachineInterfaceAddress binds an NMState interface to a named entry in
+// spec.addresses[], so a node's static install IP is authored exactly once.
+// Rendering injects the resolved address into the interface's ipv4/ipv6 block.
+type MachineInterfaceAddress struct {
+	Interface    string               `yaml:"interface" json:"interface"`
+	AddressRef   LocalObjectReference `yaml:"addressRef" json:"addressRef"`
+	PrefixLength int                  `yaml:"prefixLength" json:"prefixLength"`
+	Family       string               `yaml:"family,omitempty" json:"family,omitempty"`
 }
 
 type MachineNetworkInterfaceBinding struct {

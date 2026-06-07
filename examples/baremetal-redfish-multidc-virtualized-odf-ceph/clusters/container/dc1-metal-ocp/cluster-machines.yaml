@@ -20,13 +20,11 @@ spec:
     config:
       networkConfigRef:
         name: dc1-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.141.10
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc1-net
     interfaceBinding:
@@ -74,13 +72,11 @@ spec:
     config:
       networkConfigRef:
         name: dc1-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.141.11
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc1-net
     interfaceBinding:
@@ -128,13 +124,11 @@ spec:
     config:
       networkConfigRef:
         name: dc1-net
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.141.12
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: dc1-net
     interfaceBinding:

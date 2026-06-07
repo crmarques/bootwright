@@ -26,13 +26,11 @@ spec:
         name: ceph-bridge
       attachmentRef:
         name: ceph-bridge
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.134.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ssh
+          prefixLength: 24
 
   addresses:
     - name: ssh

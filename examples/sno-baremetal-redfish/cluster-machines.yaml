@@ -20,13 +20,11 @@ spec:
     config:
       networkConfigRef:
         name: rack1-vlan140-machine
-      overrides:
-        interfaces:
-          - name: eno1
-            ipv4:
-              address:
-                - ip: 192.168.140.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: eno1
+          addressRef:
+            name: ip
+          prefixLength: 24
       attachmentRef:
         name: rack1-vlan140-machine
     interfaceBinding:

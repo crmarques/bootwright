@@ -125,6 +125,7 @@ func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
 		},
 		Network:          machine.Spec.Network.Config,
 		InterfaceBinding: append([]v1alpha1.MachineNetworkInterfaceBinding(nil), machine.Spec.Network.InterfaceBinding...),
+		Addresses:        append([]v1alpha1.MachineAddress(nil), machine.Spec.Addresses...),
 		RootDeviceHints:  machine.Spec.OS.Install.RootDeviceHints,
 	}
 	return node

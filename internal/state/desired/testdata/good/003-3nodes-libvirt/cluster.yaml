@@ -24,13 +24,11 @@ spec:
         name: cluster-3n-bridge
       attachmentRef:
         name: cluster-3n-bridge
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
 
   addresses:
     - name: ip
@@ -62,13 +60,11 @@ spec:
         name: cluster-3n-bridge
       attachmentRef:
         name: cluster-3n-bridge
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.21
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
 
   addresses:
     - name: ip
@@ -100,13 +96,11 @@ spec:
         name: cluster-3n-bridge
       attachmentRef:
         name: cluster-3n-bridge
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.133.22
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
 
   addresses:
     - name: ip

@@ -121,13 +121,11 @@ spec:
         name: ocp-machine-net
       attachmentRef:
         name: ocp-install
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.0.2.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
     interfaceBinding:
       - nicRef:
           name: primary
@@ -154,8 +152,15 @@ Rules:
 - `spec.network.config.networkConfigRef` selects a `NetworkConfig`.
 - `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
-- `spec.network.config.overrides` merges into the rendered NMState for that
-  machine.
+- `spec.network.config.interfaceAddresses[]` is the single owner of a node's
+  static install IP. Each entry binds an NMState `interface` to a named
+  `spec.addresses[]` entry through `addressRef` and sets `prefixLength` (and
+  optional `family`, default `ipv4`); rendering injects the resolved address
+  into that interface. Author the IP in `spec.addresses[]` once instead of
+  duplicating it into an NMState override.
+- `spec.network.config.overrides` merges arbitrary additional NMState (bonds,
+  routes, extra interface attributes) into the rendered config for that machine;
+  it must not carry the static install IP, which `interfaceAddresses` owns.
 - `spec.network.interfaceBinding[]` maps hardware NIC names to effective
   NMState interface names for MAC injection.
 - `spec.addresses[]` owns durable named addresses used by SSH and shared
