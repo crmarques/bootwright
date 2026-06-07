@@ -6,4 +6,4 @@ spec:
   registry:
     type: mirrorRegistry
     machineRef:
-      name: lab-host
+      name: bastion

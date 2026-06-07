@@ -53,7 +53,7 @@ func stateWithManagedProxy() v1alpha1.State {
 	return v1alpha1.State{
 		Environments: []v1alpha1.Environment{env},
 		Machines: []v1alpha1.Machine{{
-			Metadata: v1alpha1.Metadata{Name: "lab-host"},
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
 					Provided: v1alpha1.BoolPtr(true),
@@ -69,7 +69,7 @@ func stateWithManagedProxy() v1alpha1.State {
 			Spec: v1alpha1.InfraComponentSpec{
 				Proxy: &v1alpha1.ProxyComponent{
 					Type:       v1alpha1.InfraComponentTypeSquid,
-					MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+					MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
 					Port:       3128,
 				},
 			},

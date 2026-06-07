@@ -21,44 +21,44 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	if len(tasks) != 8 {
 		t.Fatalf("planned %d tasks, want 8: %+v", len(tasks), tasks)
 	}
-	if tasks[0].Entry.ID != "provider.lab-host" {
-		t.Fatalf("first task = %s, want provider.lab-host", tasks[0].Entry.ID)
+	if tasks[0].Entry.ID != "provider.bastion" {
+		t.Fatalf("first task = %s, want provider.bastion", tasks[0].Entry.ID)
 	}
-	if tasks[0].Entry.Host != "lab-host" || len(tasks[0].Entry.ResourceKeys) != 1 {
-		t.Fatalf("provider host/resources = %q/%v, want lab-host with resource key", tasks[0].Entry.Host, tasks[0].Entry.ResourceKeys)
+	if tasks[0].Entry.Host != "bastion" || len(tasks[0].Entry.ResourceKeys) != 1 {
+		t.Fatalf("provider host/resources = %q/%v, want bastion with resource key", tasks[0].Entry.Host, tasks[0].Entry.ResourceKeys)
 	}
-	if tasks[1].Entry.ID != "infra-component.lab-host" {
-		t.Fatalf("second task = %s, want infra-component.lab-host", tasks[1].Entry.ID)
+	if tasks[1].Entry.ID != "infra-component.bastion" {
+		t.Fatalf("second task = %s, want infra-component.bastion", tasks[1].Entry.ID)
 	}
-	if tasks[1].Entry.Host != "lab-host" || len(tasks[1].Entry.ResourceKeys) != 1 {
-		t.Fatalf("infra component host/resources = %q/%v, want lab-host with resource key", tasks[1].Entry.Host, tasks[1].Entry.ResourceKeys)
+	if tasks[1].Entry.Host != "bastion" || len(tasks[1].Entry.ResourceKeys) != 1 {
+		t.Fatalf("infra component host/resources = %q/%v, want bastion with resource key", tasks[1].Entry.Host, tasks[1].Entry.ResourceKeys)
 	}
-	if tasks[2].Entry.ID != "infraprepare.sno-libvirt.lab-host" {
-		t.Fatalf("third task = %s, want infraprepare.sno-libvirt.lab-host", tasks[2].Entry.ID)
+	if tasks[2].Entry.ID != "infraprepare.sno-libvirt.bastion" {
+		t.Fatalf("third task = %s, want infraprepare.sno-libvirt.bastion", tasks[2].Entry.ID)
 	}
-	if len(tasks[2].Entry.Dependencies) != 2 || tasks[2].Entry.Dependencies[0] != "provider.lab-host" || tasks[2].Entry.Dependencies[1] != "infra-component.lab-host" {
+	if len(tasks[2].Entry.Dependencies) != 2 || tasks[2].Entry.Dependencies[0] != "provider.bastion" || tasks[2].Entry.Dependencies[1] != "infra-component.bastion" {
 		t.Fatalf("infra prepare deps = %v, want provider and infra-component services", tasks[2].Entry.Dependencies)
 	}
 	if tasks[3].Entry.ID != "infra.sno-libvirt.master-0" {
 		t.Fatalf("fourth task = %s, want infra.sno-libvirt.master-0", tasks[3].Entry.ID)
 	}
-	if len(tasks[3].Entry.Dependencies) != 3 || tasks[3].Entry.Dependencies[0] != "provider.lab-host" || tasks[3].Entry.Dependencies[1] != "infra-component.lab-host" || tasks[3].Entry.Dependencies[2] != "infraprepare.sno-libvirt.lab-host" {
+	if len(tasks[3].Entry.Dependencies) != 3 || tasks[3].Entry.Dependencies[0] != "provider.bastion" || tasks[3].Entry.Dependencies[1] != "infra-component.bastion" || tasks[3].Entry.Dependencies[2] != "infraprepare.sno-libvirt.bastion" {
 		t.Fatalf("machine infra deps = %v, want provider, infra-component, and prepare", tasks[3].Entry.Dependencies)
 	}
-	if tasks[3].Entry.HostSlotKey != "host:lab-host:machine" || tasks[3].Entry.HostSlotCount != 1 {
-		t.Fatalf("machine infra host slot = %q/%d, want host:lab-host:machine/1", tasks[3].Entry.HostSlotKey, tasks[3].Entry.HostSlotCount)
+	if tasks[3].Entry.HostSlotKey != "host:bastion:machine" || tasks[3].Entry.HostSlotCount != 1 {
+		t.Fatalf("machine infra host slot = %q/%d, want host:bastion:machine/1", tasks[3].Entry.HostSlotKey, tasks[3].Entry.HostSlotCount)
 	}
-	if tasks[4].Entry.ID != "infrafinalize.sno-libvirt.lab-host" {
-		t.Fatalf("fifth task = %s, want infrafinalize.sno-libvirt.lab-host", tasks[4].Entry.ID)
+	if tasks[4].Entry.ID != "infrafinalize.sno-libvirt.bastion" {
+		t.Fatalf("fifth task = %s, want infrafinalize.sno-libvirt.bastion", tasks[4].Entry.ID)
 	}
-	if len(tasks[4].Entry.Dependencies) != 3 || tasks[4].Entry.Dependencies[0] != "provider.lab-host" || tasks[4].Entry.Dependencies[1] != "infra-component.lab-host" || tasks[4].Entry.Dependencies[2] != "infra.sno-libvirt.master-0" {
+	if len(tasks[4].Entry.Dependencies) != 3 || tasks[4].Entry.Dependencies[0] != "provider.bastion" || tasks[4].Entry.Dependencies[1] != "infra-component.bastion" || tasks[4].Entry.Dependencies[2] != "infra.sno-libvirt.master-0" {
 		t.Fatalf("infra finalize deps = %v, want provider, infra-component, and machine infra", tasks[4].Entry.Dependencies)
 	}
 	if tasks[5].Entry.ID != "iso.sno-libvirt" {
 		t.Fatalf("sixth task = %s, want iso.sno-libvirt", tasks[5].Entry.ID)
 	}
-	if len(tasks[5].Entry.Dependencies) != 1 || tasks[5].Entry.Dependencies[0] != "infrafinalize.sno-libvirt.lab-host" {
-		t.Fatalf("iso deps = %v, want infrafinalize.sno-libvirt.lab-host", tasks[5].Entry.Dependencies)
+	if len(tasks[5].Entry.Dependencies) != 1 || tasks[5].Entry.Dependencies[0] != "infrafinalize.sno-libvirt.bastion" {
+		t.Fatalf("iso deps = %v, want infrafinalize.sno-libvirt.bastion", tasks[5].Entry.Dependencies)
 	}
 	if tasks[6].Entry.ID != "boot.sno-libvirt" {
 		t.Fatalf("seventh task = %s, want boot.sno-libvirt", tasks[6].Entry.ID)

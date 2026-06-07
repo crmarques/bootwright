@@ -7,7 +7,7 @@ spec:
 
   libvirt:
     machineRef:
-      name: lab-host
+      name: bastion
     uri: qemu:///system
     bmcEmulationDefaults:
       enabled: true

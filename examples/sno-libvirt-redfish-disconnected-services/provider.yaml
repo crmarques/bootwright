@@ -19,7 +19,7 @@ spec:
         credentialRef:
           name: bmc-credentials
     machineRef:
-      name: lab-host
+      name: bastion
     machineProfiles:
     - name: sno
       cpu: 8

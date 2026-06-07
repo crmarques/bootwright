@@ -156,7 +156,7 @@ spec:
   loadBalancer:
     type: haProxy
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddresses:
       - name: apps-ip
         ip: 192.168.133.11

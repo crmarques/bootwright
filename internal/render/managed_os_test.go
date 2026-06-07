@@ -193,10 +193,10 @@ func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	members := HostGroupMembers(state)
-	if got := strings.Join(members[GroupInfraHosts], ","); got != "lab-host" {
+	if got := strings.Join(members[GroupInfraHosts], ","); got != "bastion" {
 		t.Fatalf("infra hosts = %v", members[GroupInfraHosts])
 	}
-	if got := strings.Join(members[GroupProviderHosts], ","); got != "lab-host" {
+	if got := strings.Join(members[GroupProviderHosts], ","); got != "bastion" {
 		t.Fatalf("provider hosts = %v", members[GroupProviderHosts])
 	}
 	wantMachineTaskHosts := strings.Join([]string{
@@ -221,7 +221,7 @@ func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 	if got := pseudoHost["bootwright_machine_task_machine_name"]; got != "ceph-0" {
 		t.Fatalf("machine task machine = %v", got)
 	}
-	if got := pseudoHost["bootwright_machine_task_provider_host_name"]; got != "lab-host" {
+	if got := pseudoHost["bootwright_machine_task_provider_host_name"]; got != "bastion" {
 		t.Fatalf("machine task provider host = %v", got)
 	}
 }

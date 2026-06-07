@@ -9,7 +9,7 @@ import (
 func clusterFacingState(hostSSH, hostClusterAddr, networkGateway string) v1alpha1.State {
 	state := v1alpha1.State{
 		Machines: []v1alpha1.Machine{{
-			Metadata: v1alpha1.Metadata{Name: "lab-host"},
+			Metadata: v1alpha1.Metadata{Name: "bastion"},
 			Spec: v1alpha1.MachineSpec{
 				OS: v1alpha1.MachineOSSpec{
 					Provided: v1alpha1.BoolPtr(true),
@@ -99,7 +99,7 @@ func TestClusterFacingHostAddress(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			state := clusterFacingState(tc.sshAddress, "", tc.networkGateway)
-			got := ClusterFacingMachineAddress(state, "lab-host", clusterFacingInfra())
+			got := ClusterFacingMachineAddress(state, "bastion", clusterFacingInfra())
 			if got != tc.want {
 				t.Fatalf("ClusterFacingMachineAddress = %q, want %q", got, tc.want)
 			}
@@ -126,7 +126,7 @@ func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) 
 			NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "bridge-net"},
 		},
 	}}
-	got := ClusterFacingMachineAddress(state, "lab-host", infra)
+	got := ClusterFacingMachineAddress(state, "bastion", infra)
 	if got != "192.168.132.1" {
 		t.Fatalf("got %q, want %q (gateway via machine interface fallback)", got, "192.168.132.1")
 	}
@@ -134,7 +134,7 @@ func TestClusterFacingHostAddressFallsBackThroughMachineInterface(t *testing.T) 
 
 func TestHostRouteAddressUsesNamedAddress(t *testing.T) {
 	state := clusterFacingState("localhost", "10.42.0.7", "192.168.132.1")
-	got := MachineRouteAddress(state, "lab-host", "cluster", clusterFacingInfra())
+	got := MachineRouteAddress(state, "bastion", "cluster", clusterFacingInfra())
 	if got != "10.42.0.7" {
 		t.Fatalf("MachineRouteAddress = %q, want %q", got, "10.42.0.7")
 	}
@@ -188,7 +188,7 @@ func networkConfigSpec(cidr, gateway string) v1alpha1.NetworkConfigSpec {
 
 func TestMachineRouteAddressMissingNamedAddress(t *testing.T) {
 	state := clusterFacingState("localhost", "10.42.0.7", "192.168.132.1")
-	got := MachineRouteAddress(state, "lab-host", "missing", clusterFacingInfra())
+	got := MachineRouteAddress(state, "bastion", "missing", clusterFacingInfra())
 	if got != "" {
 		t.Fatalf("MachineRouteAddress = %q, want empty", got)
 	}

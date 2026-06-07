@@ -233,7 +233,7 @@ bootwright_provider_services:
   - kind: bmc
     providerName: lab-libvirt-provider
     name: emulated
-    machineRef: lab-host
+    machineRef: bastion
     machineAddress: 192.168.133.1
     realisation: emulated
     bmcRole: emulated
@@ -283,7 +283,7 @@ bootwright_infra_component_services:
 
 ```yaml
 bootwright_provider_machine_setups:
-  - machineRef: lab-host
+  - machineRef: bastion
     machineAddress: 192.168.133.1
     applyRole: bootwright.core.machine_setup_libvirt
 ```

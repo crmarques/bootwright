@@ -24,7 +24,7 @@ var emulatedBareMetalSubstrate = Substrate{
 	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: lab-host
+  name: bastion
 spec:
   capabilities:
     - libvirt
@@ -100,7 +100,7 @@ spec:
   type: libvirt
   libvirt:
     machineRef:
-      name: lab-host
+      name: bastion
     uri: qemu:///system
     bmcEmulationDefaults:
       auth:
@@ -124,7 +124,7 @@ spec:
   loadBalancer:
     type: haProxy
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddresses:
       - name: control-plane
         ip: 192.168.130.10
@@ -139,7 +139,7 @@ spec:
   nameResolution:
     type: dnsmasq
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddress: 192.168.130.1
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -150,7 +150,7 @@ spec:
   ntp:
     type: chrony
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddress: 192.168.130.1
     endpoints:
       - name: cluster

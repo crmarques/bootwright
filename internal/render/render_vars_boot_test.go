@@ -136,7 +136,7 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			wantSystemID:  "7ec5d09a-2be9-5fc1-8505-0dea5887aa8a",
 			wantCredRef:   "bmc-credentials",
 			wantValidate:  false,
-			wantStageHost: "lab-host",
+			wantStageHost: "bastion",
 			wantStagePath: "/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/lab-libvirt-provider/vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 			wantFetchURL:  "http://127.0.0.1:8001/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-libvirt.iso",
 		},
@@ -237,7 +237,7 @@ func TestEmulatedLibvirtBootProjectsMediaBackend(t *testing.T) {
 		t.Fatalf("boot missing media.libvirt control: %v", boot)
 	}
 	wants := map[string]any{
-		"machineRef": "lab-host",
+		"machineRef": "bastion",
 		"uri":        "qemu:///system",
 		"domain":     "sno-libvirt-master-0",
 	}
@@ -636,7 +636,7 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 		"applyRole":        "bootwright.core.provider_service_bmc_emulated",
 		"destroyRole":      "bootwright.core.provider_service_bmc_emulated",
 		"providerName":     "lab-libvirt-provider",
-		"machineRef":       "lab-host",
+		"machineRef":       "bastion",
 		"configConsistent": true,
 	}
 	for k, want := range wants {
@@ -953,7 +953,7 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 		Metadata: v1alpha1.Metadata{Name: "registry"},
 		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
 			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-			MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+			MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
 			Port:       v1alpha1.DefaultMirrorRegistryPort,
 		}},
 	})

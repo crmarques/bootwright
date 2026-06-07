@@ -10,4 +10,4 @@ spec:
     - console-openshift-console.apps.sno-libvirt.bootwright.test
     - oauth-openshift.apps.sno-libvirt.bootwright.test
     machineRef:
-      name: lab-host
+      name: bastion

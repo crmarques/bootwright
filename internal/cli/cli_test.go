@@ -3517,11 +3517,11 @@ func TestApplyFullGraphDryRunJSONPlansAddonTasks(t *testing.T) {
 		gotIDs = append(gotIDs, task.ID)
 	}
 	wantIDs := []string{
-		"provider.lab-host",
-		"infra-component.lab-host",
-		"infraprepare.sno-libvirt.lab-host",
+		"provider.bastion",
+		"infra-component.bastion",
+		"infraprepare.sno-libvirt.bastion",
 		"infra.sno-libvirt.master-0",
-		"infrafinalize.sno-libvirt.lab-host",
+		"infrafinalize.sno-libvirt.bastion",
 		"iso.sno-libvirt",
 		"boot.sno-libvirt",
 		"wait.sno-libvirt",

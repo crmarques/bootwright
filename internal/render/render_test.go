@@ -369,7 +369,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	}
 	state.Environments[0].Spec.Secrets["mirror-trust"] = v1alpha1.EnvironmentSecretSpec{
 		Generated: &v1alpha1.EnvironmentSecretGenerated{
-			SelfSignedCertificate: &v1alpha1.SelfSignedCertificateSpec{CommonName: "lab-host"},
+			SelfSignedCertificate: &v1alpha1.SelfSignedCertificateSpec{CommonName: "bastion"},
 		},
 	}
 	state.Environments[0].Spec.Registries = &v1alpha1.EnvironmentRegistriesSpec{Mirror: &v1alpha1.EnvironmentRegistryMirrorSpec{
@@ -392,7 +392,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
 	for i := range state.Machines {
-		if state.Machines[i].Metadata.Name == "lab-host" {
+		if state.Machines[i].Metadata.Name == "bastion" {
 			state.Machines[i].Spec.Addresses[1].Address = "192.168.132.99"
 		}
 	}
@@ -400,7 +400,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 		v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "artifact-server"},
 			Spec: v1alpha1.InfraComponentSpec{ArtifactServer: &v1alpha1.ArtifactServerComponent{
-				MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
 				Listeners: []v1alpha1.ArtifactServerListener{{
 					Name:     "https",
 					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
@@ -417,7 +417,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 			Metadata: v1alpha1.Metadata{Name: "registry"},
 			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
 				Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-				MachineRef: v1alpha1.LocalObjectReference{Name: "lab-host"},
+				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
 				Port:       5000,
 			}},
 		},
@@ -439,7 +439,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	if !ok {
 		t.Fatalf("imageDigestSources missing or wrong type: %v", cfg["imageDigestSources"])
 	}
-	// lab-host SSH address resolves to localhost; ClusterFacingHostAddress
+	// bastion SSH address resolves to localhost; ClusterFacingHostAddress
 	// substitutes the gateway of the cluster's api endpoint network
 	// (sno-bridge → 192.168.132.1) so the mirror URL is reachable from
 	// cluster guests.

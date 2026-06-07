@@ -1379,7 +1379,7 @@ metadata: { name: libvirt }
 spec:
   type: libvirt
   libvirt:
-    machineRef: { name: lab-host }
+    machineRef: { name: bastion }
     uri: qemu:///system
     machineProfiles:
       - name: sno
@@ -1397,7 +1397,7 @@ metadata: { name: libvirt }
 spec:
   type: libvirt
   libvirt:
-    machineRef: { name: lab-host }
+    machineRef: { name: bastion }
     uri: qemu:///system
     bmcEmulationDefaults:
       enabled: false
@@ -1419,7 +1419,7 @@ metadata: { name: libvirt-a }
 spec:
   type: libvirt
   libvirt:
-    machineRef: { name: lab-host }
+    machineRef: { name: bastion }
     uri: qemu:///system
     bmcEmulationDefaults:
       auth:
@@ -1436,7 +1436,7 @@ metadata: { name: libvirt-b }
 spec:
   type: libvirt
   libvirt:
-    machineRef: { name: lab-host }
+    machineRef: { name: bastion }
     uri: qemu:///system
     bmcEmulationDefaults:
       auth:
@@ -1465,7 +1465,7 @@ spec:
 `,
 				"service-machines.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: Machine
-metadata: { name: lab-host }
+metadata: { name: bastion }
 spec:
   capabilities: [libvirt]
   os:

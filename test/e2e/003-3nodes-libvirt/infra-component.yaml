@@ -6,7 +6,7 @@ spec:
   loadBalancer:
     type: haProxy
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddresses:
       - name: control-plane
         ip: 192.168.133.10
@@ -21,7 +21,7 @@ spec:
   proxy:
     type: squid
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddress: 0.0.0.0
     port: 3128
 ---
@@ -33,7 +33,7 @@ spec:
   nameResolution:
     type: dnsmasq
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddress: 192.168.133.1
     port: 53
     additionalIngressHosts:
@@ -48,7 +48,7 @@ spec:
   ntp:
     type: chrony
     machineRef:
-      name: lab-host
+      name: bastion
     bindAddress: 192.168.133.1
     port: 123
     endpoints:

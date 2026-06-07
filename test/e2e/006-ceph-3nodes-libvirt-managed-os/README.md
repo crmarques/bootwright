@@ -7,7 +7,7 @@ desired-state object with short names so the fixture stays easy to inspect.
 
 The current fixture keeps only state supported by the current code path:
 
-- one provided libvirt host named `lab-host`
+- one provided libvirt host named `bastion`
 - three lean managed Ceph VMs named `ceph-0`, `ceph-1`, and `ceph-2`
 - a tiny `ceph-node` libvirt profile: 1 vCPU, 2048 MiB RAM, a 16 GiB root
   disk, and two 1 GiB OSD data disks per VM
@@ -47,7 +47,7 @@ or Ansible changes.
   distribution adds no subscription-backed repo, so supply `cephadm` through the
   managed-OS `MachineInstallProfile` repositories or a preinstalled host package.
 
-Bootwright owns lab host preparation for this fixture. After
+Bootwright owns bastion host preparation for this fixture. After
 `bootwright bastion setup --yes` and
 `bootwright apply --stage infra --clusters ceph-libvirt --yes`, the required
 libvirt tooling, `qemu-img`, `sushy-tools`, `mkksiso`, Ansible requirements,
@@ -84,7 +84,7 @@ spec:
 bootwright context init 006-ceph-3nodes-libvirt-managed-os \
   -f test/e2e/006-ceph-3nodes-libvirt-managed-os --yes
 bootwright secret materialize
-bootwright host trust --hosts lab-host --yes
+bootwright host trust --hosts bastion --yes
 bootwright bastion setup --yes
 bootwright apply --stage infra --clusters ceph-libvirt --yes
 bootwright apply --stage clusters --clusters ceph-libvirt --yes

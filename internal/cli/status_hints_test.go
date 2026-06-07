@@ -40,7 +40,7 @@ func TestStatusNeedsHostTrust(t *testing.T) {
 		},
 	}
 	local := remote
-	local.Metadata = v1alpha1.Metadata{Name: "lab-host"}
+	local.Metadata = v1alpha1.Metadata{Name: "bastion"}
 	local.Spec.Addresses = []v1alpha1.MachineAddress{{Name: "ssh", Address: "localhost"}}
 
 	cases := []struct {

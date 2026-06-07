@@ -419,13 +419,13 @@ func TestLimitMatchesNoHostsTable(t *testing.T) {
 		{"only empty groups", render.GroupProviderHosts + ":" + render.GroupInfraComponentHosts + ":" + render.GroupInfraHosts, true},
 		{"unknown group", "no_such_group", true},
 		{"mix of empty and non-empty", render.GroupProviderHosts + ":" + render.GroupOCPHosts, false},
-		{"literal inventory host", "lab-host", false},
+		{"literal inventory host", "bastion", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			testState := state
-			if tc.limit == "lab-host" {
-				testState = stateWithInfraHost("lab-host")
+			if tc.limit == "bastion" {
+				testState = stateWithInfraHost("bastion")
 			}
 			if got := LimitMatchesNoHosts(tc.limit, testState); got != tc.want {
 				t.Fatalf("LimitMatchesNoHosts(%q) = %v, want %v", tc.limit, got, tc.want)
