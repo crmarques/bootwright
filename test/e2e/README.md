@@ -33,7 +33,7 @@ make build
 make list-e2e-cases
 bin/bootwright context init 001-sno-libvirt -f test/e2e/001-sno-libvirt --yes
 bin/bootwright check syntax
-bin/bootwright render installer --scope sno-libvirt
+bin/bootwright render installer --clusters sno-libvirt
 ```
 
 Dry-run all fixtures through the apply pipeline:

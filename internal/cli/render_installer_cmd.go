@@ -28,7 +28,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
   bootwright render installer
 
   # Render only specific clusters
-  bootwright render installer --scope managed-01
+  bootwright render installer --clusters managed-01
 
   # Also write the effective installer files with secrets inlined (mode 0600)
   bootwright render installer --sensitive
@@ -37,7 +37,7 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
   bootwright render installer --output json`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to render")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to render")
 	cmd.Flags().BoolVar(&sensitive, "sensitive", false, "also write effective installer inputs under /var/lib/bootwright/contexts/<context>/clusters/<cluster>/runtime/installer/ with secret material inlined for direct openshift-install consumption (mode 0600)")
 	cmd.Flags().StringVar(&output, "output", output, "output format: text|json")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {

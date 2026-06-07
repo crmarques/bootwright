@@ -34,7 +34,7 @@ type scopeCommonFlags struct {
 }
 
 // registerScopeCommonFlags wires the standard flag set onto cmd and
-// gates --scope on whether the scope accepts cluster-scoped filtering
+// gates --clusters on whether the scope accepts cluster-scoped filtering
 // (i.e. infra / clusters / all-for-check-apply; destroy never accepts
 // "all" because allScope.destroyPlaybook is empty).
 func registerScopeCommonFlags(cmd *cobra.Command, f *scopeCommonFlags, allowClusterScope bool, scopeAction string) {
@@ -52,7 +52,7 @@ func registerScopeCommonFlagsWithAnsibleTarget(cmd *cobra.Command, f *scopeCommo
 		if targetKind == "ContainerCluster" {
 			scopeUsage += " (restricts the matching ClusterInstall/Provider sets)"
 		}
-		cmd.Flags().StringVar(&f.clusterScope, "scope", "", scopeUsage)
+		cmd.Flags().StringVar(&f.clusterScope, "clusters", "", scopeUsage)
 	}
 }
 
@@ -73,7 +73,7 @@ func printBundlePath(stdout io.Writer, bundleDir string) {
 	p.Fields([]cliout.Field{{Key: "ansible bundle", Value: bundleDir}})
 }
 
-// scopeAllowsClusterScope reports whether the --scope flag is meaningful
+// scopeAllowsClusterScope reports whether the --clusters flag is meaningful
 // for this command. The "all" scope has no destroyPlaybook so destroy
 // commands exclude it via destroyOnly=true; check/apply include it.
 func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {

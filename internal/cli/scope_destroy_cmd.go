@@ -74,7 +74,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
 	if !options.stageSelector && scope.name == "infra" {
-		if f := cmd.Flags().Lookup("scope"); f != nil {
+		if f := cmd.Flags().Lookup("clusters"); f != nil {
 			f.Usage = "comma-separated ContainerCluster names to destroy, or artifact-server to remove only the generated artifact publication service"
 		}
 	}
@@ -308,7 +308,7 @@ func destroyClusterScopeFlag(stageSelector bool) string {
 	if stageSelector {
 		return "--clusters"
 	}
-	return "--scope"
+	return "--clusters"
 }
 
 func scopeDestroyExample(scopeName string) string {
@@ -319,12 +319,12 @@ func scopeDestroyExample(scopeName string) string {
   bootwright destroy %[1]s --yes
 
   # Destroy only specific clusters
-  bootwright destroy %[1]s --scope managed-01 --yes`, scopeName)
+  bootwright destroy %[1]s --clusters managed-01 --yes`, scopeName)
 	if scopeName == "infra" {
 		example += `
 
   # Remove only the generated artifact publication service
-  bootwright destroy infra --scope artifact-server --yes`
+  bootwright destroy infra --clusters artifact-server --yes`
 	}
 	return example
 }

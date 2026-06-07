@@ -21,7 +21,7 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
   bootwright check addons`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&clusterScope, "scope", "", "comma-separated ContainerCluster names to check")
+	cmd.Flags().StringVar(&clusterScope, "clusters", "", "comma-separated ContainerCluster names to check")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
 		p := cliout.New(stdout)
 		p.Command("addons check")

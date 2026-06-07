@@ -105,7 +105,7 @@ func scopeCheckExample(scopeName string) string {
   bootwright check %[1]s
 
   # Limit to specific storage clusters
-  bootwright check %[1]s --scope ceph-storage
+  bootwright check %[1]s --clusters ceph-storage
 
   # Print the planned Ansible command without executing it
   bootwright check %[1]s --dry-run`, scopeName)
@@ -114,7 +114,7 @@ func scopeCheckExample(scopeName string) string {
   bootwright check %[1]s
 
   # Limit to specific clusters
-  bootwright check %[1]s --scope sno-libvirt,managed-01
+  bootwright check %[1]s --clusters sno-libvirt,managed-01
 
   # Print the planned Ansible command without executing it
   bootwright check %[1]s --dry-run`, scopeName)

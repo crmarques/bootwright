@@ -40,7 +40,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 		return stategraph.FilterStateToClusterRoots(state, containerNames, storageNames), nil
 	default:
 		if strings.TrimSpace(scope) != "" {
-			return state, fmt.Errorf("--scope is not supported for %s", target)
+			return state, fmt.Errorf("--clusters is not supported for %s", target)
 		}
 		return state, nil
 	}

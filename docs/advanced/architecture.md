@@ -95,7 +95,7 @@ external-mode manifests.
 
 ## External CLI Inputs
 
-`bootwright render --output-dir <dir> --scope <cluster> --sensitive` writes the
+`bootwright render --output-dir <dir> --clusters <cluster> --sensitive` writes the
 same concrete tool inputs Bootwright would hand to supplier or community CLIs.
 OpenShift installer files land under
 `<dir>/openshift-install/<cluster>/{install,agent}-config.yaml`; Ansible

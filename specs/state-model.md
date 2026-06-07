@@ -645,6 +645,14 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
+- Cluster selection uses one flag name, `--clusters`, on every command that
+  narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `check` and
+  `destroy` scope subcommands, and `render`. It accepts a comma-separated list
+  of `ContainerCluster` and `StorageCluster` names. `destroy infra --clusters`
+  additionally accepts the literal `artifact-server` to remove only the
+  generated artifact publication service; that targeted infra cleanup is the
+  reason `destroy` keeps the `infra` subcommand alongside the `--stage`
+  selector.
 - `apply --stage infra` includes provider, infra-components, machine-infra, and
   storage-infra work.
 - `apply --stage clusters` includes storage-cluster, container-cluster, and

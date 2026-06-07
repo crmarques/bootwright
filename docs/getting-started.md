@@ -326,20 +326,20 @@ bootwright render effective
 Render placeholder installer files into context state:
 
 ```text
-bootwright render installer --scope <cluster-name>
+bootwright render installer --clusters <cluster-name>
 ```
 
 Render storage tool inputs into context state:
 
 ```text
-bootwright render storage --scope <storage-cluster-name>
+bootwright render storage --clusters <storage-cluster-name>
 ```
 
 To run `openshift-install` or Ansible-facing CLIs yourself, export concrete
 tool inputs to a local, unversioned directory:
 
 ```text
-bootwright render --output-dir ./rendered --scope <cluster-name> --sensitive
+bootwright render --output-dir ./rendered --clusters <cluster-name> --sensitive
 openshift-install agent create image --dir ./rendered/openshift-install/<cluster-name>
 openshift-install agent wait-for install-complete --dir ./rendered/openshift-install/<cluster-name> --log-level info
 ```
@@ -360,7 +360,7 @@ fetches, including HTTPS listeners when the selected artifact server exposes
 them:
 
 ```text
-bootwright destroy infra --scope artifact-server --yes
+bootwright destroy infra --clusters artifact-server --yes
 ```
 
 This does not destroy container-cluster nodes or the rest of the infrastructure.

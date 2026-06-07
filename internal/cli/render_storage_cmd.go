@@ -20,10 +20,10 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
   bootwright render storage
 
   # Render only one StorageCluster
-  bootwright render storage --scope ceph-stretch`,
+  bootwright render storage --clusters ceph-stretch`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&storageScope, "scope", "", "comma-separated StorageCluster names to render")
+	cmd.Flags().StringVar(&storageScope, "clusters", "", "comma-separated StorageCluster names to render")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		state, err := loadDesiredState(cf)
 		if err != nil {

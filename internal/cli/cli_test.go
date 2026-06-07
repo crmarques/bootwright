@@ -137,7 +137,7 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("check storage-cluster --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"comma-separated StorageCluster names to check", "bootwright check storage-cluster --scope ceph-storage"} {
+	for _, want := range []string{"comma-separated StorageCluster names to check", "bootwright check storage-cluster --clusters ceph-storage"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("check storage-cluster help missing %q:\n%s", want, stdout)
 		}
@@ -326,7 +326,7 @@ func TestHumanOutputStructuredText(t *testing.T) {
 		},
 		{
 			name: "render installer",
-			args: []string{"render", "installer", "--scope", "sno-libvirt"},
+			args: []string{"render", "installer", "--clusters", "sno-libvirt"},
 			want: []string{"Bootwright: installer render", "Rendered artifacts", "Installer placeholders", "install-config.yaml", "agent-config.yaml"},
 		},
 		{
@@ -453,7 +453,7 @@ func TestDestroyInfraArtifactServerScopeDryRunJSON(t *testing.T) {
 	initTestContext(t, "002-sno-emul-baremetal")
 	stdout, stderr, code := runCLI(t,
 		"destroy", "infra",
-		"--scope", "artifact-server",
+		"--clusters", "artifact-server",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
@@ -677,7 +677,7 @@ func TestRenderInstallerScopedFixtureJSON(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
 		"render", "installer",
-		"--scope", "sno-libvirt",
+		"--clusters", "sno-libvirt",
 		"--output", "json",
 	)
 	if code != 0 {
@@ -1687,7 +1687,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"destroy", "cluster"}, want: false},
 		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"render"}, want: false},
-		{args: []string{"render", "--scope", "managed-01"}, want: false},
+		{args: []string{"render", "--clusters", "managed-01"}, want: false},
 		{args: []string{"render", "installer"}, want: true},
 		{args: []string{"render", "storage"}, want: true},
 		{args: []string{"render", "effective"}, want: true},
@@ -2598,7 +2598,7 @@ func addFixtureResourceSelection(t *testing.T, dir string) {
 func TestRenderOutputDirRequiresSensitive(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	outputDir := filepath.Join(t.TempDir(), "rendered")
-	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt")
+	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt")
 	if code == 0 {
 		t.Fatalf("render --output-dir unexpectedly succeeded:\n%s", stdout)
 	}
@@ -2611,7 +2611,7 @@ func TestRenderOutputDirRequiresSensitive(t *testing.T) {
 		t.Fatalf("render --output-dir without --sensitive wrote %s: %v", outputDir, err)
 	}
 
-	_, _, code = runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt", "--resolve-secrets")
+	_, _, code = runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--resolve-secrets")
 	if code == 0 {
 		t.Fatal("render --output-dir accepted removed --resolve-secrets flag")
 	}
@@ -2619,7 +2619,7 @@ func TestRenderOutputDirRequiresSensitive(t *testing.T) {
 		t.Fatalf("render --output-dir with removed --resolve-secrets wrote %s: %v", outputDir, err)
 	}
 
-	_, stderr, code = runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt", "--sensitive", "--resolve-secrets")
+	_, stderr, code = runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--sensitive", "--resolve-secrets")
 	if code == 0 {
 		t.Fatal("render --output-dir accepted removed --resolve-secrets flag together with --sensitive")
 	}
@@ -2627,7 +2627,7 @@ func TestRenderOutputDirRequiresSensitive(t *testing.T) {
 		t.Fatalf("stderr missing unknown flag for removed --resolve-secrets:\n%s", stderr)
 	}
 
-	_, stderr, code = runCLI(t, "render", "installer", "--scope", "sno-libvirt", "--resolve-secrets")
+	_, stderr, code = runCLI(t, "render", "installer", "--clusters", "sno-libvirt", "--resolve-secrets")
 	if code == 0 {
 		t.Fatal("render installer accepted removed --resolve-secrets flag")
 	}
@@ -2659,7 +2659,7 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
 	}
 	outputDir := filepath.Join(t.TempDir(), "rendered")
-	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt", "--sensitive")
+	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--sensitive")
 	if code != 0 {
 		t.Fatalf("render --output-dir exited %d, stderr=%q", code, stderr)
 	}
@@ -2704,7 +2704,7 @@ func TestRenderOutputDirRejectsNonEmptyUnmarkedDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--scope", "sno-libvirt", "--sensitive")
+	_, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--sensitive")
 	if code == 0 {
 		t.Fatal("render --output-dir accepted a non-empty unmarked output directory")
 	}

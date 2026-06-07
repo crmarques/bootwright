@@ -187,16 +187,16 @@ bootwright cluster access-info
 bootwright check all --dry-run
 bootwright apply --stage infra --dry-run
 bootwright apply --stage infra --yes
-bootwright render installer --scope demo-ocp
-bootwright render storage --scope ceph-stretch
-bootwright render --output-dir ./rendered --scope demo-ocp --sensitive
+bootwright render installer --clusters demo-ocp
+bootwright render storage --clusters ceph-stretch
+bootwright render --output-dir ./rendered --clusters demo-ocp --sensitive
 bootwright apply --stage clusters --clusters ceph-stretch --yes
 bootwright apply --stage clusters --yes
 bootwright check addons
 bootwright status
 bootwright destroy --stage clusters --yes
 bootwright destroy --stage infra --yes
-bootwright destroy infra --scope artifact-server --yes
+bootwright destroy infra --clusters artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. `bastion setup` remains a
@@ -226,7 +226,7 @@ storage services, add-on records, and generated storage attachment records.
 desired state and Bootwright ownership records; without `--clusters` it also
 sweeps current-context VM artifacts provider adapters can identify.
 
-`bootwright render --output-dir ./rendered --scope <cluster> --sensitive`
+`bootwright render --output-dir ./rendered --clusters <cluster> --sensitive`
 exports concrete external CLI inputs, including
 `openshift-install/<cluster>/{install,agent}-config.yaml`, for operators who
 want to run supplier or community tools such as `openshift-install` themselves.
