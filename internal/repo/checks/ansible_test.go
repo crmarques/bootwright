@@ -2712,6 +2712,27 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		}
 	}
 
+	ossTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml")
+	downloadIdx := findAnsibleTask(t, ossTasks, "Download cephadm utility to configure community Ceph repository")
+	addRepoIdx := findAnsibleTask(t, ossTasks, "Configure community Ceph package repository through cephadm")
+	if !(downloadIdx < addRepoIdx) {
+		t.Fatalf("oss provider must download cephadm before configuring the community repo")
+	}
+	download, ok := ossTasks[downloadIdx]["ansible.builtin.get_url"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(download["url"]), "bootwright_ceph_community_release") {
+		t.Fatalf("oss cephadm download must build the release-scoped upstream URL, got %v", ossTasks[downloadIdx])
+	}
+	addRepo, ok := ossTasks[addRepoIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("oss community repo task must run a command, got %v", ossTasks[addRepoIdx])
+	}
+	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") {
+		t.Fatalf("oss community repo task must run cephadm add-repo --release, got %v", addRepo["argv"])
+	}
+	if got := fmt.Sprint(addRepo["creates"]); !strings.Contains(got, "bootwright_ceph_community_repo_file") {
+		t.Fatalf("oss community repo task must be idempotent via creates, got %v", addRepo["creates"])
+	}
+
 	installTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 	registryLogin := installTasks[findAnsibleTask(t, installTasks, "Log storage node into cephadm registry")]
 	if got := registryLogin["no_log"]; got != true {
@@ -2739,7 +2760,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	}
 
 	initialProbeIdx := findAnsibleTask(t, installTasks, "Probe cephadm CLI before package fallback")
-	cephadmPackageIdx := findAnsibleTask(t, installTasks, "Install cephadm package on storage node when available")
+	cephadmPackageIdx := findAnsibleTask(t, installTasks, "Install cephadm package on storage node when not preinstalled")
 	recordCephadmIdx := findAnsibleTask(t, installTasks, "Write cephadm package ownership record")
 	verifyCephadmIdx := findAnsibleTask(t, installTasks, "Verify cephadm CLI on storage node")
 	failCephadmIdx := findAnsibleTask(t, installTasks, "Fail when cephadm CLI is unavailable")

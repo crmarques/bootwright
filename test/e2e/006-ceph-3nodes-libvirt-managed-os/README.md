@@ -14,9 +14,10 @@ The current fixture keeps only state supported by the current code path:
 - an external DNS catalog entry named `lab-dns` at `192.168.134.1`
 - Ceph MON, MGR, OSD, MDS, RGW, and ingress roles on all three nodes
 - RBD, CephFS metadata, CephFS data, and RGW pools
-- the community (OSS) Ceph distribution, so cephadm pulls the latest stable
-  upstream Ceph release and no Red Hat entitlement or registry pull secret is
-  required
+- the community (OSS) Ceph distribution, so Bootwright configures the upstream
+  community Ceph repository (release pinned to `squid` in the StorageCluster) and
+  cephadm pulls the matching upstream Ceph image; no Red Hat entitlement or
+  registry pull secret is required
 
 The requested managed infra-services VM, managed DNS service, artifact service,
 and storage-owned RGW/dashboard ingress endpoints are listed below as
@@ -42,10 +43,11 @@ or Ansible changes.
 ## Prerequisites
 
 - A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
-- A repository reachable from the Ceph nodes that provides the community
-  `cephadm` package (for example EPEL or the upstream Ceph repo). The OSS
-  distribution adds no subscription-backed repo, so supply `cephadm` through the
-  managed-OS `MachineInstallProfile` repositories or a preinstalled host package.
+- Outbound reachability from the Ceph nodes to the upstream Ceph repository
+  (`download.ceph.com`). The OSS distribution adds no subscription-backed repo;
+  Bootwright configures the community repo on each node with cephadm using
+  `spec.ceph.community.release`. For a disconnected lab, set
+  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com`.
 
 Bootwright owns bastion host preparation for this fixture. After
 `bootwright bastion setup --yes` and

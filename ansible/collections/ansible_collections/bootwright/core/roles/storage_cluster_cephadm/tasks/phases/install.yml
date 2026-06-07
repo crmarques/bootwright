@@ -8,7 +8,7 @@
   changed_when: false
   failed_when: false
 
-- name: Install cephadm package on storage node when available
+- name: Install cephadm package on storage node when not preinstalled
   ansible.builtin.package:
     name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
     state: present

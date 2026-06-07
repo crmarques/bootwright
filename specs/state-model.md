@@ -433,7 +433,11 @@ Rules:
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `distribution: oss` uses upstream/community Ceph package and image sources
-  and must not set `entitlementRef`.
+  and must not set `entitlementRef`. Bootwright configures the upstream
+  community repository on each node with cephadm. `spec.ceph.community.release`
+  selects the upstream Ceph release (latest stable by default) and
+  `spec.ceph.community.mirror` overrides the `download.ceph.com` base URL.
+  `spec.ceph.community` must be empty for `redhat` and `ibm`.
 - `distribution: redhat` requires `entitlementRef.name` to resolve to a Red
   Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph

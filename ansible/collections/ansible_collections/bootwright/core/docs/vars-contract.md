@@ -299,7 +299,7 @@ records. The storage role owns remote host mutation and `cephadm`, `ceph`, and
 ```yaml
 bootwright_storage_clusters:
   - name: ceph-stretch
-    seedHost: storage__ceph-stretch
+    seedHost: storage__ceph-stretch__ceph-dc1-0
     storageGroup: bootwright_storage_hosts_ceph_stretch
     provider:
       name: redhat
@@ -330,7 +330,7 @@ bootwright_storage_clusters:
       - 192.168.133.0/24
     nodes:
       - name: ceph-dc1-0
-        inventoryHost: storage__ceph-stretch
+        inventoryHost: storage__ceph-stretch__ceph-dc1-0
         address: 192.168.133.30
         devices:
           - /dev/sdb
@@ -360,14 +360,21 @@ bootwright_storage_clusters:
 ```
 
 The storage inventory contains one synthetic host per declared storage node in
-`bootwright_storage_hosts`, plus a per-cluster storage group. The seed node
-keeps the stable host name `storage__<cluster>` for task limiting; non-seed
-nodes render as `storage__<cluster>__<node>`. Every storage host renders
+`bootwright_storage_hosts`, plus a per-cluster storage group. Every storage
+node, including the cephadm bootstrap seed, renders as
+`storage__<cluster>__<node>`; `seedHost` is the seed node's own host name and is
+used to limit the bootstrap play. Every storage host renders
 `bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
 `ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
 `ansible_ssh_common_args` from the node's referenced `Machine.spec.access.ssh`. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
+
+For `distribution: oss`, the `provider` block also carries a `community` map with
+a `release` (defaulting to the latest stable upstream Ceph release) and an
+optional `mirror`. The storage role uses it to configure the upstream community
+Ceph package repository with cephadm before installing `cephadm`. The `redhat`
+and `ibm` distributions omit `community` and use subscription-backed repos.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare

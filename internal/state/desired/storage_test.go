@@ -173,6 +173,37 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			},
 			want: `resolves to provider "ibm", want "redhat"`,
 		},
+		{
+			name: "community-on-non-oss",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+				state.Environments = []v1alpha1.Environment{{
+					Metadata: v1alpha1.Metadata{Name: "env"},
+					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
+						Name:     "ceph-entitlement",
+						Provider: v1alpha1.EntitlementProviderRedHat,
+						Product:  v1alpha1.EntitlementProductCeph,
+					}}},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Release: "squid"}
+			},
+			want: "spec.ceph.community must be empty unless distribution=oss",
+		},
+		{
+			name: "community-bad-release",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Release: "Squid!"}
+			},
+			want: `spec.ceph.community.release "Squid!" must be an upstream Ceph release name`,
+		},
+		{
+			name: "community-bad-mirror",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Mirror: "ftp://mirror.example.test/ceph"}
+			},
+			want: "spec.ceph.community.mirror \"ftp://mirror.example.test/ceph\" must be an http or https URL",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

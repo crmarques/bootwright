@@ -135,7 +135,7 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := cluster["name"]; got != "ceph-storage" {
 		t.Fatalf("storage cluster name = %v", got)
 	}
-	if got := cluster["seedHost"]; got != render.StorageSeedHostName("ceph-storage") {
+	if got := cluster["seedHost"]; got != render.StorageSeedHostName(state.StorageClusters[0]) {
 		t.Fatalf("seedHost = %v", got)
 	}
 	bootstrap := cluster["bootstrap"].(map[string]any)
@@ -168,7 +168,7 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 		t.Fatalf("storage nodes got %d, want 7", len(nodes))
 	}
 	firstNode := nodes[0].(map[string]any)
-	if got := firstNode["inventoryHost"]; got != render.StorageSeedHostName("ceph-storage") {
+	if got := firstNode["inventoryHost"]; got != render.StorageSeedHostName(state.StorageClusters[0]) {
 		t.Fatalf("seed inventory host = %v", got)
 	}
 	clusterSSH := cluster["clusterSSH"].(map[string]any)
@@ -213,7 +213,7 @@ func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing
 
 	inventory := readYAMLDoc(t, result.InventoryPath)
 	hosts := inventory["all"].(map[string]any)["hosts"].(map[string]any)
-	seed := hosts[render.StorageSeedHostName("ceph-libvirt")].(map[string]any)
+	seed := hosts[render.StorageSeedHostName(state.StorageClusters[0])].(map[string]any)
 	if got := seed["ansible_ssh_private_key_file"]; got != filepath.Join(runtimeSecretsDir, "ceph-node-ssh") {
 		t.Fatalf("seed private key path = %v, want runtime secret path", got)
 	}
@@ -285,6 +285,27 @@ func TestImportedDataFoundationExternalDetailsRenderPlaceholderAndSensitiveSecre
 	details := externalDetailsJSON(t, attachment.ExternalClusterDetailsPath)
 	if details != secretJSON {
 		t.Fatalf("sensitive external details = %s, want %s", details, secretJSON)
+	}
+}
+
+func TestManagedOSSStorageProjectsCommunityRepoAndSeedHost(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	vars := render.VarsWithSecretsDir(state, "/context/secrets")
+	cluster := storageClusterByName(t, vars, "ceph-libvirt")
+	provider := cluster["provider"].(map[string]any)
+	community, ok := provider["community"].(map[string]any)
+	if !ok || community["release"] != "squid" {
+		t.Fatalf("oss provider community = %#v, want release squid", provider["community"])
+	}
+	if got := cluster["seedHost"]; got != "storage__ceph-libvirt__ceph-0" {
+		t.Fatalf("seedHost = %v, want consistent per-node seed name storage__ceph-libvirt__ceph-0", got)
+	}
+	hosts := render.Inventory(state, "/context/secrets")["all"].(map[string]any)["hosts"].(map[string]any)
+	if _, ok := hosts["storage__ceph-libvirt__ceph-0"]; !ok {
+		t.Fatalf("inventory missing consistent seed host storage__ceph-libvirt__ceph-0: %#v", hosts)
 	}
 }
 

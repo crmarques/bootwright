@@ -157,7 +157,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 					},
 					Playbook:      applyStoragePlaybook,
-					Limit:         render.StorageSeedHostName(cluster.Metadata.Name),
+					Limit:         render.StorageSeedHostName(cluster),
 					ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
 					State:         storageTaskState(state, cluster.Metadata.Name),
 				},

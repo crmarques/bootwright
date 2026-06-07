@@ -23,8 +23,16 @@ type Provider struct {
 	RequiresLicense      bool
 	PrerequisitePackages []string
 	CephadmPackage       string
+	Community            Community
 	Repository           Repository
 	RuntimeOS            RuntimeOS
+}
+
+// Community describes the upstream package source for the oss distribution.
+// It is unset for the redhat and ibm distributions.
+type Community struct {
+	Release string
+	Mirror  string
 }
 
 type Repository struct {
@@ -46,6 +54,20 @@ func Distribution(cluster v1alpha1.StorageCluster) string {
 	return cluster.Spec.Ceph.Distribution
 }
 
+// communitySource resolves the upstream package source for the oss
+// distribution, defaulting the release when the operator left it unset.
+func communitySource(cluster v1alpha1.StorageCluster) Community {
+	out := Community{Release: v1alpha1.StorageCephCommunityDefaultRelease}
+	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Community == nil {
+		return out
+	}
+	if release := cluster.Spec.Ceph.Community.Release; release != "" {
+		out.Release = release
+	}
+	out.Mirror = cluster.Spec.Ceph.Community.Mirror
+	return out
+}
+
 func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) Provider {
 	distribution := Distribution(cluster)
 	provider := Provider{
@@ -57,6 +79,8 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		},
 	}
 	switch distribution {
+	case v1alpha1.StorageCephDistributionOSS:
+		provider.Community = communitySource(cluster)
 	case v1alpha1.StorageCephDistributionRedHat:
 		provider.RequiresRHSM = true
 		provider.RequiresRegistry = true
@@ -100,6 +124,13 @@ func Vars(provider Provider) map[string]any {
 		"requiresLicense":      provider.RequiresLicense,
 		"prerequisitePackages": append([]string(nil), provider.PrerequisitePackages...),
 		"cephadmPackage":       provider.CephadmPackage,
+	}
+	if provider.Community.Release != "" {
+		community := map[string]any{"release": provider.Community.Release}
+		if provider.Community.Mirror != "" {
+			community["mirror"] = provider.Community.Mirror
+		}
+		out["community"] = community
 	}
 	if provider.Entitlement.Name != "" {
 		out["entitlement"] = map[string]any{

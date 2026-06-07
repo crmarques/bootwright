@@ -10,8 +10,15 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
-func StorageSeedHostName(clusterName string) string {
-	return "storage__" + clusterName
+// StorageSeedHostName is the inventory host name of the cephadm bootstrap seed
+// node. It is the seed node's regular per-node host name; the seed is not named
+// differently from the other storage nodes.
+func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
+	seedNode := ""
+	if cluster.Spec.Ceph != nil {
+		seedNode = cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode
+	}
+	return StorageNodeHostName(cluster.Metadata.Name, seedNode)
 }
 
 func StorageNodeHostName(clusterName, nodeName string) string {
@@ -55,9 +62,6 @@ func storageClusterHostSets(state v1alpha1.State) map[string]map[string]bool {
 }
 
 func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) string {
-	if cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode == nodeName {
-		return StorageSeedHostName(cluster.Metadata.Name)
-	}
 	return StorageNodeHostName(cluster.Metadata.Name, nodeName)
 }
 
@@ -72,7 +76,7 @@ func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageClu
 	entry["bootwright_host_name"] = storageInventoryHostName(cluster, nodeName)
 	entry["bootwright_storage_cluster_name"] = cluster.Metadata.Name
 	entry["bootwright_storage_node_name"] = nodeName
-	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster.Metadata.Name)
+	entry["bootwright_storage_seed_host_name"] = StorageSeedHostName(cluster)
 	return entry
 }
 
@@ -85,7 +89,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 		asset := StorageAssets("{{ bootwright_rendered_dir }}", v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}})[0]
 		entry := map[string]any{
 			"name":                cluster.Metadata.Name,
-			"seedHost":            StorageSeedHostName(cluster.Metadata.Name),
+			"seedHost":            StorageSeedHostName(cluster),
 			"storageGroup":        StorageClusterGroupName(cluster.Metadata.Name),
 			"provider":            cephprovider.Vars(provider),
 			"remoteWorkDir":       "/tmp/bootwright-storage-" + cluster.Metadata.Name,

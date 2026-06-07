@@ -7,6 +7,11 @@ spec:
 
   ceph:
     distribution: oss
+    community:
+      # Optional. Bootwright configures the upstream community Ceph repo with
+      # cephadm; release defaults to the latest stable when omitted. Set
+      # community.mirror to a download.ceph.com mirror for disconnected sites.
+      release: squid
     cephadm:
       bootstrap:
         seedNode: ceph-0

@@ -210,6 +210,11 @@ const (
 	StorageCephDistributionRedHat = "redhat"
 	StorageCephDistributionIBM    = "ibm"
 
+	// StorageCephCommunityDefaultRelease is the upstream Ceph release Bootwright
+	// pins for the community (oss) distribution when spec.ceph.community.release
+	// is unset. cephadm maps it to the matching package repo and container image.
+	StorageCephCommunityDefaultRelease = "squid"
+
 	StorageCephRoleMON     = "mon"
 	StorageCephRoleMGR     = "mgr"
 	StorageCephRoleOSD     = "osd"

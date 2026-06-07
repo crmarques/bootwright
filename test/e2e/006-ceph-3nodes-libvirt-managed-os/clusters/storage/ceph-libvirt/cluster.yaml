@@ -9,6 +9,11 @@ spec:
 
   ceph:
     distribution: oss
+    community:
+      # Bootwright configures the upstream community Ceph repo on each node with
+      # cephadm. Pin the release here; omit for the latest stable default. Set
+      # community.mirror to point at an internal mirror of download.ceph.com.
+      release: squid
     cephadm:
       addressRef:
         name: ssh

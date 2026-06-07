@@ -82,9 +82,12 @@ prepares every declared storage node, runs cephadm there, and applies generated
 core services, storage operations, late RGW/MDS services, and Data Foundation
 credential operations from the rendered storage tree. The managed Ceph
 declaration selects `spec.ceph.distribution`. Upstream/community installs use
-`distribution: oss`; Red Hat and IBM installs reference named
-`Environment.spec.entitlements[]` entries for RHSM, registry entitlement, and
-license material. Secret bytes never appear in desired state. For imported storage,
+`distribution: oss`, where Bootwright configures the upstream community Ceph
+repository on each node with cephadm; `spec.ceph.community.release` pins the
+release (latest stable by default) and `spec.ceph.community.mirror` points at a
+download.ceph.com mirror for disconnected sites. Red Hat and IBM installs
+reference named `Environment.spec.entitlements[]` entries for RHSM, registry
+entitlement, and license material. Secret bytes never appear in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
 `storage-export-attachment` effect, bindings provide `exportRef`, and

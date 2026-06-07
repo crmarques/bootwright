@@ -3,6 +3,7 @@ package desiredstate
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -83,6 +84,7 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
 	errs = append(errs, validateStorageCephDistribution(prefix, cluster, env)...)
+	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines)...)
 	for i, cidr := range ceph.Networks.PublicCIDRs {
@@ -136,6 +138,41 @@ func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Env
 		errs = append(errs, fmt.Sprintf("%s.entitlementRef.name %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
 	}
 	return errs
+}
+
+func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster) []string {
+	community := cluster.Spec.Ceph.Community
+	if community == nil {
+		return nil
+	}
+	if storageCephDistribution(cluster) != v1alpha1.StorageCephDistributionOSS {
+		return []string{prefix + " must be empty unless distribution=oss"}
+	}
+	var errs []string
+	if release := community.Release; release != "" && !isStorageCephCommunityRelease(release) {
+		errs = append(errs, fmt.Sprintf("%s.release %q must be an upstream Ceph release name such as squid, reef, or quincy", prefix, release))
+	}
+	if mirror := community.Mirror; mirror != "" && !isHTTPURL(mirror) {
+		errs = append(errs, fmt.Sprintf("%s.mirror %q must be an http or https URL", prefix, mirror))
+	}
+	return errs
+}
+
+func isStorageCephCommunityRelease(release string) bool {
+	for _, r := range release {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func isHTTPURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile) []string {

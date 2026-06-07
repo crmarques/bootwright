@@ -1045,7 +1045,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	if task.Playbook != "bootwright.core.task_storage_cluster_apply" {
 		t.Fatalf("storage playbook = %q", task.Playbook)
 	}
-	if task.Limit != render.StorageSeedHostName("ceph") {
+	if task.Limit != render.StorageNodeHostName("ceph", "ceph-0") {
 		t.Fatalf("storage limit = %q", task.Limit)
 	}
 	if !reflect.DeepEqual(task.ExtraVarPairs, []string{"bootwright_task_storage_cluster_name=ceph", "bootwright_task_storage_skip_prereqs=true"}) {

@@ -444,7 +444,7 @@ func TestStorageInventoryUsesManagedCephHosts(t *testing.T) {
 	inv := render.Inventory(state, secretsDir)
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
-	seedName := render.StorageSeedHostName("ceph-storage")
+	seedName := render.StorageSeedHostName(state.StorageClusters[0])
 	seed := hosts[seedName].(map[string]any)
 	if got := seed["ansible_host"]; got != "192.168.141.30" {
 		t.Fatalf("storage seed ansible_host = %v, want 192.168.141.30", got)

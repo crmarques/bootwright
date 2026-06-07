@@ -6,7 +6,25 @@
       - not (bootwright_ceph_provider.requiresLicense | default(false) | bool)
     fail_msg: "Ceph distribution oss must not require Red Hat or IBM entitlement material."
 
-- name: Prepare community Ceph package repositories
-  ansible.builtin.debug:
-    msg: "Using OS/community repositories for cephadm and Ceph packages."
+- name: Resolve community Ceph package source
+  ansible.builtin.set_fact:
+    bootwright_ceph_community_release: "{{ bootwright_ceph_provider.community.release | default('squid') }}"
+    bootwright_ceph_community_mirror: "{{ (bootwright_ceph_provider.community.mirror | default(bootwright_ceph_community_default_mirror, true)) | regex_replace('/$', '') }}"
   changed_when: false
+
+- name: Download cephadm utility to configure community Ceph repository
+  ansible.builtin.get_url:
+    url: "{{ bootwright_ceph_community_mirror }}/rpm-{{ bootwright_ceph_community_release }}/el{{ ansible_distribution_major_version }}/noarch/cephadm"
+    dest: "{{ bootwright_ceph_community_bootstrap_cephadm }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure community Ceph package repository through cephadm
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [bootwright_ceph_community_bootstrap_cephadm, 'add-repo', '--release', bootwright_ceph_community_release]
+        + (['--mirror', bootwright_ceph_community_mirror] if bootwright_ceph_community_mirror != bootwright_ceph_community_default_mirror else [])
+      }}
+    creates: "{{ bootwright_ceph_community_repo_file }}"

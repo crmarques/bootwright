@@ -19,6 +19,41 @@ func TestSelectDefaultsToOSSProvider(t *testing.T) {
 	if provider.RequiresRHSM || provider.RequiresRegistry || provider.RequiresLicense {
 		t.Fatalf("OSS provider requires vendor material: %#v", provider)
 	}
+	if provider.Community.Release != v1alpha1.StorageCephCommunityDefaultRelease {
+		t.Fatalf("community release = %q, want default %q", provider.Community.Release, v1alpha1.StorageCephCommunityDefaultRelease)
+	}
+	community, ok := Vars(provider)["community"].(map[string]any)
+	if !ok {
+		t.Fatalf("oss provider vars missing community map: %#v", Vars(provider))
+	}
+	if community["release"] != v1alpha1.StorageCephCommunityDefaultRelease {
+		t.Fatalf("community vars release = %v, want default", community["release"])
+	}
+	if _, hasMirror := community["mirror"]; hasMirror {
+		t.Fatalf("community vars must omit mirror when unset: %#v", community)
+	}
+}
+
+func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Spec: v1alpha1.StorageClusterSpec{
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Distribution: v1alpha1.StorageCephDistributionOSS,
+				Community: &v1alpha1.StorageCephCommunitySpec{
+					Release: "reef",
+					Mirror:  "https://mirror.example.test/ceph",
+				},
+			},
+		},
+	}
+	provider := Select(cluster, nil, "/context/secrets")
+	if provider.Community.Release != "reef" || provider.Community.Mirror != "https://mirror.example.test/ceph" {
+		t.Fatalf("community override not projected: %#v", provider.Community)
+	}
+	community := Vars(provider)["community"].(map[string]any)
+	if community["release"] != "reef" || community["mirror"] != "https://mirror.example.test/ceph" {
+		t.Fatalf("community vars = %#v", community)
+	}
 }
 
 func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
@@ -51,6 +86,9 @@ func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 	rhsm := vars["rhsm"].(map[string]any)
 	if rhsm["organizationPath"] != "/context/secrets/redhat-org" || rhsm["activationKeyPath"] != "/context/secrets/redhat-key" {
 		t.Fatalf("rhsm vars = %#v", rhsm)
+	}
+	if _, ok := vars["community"]; ok {
+		t.Fatalf("redhat provider must not project community vars: %#v", vars["community"])
 	}
 }
 
