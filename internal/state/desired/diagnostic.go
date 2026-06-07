@@ -118,9 +118,10 @@ func diagnosticFromDecodeMessage(message string) (Diagnostic, bool) {
 			remediation = known
 		}
 		return Diagnostic{
-			Object:      "ContainerCluster",
-			Field:       fieldPath,
-			Value:       field,
+			Object: "ContainerCluster",
+			Field:  fieldPath,
+			// Value stays empty: a rejected unknown field has no offending
+			// value, and Value must consistently mean "the invalid value".
 			Rule:        fieldPath + " is not accepted on ContainerCluster install intent",
 			Remediation: remediation,
 			Message:     message,

@@ -12,8 +12,8 @@ func TestDiagnosticsMapRemovedInstallField(t *testing.T) {
 		t.Fatalf("Diagnostics returned %d entries, want 1", len(diagnostics))
 	}
 	got := diagnostics[0]
-	if got.Object != "ContainerCluster" || got.Field != "spec.install.baseDomain" || got.Value != "baseDomain" {
-		t.Fatalf("diagnostic owner = (%q, %q, %q), want ContainerCluster spec.install.baseDomain baseDomain", got.Object, got.Field, got.Value)
+	if got.Object != "ContainerCluster" || got.Field != "spec.install.baseDomain" || got.Value != "" {
+		t.Fatalf("diagnostic owner = (%q, %q, %q), want ContainerCluster spec.install.baseDomain with empty value", got.Object, got.Field, got.Value)
 	}
 	if got.Rule != "spec.install.baseDomain is not accepted on ContainerCluster install intent" {
 		t.Fatalf("rule = %q", got.Rule)
