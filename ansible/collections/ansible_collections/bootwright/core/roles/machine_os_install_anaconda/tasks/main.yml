@@ -249,6 +249,7 @@
           path={{ bootwright_os_source_iso_effective }}
           url={{ bootwright_component.osInstall.image.url | default('') }}
           checksum={{ bootwright_component.osInstall.image.checksum | default('') | regex_replace('^sha256:', '') }}
+          kernelArgs={{ bootwright_component.osInstall.installer.kernelArgs | default([]) | join(' ') }}
           exists={{ bootwright_os_source_stat.stat.exists | default(false) }}
           size={{ bootwright_os_source_stat.stat.size | default('') }}
           mtime={{ bootwright_os_source_stat.stat.mtime | default('') }}
@@ -351,7 +352,27 @@
         TMPDIR: "{{ bootwright_os_install_tmpdir }}"
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
-      when: bootwright_os_install_iso_rebuild_needed | bool
+      when:
+        - bootwright_os_install_iso_rebuild_needed | bool
+        - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
+
+    - name: Build managed OS install ISO with kernel command line
+      ansible.builtin.command:
+        argv:
+          - mkksiso
+          - --ks
+          - "{{ bootwright_os_kickstart_path }}"
+          - --cmdline
+          - "{{ bootwright_component.osInstall.installer.kernelArgs | join(' ') }}"
+          - "{{ bootwright_os_source_iso_effective }}"
+          - "{{ bootwright_os_install_iso }}"
+      environment:
+        TMPDIR: "{{ bootwright_os_install_tmpdir }}"
+        TMP: "{{ bootwright_os_install_tmpdir }}"
+        TEMP: "{{ bootwright_os_install_tmpdir }}"
+      when:
+        - bootwright_os_install_iso_rebuild_needed | bool
+        - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0
 
     - name: Set managed OS virtual media permissions
       ansible.builtin.file:

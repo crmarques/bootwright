@@ -649,6 +649,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	resetTmpIdx := findAnsibleTask(t, tasks, "Reset managed OS install ISO temp directory before rebuild")
 	createTmpIdx := findAnsibleTask(t, tasks, "Create managed OS install ISO temp directory")
 	buildISOIdx := findAnsibleTask(t, tasks, "Build managed OS install ISO")
+	buildISOWithCmdlineIdx := findAnsibleTask(t, tasks, "Build managed OS install ISO with kernel command line")
 	if !(copyIdx < sourceStatIdx && downloadIdx < sourceStatIdx && sourceStatIdx < sourceIdentityIdx && sourceIdentityIdx < checksumIdx && sourceIdentityIdx < createMediaDirIdx && createMediaDirIdx < removeLegacyIdx && removeLegacyIdx < statISOIdx) {
 		t.Fatalf("Anaconda role must resolve source metadata before checksum and rebuild decisions")
 	}
@@ -664,7 +665,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 		t.Fatalf("%s is not a copy task", tasks[sourceIdentityIdx]["name"])
 	}
 	sourceIdentityContent := fmt.Sprint(sourceIdentity["content"])
-	for _, want := range []string{"bootwright_os_source_iso_effective", "bootwright_os_source_stat.stat.size", "bootwright_os_source_stat.stat.mtime"} {
+	for _, want := range []string{"bootwright_os_source_iso_effective", "bootwright_os_source_stat.stat.size", "bootwright_os_source_stat.stat.mtime", "kernelArgs"} {
 		if !strings.Contains(sourceIdentityContent, want) {
 			t.Fatalf("%s source identity missing %q: %s", tasks[sourceIdentityIdx]["name"], want, sourceIdentityContent)
 		}
@@ -697,7 +698,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if statISO["path"] != "{{ bootwright_os_install_iso }}" || statISO["get_checksum"] != false {
 		t.Fatalf("%s must stat install.iso without checksumming it, got %v", tasks[statISOIdx]["name"], statISO)
 	}
-	if !(statISOIdx < rebuildStateIdx && rebuildStateIdx < removeStaleIdx && removeStaleIdx < resetTmpIdx && resetTmpIdx < createTmpIdx && createTmpIdx < buildISOIdx) {
+	if !(statISOIdx < rebuildStateIdx && rebuildStateIdx < removeStaleIdx && removeStaleIdx < resetTmpIdx && resetTmpIdx < createTmpIdx && createTmpIdx < buildISOIdx && buildISOIdx < buildISOWithCmdlineIdx) {
 		t.Fatalf("Anaconda role must remove stale install.iso and reset temp state before mkksiso")
 	}
 	rebuildFact, ok := tasks[rebuildStateIdx]["ansible.builtin.set_fact"].(map[string]any)
@@ -729,8 +730,8 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if got := tasks[removeStaleIdx]["when"]; !stringListContains(got, "bootwright_os_install_iso_rebuild_needed | bool") || !stringListContains(got, "bootwright_os_install_iso_stat.stat.exists | default(false)") {
 		t.Fatalf("%s must only remove an existing ISO when rebuild is needed, got when=%v", tasks[removeStaleIdx]["name"], got)
 	}
-	if got := tasks[buildISOIdx]["when"]; got != "bootwright_os_install_iso_rebuild_needed | bool" {
-		t.Fatalf("%s must use resolved rebuild state, got when=%v", tasks[buildISOIdx]["name"], got)
+	if got := tasks[buildISOIdx]["when"]; !stringListContains(got, "bootwright_os_install_iso_rebuild_needed | bool") || !stringListContains(got, "(bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0") {
+		t.Fatalf("%s must run only when rebuild is needed and kernel args are empty, got when=%v", tasks[buildISOIdx]["name"], got)
 	}
 	buildCommand, ok := tasks[buildISOIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -739,6 +740,9 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if got := fmt.Sprint(buildCommand["argv"]); !strings.Contains(got, "bootwright_os_source_iso_effective") {
 		t.Fatalf("%s must use the effective source ISO, got argv=%v", tasks[buildISOIdx]["name"], buildCommand["argv"])
 	}
+	if stringListContains(buildCommand["argv"], "--cmdline") {
+		t.Fatalf("%s must not pass --cmdline for empty kernel args, got argv=%v", tasks[buildISOIdx]["name"], buildCommand["argv"])
+	}
 	buildEnv, ok := tasks[buildISOIdx]["environment"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s must set mkksiso temp environment", tasks[buildISOIdx]["name"])
@@ -746,6 +750,27 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
 		if got := buildEnv[key]; got != "{{ bootwright_os_install_tmpdir }}" {
 			t.Fatalf("%s environment %s got %v, want bootwright_os_install_tmpdir", tasks[buildISOIdx]["name"], key, got)
+		}
+	}
+	if got := tasks[buildISOWithCmdlineIdx]["when"]; !stringListContains(got, "bootwright_os_install_iso_rebuild_needed | bool") || !stringListContains(got, "(bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0") {
+		t.Fatalf("%s must run only when rebuild is needed and kernel args are present, got when=%v", tasks[buildISOWithCmdlineIdx]["name"], got)
+	}
+	buildWithCmdlineCommand, ok := tasks[buildISOWithCmdlineIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not a command task", tasks[buildISOWithCmdlineIdx]["name"])
+	}
+	for _, want := range []string{"mkksiso", "--ks", "--cmdline", "bootwright_component.osInstall.installer.kernelArgs | join(' ')", "bootwright_os_source_iso_effective", "bootwright_os_install_iso"} {
+		if !strings.Contains(fmt.Sprint(buildWithCmdlineCommand["argv"]), want) {
+			t.Fatalf("%s argv missing %q: %v", tasks[buildISOWithCmdlineIdx]["name"], want, buildWithCmdlineCommand["argv"])
+		}
+	}
+	buildWithCmdlineEnv, ok := tasks[buildISOWithCmdlineIdx]["environment"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must set mkksiso temp environment", tasks[buildISOWithCmdlineIdx]["name"])
+	}
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if got := buildWithCmdlineEnv[key]; got != "{{ bootwright_os_install_tmpdir }}" {
+			t.Fatalf("%s environment %s got %v, want bootwright_os_install_tmpdir", tasks[buildISOWithCmdlineIdx]["name"], key, got)
 		}
 	}
 	if findAnsibleTaskIndex(tasks, "Stage managed OS install ISO for virtual media") >= 0 {
@@ -768,14 +793,14 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	prepareMediaIdx := findAnsibleTask(t, tasks, "Prepare provider virtual media before managed OS boot")
 	bootMediaIdx := findAnsibleTask(t, tasks, "Boot managed OS installer through Redfish virtual media")
 	persistentCleanupIdx := findAnsibleTask(t, tasks, "Clean managed OS persistent virtual media after installer boot")
-	if !(buildISOIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx && bootMediaIdx < persistentCleanupIdx) {
+	if !(buildISOWithCmdlineIdx < stagePermsIdx && stagePermsIdx < restoreLabelsIdx && restoreLabelsIdx < resolveBootComponentIdx && resolveBootComponentIdx < prepareMediaIdx && prepareMediaIdx < bootMediaIdx && bootMediaIdx < persistentCleanupIdx) {
 		t.Fatalf("Anaconda role must resolve tokenized boot component before media preparation, boot, and persistent cleanup")
 	}
 	stagePerms, ok := tasks[stagePermsIdx]["ansible.builtin.file"].(map[string]any)
 	if !ok {
 		t.Fatalf("%s is not a file task", tasks[stagePermsIdx]["name"])
 	}
-	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "0644" {
+	if stagePerms["path"] != "{{ bootwright_os_install_iso }}" || stagePerms["state"] != "file" || stagePerms["mode"] != "{{ '0600' if (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) else '0644' }}" {
 		t.Fatalf("%s must set permissions on the published install ISO, got %v", tasks[stagePermsIdx]["name"], stagePerms)
 	}
 	restoreLabels, ok := tasks[restoreLabelsIdx]["ansible.builtin.command"].(map[string]any)
@@ -836,9 +861,14 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		"bootloader --location=mbr --boot-drive={{ storage.rootDisk }}",
 		"part swap --recommended --ondisk={{ storage.rootDisk }}",
 		"part / --fstype=xfs --size=10240 --grow --ondisk={{ storage.rootDisk }}",
+		"selinux --{{ selinux.mode }}",
+		"firewall --{{ 'enabled' if firewall.enabled else 'disabled' }}",
+		"services{% if disabled_services | length > 0 %} --disabled={{ disabled_services | join(',') }}{% endif %}{% if enabled_services | length > 0 %} --enabled={{ enabled_services | join(',') }}{% endif %}",
 		"{% set ssh_key = '' %}",
 		"{% if (ks.authorizeMachineSSHKey | default(false)) and (ks.sshPublicKeyPath | default('') | length > 0) %}",
 		"{% set ssh_key = lookup('ansible.builtin.file', ks.sshPublicKeyPath) %}",
+		"%packages{% if packages.excludeDocs | default(false) %} --excludedocs{% endif %}{% if not (packages.installWeakDeps | default(true)) %} --exclude-weakdeps{% endif %}{% if packages.languages | default([]) | length > 0 %} --inst-langs={{ packages.languages | join(',') }}{% endif %}",
+		"@^{{ packages.environment | default('minimal') }}-environment",
 		"{% set marker = bootwright_component.osInstall.marker | default({}) %}",
 		"cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'",
 		"{{ marker | to_nice_json }}",
@@ -846,6 +876,9 @@ func TestManagedOSKickstartTemplateKeepsSSHKeyConditionalParseable(t *testing.T)
 		if !strings.Contains(body, want) {
 			t.Fatalf("Kickstart template missing %q", want)
 		}
+	}
+	if strings.Contains(body, "systemctl enable sshd") {
+		t.Fatalf("Kickstart template must not force-enable sshd outside customizations.services.enabled")
 	}
 	for _, forbidden := range []string{"reboot --eject", "poweroff"} {
 		if strings.Contains(body, forbidden) {

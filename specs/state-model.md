@@ -20,7 +20,8 @@ shapes must fail strict decode or validation instead of being translated.
   checksum, and trust references.
 - `MachineInstallProfile` owns Bootwright-managed OS install behavior:
   installer type, image reference, repositories, host naming, SSH
-  authorization, storage, packages, and services.
+  authorization, storage, packages, services, SELinux, firewall, and FIPS
+  install-time customizations.
 - `NetworkConfig` owns reusable `machineNetwork[]`, name-resolution service
   selections, and NMState templates rendered into installer inputs.
 - `InfraProvider` owns substrate capabilities, machine profiles, provider
@@ -145,7 +146,7 @@ Rules:
   and BMC access under `spec.hardware.management.bmc`.
 - Libvirt, vSphere, and KubeVirt install machines select VM shape through
   `spec.substrate.profileRef`.
-- `spec.os.profileRef` selects a `MachineInstallProfile` when Bootwright
+- `spec.os.installProfileRef` selects a `MachineInstallProfile` when Bootwright
   installs a managed OS.
 - `spec.os.install.rootDeviceHints` is the Machine-owned root-device hint
   location.
@@ -249,10 +250,35 @@ spec:
         source: machineRootDeviceHints
       wipe: true
     packages:
-      - cephadm
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      languages:
+        - en_US.UTF-8
+      install:
+        - cephadm
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
     services:
       enabled:
         - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - avahi-daemon
+        - cockpit.socket
+        - cups
+        - kdump
+        - postfix
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true
+      fips:
+        enabled: true
 ```
 
 Rules:
@@ -265,8 +291,30 @@ Rules:
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.
+- `customizations.packages.environment` currently accepts `minimal`, which
+  renders the supported minimal Anaconda package environment.
+- `customizations.packages.install[]` is the explicit package allow-list
+  rendered into Kickstart. Supported Ceph-node RHEL install profiles keep this
+  list to `cephadm`, `podman`, `lvm2`, `chrony`, and `firewalld`.
+- `customizations.packages.excludeDocs: true` renders Kickstart package
+  document exclusion.
+- `customizations.packages.installWeakDeps: false` renders weak-dependency
+  exclusion.
+- `customizations.packages.languages[]` renders package language selection.
+- `customizations.services.enabled[]` and
+  `customizations.services.disabled[]` render Kickstart service state. A
+  machine that references a managed OS install profile requires `sshd` in the
+  enabled list so Bootwright can reconnect after installation.
+- `customizations.security.selinux.mode` accepts `enforcing`, `permissive`, or
+  `disabled`.
+- `customizations.security.firewall.enabled` renders Kickstart firewall state.
+  When true, the profile must install and enable `firewalld`.
+- `customizations.security.fips.enabled: true` is supported only for RHEL
+  Anaconda install profiles. It renders `fips=1` into the installer kernel
+  command line through `mkksiso --cmdline`; changing this field on an installed
+  machine is reinstall-only.
 - A `Machine` with `os.provided: false` and managed OS install must set
-  `spec.os.profileRef.name`.
+  `spec.os.installProfileRef.name`.
 
 ## InfraProvider
 

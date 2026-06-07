@@ -17,7 +17,7 @@ spec:
       rootDeviceHints:
         deviceName: /dev/vda
     provided: false
-    profileRef:
+    installProfileRef:
       name: rhel-9-ceph-node
 
   network:

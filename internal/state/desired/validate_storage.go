@@ -183,15 +183,15 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 	var errs []string
 	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 		machine, ok := machines[node.MachineRef.Name]
-		if !ok || machine.Spec.OS.ProfileRef.Name == "" {
+		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
 			continue
 		}
-		profile, ok := installProfiles[machine.Spec.OS.ProfileRef.Name]
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
 		if !ok {
 			continue
 		}
 		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Name, profile.Metadata.Name)
-		if strings.ToLower(profile.Spec.OS.Family) != "rhel" {
+		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
 			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
 			continue
 		}

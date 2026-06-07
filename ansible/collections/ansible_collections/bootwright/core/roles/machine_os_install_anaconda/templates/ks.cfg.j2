@@ -17,8 +17,17 @@ lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
 rootpw --lock
-
 {% set ks = bootwright_component.osInstall.kickstart %}
+{% set security = ks.security | default({}) %}
+{% set selinux = security.selinux | default({}) %}
+{% if selinux.mode | default('') | length > 0 %}
+selinux --{{ selinux.mode }}
+{% endif %}
+{% set firewall = security.firewall | default({}) %}
+{% if firewall.enabled is defined %}
+firewall --{{ 'enabled' if firewall.enabled else 'disabled' }}
+{% endif %}
+
 {% set net = ks.network | default({}) %}
 {% if (net.bootproto | default('dhcp')) == 'static' %}
 network --device={{ net.device | default('link') }} --bootproto=static --ip={{ net.ip }}{% if net.netmask | default('') | length > 0 %} --netmask={{ net.netmask }}{% endif %}{% if net.gateway | default('') | length > 0 %} --gateway={{ net.gateway }}{% endif %}{% if net.dnsServers | default([]) | length > 0 %} --nameserver={{ net.dnsServers | join(',') }}{% endif %} --activate --onboot=yes --hostname={{ ks.hostname }}
@@ -45,8 +54,11 @@ clearpart --all --initlabel
 autopart --type=lvm --fstype=xfs
 {% endif %}
 
-{% if ks.services | default([]) | length > 0 %}
-services --enabled={{ ks.services | join(',') }}
+{% set services = ks.services | default({}) %}
+{% set enabled_services = services.enabled | default([]) %}
+{% set disabled_services = services.disabled | default([]) %}
+{% if enabled_services | length > 0 or disabled_services | length > 0 %}
+services{% if disabled_services | length > 0 %} --disabled={{ disabled_services | join(',') }}{% endif %}{% if enabled_services | length > 0 %} --enabled={{ enabled_services | join(',') }}{% endif %}
 {% endif %}
 
 {% set ssh_key = '' %}
@@ -60,9 +72,10 @@ user --name={{ ks.sshUser }} --groups=wheel --lock
 sshkey --username={{ ks.sshUser | default('root') }} "{{ ssh_key | trim }}"
 {% endif %}
 
-%packages
-@^minimal-environment
-{% for package in ks.packages | default([]) %}
+{% set packages = ks.packages | default({}) %}
+%packages{% if packages.excludeDocs | default(false) %} --excludedocs{% endif %}{% if not (packages.installWeakDeps | default(true)) %} --exclude-weakdeps{% endif %}{% if packages.languages | default([]) | length > 0 %} --inst-langs={{ packages.languages | join(',') }}{% endif %}
+@^{{ packages.environment | default('minimal') }}-environment
+{% for package in packages.install | default([]) %}
 {{ package }}
 {% endfor %}
 %end
@@ -83,5 +96,4 @@ cat > {{ marker.path }} <<'BOOTWRIGHT_INSTALL_MARKER'
 BOOTWRIGHT_INSTALL_MARKER
 chmod 0644 {{ marker.path }}
 {% endif %}
-systemctl enable sshd
 %end

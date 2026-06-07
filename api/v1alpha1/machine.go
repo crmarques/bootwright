@@ -61,9 +61,9 @@ type RootDeviceHints struct {
 }
 
 type MachineOSSpec struct {
-	Provided   *bool                `yaml:"provided" json:"provided"`
-	ProfileRef LocalObjectReference `yaml:"profileRef,omitempty" json:"profileRef,omitempty"`
-	Install    MachineOSInstallSpec `yaml:"install,omitempty" json:"install,omitempty"`
+	Provided          *bool                `yaml:"provided" json:"provided"`
+	InstallProfileRef LocalObjectReference `yaml:"installProfileRef,omitempty" json:"installProfileRef,omitempty"`
+	Install           MachineOSInstallSpec `yaml:"install,omitempty" json:"install,omitempty"`
 }
 
 type MachineOSInstallSpec struct {
@@ -178,8 +178,9 @@ type MachineInstallCustomizations struct {
 	Hostname MachineInstallHostname `yaml:"hostname,omitempty" json:"hostname,omitempty"`
 	SSH      MachineInstallSSH      `yaml:"ssh,omitempty" json:"ssh,omitempty"`
 	Storage  MachineInstallStorage  `yaml:"storage,omitempty" json:"storage,omitempty"`
-	Packages []string               `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Packages MachineInstallPackages `yaml:"packages,omitempty" json:"packages,omitempty"`
 	Services MachineInstallServices `yaml:"services,omitempty" json:"services,omitempty"`
+	Security MachineInstallSecurity `yaml:"security,omitempty" json:"security,omitempty"`
 }
 
 type MachineInstallHostname struct {
@@ -200,8 +201,35 @@ type MachineInstallRootDevice struct {
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
+type MachineInstallPackages struct {
+	Environment     string   `yaml:"environment,omitempty" json:"environment,omitempty"`
+	Install         []string `yaml:"install,omitempty" json:"install,omitempty"`
+	ExcludeDocs     bool     `yaml:"excludeDocs,omitempty" json:"excludeDocs,omitempty"`
+	InstallWeakDeps *bool    `yaml:"installWeakDeps,omitempty" json:"installWeakDeps,omitempty"`
+	Languages       []string `yaml:"languages,omitempty" json:"languages,omitempty"`
+}
+
 type MachineInstallServices struct {
-	Enabled []string `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Enabled  []string `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Disabled []string `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+}
+
+type MachineInstallSecurity struct {
+	SELinux  MachineInstallSELinux  `yaml:"selinux,omitempty" json:"selinux,omitempty"`
+	Firewall MachineInstallFirewall `yaml:"firewall,omitempty" json:"firewall,omitempty"`
+	FIPS     MachineInstallFIPS     `yaml:"fips,omitempty" json:"fips,omitempty"`
+}
+
+type MachineInstallSELinux struct {
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+}
+
+type MachineInstallFirewall struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+type MachineInstallFIPS struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 func MachineAddressByName(machine Machine, name string) (string, bool) {
@@ -230,7 +258,7 @@ func MachineRequiresSubstrate(machine Machine) bool {
 }
 
 func MachineInstallsOS(machine Machine) bool {
-	return MachineRequiresSubstrate(machine) && machine.Spec.OS.ProfileRef.Name != ""
+	return MachineRequiresSubstrate(machine) && machine.Spec.OS.InstallProfileRef.Name != ""
 }
 
 func MachineHasCapability(machine Machine, want string) bool {

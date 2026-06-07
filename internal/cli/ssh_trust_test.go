@@ -238,8 +238,8 @@ func hostTrustManagedOSTestState() v1alpha1.State {
 		Spec: v1alpha1.MachineSpec{
 			Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
 			OS: v1alpha1.MachineOSSpec{
-				Provided:   v1alpha1.BoolPtr(false),
-				ProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph-node"},
+				Provided:          v1alpha1.BoolPtr(false),
+				InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel-9-ceph-node"},
 			},
 			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.168.134.20"}},
 			Access: v1alpha1.MachineAccess{

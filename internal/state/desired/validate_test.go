@@ -51,6 +51,13 @@ func TestCanonicalExamples(t *testing.T) {
 	}
 }
 
+func TestCephRHELMinimalFIPSReviewExample(t *testing.T) {
+	_, err := LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "_wip", "ceph-rhel-minimal-fips-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+}
+
 func TestHostSSHKnownHostsRefOptionalAndExplicitCompatible(t *testing.T) {
 	t.Run("omitted", func(t *testing.T) {
 		dir := t.TempDir()
@@ -779,6 +786,21 @@ func TestSchemaCompatibilityValidationRejectsKnownIncompatibleFields(t *testing.
 			wantSubstring: "InfraProvider/rack spec.networkAttachments[cluster-net].libvirt must be empty when InfraProvider/rack spec.type=baremetal",
 		},
 		{
+			name: "machine-os-profile-ref",
+			mutate: func(files map[string]string) {
+				files["managed-machine.yaml"] = `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata: { name: managed-os }
+spec:
+  os:
+    provided: false
+    profileRef:
+      name: rhel
+`
+			},
+			wantSubstring: "field profileRef not found",
+		},
+		{
 			name: "cluster-artifact-access-provider-ref",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = strings.Replace(files["cluster.yaml"], "    artifactAccess:\n", "    artifactAccess:\n      providerRef:\n        name: rack\n", 1)
@@ -827,32 +849,118 @@ spec:
 		{
 			name: "machine-install-hostname-source",
 			mutate: func(files map[string]string) {
-				files["machine-install.yaml"] = `apiVersion: bootwright.io/v1alpha1
-kind: MachineImage
-metadata: { name: rhel-iso }
-spec:
-  type: iso
-  url: local-media:rhel-9.4.iso
----
-apiVersion: bootwright.io/v1alpha1
-kind: MachineInstallProfile
-metadata: { name: rhel }
-spec:
-  os:
-    family: rhel
-    version: "9.4"
-    architecture: x86_64
-  installer:
-    type: anaconda
-    anaconda:
-      imageRef:
-        name: rhel-iso
-  customizations:
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
     hostname:
       source: static
-`
+`)
 			},
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.hostname.source "static" must be "machineName"`,
+		},
+		{
+			name: "machine-install-packages-object-environment",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    packages:
+      environment: standard
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.packages.environment "standard" must be "minimal"`,
+		},
+		{
+			name: "machine-install-packages-list-rejected",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    packages:
+      - cephadm
+`)
+			},
+			wantSubstring: `cannot unmarshal !!seq into v1alpha1.MachineInstallPackages`,
+		},
+		{
+			name: "machine-install-package-name-whitespace",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    packages:
+      install:
+        - " cephadm"
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.packages.install[0] " cephadm" must not contain leading or trailing whitespace`,
+		},
+		{
+			name: "machine-install-service-disabled-conflict",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    services:
+      enabled:
+        - sshd
+      disabled:
+        - sshd
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.services.disabled[0] "sshd" must not also be enabled`,
+		},
+		{
+			name: "machine-install-selinux-mode",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    security:
+      selinux:
+        mode: warn
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.security.selinux.mode "warn" must be one of: enforcing, permissive, disabled`,
+		},
+		{
+			name: "machine-install-firewall-requires-package",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    packages:
+      install:
+        - cephadm
+    services:
+      enabled:
+        - sshd
+        - firewalld
+    security:
+      firewall:
+        enabled: true
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.security.firewall.enabled requires customizations.packages.install to include firewalld`,
+		},
+		{
+			name: "machine-install-fips-requires-rhel",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("fedora", `
+    services:
+      enabled:
+        - sshd
+    security:
+      fips:
+        enabled: true
+`)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.customizations.security.fips.enabled is only supported for RHEL install profiles`,
+		},
+		{
+			name: "machine-os-install-profile-ref-missing",
+			mutate: func(files map[string]string) {
+				files["managed-machine.yaml"] = managedOSMachineYAML("missing")
+			},
+			wantSubstring: `Machine/managed-os spec.os.installProfileRef.name "missing" does not match any MachineInstallProfile`,
+		},
+		{
+			name: "machine-os-install-profile-ref-requires-sshd",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = machineInstallProfileYAML("rhel", `
+    services:
+      enabled:
+        - chronyd
+`)
+				files["managed-machine.yaml"] = managedOSMachineYAML("rhel")
+			},
+			wantSubstring: `Machine/managed-os spec.os.installProfileRef.name "rhel" references MachineInstallProfile/rhel without customizations.services.enabled containing sshd`,
 		},
 	}
 	for _, tc := range cases {
@@ -2860,6 +2968,64 @@ func baselineFilesWithNTPComponent() map[string]string {
 	files := newBaselineFiles()
 	files["infra-component.yaml"] = files["infra-component.yaml"] + "---\n" + newNTPComponentYAML
 	return files
+}
+
+func machineInstallProfileYAML(osFamily, customizations string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata: { name: rhel-iso }
+spec:
+  type: iso
+  url: local-media:rhel-9.4.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata: { name: rhel }
+spec:
+  os:
+    family: ` + osFamily + `
+    version: "9.4"
+    architecture: x86_64
+  installer:
+    type: anaconda
+    anaconda:
+      imageRef:
+        name: rhel-iso
+  customizations:
+` + customizations
+}
+
+func managedOSMachineYAML(profileName string) string {
+	return `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata: { name: managed-os }
+spec:
+  capabilities: [ceph-node]
+  substrate:
+    providerRef: { name: rack }
+  hardware:
+    nics:
+      - { name: primary, macAddress: 52:54:00:32:11:11 }
+    boot:
+      nicRef: { name: primary }
+    management:
+      bmc:
+        address: redfish-virtualmedia+http://10.0.0.2/redfish/v1/Systems/1
+        credentialsRef: { name: bmc-credentials }
+  os:
+    provided: false
+    installProfileRef: { name: ` + profileName + ` }
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+` + baselineMachineNetworkConfigYAML() + `
+  addresses:
+    - { name: ip, address: 192.168.132.20 }
+  access:
+    ssh:
+      keyRef: { name: bastion-host-ssh }
+      addressRef: { name: ip }
+`
 }
 
 func environmentYAMLWithNTPSources(sources string) string {

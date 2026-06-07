@@ -50,6 +50,7 @@ const (
 	MachineCapabilityRegistry         = "registry"
 	MachineCapabilityCephAdmin        = "ceph-admin"
 	MachineCapabilityCephNode         = "ceph-node"
+	MachineInstallOSFamilyRHEL        = "rhel"
 	MachineInstallProfileTypeAnaconda = "anaconda"
 	MachineImageTypeISO               = "iso"
 	MachineImageMediaTypeDVD          = "dvd"
@@ -58,6 +59,10 @@ const (
 	MachineImageInstallSourceTypeRHSM = "redhatCDN"
 	MachineInstallHostnameMachineName = "machineName"
 	MachineInstallRootDeviceMachine   = "machineRootDeviceHints"
+	MachineInstallPackageEnvMinimal   = "minimal"
+	MachineInstallSELinuxEnforcing    = "enforcing"
+	MachineInstallSELinuxPermissive   = "permissive"
+	MachineInstallSELinuxDisabled     = "disabled"
 
 	// Cluster install modes (ContainerCluster.spec.install.mode).
 	InstallModeConnected    = "connected"

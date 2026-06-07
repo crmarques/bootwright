@@ -1729,8 +1729,8 @@ func kubeVirtCephPlanningState(includeParent bool) v1alpha1.State {
 				ProfileRef:  v1alpha1.LocalObjectReference{Name: "sno"},
 			},
 			OS: v1alpha1.MachineOSSpec{
-				Provided:   v1alpha1.BoolPtr(false),
-				ProfileRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				Provided:          v1alpha1.BoolPtr(false),
+				InstallProfileRef: v1alpha1.LocalObjectReference{Name: "rhel"},
 			},
 			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "10.0.0.20"}},
 			Access: v1alpha1.MachineAccess{

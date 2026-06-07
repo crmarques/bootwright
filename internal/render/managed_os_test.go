@@ -2,6 +2,7 @@ package render
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -71,9 +72,41 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if len(repositories) != 0 {
 		t.Fatalf("installer.repositories = %v", repositories)
 	}
+	if _, ok := installer["kernelArgs"]; ok {
+		t.Fatalf("installer.kernelArgs = %v, want omitted when FIPS is disabled", installer["kernelArgs"])
+	}
 	ks := osInstall["kickstart"].(map[string]any)
 	if ks["hostname"] != "ceph-0" {
 		t.Fatalf("kickstart hostname = %v", ks["hostname"])
+	}
+	packages := ks["packages"].(map[string]any)
+	if packages["environment"] != "minimal" || packages["installWeakDeps"] != false || packages["excludeDocs"] != true {
+		t.Fatalf("kickstart package options = %v", packages)
+	}
+	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"cephadm", "podman", "lvm2", "chrony", "firewalld"}) {
+		t.Fatalf("kickstart packages.install = %v", got)
+	}
+	if got := packages["languages"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
+		t.Fatalf("kickstart packages.languages = %v", got)
+	}
+	services := ks["services"].(map[string]any)
+	if got := services["enabled"].([]string); !reflect.DeepEqual(got, []string{"sshd", "chronyd", "firewalld"}) {
+		t.Fatalf("kickstart services.enabled = %v", got)
+	}
+	if got := services["disabled"].([]string); !reflect.DeepEqual(got, []string{"avahi-daemon", "cockpit.socket", "cups", "kdump", "postfix"}) {
+		t.Fatalf("kickstart services.disabled = %v", got)
+	}
+	security := ks["security"].(map[string]any)
+	selinux := security["selinux"].(map[string]any)
+	if selinux["mode"] != "enforcing" {
+		t.Fatalf("kickstart selinux = %v", selinux)
+	}
+	firewall := security["firewall"].(map[string]any)
+	if firewall["enabled"] != true {
+		t.Fatalf("kickstart firewall = %v", firewall)
+	}
+	if _, ok := security["fips"]; ok {
+		t.Fatalf("kickstart fips = %v, want omitted when disabled", security["fips"])
 	}
 	network := ks["network"].(map[string]any)
 	if network["ip"] != "192.168.134.20" || network["netmask"] != "255.255.255.0" {
@@ -98,6 +131,28 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	redfish := boot["redfish"].(map[string]any)
 	if redfish["setBootSource"] != false {
 		t.Fatalf("managed OS libvirt Redfish setBootSource = %v, want false", redfish["setBootSource"])
+	}
+}
+
+func TestManagedOSInstallRendersFIPSKernelArgs(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	state.MachineInstallProfiles[0].Spec.Customizations.Security.FIPS.Enabled = true
+
+	vars := VarsWithSecretsDir(state, "/context/secrets")
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	first := groups[0].(map[string]any)["components"].([]any)[0].(map[string]any)
+	osInstall := first["osInstall"].(map[string]any)
+	installer := osInstall["installer"].(map[string]any)
+	if got := installer["kernelArgs"].([]string); !reflect.DeepEqual(got, []string{"fips=1"}) {
+		t.Fatalf("installer.kernelArgs = %v", got)
+	}
+	security := osInstall["kickstart"].(map[string]any)["security"].(map[string]any)
+	fips := security["fips"].(map[string]any)
+	if fips["enabled"] != true {
+		t.Fatalf("kickstart fips = %v", fips)
 	}
 }
 

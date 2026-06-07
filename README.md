@@ -119,7 +119,7 @@ User-authored YAML uses `apiVersion: bootwright.io/v1alpha1` and seventeen kinds
 | `Environment` | Shared environment defaults: selected resource files or directories, cluster selection, base domain, secret sources, service access catalog, proxy selection, registry defaults, and component image pins |
 | `Machine` | Raw, Bootwright-managed, or externally installed machine desired state: substrate binding, OS mode, install network, named addresses, SSH, and capabilities |
 | `MachineImage` | Bootwright-managed OS install media such as trusted base ISOs |
-| `MachineInstallProfile` | Bootwright-managed OS installation profile, installer type, repositories, storage, SSH, packages, and service customizations |
+| `MachineInstallProfile` | Bootwright-managed OS installation profile, installer type, repositories, storage, SSH, packages, services, SELinux, firewall, and FIPS install customizations |
 | `InfraProvider` | Provider capability, substrate profiles, provider connection facts, and network attachments |
 | `InfraComponent` | Machine-bound shared infra services such as artifact servers, load balancers, proxies, name resolution, and registries |
 | `NetworkConfig` | Installer `machineNetwork[]` plus reusable NMState host templates for agent installs |

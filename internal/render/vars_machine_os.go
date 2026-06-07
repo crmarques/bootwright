@@ -1,9 +1,6 @@
 package render
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -101,7 +98,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	if machine.Spec.Access.SSH == nil {
 		return nil
 	}
-	profile, ok := findMachineInstallProfile(state, machine.Spec.OS.ProfileRef.Name)
+	profile, ok := findMachineInstallProfile(state, machine.Spec.OS.InstallProfileRef.Name)
 	if !ok || profile.Spec.Installer.Anaconda == nil {
 		return nil
 	}
@@ -119,6 +116,9 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	installer := map[string]any{
 		"type":         profile.Spec.Installer.Type,
 		"repositories": append(imageRepositories, profileRepositories...),
+	}
+	if profile.Spec.Customizations.Security.FIPS.Enabled {
+		installer["kernelArgs"] = []string{"fips=1"}
 	}
 	if sourceURL != "" {
 		installer["sourceURL"] = sourceURL
@@ -141,8 +141,9 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
 			"authorizeMachineSSHKey": profile.Spec.Customizations.SSH.AuthorizeMachineSSHKey,
-			"packages":               append([]string(nil), profile.Spec.Customizations.Packages...),
-			"services":               append([]string(nil), profile.Spec.Customizations.Services.Enabled...),
+			"packages":               machineInstallPackagesVars(profile.Spec.Customizations.Packages),
+			"services":               machineInstallServicesVars(profile.Spec.Customizations.Services),
+			"security":               machineInstallSecurityVars(profile.Spec.Customizations.Security),
 			"storage":                machineInstallStorageVars(profile, state, m),
 			"network":                machineInstallNetworkVars(state, ci, m, clusterName),
 		},
@@ -158,19 +159,6 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	}
 	out["marker"] = machineOSInstallMarkerVars(out, clusterName, machine.Metadata.Name, profile.Metadata.Name)
 	return out
-}
-
-func machineOSInstallMarkerVars(osInstall map[string]any, clusterName, machineName, profileName string) map[string]any {
-	data, _ := json.Marshal(osInstall)
-	sum := sha256.Sum256(data)
-	return map[string]any{
-		"owner":       "bootwright",
-		"cluster":     clusterName,
-		"machine":     machineName,
-		"profile":     profileName,
-		"path":        "/etc/bootwright/install-marker.json",
-		"desiredHash": "sha256:" + hex.EncodeToString(sum[:]),
-	}
 }
 
 func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool) map[string]any {

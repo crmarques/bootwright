@@ -81,8 +81,8 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 		return errs
 	}
 	if *machine.Spec.OS.Provided {
-		if machine.Spec.OS.ProfileRef.Name != "" {
-			errs = append(errs, prefix+".profileRef.name must be empty when provided=true")
+		if machine.Spec.OS.InstallProfileRef.Name != "" {
+			errs = append(errs, prefix+".installProfileRef.name must be empty when provided=true")
 		}
 		if !machine.Spec.OS.Install.IsZero() {
 			errs = append(errs, prefix+".install must be empty when provided=true")
@@ -92,9 +92,12 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 		}
 		return errs
 	}
-	if machine.Spec.OS.ProfileRef.Name != "" {
-		if _, ok := installProfiles[machine.Spec.OS.ProfileRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.profileRef.name %q does not match any MachineInstallProfile", prefix, machine.Spec.OS.ProfileRef.Name))
+	if machine.Spec.OS.InstallProfileRef.Name != "" {
+		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.installProfileRef.name %q does not match any MachineInstallProfile", prefix, machine.Spec.OS.InstallProfileRef.Name))
+		} else if !machineInstallStringListContains(profile.Spec.Customizations.Services.Enabled, "sshd") {
+			errs = append(errs, fmt.Sprintf("%s.installProfileRef.name %q references MachineInstallProfile/%s without customizations.services.enabled containing sshd", prefix, machine.Spec.OS.InstallProfileRef.Name, profile.Metadata.Name))
 		}
 	}
 	return errs
@@ -107,9 +110,9 @@ func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
 		}
 		return validateMachineSSH(prefix, machine)
 	}
-	if *machine.Spec.OS.Provided || machine.Spec.OS.ProfileRef.Name != "" {
+	if *machine.Spec.OS.Provided || machine.Spec.OS.InstallProfileRef.Name != "" {
 		if machine.Spec.Access.SSH == nil {
-			return []string{prefix + ".ssh is required when os.provided=true or os.profileRef.name is set"}
+			return []string{prefix + ".ssh is required when os.provided=true or os.installProfileRef.name is set"}
 		}
 	}
 	if machine.Spec.Access.SSH == nil {
@@ -525,8 +528,90 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		if source := customizations.Storage.RootDevice.Source; source != "" && source != v1alpha1.MachineInstallRootDeviceMachine {
 			errs = append(errs, fmt.Sprintf("%s.customizations.storage.rootDevice.source %q must be %q", prefix, source, v1alpha1.MachineInstallRootDeviceMachine))
 		}
+		errs = append(errs, validateMachineInstallPackages(prefix+".customizations.packages", customizations.Packages)...)
+		errs = append(errs, validateMachineInstallServices(prefix+".customizations.services", customizations.Services)...)
+		errs = append(errs, validateMachineInstallSecurity(prefix+".customizations.security", profile, customizations)...)
 	}
 	return errs
+}
+
+func validateMachineInstallPackages(prefix string, packages v1alpha1.MachineInstallPackages) []string {
+	var errs []string
+	switch packages.Environment {
+	case "", v1alpha1.MachineInstallPackageEnvMinimal:
+	default:
+		errs = append(errs, fmt.Sprintf("%s.environment %q must be %q", prefix, packages.Environment, v1alpha1.MachineInstallPackageEnvMinimal))
+	}
+	errs = append(errs, validateMachineInstallStringList(prefix+".install", packages.Install)...)
+	errs = append(errs, validateMachineInstallStringList(prefix+".languages", packages.Languages)...)
+	return errs
+}
+
+func validateMachineInstallServices(prefix string, services v1alpha1.MachineInstallServices) []string {
+	var errs []string
+	errs = append(errs, validateMachineInstallStringList(prefix+".enabled", services.Enabled)...)
+	errs = append(errs, validateMachineInstallStringList(prefix+".disabled", services.Disabled)...)
+	enabled := map[string]bool{}
+	for _, service := range services.Enabled {
+		enabled[service] = true
+	}
+	for i, service := range services.Disabled {
+		if enabled[service] {
+			errs = append(errs, fmt.Sprintf("%s.disabled[%d] %q must not also be enabled", prefix, i, service))
+		}
+	}
+	return errs
+}
+
+func validateMachineInstallSecurity(prefix string, profile v1alpha1.MachineInstallProfile, customizations v1alpha1.MachineInstallCustomizations) []string {
+	var errs []string
+	security := customizations.Security
+	switch security.SELinux.Mode {
+	case "", v1alpha1.MachineInstallSELinuxEnforcing, v1alpha1.MachineInstallSELinuxPermissive, v1alpha1.MachineInstallSELinuxDisabled:
+	default:
+		errs = append(errs, fmt.Sprintf("%s.selinux.mode %q must be one of: %s, %s, %s",
+			prefix, security.SELinux.Mode, v1alpha1.MachineInstallSELinuxEnforcing, v1alpha1.MachineInstallSELinuxPermissive, v1alpha1.MachineInstallSELinuxDisabled))
+	}
+	if security.FIPS.Enabled && strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
+		errs = append(errs, fmt.Sprintf("%s.fips.enabled is only supported for RHEL install profiles", prefix))
+	}
+	if security.Firewall.Enabled != nil && *security.Firewall.Enabled {
+		if !machineInstallStringListContains(customizations.Packages.Install, "firewalld") {
+			errs = append(errs, prefix+".firewall.enabled requires customizations.packages.install to include firewalld")
+		}
+		if !machineInstallStringListContains(customizations.Services.Enabled, "firewalld") {
+			errs = append(errs, prefix+".firewall.enabled requires customizations.services.enabled to include firewalld")
+		}
+	}
+	return errs
+}
+
+func validateMachineInstallStringList(prefix string, values []string) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, value := range values {
+		if value == "" {
+			errs = append(errs, fmt.Sprintf("%s[%d] must not be empty", prefix, i))
+			continue
+		}
+		if strings.TrimSpace(value) != value {
+			errs = append(errs, fmt.Sprintf("%s[%d] %q must not contain leading or trailing whitespace", prefix, i, value))
+		}
+		if seen[value] {
+			errs = append(errs, fmt.Sprintf("%s[%d] %q is duplicated", prefix, i, value))
+		}
+		seen[value] = true
+	}
+	return errs
+}
+
+func machineInstallStringListContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func machineImageMediaType(image v1alpha1.MachineImage) string {

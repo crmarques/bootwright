@@ -288,6 +288,79 @@ bootwright_provider_machine_setups:
     applyRole: bootwright.core.machine_setup_libvirt
 ```
 
+## Managed OS Install Shape
+
+Managed OS install playbooks consume one projected group per storage or service
+domain that needs Bootwright-installed machines. Each component carries the
+resolved provider, boot media, base install image, Kickstart inputs, and
+optional installer kernel arguments.
+
+```yaml
+bootwright_managed_os_install_groups:
+  - name: ceph-libvirt
+    storageClusterName: ceph-libvirt
+    components:
+      - name: ceph-0
+        osInstall:
+          profileName: rhel-9-ceph-node-minimal-fips
+          os:
+            family: rhel
+            version: "9.7"
+            architecture: x86_64
+          installer:
+            type: anaconda
+            kernelArgs:
+              - fips=1
+            repositories: []
+          image:
+            kind: media
+            mediaType: dvd
+            key: rhel-9.7-x86_64-dvd.iso
+            path: /var/lib/bootwright/media/rhel-9.7-x86_64-dvd.iso
+            sourceOnTarget: true
+          kickstart:
+            hostname: ceph-0
+            sshUser: root
+            sshPublicKeyPath: /var/lib/bootwright/contexts/lab/secrets/ceph-node-ssh.pub
+            authorizeMachineSSHKey: true
+            passwordAuthentication: false
+            packages:
+              environment: minimal
+              installWeakDeps: false
+              excludeDocs: true
+              languages:
+                - en_US.UTF-8
+              install:
+                - cephadm
+                - podman
+                - lvm2
+                - chrony
+                - firewalld
+            services:
+              enabled:
+                - sshd
+                - chronyd
+                - firewalld
+              disabled:
+                - avahi-daemon
+                - cockpit.socket
+                - cups
+                - kdump
+                - postfix
+            security:
+              selinux:
+                mode: enforcing
+              firewall:
+                enabled: true
+              fips:
+                enabled: true
+```
+
+`installer.kernelArgs` is empty unless a profile requests install-time kernel
+arguments such as RHEL FIPS enablement. The Anaconda role adds those arguments
+with `mkksiso --cmdline` and includes them in the source identity file so a
+changed command line forces install ISO rebuild.
+
 ## Managed Storage Shape
 
 Managed storage playbooks consume one projected entry per

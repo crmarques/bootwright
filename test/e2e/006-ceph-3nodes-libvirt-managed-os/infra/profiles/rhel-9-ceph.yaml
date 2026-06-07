@@ -25,11 +25,30 @@ spec:
         source: machineRootDeviceHints
       wipe: true
     packages:
-      - chrony
-      - firewalld
-      - lvm2
-      - podman
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      languages:
+        - en_US.UTF-8
+      install:
+        - cephadm
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
     services:
       enabled:
-        - chronyd
         - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - avahi-daemon
+        - cockpit.socket
+        - cups
+        - kdump
+        - postfix
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true
