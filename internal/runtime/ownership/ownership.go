@@ -37,20 +37,20 @@ var safeSegmentRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 	var wire struct {
-		APIVersion string            `json:"apiVersion"`
-		Kind       string            `json:"kind"`
-		Name       string            `json:"name"`
-		Owner      string            `json:"owner"`
-		Context    string            `json:"context,omitempty"`
-		Host       string            `json:"host,omitempty"`
-		Provider   string            `json:"provider,omitempty"`
-		Cluster    string            `json:"cluster,omitempty"`
-		Machine    string            `json:"machine,omitempty"`
-		Paths      []string          `json:"paths,omitempty"`
-		HostFacts  map[string]string `json:"hostFacts,omitempty"`
-		Labels     map[string]string `json:"labels,omitempty"`
-		Attributes map[string]string `json:"attributes,omitempty"`
-		UpdatedAt  string            `json:"updatedAt"`
+		APIVersion string                     `json:"apiVersion"`
+		Kind       string                     `json:"kind"`
+		Name       string                     `json:"name"`
+		Owner      string                     `json:"owner"`
+		Context    string                     `json:"context,omitempty"`
+		Host       string                     `json:"host,omitempty"`
+		Provider   string                     `json:"provider,omitempty"`
+		Cluster    string                     `json:"cluster,omitempty"`
+		Machine    string                     `json:"machine,omitempty"`
+		Paths      []string                   `json:"paths,omitempty"`
+		HostFacts  map[string]json.RawMessage `json:"hostFacts,omitempty"`
+		Labels     map[string]json.RawMessage `json:"labels,omitempty"`
+		Attributes map[string]json.RawMessage `json:"attributes,omitempty"`
+		UpdatedAt  string                     `json:"updatedAt"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
@@ -66,9 +66,9 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 		Cluster:    wire.Cluster,
 		Machine:    wire.Machine,
 		Paths:      wire.Paths,
-		HostFacts:  wire.HostFacts,
-		Labels:     wire.Labels,
-		Attributes: wire.Attributes,
+		HostFacts:  coerceStringMap(wire.HostFacts),
+		Labels:     coerceStringMap(wire.Labels),
+		Attributes: coerceStringMap(wire.Attributes),
 	}
 	if strings.TrimSpace(wire.UpdatedAt) == "" {
 		return nil
@@ -79,6 +79,27 @@ func (record *ResourceRecord) UnmarshalJSON(data []byte) error {
 	}
 	record.UpdatedAt = updatedAt
 	return nil
+}
+
+// coerceStringMap normalizes a wire string map whose values may have been
+// serialized as JSON scalars other than strings (for example numeric port
+// attributes written by older Ansible roles). String values are taken
+// verbatim; numbers and booleans are kept as their literal token so the
+// in-memory record stays map[string]string and round-trips as strings.
+func coerceStringMap(in map[string]json.RawMessage) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, raw := range in {
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil {
+			out[key] = s
+			continue
+		}
+		out[key] = strings.TrimSpace(string(raw))
+	}
+	return out
 }
 
 func ResourcePath(root string, record ResourceRecord) (string, error) {

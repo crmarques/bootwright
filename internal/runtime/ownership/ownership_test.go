@@ -81,6 +81,45 @@ func TestResourceRecordLoadsNaiveUTCUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestResourceRecordLoadsNumericAttributes(t *testing.T) {
+	root := t.TempDir()
+	recordDir := filepath.Join(root, ResourceDirName, "bmc-emulator")
+	if err := os.MkdirAll(recordDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(recordDir, "lab-libvirt-provider.json")
+	data := []byte(`{
+  "apiVersion": "bootwright.io/ownership/v1alpha1",
+  "kind": "bmc-emulator",
+  "name": "lab-libvirt-provider",
+  "owner": "bootwright",
+  "attributes": {
+    "redfishUnit": "bootwright-sushy-lab-libvirt-provider.service",
+    "redfishPort": 8000,
+    "vmediaPort": 8001
+  },
+  "updatedAt": "2026-06-06T14:11:02Z"
+}
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	records, err := LoadResources(root)
+	if err != nil {
+		t.Fatalf("LoadResources: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want 1", len(records))
+	}
+	attrs := records[0].Attributes
+	if attrs["redfishPort"] != "8000" || attrs["vmediaPort"] != "8001" {
+		t.Fatalf("numeric attributes not coerced to strings: %#v", attrs)
+	}
+	if attrs["redfishUnit"] != "bootwright-sushy-lab-libvirt-provider.service" {
+		t.Fatalf("string attribute lost: %#v", attrs)
+	}
+}
+
 func TestResourceRecordRejectsUnsafeNames(t *testing.T) {
 	err := SaveResource(t.TempDir(), ResourceRecord{Kind: "libvirt/domain", Name: "../machine"})
 	if err == nil {

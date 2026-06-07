@@ -44,5 +44,5 @@
       attributes:
         redfishUnit: "bootwright-sushy-{{ bootwright_component.providerName }}.service"
         vmediaUnit: "bootwright-vmedia-{{ bootwright_component.providerName }}.service"
-        redfishPort: "{{ bootwright_component.bmcEmulated.port }}"
-        vmediaPort: "{{ bootwright_component.bmcEmulated.vmediaPort }}"
+        redfishPort: "{{ bootwright_component.bmcEmulated.port | string }}"
+        vmediaPort: "{{ bootwright_component.bmcEmulated.vmediaPort | string }}"
