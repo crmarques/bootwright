@@ -83,3 +83,35 @@ func TestStateCheckForeignOwner(t *testing.T) {
 		t.Fatalf("expected foreign classification, got %+v", root)
 	}
 }
+
+// TestStateCheckSharedResourceKeyTasksMatch covers F2/F14: distinct tasks that
+// share an apply-time ResourceKey (the scheduler mutual-exclusion lock) must each
+// keep their own converge-safety record. A provider task and a machine-infra
+// finalize task on one host both carry "host:bastion:mutating"; recorded with
+// their own desired hashes after a clean apply, state-check must report both as
+// matched, not drift. With the record key derived from ResourceKeys, the two
+// collided on one file and this reported drift.
+func TestStateCheckSharedResourceKeyTasksMatch(t *testing.T) {
+	runsDir := t.TempDir()
+	shared := []string{"host:bastion:mutating"}
+	provider := stateCheckTask("provider.bastion", "machineInfra", "demo", "container")
+	provider.Entry.ResourceKeys = shared
+	finalize := stateCheckTask("infrafinalize.demo.bastion", "machineInfra", "demo", "container")
+	finalize.Entry.ResourceKeys = shared
+
+	for _, task := range []ApplyTask{provider, finalize} {
+		hash, err := ApplyTaskDesiredHash(task)
+		if err != nil {
+			t.Fatalf("desired hash: %v", err)
+		}
+		saveStateCheckRecord(t, runsDir, task, hash, ConvergeSafetyOwner)
+	}
+
+	report, err := StateCheck([]ApplyTask{provider, finalize}, runsDir)
+	if err != nil {
+		t.Fatalf("StateCheck: %v", err)
+	}
+	if !report.InSync {
+		t.Fatalf("shared-ResourceKey tasks recorded after a clean apply must be in sync, got %+v", report.Roots)
+	}
+}

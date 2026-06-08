@@ -145,8 +145,23 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			if err != nil {
 				return failErr(1, err)
 			}
-			if runScope.name == "infra" && strings.TrimSpace(flags.clusterScope) == "" {
-				plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_infra_destroy_context_sweep=true")
+			if runScope.name == "infra" {
+				if strings.TrimSpace(flags.clusterScope) == "" {
+					plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_infra_destroy_context_sweep=true")
+				} else {
+					// Scope the recorded-resource cleanup to the selected roots.
+					// Ownership records are loaded context-wide (so unscoped destroy
+					// can remove orphans), but a scoped destroy must not tear down a
+					// co-located cluster's VMs/disks on a shared hypervisor. Every
+					// libvirt-domain/libvirt-network/managed-os-install record carries
+					// its cluster, so the playbook gates the cleanup on this set.
+					containerNames, storageNames, err := clusterRootNamesForTarget(state, flags.clusterScope)
+					if err != nil {
+						return failErr(1, err)
+					}
+					scope := append(append([]string{}, containerNames...), storageNames...)
+					plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_destroy_cluster_scope="+strings.Join(scope, ","))
+				}
 			}
 		}
 		destroySafety := workflow.EvaluateDestroySafety(plan.state, override)

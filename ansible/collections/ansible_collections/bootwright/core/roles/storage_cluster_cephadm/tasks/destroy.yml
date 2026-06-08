@@ -33,7 +33,7 @@
 - name: Validate declared Ceph destroy devices
   ansible.builtin.assert:
     that:
-      - item is match('^/dev/(disk/by-id/|mapper/|nvme[0-9]+n[0-9]+|[svx]d[a-z]+)$')
+      - item is match('^/dev/(disk/by-id/[^/]+|mapper/[^/]+|nvme[0-9]+n[0-9]+|[svx]d[a-z]+)$')
     fail_msg: >-
       Refusing to wipe undeclared or unsupported storage device {{ item }}
       for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}.

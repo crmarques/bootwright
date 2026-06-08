@@ -83,7 +83,7 @@ func TestManagedOSInstallVarsFromCephLibvirtFixture(t *testing.T) {
 	if packages["environment"] != "minimal" || packages["installWeakDeps"] != false || packages["excludeDocs"] != true {
 		t.Fatalf("kickstart package options = %v", packages)
 	}
-	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"cephadm", "podman", "lvm2", "chrony", "firewalld"}) {
+	if got := packages["install"].([]string); !reflect.DeepEqual(got, []string{"podman", "lvm2", "chrony", "firewalld"}) {
 		t.Fatalf("kickstart packages.install = %v", got)
 	}
 	if got := packages["languages"].([]string); !reflect.DeepEqual(got, []string{"en_US.UTF-8"}) {
@@ -279,4 +279,32 @@ func TestManagedStorageOSMachinesEnterInfraInventory(t *testing.T) {
 	if got := pseudoHost["bootwright_machine_task_provider_host_name"]; got != "bastion" {
 		t.Fatalf("machine task provider host = %v", got)
 	}
+}
+
+// TestManagedOSInstallMarkerHashStableAcrossSecretsDir covers F1: the on-host
+// install marker must hash WHAT is installed, not WHERE the per-run runtime
+// secrets live. Rendering the same desired state with two different (per-run)
+// secrets directories must produce an identical marker desiredHash; otherwise a
+// re-apply trips the role's reinstall-only guard and --override wipes the disks.
+func TestManagedOSInstallMarkerHashStableAcrossSecretsDir(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	hashA := firstManagedOSMarkerHash(t, VarsWithSecretsDir(state, "/var/lib/bootwright/contexts/c/runs/history/apply-A/tasks/t/artifacts/runtime/secrets"))
+	hashB := firstManagedOSMarkerHash(t, VarsWithSecretsDir(state, "/var/lib/bootwright/contexts/c/runs/history/apply-B/tasks/t/artifacts/runtime/secrets"))
+	if hashA != hashB {
+		t.Fatalf("marker desiredHash must be stable across per-run secrets dirs:\n  A=%s\n  B=%s", hashA, hashB)
+	}
+}
+
+func firstManagedOSMarkerHash(t *testing.T, vars map[string]any) string {
+	t.Helper()
+	groups := vars["bootwright_managed_os_install_groups"].([]any)
+	group := groups[0].(map[string]any)
+	components := group["components"].([]any)
+	first := components[0].(map[string]any)
+	osInstall := first["osInstall"].(map[string]any)
+	marker := osInstall["marker"].(map[string]any)
+	return marker["desiredHash"].(string)
 }

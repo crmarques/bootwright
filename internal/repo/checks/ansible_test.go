@@ -2545,6 +2545,15 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		}
 	}
 
+	// A scoped destroy must restrict recorded-resource cleanup to the selected
+	// roots so it cannot tear down a co-located cluster's VMs/disks on a shared
+	// host; an unscoped destroy leaves the var undefined and cleans everything.
+	recorded := tasks[findAnsibleTask(t, tasks, "Destroy recorded machine infrastructure resources")]
+	recordedWhen := fmt.Sprint(recorded["when"])
+	if !strings.Contains(recordedWhen, "bootwright_destroy_cluster_scope") {
+		t.Fatalf("recorded-resource destroy must be scoped by bootwright_destroy_cluster_scope: %v", recorded["when"])
+	}
+
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra_destroy_libvirt_context.yml")
 	for _, want := range []string{
 		"/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters",

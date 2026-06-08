@@ -183,11 +183,16 @@ func ClassifyConvergeSafety(record ConvergeSafetyRecord, desiredHash, ownerManag
 	return ConvergeSafetyDrift
 }
 
+// applyTaskSafetyResourceID identifies the converge-safety record for a task.
+// It keys on the TASK identity, not on task.Entry.ResourceKeys: ResourceKeys are
+// the scheduler's mutual-exclusion lock keys and are deliberately SHARED across
+// distinct tasks that mutate the same host/storage resource (e.g. a provider
+// task, a machine-infra prepare task, and a finalize task all carry
+// "host:<host>:mutating"; storageinfra and storage both carry "storage:<name>").
+// Keying the record by the shared lock made several tasks write one file with
+// different per-task desired hashes, so the last writer won and state-check
+// misreported the others as drift on a clean apply.
 func applyTaskSafetyResourceID(task ApplyTask) string {
-	if len(task.Entry.ResourceKeys) > 0 {
-		keys := append([]string(nil), task.Entry.ResourceKeys...)
-		return strings.Join(keys, ",")
-	}
 	if task.Entry.Kind != "" && task.Entry.ID != "" {
 		return task.Entry.Kind + "/" + task.Entry.ID
 	}

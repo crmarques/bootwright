@@ -42,6 +42,12 @@ func TestCanonicalExamples(t *testing.T) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
+		// _wip holds intentionally-incomplete scratch examples (gitignored);
+		// they are not canonical and TestCephRHELMinimalFIPSReviewExample covers
+		// the one tracked _wip example individually.
+		if name == "_wip" {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			_, err := LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
 			if err != nil {

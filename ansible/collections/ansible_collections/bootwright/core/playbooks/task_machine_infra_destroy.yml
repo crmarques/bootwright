@@ -54,7 +54,15 @@
       loop: "{{ bootwright_host_infra_ownership_records }}"
       loop_control:
         label: "{{ item.kind }}/{{ item.name }}"
-      when: item.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
+      when:
+        - item.kind in ['libvirt-domain', 'libvirt-network', 'managed-os-install']
+        # A scoped destroy (--clusters) must only clean records owned by the
+        # selected roots; an unscoped destroy leaves the var undefined and cleans
+        # every context-owned record (including orphans). Without this gate a
+        # scoped destroy tore down co-located clusters' VMs/disks on a shared host.
+        - >-
+          bootwright_destroy_cluster_scope is not defined
+          or item.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
 
     - name: Sweep current-context libvirt domains
       ansible.builtin.include_tasks: tasks/machine_infra_destroy_libvirt_context.yml

@@ -55,29 +55,29 @@ func loadEffectiveStateFreshness(current v1alpha1.State, renderedDir string) eff
 }
 
 func stateFreshnessShape(state v1alpha1.State) v1alpha1.State {
-	for i := range state.Environments {
-		state.Environments[i].SourcePath = ""
-	}
-	for i := range state.Machines {
-		state.Machines[i].SourcePath = ""
-	}
-	for i := range state.MachineImages {
-		state.MachineImages[i].SourcePath = ""
-	}
-	for i := range state.MachineInstallProfiles {
-		state.MachineInstallProfiles[i].SourcePath = ""
-	}
-	for i := range state.NetworkConfigs {
-		state.NetworkConfigs[i].SourcePath = ""
-	}
-	for i := range state.InfraProviders {
-		state.InfraProviders[i].SourcePath = ""
-	}
-	for i := range state.InfraComponents {
-		state.InfraComponents[i].SourcePath = ""
-	}
-	for i := range state.ContainerClusters {
-		state.ContainerClusters[i].SourcePath = ""
+	// Clear SourcePath on every loaded resource so freshness compares only the
+	// authored fields. SourcePath carries `yaml:"-"`, so it is absent from the
+	// round-tripped effective-state.yaml; clearing it on the in-memory side too
+	// keeps the DeepEqual honest. Reflecting over State's per-kind slices ensures
+	// a newly added kind can never be silently omitted from this normalization
+	// (the previous explicit list missed all storage and add-on kinds, which made
+	// status falsely report "stale" for any storage/add-on-bearing state).
+	v := reflect.ValueOf(&state).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() != reflect.Slice {
+			continue
+		}
+		for j := 0; j < field.Len(); j++ {
+			elem := field.Index(j)
+			if elem.Kind() != reflect.Struct {
+				continue
+			}
+			sp := elem.FieldByName("SourcePath")
+			if sp.IsValid() && sp.CanSet() && sp.Kind() == reflect.String {
+				sp.SetString("")
+			}
+		}
 	}
 	return state
 }

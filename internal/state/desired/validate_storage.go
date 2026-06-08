@@ -438,6 +438,8 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		case v1alpha1.StoragePoolTypeErasureCode:
 			if pool.Spec.Ceph.ErasureCoded == nil {
 				errs = append(errs, prefix+".ceph.erasureCoded is required when ceph.type=erasure-coded")
+			} else if pool.Spec.Ceph.ErasureCoded.DataChunks < 1 || pool.Spec.Ceph.ErasureCoded.CodingChunks < 1 {
+				errs = append(errs, prefix+".ceph.erasureCoded.dataChunks and codingChunks must be positive")
 			}
 			if pool.Spec.Ceph.Replicated.Size != 0 || pool.Spec.Ceph.Replicated.MinSize != 0 {
 				errs = append(errs, prefix+".ceph.type=erasure-coded must not set replicated")

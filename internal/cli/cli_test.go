@@ -523,6 +523,9 @@ func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testi
 	if slices.Contains(report.ExtraVars, "bootwright_infra_destroy_context_sweep=true") {
 		t.Fatalf("scoped infra destroy must not enable context sweep: %#v", report.ExtraVars)
 	}
+	if !slices.Contains(report.ExtraVars, "bootwright_destroy_cluster_scope=sno-libvirt") {
+		t.Fatalf("scoped infra destroy must scope recorded-resource cleanup to selected roots: %#v", report.ExtraVars)
+	}
 }
 
 func TestDestroyStageClustersDryRunJSON(t *testing.T) {
