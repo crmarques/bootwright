@@ -224,6 +224,64 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 	}
 }
 
+func TestApplyTaskDesiredHashFabricVarsIgnoreUnrelatedState(t *testing.T) {
+	mustHash := func(task ApplyTask) string {
+		t.Helper()
+		h, err := ApplyTaskDesiredHash(task)
+		if err != nil {
+			t.Fatalf("ApplyTaskDesiredHash: %v", err)
+		}
+		return h
+	}
+	base := ApplyTask{
+		Entry:           TaskLedgerEntry{ID: "provider.host-a", Kind: ApplyTaskKindProvider, Host: "host-a"},
+		Playbook:        applyProviderPlaybook,
+		Limit:           "host-a",
+		State:           v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "cluster-a"}}}},
+		DesiredHashVars: []any{map[string]any{"machineRef": "host-a", "kind": "loadBalancer"}},
+	}
+
+	// An unrelated cluster appears in State, but the host's rendered fabric vars
+	// are unchanged: state-check must NOT report this fabric host as drifted.
+	unrelated := base
+	unrelated.State = v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{
+		{Metadata: v1alpha1.Metadata{Name: "cluster-a"}},
+		{Metadata: v1alpha1.Metadata{Name: "cluster-b"}},
+	}}
+
+	// The host's own rendered vars change (e.g. a new load-balancer frontend): the
+	// fabric host MUST report drift.
+	relevant := base
+	relevant.DesiredHashVars = []any{map[string]any{"machineRef": "host-a", "kind": "loadBalancer", "frontends": []any{"vip"}}}
+
+	if got, want := mustHash(unrelated), mustHash(base); got != want {
+		t.Fatalf("fabric desired hash changed on an unrelated State edit: %s vs %s", got, want)
+	}
+	if mustHash(relevant) == mustHash(base) {
+		t.Fatal("fabric desired hash did not change when the host's rendered vars changed")
+	}
+}
+
+func TestApplyTaskDesiredHashNonFabricStillHashesState(t *testing.T) {
+	base := ApplyTask{
+		Entry: TaskLedgerEntry{ID: "clusterInstall/c", Kind: ApplyTaskKindClusterInstall, Cluster: "c"},
+		State: v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "c"}}}},
+	}
+	changed := base
+	changed.State = v1alpha1.State{ContainerClusters: []v1alpha1.ContainerCluster{{Metadata: v1alpha1.Metadata{Name: "c2"}}}}
+	h0, err := ApplyTaskDesiredHash(base)
+	if err != nil {
+		t.Fatalf("ApplyTaskDesiredHash: %v", err)
+	}
+	h1, err := ApplyTaskDesiredHash(changed)
+	if err != nil {
+		t.Fatalf("ApplyTaskDesiredHash: %v", err)
+	}
+	if h0 == h1 {
+		t.Fatal("non-fabric desired hash did not change when State changed")
+	}
+}
+
 func TestConvergeSafetyClassification(t *testing.T) {
 	const desiredHash = "sha256:desired"
 	cases := []struct {

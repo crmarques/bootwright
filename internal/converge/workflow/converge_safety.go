@@ -141,17 +141,18 @@ func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyT
 
 func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 	payload := struct {
-		APIVersion   string         `json:"apiVersion"`
-		TaskID       string         `json:"taskID"`
-		TaskKind     string         `json:"taskKind"`
-		Cluster      string         `json:"cluster,omitempty"`
-		ClusterKind  string         `json:"clusterKind,omitempty"`
-		Node         string         `json:"node,omitempty"`
-		Host         string         `json:"host,omitempty"`
-		ResourceKeys []string       `json:"resourceKeys,omitempty"`
-		Playbook     string         `json:"playbook,omitempty"`
-		Limit        string         `json:"limit,omitempty"`
-		State        v1alpha1.State `json:"state"`
+		APIVersion   string          `json:"apiVersion"`
+		TaskID       string          `json:"taskID"`
+		TaskKind     string          `json:"taskKind"`
+		Cluster      string          `json:"cluster,omitempty"`
+		ClusterKind  string          `json:"clusterKind,omitempty"`
+		Node         string          `json:"node,omitempty"`
+		Host         string          `json:"host,omitempty"`
+		ResourceKeys []string        `json:"resourceKeys,omitempty"`
+		Playbook     string          `json:"playbook,omitempty"`
+		Limit        string          `json:"limit,omitempty"`
+		State        *v1alpha1.State `json:"state,omitempty"`
+		FabricVars   any             `json:"fabricVars,omitempty"`
 	}{
 		APIVersion:   v1alpha1.APIVersion,
 		TaskID:       task.Entry.ID,
@@ -163,7 +164,17 @@ func ApplyTaskDesiredHash(task ApplyTask) (string, error) {
 		ResourceKeys: append([]string(nil), task.Entry.ResourceKeys...),
 		Playbook:     task.Playbook,
 		Limit:        task.Limit,
-		State:        task.State,
+	}
+	// Fabric tasks hash a host-scoped projection of the rendered vars so an
+	// unrelated fleet edit does not flip the infrastructure root to drift. Every
+	// other task keeps hashing the full State; its payload stays byte-identical to
+	// the prior definition (a non-nil State pointer marshals the same as the value),
+	// so recorded hashes remain valid.
+	if task.DesiredHashVars != nil {
+		payload.FabricVars = task.DesiredHashVars
+	} else {
+		state := task.State
+		payload.State = &state
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

@@ -25,10 +25,11 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 						ResourceKeys: []string{hostMutationResource(host)},
 						Status:       TaskStatusPending,
 					},
-					Playbook: applyProviderPlaybook,
-					Limit:    host,
-					Forks:    1,
-					State:    state,
+					Playbook:        applyProviderPlaybook,
+					Limit:           host,
+					Forks:           1,
+					State:           state,
+					DesiredHashVars: render.FabricHostDesiredVars(state, host),
 				},
 			}); err != nil {
 				return nil, err
@@ -53,10 +54,11 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 						ResourceKeys: []string{hostMutationResource(host)},
 						Status:       TaskStatusPending,
 					},
-					Playbook: applyInfraComponentsPlaybook,
-					Limit:    host,
-					Forks:    1,
-					State:    state,
+					Playbook:        applyInfraComponentsPlaybook,
+					Limit:           host,
+					Forks:           1,
+					State:           state,
+					DesiredHashVars: render.FabricHostDesiredVars(state, host),
 				},
 			}); err != nil {
 				return nil, err

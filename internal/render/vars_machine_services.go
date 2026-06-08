@@ -23,6 +23,30 @@ func infraComponentServicesVars(state v1alpha1.State) []any {
 	})
 }
 
+// FabricHostDesiredVars returns the deterministic rendered fabric vars for one
+// host: the provider services, infra-component services, and provider machine
+// setups whose placement machineRef is host. state-check hashes this instead of
+// the whole desired state for fabric (provider/infra-component) tasks, so an
+// edit elsewhere in the fleet that does not change this host's rendered vars no
+// longer reports spurious infrastructure drift — while a change that does affect
+// the host (a cluster its load balancer fronts, a storage node it prepares) still
+// does, because that change flows into these same vars.
+func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
+	out := []any{}
+	for _, group := range [][]any{
+		providerServicesVars(state),
+		infraComponentServicesVars(state),
+		providerMachineSetupsVars(state),
+	} {
+		for _, entry := range group {
+			if m, ok := entry.(map[string]any); ok && stringMapValue(m, "machineRef") == host {
+				out = append(out, entry)
+			}
+		}
+	}
+	return out
+}
+
 func machineServicesVars(state v1alpha1.State, include func(stategraph.MachineService) bool) []any {
 	builder := newMachineServiceBuilder()
 	graph := stategraph.ResolveMachineServices(state)

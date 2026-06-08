@@ -64,15 +64,21 @@ type ApplyTarget struct {
 }
 
 type ApplyTask struct {
-	Entry             TaskLedgerEntry
-	Playbook          string
-	Limit             string
-	Forks             int
-	RedfishSlots      int
-	HostSlotKey       string
-	HostSlotCount     int
-	ExtraVarPairs     []string
-	State             v1alpha1.State
+	Entry         TaskLedgerEntry
+	Playbook      string
+	Limit         string
+	Forks         int
+	RedfishSlots  int
+	HostSlotKey   string
+	HostSlotCount int
+	ExtraVarPairs []string
+	State         v1alpha1.State
+	// DesiredHashVars, when set, is the desired-state input ApplyTaskDesiredHash
+	// hashes instead of the full State. Fabric (provider/infra-component) tasks
+	// set it to the host's rendered fabric vars so state-check does not report
+	// drift when an unrelated part of the fleet changes. Other tasks leave it nil
+	// and continue to hash State.
+	DesiredHashVars   any
 	Extension         *extensionplan.ExtensionPlan
 	StorageAttachment *StorageAttachmentPlan
 }
