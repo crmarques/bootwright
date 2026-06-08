@@ -1,28 +1,19 @@
 package desiredstate
 
 import (
-	"os"
-	osuser "os/user"
-	"strconv"
-	"strings"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
-
-var currentHostSSHUser = hostSSHUserFromProcess
 
 // Normalize applies defaults in-place. Pure transformation: no
 // diagnostics, no rejections; that work belongs to Validate.
 func Normalize(state *v1alpha1.State) {
-	hostSSHUser := currentHostSSHUser()
 	for i := range state.Environments {
 		normalizeEnvironment(&state.Environments[i])
 	}
 	for i := range state.Machines {
-		normalizeMachine(&state.Machines[i], hostSSHUser)
+		normalizeMachine(&state.Machines[i])
 	}
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
@@ -56,27 +47,6 @@ func Normalize(state *v1alpha1.State) {
 	}
 }
 
-func hostSSHUserFromProcess() string {
-	if uid, _, ok := localroot.CallerUIDGID(); ok {
-		if u, err := osuser.LookupId(strconv.FormatUint(uint64(uid), 10)); err == nil {
-			if username := strings.TrimSpace(u.Username); username != "" {
-				return username
-			}
-		}
-	}
-	if u, err := osuser.Current(); err == nil {
-		if username := strings.TrimSpace(u.Username); username != "" {
-			return username
-		}
-	}
-	for _, key := range []string{"USER", "LOGNAME"} {
-		if username := strings.TrimSpace(os.Getenv(key)); username != "" {
-			return username
-		}
-	}
-	return ""
-}
-
 func normalizeEnvironment(env *v1alpha1.Environment) {
 	if env.Spec.SecretStorage.Mode == "" {
 		env.Spec.SecretStorage.Mode = v1alpha1.SecretStorageModeSource
@@ -98,10 +68,7 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 	}
 }
 
-func normalizeMachine(m *v1alpha1.Machine, sshUser string) {
-	if m.Spec.Access.SSH != nil && m.Spec.Access.SSH.User == "" && sshUser != "" {
-		m.Spec.Access.SSH.User = sshUser
-	}
+func normalizeMachine(m *v1alpha1.Machine) {
 	if m.Spec.Hardware.Management.BMC.Address != "" {
 		normalizeBMC(&m.Spec.Hardware.Management.BMC)
 	}

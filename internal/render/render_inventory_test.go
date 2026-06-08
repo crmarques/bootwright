@@ -122,26 +122,29 @@ func inventoryTestMachine(state v1alpha1.State, name string) (v1alpha1.Machine, 
 	return v1alpha1.Machine{}, false
 }
 
-func TestInventoryUsesDefaultedHostSSHUser(t *testing.T) {
+func TestInventoryOmitsAnsibleUserWhenMachineSSHUserUnset(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(fixtureRoot, "005-3nodes-baremetal")})
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	bastion, ok := inventoryTestMachine(state, "bastion")
 	if !ok || bastion.Spec.Access.SSH == nil {
-		t.Fatal("Machine/bastion spec.access.ssh was not defaulted")
+		t.Fatal("Machine/bastion spec.access.ssh missing")
 	}
-	want := bastion.Spec.Access.SSH.User
-	if want == "" {
-		t.Fatal("Machine.spec.access.ssh.user was not defaulted")
+	// The bastion omits access.ssh.user; it must NOT be defaulted from the
+	// invoking process (that made rendered artifacts non-deterministic), so the
+	// inventory carries no ansible_user and Ansible connects as the user running
+	// the playbook (root after the sudo re-exec).
+	if got := bastion.Spec.Access.SSH.User; got != "" {
+		t.Fatalf("Machine.spec.access.ssh.user = %q, want empty (no process-user default)", got)
 	}
 
 	inv := render.Inventory(state, "")
 	all := inv["all"].(map[string]any)
 	hosts := all["hosts"].(map[string]any)
 	serviceHost := hosts["bastion"].(map[string]any)
-	if got := serviceHost["ansible_user"]; got != want {
-		t.Fatalf("ansible_user = %v, want defaulted Machine.spec.access.ssh.user %q", got, want)
+	if _, ok := serviceHost["ansible_user"]; ok {
+		t.Fatalf("ansible_user should be omitted when Machine.spec.access.ssh.user is unset: %v", serviceHost)
 	}
 }
 

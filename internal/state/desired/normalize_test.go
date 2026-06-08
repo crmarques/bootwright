@@ -67,15 +67,11 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	}
 }
 
-func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
-	previous := currentHostSSHUser
-	currentHostSSHUser = func() string { return "operator" }
-	t.Cleanup(func() { currentHostSSHUser = previous })
-
+func TestNormalizeDoesNotDefaultMachineSSHUser(t *testing.T) {
 	state := v1alpha1.State{
 		Machines: []v1alpha1.Machine{
 			{
-				Metadata: v1alpha1.Metadata{Name: "defaulted"},
+				Metadata: v1alpha1.Metadata{Name: "omitted"},
 				Spec: v1alpha1.MachineSpec{
 					OS: v1alpha1.MachineOSSpec{
 						Provided: v1alpha1.BoolPtr(true),
@@ -104,8 +100,11 @@ func TestNormalizeDefaultsHostSSHUser(t *testing.T) {
 
 	Normalize(&state)
 
-	if got := state.Machines[0].Spec.Access.SSH.User; got != "operator" {
-		t.Fatalf("defaulted Machine SSH user = %q, want operator", got)
+	// An omitted user is left empty so rendered artifacts are deterministic
+	// across operators; the connection layer falls back to the (root) user
+	// running ansible-playbook, matching the kickstart's root default.
+	if got := state.Machines[0].Spec.Access.SSH.User; got != "" {
+		t.Fatalf("omitted Machine SSH user = %q, want empty (not process-derived)", got)
 	}
 	if got := state.Machines[1].Spec.Access.SSH.User; got != "root" {
 		t.Fatalf("explicit Machine SSH user = %q, want root", got)
