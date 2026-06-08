@@ -13,12 +13,6 @@ spec:
         name: dc1-child-net
         namespace: bootwright-dc1-child-ocp
 
-  - name: dc2-child-net
-    kubevirt:
-      nadRef:
-        name: dc2-child-net
-        namespace: bootwright-dc2-child-ocp
-
   kubevirt:
     namespace: bootwright-dc1-child-ocp
     storageClassRef:
@@ -43,12 +37,6 @@ spec:
   type: kubevirt
 
   networkAttachments:
-
-  - name: dc1-child-net
-    kubevirt:
-      nadRef:
-        name: dc1-child-net
-        namespace: bootwright-dc1-child-ocp
 
   - name: dc2-child-net
     kubevirt:

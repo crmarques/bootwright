@@ -18,7 +18,3 @@ spec:
   - name: dc2-net
     bareMetal:
       vlan: 0
-
-  - name: metal-net
-    bareMetal:
-      vlan: 0
