@@ -173,9 +173,15 @@ Bootwright records only your current context selection in
 `/var/lib/bootwright/contexts/<context-name>/`, and the imported authoring copy
 lives at `input/` inside that directory. Other sudo-capable administrators on
 the same host see the same shared contexts, but keep their own current
-selection. Run `bootwright ...` as your user; if you run
-`sudo bootwright ...` directly, Bootwright uses root's private current-context
-selection instead.
+selection. Run `bootwright ...` as your user.
+
+!!! warning
+    Do not run `sudo bootwright ...` directly. Bootwright re-escalates with
+    `sudo` on its own when it needs `/var/lib/bootwright`. Running the whole
+    command under `sudo` makes it read root's *private* current-context
+    selection instead of yours, so it can report "no current context" even
+    after you imported one. Recover by running `bootwright context use <name>`
+    as your user.
 
 Re-run `context init` with `--yes` to replace the entire context directory, or
 use `bootwright context update lab -f <input-dir> --yes` to replace only

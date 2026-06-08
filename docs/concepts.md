@@ -188,6 +188,17 @@ from libvirt, bare metal, vSphere, or another substrate.
 - `none`
 - `external`
 
+Because it is the render mode and not the substrate, the value follows the
+install path rather than the provider:
+
+| Install path / topology | `platform.type` |
+| --- | --- |
+| Redfish virtual-media agent install (real bare metal, or libvirt with emulated Redfish) | `baremetal` |
+| vSphere agent install | `vsphere` |
+| KubeVirt-hosted machines (Bootwright only prepares the VMs) | `none` |
+| Externally-managed platform | `external` |
+| Single-node (any of the above) | rendered `none` automatically; the authored value is overridden unless `external` is set |
+
 Bare-metal provisioning network values are lowercase: `disabled`, `managed`,
 or `unmanaged`. `disabled` uses the existing machine network, which is the
 normal Redfish virtual-media agent-install mode.

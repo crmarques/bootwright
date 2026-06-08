@@ -69,6 +69,9 @@ Rules:
 - `defaults.artifactAccess`, when set, is copied into selected
   `ContainerCluster.spec.install.artifactAccess` fields only for active
   artifact consumers.
+- `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the
+  base URL Bootwright downloads the OpenShift clients (`oc`,
+  `openshift-install`) from, for disconnected or mirrored labs.
 - `infraComponents.*[]` entries are service access catalog entries. They are
   either `external` with direct access configuration or `managed` with
   `componentRef.name` pointing at an `InfraComponent` arm of the matching kind.
@@ -338,9 +341,12 @@ Rules:
   `machineRootDeviceHints`.
 - `customizations.packages.environment` currently accepts `minimal`, which
   renders the supported minimal Anaconda package environment.
-- `customizations.packages.install[]` is the explicit package allow-list
-  rendered into Kickstart. Supported Ceph-node RHEL install profiles keep this
-  list to `cephadm`, `podman`, `lvm2`, `chrony`, and `firewalld`.
+- `customizations.packages.install[]` is the open allow-list of packages
+  rendered into Kickstart; whatever is listed is installed. The validator
+  enforces only the firewall dependency (a profile with
+  `security.firewall.enabled: true` must list `firewalld`), not a closed set.
+  `cephadm`, `podman`, `lvm2`, `chrony`, and `firewalld` are the recommended
+  Ceph-node RHEL baseline, not a validated limit.
 - `customizations.packages.excludeDocs: true` renders Kickstart package
   document exclusion.
 - `customizations.packages.installWeakDeps: false` renders weak-dependency
