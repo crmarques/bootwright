@@ -55,8 +55,9 @@ working directory for your environment:
 bootwright example init my-sno-lab --output ./my-sno-lab
 ```
 
-When working from a fresh checkout, copying the canonical example is
-equivalent:
+When working from a fresh checkout, you can copy a canonical in-repo example
+instead. Its file layout differs from the scaffold's (flat files rather than
+`shared/`), but it imports the same way:
 
 ```text
 cp -a examples/sno-libvirt-redfish ./my-sno-lab

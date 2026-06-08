@@ -12,7 +12,7 @@ Key files:
 | `provider.yaml` | `InfraProvider` |
 | `infra-component.yaml` | `InfraComponent` |
 | `networks.yaml` | `NetworkConfig` |
-| `cluster-machines.yaml` | `Machine and ContainerCluster` |
+| `cluster-machines.yaml` | `Machine` |
 | `container-cluster.yaml` | `ContainerCluster` |
 
 The cluster node binds to `Machine[master-0]`, which

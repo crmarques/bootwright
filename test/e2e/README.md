@@ -9,7 +9,7 @@ service-machines.yaml             Machine
 provider.yaml          InfraProvider
 infra-component.yaml   InfraComponent shared infra services
 networks.yaml          NetworkConfig
-cluster-machines.yaml     Machine and ContainerCluster
+cluster-machines.yaml  Machine
 container-cluster.yaml ContainerCluster
 ```
 

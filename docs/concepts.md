@@ -24,8 +24,7 @@ instead of compact inline maps.
 | `InfraProvider` | Capability inventory: bare-metal machines and virtual machine profiles |
 | `InfraComponent` | Machine-bound shared infra services and routable endpoints |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
-| `Machine and ContainerCluster` | Platform render mode, endpoints, and selected machines |
-| `ContainerCluster` | Distribution, release, install mode, cluster networking, pools, and node bindings |
+| `ContainerCluster` | Distribution, release, install mode, platform render mode, endpoints, cluster networking, machine pools, and node-to-machine bindings |
 | `StorageCluster` | External storage intent, either Bootwright-managed Ceph through cephadm or imported Ceph |
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
 | `StoragePool` | Ceph pool role, placement, and replication settings |
@@ -39,12 +38,11 @@ instead of compact inline maps.
 ## Reference Flow
 
 ```text
-ContainerCluster.nodes[*].infraNodeRef
-  -> ContainerCluster.spec.nodes[*].machineRef
-  -> InfraProvider machine or profile
+ContainerCluster.spec.nodes[*].machineRef
   -> Machine
+  -> InfraProvider (Machine.spec.substrate.providerRef / profileRef)
 
-Provider-sourced Machine and ContainerCluster nodes
+Machine.spec.network.config.networkConfigRef
   -> NetworkConfig
 
 Environment.infraComponents.*.componentRef
@@ -68,8 +66,8 @@ ClusterAddonBinding.addons[].inputs[]
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
-the exact provider-sourced cluster infrastructure node that backs it. In v1
-all OpenShift nodes in one cluster must reference the same `Machine and ContainerCluster`.
+the exact `Machine` that backs it through `spec.nodes[].machineRef`; each
+`Machine` owns its own substrate binding and install network.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.
@@ -103,7 +101,7 @@ material.
 ## KubeVirt Child Clusters
 
 A virtualized child OpenShift cluster is still declared as its own
-`ContainerCluster`. The child `Machine and ContainerCluster` selects a KubeVirt
+`ContainerCluster`. The child cluster's `Machine` objects select a KubeVirt
 `InfraProvider` machine profile, and that profile points either at a
 Bootwright-managed host cluster with `hostClusterRef` or at an external
 virtualization cluster kubeconfig with `kubeconfigRef`.
@@ -148,10 +146,11 @@ KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
 `Machine.spec.network.config.attachmentRef`.
 
-Most provider-sourced nodes reuse the same NMState template and only set static
-IPs in
-`Machine.spec.network.config.overrides.interfaces[].ipv4.address[]`.
-Advanced provider-sourced nodes may provide a full inline `network.spec`.
+Most provider-sourced nodes reuse the same NMState template and set their static
+install IP through `Machine.spec.network.config.interfaceAddresses[]`, which
+references a named `Machine.spec.addresses[]` entry; `overrides` carries other
+NMState (bonds, routes) but not the install IP. Advanced provider-sourced nodes
+may instead provide a full inline `Machine.spec.network.config.spec`.
 
 Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and
@@ -194,12 +193,12 @@ or `unmanaged`. `disabled` uses the existing machine network, which is the
 normal Redfish virtual-media agent-install mode.
 
 For single-node clusters, Bootwright renders installer `platform.none` unless
-`platform.type: external` is selected. The authored `Machine and ContainerCluster` still owns
+`platform.type: external` is selected. The authored `ContainerCluster` still owns
 the selected machines, endpoints, and managed components.
 
 ## Managed Components
 
-Machine-bound shared services live in `InfraComponent` objects. `Machine and ContainerCluster`
+Machine-bound shared services live in `InfraComponent` objects. `ContainerCluster`
 references load balancers from endpoints, `Environment` selects proxy,
 artifact, and registry access, and `NetworkConfig.spec.dnsRefs[]`
 selects environment name-resolution entries.

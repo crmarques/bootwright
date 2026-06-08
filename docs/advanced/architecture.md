@@ -20,7 +20,7 @@ The render step merges the provisioning kinds into concrete outputs:
   `Machine`, `NetworkConfig` templates, and provider
   MAC inventory
 - provider variables from `InfraProvider`, `InfraComponent`, `Machine`, and
-  `Machine and ContainerCluster.components`
+  `ContainerCluster` artifact access
 - storage inputs from `StorageCluster`, storage pools, CephFS, RGW, exports,
   and Data Foundation attachments
 

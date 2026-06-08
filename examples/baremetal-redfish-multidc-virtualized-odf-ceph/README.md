@@ -28,9 +28,22 @@ Defaulted fields are intentionally present with short comments so authors can se
 
 ## Validate And Apply
 
+`secret generate` only materializes the `generated:` entries; set the operator
+secrets this example declares (`openshift-pull-secret`, `bmc-credentials`,
+`ceph-registry-credentials`, `redhat-org`, `redhat-activation-key`) yourself
+first. `bastion-host-ssh` points at a local key file. After each step, run
+`bootwright status` for the suggested next command. See
+[getting started](../../docs/getting-started.md) for the full secret and
+host-trust workflow.
+
 ```text
 bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
+bootwright secret set openshift-pull-secret --pull-secret <path>
+printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
+printf '%s\n' "${REGISTRY_PASS}" | bootwright secret set ceph-registry-credentials --username "${REGISTRY_USER}" --password-stdin
+bootwright secret set redhat-org --raw-file <org-id-file>
+bootwright secret set redhat-activation-key --raw-file <activation-key-file>
 bootwright secret generate
 bootwright bastion setup --yes
 bootwright check all
