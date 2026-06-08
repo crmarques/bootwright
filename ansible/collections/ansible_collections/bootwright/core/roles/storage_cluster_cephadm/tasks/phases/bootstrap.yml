@@ -105,6 +105,82 @@
         - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0
         - item.address | default('') | length > 0
 
+    # The bootstrap (storage) stage runs with skip_prereqs and is the actual
+    # consumer of the ceph CLI; guarantee it here so the orchestration steps
+    # below work even when the prereq stage installed an older tooling set.
+    - name: Ensure Ceph client tooling is present for cephadm orchestration
+      ansible.builtin.package:
+        name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"
+        state: present
+      register: bootwright_ceph_common_bootstrap_install
+
+    - name: Create ceph-common package ownership directory
+      ansible.builtin.file:
+        path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: bootwright_ceph_common_bootstrap_install.changed | default(false)
+
+    - name: Write ceph-common package ownership record
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_ownership
+        tasks_from: package_apply_one.yml
+      vars:
+        bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"
+        bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+      when: bootwright_ceph_common_bootstrap_install.changed | default(false)
+
+    # --override (bootwright_install_override) asks for a clean rebuild: tear down
+    # any existing cephadm cluster on the seed and clear the residual config so the
+    # bootstrap below runs against a fresh host with no manual recovery. Without
+    # override an already-bootstrapped node is left untouched (idempotent re-apply).
+    # This is destructive and is gated strictly on the explicit override flag.
+    - name: Read existing Ceph configuration for override rebuild
+      ansible.builtin.slurp:
+        src: /etc/ceph/ceph.conf
+      register: bootwright_ceph_override_conf
+      failed_when: false
+      when: bootwright_install_override | default(false) | bool
+
+    - name: Resolve existing Ceph cluster fsid for override rebuild
+      ansible.builtin.set_fact:
+        bootwright_ceph_override_fsid: >-
+          {{ (bootwright_ceph_override_conf.content | b64decode
+              | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')) | default('', true) }}
+      when:
+        - bootwright_install_override | default(false) | bool
+        - (bootwright_ceph_override_conf | default({})).content is defined
+
+    - name: Remove existing cephadm cluster for override rebuild
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - rm-cluster
+          - --force
+          - --zap-osds
+          - --fsid
+          - "{{ bootwright_ceph_override_fsid }}"
+      register: bootwright_ceph_override_rm
+      changed_when: true
+      failed_when: false
+      when:
+        - bootwright_install_override | default(false) | bool
+        - bootwright_ceph_override_fsid | default('') | length > 0
+
+    - name: Clear residual Ceph configuration for override rebuild
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/ceph/ceph.conf
+        - /etc/ceph/ceph.client.admin.keyring
+        - /etc/ceph/ceph.pub
+      when:
+        - bootwright_install_override | default(false) | bool
+        - (bootwright_ceph_override_conf | default({})).content is defined
+
     - name: Check existing Ceph configuration
       ansible.builtin.command:
         argv:
@@ -112,15 +188,6 @@
           - -f
           - /etc/ceph/ceph.conf
       register: bootwright_ceph_conf_check
-      changed_when: false
-      failed_when: false
-
-    - name: Check existing Ceph status
-      ansible.builtin.command:
-        argv:
-          - ceph
-          - status
-      register: bootwright_ceph_status_check
       changed_when: false
       failed_when: false
 
@@ -168,7 +235,13 @@
       register: bootwright_ceph_bootstrap
       changed_when: true
       no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
-      when: bootwright_ceph_conf_check.rc != 0 or bootwright_ceph_status_check.rc != 0
+      # cephadm bootstrap is a one-time, non-idempotent operation that refuses to
+      # run when /etc/ceph/ceph.conf already exists. Gate purely on that file, the
+      # same marker cephadm itself checks: an already-bootstrapped node must never
+      # be re-bootstrapped (a transiently unreachable cluster cannot be repaired by
+      # re-running bootstrap). A stale conf from a prior cluster is cleared by the
+      # destroy flow, which owns /etc/ceph, before a fresh apply re-bootstraps.
+      when: bootwright_ceph_conf_check.rc != 0
 
     - name: Configure cephadm SSH trust
       ansible.builtin.command:

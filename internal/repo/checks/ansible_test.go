@@ -2947,6 +2947,22 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 			t.Fatalf("%s must be no_log, got %v", name, got)
 		}
 	}
+	ensureClient := block[findAnsibleTask(t, block, "Ensure Ceph client tooling is present for cephadm orchestration")]
+	ensureClientBody, ok := ensureClient["ansible.builtin.package"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(ensureClientBody["name"]), "bootwright_ceph_provider.cephCommonPackage") {
+		t.Fatalf("bootstrap stage must ensure the provider-selected ceph client package, got %v", ensureClient)
+	}
+	rmCluster := block[findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild")]
+	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_install_override") {
+		t.Fatalf("destructive cephadm rm-cluster must be gated on the override flag, got when=%v", rmCluster["when"])
+	}
+	if got := fmt.Sprint(rmCluster["ansible.builtin.command"]); !strings.Contains(got, "rm-cluster") {
+		t.Fatalf("override rebuild must run cephadm rm-cluster, got %v", rmCluster)
+	}
+	bootstrapStep := block[findAnsibleTask(t, block, "Bootstrap Ceph cluster when absent")]
+	if got := fmt.Sprint(bootstrapStep["when"]); !strings.Contains(got, "bootwright_ceph_conf_check.rc") || strings.Contains(got, "status_check") {
+		t.Fatalf("bootstrap must be gated solely on ceph.conf presence, got when=%v", bootstrapStep["when"])
+	}
 	resolveBootstrap := block[findAnsibleTask(t, block, "Resolve cephadm bootstrap command")]
 	bootstrapArgv := fmt.Sprint(resolveBootstrap["ansible.builtin.set_fact"])
 	if !strings.Contains(bootstrapArgv, "--registry-json") || strings.Contains(bootstrapArgv, "--registry-password") || strings.Contains(bootstrapArgv, "--registry-username") {
