@@ -411,25 +411,24 @@ This does not destroy container-cluster nodes or the rest of the infrastructure.
 ## Add The Cluster Kube Context
 
 After `apply --yes` completes, merge the generated admin kubeconfig into your
-user kubeconfig:
+user kubeconfig. `bootwright cluster kubeconfig` prints the root-owned admin
+kubeconfig for you, so you no longer need a manual `sudo` copy:
 
 ```text
 export CLUSTER=<cluster-name>
-export BOOTWRIGHT_CONTEXT="$(bootwright context current --short)"
-export SRC_KUBECONFIG="/var/lib/bootwright/contexts/${BOOTWRIGHT_CONTEXT}/clusters/${CLUSTER}/secrets/kubeconfig"
-export TMP_KUBECONFIG="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
-export TMP_MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
+export SRC="${TMPDIR:-/tmp}/bootwright-${CLUSTER}.kubeconfig"
+export MERGED="${TMPDIR:-/tmp}/bootwright-merged-kubeconfig"
 
 mkdir -p "${HOME}/.kube"
 touch "${HOME}/.kube/config"
 chmod 0600 "${HOME}/.kube/config"
 
-sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" \
-  "${SRC_KUBECONFIG}" "${TMP_KUBECONFIG}"
-CTX="$(oc --kubeconfig "${TMP_KUBECONFIG}" config current-context)"
-oc --kubeconfig "${TMP_KUBECONFIG}" config rename-context "${CTX}" "${CLUSTER}-admin"
-KUBECONFIG="${HOME}/.kube/config:${TMP_KUBECONFIG}" oc config view --flatten > "${TMP_MERGED}"
-install -m 0600 "${TMP_MERGED}" "${HOME}/.kube/config"
+bootwright cluster kubeconfig --cluster "${CLUSTER}" > "${SRC}"
+chmod 0600 "${SRC}"
+CTX="$(oc --kubeconfig "${SRC}" config current-context)"
+oc --kubeconfig "${SRC}" config rename-context "${CTX}" "${CLUSTER}-admin"
+KUBECONFIG="${HOME}/.kube/config:${SRC}" oc config view --flatten > "${MERGED}"
+install -m 0600 "${MERGED}" "${HOME}/.kube/config"
 oc config use-context "${CLUSTER}-admin"
 ```
 

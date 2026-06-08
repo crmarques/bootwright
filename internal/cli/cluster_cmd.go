@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -43,8 +45,62 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 	cmd.AddCommand(
 		newClusterListCmd(stdout),
 		newClusterAccessInfoCmd(stdout),
+		newClusterKubeconfigCmd(stdout),
 	)
 	requireSubcommand(cmd)
+	return cmd
+}
+
+func newClusterKubeconfigCmd(stdout io.Writer) *cobra.Command {
+	clusterName := ""
+	cmd := &cobra.Command{
+		Use:   "kubeconfig --cluster <name>",
+		Short: "Print the admin kubeconfig for an installed cluster",
+		Long: `Print the generated admin kubeconfig for an installed container cluster to
+stdout, so you can save it to a file you own instead of copying the root-owned
+source by hand:
+
+    bootwright cluster kubeconfig --cluster managed-01 > ~/.kube/managed-01
+    oc --kubeconfig ~/.kube/managed-01 get nodes
+
+The kubeconfig is admin credential material; redirect it to a private path and
+do not commit it.`,
+		Args: cobra.NoArgs,
+		Example: `  # Save one cluster's admin kubeconfig to a private file
+  bootwright cluster kubeconfig --cluster managed-01 > ~/.kube/managed-01`,
+	}
+	cmd.Flags().StringVar(&clusterName, "cluster", "", "ContainerCluster name")
+	_ = cmd.MarkFlagRequired("cluster")
+	cf := addCommonFlags()
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		state, err := loadDesiredState(cf)
+		if err != nil {
+			return failErr(1, err)
+		}
+		if err := validateClusterNames(state, []string{clusterName}); err != nil {
+			return failErr(2, err)
+		}
+		clustersDir := controllerClustersDir(cf.ctx.Name)
+		summaries := filterClusterAccessSummaries(
+			clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state)),
+			clusterName,
+		)
+		if len(summaries) == 0 {
+			return failf(1, "%q is not an installed container cluster", clusterName)
+		}
+		summary := summaries[0]
+		if !summary.Kubeconfig.Present {
+			return failf(1, "kubeconfig for %q not found at %s; install the cluster first", clusterName, summary.KubeconfigPath)
+		}
+		data, err := os.ReadFile(summary.KubeconfigPath)
+		if err != nil {
+			return failErr(1, fmt.Errorf("read kubeconfig for %s: %w", clusterName, err))
+		}
+		if _, err := stdout.Write(data); err != nil {
+			return failErr(1, fmt.Errorf("write kubeconfig for %s: %w", clusterName, err))
+		}
+		return nil
+	}
 	return cmd
 }
 
