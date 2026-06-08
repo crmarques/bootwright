@@ -2618,6 +2618,64 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
+	top := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	if len(top) == 0 {
+		t.Fatalf("bootstrap.yml has no tasks")
+	}
+	tasks := nestedAnsibleTasks(t, top[0], "block")
+
+	// A --override clean rebuild must read a Bootwright ownership marker, decide
+	// ownership by matching its fsid to the live cluster, and refuse (fail closed)
+	// before the destructive cephadm rm-cluster --zap-osds, so a foreign or
+	// co-resident cephadm cluster on the seed is never zapped.
+	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker for override rebuild")
+	decideIdx := findAnsibleTask(t, tasks, "Decide override rebuild ownership")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse override rebuild of a non-Bootwright Ceph cluster")
+	zapIdx := findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")
+	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < zapIdx) {
+		t.Fatalf("override rebuild must read marker, decide ownership, and refuse before zapping (read=%d decide=%d refuse=%d zap=%d)", readIdx, decideIdx, refuseIdx, zapIdx)
+	}
+
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("override rebuild guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_override_owned") {
+		t.Fatalf("override rebuild guard must require proven Bootwright ownership, got %v", refuse["that"])
+	}
+
+	zap, ok := tasks[zapIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(zap["argv"]), "rm-cluster") || !strings.Contains(fmt.Sprint(zap["argv"]), "--zap-osds") {
+		t.Fatalf("override rebuild must zap via cephadm rm-cluster --zap-osds, got %v", tasks[zapIdx])
+	}
+	if got := fmt.Sprint(tasks[zapIdx]["when"]); !strings.Contains(got, "bootwright_ceph_override_owned") {
+		t.Fatalf("override rebuild zap must be gated on proven ownership, got %v", tasks[zapIdx]["when"])
+	}
+
+	// Ownership is an fsid match between the marker and the live cluster.
+	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("ownership decision must be a set_fact, got %v", tasks[decideIdx])
+	}
+	if got := fmt.Sprint(decide["bootwright_ceph_override_owned"]); !strings.Contains(got, "bootwright_ceph_override_owned_fsid") || !strings.Contains(got, "bootwright_ceph_override_fsid") {
+		t.Fatalf("ownership decision must match marker fsid to live fsid, got %v", decide["bootwright_ceph_override_owned"])
+	}
+
+	// The marker recording that fsid is stamped (root-owned, 0600) on apply.
+	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright Ceph ownership marker")
+	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("ownership marker must be written with copy, got %v", tasks[stampIdx])
+	}
+	if got := fmt.Sprint(stamp["dest"]); !strings.Contains(got, "bootwright_ceph_ownership_marker_path") {
+		t.Fatalf("ownership marker must write the marker path, got %v", stamp["dest"])
+	}
+	if got := fmt.Sprint(stamp["mode"]); got != "0600" {
+		t.Fatalf("ownership marker must be mode 0600, got %v", stamp["mode"])
+	}
+}
+
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")

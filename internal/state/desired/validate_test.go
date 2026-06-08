@@ -1449,6 +1449,48 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 	}
 }
 
+func TestUnknownFieldRejectedAcrossAllKinds(t *testing.T) {
+	kinds := []string{
+		v1alpha1.KindEnvironment,
+		v1alpha1.KindMachine,
+		v1alpha1.KindMachineImage,
+		v1alpha1.KindMachineInstallProfile,
+		v1alpha1.KindNetworkConfig,
+		v1alpha1.KindInfraProvider,
+		v1alpha1.KindInfraComponent,
+		v1alpha1.KindContainerCluster,
+		v1alpha1.KindStorageCluster,
+		v1alpha1.KindStoragePlacementPolicy,
+		v1alpha1.KindStoragePool,
+		v1alpha1.KindStorageFilesystem,
+		v1alpha1.KindStorageObjectGateway,
+		v1alpha1.KindStorageExport,
+		v1alpha1.KindClusterAddon,
+		v1alpha1.KindClusterAddonProfile,
+		v1alpha1.KindClusterAddonBinding,
+	}
+	if len(kinds) != 17 {
+		t.Fatalf("expected 17 user-authored kinds, listed %d", len(kinds))
+	}
+	for _, kind := range kinds {
+		t.Run(kind, func(t *testing.T) {
+			body := "apiVersion: bootwright.io/v1alpha1\n" +
+				"kind: " + kind + "\n" +
+				"metadata:\n  name: unknown-field-probe\n" +
+				"spec:\n  zzzBootwrightUnknownField: true\n"
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{"doc.yaml": body})
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatalf("kind %s: expected strict-decode error for an unknown spec field, got nil", kind)
+			}
+			if !strings.Contains(err.Error(), "zzzBootwrightUnknownField") {
+				t.Fatalf("kind %s: error %q does not reject the unknown spec field", kind, err)
+			}
+		})
+	}
+}
+
 func TestEnvironmentProxyOldSpecRejectsStrictDecode(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()

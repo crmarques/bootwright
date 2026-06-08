@@ -136,11 +136,24 @@
     # any existing cephadm cluster on the seed and clear the residual config so the
     # bootstrap below runs against a fresh host with no manual recovery. Without
     # override an already-bootstrapped node is left untouched (idempotent re-apply).
-    # This is destructive and is gated strictly on the explicit override flag.
+    # The zap is gated on the explicit override flag AND on a Bootwright ownership
+    # marker whose fsid matches the live cluster: a clean rebuild must never
+    # --zap-osds a cephadm cluster Bootwright did not create (a foreign or
+    # co-resident cluster on the seed), so an existing-but-unowned cluster fails
+    # closed instead of being destroyed.
     - name: Read existing Ceph configuration for override rebuild
       ansible.builtin.slurp:
         src: /etc/ceph/ceph.conf
       register: bootwright_ceph_override_conf
+      changed_when: false
+      failed_when: false
+      when: bootwright_install_override | default(false) | bool
+
+    - name: Read Bootwright Ceph ownership marker for override rebuild
+      ansible.builtin.slurp:
+        src: "{{ bootwright_ceph_ownership_marker_path }}"
+      register: bootwright_ceph_override_marker
+      changed_when: false
       failed_when: false
       when: bootwright_install_override | default(false) | bool
 
@@ -152,6 +165,40 @@
       when:
         - bootwright_install_override | default(false) | bool
         - (bootwright_ceph_override_conf | default({})).content is defined
+
+    - name: Resolve Bootwright ownership marker fsid for override rebuild
+      ansible.builtin.set_fact:
+        bootwright_ceph_override_owned_fsid: >-
+          {{ (bootwright_ceph_override_marker.content | b64decode | from_json).fsid
+             | default('', true) | trim }}
+      when:
+        - bootwright_install_override | default(false) | bool
+        - (bootwright_ceph_override_marker | default({})).content is defined
+
+    - name: Decide override rebuild ownership
+      ansible.builtin.set_fact:
+        bootwright_ceph_override_owned: >-
+          {{
+            (bootwright_ceph_override_owned_fsid | default('') | length > 0)
+            and (bootwright_ceph_override_fsid | default('') | length > 0)
+            and (bootwright_ceph_override_owned_fsid | default('')
+                 == bootwright_ceph_override_fsid | default(''))
+          }}
+      when: bootwright_install_override | default(false) | bool
+
+    - name: Refuse override rebuild of a non-Bootwright Ceph cluster
+      ansible.builtin.assert:
+        that:
+          - bootwright_ceph_override_owned | default(false) | bool
+        fail_msg: >-
+          Refusing --override clean rebuild of the cephadm cluster on
+          {{ inventory_hostname }} (fsid {{ bootwright_ceph_override_fsid | default('<unknown>') }}):
+          it carries no Bootwright ownership marker matching this cluster, so it may be a
+          foreign or co-resident Ceph cluster. Re-run a normal apply to re-stamp ownership,
+          or remove /etc/ceph manually after verifying the cluster is safe to destroy, then retry.
+      when:
+        - bootwright_install_override | default(false) | bool
+        - bootwright_ceph_override_fsid | default('') | length > 0
 
     - name: Remove existing cephadm cluster for override rebuild
       ansible.builtin.command:
@@ -167,6 +214,7 @@
       failed_when: false
       when:
         - bootwright_install_override | default(false) | bool
+        - bootwright_ceph_override_owned | default(false) | bool
         - bootwright_ceph_override_fsid | default('') | length > 0
 
     - name: Clear residual Ceph configuration for override rebuild
@@ -177,8 +225,10 @@
         - /etc/ceph/ceph.conf
         - /etc/ceph/ceph.client.admin.keyring
         - /etc/ceph/ceph.pub
+        - "{{ bootwright_ceph_ownership_marker_path }}"
       when:
         - bootwright_install_override | default(false) | bool
+        - bootwright_ceph_override_owned | default(false) | bool
         - (bootwright_ceph_override_conf | default({})).content is defined
 
     - name: Check existing Ceph configuration
@@ -375,6 +425,36 @@
       become: false
       no_log: true
       when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
+
+    # Stamp a host-local ownership marker recording this cluster's fsid so a later
+    # --override clean rebuild can prove the live cephadm cluster is the one
+    # Bootwright created (fsid match) before --zap-osds. Refreshed on every
+    # successful apply, which also re-stamps clusters bootstrapped before the marker
+    # existed. Removed by /etc/ceph teardown in the destroy flow.
+    - name: Capture Ceph fsid for ownership marker
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - fsid
+      register: bootwright_ceph_ownership_fsid
+      changed_when: false
+      failed_when: false
+
+    - name: Stamp Bootwright Ceph ownership marker
+      ansible.builtin.copy:
+        dest: "{{ bootwright_ceph_ownership_marker_path }}"
+        content: >-
+          {{
+            {
+              'manager': 'bootwright',
+              'cluster': bootwright_selected_storage_cluster.name,
+              'fsid': bootwright_ceph_ownership_fsid.stdout | default('') | trim
+            } | to_nice_json
+          }}
+        owner: root
+        group: root
+        mode: "0600"
+      when: bootwright_ceph_ownership_fsid.stdout | default('') | trim | length > 0
 
     - name: Record storage cluster ownership
       ansible.builtin.include_role:

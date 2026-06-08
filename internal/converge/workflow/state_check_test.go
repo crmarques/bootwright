@@ -62,6 +62,55 @@ func TestStateCheckClassifiesDriftAbsenceAndMatch(t *testing.T) {
 	}
 }
 
+func TestStateCheckGranularDriftMixedResources(t *testing.T) {
+	runsDir := t.TempDir()
+	// Four resources under one present root (container/demo): one matched, one
+	// drifted, one foreign, one never applied. A present root must report the
+	// out-of-sync resources granularly (not collapse to a single absence) and keep
+	// the matched count distinct.
+	matched := stateCheckTask("container-cluster.demo", "containerCluster", "demo", "container")
+	drift := stateCheckTask("addon.demo.virt", "clusterAddon", "demo", "container")
+	foreign := stateCheckTask("machineinfra.demo.node0", "machineInfra", "demo", "container")
+	missing := stateCheckTask("storage-attach.demo", "storageAttachment", "demo", "container")
+
+	matchHash, err := ApplyTaskDesiredHash(matched)
+	if err != nil {
+		t.Fatalf("desired hash: %v", err)
+	}
+	saveStateCheckRecord(t, runsDir, matched, matchHash, ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, drift, "sha256:stale", ConvergeSafetyOwner)
+	saveStateCheckRecord(t, runsDir, foreign, "sha256:stale", "someone-else")
+	// missing: no record -> never applied, but the root is otherwise present.
+
+	report, err := StateCheck([]ApplyTask{matched, drift, foreign, missing}, runsDir)
+	if err != nil {
+		t.Fatalf("StateCheck: %v", err)
+	}
+	if report.InSync {
+		t.Fatal("a root with drift/foreign/missing resources must not be in sync")
+	}
+	if len(report.Roots) != 1 {
+		t.Fatalf("expected one root, got %d: %+v", len(report.Roots), report.Roots)
+	}
+	root := report.Roots[0]
+	if root.Name != "demo" || root.Absent {
+		t.Fatalf("present root demo must report granularly, not as a single absence, got %+v", root)
+	}
+	if root.Total != 4 || root.Matched != 1 {
+		t.Fatalf("expected total 4 matched 1, got total=%d matched=%d", root.Total, root.Matched)
+	}
+	if len(root.Resources) != 3 {
+		t.Fatalf("expected 3 out-of-sync resources reported granularly, got %d: %+v", len(root.Resources), root.Resources)
+	}
+	counts := map[ConvergeSafetyClassification]int{}
+	for _, res := range root.Resources {
+		counts[res.Classification]++
+	}
+	if counts[ConvergeSafetyDrift] != 1 || counts[ConvergeSafetyForeign] != 1 || counts[ConvergeSafetyMissing] != 1 {
+		t.Fatalf("expected one drift, one foreign, one missing reported granularly, got %+v", counts)
+	}
+}
+
 func TestStateCheckForeignOwner(t *testing.T) {
 	runsDir := t.TempDir()
 	task := stateCheckTask("container-cluster.demo", "containerCluster", "demo", "container")

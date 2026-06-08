@@ -3671,6 +3671,38 @@ func TestApplyClustersOverrideDryRunPassesInstallOverride(t *testing.T) {
 	}
 }
 
+func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	now := time.Now().UTC()
+	ledger := workflow.NewRunLedger("apply-active", "clusters", "", workflow.ConcurrencyLimits{}, nil, now)
+	if err := workflow.SaveRunLedger(ctx.RunsDir, ledger); err != nil {
+		t.Fatalf("SaveRunLedger: %v", err)
+	}
+	if err := workflow.SaveRunLease(ctx.RunsDir, workflow.NewRunLease("apply-active", now)); err != nil {
+		t.Fatalf("SaveRunLease: %v", err)
+	}
+
+	// --override authorizes Bootwright-owned install-mismatch checks only; it must
+	// not bypass an active run lease. The apply must fail closed before contacting
+	// any host or starting a workflow.
+	stdout, stderr, code := runCLI(t,
+		"apply", "--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--override",
+		"--yes",
+		"--ask-become-pass=false",
+	)
+	if code == 0 {
+		t.Fatalf("apply --override unexpectedly bypassed the active run lease\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "apply run apply-active is still running") {
+		t.Fatalf("apply --override stderr missing active-run error:\n%s", stderr)
+	}
+	if strings.Contains(stdout, "Bundle") || strings.Contains(stdout, "Workflow") {
+		t.Fatalf("apply --override progressed to workflow despite the active lease\nstdout:\n%s", stdout)
+	}
+}
+
 func TestStatusWatchStopsWhenNoRunLedgerExists(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "status", "--watch", "--watch-interval", "1ms")
