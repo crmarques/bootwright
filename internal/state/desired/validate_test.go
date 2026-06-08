@@ -2481,14 +2481,14 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "attachmentRef: { name: child-machine-net }", "attachmentRef: { name: missing }", 1)
 			},
-			wantSubstring: `attachmentRef.name "missing" does not match any networkAttachments[] on InfraProvider/child-kubevirt-provider`,
+			wantSubstring: `Machine/child-master-0 spec.network.config.attachmentRef.name "missing" does not match any networkAttachments[] on InfraProvider/child-kubevirt-provider`,
 		},
 		{
 			name: "network-attachment-kind-mismatch",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n", "      libvirt:\n        bridge: vbr-child\n", 1)
 			},
-			wantSubstring: `networkConfigRef.name "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment "child-machine-net" of kind "libvirt", but provider type is "kubevirt"`,
+			wantSubstring: `spec.network.config.attachmentRef.name "child-machine-net" binds to InfraProvider/child-kubevirt-provider networkAttachment of kind "libvirt", but provider type is "kubevirt"`,
 		},
 		{
 			name: "network-attachment-nad-namespace-required",

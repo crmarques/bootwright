@@ -23,6 +23,11 @@ type ClusterArtifactEndpointRef struct {
 }
 
 type MachineNetworkBinding struct {
+	// MachineName is the projected source Machine that owns this binding's
+	// network/substrate facts. It is the editable owner diagnostics must name;
+	// the binding itself is a computed view (ClusterInstall.NetworkBindings is
+	// yaml:"-"), so this field is never authored or serialized.
+	MachineName      string               `yaml:"-" json:"-"`
 	NetworkConfigRef LocalObjectReference `yaml:"networkConfigRef" json:"networkConfigRef"`
 	ProviderRef      LocalObjectReference `yaml:"providerRef" json:"providerRef"`
 	AttachmentRef    LocalObjectReference `yaml:"attachmentRef" json:"attachmentRef"`

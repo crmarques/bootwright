@@ -253,27 +253,32 @@ func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string
 
 func validateMachineNetworkBindings(ci v1alpha1.ClusterInstall, providers map[string]v1alpha1.InfraProvider, networkConfigs map[string]v1alpha1.NetworkConfig) []string {
 	var errs []string
-	for i, binding := range ci.NetworkBindings {
-		prefix := fmt.Sprintf("ContainerCluster/%s spec.install.networkBindings[%d]", ci.Metadata.Name, i)
+	for _, binding := range ci.NetworkBindings {
+		// NetworkBindings is a computed view; blame the editable owner (the
+		// referenced Machine), not the synthetic spec.install.networkBindings path.
+		mp := fmt.Sprintf("Machine/%s", binding.MachineName)
+		if binding.MachineName == "" {
+			mp = fmt.Sprintf("ContainerCluster/%s node Machine", ci.Metadata.Name)
+		}
 		if binding.NetworkConfigRef.Name == "" {
-			errs = append(errs, prefix+".networkConfigRef.name is required")
+			errs = append(errs, mp+" spec.network.config.networkConfigRef.name is required")
 		} else if _, ok := networkConfigs[binding.NetworkConfigRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.networkConfigRef.name %q does not match any NetworkConfig", prefix, binding.NetworkConfigRef.Name))
+			errs = append(errs, fmt.Sprintf("%s spec.network.config.networkConfigRef.name %q does not match any NetworkConfig", mp, binding.NetworkConfigRef.Name))
 		}
 		provider, ok := providers[binding.ProviderRef.Name]
 		if binding.ProviderRef.Name == "" {
-			errs = append(errs, prefix+".providerRef.name is required")
+			errs = append(errs, mp+" spec.substrate.providerRef.name is required")
 		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s.providerRef.name %q does not match any InfraProvider", prefix, binding.ProviderRef.Name))
+			errs = append(errs, fmt.Sprintf("%s spec.substrate.providerRef.name %q does not match any InfraProvider", mp, binding.ProviderRef.Name))
 		}
 		if binding.AttachmentRef.Name == "" {
-			errs = append(errs, prefix+".attachmentRef.name is required")
+			errs = append(errs, mp+" spec.network.config.attachmentRef.name is required")
 		} else if ok {
 			if attachment, found := lookupNetworkAttachment(provider, binding.AttachmentRef.Name); !found {
-				errs = append(errs, fmt.Sprintf("%s.attachmentRef.name %q does not match any networkAttachments[] on InfraProvider/%s", prefix, binding.AttachmentRef.Name, provider.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef.name %q does not match any networkAttachments[] on InfraProvider/%s", mp, binding.AttachmentRef.Name, provider.Metadata.Name))
 			} else if kind := v1alpha1.NetworkAttachmentKind(attachment); kind != "" && kind != provider.Spec.Type {
-				errs = append(errs, fmt.Sprintf("%s.networkConfigRef.name %q binds to InfraProvider/%s networkAttachment %q of kind %q, but provider type is %q",
-					prefix, binding.NetworkConfigRef.Name, provider.Metadata.Name, binding.AttachmentRef.Name, kind, provider.Spec.Type))
+				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef.name %q binds to InfraProvider/%s networkAttachment of kind %q, but provider type is %q",
+					mp, binding.AttachmentRef.Name, provider.Metadata.Name, kind, provider.Spec.Type))
 			}
 		}
 	}
