@@ -98,7 +98,7 @@
       - "{{ item }}"
   register: bootwright_ceph_device_check
   changed_when: false
-  failed_when: bootwright_ceph_device_check.rc != 0 or (bootwright_ceph_device_check.stdout | regex_search('\\S'))
+  failed_when: bootwright_ceph_device_check.rc != 0 or (bootwright_ceph_device_check.stdout | trim | length > 0)
   loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_node.name }} {{ item }}"
