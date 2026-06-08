@@ -117,6 +117,37 @@ func TestContextStoreRejectsMissingAndUnsafeKeyFiles(t *testing.T) {
 	}
 }
 
+func TestMaterializeRuntimeRemovesPartialPlaintextOnError(t *testing.T) {
+	store := NewContextStore("lab", t.TempDir())
+	first := MaterialKey{Name: "aaa-first", Role: MaterialPrimary}
+	second := MaterialKey{Name: "zzz-second", Role: MaterialPrimary}
+	if err := store.Write(first, []byte("first-secret\n")); err != nil {
+		t.Fatalf("Write first: %v", err)
+	}
+	if err := store.Write(second, []byte("second-secret\n")); err != nil {
+		t.Fatalf("Write second: %v", err)
+	}
+	// Corrupt the second material (sorted after the first) so its decrypt fails
+	// mid-loop, after the first has already been written as plaintext.
+	path := store.materialPath(second)
+	env := readTestEnvelope(t, path)
+	ciphertext, err := base64.StdEncoding.DecodeString(env.Ciphertext)
+	if err != nil {
+		t.Fatalf("decode ciphertext: %v", err)
+	}
+	ciphertext[0] ^= 0xff
+	env.Ciphertext = base64.StdEncoding.EncodeToString(ciphertext)
+	writeTestEnvelope(t, path, env)
+
+	targetDir := filepath.Join(t.TempDir(), "runtime-secrets")
+	if err := store.MaterializeRuntime(targetDir); err == nil {
+		t.Fatal("MaterializeRuntime succeeded despite a corrupt material")
+	}
+	if entries, statErr := os.ReadDir(targetDir); statErr == nil && len(entries) > 0 {
+		t.Fatalf("failed materialization left partial plaintext on disk: %v", entries)
+	}
+}
+
 func TestContextStoreRejectsWrongOwnerPolicy(t *testing.T) {
 	dir := t.TempDir()
 	store := NewContextStore("lab", dir)

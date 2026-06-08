@@ -70,3 +70,29 @@ func readTrustTestFile(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+func TestSaveRejectsDivergentKeysForOneAddress(t *testing.T) {
+	dir := t.TempDir()
+	store := Store{Hosts: []HostRecord{
+		{Name: "node-a", Address: "10.0.0.5", KeyType: "ssh-ed25519", PublicKey: "QUJDRA=="},
+		{Name: "node-b", Address: "10.0.0.5", KeyType: "ssh-ed25519", PublicKey: "RUZHSA=="},
+	}}
+	err := Save(dir, store)
+	if err == nil || !strings.Contains(err.Error(), "10.0.0.5") || !strings.Contains(err.Error(), "divergent") {
+		t.Fatalf("Save with divergent keys for one address = %v, want a divergent-key error", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, KnownHostsName)); statErr == nil {
+		t.Fatal("known_hosts was written despite the address conflict")
+	}
+}
+
+func TestSaveAllowsSharedAddressWithIdenticalKey(t *testing.T) {
+	dir := t.TempDir()
+	store := Store{Hosts: []HostRecord{
+		{Name: "node-a", Address: "10.0.0.5", KeyType: "ssh-ed25519", PublicKey: testPublicKey},
+		{Name: "node-b", Address: "10.0.0.5", KeyType: "ssh-ed25519", PublicKey: testPublicKey},
+	}}
+	if err := Save(dir, store); err != nil {
+		t.Fatalf("Save with a shared address and identical key: %v", err)
+	}
+}

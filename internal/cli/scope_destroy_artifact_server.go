@@ -6,6 +6,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 )
 
 const (
@@ -25,10 +26,10 @@ func isInfraArtifactServerDestroyScope(scope scopeSpec, clusterScope string) boo
 	return scope.name == "infra" && strings.TrimSpace(clusterScope) == infraDestroyArtifactServerScope
 }
 
-func prepareInfraArtifactServerDestroyWorkflow(state v1alpha1.State, askBecomePass, dryRun bool) scopedWorkflowPlan {
+func prepareInfraArtifactServerDestroyWorkflow(state v1alpha1.State, askBecomePass, dryRun bool, records []ownership.ResourceRecord) scopedWorkflowPlan {
 	selected := []Phase{infraArtifactServerDestroyPhase}
 	limit := render.GroupInfraComponentHosts
-	noRemoteWork := !dryRun && workflow.LimitMatchesNoHosts(limit, state)
+	noRemoteWork := !dryRun && workflow.LimitMatchesNoHostsWithOwnershipRecords(limit, state, records)
 	askBecomeForRun := askBecomePass && rootPhaseCount(selected) > 0 && !noRemoteWork
 	return scopedWorkflowPlan{
 		state:         state,

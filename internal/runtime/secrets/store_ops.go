@@ -237,7 +237,7 @@ func (s *ContextStore) Rotate() error {
 	return s.removeUnusedKeys(metadata.ActiveKeyID)
 }
 
-func (s *ContextStore) MaterializeRuntime(targetDir string) error {
+func (s *ContextStore) MaterializeRuntime(targetDir string) (err error) {
 	materials, err := s.ListMaterial()
 	if err != nil {
 		return err
@@ -251,6 +251,15 @@ func (s *ContextStore) MaterializeRuntime(targetDir string) error {
 	if err := os.Chmod(targetDir, 0o700); err != nil {
 		return fmt.Errorf("chmod runtime secrets directory %s: %w", targetDir, err)
 	}
+	// Plaintext copies are written one material at a time. If a later material
+	// fails to decrypt or write, remove everything written so far: callers
+	// register their own cleanup defer only on the success path, so without this
+	// a failed materialization would leave partial plaintext secrets on disk.
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(targetDir)
+		}
+	}()
 	for _, material := range materials {
 		if material.State == MaterialStateMissing {
 			continue

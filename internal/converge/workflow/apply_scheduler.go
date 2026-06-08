@@ -84,13 +84,16 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ledger := NewRunLedger(runID, target.Name, clusterScope, limits, TaskLedgerEntries(tasks), startedAt)
-	if err := SaveRunLedger(runsDir, ledger); err != nil {
+	// Claim the run lease atomically before writing our ledger. A concurrent
+	// mutator that raced past the advisory pre-mutation check must lose here
+	// rather than silently overwriting the in-flight run's lease and ledger.
+	now := time.Now()
+	lease := NewRunLease(runID, now)
+	if err := AcquireRunLease(runsDir, lease, now); err != nil {
 		return ledger, err
 	}
-	lease := NewRunLease(runID, startedAt)
-	if err := SaveRunLease(runsDir, lease); err != nil {
-		ledger.Finish(RunStatusFailed, time.Now())
-		_ = SaveRunLedger(runsDir, ledger)
+	if err := SaveRunLedger(runsDir, ledger); err != nil {
+		_ = RemoveRunLease(runsDir)
 		return ledger, err
 	}
 	stopLeaseHeartbeat, leaseErrors := startRunLeaseHeartbeat(ctx, runsDir, lease)

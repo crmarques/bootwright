@@ -208,6 +208,66 @@ func RemoveRunLease(runsDir string) error {
 	return nil
 }
 
+// leaseFresh reports whether an on-disk lease belongs to a run that is still
+// alive: a recent heartbeat and, when the lease was taken on this host, a live
+// process. It mirrors the freshness arms of AssessRunActivity but works from the
+// lease alone, so it can gate mutating runs that do not maintain a ledger.
+func leaseFresh(lease RunLease, now time.Time) bool {
+	if lease.HeartbeatAt.IsZero() {
+		return false
+	}
+	if localLeaseProcessMissing(lease) {
+		return false
+	}
+	return now.UTC().Sub(lease.HeartbeatAt.UTC()) <= ApplyLeaseStaleAfter
+}
+
+// AcquireRunLease atomically claims the run lease for a mutating run. It fails
+// closed when another run holds a fresh lease, so two mutators that both raced
+// past the advisory pre-mutation check cannot proceed together. A stale lease
+// (dead process or expired heartbeat) is claimed by renaming it aside — only one
+// of several racing takeovers can win that rename — before the lease is created
+// with an O_EXCL exclusive open. The lease is the single point of mutual
+// exclusion between scheduler applies and Run-based destroys.
+func AcquireRunLease(runsDir string, lease RunLease, now time.Time) error {
+	path := LeasePath(runsDir)
+	existing, found, err := LoadRunLease(runsDir)
+	if err != nil {
+		return err
+	}
+	if found {
+		if leaseFresh(existing, now) {
+			return fmt.Errorf("a mutating run (%s) is still running; inspect it with bootwright status --watch", existing.RunID)
+		}
+		// Atomically claim the stale lease: renaming the path aside succeeds for
+		// at most one racer (the source vanishes for the rest), so no two
+		// takeovers can both go on to recreate the lease.
+		staleClaim := path + ".stale-" + lease.RunID
+		if err := os.Rename(path, staleClaim); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("claim stale apply lease: %w", err)
+		}
+		_ = os.Remove(staleClaim)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create apply lease directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("chmod apply lease directory: %w", err)
+	}
+	data, err := json.MarshalIndent(lease, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode apply lease: %w", err)
+	}
+	data = append(data, '\n')
+	if err := safefs.WriteNewFile(path, data, 0o600); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("a mutating run acquired the apply lease concurrently; inspect it with bootwright status --watch")
+		}
+		return fmt.Errorf("acquire apply lease: %w", err)
+	}
+	return nil
+}
+
 func SaveRunLedger(runsDir string, ledger RunLedger) error {
 	path := LedgerPath(runsDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
@@ -63,7 +64,13 @@ type RunOptions struct {
 	// targets the openshift install_agent role.
 	ResolveInstaller bool
 	// Label is included in the dry-run echo line, e.g. "infra apply".
-	Label                      string
+	Label string
+	// AcquireRunLease, when true and the run is not a dry-run or no-hosts skip,
+	// claims the run lease around the ansible invocation so the run is mutually
+	// exclusive with scheduler applies and other lease-holding runs. Set by
+	// destroy, which mutates outside the apply scheduler and would otherwise hold
+	// no lease, letting an apply start concurrently against the same targets.
+	AcquireRunLease            bool
 	InstallOverride            bool
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 }
@@ -201,6 +208,18 @@ func Run(ctx context.Context, opts RunOptions, runner ansible.Runner, reporter R
 			reporter.SkipNoHosts(label, opts.Limit)
 		}
 		return RunResult{Render: result, Command: command, Skipped: true}, nil
+	}
+	if opts.AcquireRunLease {
+		now := time.Now()
+		lease := NewRunLease(applyRunID(now), now)
+		if err := AcquireRunLease(opts.RunsDir, lease, now); err != nil {
+			return RunResult{Render: result, Command: command}, err
+		}
+		stopLeaseHeartbeat, _ := startRunLeaseHeartbeat(ctx, opts.RunsDir, lease)
+		defer func() {
+			stopLeaseHeartbeat()
+			_ = RemoveRunLease(opts.RunsDir)
+		}()
 	}
 	if reporter != nil {
 		reporter.AnsibleStart(command[0])

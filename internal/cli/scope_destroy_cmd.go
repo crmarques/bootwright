@@ -11,6 +11,7 @@ import (
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
@@ -134,14 +135,22 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		playbook := runScope.destroyPlaybook
 		artifactsBaseName := runScope.artifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
+		// Destroy tears down resources recorded in the context ownership store even
+		// when the desired state no longer references them. Load those records so the
+		// plan's no-remote-work decision (which gates the confirmation prompt and the
+		// become-password prompt) counts the same hosts workflow.Run will act on.
+		ownershipRecords, err := ownership.LoadResources(ctx.OwnershipDir)
+		if err != nil {
+			return failErr(1, err)
+		}
 		var plan scopedWorkflowPlan
 		if artifactServerOnly {
-			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun)
+			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun, ownershipRecords)
 			playbook = infraDestroyArtifactServerPlaybook
 			artifactsBaseName = infraDestroyArtifactServerArtifactsBaseName
 			workflowLabel = "infra destroy artifact-server"
 		} else {
-			plan, err = prepareScopedWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun)
+			plan, err = prepareScopedWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun, ownershipRecords)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -247,6 +256,9 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
 			DryRun:             dryRun,
 			Label:              workflowLabel,
+			// Destroy mutates outside the apply scheduler; hold the run lease for
+			// the teardown so it is mutually exclusive with a concurrent apply.
+			AcquireRunLease: true,
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)

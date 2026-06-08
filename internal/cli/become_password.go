@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/runtime/fs"
 )
 
 type becomeCredential struct {
@@ -123,25 +126,23 @@ func writeBecomePasswordFile(password string) (string, func(), error) {
 	if password == "" {
 		return "", nil, errors.New("BECOME password cannot be empty")
 	}
-	file, err := os.CreateTemp("", "bootwright-become-*")
+	// Materialize the plaintext BECOME password under a 0700 per-run directory
+	// (not bare in the shared, world-writable /tmp), mirroring the secret-staging
+	// path and the spec's short-lived-plaintext contract: 0700 directory, 0600
+	// file, removed by cleanup.
+	dir, err := os.MkdirTemp("", "bootwright-become-")
 	if err != nil {
-		return "", nil, fmt.Errorf("create BECOME password file: %w", err)
+		return "", nil, fmt.Errorf("create BECOME password directory: %w", err)
 	}
-	path := file.Name()
-	cleanup := func() { _ = os.Remove(path) }
-	if err := os.Chmod(path, 0o600); err != nil {
-		_ = file.Close()
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	if err := os.Chmod(dir, 0o700); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("chmod BECOME password file: %w", err)
+		return "", nil, fmt.Errorf("chmod BECOME password directory: %w", err)
 	}
-	if _, err := file.WriteString(password + "\n"); err != nil {
-		_ = file.Close()
+	path := filepath.Join(dir, "become-pass")
+	if err := safefs.WriteNewFile(path, []byte(password+"\n"), 0o600); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("write BECOME password file: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("close BECOME password file: %w", err)
 	}
 	return path, cleanup, nil
 }

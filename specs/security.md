@@ -70,6 +70,29 @@ Disconnected installs are cluster-scoped through
 `ContainerCluster.spec.install.mode`. They require mirror trust material and
 either an external mirror URL or a managed registry component.
 
+### BMC virtual-media certificate verification
+
+When a Machine boots from a Redfish BMC, the BMC itself fetches the agent ISO
+from the managed artifact server (or an operator-provided HTTPS URL). For an
+HTTPS fetch the `container_cluster_boot_redfish` role temporarily sets the BMC
+`SecurityService.HttpsTransferCertVerification` and the VirtualMedia
+`VerifyCertificate` to `false`, then restores the probed original values in an
+`always` cleanup (`media/restore_certificate_verification.yml`). This is the only
+place Bootwright disables TLS verification, and it is deliberately narrow:
+
+- The managed artifact server presents a self-signed certificate that the BMC
+  has no way to trust without distributing a CA to every BMC, so the disable is
+  what makes the default bare-metal fetch work at all.
+- It applies only to the BMC's own fetch leg, only when the fetch URL is HTTPS,
+  and only when the BMC currently has verification enabled; the original value is
+  probed beforehand and restored afterward, scoping the disable to the fetch
+  window.
+- TLS encryption is retained — only server authentication is dropped — and the
+  fetch is further bounded by the unguessable per-run publish token in the ISO
+  URL.
+- The control-node-to-BMC leg is unaffected and remains operator-controlled
+  through `disableCertificateVerification`.
+
 ## Proxy Boundaries
 
 `Environment.spec.infraComponents.proxies[]` declares proxy access entries.

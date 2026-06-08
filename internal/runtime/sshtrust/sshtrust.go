@@ -109,9 +109,41 @@ func Load(path string) (Store, error) {
 	return store, nil
 }
 
+// ValidateAddressConsistency fails closed when two records pin the same address
+// to different keys. OpenSSH accepts any matching known_hosts entry for a host,
+// so emitting two divergent lines for one address would let a peer present
+// *either* key and still pass StrictHostKeyChecking — silently weakening the
+// trust-on-first-use pin from "exactly this key" to "either key". The store is
+// keyed by Machine name, but two Machines may resolve to one address, so the
+// invariant is enforced here at the single point that writes known_hosts.
+func (s Store) ValidateAddressConsistency() error {
+	type hostKey struct{ keyType, publicKey string }
+	pinned := map[string]hostKey{}
+	owner := map[string]string{}
+	for _, record := range s.Hosts {
+		address := strings.TrimSpace(record.Address)
+		if address == "" {
+			continue
+		}
+		current := hostKey{record.KeyType, record.PublicKey}
+		if existing, ok := pinned[address]; ok {
+			if existing != current {
+				return fmt.Errorf("SSH trust store pins address %s to divergent keys for hosts %q and %q; remove or re-point one before saving", address, owner[address], record.Name)
+			}
+			continue
+		}
+		pinned[address] = current
+		owner[address] = record.Name
+	}
+	return nil
+}
+
 func Save(dir string, store Store) error {
 	if strings.TrimSpace(dir) == "" {
 		return errors.New("SSH trust directory is required")
+	}
+	if err := store.ValidateAddressConsistency(); err != nil {
+		return err
 	}
 	sortStore(store)
 	if err := os.MkdirAll(dir, localDirMode); err != nil {

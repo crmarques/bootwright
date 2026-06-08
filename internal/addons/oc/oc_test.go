@@ -193,3 +193,67 @@ func writeReadyExtensionRecord(t *testing.T, clustersDir string, plan extensionp
 		t.Fatalf("SaveRecord: %v", err)
 	}
 }
+
+type leakyApplyRunner struct {
+	secret string
+}
+
+func (r *leakyApplyRunner) Run(_ context.Context, _ string, args []string, _ []byte) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("empty oc args")
+	}
+	switch args[0] {
+	case "apply":
+		// Mimic oc echoing the rejected object's fields, including secret bytes.
+		out := "admission webhook denied the request: " + r.secret
+		return []byte(out), fmt.Errorf("run oc %s: exit status 1: %s", strings.Join(args, " "), out)
+	case "get":
+		// Force the readiness pre-check to report not-ready so Apply proceeds.
+		return nil, fmt.Errorf("not found")
+	default:
+		return nil, fmt.Errorf("unexpected oc args %v", args)
+	}
+}
+
+// TestApplyDoesNotPersistRawOutputInFailedRecord guards the "never secret bytes"
+// contract for observed-state records: when oc apply fails with output that echoes
+// user-inlined secret bytes, the failure must be summarized in the record (naming
+// the failed resource and pointing at the apply log) rather than stored verbatim.
+func TestApplyDoesNotPersistRawOutputInFailedRecord(t *testing.T) {
+	dir := t.TempDir()
+	plan := readyExtensionPlan()
+	kubeconfig := filepath.Join(dir, "kubeconfig")
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	const secret = "s3cr3t-token-DO-NOT-LEAK"
+	runner := &leakyApplyRunner{secret: secret}
+
+	_, err := Apply(context.Background(), runner, RunConfig{
+		ClustersDir: dir,
+		Kubeconfig:  kubeconfig,
+		RunID:       "run",
+		StartedAt:   time.Now(),
+	}, plan)
+	if err == nil {
+		t.Fatal("Apply succeeded despite an apply failure")
+	}
+	// The raw output (with the secret) must still reach the caller -> apply log.
+	if !strings.Contains(err.Error(), secret) {
+		t.Fatalf("returned error dropped the raw output that belongs in the apply log: %v", err)
+	}
+
+	record, found, err := extensionrecords.LoadRecord(dir, plan.Cluster, plan.Name)
+	if err != nil || !found {
+		t.Fatalf("LoadRecord: found=%v err=%v", found, err)
+	}
+	if record.Status != extensionrecords.RecordStatusFailed {
+		t.Fatalf("record status = %q, want failed", record.Status)
+	}
+	if strings.Contains(record.LastObserved, secret) {
+		t.Fatalf("observed-state record leaked secret bytes: %q", record.LastObserved)
+	}
+	if !strings.Contains(record.LastObserved, "apply log") {
+		t.Fatalf("record.LastObserved should point at the apply log: %q", record.LastObserved)
+	}
+}

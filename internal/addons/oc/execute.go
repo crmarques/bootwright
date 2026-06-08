@@ -59,13 +59,18 @@ func Apply(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpl
 	if err := extensionrecords.SaveRecord(cfg.ClustersDir, record); err != nil {
 		return TaskResult{}, err
 	}
-	observed, err := applyExtension(ctx, runner, cfg.Kubeconfig, plan)
+	observed, failedID, err := applyExtension(ctx, runner, cfg.Kubeconfig, plan)
 	now = time.Now().UTC()
 	record.UpdatedAt = now
 	record.ObservedResources = observed
 	if err != nil {
 		record.Status = extensionrecords.RecordStatusFailed
-		record.LastObserved = err.Error()
+		// The apply error carries the raw oc stdout/stderr, which can echo back
+		// user-inlined Secret bytes from the applied manifest. Observed-state
+		// records must never hold secret bytes (specs/security.md), so persist a
+		// non-secret summary naming the failed resource; the full output is kept
+		// only in the sanctioned apply log the runner already wrote.
+		record.LastObserved = applyFailureSummary(failedID)
 		_ = extensionrecords.SaveRecord(cfg.ClustersDir, record)
 		return TaskResult{}, err
 	}
@@ -127,34 +132,49 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 	return TaskResult{}, nil
 }
 
-func applyExtension(ctx context.Context, runner OCRunner, kubeconfig string, plan extensionplan.ExtensionPlan) ([]string, error) {
+// applyExtension applies each resource in order. On failure it returns the
+// resources already applied plus the identifier of the resource that failed, so
+// callers can record a non-secret failure summary without persisting the raw oc
+// output (which may echo user-inlined secret bytes).
+func applyExtension(ctx context.Context, runner OCRunner, kubeconfig string, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
 	switch plan.Extension.Spec.Type {
 	case v1alpha1.ClusterAddonTypeOLMOperator:
 		resources, err := extensionrender.OLMResources(plan.Extension)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		var observed []string
 		for _, resource := range resources {
+			id := extensionrender.ObservedResourceID(resource.Kind, resource.Namespace, resource.Name)
 			if _, err := runner.Run(ctx, kubeconfig, applyArgs(plan.Policy, "-"), resource.Content); err != nil {
-				return observed, err
+				return observed, id, err
 			}
-			observed = append(observed, extensionrender.ObservedResourceID(resource.Kind, resource.Namespace, resource.Name))
+			observed = append(observed, id)
 		}
-		return observed, nil
+		return observed, "", nil
 	case v1alpha1.ClusterAddonTypeManifestSet:
-		var observed []string
 		for _, manifest := range plan.Extension.Spec.ManifestSet.Manifests {
+			id := "Manifest/" + manifest.Path
 			path := extensionrender.ManifestPath(plan.Extension, manifest)
 			if _, err := runner.Run(ctx, kubeconfig, applyArgs(plan.Policy, path), nil); err != nil {
-				return observed, err
+				return observed, id, err
 			}
-			observed = append(observed, "Manifest/"+manifest.Path)
+			observed = append(observed, id)
 		}
-		return observed, nil
+		return observed, "", nil
 	default:
-		return nil, fmt.Errorf("ClusterAddon/%s spec.type %q is not executable", plan.Name, plan.Extension.Spec.Type)
+		return nil, "", fmt.Errorf("ClusterAddon/%s spec.type %q is not executable", plan.Name, plan.Extension.Spec.Type)
 	}
+}
+
+// applyFailureSummary returns a non-secret one-line description of an apply
+// failure for the observed-state record. It names the failed resource (a Kind/
+// Namespace/Name or Manifest/path identifier, never secret bytes) and points the
+// operator at the apply log for the raw oc output.
+func applyFailureSummary(failedID string) string {
+	if strings.TrimSpace(failedID) == "" {
+		return "oc apply failed; see the apply log for details"
+	}
+	return fmt.Sprintf("oc apply failed at %s; see the apply log for details", failedID)
 }
 
 func applyArgs(policy v1alpha1.ClusterAddonPolicy, file string) []string {
