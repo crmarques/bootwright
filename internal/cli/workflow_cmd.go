@@ -17,6 +17,18 @@ func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check <target>",
 		Short: "Validate desired state and prerequisites",
+		Long: `Validate desired state and prerequisites.
+
+A live check (without --dry-run) runs an Ansible preflight whose result is the
+process exit code: 0 when every check passes, non-zero when any check fails.
+Per-check pass/fail detail is in the terminal output and the run, task, and
+cluster logs under Bootwright storage, not in a single result document.
+
+--output json is accepted only with --dry-run, and returns the planned preflight
+command graph (the work that would run), not pass/fail results. In CI, gate on
+the live check exit code, and use 'check <target> --dry-run --output json' to
+inspect the plan. 'check syntax' is the exception: it is a pure offline
+validator and emits structured result JSON with --output json.`,
 	}
 	cmd.AddCommand(
 		newCheckSyntaxCmd(stdout),
