@@ -23,6 +23,7 @@ type Provider struct {
 	RequiresLicense      bool
 	PrerequisitePackages []string
 	CephadmPackage       string
+	CephCommonPackage    string
 	Community            Community
 	Repository           Repository
 	RuntimeOS            RuntimeOS
@@ -74,6 +75,7 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		Distribution:         distribution,
 		PrerequisitePackages: []string{"firewalld", "lvm2", "podman", "chrony"},
 		CephadmPackage:       "cephadm",
+		CephCommonPackage:    "ceph-common",
 		RuntimeOS: RuntimeOS{
 			Family: "linux",
 		},
@@ -124,6 +126,7 @@ func Vars(provider Provider) map[string]any {
 		"requiresLicense":      provider.RequiresLicense,
 		"prerequisitePackages": append([]string(nil), provider.PrerequisitePackages...),
 		"cephadmPackage":       provider.CephadmPackage,
+		"cephCommonPackage":    provider.CephCommonPackage,
 	}
 	if provider.Community.Release != "" {
 		community := map[string]any{"release": provider.Community.Release}

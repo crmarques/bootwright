@@ -53,6 +53,60 @@
       provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
       Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}
 
+- name: Probe ceph CLI before package fallback
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - --version
+  register: bootwright_ceph_cli_initial_probe
+  changed_when: false
+  failed_when: false
+
+- name: Install ceph-common package on storage node when not preinstalled
+  ansible.builtin.package:
+    name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"
+    state: present
+  register: bootwright_ceph_common_package_install
+  failed_when: false
+  when: bootwright_ceph_cli_initial_probe.rc | default(1) != 0
+
+- name: Create ceph-common package ownership directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ownership_dir }}/packages/{{ inventory_hostname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: bootwright_ceph_common_package_install.changed | default(false)
+
+- name: Write ceph-common package ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: package_apply_one.yml
+  vars:
+    bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  when: bootwright_ceph_common_package_install.changed | default(false)
+
+- name: Verify ceph CLI on storage node
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - --version
+  register: bootwright_ceph_cli_version
+  changed_when: false
+  failed_when: false
+
+- name: Fail when ceph CLI is unavailable
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_cli_version.rc == 0
+    fail_msg: >-
+      ceph CLI (ceph-common) is required on storage node {{ bootwright_current_storage_node.name }} for Ceph
+      distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
+      provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
+      Package fallback result: {{ (bootwright_ceph_common_package_install | default({})).msg | default('not attempted') }}
+
 - name: Install cephadm registry trust on storage node
   ansible.builtin.copy:
     src: "{{ bootwright_ceph_registry_trust_path }}"

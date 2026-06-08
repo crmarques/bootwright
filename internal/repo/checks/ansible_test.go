@@ -2907,6 +2907,31 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("cephadm unavailable assert must point to managed OS package ownership, got %v", failCephadm)
 	}
 
+	probeCephIdx := findAnsibleTask(t, installTasks, "Probe ceph CLI before package fallback")
+	cephCommonPackageIdx := findAnsibleTask(t, installTasks, "Install ceph-common package on storage node when not preinstalled")
+	recordCephCommonIdx := findAnsibleTask(t, installTasks, "Write ceph-common package ownership record")
+	verifyCephIdx := findAnsibleTask(t, installTasks, "Verify ceph CLI on storage node")
+	failCephIdx := findAnsibleTask(t, installTasks, "Fail when ceph CLI is unavailable")
+	if !(failCephadmIdx < probeCephIdx && probeCephIdx < cephCommonPackageIdx && cephCommonPackageIdx < recordCephCommonIdx && recordCephCommonIdx < verifyCephIdx && verifyCephIdx < failCephIdx) {
+		t.Fatalf("ceph-common fallback must run after cephadm tooling and before storage services/verification")
+	}
+	cephCommonPackage := installTasks[cephCommonPackageIdx]
+	if got := cephCommonPackage["failed_when"]; got != false {
+		t.Fatalf("ceph-common package fallback must not fail the package batch, got failed_when=%v", got)
+	}
+	cephCommonPackageBody, ok := cephCommonPackage["ansible.builtin.package"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(cephCommonPackageBody["name"]), "bootwright_ceph_provider.cephCommonPackage") {
+		t.Fatalf("ceph-common package fallback must install provider-selected ceph-common package, got %v", cephCommonPackage)
+	}
+	assertIncludeRoleName(t, installTasks[recordCephCommonIdx], "bootwright.core.helper_ownership")
+	if got := installTasks[verifyCephIdx]["failed_when"]; got != false {
+		t.Fatalf("ceph CLI verify must leave failure handling to the targeted assert, got failed_when=%v", got)
+	}
+	failCeph, ok := installTasks[failCephIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(failCeph["fail_msg"]), "MachineInstallProfile") {
+		t.Fatalf("ceph CLI unavailable assert must point to managed OS package ownership, got %v", failCeph)
+	}
+
 	bootstrapTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
 	bootstrap := bootstrapTasks[findAnsibleTask(t, bootstrapTasks, "Apply managed Ceph cluster through cephadm")]
 	block := nestedAnsibleTasks(t, bootstrap, "block")
