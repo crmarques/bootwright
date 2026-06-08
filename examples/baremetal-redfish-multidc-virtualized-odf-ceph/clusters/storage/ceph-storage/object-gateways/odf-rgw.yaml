@@ -6,8 +6,10 @@ spec:
   storageClusterRef:
     name: ceph-storage
 
-  publicEndpointRef:
-    name: rgw-public
+  public:
+    dnsName: rgw-ceph.bootwright.test
+    scheme: https
+    port: 443
 
   ceph:
     serviceID: odf
@@ -22,16 +24,20 @@ spec:
       countPerHost: 1
     ingresses:
       - name: dc1
-        endpointRef:
-          name: rgw-dc1
+        address: 192.168.141.80
+        prefixLength: 24
+        interfaceNetworks:
+          - 192.168.141.0/24
         placement:
           hosts:
             - ceph-dc1-0
             - ceph-dc1-1
             - ceph-dc1-2
       - name: dc2
-        endpointRef:
-          name: rgw-dc2
+        address: 192.168.142.80
+        prefixLength: 24
+        interfaceNetworks:
+          - 192.168.142.0/24
         placement:
           hosts:
             - ceph-dc2-0

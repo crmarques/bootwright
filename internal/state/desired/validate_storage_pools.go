@@ -195,7 +195,7 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 		if gw.Spec.Ceph.FrontendPort < 0 || gw.Spec.Ceph.FrontendPort > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.ceph.frontendPort %d out of range", prefix, gw.Spec.Ceph.FrontendPort))
 		}
-		errs = append(errs, validateStorageGatewayPublicEndpoint(state, prefix+".publicEndpointRef", gw)...)
+		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".public", gw)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", gw.Spec.Ceph.Placement.Hosts, cluster, v1alpha1.StorageCephRoleRGW)...)
@@ -210,7 +210,7 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, ingress.Name))
 			}
 			ingressNames[ingress.Name] = true
-			errs = append(errs, validateStorageGatewayIngressEndpoint(state, owner+".endpointRef", ingress.EndpointRef, gw)...)
+			errs = append(errs, validateStorageGatewayIngressEndpoint(owner, ingress, gw)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
 			ingressHosts = append(ingressHosts, ingress.Placement.Hosts...)
 		}
@@ -221,54 +221,20 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 	return errs
 }
 
-func validateStorageGatewayPublicEndpoint(state v1alpha1.State, prefix string, gw v1alpha1.StorageObjectGateway) []string {
-	ref := gw.Spec.PublicEndpointRef
-	if ref.Name == "" {
-		return []string{prefix + ".name is required"}
-	}
-	endpoint, ok := storageEndpointByName(state, ref.Name)
-	if !ok {
-		return []string{fmt.Sprintf("%s.name %q does not match any ContainerCluster spec.install.endpoints entry", prefix, ref.Name)}
-	}
-	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceExternal)
-	if source != v1alpha1.EndpointSourceExternal {
-		return []string{fmt.Sprintf("%s.name %q references endpoint source.type %q; StorageObjectGateway publicEndpointRef requires %q",
-			prefix, ref.Name, source, v1alpha1.EndpointSourceExternal)}
-	}
-	if endpoint.DNSName == "" {
-		return []string{fmt.Sprintf("%s.name %q requires an endpoint with dnsName for StorageObjectGateway/%s publicEndpointRef", prefix, ref.Name, gw.Metadata.Name)}
+func validateStorageGatewayPublicEndpoint(prefix string, gw v1alpha1.StorageObjectGateway) []string {
+	if gw.Spec.Public.DNSName == "" {
+		return []string{fmt.Sprintf("%s.dnsName is required for StorageObjectGateway/%s", prefix, gw.Metadata.Name)}
 	}
 	return nil
 }
 
-func validateStorageGatewayIngressEndpoint(state v1alpha1.State, prefix string, ref v1alpha1.EndpointRef, gw v1alpha1.StorageObjectGateway) []string {
-	if ref.Name == "" {
-		return []string{prefix + ".name is required"}
-	}
-	endpoint, ok := storageEndpointByName(state, ref.Name)
-	if !ok {
-		return []string{fmt.Sprintf("%s.name %q does not match any ContainerCluster spec.install.endpoints entry", prefix, ref.Name)}
-	}
-	source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceCephadm)
-	if source != v1alpha1.EndpointSourceCephadm {
-		return []string{fmt.Sprintf("%s.name %q references endpoint source.type %q; StorageObjectGateway ingress endpointRef requires %q",
-			prefix, ref.Name, source, v1alpha1.EndpointSourceCephadm)}
-	}
+func validateStorageGatewayIngressEndpoint(prefix string, ingress v1alpha1.StorageObjectGatewayIngress, gw v1alpha1.StorageObjectGateway) []string {
 	var errs []string
-	if endpoint.Address == "" {
-		errs = append(errs, fmt.Sprintf("%s.name %q requires an endpoint address for StorageObjectGateway/%s ingress", prefix, ref.Name, gw.Metadata.Name))
+	if ingress.Address == "" {
+		errs = append(errs, fmt.Sprintf("%s.address is required for StorageObjectGateway/%s ingress", prefix, gw.Metadata.Name))
 	}
-	if endpoint.PrefixLength == 0 {
-		errs = append(errs, fmt.Sprintf("%s.name %q requires endpoint prefixLength for StorageObjectGateway/%s ingress", prefix, ref.Name, gw.Metadata.Name))
+	if ingress.PrefixLength == 0 {
+		errs = append(errs, fmt.Sprintf("%s.prefixLength is required for StorageObjectGateway/%s ingress", prefix, gw.Metadata.Name))
 	}
 	return errs
-}
-
-func storageEndpointByName(state v1alpha1.State, name string) (v1alpha1.Endpoint, bool) {
-	for _, cluster := range state.ContainerClusters {
-		if endpoint, ok := cluster.Spec.Install.Endpoints[name]; ok {
-			return endpoint, true
-		}
-	}
-	return v1alpha1.Endpoint{}, false
 }

@@ -495,10 +495,6 @@ Rules:
     `source.bindAddress`, and must not set `address`.
   - **Single-node clusters** additionally reject `source.type: openshift` on the
     `api`, `api-int`, and `ingress` slots.
-  - **`StorageObjectGateway.spec.publicEndpointRef`** requires an endpoint with
-    `source.type: external` and a `dnsName`.
-  - **`StorageObjectGateway` ingress `endpointRef`** requires an endpoint with
-    `source.type: cephadm`, an `address`, and a `prefixLength`.
   - `source.componentRef` and `source.bindAddress` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
@@ -642,13 +638,14 @@ Rules:
   `StorageCluster`.
 - `spec.ceph.serviceID` is required; `spec.ceph.frontendPort` must be in
   `0`–`65535`.
-- `spec.publicEndpointRef` requires a `ContainerCluster` endpoint with
-  `source.type: external` and a `dnsName`.
+- `spec.public.dnsName` is required and is the storage-owned public S3 endpoint;
+  optional `spec.public.scheme` and `spec.public.port` refine it. The gateway
+  owns this fact, so a storage-only object store needs no `ContainerCluster`.
 - `spec.ceph.placement.hosts[]` select topology nodes that hold the `rgw` role;
   on stretch-mode clusters at least two per data site.
-- `spec.ceph.ingresses[]` require a unique `name`, an `endpointRef` to an
-  endpoint with `source.type: cephadm`, an `address`, and a `prefixLength`, and
-  a `placement` over `ingress`-role nodes.
+- `spec.ceph.ingresses[]` require a unique `name`, a storage-owned `address` and
+  `prefixLength` for the ingress VIP (optional `interfaceNetworks[]`), and a
+  `placement` over `ingress`-role nodes.
 
 ## StorageExport
 

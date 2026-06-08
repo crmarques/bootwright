@@ -178,8 +178,17 @@ type StorageObjectGateway struct {
 
 type StorageObjectGatewaySpec struct {
 	StorageClusterRef LocalObjectReference         `yaml:"storageClusterRef" json:"storageClusterRef"`
-	PublicEndpointRef EndpointRef                  `yaml:"publicEndpointRef" json:"publicEndpointRef"`
+	Public            StorageObjectGatewayPublic   `yaml:"public" json:"public"`
 	Ceph              StorageObjectGatewayCephSpec `yaml:"ceph" json:"ceph"`
+}
+
+// StorageObjectGatewayPublic is the storage-owned public S3 endpoint surface of
+// the RGW service. The storage cluster owns this fact; downstream consumers
+// reference the gateway, not the other way around.
+type StorageObjectGatewayPublic struct {
+	DNSName string `yaml:"dnsName" json:"dnsName"`
+	Scheme  string `yaml:"scheme,omitempty" json:"scheme,omitempty"`
+	Port    int    `yaml:"port,omitempty" json:"port,omitempty"`
 }
 
 type StorageObjectGatewayCephSpec struct {
@@ -189,10 +198,14 @@ type StorageObjectGatewayCephSpec struct {
 	Ingresses    []StorageObjectGatewayIngress `yaml:"ingresses,omitempty" json:"ingresses,omitempty"`
 }
 
+// StorageObjectGatewayIngress is one storage-owned RGW ingress VIP. Address and
+// prefixLength are owned here, not borrowed from a ContainerCluster endpoint.
 type StorageObjectGatewayIngress struct {
-	Name        string           `yaml:"name" json:"name"`
-	EndpointRef EndpointRef      `yaml:"endpointRef" json:"endpointRef"`
-	Placement   StoragePlacement `yaml:"placement" json:"placement"`
+	Name              string           `yaml:"name" json:"name"`
+	Address           string           `yaml:"address" json:"address"`
+	PrefixLength      int              `yaml:"prefixLength" json:"prefixLength"`
+	InterfaceNetworks []string         `yaml:"interfaceNetworks,omitempty" json:"interfaceNetworks,omitempty"`
+	Placement         StoragePlacement `yaml:"placement" json:"placement"`
 }
 
 type StorageExport struct {

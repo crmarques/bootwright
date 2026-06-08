@@ -617,7 +617,7 @@ func storageValidationState() v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "rgw"},
 			Spec: v1alpha1.StorageObjectGatewaySpec{
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
-				PublicEndpointRef: v1alpha1.EndpointRef{Name: "rgw-public"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw-ceph.example.test", Scheme: "https", Port: 443},
 				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
 					ServiceID: "odf",
 					Placement: v1alpha1.StoragePlacement{

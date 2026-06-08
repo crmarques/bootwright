@@ -63,9 +63,9 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 		spec := map[string]any{"rgw_frontend_port": gw.Spec.Ceph.FrontendPort}
 		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, gw.Spec.Ceph.Placement.Hosts, gw.Spec.Ceph.Placement.CountPerHost, spec))
-		publicEndpoint, _ := topology.GatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef)
+		publicEndpoint, _ := topology.GatewayPublicEndpoint(gw)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {
-			endpoint, ok := topology.GatewayEndpoint(state, gw, ingress.EndpointRef)
+			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
 			if !ok {
 				continue
 			}

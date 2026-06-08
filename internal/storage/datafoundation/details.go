@@ -65,7 +65,7 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 			if gw.Spec.Ceph.ServiceID != "" {
 				input.RGWPoolPrefix = gw.Spec.Ceph.ServiceID
 			}
-			if endpoint, endpointOK := topology.GatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef); endpointOK {
+			if endpoint, endpointOK := topology.GatewayPublicEndpoint(gw); endpointOK {
 				input.RGWEndpoint = fmt.Sprintf("%s:%d", endpoint.DNSName, topology.EndpointPort(endpoint, 443))
 			}
 		}

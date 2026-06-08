@@ -124,8 +124,9 @@ network:
 
 Cluster endpoints live in `ContainerCluster.spec.install.endpoints` as named endpoint
 objects. Consumers bind to those names explicitly; OpenShift install uses
-`ContainerCluster.spec.install.endpointRefs`, while storage gateways use
-gateway endpoint refs.
+`ContainerCluster.spec.install.endpointRefs`. Storage gateways do not borrow
+cluster endpoints; they own their RGW public and ingress endpoints directly
+(below).
 
 ```yaml
 endpoints:
@@ -174,22 +175,30 @@ load-balancer host is also the infra host that can attach the address to the
 libvirt network. Other placements require the external network fabric to route
 the VIP to the load-balancer host.
 
-Storage RGW ingress endpoints are also declared here. The endpoint address is
-the concrete VIP. `prefixLength` provides the `/24` style suffix cephadm expects
-for the keepalived virtual IP, and `interfaceNetworks[]` tells cephadm which
-site-local subnet can host that VIP:
+Storage RGW endpoints are owned by the `StorageObjectGateway`, not by a cluster.
+`spec.public` is the public S3 endpoint, and each `spec.ceph.ingresses[]` entry
+is a concrete ingress VIP. `prefixLength` provides the `/24` style suffix cephadm
+expects for the keepalived virtual IP, and `interfaceNetworks[]` tells cephadm
+which site-local subnet can host that VIP:
 
 ```yaml
-endpoints:
-  rgw-public:
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+spec:
+  public:
     dnsName: rgw-ceph.bootwright.test
     scheme: https
     port: 443
-  rgw-dc1:
-    address: 192.168.141.80
-    prefixLength: 24
-    interfaceNetworks:
-      - 192.168.141.0/24
+  ceph:
+    serviceID: odf
+    ingresses:
+      - name: dc1
+        address: 192.168.141.80
+        prefixLength: 24
+        interfaceNetworks:
+          - 192.168.141.0/24
+        placement:
+          hosts: [ceph-dc1-0, ceph-dc1-1, ceph-dc1-2]
 ```
 
 ## Name Resolution

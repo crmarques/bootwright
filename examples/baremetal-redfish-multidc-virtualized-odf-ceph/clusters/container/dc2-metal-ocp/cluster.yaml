@@ -28,13 +28,6 @@ spec:
         address: 192.168.142.21
         source:
           type: external
-      rgw-dc2:
-        address: 192.168.142.80
-        prefixLength: 24
-        interfaceNetworks:
-        - 192.168.142.0/24
-        source:
-          type: cephadm
 
   networking:
     networkType: OVNKubernetes

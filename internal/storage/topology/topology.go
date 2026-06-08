@@ -120,13 +120,23 @@ func GatewayByName(state v1alpha1.State, name string) (v1alpha1.StorageObjectGat
 	return v1alpha1.StorageObjectGateway{}, false
 }
 
-func GatewayEndpoint(state v1alpha1.State, gateway v1alpha1.StorageObjectGateway, ref v1alpha1.EndpointRef) (v1alpha1.Endpoint, bool) {
-	for _, cluster := range state.ContainerClusters {
-		if endpoint, ok := cluster.Spec.Install.Endpoints[ref.Name]; ok {
-			return endpoint, true
-		}
+// GatewayPublicEndpoint returns the storage-owned public S3 endpoint of the RGW
+// service. Ownership is on the gateway itself, so no ContainerCluster lookup is
+// involved and a storage-only object store needs no consumer cluster.
+func GatewayPublicEndpoint(gateway v1alpha1.StorageObjectGateway) (v1alpha1.Endpoint, bool) {
+	public := gateway.Spec.Public
+	if public.DNSName == "" {
+		return v1alpha1.Endpoint{}, false
 	}
-	return v1alpha1.Endpoint{}, false
+	return v1alpha1.Endpoint{DNSName: public.DNSName, Scheme: public.Scheme, Port: public.Port}, true
+}
+
+// GatewayIngressEndpoint returns one storage-owned RGW ingress VIP.
+func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alpha1.Endpoint, bool) {
+	if ingress.Address == "" {
+		return v1alpha1.Endpoint{}, false
+	}
+	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.InterfaceNetworks}, true
 }
 
 func CephadmVirtualIP(endpoint v1alpha1.Endpoint) string {
