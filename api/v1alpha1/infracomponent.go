@@ -108,3 +108,30 @@ type ServiceEndpoint struct {
 	Name           string `yaml:"name" json:"name"`
 	MachineAddress string `yaml:"machineAddress" json:"machineAddress"`
 }
+
+// MachineBoundComponent is the shape shared by the machine-bound InfraComponent
+// arms (proxy, nameResolution, ntp, registry): one service on one machine with
+// an optional bind address and port. Render and the service graph project these
+// uniformly through this accessor. loadBalancer and artifactServer have
+// different shapes and deliberately do not implement it.
+type MachineBoundComponent interface {
+	MachineRefName() string
+	ServiceBindAddress() string
+	ServicePort() int
+}
+
+func (c ProxyComponent) MachineRefName() string     { return c.MachineRef.Name }
+func (c ProxyComponent) ServiceBindAddress() string { return c.BindAddress }
+func (c ProxyComponent) ServicePort() int           { return c.Port }
+
+func (c NameResolutionComponent) MachineRefName() string     { return c.MachineRef.Name }
+func (c NameResolutionComponent) ServiceBindAddress() string { return c.BindAddress }
+func (c NameResolutionComponent) ServicePort() int           { return c.Port }
+
+func (c NTPComponent) MachineRefName() string     { return c.MachineRef.Name }
+func (c NTPComponent) ServiceBindAddress() string { return c.BindAddress }
+func (c NTPComponent) ServicePort() int           { return c.Port }
+
+func (c RegistryComponent) MachineRefName() string     { return c.MachineRef.Name }
+func (c RegistryComponent) ServiceBindAddress() string { return c.BindAddress }
+func (c RegistryComponent) ServicePort() int           { return c.Port }

@@ -385,6 +385,15 @@ func loadBalancerConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, 
 	return out
 }
 
+func machineBoundConsumerFields(arm v1alpha1.MachineBoundComponent, entryName, kind, realisation string) map[string]string {
+	return map[string]string{
+		"machineRef":  arm.MachineRefName(),
+		"entryName":   entryName,
+		"bindAddress": arm.ServiceBindAddress(),
+		"port":        fmt.Sprint(servicePort(kind, realisation, arm.ServicePort())),
+	}
+}
+
 func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
 	env := stateview.Environment(state)
 	if env == nil {
@@ -413,7 +422,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeSquid,
-			map[string]string{"machineRef": proxy.MachineRef.Name, "entryName": entry.Name, "bindAddress": proxy.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid, proxy.Port))},
+			machineBoundConsumerFields(proxy, entry.Name, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid),
 			nil,
 		))
 	}
@@ -449,7 +458,7 @@ func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallNa
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeDnsmasq,
-			map[string]string{"machineRef": dns.MachineRef.Name, "entryName": entry.Name, "bindAddress": dns.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, dns.Port))},
+			machineBoundConsumerFields(dns, entry.Name, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq),
 			map[string][]string{"additionalIngressHosts": mergedHosts},
 		))
 	}
@@ -503,7 +512,7 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterIns
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
 			v1alpha1.InfraComponentTypeChrony,
-			map[string]string{"machineRef": ntp.MachineRef.Name, "entryName": entry.Name, "bindAddress": ntp.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, ntp.Port))},
+			machineBoundConsumerFields(ntp, entry.Name, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony),
 			nil,
 		))
 	}
@@ -535,7 +544,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		v1alpha1.KindInfraComponent,
 		component.Metadata.Name,
 		v1alpha1.InfraComponentTypeMirrorRegistry,
-		map[string]string{"machineRef": registry.MachineRef.Name, "entryName": entry.Name, "bindAddress": registry.BindAddress, "port": fmt.Sprint(servicePort(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry, registry.Port))},
+		machineBoundConsumerFields(registry, entry.Name, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry),
 		nil,
 	)}
 }

@@ -277,54 +277,43 @@ func artifactURLHost(host string) string {
 	return host
 }
 
-func proxyComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentProxyComponent, component v1alpha1.InfraComponent) map[string]any {
-	proxy := component.Spec.Proxy
-	port := proxy.Port
+func machineBoundServiceVarsBase(state v1alpha1.State, component v1alpha1.InfraComponent, arm v1alpha1.MachineBoundComponent, kind, realisation, entryName string) (map[string]any, string, int) {
+	port := arm.ServicePort()
 	if port == 0 {
-		port = support.LookupService(v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid).DefaultPort
+		port = support.LookupService(kind, realisation).DefaultPort
 	}
-	machineAddress := lookupMachineAddress(state, proxy.MachineRef.Name)
+	machineAddress := lookupMachineAddress(state, arm.MachineRefName())
 	out := map[string]any{
-		"kind":           v1alpha1.ComponentSlotProxy,
+		"kind":           kind,
 		"providerName":   v1alpha1.KindInfraComponent,
 		"name":           component.Metadata.Name,
 		"componentName":  component.Metadata.Name,
-		"entryName":      entry.Name,
+		"entryName":      entryName,
 		"port":           port,
-		"bindAddress":    proxy.BindAddress,
-		"machineRef":     proxy.MachineRef.Name,
+		"bindAddress":    arm.ServiceBindAddress(),
+		"machineRef":     arm.MachineRefName(),
 		"machineAddress": machineAddress,
-		"realisation":    v1alpha1.InfraComponentTypeSquid,
-		"url":            fmt.Sprintf("http://%s:%d", machineAddress, port),
-		"image":          managedSquidImage(state),
+		"realisation":    realisation,
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)
+	applyServiceRoleContract(out, kind, realisation)
+	return out, machineAddress, port
+}
+
+func proxyComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentProxyComponent, component v1alpha1.InfraComponent) map[string]any {
+	out, machineAddress, port := machineBoundServiceVarsBase(state, component, component.Spec.Proxy, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid, entry.Name)
+	out["url"] = fmt.Sprintf("http://%s:%d", machineAddress, port)
+	out["image"] = managedSquidImage(state)
 	return out
 }
 
 func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNameResolutionComponent, component v1alpha1.InfraComponent) map[string]any {
 	dns := component.Spec.NameResolution
-	port := dns.Port
-	if port == 0 {
-		port = support.LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq).DefaultPort
-	}
+	out, _, _ := machineBoundServiceVarsBase(state, component, dns, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq, entry.Name)
 	additionalHosts := append([]string(nil), dns.AdditionalIngressHosts...)
 	additionalHosts = append(additionalHosts, entry.AdditionalIngressHosts...)
 	hostRecords, domainRecords := nameResolutionRecordsVars(state, entry.Name, additionalHosts)
-	out := map[string]any{
-		"kind":                   v1alpha1.ComponentSlotNameResolution,
-		"providerName":           v1alpha1.KindInfraComponent,
-		"name":                   component.Metadata.Name,
-		"componentName":          component.Metadata.Name,
-		"entryName":              entry.Name,
-		"port":                   port,
-		"bindAddress":            dns.BindAddress,
-		"additionalIngressHosts": additionalHosts,
-		"machineRef":             dns.MachineRef.Name,
-		"machineAddress":         lookupMachineAddress(state, dns.MachineRef.Name),
-		"realisation":            v1alpha1.InfraComponentTypeDnsmasq,
-		"image":                  managedDnsmasqImage(state),
-	}
+	out["additionalIngressHosts"] = additionalHosts
+	out["image"] = managedDnsmasqImage(state)
 	if len(hostRecords) > 0 {
 		out["hostRecords"] = hostRecords
 	}
@@ -334,57 +323,22 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	if len(dns.Forwarders) > 0 {
 		out["forwarders"] = stringSliceAny(dns.Forwarders)
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	return out
 }
 
 func ntpComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNTPSourceComponent, component v1alpha1.InfraComponent) map[string]any {
 	ntp := component.Spec.NTP
-	port := ntp.Port
-	if port == 0 {
-		port = support.LookupService(v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony).DefaultPort
-	}
-	out := map[string]any{
-		"kind":           v1alpha1.ComponentSlotNTP,
-		"providerName":   v1alpha1.KindInfraComponent,
-		"name":           component.Metadata.Name,
-		"componentName":  component.Metadata.Name,
-		"entryName":      entry.Name,
-		"port":           port,
-		"bindAddress":    ntp.BindAddress,
-		"machineRef":     ntp.MachineRef.Name,
-		"machineAddress": lookupMachineAddress(state, ntp.MachineRef.Name),
-		"realisation":    v1alpha1.InfraComponentTypeChrony,
-	}
+	out, _, _ := machineBoundServiceVarsBase(state, component, ntp, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, entry.Name)
 	if len(ntp.UpstreamSources) > 0 {
 		out["upstreamSources"] = stringSliceAny(ntp.UpstreamSources)
 	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)
 	return out
 }
 
 func registryComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentRegistryComponent, component v1alpha1.InfraComponent) map[string]any {
-	registry := component.Spec.Registry
-	port := registry.Port
-	if port == 0 {
-		port = support.LookupService(v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry).DefaultPort
-	}
-	machineAddress := lookupMachineAddress(state, registry.MachineRef.Name)
-	out := map[string]any{
-		"kind":           v1alpha1.ComponentSlotRegistry,
-		"providerName":   v1alpha1.KindInfraComponent,
-		"name":           component.Metadata.Name,
-		"componentName":  component.Metadata.Name,
-		"entryName":      entry.Name,
-		"port":           port,
-		"bindAddress":    registry.BindAddress,
-		"machineRef":     registry.MachineRef.Name,
-		"machineAddress": machineAddress,
-		"realisation":    v1alpha1.InfraComponentTypeMirrorRegistry,
-		"url":            fmt.Sprintf("%s:%d", machineAddress, port),
-		"image":          managedMirrorRegistryImage(state),
-	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)
+	out, machineAddress, port := machineBoundServiceVarsBase(state, component, component.Spec.Registry, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry, entry.Name)
+	out["url"] = fmt.Sprintf("%s:%d", machineAddress, port)
+	out["image"] = managedMirrorRegistryImage(state)
 	return out
 }
 
