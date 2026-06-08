@@ -477,6 +477,17 @@ operations:
       cluster: prod-3node
 ```
 
+## Bastion Tools
+
+`workflow_bastion_apply_tools` installs the controller-side OpenShift CLIs. The
+renderer projects these extra vars (see `internal/converge/bastion`):
+
+| Fact | Shape |
+| --- | --- |
+| `bootwright_openshift_release_version` | OpenShift release the controller CLIs (`oc`, `kubectl`, `openshift-install`) are pinned to |
+| `bootwright_clis_install_dir` | Directory the controller CLIs are installed into |
+| `bootwright_clis_release_url` | Release-scoped base URL the CLIs and their checksums are fetched from; honors `Environment.spec.defaults.clientsMirror` and otherwise the pinned upstream mirror. The role falls back to `bootwright_clis_mirror_base` only when this var is not projected |
+
 ## Projection Rule
 
 Roles consume already-projected blocks. They should not rediscover provider

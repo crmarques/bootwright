@@ -27,6 +27,7 @@ type CLIInstallSpec struct {
 	InstallDir        string
 	BundleDir         string
 	Executable        string
+	ClisReleaseURL    string
 }
 
 // PlannedCommand returns the ansible-playbook invocation the CLI will
@@ -40,6 +41,7 @@ func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 		"bootwright.core.workflow_bastion_apply_tools",
 		"-e", "bootwright_openshift_release_version=" + s.OCPReleaseVersion,
 		"-e", "bootwright_clis_install_dir=" + s.InstallDir,
+		"-e", "bootwright_clis_release_url=" + s.ClisReleaseURL,
 	}
 }
 
@@ -90,5 +92,6 @@ func PlanCLIInstall(state v1alpha1.State, installDir, bundleDir string, venvBin 
 		InstallDir:        installDir,
 		BundleDir:         bundleDir,
 		Executable:        venvBin("ansible-playbook"),
+		ClisReleaseURL:    render.OpenShiftClientsReleaseURL(state, version),
 	}
 }

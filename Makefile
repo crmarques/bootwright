@@ -89,6 +89,10 @@ E2E_CASES = $(notdir $(patsubst %/,%,$(wildcard $(E2E_DIR)/*/)))
 # The intent is to catch new growth before files turn into god files again.
 CLI_FILE_LINE_LIMIT ?= 400
 WORKFLOW_FILE_LINE_LIMIT ?= 1000
+# internal/state/desired holds the per-kind validators. They run longer than
+# thin CLI handlers but must not become god files, so the largest is split by
+# kind to stay under this. Keep it sub-1000 so genuine growth is caught.
+VALIDATOR_FILE_LINE_LIMIT ?= 900
 
 all: build
 
@@ -242,7 +246,8 @@ stale-term-check:
 
 # Reject CLI / render files that have grown past the thin-handler
 # threshold. Excludes test files so the lint targets production code
-# only. Scope includes CLI and the largest domain packages that previously
+# only. Scope includes CLI, render, the converge/workflow orchestration, and
+# the internal/state/desired validators — the domain packages that previously
 # accumulated god-files.
 cli-file-size-check:
 	@over=$$(find internal/cli internal/render internal/state/scaffold internal/converge/bastion internal/runtime/secrets -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
@@ -261,6 +266,15 @@ cli-file-size-check:
 		done); \
 	if [ -n "$$over" ]; then \
 		printf '%s\n' "workflow files over $(WORKFLOW_FILE_LINE_LIMIT) lines (split planning, scheduling, resources, logs, and ledger responsibilities):" "$$over"; \
+		exit 1; \
+	fi
+	@over=$$(find internal/state/desired -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+		| while read -r f; do \
+			n=$$(wc -l <"$$f"); \
+			if [ "$$n" -gt $(VALIDATOR_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
+		done); \
+	if [ -n "$$over" ]; then \
+		printf '%s\n' "validator files over $(VALIDATOR_FILE_LINE_LIMIT) lines (split by kind, e.g. validate_storage_pools.go / validate_storage_exports.go / validate_storage_stretch.go):" "$$over"; \
 		exit 1; \
 	fi
 

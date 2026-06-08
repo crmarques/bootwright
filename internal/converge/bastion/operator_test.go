@@ -168,6 +168,7 @@ func TestCLIInstallSpecPlannedCommand(t *testing.T) {
 		InstallDir:        "/usr/local/bin",
 		BundleDir:         "/var/lib/bootwright/cache/ansible-bundles/version=dev",
 		Executable:        "/venv/bin/ansible-playbook",
+		ClisReleaseURL:    "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.12",
 	}
 	got := spec.PlannedCommand("inv.ini")
 	want := []string{
@@ -176,6 +177,7 @@ func TestCLIInstallSpecPlannedCommand(t *testing.T) {
 		"bootwright.core.workflow_bastion_apply_tools",
 		"-e", "bootwright_openshift_release_version=4.21.12",
 		"-e", "bootwright_clis_install_dir=/usr/local/bin",
+		"-e", "bootwright_clis_release_url=https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.21.12",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("PlannedCommand mismatch\n got %v\nwant %v", got, want)

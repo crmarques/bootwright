@@ -28,27 +28,8 @@ func validateInfraComponents(state v1alpha1.State) []string {
 
 func validateInfraComponentSpec(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	prefix := fmt.Sprintf("InfraComponent/%s spec", component.Metadata.Name)
-	set := 0
-	if component.Spec.ArtifactServer != nil {
-		set++
-	}
-	if component.Spec.LoadBalancer != nil {
-		set++
-	}
-	if component.Spec.Proxy != nil {
-		set++
-	}
-	if component.Spec.NameResolution != nil {
-		set++
-	}
-	if component.Spec.NTP != nil {
-		set++
-	}
-	if component.Spec.Registry != nil {
-		set++
-	}
-	if set != 1 {
-		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, ntp, registry} (got %d)", prefix, set)}
+	if slots := component.Spec.SetSlots(); len(slots) != 1 {
+		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, ntp, registry} (got %d)", prefix, len(slots))}
 	}
 	var errs []string
 	if component.Spec.ArtifactServer != nil {

@@ -132,20 +132,25 @@ These boundaries are reflected in rendering:
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.
 
-Convergence is resumable by default. Each mutating workflow task must run
-under its existing resource lock, derive a non-secret desired hash and
-Bootwright owner identity, probe current reality when the task has a reliable
-probe, and classify the result as matching, safe drift, foreign, unknown, or
-destructive drift. Matching work is skipped, safe Bootwright-owned drift may be
-reconciled, and foreign, unknown, or destructive drift fails closed unless the
-task defines a narrow command-scoped `--override` path. Generic task safety
-records are durable non-secret evidence; concrete probes such as cluster
-install records, add-on records, managed OS markers, provider metadata, and
-storage comparison results decide whether a rerun can skip or must fail. A
-mutating task without a reliable probe (most provider-service and
-infra-component config tasks) re-runs and relies on idempotent execution rather
-than a safety-record read-back; its convergence-safety record is durable
-evidence that `state-check` reports against, not an apply-time skip gate.
+Convergence is resumable by default. Each mutating workflow task runs under its
+existing resource lock, derives a non-secret desired hash and Bootwright owner
+identity, and writes a durable convergence-safety record. The records classifier
+compares that recorded evidence against current desired state and yields four
+outcomes — `missing` (no record), `foreign` (a non-Bootwright owner), `match`
+(recorded desired hash equals current), or `drift` (it differs). This
+classification is what `state-check` reports; it is not itself an apply-time skip
+gate. Most provider-service and infra-component config tasks have no reliable
+external probe: they re-run and rely on idempotent execution, and their record is
+marked `unknown` (recorded but not classified) as durable evidence rather than an
+apply-time skip. Apply-time fail-closed gating lives at the concrete-probe sites.
+Cluster install reconcile reads per-cluster install records and probes live
+cluster availability, skips completed installs, resumes only from known-safe
+phases, and fails closed when install state exists for missing or different
+inputs after node boot unless a command-scoped `--override` is given. Destroy
+requires `--override` when selected state sets
+`Environment.spec.safety.destroyProtection: requiredOverride`. Concrete probes —
+cluster install records, add-on records, managed OS markers, provider metadata,
+and storage comparison results — decide whether a rerun can skip or must fail.
 
 Shared machine services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about

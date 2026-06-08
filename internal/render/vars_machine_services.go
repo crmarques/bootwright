@@ -46,25 +46,26 @@ func machineServicesVars(state v1alpha1.State, include func(stategraph.MachineSe
 	return builder.Services()
 }
 
+// machineServiceVarBuilders maps each service-graph identity kind to its vars
+// builder. Every kind the support registry can produce must have an entry here,
+// or its rendered vars are silently dropped; TestMachineServiceVarBuildersCoverRegistry
+// enforces that against support.ServiceEntries().
+var machineServiceVarBuilders = map[string]func(v1alpha1.State, stategraph.MachineService) (map[string]any, bool){
+	v1alpha1.ComponentSlotLoadBalancer:   loadBalancerMachineServiceVars,
+	v1alpha1.ComponentSlotArtifacts:      artifactMachineServiceVars,
+	v1alpha1.ComponentSlotProxy:          proxyMachineServiceVars,
+	v1alpha1.ComponentSlotNameResolution: nameResolutionMachineServiceVars,
+	v1alpha1.ComponentSlotNTP:            ntpMachineServiceVars,
+	v1alpha1.ComponentSlotRegistry:       registryMachineServiceVars,
+	v1alpha1.ProviderServiceKindBMC:      bmcMachineServiceVarsFromGraph,
+}
+
 func machineServiceVarsFromGraph(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {
-	switch service.Identity.Kind {
-	case v1alpha1.ComponentSlotLoadBalancer:
-		return loadBalancerMachineServiceVars(state, service)
-	case v1alpha1.ComponentSlotArtifacts:
-		return artifactMachineServiceVars(state, service)
-	case v1alpha1.ComponentSlotProxy:
-		return proxyMachineServiceVars(state, service)
-	case v1alpha1.ComponentSlotNameResolution:
-		return nameResolutionMachineServiceVars(state, service)
-	case v1alpha1.ComponentSlotNTP:
-		return ntpMachineServiceVars(state, service)
-	case v1alpha1.ComponentSlotRegistry:
-		return registryMachineServiceVars(state, service)
-	case v1alpha1.ProviderServiceKindBMC:
-		return bmcMachineServiceVarsFromGraph(state, service)
-	default:
+	build, ok := machineServiceVarBuilders[service.Identity.Kind]
+	if !ok {
 		return nil, false
 	}
+	return build(state, service)
 }
 
 func loadBalancerMachineServiceVars(state v1alpha1.State, service stategraph.MachineService) (map[string]any, bool) {

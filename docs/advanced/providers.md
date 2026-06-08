@@ -274,3 +274,43 @@ For real BMCs, the artifact server endpoint selected by
 `artifactAccess.redfishVirtualMedia.endpointRef.name` should usually resolve
 to an IP address that the BMC network can reach. Controller reachability alone
 is not enough for virtual-media ISO fetches.
+
+## Adding a Substrate
+
+A substrate is a `Machine` backend such as libvirt, bare metal, vSphere, or
+KubeVirt. Unlike a managed service it is not its own kind; it is dispatched by a
+Go registry, so adding one is a registry plus role operation:
+
+1. Add the capability arm and validation in `api/v1alpha1` and the desired-state
+   validators — a machine profile arm for virtual substrates, or explicit
+   `Machine.spec.hardware` inventory for physical ones.
+2. Add the dispatch triplet (`substrateRole`, `bmcRole`, `bootRole`) and its
+   `RoleContract` to the registry in `internal/infra/support`. Real backends use
+   status `supported`, schema-only backends use `scaffold`, and no-op arms
+   resolve to the explicit `*_none` roles so dispatch stays visible.
+3. Add the converging roles under the matching families in
+   `ansible/collections/ansible_collections/bootwright/core/roles/` —
+   `machine_substrate_*`, `provider_service_bmc_*`, `container_cluster_boot_*`,
+   and the optional media hook. The renderer projects their exact names; roles
+   never branch on the dispatch discriminators.
+4. Map the installer platform render mode where it applies. It is the installer
+   platform, not the substrate type; substrate ownership stays on the machine and
+   provider.
+
+The normative contract is in `specs/architecture.md` (Providers and Platform
+Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`; the registry in
+`internal/infra/support` is the single source of truth for role names.
+
+## Adding a CLI Verb
+
+CLI commands live in `internal/cli` and are wired in `cli.go`. Each should be a
+thin adapter that translates flags into options and calls into
+`internal/converge/workflow`; orchestration logic stays in the workflow package,
+not the command. Human output goes through `internal/cli/output`.
+
+Before shipping a verb, decide whether it is read-only. Read-only verbs —
+`status`, `state-check`, `render`, `plan`, `apply --dry-run`, `validate`,
+`check syntax`, help, and discovery — must not write runtime records, acquire a
+mutating run lease, or mutate provider, BMC, cluster, or storage state, and most
+must not contact hosts at all. The binding rules for that contract are in
+`specs/state-model.md` (CLI Contract).

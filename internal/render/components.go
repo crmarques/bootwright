@@ -1,6 +1,8 @@
 package render
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/infra/support"
@@ -16,6 +18,12 @@ const ansibleCoreLookupDate = "2026-05-31"
 const (
 	defaultSushyToolsVersion = "2.2.0"
 )
+
+// OpenShiftClientsMirrorBase is the canonical upstream base URL for downloading
+// oc, kubectl, and openshift-install. The openshift-install ComponentPin source
+// and the controller CLI install both derive from it; an Environment
+// defaults.clientsMirror overrides it for disconnected labs.
+const OpenShiftClientsMirrorBase = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp"
 
 type ComponentPin struct {
 	Name       string `yaml:"name" json:"name"`
@@ -46,11 +54,26 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 		pins = append(pins, ComponentPin{
 			Name:       "openshift-install",
 			Version:    version,
-			Source:     "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/" + version + "/",
+			Source:     OpenShiftClientsMirrorBase + "/" + version + "/",
 			LookupDate: versionLookupDate,
 		})
 	}
 	return pins
+}
+
+// OpenShiftClientsReleaseURL is the release-scoped base URL the controller CLI
+// install fetches oc/openshift-install and their checksums from. It honors an
+// Environment defaults.clientsMirror override and otherwise uses the pinned
+// upstream mirror, keeping the install source renderer-owned instead of
+// hardcoded in the Ansible role.
+func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
+	base := OpenShiftClientsMirrorBase
+	if env := stateview.Environment(state); env != nil {
+		if m := strings.TrimSpace(env.Spec.Defaults.ClientsMirror); m != "" {
+			base = strings.TrimRight(m, "/")
+		}
+	}
+	return base + "/" + version
 }
 
 // servicePinGates maps each pinnable managed service to the predicate that

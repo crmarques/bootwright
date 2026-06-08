@@ -513,7 +513,8 @@ Rules:
   `StorageCluster` must share one SSH user and `keyRef`.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
-- When `spec.ceph.topology.stretch.enabled` is true: `dataSites` must contain
+- When `spec.ceph.topology.stretch.enabled` is true: `failureDomain` (the CRUSH
+  failure domain for the stretch rule) is required; `dataSites` must contain
   exactly two sites; `tiebreaker.site` must be distinct from the data sites;
   `tiebreaker.node` and `ruleName` are required; `replicatedPoolDefaults` must
   be `size: 4` and `minSize: 2`; each data site must hold exactly two `mon`

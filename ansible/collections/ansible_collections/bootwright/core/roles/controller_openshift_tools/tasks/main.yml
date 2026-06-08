@@ -19,10 +19,11 @@
     name: "{{ bootwright_clis_packages }}"
     state: present
 
-- name: Compute release URL base
+- name: Default release URL base when not projected
   ansible.builtin.set_fact:
     bootwright_clis_release_url: "{{ bootwright_clis_mirror_base }}/{{ bootwright_openshift_release_version }}"
   changed_when: false
+  when: bootwright_clis_release_url is not defined
 
 - name: Ensure CLI install directory exists
   ansible.builtin.file:

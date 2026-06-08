@@ -23,12 +23,15 @@ const (
 type ConvergeSafetyClassification string
 
 const (
-	ConvergeSafetyMatch       ConvergeSafetyClassification = "match"
-	ConvergeSafetyDrift       ConvergeSafetyClassification = "drift"
-	ConvergeSafetyForeign     ConvergeSafetyClassification = "foreign"
-	ConvergeSafetyUnknown     ConvergeSafetyClassification = "unknown"
-	ConvergeSafetyMissing     ConvergeSafetyClassification = "missing"
-	ConvergeSafetyDestructive ConvergeSafetyClassification = "destructive"
+	ConvergeSafetyMatch   ConvergeSafetyClassification = "match"
+	ConvergeSafetyDrift   ConvergeSafetyClassification = "drift"
+	ConvergeSafetyForeign ConvergeSafetyClassification = "foreign"
+	// ConvergeSafetyUnknown marks a record written by a probe-less mutating task
+	// (most provider-service and infra-component config tasks): the task completed
+	// but no external probe classified observed state. It is never returned by
+	// ClassifyConvergeSafety; state-check reports it as recorded-but-not-classified.
+	ConvergeSafetyUnknown ConvergeSafetyClassification = "unknown"
+	ConvergeSafetyMissing ConvergeSafetyClassification = "missing"
 )
 
 type ConvergeSafetyStatus string

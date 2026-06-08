@@ -10,6 +10,11 @@
 //   - Ansible exec goes through ansible.Runner so tests can fake it.
 //   - Options structs are flat: callers compute defaults and resolve paths
 //     before calling in; workflow does not consult the environment.
+//
+// Apply-result persistence owned here: the durable run ledger (ledger.go) and
+// per-cluster install state (install_state.go). Add-on apply state lives in
+// internal/addons/records; managed-Ceph and Data Foundation results in
+// internal/storage.
 package workflow
 
 import (

@@ -17,6 +17,33 @@ type InfraComponentSpec struct {
 	Registry       *RegistryComponent       `yaml:"registry,omitempty" json:"registry,omitempty"`
 }
 
+// SetSlots returns the arm slots that are set on the spec, by component-slot
+// kind. It is the single place the InfraComponent arm union is enumerated; the
+// exactly-one-of validator counts its length, so adding an arm above means
+// adding it here.
+func (s InfraComponentSpec) SetSlots() []string {
+	var slots []string
+	if s.ArtifactServer != nil {
+		slots = append(slots, ComponentSlotArtifacts)
+	}
+	if s.LoadBalancer != nil {
+		slots = append(slots, ComponentSlotLoadBalancer)
+	}
+	if s.Proxy != nil {
+		slots = append(slots, ComponentSlotProxy)
+	}
+	if s.NameResolution != nil {
+		slots = append(slots, ComponentSlotNameResolution)
+	}
+	if s.NTP != nil {
+		slots = append(slots, ComponentSlotNTP)
+	}
+	if s.Registry != nil {
+		slots = append(slots, ComponentSlotRegistry)
+	}
+	return slots
+}
+
 type ArtifactServerComponent struct {
 	MachineRef  LocalObjectReference     `yaml:"machineRef" json:"machineRef"`
 	BindAddress string                   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`

@@ -43,6 +43,7 @@ type EnvironmentSafetySpec struct {
 type EnvironmentDefaultsSpec struct {
 	Install        EnvironmentInstallDefaultsSpec `yaml:"install,omitempty" json:"install,omitempty"`
 	ArtifactAccess ClusterArtifactAccess          `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
+	ClientsMirror  string                         `yaml:"clientsMirror,omitempty" json:"clientsMirror,omitempty"`
 }
 
 type EnvironmentInstallDefaultsSpec struct {

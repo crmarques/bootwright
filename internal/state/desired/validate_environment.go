@@ -95,6 +95,9 @@ func validateEnvironmentDefaults(env v1alpha1.Environment) []string {
 	if env.Spec.Defaults.ArtifactAccess.ProviderRef.Name != "" {
 		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.artifactAccess.providerRef is not valid; select artifact servers with serverRef", env.Metadata.Name))
 	}
+	if mirror := strings.TrimSpace(env.Spec.Defaults.ClientsMirror); mirror != "" && !isHTTPURL(mirror) {
+		errs = append(errs, fmt.Sprintf("Environment/%s spec.defaults.clientsMirror %q must be an http(s) URL", env.Metadata.Name, env.Spec.Defaults.ClientsMirror))
+	}
 	errs = append(errs, validateNodeSSHSpec(
 		fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name),
 		env.Spec.Defaults.Install.NodeSSH,
