@@ -11,9 +11,10 @@ import (
 func newSecretGenerateCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate",
-		Short: "Generate local install secret material requested by desired state",
+		Short: `Create the "generated:" secret material declared by desired state`,
 		Args:  cobra.NoArgs,
-		Example: `  # Materialize every "generated:" secret declared by the current context
+		Example: `  # Create every "generated:" secret declared by the current context (file: and
+  # scalar entries are not touched; use "secret set" / "secret materialize" for those)
   bootwright secret generate`,
 	}
 	cf := addCommonFlags()

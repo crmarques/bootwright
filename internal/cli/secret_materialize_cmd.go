@@ -11,9 +11,10 @@ import (
 func newSecretMaterializeCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "materialize",
-		Short: "Materialize generated and context-storage secret material",
+		Short: `Create "generated:" secrets and copy file-sourced material into the context store`,
 		Args:  cobra.NoArgs,
-		Example: `  # Generate declared generated secrets and copy file-sourced secrets when enabled
+		Example: `  # Create declared "generated:" secrets and, when secretStorage.mode is context,
+  # copy file:-sourced material into the encrypted context store
   bootwright secret materialize`,
 	}
 	cf := addCommonFlags()
