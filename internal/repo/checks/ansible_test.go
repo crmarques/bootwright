@@ -3010,6 +3010,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	for _, name := range []string{
 		"Prepare Ceph repository and subscription",
 		"Install Ceph host dependencies",
+		"Configure Ceph container registry access",
 		"Install cephadm and Ceph host tooling",
 		"Bootstrap and converge Ceph cluster",
 	} {
@@ -3021,49 +3022,72 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 
 	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
 	gatherIdx := findAnsibleTask(t, repositoryTasks, "Gather storage node OS facts")
-	providerIdx := findAnsibleTask(t, repositoryTasks, "Run provider-specific Ceph repository preparation")
-	if !(gatherIdx < providerIdx) {
-		t.Fatalf("storage repository phase must gather OS facts before provider preparation")
+	communityDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure community Ceph package repository")
+	subscriptionDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure subscription-backed Ceph package repository")
+	if !(gatherIdx < communityDispatchIdx && gatherIdx < subscriptionDispatchIdx) {
+		t.Fatalf("storage repository phase must gather OS facts before dispatching repository preparation")
+	}
+	// Dispatch is keyed on rendered capability flags, not the distribution name,
+	// so the role carries no per-distribution branch (ADR 0002).
+	if got := fmt.Sprint(repositoryTasks[communityDispatchIdx]["when"]); !strings.Contains(got, "community is defined") {
+		t.Fatalf("community repository dispatch must gate on the rendered community block, got when=%v", got)
+	}
+	if got := fmt.Sprint(repositoryTasks[subscriptionDispatchIdx]["when"]); !strings.Contains(got, "requiresRHSM") {
+		t.Fatalf("subscription repository dispatch must gate on requiresRHSM, got when=%v", got)
 	}
 	for _, rel := range []string{
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/redhat.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/ibm.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml",
 	} {
 		if tasks := readAnsibleTasks(t, rel); len(tasks) == 0 {
 			t.Fatalf("%s has no tasks", rel)
 		}
 	}
 
-	ossTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/oss.yml")
-	downloadIdx := findAnsibleTask(t, ossTasks, "Download cephadm utility to configure community Ceph repository")
-	addRepoIdx := findAnsibleTask(t, ossTasks, "Configure community Ceph package repository through cephadm")
+	communityTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/community.yml")
+	downloadIdx := findAnsibleTask(t, communityTasks, "Download cephadm utility to configure community Ceph repository")
+	addRepoIdx := findAnsibleTask(t, communityTasks, "Configure community Ceph package repository through cephadm")
 	if !(downloadIdx < addRepoIdx) {
-		t.Fatalf("oss provider must download cephadm before configuring the community repo")
+		t.Fatalf("community provider must download cephadm before configuring the community repo")
 	}
-	download, ok := ossTasks[downloadIdx]["ansible.builtin.get_url"].(map[string]any)
+	download, ok := communityTasks[downloadIdx]["ansible.builtin.get_url"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(download["url"]), "bootwright_ceph_community_release") {
-		t.Fatalf("oss cephadm download must build the release-scoped upstream URL, got %v", ossTasks[downloadIdx])
+		t.Fatalf("community cephadm download must build the release-scoped upstream URL, got %v", communityTasks[downloadIdx])
 	}
-	addRepo, ok := ossTasks[addRepoIdx]["ansible.builtin.command"].(map[string]any)
+	addRepo, ok := communityTasks[addRepoIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
-		t.Fatalf("oss community repo task must run a command, got %v", ossTasks[addRepoIdx])
+		t.Fatalf("community repo task must run a command, got %v", communityTasks[addRepoIdx])
 	}
 	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") {
-		t.Fatalf("oss community repo task must run cephadm add-repo --release, got %v", addRepo["argv"])
+		t.Fatalf("community repo task must run cephadm add-repo --release, got %v", addRepo["argv"])
 	}
 	if got := fmt.Sprint(addRepo["creates"]); !strings.Contains(got, "bootwright_ceph_community_repo_file") {
-		t.Fatalf("oss community repo task must be idempotent via creates, got %v", addRepo["creates"])
+		t.Fatalf("community repo task must be idempotent via creates, got %v", addRepo["creates"])
 	}
 
-	installTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
-	registryLogin := installTasks[findAnsibleTask(t, installTasks, "Log storage node into cephadm registry")]
+	// Subscription-backed register/refresh must stay no_log, and the licensed
+	// distributions must write the license-acceptance marker before the install
+	// stage pulls the licensed cephadm/ceph packages.
+	subscriptionTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/providers/subscription.yml")
+	rhsmRegister := subscriptionTasks[findAnsibleTask(t, subscriptionTasks, "Register storage node with RHSM")]
+	if got := rhsmRegister["no_log"]; got != true {
+		t.Fatalf("RHSM registration must be no_log, got %v", got)
+	}
+	licenseAcceptIdx := findAnsibleTask(t, subscriptionTasks, "Accept vendor Ceph license provisions")
+	if got := fmt.Sprint(subscriptionTasks[licenseAcceptIdx]["when"]); !strings.Contains(got, "requiresLicense") {
+		t.Fatalf("license acceptance must gate on requiresLicense, got when=%v", got)
+	}
+
+	registryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/registry.yml")
+	registryLogin := registryTasks[findAnsibleTask(t, registryTasks, "Log storage node into cephadm registry")]
 	if got := registryLogin["no_log"]; got != true {
 		t.Fatalf("registry login must be no_log, got %v", got)
 	}
 	if _, ok := registryLogin["containers.podman.podman_login"].(map[string]any); !ok {
 		t.Fatalf("registry login must use podman_login, got %v", registryLogin)
 	}
+
+	installTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
 
 	dependencyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/dependencies.yml")
 	prereqs := dependencyTasks[findAnsibleTask(t, dependencyTasks, "Install Ceph prerequisites on storage node")]

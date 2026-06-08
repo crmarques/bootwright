@@ -445,11 +445,20 @@ used to limit the bootstrap play. Every storage host renders
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and
 are copied to the seed host for cephadm.
 
-For `distribution: oss`, the `provider` block also carries a `community` map with
-a `release` (defaulting to the latest stable upstream Ceph release) and an
-optional `mirror`. The storage role uses it to configure the upstream community
-Ceph package repository with cephadm before installing `cephadm`. The `redhat`
-and `ibm` distributions omit `community` and use subscription-backed repos.
+The storage role dispatches its repository preparation on rendered `provider`
+capability flags, not on the distribution name. For `distribution: oss` the
+`provider` block carries a `community` map with a `release` (defaulting to the
+latest stable upstream Ceph release) and an optional `mirror`; the role uses it
+to configure the upstream community Ceph package repository with cephadm before
+installing `cephadm`. The `redhat` and `ibm` distributions omit `community` and
+set `requiresRHSM: true`; one shared, data-driven task file then registers RHSM,
+enables `repository.redhatRepos`, installs the optional `repository.ibmRepoURL`
+vendor `.repo`, and — when `requiresLicense: true` — installs and accepts the
+vendor license. Distributions that set `requiresRegistry: true` additionally run
+a registry stage (after host dependencies, before cephadm install) that installs
+the entitlement's `registry.trustBundlePath` and logs in to `registry.url` so
+every node can pull the Ceph container images cephadm orchestrates. Adding a
+distribution is a renderer/table change, not a new branch in the role.
 
 `ceph.operationsPath` points to a phased operation document. Each entry has a
 stable `phase`, `name`, and `command`. Create-style operations also declare

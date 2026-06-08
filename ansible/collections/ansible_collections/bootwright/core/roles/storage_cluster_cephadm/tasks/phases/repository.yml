@@ -6,17 +6,22 @@
       - "!min"
       - distribution
 
+# Distribution dispatch is driven by the rendered provider capability flags, not
+# by the distribution name: community-source distributions carry a `community`
+# block, subscription-backed distributions set `requiresRHSM`. This keeps the
+# role free of per-distribution name branches (see ADR 0002) — a new
+# distribution is a renderer/table change, not a new `when:` clause here.
 - name: Validate community Ceph storage node OS
   ansible.builtin.assert:
     that:
       - ansible_os_family == 'RedHat'
     fail_msg: >-
-      Ceph distribution oss is supported on RHEL-family storage nodes only;
+      Ceph distribution {{ bootwright_ceph_provider_name }} is supported on RHEL-family storage nodes only;
       {{ bootwright_current_storage_node.name }} reported
       {{ ansible_distribution | default('<unknown>') }} (os_family {{ ansible_os_family | default('<unknown>') }}).
-  when: bootwright_ceph_provider_name == 'oss'
+  when: bootwright_ceph_provider.community is defined
 
-- name: Validate vendor Ceph storage node OS
+- name: Validate subscription-backed Ceph storage node OS
   ansible.builtin.assert:
     that:
       - ansible_os_family == 'RedHat'
@@ -25,10 +30,15 @@
       {{ bootwright_ceph_provider.runtimeOS.message | default('selected Ceph distribution is incompatible with this storage node OS') }};
       {{ bootwright_current_storage_node.name }} reported
       {{ ansible_distribution | default('<unknown>') }} {{ ansible_distribution_version | default('<unknown>') }}.
-  when: bootwright_ceph_provider_name in ['redhat', 'ibm']
+  when: bootwright_ceph_provider.requiresRHSM | default(false) | bool
 
 - name: Load Ceph storage node OS variables
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
-- name: Run provider-specific Ceph repository preparation
-  ansible.builtin.include_tasks: "../providers/{{ bootwright_ceph_provider_name }}.yml"
+- name: Configure community Ceph package repository
+  ansible.builtin.include_tasks: ../providers/community.yml
+  when: bootwright_ceph_provider.community is defined
+
+- name: Configure subscription-backed Ceph package repository
+  ansible.builtin.include_tasks: ../providers/subscription.yml
+  when: bootwright_ceph_provider.requiresRHSM | default(false) | bool

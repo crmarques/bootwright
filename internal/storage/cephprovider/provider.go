@@ -8,12 +8,72 @@ import (
 const (
 	RedHatRegistryURL = "registry.redhat.io"
 	IBMRegistryURL    = "cp.icr.io/cp"
+
+	// ibmStorageCephRepoURL is the vendor .repo definition cephadm and ceph
+	// packages are installed from on IBM Storage Ceph nodes. The "-9-" segment
+	// is IBM's release stream (cephadm-ansible's ceph_ibm_version), not the RHEL
+	// version, which the "-rhel-9" suffix carries separately.
+	ibmStorageCephRepoURL = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo"
 )
 
 const (
 	rhelBaseOSRepo    = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-baseos-rpms"
 	rhelAppStreamRepo = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-appstream-rpms"
+	rhcephToolsRepo   = "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
 )
+
+// rhelCephVersions are the RHEL releases the subscription-backed (redhat, ibm)
+// Ceph distributions support on storage nodes.
+var rhelCephVersions = []string{"9.6", "9.7", "10", "10.0", "10.1"}
+
+// distributionDef is the declarative record of everything that varies between
+// the supported Ceph distributions. Distribution facts live in this one table
+// rather than in imperative selection logic, so adding a distribution is a table
+// entry plus its api/v1alpha1 constant and validation — never a new code branch
+// in Select, Vars, or the Ansible role.
+type distributionDef struct {
+	requiresRHSM     bool
+	requiresRegistry bool
+	requiresLicense  bool
+	registryURL      string   // default cephadm registry; an entitlement may override it
+	redhatRepos      []string // subscription-manager repositories to enable
+	ibmRepoURL       string   // vendor .repo file to install, when set
+	runtimeOS        RuntimeOS
+}
+
+func (d distributionDef) requiresEntitlement() bool {
+	return d.requiresRHSM || d.requiresRegistry || d.requiresLicense
+}
+
+func rhelCephRuntimeOS(message string) RuntimeOS {
+	return RuntimeOS{
+		Family:         "rhel",
+		ExactVersions:  append([]string(nil), rhelCephVersions...),
+		ManagedMessage: message,
+	}
+}
+
+var distributions = map[string]distributionDef{
+	v1alpha1.StorageCephDistributionOSS: {
+		runtimeOS: RuntimeOS{Family: "linux"},
+	},
+	v1alpha1.StorageCephDistributionRedHat: {
+		requiresRHSM:     true,
+		requiresRegistry: true,
+		registryURL:      RedHatRegistryURL,
+		redhatRepos:      []string{rhelBaseOSRepo, rhelAppStreamRepo, rhcephToolsRepo},
+		runtimeOS:        rhelCephRuntimeOS("Red Hat Ceph Storage 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+	},
+	v1alpha1.StorageCephDistributionIBM: {
+		requiresRHSM:     true,
+		requiresRegistry: true,
+		requiresLicense:  true,
+		registryURL:      IBMRegistryURL,
+		redhatRepos:      []string{rhelBaseOSRepo, rhelAppStreamRepo},
+		ibmRepoURL:       ibmStorageCephRepoURL,
+		runtimeOS:        rhelCephRuntimeOS("IBM Storage Ceph 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+	},
+}
 
 type Provider struct {
 	Distribution         string
@@ -71,48 +131,29 @@ func communitySource(cluster v1alpha1.StorageCluster) Community {
 
 func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) Provider {
 	distribution := Distribution(cluster)
+	def := distributions[distribution]
 	provider := Provider{
 		Distribution:         distribution,
 		PrerequisitePackages: []string{"firewalld", "lvm2", "podman", "chrony"},
 		CephadmPackage:       "cephadm",
 		CephCommonPackage:    "ceph-common",
-		RuntimeOS: RuntimeOS{
-			Family: "linux",
+		RequiresRHSM:         def.requiresRHSM,
+		RequiresRegistry:     def.requiresRegistry,
+		RequiresLicense:      def.requiresLicense,
+		Repository: Repository{
+			RedHatRepos: def.redhatRepos,
+			IBMRepoURL:  def.ibmRepoURL,
 		},
+		RuntimeOS: def.runtimeOS,
 	}
-	switch distribution {
-	case v1alpha1.StorageCephDistributionOSS:
+	if provider.RuntimeOS.Family == "" {
+		provider.RuntimeOS.Family = "linux"
+	}
+	if distribution == v1alpha1.StorageCephDistributionOSS {
 		provider.Community = communitySource(cluster)
-	case v1alpha1.StorageCephDistributionRedHat:
-		provider.RequiresRHSM = true
-		provider.RequiresRegistry = true
-		provider.Repository.RedHatRepos = []string{
-			rhelBaseOSRepo,
-			rhelAppStreamRepo,
-			"rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms",
-		}
-		provider.RuntimeOS = RuntimeOS{
-			Family:         "rhel",
-			ExactVersions:  []string{"9.6", "9.7", "10", "10.0", "10.1"},
-			ManagedMessage: "Red Hat Ceph Storage 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes",
-		}
-		if cluster.Spec.Ceph != nil {
-			provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, RedHatRegistryURL, secretsDir)
-		}
-	case v1alpha1.StorageCephDistributionIBM:
-		provider.RequiresRHSM = true
-		provider.RequiresRegistry = true
-		provider.RequiresLicense = true
-		provider.Repository.RedHatRepos = []string{rhelBaseOSRepo, rhelAppStreamRepo}
-		provider.Repository.IBMRepoURL = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo"
-		provider.RuntimeOS = RuntimeOS{
-			Family:         "rhel",
-			ExactVersions:  []string{"9.6", "9.7", "10", "10.0", "10.1"},
-			ManagedMessage: "IBM Storage Ceph 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes",
-		}
-		if cluster.Spec.Ceph != nil {
-			provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, IBMRegistryURL, secretsDir)
-		}
+	}
+	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
+		provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
 	}
 	return provider
 }

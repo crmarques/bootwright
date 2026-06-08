@@ -10,6 +10,12 @@
   ansible.builtin.include_tasks: phases/dependencies.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool
 
+- name: Configure Ceph container registry access
+  ansible.builtin.include_tasks: phases/registry.yml
+  when:
+    - not bootwright_task_storage_skip_prereqs | default(false) | bool
+    - bootwright_ceph_provider.requiresRegistry | default(false) | bool
+
 - name: Install cephadm and Ceph host tooling
   ansible.builtin.include_tasks: phases/install.yml
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool

@@ -1,10 +1,12 @@
 ---
-- name: Validate OSS Ceph provider has no vendor entitlement
+- name: Validate community Ceph provider has no vendor entitlement
   ansible.builtin.assert:
     that:
       - not (bootwright_ceph_provider.requiresRHSM | default(false) | bool)
       - not (bootwright_ceph_provider.requiresLicense | default(false) | bool)
-    fail_msg: "Ceph distribution oss must not require Red Hat or IBM entitlement material."
+    fail_msg: >-
+      Ceph distribution {{ bootwright_ceph_provider_name }} uses the upstream community
+      package source and must not require Red Hat or IBM entitlement material.
 
 - name: Resolve community Ceph package source
   ansible.builtin.set_fact:

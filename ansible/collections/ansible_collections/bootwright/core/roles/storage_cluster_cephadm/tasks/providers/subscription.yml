@@ -1,0 +1,107 @@
+---
+# Subscription-backed Ceph package repository preparation, shared by every
+# distribution the renderer marks requiresRHSM (redhat, ibm). What differs
+# between those distributions is data, not control flow: the RHSM repository set
+# (provider.repository.redhatRepos), an optional vendor .repo file
+# (provider.repository.ibmRepoURL), and whether a license must be accepted
+# (provider.requiresLicense). Each step below is gated on a rendered flag, so a
+# new subscription-backed distribution needs a table entry in the Go renderer,
+# never a new task file here.
+- name: Validate subscription-backed Ceph entitlement paths
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_rhsm_organization_path | length > 0
+      - bootwright_ceph_rhsm_activation_key_path | length > 0
+      - bootwright_ceph_registry_url | length > 0
+      - bootwright_ceph_registry_credentials_path | length > 0
+    fail_msg: >-
+      Ceph distribution {{ bootwright_ceph_provider_name }} requires RHSM organizationRef,
+      activationKeyRef, and registry credentialsRef entitlement material.
+
+- name: Require accepted license for licensed Ceph distribution
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_provider.license.accepted | default(false) | bool
+    fail_msg: >-
+      Ceph distribution {{ bootwright_ceph_provider_name }} requires license acceptance;
+      set the Environment entitlement license.accept=true.
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool
+
+- name: Register storage node with RHSM
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - register
+      - --org
+      - "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_organization_path) | trim }}"
+      - --activationkey
+      - "{{ lookup('ansible.builtin.file', bootwright_ceph_rhsm_activation_key_path) | trim }}"
+      - --force
+  register: bootwright_ceph_rhsm_register
+  changed_when: false
+  no_log: true
+
+- name: Refresh RHSM subscription metadata
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - refresh
+  changed_when: false
+
+# subscription-manager register does not connect Red Hat Insights on its own;
+# honor the entitlement's connectToInsights intent explicitly when set, matching
+# the managed-OS Kickstart's rhsm --connect-to-insights behavior.
+- name: Connect storage node to Red Hat Insights
+  ansible.builtin.command:
+    argv:
+      - insights-client
+      - --register
+  register: bootwright_ceph_insights_register
+  changed_when: bootwright_ceph_insights_register.rc == 0
+  when: bootwright_ceph_provider.rhsm.connectToInsights | default(false) | bool
+
+- name: Disable unrelated RHSM repositories
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - repos
+      - --disable=*
+  changed_when: false
+
+- name: Enable subscription-backed Ceph repositories
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - repos
+      - "--enable={{ item }}"
+  loop: "{{ bootwright_ceph_provider.repository.redhatRepos | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+
+- name: Install vendor Ceph repository definition
+  ansible.builtin.get_url:
+    url: "{{ bootwright_ceph_provider.repository.ibmRepoURL }}"
+    dest: /etc/yum.repos.d/ibm-storage-ceph.repo
+    owner: root
+    group: root
+    mode: "0644"
+  when: bootwright_ceph_provider.repository.ibmRepoURL | default('') | length > 0
+
+- name: Install vendor Ceph license package
+  ansible.builtin.package:
+    name: ibm-storage-ceph-license
+    state: present
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool
+
+# The licensed packages (cephadm, ceph) installed later from the vendor repo
+# refuse to operate until this acceptance marker exists, so it must be written in
+# the repository stage, before the install stage pulls them.
+- name: Accept vendor Ceph license provisions
+  ansible.builtin.file:
+    path: /usr/share/ibm-storage-ceph-license/accept
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  when: bootwright_ceph_provider.requiresLicense | default(false) | bool
