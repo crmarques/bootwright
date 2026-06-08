@@ -119,7 +119,16 @@
     label: "{{ item }}"
   when:
     - item | length > 0
-    - item is match('^/(var/lib/|var/log/|etc/systemd/system/|etc/sysctl.d/|etc/pki/ca-trust/source/anchors/|tmp/bootwright-)')
+    # System prefixes Bootwright owns, plus the context-owned state roots so the
+    # cleanup also works when the context lives under a non-default root (e.g.
+    # /srv/bootwright) instead of /var/lib/bootwright. Each root clause is guarded
+    # on a non-empty value so an undefined var can never match every path.
+    - >-
+      item is match('^/(var/lib/|var/log/|etc/systemd/system/|etc/sysctl.d/|etc/pki/ca-trust/source/anchors/|tmp/bootwright-)')
+      or (bootwright_provider_state_dir | default('') | length > 0 and item.startswith(bootwright_provider_state_dir ~ '/'))
+      or (bootwright_managed_services_dir | default('') | length > 0 and item.startswith(bootwright_managed_services_dir ~ '/'))
+      or (bootwright_clusters_dir | default('') | length > 0 and item.startswith(bootwright_clusters_dir ~ '/'))
+      or (bootwright_ownership_dir | default('') | length > 0 and item.startswith(bootwright_ownership_dir ~ '/'))
 
 - name: Remove destroyed ownership resource record
   ansible.builtin.include_role:

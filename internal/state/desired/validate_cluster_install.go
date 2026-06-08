@@ -167,6 +167,14 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	if component.Spec.LoadBalancer == nil {
 		return []string{fmt.Sprintf("%s.source.componentRef.name %q must reference a loadBalancer InfraComponent", prefix, source.ComponentRef.Name)}
 	}
+	// The endpoint must name which loadBalancer bind address it uses unless the
+	// loadBalancer declares exactly one (the accepted single-bind shortcut). With
+	// zero or multiple bindAddresses and no source.bindAddress,
+	// state/view.LoadBalancerBindAddress cannot resolve a VIP and the
+	// install-config ships with an empty api/ingress VIP.
+	if source.BindAddress == "" && len(component.Spec.LoadBalancer.BindAddresses) != 1 {
+		errs = append(errs, prefix+".source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress")
+	}
 	errs = append(errs, validateLoadBalancerBindAddresses(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, nil)...)
 	return errs
 }

@@ -55,9 +55,9 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		var storageNames []string
-		if strings.TrimSpace(clusterScope) != "" {
-			if _, storageNames, err = clusterRootNamesForTarget(state, clusterScope); err != nil {
+		scoped := strings.TrimSpace(clusterScope) != ""
+		if scoped {
+			if _, _, err = clusterRootNamesForTarget(state, clusterScope); err != nil {
 				return failErr(1, err)
 			}
 		}
@@ -66,7 +66,16 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		applyTarget := scope.applyTarget()
-		applyTarget.StorageClusterNames = storageNames
+		if scoped {
+			// Match scoped apply: report the transitive data-foundation
+			// attachment-target storage clusters present in the scoped state, not
+			// only the literal --clusters storage names.
+			names := make([]string, 0, len(state.StorageClusters))
+			for _, sc := range state.StorageClusters {
+				names = append(names, sc.Metadata.Name)
+			}
+			applyTarget.StorageClusterNames = names
+		}
 		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, state)
 		if err != nil {
 			return failErr(1, err)

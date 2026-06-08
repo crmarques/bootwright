@@ -144,12 +144,12 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
-		var selectedStorageClusters []string
 		storageSelectionActive := false
 		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
-			var err error
-			_, selectedStorageClusters, err = clusterRootNamesForTarget(state, flags.clusterScope)
-			if err != nil {
+			// Validate the requested names here; the effective storage selection is
+			// derived from the scoped plan.state below so it includes
+			// data-foundation attachment targets pulled in transitively.
+			if _, _, err := clusterRootNamesForTarget(state, flags.clusterScope); err != nil {
 				return failErr(1, err)
 			}
 			storageSelectionActive = true
@@ -181,7 +181,17 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		}
 		applyTarget := runScope.applyTarget()
 		if storageSelectionActive {
-			applyTarget.StorageClusterNames = selectedStorageClusters
+			// plan.state already includes the transitive closure of storage clusters
+			// required by the selected container clusters' data-foundation
+			// attachments (FilterStateToClusters -> filterStorageToClusters).
+			// Schedule provision for all of them; selecting only the literal
+			// --clusters storage names would skip a transitively-required managed
+			// StorageCluster, failing the attachment task after nodes have booted.
+			names := make([]string, 0, len(plan.state.StorageClusters))
+			for _, sc := range plan.state.StorageClusters {
+				names = append(names, sc.Metadata.Name)
+			}
+			applyTarget.StorageClusterNames = names
 		}
 		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.state)
 		if err != nil {

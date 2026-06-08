@@ -12,6 +12,15 @@
     bootwright_ceph_community_mirror: "{{ (bootwright_ceph_provider.community.mirror | default(bootwright_ceph_community_default_mirror, true)) | regex_replace('/$', '') }}"
   changed_when: false
 
+- name: Require an https community Ceph mirror
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_community_mirror is match('^https://')
+    fail_msg: >-
+      Refusing to fetch and execute cephadm over an insecure transport: set
+      spec.ceph.community.mirror to an https:// URL (got
+      {{ bootwright_ceph_community_mirror }}).
+
 - name: Download cephadm utility to configure community Ceph repository
   ansible.builtin.get_url:
     url: "{{ bootwright_ceph_community_mirror }}/rpm-{{ bootwright_ceph_community_release }}/el{{ ansible_distribution_major_version }}/noarch/cephadm"

@@ -53,6 +53,15 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		}
 		defaultData := topology.FilesystemDefaultDataPool(fs)
 		ops = append(ops, operationWithIdempotency("storage", "create-cephfs-"+fs.Metadata.Name, "cephfs", fs.Metadata.Name, "ceph", "fs", "new", fs.Metadata.Name, fs.Spec.CephFS.MetadataPoolRef.Name, defaultData))
+		// `ceph fs new` wires only the default data pool; attach the remaining
+		// declared data pools so a multi-data-pool CephFS matches desired state.
+		// add_data_pool is idempotent on Ceph, so no separate skip probe is needed.
+		for _, ref := range fs.Spec.CephFS.DataPoolRefs {
+			if ref.Name == "" || ref.Name == defaultData {
+				continue
+			}
+			ops = append(ops, operationInPhase("storage", "add-cephfs-data-pool-"+fs.Metadata.Name+"-"+ref.Name, "ceph", "fs", "add_data_pool", fs.Metadata.Name, ref.Name))
+		}
 		if fs.Spec.CephFS.MDS.ActiveCount > 0 {
 			ops = append(ops, operationInPhase("storage", "set-cephfs-max-mds-"+fs.Metadata.Name, "ceph", "fs", "set", fs.Metadata.Name, "max_mds", fmt.Sprint(fs.Spec.CephFS.MDS.ActiveCount)))
 		}

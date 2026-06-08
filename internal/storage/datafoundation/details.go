@@ -59,6 +59,12 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 		input.RBDPool = df.RBDPoolRef.Name
 		input.RGWPoolPrefix = df.ObjectGatewayRef.Name
 		if gw, ok := topology.GatewayByName(state, df.ObjectGatewayRef.Name); ok {
+			// cephadm names RGW pools after the rgw service_id (no realm/zone is
+			// rendered), so the Data Foundation poolPrefix must be the RGW
+			// serviceID, not the StorageObjectGateway resource name.
+			if gw.Spec.Ceph.ServiceID != "" {
+				input.RGWPoolPrefix = gw.Spec.Ceph.ServiceID
+			}
 			if endpoint, endpointOK := topology.GatewayEndpoint(state, gw, gw.Spec.PublicEndpointRef); endpointOK {
 				input.RGWEndpoint = fmt.Sprintf("%s:%d", endpoint.DNSName, topology.EndpointPort(endpoint, 443))
 			}

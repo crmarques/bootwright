@@ -1664,6 +1664,11 @@ func TestComponentImagesRequirePinnedReference(t *testing.T) {
 			wantSubstring: `spec.componentImages[proxy][squid].public "quay.io/squid@not-a-digest" must pin a version tag or digest`,
 		},
 		{
+			name:          "mutable tag containing a digit",
+			image:         "quay.io/squid:edge-1",
+			wantSubstring: `spec.componentImages[proxy][squid].public "quay.io/squid:edge-1" must pin a version tag or digest`,
+		},
+		{
 			name:  "version tag",
 			image: "quay.io/squid:7.5-oe2403sp3",
 		},
@@ -2027,6 +2032,28 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 				addLoadBalancerInfraComponent(files, "control-plane", "- ip: 192.168.132.10\n")
 			},
+		},
+		{
+			name: "multi-bind-address-without-selection-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+    api-int:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: control-plane
+    apps:
+      source:
+        type: infraComponent
+        componentRef: { name: load-balancer }
+        bindAddress: apps
+`)
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
+			},
+			wantSubstring: "spec.install.endpoints.api.source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress",
 		},
 		{
 			name: "named-bind-address-selection-accepted",

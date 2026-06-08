@@ -17,7 +17,11 @@ import (
 // also accept bare IPs (handled separately) since the assisted installer
 // treats either as valid.
 var ntpHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
-var imageVersionTag = regexp.MustCompile(`[0-9]`)
+
+// imageVersionTag accepts a version-like tag: it must START with a digit (or a
+// leading "v"), so mutable tags that merely contain a digit — "edge-1",
+// "latest-2", "nightly20240101" — are rejected as floating references.
+var imageVersionTag = regexp.MustCompile(`^v?[0-9][\w.+-]*$`)
 var imageSHA256Digest = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 
 // componentImageCatalog enumerates the (category, type) pairs that

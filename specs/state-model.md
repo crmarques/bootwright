@@ -506,8 +506,6 @@ Rules:
 - `spec.ceph.cephadm.bootstrap.seedNode` and
   `spec.ceph.cephadm.bootstrap.monIP.nodeRef.name` must name
   `spec.ceph.topology.nodes[]` entries.
-- `spec.ceph.cephadm.registry.url` is required, must not contain whitespace, and
-  must not embed credentials; `registry.credentialsRef.name` is required.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
 - `spec.ceph.topology.nodes[]` require a unique `name`, a `machineRef` to a
   `ceph-node` `Machine`, a `site`, and at least one `roles[]` value from

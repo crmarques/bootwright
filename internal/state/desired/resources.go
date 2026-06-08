@@ -287,6 +287,8 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddon, ref.Name)
 		}
+		require(fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef", binding.Metadata.Name),
+			v1alpha1.KindContainerCluster, binding.Spec.ClusterRef.Name)
 	}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
 		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name),
