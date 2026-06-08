@@ -5,6 +5,9 @@
     - "!all"
     - min
   become: true
+  # A seed-host ownership refusal (a foreign or unverifiable Ceph cluster) must
+  # abort the whole destroy before any node wipes its OSD devices.
+  any_errors_fatal: true
   vars:
     bootwright_selected_storage_cluster: >-
       {{

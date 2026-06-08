@@ -143,6 +143,11 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		if err != nil {
 			return failErr(1, err)
 		}
+		// Records live under a per-context ownership dir, but drop any record
+		// explicitly stamped with a different context as defense in depth: a
+		// destroy must never tear down resources recorded for another Bootwright
+		// context that share a host or a misconfigured context directory.
+		ownershipRecords = ownership.FilterByContext(ownershipRecords, ctx.Name)
 		var plan scopedWorkflowPlan
 		if artifactServerOnly {
 			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun, ownershipRecords)

@@ -794,10 +794,15 @@ Rules:
 - `destroy --stage infra|clusters --override` is required when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`.
   `--yes` only skips the confirmation prompt and never implies `--override`.
-- `apply --override` is command-scoped. It may continue past
-  Bootwright-owned unsafe mismatch checks that have an explicit override path,
-  but it must not bypass active-run leases, validation, secret checks, or
-  foreign-resource ownership failures.
+- `apply --override` is command-scoped. It may continue past Bootwright-owned
+  unsafe mismatch checks that have an explicit override path: it bypasses the
+  skip-if-already-complete install check, reinstalls a managed-OS machine (the
+  substrate VM is undefined and its disks wiped, then rebuilt), and cleanly
+  rebuilds a managed Ceph cluster (`cephadm rm-cluster --zap-osds`), allowed only
+  when a Bootwright ownership marker proves the live cluster is the one Bootwright
+  created — a foreign or co-resident cluster fails closed. It must not bypass
+  active-run leases, validation, secret checks, or foreign-resource ownership
+  failures.
 - `bootwright host trust` records SSH server-key trust for declared machines.
 - `bootwright state-check` is a read-only desired-vs-recorded report. It never
   mutates state, writes convergence records, or runs playbooks, and it accepts

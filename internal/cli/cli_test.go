@@ -127,6 +127,15 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 			t.Fatalf("apply help missing %q:\n%s", want, stdout)
 		}
 	}
+	// --override authorizes Bootwright-owned destructive rebuilds; its help text
+	// must name that scope (managed-OS VM reinstall, Ceph wipe-and-rebuild) rather
+	// than understating it as install-mismatch checks. Match single tokens so the
+	// assertion survives cobra line wrapping.
+	for _, want := range []string{"--override", "reinstall", "wipe-and-rebuild"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("apply --override help must name its destructive scope, missing %q:\n%s", want, stdout)
+		}
+	}
 	for _, reject := range []string{"--scope", "--cluster ", "bastion", "container|storage|install|addons", "Subcommand Flags"} {
 		if strings.Contains(stdout, reject) {
 			t.Fatalf("apply help exposes removed flag or help section %q:\n%s", reject, stdout)
@@ -3682,8 +3691,8 @@ func TestApplyOverrideDoesNotBypassActiveRunLease(t *testing.T) {
 		t.Fatalf("SaveRunLease: %v", err)
 	}
 
-	// --override authorizes Bootwright-owned install-mismatch checks only; it must
-	// not bypass an active run lease. The apply must fail closed before contacting
+	// --override authorizes Bootwright-owned destructive rebuilds; it must not
+	// bypass an active run lease. The apply must fail closed before contacting
 	// any host or starting a workflow.
 	stdout, stderr, code := runCLI(t,
 		"apply", "--stage", "clusters",

@@ -2676,6 +2676,88 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
+	top := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
+	tasks := nestedAnsibleTasks(t, top[0], "block")
+	rm := tasks[findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")]
+	if got := fmt.Sprint(rm["failed_when"]); !strings.Contains(got, "!= 0") {
+		t.Fatalf("override rebuild rm-cluster must fail closed before clearing config and re-bootstrapping, got failed_when=%v", rm["failed_when"])
+	}
+}
+
+func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+
+	// On the seed, prove the live cephadm cluster is Bootwright's (marker fsid
+	// matches the live fsid) and fail closed before removing the cluster or wiping
+	// devices, so a foreign/co-resident cluster or an unreadable fsid never leads
+	// to --zap-osds and /etc/ceph teardown.
+	readIdx := findAnsibleTask(t, tasks, "Read Bootwright Ceph ownership marker on seed host")
+	decideIdx := findAnsibleTask(t, tasks, "Decide Ceph destroy ownership on seed host")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright Ceph cluster on seed host")
+	rmIdx := findAnsibleTask(t, tasks, "Remove cephadm cluster on seed host")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < rmIdx && rmIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must verify ownership before removing the cluster and wiping (read=%d decide=%d refuse=%d rm=%d wipe=%d)", readIdx, decideIdx, refuseIdx, rmIdx, wipeIdx)
+	}
+
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("ceph destroy ownership guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_destroy_owned") {
+		t.Fatalf("ceph destroy guard must require proven Bootwright ownership, got %v", refuse["that"])
+	}
+
+	rm := tasks[rmIdx]
+	if got := fmt.Sprint(rm["when"]); !strings.Contains(got, "bootwright_ceph_destroy_owned") {
+		t.Fatalf("ceph destroy rm-cluster must be gated on proven ownership, got %v", rm["when"])
+	}
+	if got := fmt.Sprint(rm["failed_when"]); !strings.Contains(got, "!= 0") {
+		t.Fatalf("ceph destroy rm-cluster must fail closed on error, got failed_when=%v", rm["failed_when"])
+	}
+
+	zap := tasks[findAnsibleTask(t, tasks, "Zap declared Ceph device partition tables")]
+	if got := fmt.Sprint(zap["failed_when"]); !strings.Contains(got, "!= 0") {
+		t.Fatalf("ceph destroy sgdisk zap must fail closed on error, got failed_when=%v", zap["failed_when"])
+	}
+}
+
+func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
+	plays := readAnsiblePlays(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_storage_cluster_destroy.yml")
+	if len(plays) != 1 {
+		t.Fatalf("storage destroy plays = %d, want 1", len(plays))
+	}
+	if got := plays[0]["any_errors_fatal"]; got != true {
+		t.Fatalf("storage destroy play must run any_errors_fatal so a seed ownership refusal aborts before any node wipes devices, got %v", got)
+	}
+}
+
+func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/destroy.yml")
+	readIdx := findAnsibleTask(t, tasks, "Read libvirt domain ownership metadata")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright libvirt domain")
+	stopIdx := findAnsibleTask(t, tasks, "Stop libvirt domain")
+	undefineIdx := findAnsibleTask(t, tasks, "Undefine libvirt domain")
+	if !(readIdx < refuseIdx && refuseIdx < stopIdx && stopIdx < undefineIdx) {
+		t.Fatalf("libvirt destroy must read and verify domain ownership before stop/undefine (read=%d refuse=%d stop=%d undefine=%d)", readIdx, refuseIdx, stopIdx, undefineIdx)
+	}
+	read, ok := tasks[readIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(read["argv"]), "dumpxml") {
+		t.Fatalf("libvirt destroy ownership probe must run virsh dumpxml, got %v", tasks[readIdx])
+	}
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("libvirt destroy ownership guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	that := fmt.Sprint(refuse["that"])
+	for _, want := range []string{"<bootwright:context>", "<bootwright:cluster>", "<bootwright:machine>"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("libvirt destroy guard must require the Bootwright ownership marker %q, got %v", want, refuse["that"])
+		}
+	}
+}
+
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")

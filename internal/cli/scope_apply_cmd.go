@@ -80,7 +80,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	if scopeTargetsContainerInstall(scope) {
-		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned unsafe install mismatch checks; does not bypass leases, validation, secrets, or foreign ownership")
+		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (install-skip override, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); does not bypass leases, validation, secrets, or foreign ownership")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {

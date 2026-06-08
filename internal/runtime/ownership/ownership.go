@@ -185,6 +185,26 @@ func LoadResources(root string) ([]ResourceRecord, error) {
 	return records, nil
 }
 
+// FilterByContext drops records explicitly stamped with a different context, so a
+// destroy never consumes an ownership record that belongs to another Bootwright
+// context (for example a record misplaced into a shared context directory).
+// Records with no context stamp are kept for backward compatibility with records
+// written before the context field existed.
+func FilterByContext(records []ResourceRecord, context string) []ResourceRecord {
+	context = strings.TrimSpace(context)
+	if context == "" {
+		return records
+	}
+	out := make([]ResourceRecord, 0, len(records))
+	for _, record := range records {
+		if recordContext := strings.TrimSpace(record.Context); recordContext != "" && recordContext != context {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out
+}
+
 func ValidateResource(record ResourceRecord) error {
 	if err := validateSegment(record.Kind); err != nil {
 		return fmt.Errorf("kind: %w", err)

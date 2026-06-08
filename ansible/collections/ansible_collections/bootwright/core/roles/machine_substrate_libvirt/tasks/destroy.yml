@@ -6,6 +6,37 @@
     bootwright_libvirt_storage_root: "/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters/{{ bootwright_current_cluster.name }}/machines/{{ bootwright_component.name }}"
   changed_when: false
 
+# A foreign domain that happens to match the <cluster>-<machine> naming on this
+# hypervisor must not be destroyed/undefined. Read the domain XML and require the
+# Bootwright ownership marker for this context, cluster, and machine before
+# touching it (mirrors the context-sweep ownership check). When the domain is
+# absent the probe fails and the assert is skipped, so destroy stays idempotent.
+- name: Read libvirt domain ownership metadata
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_component.libvirt.uri | default('qemu:///system', true) }}"
+      - dumpxml
+      - "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+  register: bootwright_libvirt_destroy_domain_xml
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to destroy a non-Bootwright libvirt domain
+  ansible.builtin.assert:
+    that:
+      - ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+      - ('<bootwright:cluster>' ~ bootwright_current_cluster.name ~ '</bootwright:cluster>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+      - ('<bootwright:machine>' ~ bootwright_component.name ~ '</bootwright:machine>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+    fail_msg: >-
+      Refusing to destroy libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}:
+      it carries no Bootwright ownership marker for this context/cluster/machine,
+      so it may be a foreign domain that happens to match the naming. Verify the
+      domain before removing it manually, then retry.
+  when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+
 - name: Stop libvirt domain
   community.libvirt.virt:
     name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"

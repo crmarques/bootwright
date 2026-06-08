@@ -211,7 +211,9 @@
           - "{{ bootwright_ceph_override_fsid }}"
       register: bootwright_ceph_override_rm
       changed_when: true
-      failed_when: false
+      # A failed rm-cluster must not silently fall through to clearing config and
+      # re-bootstrapping: that would orphan the old cephadm daemons. Fail closed.
+      failed_when: bootwright_ceph_override_rm.rc != 0
       when:
         - bootwright_install_override | default(false) | bool
         - bootwright_ceph_override_owned | default(false) | bool

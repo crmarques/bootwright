@@ -148,3 +148,30 @@ func TestResourceRecordRejectsPathTraversal(t *testing.T) {
 		t.Fatal("SaveResource unexpectedly accepted owned path containing ..")
 	}
 }
+
+func TestFilterByContextDropsForeignContextRecords(t *testing.T) {
+	records := []ResourceRecord{
+		{Kind: "libvirt-domain", Name: "lab-a", Context: "lab"},
+		{Kind: "libvirt-domain", Name: "other-a", Context: "other"},
+		{Kind: "libvirt-network", Name: "legacy", Context: ""},
+	}
+	got := FilterByContext(records, "lab")
+	if len(got) != 2 {
+		t.Fatalf("FilterByContext kept %d records, want 2 (matching + unstamped): %+v", len(got), got)
+	}
+	for _, record := range got {
+		if record.Name == "other-a" {
+			t.Fatalf("FilterByContext kept a foreign-context record: %+v", record)
+		}
+	}
+}
+
+func TestFilterByContextEmptyContextKeepsAll(t *testing.T) {
+	records := []ResourceRecord{
+		{Kind: "libvirt-domain", Name: "lab-a", Context: "lab"},
+		{Kind: "libvirt-domain", Name: "other-a", Context: "other"},
+	}
+	if got := FilterByContext(records, ""); len(got) != len(records) {
+		t.Fatalf("FilterByContext with empty context kept %d records, want %d", len(got), len(records))
+	}
+}
