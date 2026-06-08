@@ -101,7 +101,7 @@ anything that violates them:
 - **Output.** CLI human output goes through `internal/cli/output`; raw exceptions
   stay raw (JSON, shell exports, Cobra help, prompts, external process passthrough).
 - **State checking.** A well-named command must let the operator compare selected
-  desired state with live reality without mutation. Trace both `--override` and
+  desired state with the recorded last apply without mutation. Trace both `--override` and
   no-override behavior where supported; override must not make this read-only
   check mutate or hide drift.
 - **Go↔Ansible split.** Go owns CLI, input loading/validation, normalization,

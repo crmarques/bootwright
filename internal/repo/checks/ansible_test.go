@@ -2563,6 +2563,13 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		"destroy",
 		"undefine",
 		"Remove current-context libvirt storage directory",
+		// The sweep must require the live Bootwright ownership marker, not just a
+		// disk-path match, so a foreign VM parked under the context root is not
+		// undefined.
+		"dumpxml",
+		"<bootwright:context>",
+		"bootwright_libvirt_context_owned_domains",
+		"item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("libvirt context sweep missing %q", want)
@@ -2580,6 +2587,55 @@ func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 		if !strings.Contains(body, "bootwright.io/context: {{ bootwright_clusters_dir | dirname | basename }}") {
 			t.Fatalf("%s missing context ownership label", path)
 		}
+	}
+}
+
+func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+
+	// The device-name allowlist must accept stable /dev/disk/by-id, /dev/disk/by-path
+	// and /dev/mapper paths (with a trailing identifier), not just bare prefixes.
+	validate := tasks[findAnsibleTask(t, tasks, "Validate declared Ceph destroy devices")]
+	assertBlock, ok := validate["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("device validation must be an assert, got %v", validate)
+	}
+	if got := fmt.Sprint(assertBlock["that"]); !strings.Contains(got, "disk/by-id/[^/]+") || !strings.Contains(got, "disk/by-path/[^/]+") {
+		t.Fatalf("device regex must anchor stable by-id/by-path paths, got %v", assertBlock["that"])
+	}
+
+	// Before any wipe, a mounted/in-use/system device must be refused so a
+	// misdeclared or kernel-reordered /dev/sdX cannot wipe the host disk.
+	probeIdx := findAnsibleTask(t, tasks, "Probe declared Ceph destroy devices for active mounts")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe mounted or in-use Ceph destroy devices")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(probeIdx < refuseIdx && refuseIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must probe and refuse mounted devices before wiping (probe=%d refuse=%d wipe=%d)", probeIdx, refuseIdx, wipeIdx)
+	}
+	probe, ok := tasks[probeIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(probe["argv"]), "lsblk") {
+		t.Fatalf("mount probe must run lsblk, got %v", tasks[probeIdx])
+	}
+}
+
+func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
+	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt VirtualMachine")
+	deleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine")
+	if !(readIdx < refuseIdx && refuseIdx < deleteIdx) {
+		t.Fatalf("kubevirt destroy must read and verify the ownership label before deleting (read=%d refuse=%d delete=%d)", readIdx, refuseIdx, deleteIdx)
+	}
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt delete guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	that := fmt.Sprint(refuse["that"])
+	if !strings.Contains(that, "bootwright_kubevirt_vm_owner") || !strings.Contains(that, "'bootwright'") {
+		t.Fatalf("kubevirt delete guard must require the live owner label to equal bootwright, got %v", refuse["that"])
+	}
+	if !strings.Contains(fmt.Sprint(refuse["fail_msg"]), "managed-by") {
+		t.Fatalf("kubevirt delete guard message must name the managed-by ownership label, got %v", refuse["fail_msg"])
 	}
 }
 

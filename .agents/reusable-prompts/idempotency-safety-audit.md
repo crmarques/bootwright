@@ -33,7 +33,7 @@ description. Treat "explicit" narrowly:
   flow is read-only unless the current specs document a narrow non-destructive
   runtime record write.
 - Bootwright must provide a well-named, non-mutating command whose sole purpose
-  is to compare selected desired state with live reality. Audit whether the name
+  is to compare selected desired state with the recorded last apply. Audit whether the name
   communicates "state comparison" instead of convergence or cleanup, and propose a
   better name when the current CLI lacks one or overloads a mutating command.
 - A repeated `apply` with unchanged desired state should skip or prove matching
@@ -185,7 +185,9 @@ help, examples, and tests for:
   planning, help, discovery, and probes.
 - Desired-vs-real state checking: a well-named command exists, is explicitly
   non-mutating, loads the same selected desired-state graph as converge/destroy,
-  probes live state safely, and reports whether reality matches authored intent.
+  compares against the durable last-apply convergence record without mutation (it
+  does not live-probe), and neither the report nor its docs overstate that as live
+  reality.
 - State-check report quality: when a selected cluster or storage cluster is
   wholly absent, the report says that succinctly instead of dumping every child
   object as missing; when the root exists, the report names material differences
@@ -241,8 +243,8 @@ Walk these checkpoints:
    scenario without it and with it. Which refusal disappears, which mutations
    become allowed, and which read-only guarantees must remain unchanged?
 5. **State comparison command.** Can the operator run a clearly named,
-   non-mutating command to compare selected desired state against live reality?
-   Does it detect root absence, partial presence, missing desired resources,
+   non-mutating command to compare selected desired state against the recorded
+   last apply? Does it detect root absence, partial presence, missing desired resources,
    undeclared live resources, and drifted attributes without converging or
    cleaning anything?
 6. **Reality probe.** Before a mutating task or state-comparison verdict, what

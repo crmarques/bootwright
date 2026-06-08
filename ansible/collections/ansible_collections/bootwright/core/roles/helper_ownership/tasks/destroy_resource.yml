@@ -119,6 +119,10 @@
     label: "{{ item }}"
   when:
     - item | length > 0
+    # Reject `..` so a corrupted or stale record path cannot escape the
+    # allowlisted roots via traversal (e.g. /var/lib/../../etc/... or
+    # <state-root>/../../etc), regardless of which root clause below it matches.
+    - "'..' not in item"
     # System prefixes Bootwright owns, plus the context-owned state roots so the
     # cleanup also works when the context lives under a non-default root (e.g.
     # /srv/bootwright) instead of /var/lib/bootwright. Each root clause is guarded

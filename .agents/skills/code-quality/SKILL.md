@@ -88,6 +88,31 @@ only when the user explicitly requests that full gate.
   `.agents/knowledge/KNOWLEDGE.md`; do not duplicate the explanation
   inline in the code.
 
+## Ansible Idempotency And Destructive Safety
+
+The Ansible layer performs every host mutation; hold it to the same safety bar as
+the Go layer.
+
+- Prefer modules with native idempotency (`file`, `package`, `systemd`,
+  `containers.podman.*`) over raw `command`/`shell`. When a `command`/`shell`
+  task is unavoidable, set `changed_when`/`failed_when` deliberately and make it
+  idempotent with `creates`/`removes` or an explicit guard.
+- Mark read-only probes `changed_when: false` (and `failed_when: false` when a
+  probe failure must not abort). A probe must never report a change or trigger a
+  handler.
+- Gate every destructive task (delete, undefine, wipe, zap, format, reset,
+  remove, disable) on proven Bootwright ownership and the requested scope, never
+  on names, labels, or filesystem layout alone. Re-verify live ownership (an
+  ownership record or a stamped marker/label) before an irreversible action, and
+  fail closed on a foreign or stale match.
+- Constrain path and device removal to allowlisted, context-owned roots; reject
+  `..`, and refuse mounted, in-use, or system devices before wiping.
+- A destructive role must be safe to re-run: a second identical run is a no-op or
+  tolerates already-absent state without error.
+- Never log secrets; set `no_log: true` on tasks that handle credentials.
+- Which resources to act on, the scope, and the authorization come from
+  Go-rendered variables, not from Ansible re-deriving them.
+
 ## Method
 
 - Before finishing, run `make check-fast` and fix every finding within the

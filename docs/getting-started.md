@@ -279,11 +279,19 @@ blocked while the previous apply ledger has a fresh process lease. If an
 interrupted process leaves only a stale ledger, the next `apply` or `destroy`
 marks it cancelled before continuing.
 
-To protect an environment from accidental teardown, set
-`Environment.spec.safety.destroyProtection: requiredOverride`. Protected
-destroy commands fail unless that same command includes `--override`.
-`--yes` only skips the confirmation prompt; it does not authorize protected
-destroy. Dry-run destroy output reports the protection without mutating state.
+To see how the selected desired state differs from the last apply before you
+converge or tear down, run `bootwright state-check` (optionally with `--stage` or
+`--clusters`). It is read-only and compares against the recorded last apply, not a
+live probe, so it reports `missing`, `match`, `drift`, or `foreign` per resource
+without contacting hosts.
+
+`Environment.spec.safety.destroyProtection` defaults to `allow` (unset means
+`allow`): destroy runs after the interactive confirmation (or `--yes`) without an
+override. To protect an environment from accidental teardown, set it to
+`requiredOverride`. Protected destroy commands then fail unless that same command
+includes `--override`. `--yes` only skips the confirmation prompt; it does not
+authorize protected destroy. Dry-run destroy output reports the protection
+without mutating state.
 
 Stable JSON output is intentionally limited. Use these forms for automation:
 
@@ -305,7 +313,7 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 | `bootwright cluster access-info --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
 | `bootwright status --output json` | Supported | Read-only context status |
-| `bootwright state-check --output json` | Supported | Read-only desired-vs-reality drift |
+| `bootwright state-check --output json` | Supported | Read-only desired-vs-recorded drift (vs last apply; not a live probe) |
 | `bootwright plan --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage infra --dry-run --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage clusters --dry-run --output json` | Supported | Dry-run apply plan |

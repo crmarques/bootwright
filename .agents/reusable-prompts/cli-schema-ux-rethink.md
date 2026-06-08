@@ -82,7 +82,7 @@ violates them:
   follow-up. Raw exceptions stay raw: JSON, shell exports, Cobra help, prompts,
   external process passthrough.
 - **State checking.** The CLI must include a well-named, non-mutating command for
-  comparing selected desired state with live reality. Do not accept a UX where
+  comparing selected desired state with the recorded last apply. Do not accept a UX where
   users must infer drift from `apply`, `destroy`, logs, or generated files.
   Evaluate behavior both with and without `--override` for commands that support
   it; override must never make the state-check command mutate or hide drift.
@@ -218,7 +218,7 @@ problems ordered by user impact and backed by evidence.
 ## 3. From-Scratch Operator Journey
 The ideal flow from empty context to achieved desired state — create/import,
 validate, materialize secrets, preview effective state and rendered output,
-compare desired state with live reality using the non-mutating state-check
+compare desired state with the recorded last apply using the non-mutating state-check
 command, converge infra then clusters (storage and add-ons included), monitor and
 inspect, access, recover from failure, destroy/reset safely. Use current commands
 where already right; mark proposals as proposals.

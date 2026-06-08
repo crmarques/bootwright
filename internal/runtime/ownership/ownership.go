@@ -204,6 +204,14 @@ func ValidateResource(record ResourceRecord) error {
 			return fmt.Errorf("ownership resource %s/%s contains sensitive value", record.Kind, record.Name)
 		}
 	}
+	// Owned paths drive destructive removal during destroy; reject `..` so a
+	// recorded path cannot traverse outside its intended root when the record is
+	// later consumed to delete files.
+	for _, path := range record.Paths {
+		if strings.Contains(path, "..") {
+			return fmt.Errorf("ownership resource %s/%s path %q must not contain %q", record.Kind, record.Name, path, "..")
+		}
+	}
 	return nil
 }
 

@@ -165,9 +165,10 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			}
 		}
 		destroySafety := workflow.EvaluateDestroySafety(plan.state, override)
-		if override {
-			plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_destroy_override=true")
-		}
+		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
+		// below). No Ansible destroy role consumes a destroy-override extra-var, so
+		// emitting one would be inert plumbing that reads like an executor-level
+		// gate; the authorization decision stays here.
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))

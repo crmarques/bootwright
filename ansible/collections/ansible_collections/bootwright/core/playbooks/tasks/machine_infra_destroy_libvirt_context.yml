@@ -34,6 +34,42 @@
   changed_when: false
   failed_when: false
 
+# Disk-path membership alone is not proof of ownership: a foreign domain could
+# store a disk under the context root. Read each domain's XML and require the
+# Bootwright ownership marker for this context before sweeping it, so the sweep
+# never undefines a VM that Bootwright did not create.
+- name: Inspect libvirt domain ownership metadata
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - -c
+      - "{{ bootwright_libvirt_context_uri }}"
+      - dumpxml
+      - "{{ bootwright_libvirt_domain_name }}"
+  loop: "{{ bootwright_libvirt_domain_list.stdout_lines | default([]) | reject('equalto', '') | list }}"
+  loop_control:
+    loop_var: bootwright_libvirt_domain_name
+    label: "{{ bootwright_libvirt_domain_name }}"
+  register: bootwright_libvirt_domain_metadata
+  changed_when: false
+  failed_when: false
+
+- name: Initialize Bootwright-owned current-context libvirt domains
+  ansible.builtin.set_fact:
+    bootwright_libvirt_context_owned_domains: []
+  changed_when: false
+
+- name: Select Bootwright-owned libvirt domains by ownership marker
+  ansible.builtin.set_fact:
+    bootwright_libvirt_context_owned_domains: "{{ bootwright_libvirt_context_owned_domains + [item.bootwright_libvirt_domain_name] }}"
+  loop: "{{ bootwright_libvirt_domain_metadata.results | default([]) }}"
+  loop_control:
+    label: "{{ item.bootwright_libvirt_domain_name | default('') }}"
+  when:
+    - item.rc | default(1) == 0
+    - ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (item.stdout | default(''))
+  changed_when: false
+
 - name: Initialize current-context libvirt domains
   ansible.builtin.set_fact:
     bootwright_libvirt_context_domains: []
@@ -48,6 +84,7 @@
   when:
     - item.rc | default(1) == 0
     - (bootwright_libvirt_context_storage_root ~ '/') in (item.stdout | default(''))
+    - item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains
   changed_when: false
 
 - name: Stop current-context libvirt domains

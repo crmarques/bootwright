@@ -89,7 +89,7 @@ violates them:
 - **Secrets.** Credentials, kubeconfigs, pull secrets, private keys, and tokens
   never appear in versioned content, examples, snippets, or recommendations.
 - **State checking.** The public contract must give operators a well-named,
-  non-mutating command to compare selected desired state with live reality. The
+  non-mutating command to compare selected desired state with the recorded last apply. The
   spec/UX must distinguish this from `status`, `render`, `apply`, `destroy`, and
   dry-run, and define how `--override` behaves or is rejected without mutation.
 - **Clean break.** While the API is `v1alpha1`, propose clean breaking

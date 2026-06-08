@@ -703,6 +703,13 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
+- Read-only verbs (`status`, `state-check`, `render`, `plan`, `apply --dry-run`,
+  `validate`, `check syntax`, help, and discovery) must not write runtime records
+  (convergence-safety, install, ownership, ledger) or acquire a mutating run
+  lease, and must not mutate provider, BMC, cluster, or storage state. `status`,
+  `state-check`, `render`, `plan`, and `validate` must not contact provider
+  hosts, BMCs, or clusters at all; `check` may run an Ansible preflight but only
+  with read-only or check-mode operations that converge nothing.
 - Cluster selection uses one flag name, `--clusters`, on every command that
   narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `check` and
   `destroy` scope subcommands, and `render`. It accepts a comma-separated list
@@ -738,15 +745,19 @@ Rules:
   but it must not bypass active-run leases, validation, secret checks, or
   foreign-resource ownership failures.
 - `bootwright host trust` records SSH server-key trust for declared machines.
-- `bootwright state-check` is a read-only desired-vs-reality report. It never
+- `bootwright state-check` is a read-only desired-vs-recorded report. It never
   mutates state, writes convergence records, or runs playbooks, and it accepts
   `--stage`, `--clusters`, and `--output` like the other selection commands. It
   classifies each selected resource against the durable convergence-safety
   evidence recorded by the last apply: `missing` (never applied), `match`
   (applied with the current desired state), `drift` (desired state changed since
-  it was applied), or `foreign` (a non-Bootwright owner). A root whose resources
-  are all `missing` is reported as one absence; a present root reports only the
-  resources that are not in sync. It is distinct from `status` (local readiness
+  it was applied), or `foreign` (a non-Bootwright owner). It compares desired
+  state against that recorded evidence only; it does not probe live hosts, BMCs,
+  or clusters, so a change made out of band after a matching apply (a wiped disk,
+  an undefined VM, a deleted namespace) is not detected until the next apply
+  refreshes the record. A root whose resources are all `missing` is reported as
+  one absence; a present root reports only the resources that are not in sync. It
+  is distinct from `status` (local readiness
   and next-step spine), `check` (Ansible preflight), and `plan`/`apply
   --dry-run` (the intended task graph). `--override` is rejected because
   state-check neither mutates nor suppresses its report.

@@ -160,9 +160,9 @@ leaking private host data or secret material; stale security-sensitive paths
 the maintained path. Report only what code evidence supports.
 
 **State-check implementation.** Audit whether implementation code gives users a
-safe way to ask "does selected desired state match live reality?" without
+safe way to ask "does selected desired state match the recorded last apply?" without
 mutation. The command must have a clear name, load the same selected graph as
-apply/destroy, probe reality safely, report root absence succinctly, and report
+apply/destroy, read the recorded last-apply evidence safely, report root absence succinctly, and report
 granular drift when roots exist, including missing declared resources and
 undeclared live resources such as Ceph pools, filesystems, gateways, add-ons, VMs,
 services, endpoints, or storage exports. Check text and JSON output, exit codes,

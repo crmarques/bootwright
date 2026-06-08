@@ -137,3 +137,14 @@ func TestResourceRecordRejectsSecretLikeData(t *testing.T) {
 		t.Fatal("SaveResource unexpectedly accepted sensitive field")
 	}
 }
+
+func TestResourceRecordRejectsPathTraversal(t *testing.T) {
+	err := SaveResource(t.TempDir(), ResourceRecord{
+		Kind:  "libvirt-domain",
+		Name:  "cluster-a-machine-0",
+		Paths: []string{"/var/lib/../../etc/passwd"},
+	})
+	if err == nil {
+		t.Fatal("SaveResource unexpectedly accepted owned path containing ..")
+	}
+}

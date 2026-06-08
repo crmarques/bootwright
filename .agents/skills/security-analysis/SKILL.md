@@ -28,6 +28,13 @@ security issues and propose or apply fixes.
   (e.g. `latest`); verification of downloaded artifacts.
 - File system and process safety: command construction, path traversal,
   unsafe permissions on rendered output, temp file handling.
+- Destructive-operation safety: idempotency and ownership of delete, undefine,
+  wipe, zap, format, reset, and remove paths; that read-only commands (`status`,
+  `state-check`, `render`, `plan`, `validate`, `check`) never mutate or contact
+  hosts; `destroyProtection` and command-scoped `--override` enforced before any
+  mutation, with `--yes` as confirmation only that never broadens scope; destroy
+  acting on proven Bootwright ownership and the selected scope, failing closed on
+  foreign, stale, or out-of-scope state.
 - Logging and telemetry: leakage of secrets, tokens, or private host data
   into logs, errors, or rendered output.
 - Cryptography and TLS: certificate validation, trust stores, weak or

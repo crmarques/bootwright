@@ -631,8 +631,10 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 	if report.DestroySafety.OverrideRequired || !report.DestroySafety.Override {
 		t.Fatalf("destroy safety = %+v, want override supplied and no requirement remaining", report.DestroySafety)
 	}
-	if !slices.Contains(report.ExtraVars, "bootwright_destroy_override=true") {
-		t.Fatalf("extra vars missing destroy override: %+v", report.ExtraVars)
+	// destroyProtection is enforced in Go; no inert destroy-override extra-var is
+	// passed to Ansible (no role consumes it). Guard against reintroducing it.
+	if slices.Contains(report.ExtraVars, "bootwright_destroy_override=true") {
+		t.Fatalf("extra vars should not carry an inert destroy override: %+v", report.ExtraVars)
 	}
 }
 

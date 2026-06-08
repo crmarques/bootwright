@@ -17,6 +17,36 @@
       KubeVirt destroy for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
       is missing kubeconfig or namespace.
 
+# The VM is addressed by computed name in a namespace that may be shared with
+# foreign workloads. Re-verify live ownership (the bootwright.io/managed-by label
+# the template stamps) before deleting, so a name collision with a non-Bootwright
+# VM is refused instead of silently deleted. A missing VM (rc != 0) is a no-op.
+- name: Read KubeVirt VirtualMachine ownership label
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig
+      - "{{ bootwright_kubevirt_kubeconfig }}"
+      - -n
+      - "{{ bootwright_kubevirt_namespace }}"
+      - get
+      - virtualmachine
+      - "{{ bootwright_kubevirt_vm_name }}"
+      - -o
+      - 'jsonpath={.metadata.labels.bootwright\.io/managed-by}'
+  register: bootwright_kubevirt_vm_owner
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
+  ansible.builtin.assert:
+    that:
+      - (bootwright_kubevirt_vm_owner.rc | default(1)) != 0 or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright'
+    fail_msg: >-
+      Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
+      {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
+      bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
+
 - name: Stop KubeVirt VirtualMachine
   ansible.builtin.command:
     argv:
