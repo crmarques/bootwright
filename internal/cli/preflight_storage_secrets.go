@@ -20,7 +20,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"storage-cluster"}, machine, true)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"deps", "base"}, machine, true)...)
 		}
 	}
 	clusterByName := map[string]v1alpha1.StorageCluster{}

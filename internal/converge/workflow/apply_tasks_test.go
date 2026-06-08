@@ -195,7 +195,7 @@ func TestRunApplyTaskGraphUsesRunnerFactory(t *testing.T) {
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, factory)
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, factory)
 	if err != nil {
 		t.Fatalf("RunApplyTaskGraph: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestRunApplyTaskGraphFailsWhenTasksCannotMakeProgress(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		calls++
 		return &fakeRunner{}
 	})
@@ -339,7 +339,7 @@ func TestRunApplyTaskGraphContinuesIndependentBranchAfterTaskFailure(t *testing.
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err == nil || !strings.Contains(err.Error(), "fail-a failed") {
@@ -390,7 +390,7 @@ func TestRunApplyTaskGraphHonorsCountedHostSlots(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseClusterInstall}}, "", tasks, ConcurrencyLimits{Parallelism: 3, ParallelismPerHost: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseMachines}}, "", tasks, ConcurrencyLimits{Parallelism: 3, ParallelismPerHost: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err != nil {
@@ -435,7 +435,7 @@ func TestRunApplyTaskGraphLimitsManagedOSForksToRedfishSlots(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseStorageInfra}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1, ParallelismRedfish: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseMachines}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1, ParallelismRedfish: 2}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err != nil {
@@ -480,7 +480,7 @@ func TestRunApplyTaskGraphReportsLeaseHeartbeatFailure(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err == nil || !strings.Contains(err.Error(), "refresh apply lease") {
@@ -848,7 +848,7 @@ func TestPlanApplyAddonsOrdersAddonTasks(t *testing.T) {
 func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -859,7 +859,7 @@ func TestPlanApplyAllRunsAddonsAfterInstallWait(t *testing.T) {
 func TestPlanApplyContainerClusterRunsAddonsAfterInstallWait(t *testing.T) {
 	state := extensionPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -889,7 +889,7 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
 
-	assertTaskDeps(t, tasks, "storage.ceph")
+	assertTaskDeps(t, tasks, "storage.ceph", "storageinfra.ceph")
 	assertTaskDeps(t, tasks, "iso.demo")
 	assertTaskDeps(t, tasks, "wait.demo", "iso.demo")
 	assertTaskDeps(t, tasks, "addon.demo.odf.apply", "wait.demo")
@@ -900,7 +900,7 @@ func TestPlanApplyClustersOrdersClusterLifecycleAndIntegrations(t *testing.T) {
 func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundation(t *testing.T) {
 	state := storageAttachmentPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -911,7 +911,7 @@ func TestPlanApplyAllOrdersStorageAttachmentsAfterStorageInstallAndDataFoundatio
 func TestPlanApplyAllExternalStorageAttachmentSkipsStorageTask(t *testing.T) {
 	state := externalStorageAttachmentPlanningState()
 
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -1005,7 +1005,7 @@ func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInstall(t *testin
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseBase}, ClusterKind: ApplyClusterKindStorage}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
@@ -1034,14 +1034,20 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 		RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
 		CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
 	}
-	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, state)
+	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseBase}, ClusterKind: ApplyClusterKindStorage}, state)
 	if err != nil {
 		t.Fatalf("PlanApplyTasksChecked: %v", err)
 	}
-	if len(tasks) != 1 {
-		t.Fatalf("storage tasks got %d, want 1", len(tasks))
+	var task ApplyTask
+	for _, candidate := range tasks {
+		if candidate.Entry.ID == "storage.ceph" {
+			task = candidate
+			break
+		}
 	}
-	task := tasks[0]
+	if task.Entry.ID == "" {
+		t.Fatalf("storage task not found in %v", applyTaskIDs(tasks))
+	}
 	if task.Playbook != "bootwright.core.task_storage_cluster_apply" {
 		t.Fatalf("storage playbook = %q", task.Playbook)
 	}
@@ -1063,7 +1069,7 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseStorageCluster}}, "", tasks, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseBase}, ClusterKind: ApplyClusterKindStorage}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(stdout io.Writer, stderr io.Writer) ansible.Runner {
 		return runner
 	})
 	if err != nil {
@@ -1770,15 +1776,15 @@ func applyTaskIDs(tasks []ApplyTask) []string {
 }
 
 func applyAllTarget() ApplyTarget {
-	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseProvider, ApplyPhaseInfraComponents, ApplyPhaseClusterInstall, ApplyPhaseStorageInfra, ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "all", PhaseNames: []string{ApplyPhaseFabric, ApplyPhaseMachines, ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}
 }
 
 func applyClustersTarget() ApplyTarget {
-	return ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseStorageCluster, ApplyPhaseContainerCluster, ApplyPhaseAddons}}
+	return ApplyTarget{Name: "clusters", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase, ApplyPhaseAddons}}
 }
 
 func applyContainerClusterTarget() ApplyTarget {
-	return ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseContainerCluster}}
+	return ApplyTarget{Name: "container-cluster", PhaseNames: []string{ApplyPhaseDeps, ApplyPhaseBase}}
 }
 
 func assertTaskPresent(t *testing.T, tasks []ApplyTask, id string) ApplyTask {

@@ -95,10 +95,10 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 			binaryCheck(checkGroupControllerTools, "python3", nil, "bootwright bastion setup", deps),
 		)
 	}
-	if phaseInScope("machine-infra", selected, hasState) && stateNeedsKubeVirt(state) {
+	if phaseInScope("machines", selected, hasState) && stateNeedsKubeVirt(state) {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "kubectl", nil, "install kubectl on PATH", deps))
 	}
-	if phaseInScope("container-cluster", selected, hasState) {
+	if phaseInScope("base", selected, hasState) {
 		if stateNeedsKubeVirt(state) {
 			checks = append(checks, binaryCheck(checkGroupInstallerTools, "virtctl", nil, "install virtctl on PATH", deps))
 		}
@@ -106,7 +106,7 @@ func collectPreflightChecks(state v1alpha1.State, selected []Phase, hasState boo
 	if phaseInScope("addons", selected, hasState) && len(state.ClusterAddonBindings) > 0 {
 		checks = append(checks, binaryCheck(checkGroupInstallerTools, "oc", nil, "install oc on PATH", deps))
 	}
-	if phaseInScope("storage-cluster", selected, hasState) && stateHasManagedStorageClusters(state) {
+	if (phaseInScope("deps", selected, hasState) || phaseInScope("base", selected, hasState)) && stateHasManagedStorageClusters(state) {
 		checks = append(checks,
 			binaryCheck(checkGroupControllerTools, "ssh", nil, "install ssh on PATH", deps),
 			binaryCheck(checkGroupControllerTools, "scp", nil, "install scp on PATH", deps),
@@ -187,7 +187,7 @@ func stateHasManagedStorageClusters(state v1alpha1.State) bool {
 }
 
 func kubeVirtHostClusterChecks(state v1alpha1.State, selected []Phase, clustersDir string, deps preflightDeps) []preflightCheck {
-	if !anyPhaseInScope([]string{"machine-infra", "container-cluster"}, selected) {
+	if !anyPhaseInScope([]string{"machines", "base"}, selected) {
 		return nil
 	}
 	seen := map[string]bool{}

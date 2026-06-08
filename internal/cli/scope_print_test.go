@@ -7,7 +7,7 @@ import (
 )
 
 func TestUseControllingTTYForNonInteractiveRootWorkflow(t *testing.T) {
-	rootPhase := []Phase{{Name: "container-cluster", NeedsRoot: true}}
+	rootPhase := []Phase{{Name: "base", NeedsRoot: true}}
 	if !useControllingTTYForWorkflow(rootPhase, false) {
 		t.Fatal("noninteractive root workflow should use a controlling tty")
 	}
@@ -25,7 +25,7 @@ func TestWorkflowSummaryReportsRootExecutionAsInfo(t *testing.T) {
 	t.Cleanup(func() { currentEUID = oldCurrentEUID })
 
 	var out bytes.Buffer
-	printWorkflowSummary(&out, "Apply plan", []Phase{{Name: "container-cluster", NeedsRoot: true}}, false, false, false)
+	printWorkflowSummary(&out, "Apply plan", []Phase{{Name: "base", NeedsRoot: true}}, false, false, false)
 	got := out.String()
 	if !strings.Contains(got, "[INFO] Root phases: bootwright is running as root, no BECOME password prompt needed") {
 		t.Fatalf("root execution summary missing INFO severity:\n%s", got)

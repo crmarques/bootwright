@@ -162,7 +162,7 @@ func TestDestroyHelpMatchesTargetExecutionModels(t *testing.T) {
 }
 
 func TestApplyRejectsRemovedStagesAndFlags(t *testing.T) {
-	for _, stage := range []string{"container", "storage", "install", "addons"} {
+	for _, stage := range []string{"container", "storage", "install", "bogus"} {
 		_, stderr, code := runCLI(t, "apply", "--stage", stage, "--dry-run")
 		if code == 0 {
 			t.Fatalf("apply --stage %s unexpectedly succeeded", stage)
@@ -548,7 +548,7 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
 		t.Fatalf("unexpected dry-run report header: %+v", report)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"storage-cluster", "container-cluster", "addons"}) {
+	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "addons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
 	if report.Playbook != clustersScope.destroyPlaybook {
@@ -3608,12 +3608,12 @@ func TestApplyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	for _, task := range report.ApplyPlan.Tasks {
 		gotIDs = append(gotIDs, task.ID)
 	}
-	for _, want := range []string{"storage.ceph-storage", "iso.dc1-metal-ocp", "wait.dc1-metal-ocp"} {
+	for _, want := range []string{"storageinfra.ceph-storage", "storage.ceph-storage", "iso.dc1-metal-ocp", "wait.dc1-metal-ocp"} {
 		if !slices.Contains(gotIDs, want) {
 			t.Fatalf("mixed apply task IDs missing %s: %v", want, gotIDs)
 		}
 	}
-	for _, reject := range []string{"storageinfra.ceph-storage", "iso.dc2-metal-ocp"} {
+	for _, reject := range []string{"iso.dc2-metal-ocp"} {
 		if slices.Contains(gotIDs, reject) {
 			t.Fatalf("mixed apply task IDs unexpectedly include %s: %v", reject, gotIDs)
 		}
@@ -3638,7 +3638,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	if report.Target != "clusters" || report.Playbook != clustersScope.destroyPlaybook {
 		t.Fatalf("destroy target/playbook = %q/%q, want clusters/%q", report.Target, report.Playbook, clustersScope.destroyPlaybook)
 	}
-	if !reflect.DeepEqual(report.Phases, []string{"storage-cluster", "container-cluster", "addons"}) {
+	if !reflect.DeepEqual(report.Phases, []string{"deps", "base", "addons"}) {
 		t.Fatalf("phases = %#v, want full clusters destroy scope", report.Phases)
 	}
 	varsData, err := os.ReadFile(report.Render.VarsPath)

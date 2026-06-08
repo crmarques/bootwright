@@ -11,45 +11,36 @@ type Phase struct {
 	Description   string
 }
 
+// phases are the five sub-phases of the two families. infra = fabric + machines;
+// clusters = deps + base + addons. Each maps to several task playbooks, so the
+// per-phase ApplyPlaybook field is left empty (advisory) and the task graph is
+// authoritative. NeedsRoot is coarse: base and addons mix root work (container
+// install, addon ownership) with non-root work (ceph bootstrap), so it stays true.
 var phases = map[string]Phase{
-	"provider": {
-		Name:          "provider",
-		ApplyPlaybook: "bootwright.core.task_provider_services_apply",
-		NeedsRoot:     true,
-		Description:   "converge provider setup and BMC services",
-	},
-	"infra-components": {
-		Name:          "infra-components",
-		ApplyPlaybook: "bootwright.core.task_infra_component_services_apply",
-		NeedsRoot:     true,
-		Description:   "converge machine-bound infra components: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
-	},
-	"machine-infra": {
-		Name:          "machine-infra",
-		ApplyPlaybook: "bootwright.core.task_machine_infra_apply",
-		NeedsRoot:     true,
-		Description:   "converge per-cluster substrate, networks, name resolution, and VIPs",
-	},
-	"storage-infra": {
-		Name:        "storage-infra",
+	"fabric": {
+		Name:        "fabric",
 		NeedsRoot:   true,
-		Description: "prepare managed storage nodes for later Ceph provisioning",
+		Description: "converge provider hosts (BMC services) and machine-bound shared services: proxy, registry, NTP, boot artifacts, DNS, and load balancers",
 	},
-	"storage-cluster": {
-		Name:        "storage-cluster",
-		NeedsRoot:   false,
-		Description: "provision external storage clusters with provider-native tooling",
+	"machines": {
+		Name:        "machines",
+		NeedsRoot:   true,
+		Description: "make machines exist with an OS: per-cluster substrate, instantiation, managed-OS install, networks, name resolution, and VIPs",
 	},
-	"container-cluster": {
-		Name:          "container-cluster",
-		ApplyPlaybook: "bootwright.core.task_container_cluster_agent_install",
-		NeedsRoot:     true,
-		Description:   "run openshift-install agent and boot nodes through the provider boot path",
+	"deps": {
+		Name:        "deps",
+		NeedsRoot:   true,
+		Description: "install per-cluster prerequisites before bringup: cephadm and dependencies on storage nodes; build the openshift-install agent ISO",
+	},
+	"base": {
+		Name:        "base",
+		NeedsRoot:   true,
+		Description: "bring cluster control planes up: bootstrap Ceph and apply OSDs; boot nodes and wait for openshift-install",
 	},
 	"addons": {
 		Name:        "addons",
 		NeedsRoot:   true,
-		Description: "apply declarative post-install cluster addons with oc",
+		Description: "post-install integration: apply declarative cluster addons with oc and attach storage to OpenShift",
 	},
 }
 

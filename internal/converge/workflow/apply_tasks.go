@@ -28,13 +28,16 @@ const (
 	ApplyClusterKindContainer = "container"
 	ApplyClusterKindStorage   = "storage"
 
-	ApplyPhaseProvider         = "provider"
-	ApplyPhaseInfraComponents  = "infra-components"
-	ApplyPhaseClusterInstall   = "machine-infra"
-	ApplyPhaseStorageInfra     = "storage-infra"
-	ApplyPhaseStorageCluster   = "storage-cluster"
-	ApplyPhaseContainerCluster = "container-cluster"
-	ApplyPhaseAddons           = "addons"
+	// Phase gates. Two families — infra (fabric, machines) and clusters
+	// (deps, base, addons) — each an ordered set of CLI-selectable sub-phases.
+	// These are coarse gates over the task graph; true ordering is the
+	// capability/explicit-dependency DAG. deps and base are shared by storage
+	// and container clusters; the planner filters tasks by cluster kind.
+	ApplyPhaseFabric   = "fabric"   // provider hosts + BMC + shared services
+	ApplyPhaseMachines = "machines" // substrate prepare/instantiate/OS/finalize
+	ApplyPhaseDeps     = "deps"     // per-cluster install prereqs: cephadm / agent ISO
+	ApplyPhaseBase     = "base"     // bring control planes up: ceph bootstrap / boot+wait
+	ApplyPhaseAddons   = "addons"   // post-install: addons + storage attachment
 
 	applyProviderPlaybook         = "bootwright.core.task_provider_services_apply"
 	applyInfraComponentsPlaybook  = "bootwright.core.task_infra_component_services_apply"
@@ -52,6 +55,12 @@ type ApplyTarget struct {
 	Name                string
 	PhaseNames          []string
 	StorageClusterNames []string
+	// ClusterKind restricts which cluster-kind's deps/base/addons work is
+	// planned: "" plans both, ApplyClusterKindStorage plans only storage
+	// clusters, ApplyClusterKindContainer plans only container clusters. The
+	// single-kind scopes (storage-cluster, container-cluster) set it so the
+	// shared deps/base gates do not pull in the other kind.
+	ClusterKind string
 }
 
 type ApplyTask struct {

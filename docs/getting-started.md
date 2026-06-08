@@ -249,11 +249,18 @@ For KubeVirt child clusters, the full graph also waits for the parent cluster
 install and its `provides: [kubevirt]` add-on before creating child VM
 infrastructure. Focused child applies require either an already installed and
 KubeVirt-ready parent, or both parent and child named in `--clusters`.
-Use `apply --stage infra` to prepare providers, infra services, selected
-machines, and managed storage-node prerequisites. Use `apply --stage clusters`
-to install selected container clusters, provision selected storage clusters,
-apply bound add-ons, and attach declared integrations. `--clusters` accepts a
-comma-separated mix of `ContainerCluster` and `StorageCluster` names. Running
+Use `apply --stage infra` to prepare providers, infra services, and selected
+machines (including the managed OS install on storage nodes). Use
+`apply --stage clusters` to install per-cluster software prerequisites (cephadm
+and its dependencies; the openshift-install agent ISO), bring up selected
+container and storage clusters, apply bound add-ons, and attach declared
+integrations — so a `clusters` apply is self-contained and installs the Ceph
+tooling before bootstrap rather than relying on an earlier `infra` run.
+The two families are `infra` (`fabric`, `machines`) and `clusters` (`deps`,
+`base`, `addons`); `--stage` also accepts any individual sub-phase name (for
+example `--stage deps` to (re)install prerequisites, or `--stage base` to bring
+up control planes) for surgical reruns. `--clusters` accepts a comma-separated
+mix of `ContainerCluster` and `StorageCluster` names. Running
 `apply --stage clusters --yes` again skips cluster install tasks when the prior install
 record, rendered desired-input fingerprint, and kubeconfig availability probe
 all match, then applies add-ons and integrations idempotently. If an interrupted

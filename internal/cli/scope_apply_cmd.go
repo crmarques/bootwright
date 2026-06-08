@@ -93,7 +93,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		}
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
-		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters (default full graph)")
+		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters families, or a sub-phase fabric|machines|deps|base|addons (default full graph)")
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to apply")
 	} else {
 		registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), action, usesAnsible, scopeTargetKind(scope))
@@ -331,15 +331,30 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 }
 
 func applyStageScope(stage string) (scopeSpec, error) {
-	switch strings.TrimSpace(stage) {
+	switch s := strings.TrimSpace(stage); s {
 	case "":
 		return allScope, nil
 	case "infra":
 		return infraScope, nil
 	case "clusters":
 		return clustersScope, nil
+	case "fabric", "machines", "deps", "base", "addons":
+		// Sub-phase stages run a single phase via the task graph for surgical
+		// reruns; the family stages (infra, clusters) remain the common path.
+		return subPhaseStageScope(s), nil
 	default:
-		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters")
+		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters, fabric, machines, deps, base, addons")
+	}
+}
+
+// subPhaseStageScope builds an ad-hoc scope that selects exactly one sub-phase.
+// Apply runs through the task graph (PlanApplyTasksChecked), so no per-phase
+// applyPlaybook is needed; artifacts are keyed by the phase name.
+func subPhaseStageScope(name string) scopeSpec {
+	return scopeSpec{
+		name:              name,
+		phaseNames:        []string{name},
+		artifactsBaseName: name,
 	}
 }
 

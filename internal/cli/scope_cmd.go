@@ -89,9 +89,9 @@ func scopeAllowsClusterScope(scope scopeSpec, destroyOnly bool) bool {
 
 func ansibleLimitForScope(name string) string {
 	switch name {
-	case "infra":
+	case "infra", "fabric", "machines":
 		return infraAnsibleLimit
-	case "clusters":
+	case "clusters", "deps", "base":
 		return clustersAnsibleLimit
 	case "container-cluster":
 		return clusterAnsibleLimit

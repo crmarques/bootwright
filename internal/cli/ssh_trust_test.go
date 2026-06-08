@@ -100,7 +100,7 @@ func TestHostTrustFiltersSelectedHosts(t *testing.T) {
 
 func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
 	state := hostTrustTestState()
-	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machine-infra"}}, preflightDeps{
+	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machines"}}, preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
 			if name == "ssh-keyscan" {
 				return "/usr/bin/ssh-keyscan", nil
@@ -118,7 +118,7 @@ func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
 
 func TestHostTrustPreflightSkipsMachinesWithManagedOS(t *testing.T) {
 	state := hostTrustManagedOSTestState()
-	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machine-infra"}}, preflightDeps{
+	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machines"}}, preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
 			t.Fatalf("unexpected lookup %s", name)
 			return "", errors.New("unexpected lookup")

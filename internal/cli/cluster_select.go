@@ -29,7 +29,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 			return state, err
 		}
 		return stategraph.FilterStateToStorageClusters(state, names), nil
-	case "clusters", "infra", "all":
+	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -48,7 +48,7 @@ func scopeState(state v1alpha1.State, target, scope string) (v1alpha1.State, err
 
 func scopeStateForApply(state v1alpha1.State, target, scope string) (v1alpha1.State, error) {
 	switch target {
-	case "clusters", "infra", "all":
+	case "clusters", "infra", "all", "fabric", "machines", "deps", "base":
 		if strings.TrimSpace(scope) == "" {
 			return state, nil
 		}
@@ -198,7 +198,12 @@ func formatDestroyScopeConflicts(conflicts []stategraph.DestroyScopeConflict, fl
 }
 
 func validateScopedApplySharedServices(state v1alpha1.State, target, scope string) error {
-	if strings.TrimSpace(scope) == "" || (target != "infra" && target != "all") {
+	if strings.TrimSpace(scope) == "" {
+		return nil
+	}
+	switch target {
+	case "infra", "all", "fabric", "machines":
+	default:
 		return nil
 	}
 	selectedNames, _, err := clusterRootNamesForTarget(state, scope)

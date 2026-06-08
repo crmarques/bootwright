@@ -94,7 +94,7 @@ func TestRunApplyTaskGraphFailsClosedWhenLeaseHeld(t *testing.T) {
 		ManagedServicesDir: filepath.Join(dir, "managed-services"),
 		ProviderStateDir:   filepath.Join(dir, "provider-state"),
 		BundleDir:          filepath.Join(dir, "bundle"),
-	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseProvider}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner {
+	}, ApplyTarget{Name: "infra", PhaseNames: []string{ApplyPhaseFabric}}, "", []ApplyTask{task}, ConcurrencyLimits{Parallelism: 1}, nil, func(io.Writer, io.Writer) ansible.Runner {
 		return runner
 	})
 	if err == nil || !strings.Contains(err.Error(), "still running") {

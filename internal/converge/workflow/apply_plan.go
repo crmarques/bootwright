@@ -20,10 +20,15 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	for _, phase := range target.PhaseNames {
 		phaseSet[phase] = true
 	}
+	// deps and base are shared by storage and container clusters; ClusterKind
+	// lets a single-kind scope plan only its kind so the unified gates do not
+	// pull in the other kind's tasks.
+	includeStorage := target.ClusterKind != ApplyClusterKindContainer
+	includeContainer := target.ClusterKind != ApplyClusterKindStorage
 	graph := NewActivityGraph()
 	addAvailableMachineOSCapabilities(graph, state)
 	kubeVirtReqsByCluster := map[string][]CapabilityRef{}
-	if phaseSet[ApplyPhaseClusterInstall] || phaseSet[ApplyPhaseContainerCluster] {
+	if phaseSet[ApplyPhaseMachines] || phaseSet[ApplyPhaseDeps] || phaseSet[ApplyPhaseBase] {
 		var err error
 		kubeVirtReqsByCluster, err = kubeVirtHostClusterApplyCapabilities(state)
 		if err != nil {
@@ -34,8 +39,11 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	if err != nil {
 		return nil, err
 	}
-	storageInfraDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseStorageInfra] {
+	// machines (infra): managed-OS install on storage nodes — the storage-side
+	// twin of clusterInstall (provides machine.instantiated + machine.os-ready),
+	// so it lives in the infra family, not with the cephadm prereqs.
+	managedOSDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseMachines] && includeStorage {
 		for _, cluster := range state.StorageClusters {
 			if !storageClusterManaged(cluster) {
 				continue
@@ -43,65 +51,80 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
 				continue
 			}
-			managedOSDeps := []string{}
 			managedOSMachines := managedOSMachineNames(state, cluster)
-			if len(managedOSMachines) > 0 {
-				prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
-				if err != nil {
-					return nil, err
-				}
-				taskID := "osinstall." + cluster.Metadata.Name
-				deps := append([]string(nil), machineServiceTaskIDs...)
-				seenPrepareDeps := map[string]bool{}
-				for _, machineName := range managedOSMachines {
-					host := applyMachineHost(state, machineName)
-					if prepareID := prepareDepsByHost[host]; prepareID != "" {
-						if !seenPrepareDeps[prepareID] {
-							deps = append(deps, prepareID)
-							seenPrepareDeps[prepareID] = true
-						}
+			if len(managedOSMachines) == 0 {
+				continue
+			}
+			prepareDepsByHost, err := planStorageManagedOSPrepareTasks(graph, state, cluster.Metadata.Name, managedOSMachines, machineServiceTaskIDs)
+			if err != nil {
+				return nil, err
+			}
+			taskID := "osinstall." + cluster.Metadata.Name
+			deps := append([]string(nil), machineServiceTaskIDs...)
+			seenPrepareDeps := map[string]bool{}
+			for _, machineName := range managedOSMachines {
+				host := applyMachineHost(state, machineName)
+				if prepareID := prepareDepsByHost[host]; prepareID != "" {
+					if !seenPrepareDeps[prepareID] {
+						deps = append(deps, prepareID)
+						seenPrepareDeps[prepareID] = true
 					}
 				}
-				managedOSDeps = append(managedOSDeps, taskID)
-				requires, err := kubeVirtHostClusterApplyCapabilitiesForMachines(state, managedOSMachines)
-				if err != nil {
-					return nil, err
-				}
-				provides := make([]CapabilityRef, 0, len(managedOSMachines)*2)
-				for _, machineName := range managedOSMachines {
-					provides = append(provides, machineInstantiatedCapability(machineName), machineOSReadyCapability(machineName))
-				}
-				if err := graph.Add(Activity{
-					ID:                   taskID,
-					Kind:                 ActivityKindManagedOSInstall,
-					Requires:             requires,
-					Provides:             provides,
-					ExplicitDependencies: deps,
-					Task: ApplyTask{
-						Entry: TaskLedgerEntry{
-							ID:           taskID,
-							Kind:         ApplyTaskKindManagedMachineOS,
-							Label:        "managed OS " + cluster.Metadata.Name + " machines",
-							Cluster:      cluster.Metadata.Name,
-							ClusterKind:  ApplyClusterKindStorage,
-							Status:       TaskStatusPending,
-							ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
-						},
-						Playbook:      applyManagedMachineOSPlaybook,
-						Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
-						ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
-						State:         storageTaskState(state, cluster.Metadata.Name),
-						Forks:         len(managedOSMachines),
-						RedfishSlots:  len(managedOSMachines),
+			}
+			managedOSDepsByCluster[cluster.Metadata.Name] = []string{taskID}
+			requires, err := kubeVirtHostClusterApplyCapabilitiesForMachines(state, managedOSMachines)
+			if err != nil {
+				return nil, err
+			}
+			provides := make([]CapabilityRef, 0, len(managedOSMachines)*2)
+			for _, machineName := range managedOSMachines {
+				provides = append(provides, machineInstantiatedCapability(machineName), machineOSReadyCapability(machineName))
+			}
+			if err := graph.Add(Activity{
+				ID:                   taskID,
+				Kind:                 ActivityKindManagedOSInstall,
+				Requires:             requires,
+				Provides:             provides,
+				ExplicitDependencies: deps,
+				Task: ApplyTask{
+					Entry: TaskLedgerEntry{
+						ID:           taskID,
+						Kind:         ApplyTaskKindManagedMachineOS,
+						Label:        "managed OS " + cluster.Metadata.Name + " machines",
+						Cluster:      cluster.Metadata.Name,
+						ClusterKind:  ApplyClusterKindStorage,
+						Status:       TaskStatusPending,
+						ResourceKeys: applyManagedOSResourceKeys(state, cluster.Metadata.Name, managedOSMachines),
 					},
-				}); err != nil {
-					return nil, err
-				}
+					Playbook:      applyManagedMachineOSPlaybook,
+					Limit:         render.ManagedOSGroupName(cluster.Metadata.Name),
+					ExtraVarPairs: []string{"bootwright_task_managed_os_group_name=" + cluster.Metadata.Name},
+					State:         storageTaskState(state, cluster.Metadata.Name),
+					Forks:         len(managedOSMachines),
+					RedfishSlots:  len(managedOSMachines),
+				},
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// deps (clusters): cephadm + dependencies on storage nodes, before bootstrap.
+	// Depends on the managed-OS install (machines family) via managedOSDepsByCluster
+	// when both phases are planned together; otherwise the os-ready capability is
+	// satisfied by a prior run (addAvailableMachineOSCapabilities / provided OS).
+	storageInfraDepsByCluster := map[string][]string{}
+	if phaseSet[ApplyPhaseDeps] && includeStorage {
+		for _, cluster := range state.StorageClusters {
+			if !storageClusterManaged(cluster) {
+				continue
+			}
+			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
+				continue
 			}
 			taskID := "storageinfra." + cluster.Metadata.Name
 			storageInfraDepsByCluster[cluster.Metadata.Name] = []string{taskID}
 			deps := append([]string(nil), machineServiceTaskIDs...)
-			deps = append(deps, managedOSDeps...)
+			deps = append(deps, managedOSDepsByCluster[cluster.Metadata.Name]...)
 			if err := graph.Add(Activity{
 				ID:                   taskID,
 				Kind:                 ActivityKindStorageNodePrepare,
@@ -129,7 +152,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	storageDepsByCluster := map[string][]string{}
-	if phaseSet[ApplyPhaseStorageCluster] {
+	if phaseSet[ApplyPhaseBase] && includeStorage {
 		for _, cluster := range state.StorageClusters {
 			if !storageClusterManaged(cluster) {
 				continue
@@ -169,7 +192,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	infraDepsByCluster := map[string][]string{}
 	clusterNames := applyClusterNames(state)
 	for _, name := range clusterNames {
-		if phaseSet[ApplyPhaseClusterInstall] {
+		if phaseSet[ApplyPhaseMachines] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			infraHosts := render.HostGroupMembers(clusterState)[render.GroupInfraHosts]
 			baseDeps := append([]string(nil), machineServiceTaskIDs...)
@@ -259,15 +282,17 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	for _, name := range clusterNames {
-		deps := append([]string(nil), infraDepsByCluster[name]...)
-		if phaseSet[ApplyPhaseContainerCluster] {
+		infraDeps := append([]string(nil), infraDepsByCluster[name]...)
+		isoTaskID := "iso." + name
+		// deps (clusters): build + publish the agent install ISO — the OCP/OKD
+		// pre-bringup asset, the container-side twin of the cephadm prereqs.
+		if phaseSet[ApplyPhaseDeps] && includeContainer {
 			clusterState := stategraph.FilterStateToClusters(state, []string{name})
-			isoTaskID := "iso." + name
 			if err := graph.Add(Activity{
 				ID:                   isoTaskID,
 				Kind:                 ActivityKindContainerInstallAssets,
 				Requires:             kubeVirtReqsByCluster[name],
-				ExplicitDependencies: deps,
+				ExplicitDependencies: infraDeps,
 				Task: ApplyTask{
 					Entry: TaskLedgerEntry{
 						ID:          isoTaskID,
@@ -286,6 +311,13 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 			}); err != nil {
 				return nil, err
 			}
+		}
+		// base (clusters): boot nodes then wait for openshift-install to converge.
+		// boot keeps its explicit dep on the ISO task; when only base is in scope
+		// that dep prunes at Lower() and relies on a prior deps run having
+		// published the ISO (same graceful-degradation contract as storage).
+		if phaseSet[ApplyPhaseBase] && includeContainer {
+			clusterState := stategraph.FilterStateToClusters(state, []string{name})
 			machineNames := applyClusterMachineNames(state, name)
 			bootTaskID := ""
 			if len(machineNames) > 0 {
@@ -349,10 +381,10 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 		}
 	}
 	if phaseSet[ApplyPhaseAddons] {
-		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseContainerCluster]); err != nil {
+		if err := planExtensionActivities(graph, state, phaseSet[ApplyPhaseBase]); err != nil {
 			return nil, err
 		}
-		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseContainerCluster], storageDepsByCluster); err != nil {
+		if err := planStorageAttachmentActivities(graph, state, phaseSet[ApplyPhaseBase], storageDepsByCluster); err != nil {
 			return nil, err
 		}
 	}

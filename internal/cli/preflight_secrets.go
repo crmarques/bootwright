@@ -95,7 +95,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				out = append(out, secretRefRequirement{
 					refName: ref.Name,
 					label:   fmt.Sprintf("environment installTrust caBundleRefs[%d]", i),
-					phases:  []string{"container-cluster"},
+					phases:  []string{"deps", "base"},
 				})
 			}
 		}
@@ -106,21 +106,21 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: entry.Connection.Auth.ProxyAuthRef.Name,
 				label:   fmt.Sprintf("proxy %s proxyAuthRef", entry.Name),
-				phases:  []string{"provider", "machine-infra"},
+				phases:  []string{"fabric", "machines"},
 			})
 		}
 		if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil && registries.Mirror.CredentialsRef.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: registries.Mirror.CredentialsRef.Name,
 				label:   "registry mirror credentialsRef",
-				phases:  []string{"provider", "container-cluster"},
+				phases:  []string{"fabric", "deps", "base"},
 			})
 		}
 		if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil && registries.Mirror.TrustBundleRef.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: registries.Mirror.TrustBundleRef.Name,
 				label:   "registry mirror trustBundleRef",
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 			})
 		}
 		out = append(out, collectEntitlementSecretRefRequirements(state, env)...)
@@ -133,14 +133,14 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		if locality.IsControllerLocalMachine(machine, localPolicy) {
 			continue
 		}
-		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"provider", "machine-infra", "container-cluster"}, machine, false)...)
+		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"fabric", "machines", "deps", "base"}, machine, false)...)
 	}
 	for _, p := range state.InfraProviders {
 		if l := p.Spec.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialRef.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: l.BMCEmulationDefaults.Auth.CredentialRef.Name,
 				label:   fmt.Sprintf("provider %s libvirt bmcEmulationDefaults credentialRef", p.Metadata.Name),
-				phases:  []string{"provider", "container-cluster"},
+				phases:  []string{"fabric", "deps", "base"},
 			})
 		}
 		if v := p.Spec.VSphere; v != nil {
@@ -151,7 +151,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				out = append(out, secretRefRequirement{
 					refName: vc.CredentialsRef.Name,
 					label:   fmt.Sprintf("provider %s vsphere vcenters[%d] credentialsRef", p.Metadata.Name, i),
-					phases:  []string{"provider"},
+					phases:  []string{"fabric"},
 				})
 			}
 		}
@@ -159,7 +159,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: k.KubeconfigRef.Name,
 				label:   fmt.Sprintf("provider %s kubevirt kubeconfigRef", p.Metadata.Name),
-				phases:  []string{"machine-infra", "container-cluster"},
+				phases:  []string{"machines", "deps", "base"},
 			})
 		}
 	}
@@ -170,7 +170,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		out = append(out, secretRefRequirement{
 			refName: machine.Spec.Hardware.Management.BMC.CredentialsRef.Name,
 			label:   fmt.Sprintf("machine %s hardware management bmc credentialsRef", machine.Metadata.Name),
-			phases:  []string{"provider", "container-cluster"},
+			phases:  []string{"fabric", "deps", "base"},
 		})
 	}
 
@@ -180,14 +180,14 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: install.PullSecretRef.Name,
 				label:   cluster.Metadata.Name + " pullSecretRef",
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 			})
 		}
 		if install.NodeSSH.KeyPairRef.Name != "" {
 			out = append(out, secretRefRequirement{
 				refName: install.NodeSSH.KeyPairRef.Name,
 				label:   cluster.Metadata.Name + " nodeSSH keyPairRef",
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 				role:    secret.MaterialSSHPublic,
 				sshPair: true,
 			})
@@ -196,7 +196,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: install.NodeSSH.PublicKeyRef.Name,
 				label:   cluster.Metadata.Name + " nodeSSH publicKeyRef",
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 				role:    secret.MaterialSSHPublic,
 			})
 		}
@@ -204,7 +204,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: install.NodeSSH.PrivateKeyRef.Name,
 				label:   cluster.Metadata.Name + " nodeSSH privateKeyRef",
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 				role:    secret.MaterialSSHPrivate,
 			})
 		}
@@ -215,7 +215,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 			out = append(out, secretRefRequirement{
 				refName: ref.Name,
 				label:   fmt.Sprintf("%s additionalTrustBundleRefs[%d]", cluster.Metadata.Name, i),
-				phases:  []string{"container-cluster"},
+				phases:  []string{"deps", "base"},
 			})
 		}
 		if serving := install.ServingCertificates; serving != nil {
@@ -227,7 +227,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 					out = append(out, secretRefRequirement{
 						refName: cert.SecretRef.Name,
 						label:   fmt.Sprintf("%s apiServer namedCertificates[%d] secretRef", cluster.Metadata.Name, i),
-						phases:  []string{"container-cluster"},
+						phases:  []string{"deps", "base"},
 						tlsPair: true,
 					})
 				}
@@ -236,7 +236,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				out = append(out, secretRefRequirement{
 					refName: ingress.DefaultCertificateRef.Name,
 					label:   cluster.Metadata.Name + " ingress defaultCertificateRef",
-					phases:  []string{"container-cluster"},
+					phases:  []string{"deps", "base"},
 					tlsPair: true,
 				})
 			}

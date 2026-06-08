@@ -53,7 +53,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		appendEntitlement(
 			image.Spec.InstallSource.EntitlementRef.Name,
 			"MachineImage/"+image.Metadata.Name+" installSource entitlementRef",
-			[]string{"machine-infra"},
+			[]string{"machines"},
 		)
 	}
 	for _, cluster := range state.StorageClusters {
@@ -63,7 +63,7 @@ func collectEntitlementSecretRefRequirements(state v1alpha1.State, env *v1alpha1
 		appendEntitlement(
 			cluster.Spec.Ceph.EntitlementRef.Name,
 			"StorageCluster/"+cluster.Metadata.Name+" ceph entitlementRef",
-			[]string{"storage-cluster"},
+			[]string{"deps", "base"},
 		)
 	}
 	return out

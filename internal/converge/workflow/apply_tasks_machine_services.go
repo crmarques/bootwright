@@ -7,7 +7,7 @@ import (
 
 func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, phaseSet map[string]bool) ([]string, error) {
 	taskIDs := []string{}
-	if phaseSet[ApplyPhaseProvider] {
+	if phaseSet[ApplyPhaseFabric] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupProviderHosts] {
 			taskID := "provider." + host
 			taskIDs = append(taskIDs, taskID)
@@ -35,7 +35,7 @@ func planMachineServiceActivities(graph *ActivityGraph, state v1alpha1.State, ph
 			}
 		}
 	}
-	if phaseSet[ApplyPhaseInfraComponents] {
+	if phaseSet[ApplyPhaseFabric] {
 		for _, host := range render.HostGroupMembers(state)[render.GroupInfraComponentHosts] {
 			taskID := "infra-component." + host
 			taskIDs = append(taskIDs, taskID)

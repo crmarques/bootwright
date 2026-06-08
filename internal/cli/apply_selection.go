@@ -17,7 +17,9 @@ func validateKubeVirtClusterSelection(state v1alpha1.State, scope scopeSpec, clu
 	if strings.TrimSpace(clusters) == "" {
 		return nil
 	}
-	if scope.name != "infra" && scope.name != "clusters" && scope.name != "all" {
+	switch scope.name {
+	case "infra", "clusters", "all", "machines", "deps", "base":
+	default:
 		return nil
 	}
 	containerNames, _, err := clusterRootNamesForTarget(state, clusters)

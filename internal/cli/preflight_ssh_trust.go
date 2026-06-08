@@ -15,7 +15,7 @@ import (
 const checkGroupHostTrust = "SSH host trust"
 
 func hostTrustChecks(state v1alpha1.State, secretsDir string, selected []Phase, deps preflightDeps) []preflightCheck {
-	if !anyPhaseInScope([]string{"provider", "machine-infra", "container-cluster", "storage-cluster", "addons"}, selected) {
+	if !anyPhaseInScope([]string{"fabric", "machines", "deps", "base", "addons"}, selected) {
 		return nil
 	}
 	deps = hostTrustPreflightDeps(deps)

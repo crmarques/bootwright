@@ -54,13 +54,19 @@ normal convergence target after `check all` and a dry run. Focused recovery uses
 two stages:
 
 - `apply --stage infra` converges provider hosts, substrate state, managed
-  infra components, selected machines, and managed storage-node prerequisites.
-- `apply --stage clusters` provisions selected storage clusters, creates
-  container-cluster agent ISOs, boots nodes, waits for `openshift-install agent
-  wait-for install-complete`, and then applies bound add-ons and declared
-  integrations.
+  infra components, and selected machines (the `fabric` and `machines`
+  sub-phases), including the managed OS install on storage nodes.
+- `apply --stage clusters` installs per-cluster software prerequisites (cephadm
+  and its dependencies, and the container-cluster agent ISO), brings up selected
+  storage and container clusters, waits for `openshift-install agent wait-for
+  install-complete`, and then applies bound add-ons and declared integrations
+  (the `deps`, `base`, and `addons` sub-phases). Because the Ceph tooling now
+  lives in this stage, a `clusters` apply installs it before bootstrap rather
+  than depending on a prior `infra` run.
 
-Omitting `--stage` runs the full graph: `infra`, then `clusters`.
+Omitting `--stage` runs the full graph: `infra`, then `clusters`. Each
+sub-phase (`fabric`, `machines`, `deps`, `base`, `addons`) is also selectable
+via `--stage` for surgical reruns.
 `--clusters` accepts a comma-separated mix of `ContainerCluster` and
 `StorageCluster` names.
 

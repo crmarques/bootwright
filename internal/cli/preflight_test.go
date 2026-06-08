@@ -81,7 +81,7 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 		},
 		uid: func() int { return 1000 },
 	}
-	checks := collectPreflightChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "container-cluster"}}, true, "/context/secrets", "/host-state", deps)
+	checks := collectPreflightChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
 	var tools []string
 	for _, check := range checks {
 		if check.Group == checkGroupInstallerTools {
@@ -129,7 +129,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		uid: func() int { return 1000 },
 	}
 
-	checks := collectPreflightChecks(state, []Phase{{Name: "machine-infra"}}, true, "/context/secrets", clustersDir, deps)
+	checks := collectPreflightChecks(state, []Phase{{Name: "machines"}}, true, "/context/secrets", clustersDir, deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
@@ -163,7 +163,7 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 			return nil, os.ErrNotExist
 		},
 	}
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, deps)
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, deps)
 
 	var pullSecret, generatedBMC *preflightCheck
 	for i := range checks {
@@ -198,7 +198,7 @@ func TestSecretRefChecksRequireInstallTrustCABundle(t *testing.T) {
 	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
 		CABundleRefs: []v1alpha1.SecretRef{{Name: "corp-ca"}},
 	}
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -243,7 +243,7 @@ func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
 		}},
 	}
 	var externalStats int
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			t.Fatalf("file source %s was statted through root-managed path", path)
 			return nil, os.ErrInvalid
@@ -344,7 +344,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 			},
 		}},
 	}
-	checks := collectPreflightChecks(state, []Phase{{Name: "storage-cluster"}}, true, "/context/secrets", "/host-state", preflightDeps{
+	checks := collectPreflightChecks(state, []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", preflightDeps{
 		lookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},
@@ -433,7 +433,7 @@ func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
 			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
 		},
 	}
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -527,7 +527,7 @@ func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon
 
 func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -550,7 +550,7 @@ func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
 
 func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
 	state := loadFixtureState(t, "002-sno-emul-baremetal")
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -565,7 +565,7 @@ func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
 
 func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -593,7 +593,7 @@ func TestClusterPreflightRequiresTLSPairMaterial(t *testing.T) {
 			}},
 		},
 	}
-	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "container-cluster"}}, preflightDeps{
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, preflightDeps{
 		statPath: func(path string) (os.FileInfo, error) {
 			return nil, os.ErrNotExist
 		},
@@ -642,7 +642,7 @@ func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 		},
 		uid: func() int { return 1000 },
 	}
-	checks := collectPreflightChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "container-cluster"}}, true, "/context/secrets", "/host-state", deps)
+	checks := collectPreflightChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
 
 	for _, name := range []string{"oc", "openshift-install"} {
 		for _, check := range checks {
