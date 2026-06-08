@@ -43,11 +43,14 @@ shapes must fail strict decode or validation instead of being translated.
 
 ## Environment
 
-`Environment` is fleet-wide. It contains defaults, optional input resource
-selection, and secret references, never secret bytes.
+`Environment` is fleet-wide. It contains the fleet DNS base domain, defaults,
+optional input resource selection, and secret references, never secret bytes.
 
 Rules:
 
+- `baseDomain` is required. It is the fleet DNS base domain rendered into each
+  cluster's `install-config.yaml` `baseDomain`, and `Environment` is its single
+  owner.
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
@@ -71,12 +74,48 @@ Rules:
   `componentRef.name` pointing at an `InfraComponent` arm of the matching kind.
 - `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
   catalog entries by name. Omitted values default to `none`.
-- `secrets` declares names, not bytes.
+- `secretStorage.mode`, when set, must be `source` (default) or `context`.
+  `context` requires `bootwright secret materialize` to copy `file:`-sourced
+  material into the encrypted context store before workflows read it; `source`
+  reads operator file material in place.
+- `registries.mirror`, when set, declares the disconnected mirror: optional
+  `url` (external mirror) plus `trustBundleRef` and `credentialsRef` secret
+  names. `registries.imageDigestSources[]` set `source`, `mirrors[]`, and an
+  optional `sourcePolicy` of `NeverContactSource` or `AllowContactingSource`. A
+  `ContainerCluster` with `install.mode: disconnected` requires
+  `registries.mirror.trustBundleRef` plus either `registries.mirror.url` or a
+  managed `infraComponents.registries[]` entry.
+- `installTrust.caBundleRefs[]` are fleet-wide additional CA trust-bundle secret
+  names rendered into cluster install trust.
+- `componentImages` pins managed-service images as
+  `componentImages.<category>.<type>`. The accepted pairs are
+  `load-balancer.haproxy`, `registry.mirror-registry`, `proxy.squid`,
+  `dns.dnsmasq`, and `artifacts.http`. Each entry sets at least one of `local`
+  or `public`, and every reference must pin an explicit version tag or a
+  `sha256:` digest; mutable references such as `:latest` or an omitted tag are
+  rejected.
+- `secrets[]` declares secret names, never bytes. Each item is exactly one of: a
+  scalar secret name; or a single-key map whose value is `null`/omitted
+  (context-local material), `{file: <path>}` (operator-owned local material,
+  with an optional `keyFile: <path>` that requires `file`), or `{generated:
+  ...}`. A `generated` value sets exactly one of `credentials` (optional
+  `username`), `selfSignedCertificate` (required `commonName`; optional
+  `dnsNames[]`, `ipAddresses[]`, `validityDays`), or `sshKeyPair` (optional
+  `type: ed25519`, `comment`). `file` and `generated` are mutually exclusive.
+  Any other shape is rejected naming `Environment.spec.secrets`.
 - `entitlements[]` declares named subscription, registry entitlement, and
-  license references for products that need vendor-controlled access. It
-  accepts `provider: community | redhat | ibm` and
-  `product: ceph | rhel | openshift | ibm-storage-ceph`; referenced secret
-  material still lives in `Environment.spec.secrets`.
+  license references for products that need vendor-controlled access. Each entry
+  sets a `provider`/`product` pair from this compatibility matrix; other pairs
+  are rejected:
+  - `community`: `ceph`, `openshift`
+  - `redhat`: `ceph`, `rhel`, `openshift`
+  - `ibm`: `ibm-storage-ceph`
+
+  A `rhel` entitlement and any `redhat`/`ceph` or `ibm-storage-ceph` entitlement
+  require `rhsm` (`organizationRef`, `activationKeyRef`); `redhat`/`ceph` and
+  `ibm-storage-ceph` also require `registry.credentialsRef`; `ibm-storage-ceph`
+  also requires `license.accept: true`. Referenced secret material still lives
+  in `Environment.spec.secrets`.
 
 Authored desired-state YAML uses block-style collections. Do not use
 flow-style mapping braces, inline lists, or empty inline maps in examples, e2e
@@ -151,6 +190,12 @@ Rules:
 - `spec.os.install.rootDeviceHints` is the Machine-owned root-device hint
   location.
 - `spec.network.config.networkConfigRef` selects a `NetworkConfig`.
+- `spec.network.config.spec` is the inline alternative to `networkConfigRef`: it
+  carries a full `NetworkConfig` `spec` (`machineNetwork[]`, `template`) for a
+  one-off machine instead of a shared, reusable `NetworkConfig`. Set exactly one
+  of `networkConfigRef` or `spec`. `overrides` is valid only with
+  `networkConfigRef`; `interfaceAddresses` require one of `networkConfigRef` or
+  `spec`.
 - `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
 - `spec.network.config.interfaceAddresses[]` is the single owner of a node's
@@ -460,7 +505,15 @@ Rules:
   clusters require a pull secret via `spec.install.pullSecretRef` or the
   `Environment` default.
 - `spec.install.mode` accepts `connected` (default) or `disconnected`;
-  `spec.install.method` accepts `agent` (default).
+  `spec.install.method` accepts `agent` (default). `disconnected` requires
+  `Environment.spec.registries.mirror` (trust bundle plus an external mirror URL
+  or a managed registry component).
+- `spec.install.additionalTrustBundleRefs[]` are cluster-scoped additional CA
+  trust-bundle secret names, merged with fleet-wide
+  `Environment.spec.installTrust.caBundleRefs[]`.
+- `spec.install.servingCertificates`, when set, supplies cluster serving
+  certificates: `apiServer.namedCertificates[]` (each with `names[]` and a
+  `secretRef`) and `ingress.defaultCertificateRef`.
 - `spec.nodes[].role` accepts `master` or `worker`; a cluster requires at least
   one `master` node.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
@@ -757,7 +810,13 @@ Rules:
   or clusters, so a change made out of band after a matching apply (a wiped disk,
   an undefined VM, a deleted namespace) is not detected until the next apply
   refreshes the record. A root whose resources are all `missing` is reported as
-  one absence; a present root reports only the resources that are not in sync. It
+  one absence; a present root reports only the resources that are not in sync.
+  Drift is reported at apply-task granularity: each selected apply task is one
+  reported resource, so a managed `StorageCluster` together with its pools,
+  filesystems, gateways, and exports classifies as one storage resource, and the
+  `infrastructure` root aggregates the provider and infra-component host tasks.
+  The report names which resource drifted, not which field; run `render
+  effective` and diff, or `plan`, to see the exact change. It
   is distinct from `status` (local readiness
   and next-step spine), `check` (Ansible preflight), and `plan`/`apply
   --dry-run` (the intended task graph). `--override` is rejected because
