@@ -58,6 +58,57 @@
     state: present
     disable_gpg_check: true
 
+- name: Resolve community Ceph dependency repository source
+  ansible.builtin.set_fact:
+    bootwright_ceph_community_dependency_enabled: "{{ bootwright_ceph_provider.community.enableDependencyRepos | default(true) | bool }}"
+    bootwright_ceph_community_dependency_mirror: "{{ (bootwright_ceph_provider.community.dependencyMirror | default(bootwright_ceph_community_dependency_default_mirror, true)) | regex_replace('/$', '') }}"
+  changed_when: false
+
+- name: Require an https community Ceph dependency mirror and signing key
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_community_dependency_mirror is match('^https://')
+      - bootwright_ceph_community_dependency_gpgkey is match('^https://')
+    fail_msg: >-
+      Refusing to fetch community Ceph dependency packages or their signing key
+      over an insecure transport: set spec.ceph.community.dependencyMirror and
+      bootwright_ceph_community_dependency_gpgkey to https:// URLs (got
+      {{ bootwright_ceph_community_dependency_mirror }} and
+      {{ bootwright_ceph_community_dependency_gpgkey }}).
+  when: bootwright_ceph_community_dependency_enabled
+
+# Community ceph-common depsolves against the distribution base repositories that
+# cephadm add-repo never configures (librabbitmq, librdkafka, python3-prettytable
+# from AppStream; libbabeltrace from CRB), and an unregistered RHEL node exposes
+# none of them. Trust the CentOS Official signing key with its fingerprint pinned,
+# so a substituted key over a compromised transport is rejected, before adding the
+# community repositories that key signs.
+- name: Trust the CentOS community signing key for Ceph dependency repositories
+  ansible.builtin.rpm_key:
+    key: "{{ bootwright_ceph_community_dependency_gpgkey }}"
+    fingerprint: "{{ bootwright_ceph_community_dependency_gpg_fingerprint }}"
+    state: present
+  when: bootwright_ceph_community_dependency_enabled
+
+# Mirror the documented community install procedure: add BaseOS, AppStream and CRB
+# from CentOS Stream so ceph-common dependencies resolve on an unregistered RHEL
+# node. $basearch is expanded by dnf; the release track is the EL major version
+# plus "-stream" (e.g. 9-stream) rather than dnf's $releasever, which on RHEL
+# resolves to a point release with no matching CentOS Stream path.
+- name: Add CentOS Stream community repositories for Ceph dependencies
+  ansible.builtin.yum_repository:
+    name: "{{ item.id }}"
+    description: "{{ item.name }}"
+    baseurl: "{{ bootwright_ceph_community_dependency_mirror }}/{{ ansible_distribution_major_version }}-stream/{{ item.path }}/$basearch/os/"
+    gpgcheck: true
+    gpgkey: "{{ bootwright_ceph_community_dependency_gpgkey }}"
+    enabled: true
+    file: bootwright-ceph-dependencies
+  loop: "{{ bootwright_ceph_community_dependency_repos }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: bootwright_ceph_community_dependency_enabled
+
 - name: Configure community Ceph package repository through cephadm
   ansible.builtin.command:
     argv: >-

@@ -52,17 +52,23 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 - A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
 - Working upstream internet on the libvirt host. The Ceph nodes reach the
   community Ceph repository (`download.ceph.com`), the EPEL bootstrap RPM
-  (`dl.fedoraproject.org`), and the cephadm container image (`quay.io/ceph`)
-  through the bastion: the managed `lab-dns` dnsmasq forwards public names to the
-  resolvers in `infra/components/lab-dns.yaml`, and the libvirt NAT network
-  carries egress. The OSS distribution adds no subscription-backed repo;
-  Bootwright configures the community repo on each node with cephadm using
-  `spec.ceph.community.release`. Because cephadm's `add-repo` enables EPEL and
-  these RHEL nodes are unregistered, Bootwright also pre-installs `epel-release`
-  from `dl.fedoraproject.org`. For a disconnected lab, set
-  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com`,
-  override `bootwright_ceph_community_epel_release_url` to an internal EPEL
-  mirror, and point `forwarders` at an internal resolver.
+  (`dl.fedoraproject.org`), the CentOS Stream community repositories that supply
+  ceph-common's AppStream/CRB dependencies (`mirror.stream.centos.org`) and their
+  signing key (`www.centos.org`), and the cephadm container image
+  (`quay.io/ceph`) through the bastion: the managed `lab-dns` dnsmasq forwards
+  public names to the resolvers in `infra/components/lab-dns.yaml`, and the
+  libvirt NAT network carries egress. The OSS distribution adds no
+  subscription-backed repo; Bootwright configures the community repo on each node
+  with cephadm using `spec.ceph.community.release`. Because cephadm's `add-repo`
+  enables EPEL and these RHEL nodes are unregistered, Bootwright also pre-installs
+  `epel-release` from `dl.fedoraproject.org` and adds the CentOS Stream BaseOS,
+  AppStream and CRB repositories (verified against the CentOS Official signing
+  key) so ceph-common's dependencies — `librabbitmq`, `librdkafka` and
+  `python3-prettytable` from AppStream, `libbabeltrace` from CRB — resolve. For a
+  disconnected lab, set `spec.ceph.community.mirror` to an internal mirror of
+  `download.ceph.com`, override `bootwright_ceph_community_epel_release_url` to an
+  internal EPEL mirror, set `spec.ceph.community.dependencyMirror` to an internal
+  CentOS Stream mirror, and point `forwarders` at an internal resolver.
 
 Bootwright owns bastion host preparation for this fixture. After
 `bootwright bastion setup --yes` and

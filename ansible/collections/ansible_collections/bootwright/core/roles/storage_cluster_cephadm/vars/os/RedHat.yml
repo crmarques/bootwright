@@ -24,3 +24,26 @@ bootwright_ceph_community_repo_file: /etc/yum.repos.d/ceph.repo
 # so Bootwright pre-installs epel-release from Fedora's canonical RPM. Override
 # this URL to an internal EPEL mirror for disconnected sites.
 bootwright_ceph_community_epel_release_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+# Community ceph-common pulls dependencies from the distribution base repositories
+# that cephadm add-repo never configures: librabbitmq, librdkafka and
+# python3-prettytable live in AppStream, libbabeltrace lives in CodeReady Builder
+# (CRB). An unregistered RHEL node exposes none of those RHSM-gated repositories,
+# so depsolve fails. Following the documented community install procedure,
+# Bootwright adds the matching CentOS Stream community repositories and trusts the
+# CentOS Official signing key (fingerprint pinned). Override the mirror to an
+# internal CentOS Stream mirror for disconnected sites, or set
+# spec.ceph.community.enableDependencyRepos=false on hosts that already entitle
+# BaseOS/AppStream/CRB another way (e.g. RHSM or a MachineInstallProfile mirror).
+bootwright_ceph_community_dependency_default_mirror: https://mirror.stream.centos.org
+bootwright_ceph_community_dependency_gpgkey: https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official-SHA256
+bootwright_ceph_community_dependency_gpg_fingerprint: 99DB70FAE1D7CE227FB6488205B555B38483C65D
+bootwright_ceph_community_dependency_repos:
+  - id: bootwright-centos-stream-baseos
+    name: Bootwright CentOS Stream BaseOS (community Ceph dependencies)
+    path: BaseOS
+  - id: bootwright-centos-stream-appstream
+    name: Bootwright CentOS Stream AppStream (community Ceph dependencies)
+    path: AppStream
+  - id: bootwright-centos-stream-crb
+    name: Bootwright CentOS Stream CRB (community Ceph dependencies)
+    path: CRB
