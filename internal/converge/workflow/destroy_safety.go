@@ -12,13 +12,25 @@ type DestroySafetyDecision struct {
 	Reasons          []string
 }
 
-func EvaluateDestroySafety(state v1alpha1.State, override bool) DestroySafetyDecision {
-	var reasons []string
+// ProtectedEnvironments returns the names of in-scope Environments whose
+// spec.safety.destroyProtection is requiredOverride. It is the single source of
+// truth for destroy protection, shared by the destroy gate and the apply gate
+// that refuses destructive --override rebuilds on protected environments.
+func ProtectedEnvironments(state v1alpha1.State) []string {
+	var names []string
 	for _, env := range state.Environments {
 		if env.Spec.Safety.DestroyProtection != v1alpha1.EnvironmentDestroyProtectionRequiredOverride {
 			continue
 		}
-		reasons = append(reasons, fmt.Sprintf("Environment/%s spec.safety.destroyProtection=%s", env.Metadata.Name, v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
+		names = append(names, env.Metadata.Name)
+	}
+	return names
+}
+
+func EvaluateDestroySafety(state v1alpha1.State, override bool) DestroySafetyDecision {
+	var reasons []string
+	for _, name := range ProtectedEnvironments(state) {
+		reasons = append(reasons, fmt.Sprintf("Environment/%s spec.safety.destroyProtection=%s", name, v1alpha1.EnvironmentDestroyProtectionRequiredOverride))
 	}
 	return DestroySafetyDecision{
 		RequiredOverride: len(reasons) > 0 && !override,

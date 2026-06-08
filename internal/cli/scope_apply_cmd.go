@@ -172,6 +172,17 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			}
 		}
 		if override {
+			// apply --override authorizes Bootwright-owned destructive rebuilds
+			// (managed-OS VM reinstall, owned-Ceph wipe-and-rebuild). On a
+			// destroy-protected Environment that destruction must cross the destroy
+			// authorization boundary instead of slipping in through apply, so fail
+			// closed before any mutation and direct the operator to destroy first.
+			// Dry-run/plan still previews the override plan.
+			if !dryRun {
+				if protected := workflow.ProtectedEnvironments(plan.state); len(protected) > 0 {
+					return failErr(1, fmt.Errorf("apply --override would rebuild destroy-protected resources (%s); run `bootwright destroy --override` for the affected scope, then re-apply", strings.Join(protected, ", ")))
+				}
+			}
 			plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_install_override=true")
 		}
 		limits := workflow.ConcurrencyLimits{

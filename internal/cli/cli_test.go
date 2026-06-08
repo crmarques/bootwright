@@ -647,6 +647,56 @@ func TestProtectedDestroyOverridePassesSafetyGate(t *testing.T) {
 	}
 }
 
+func TestProtectedApplyOverrideFailsClosed(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"apply",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--override",
+		"--yes",
+		"--ask-become-pass=false",
+	)
+	if code == 0 {
+		t.Fatalf("protected apply --override unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	// --override must not rebuild protected resources through apply; the operator
+	// is directed to cross the destroy authorization boundary first.
+	for _, want := range []string{"destroy-protected", "destroy --override"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("protected apply --override stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stdout, "Start") || strings.Contains(stdout, "Bundle") {
+		t.Fatalf("protected apply --override progressed to workflow setup\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"apply",
+		"--stage", "clusters",
+		"--clusters", "sno-libvirt",
+		"--override",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	// Dry-run/plan is read-only and must still preview the override plan even on a
+	// protected environment; only a real mutating apply --override is refused.
+	if code != 0 {
+		t.Fatalf("protected apply --override --dry-run should preview, exited %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_install_override=true") {
+		t.Fatalf("dry-run preview should still carry the install override: %+v", report.ExtraVars)
+	}
+}
+
 func TestScopedCheckDryRunJSONDoesNotPromptForBecome(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,

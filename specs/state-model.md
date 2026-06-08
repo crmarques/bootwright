@@ -803,6 +803,12 @@ Rules:
   created — a foreign or co-resident cluster fails closed. It must not bypass
   active-run leases, validation, secret checks, or foreign-resource ownership
   failures.
+- When selected state contains `Environment.spec.safety.destroyProtection:
+  requiredOverride`, `apply --override` fails closed before any mutation rather
+  than rebuilding protected resources: that destruction must cross the destroy
+  authorization boundary, so the operator runs `destroy --override` for the
+  affected scope and then re-applies. Dry-run/plan still previews the override
+  plan.
 - `bootwright host trust` records SSH server-key trust for declared machines.
 - `bootwright state-check` is a read-only desired-vs-recorded report. It never
   mutates state, writes convergence records, or runs playbooks, and it accepts
