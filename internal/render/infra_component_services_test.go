@@ -33,6 +33,33 @@ func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing
 	}
 }
 
+func TestFabricHostDesiredVarsFiltersByHost(t *testing.T) {
+	state := dnsRecordsState()
+	services := infraComponentServicesVars(state)
+	if len(services) == 0 {
+		t.Fatal("infra component services empty; fixture changed")
+	}
+	host, _ := services[0].(map[string]any)["machineRef"].(string)
+	if host == "" {
+		t.Fatal("infra component service has no machineRef; the fabric host projection would be silently empty")
+	}
+
+	// The host's projection must be non-empty: a silently-empty projection would
+	// make every fabric host hash identically and hide real drift.
+	got := FabricHostDesiredVars(state, host)
+	if len(got) == 0 {
+		t.Fatalf("FabricHostDesiredVars(%q) is empty; fabric host vars no longer carry machineRef", host)
+	}
+	for i, entry := range got {
+		if mref, _ := entry.(map[string]any)["machineRef"].(string); mref != host {
+			t.Fatalf("FabricHostDesiredVars[%d].machineRef = %q, want %q", i, mref, host)
+		}
+	}
+	if other := FabricHostDesiredVars(state, host+"-does-not-exist"); len(other) != 0 {
+		t.Fatalf("FabricHostDesiredVars for an unknown host = %d entries, want 0", len(other))
+	}
+}
+
 func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
