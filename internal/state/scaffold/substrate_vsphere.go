@@ -26,13 +26,11 @@ spec:
         name: {{.NetworkID}}
       attachmentRef:
         name: {{.NetworkID}}
-      overrides:
-        interfaces:
-          - name: primary
-            ipv4:
-              address:
-                - ip: 192.168.130.20
-                  prefix-length: 24
+      interfaceAddresses:
+        - interface: primary
+          addressRef:
+            name: ip
+          prefixLength: 24
   addresses:
     - name: ip
       address: 192.168.130.20
