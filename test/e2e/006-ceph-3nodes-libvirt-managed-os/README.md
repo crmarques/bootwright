@@ -51,14 +51,18 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 
 - A RHEL 9.7 x86_64 DVD ISO stored locally on the bastion.
 - Working upstream internet on the libvirt host. The Ceph nodes reach the
-  community Ceph repository (`download.ceph.com`) and the cephadm container image
-  (`quay.io/ceph`) through the bastion: the managed `lab-dns` dnsmasq forwards
-  public names to the resolvers in `infra/components/lab-dns.yaml`, and the
-  libvirt NAT network carries egress. The OSS distribution adds no
-  subscription-backed repo; Bootwright configures the community repo on each node
-  with cephadm using `spec.ceph.community.release`. For a disconnected lab, set
-  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com` and
-  point `forwarders` at an internal resolver.
+  community Ceph repository (`download.ceph.com`), the EPEL bootstrap RPM
+  (`dl.fedoraproject.org`), and the cephadm container image (`quay.io/ceph`)
+  through the bastion: the managed `lab-dns` dnsmasq forwards public names to the
+  resolvers in `infra/components/lab-dns.yaml`, and the libvirt NAT network
+  carries egress. The OSS distribution adds no subscription-backed repo;
+  Bootwright configures the community repo on each node with cephadm using
+  `spec.ceph.community.release`. Because cephadm's `add-repo` enables EPEL and
+  these RHEL nodes are unregistered, Bootwright also pre-installs `epel-release`
+  from `dl.fedoraproject.org`. For a disconnected lab, set
+  `spec.ceph.community.mirror` to an internal mirror of `download.ceph.com`,
+  override `bootwright_ceph_community_epel_release_url` to an internal EPEL
+  mirror, and point `forwarders` at an internal resolver.
 
 Bootwright owns bastion host preparation for this fixture. After
 `bootwright bastion setup --yes` and

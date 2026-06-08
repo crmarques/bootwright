@@ -29,6 +29,35 @@
     group: root
     mode: "0755"
 
+- name: Resolve EPEL bootstrap package source
+  ansible.builtin.set_fact:
+    bootwright_ceph_community_epel_url: >-
+      {{
+        bootwright_ceph_provider.community.epelReleaseURL
+        | default(bootwright_ceph_community_epel_release_url, true)
+      }}
+  changed_when: false
+
+- name: Require an https EPEL bootstrap package source
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_community_epel_url is match('^https://')
+    fail_msg: >-
+      Refusing to install the EPEL bootstrap package over an insecure transport:
+      set bootwright_ceph_community_epel_release_url to an https:// URL (got
+      {{ bootwright_ceph_community_epel_url }}).
+
+# cephadm add-repo enables EPEL with "dnf install -y epel-release" and has no flag
+# to skip it; pre-installing epel-release makes that internal step an idempotent
+# no-op on the unregistered managed RHEL node. disable_gpg_check covers hardened
+# images that force local package verification: epel-release is the bootstrap
+# package that itself ships the EPEL signing key, so no key is yet trusted.
+- name: Enable EPEL before cephadm configures the community Ceph repository
+  ansible.builtin.dnf:
+    name: "{{ bootwright_ceph_community_epel_url }}"
+    state: present
+    disable_gpg_check: true
+
 - name: Configure community Ceph package repository through cephadm
   ansible.builtin.command:
     argv: >-

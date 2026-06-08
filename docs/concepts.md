@@ -85,7 +85,9 @@ declaration selects `spec.ceph.distribution`. Upstream/community installs use
 `distribution: oss`, where Bootwright configures the upstream community Ceph
 repository on each node with cephadm; `spec.ceph.community.release` pins the
 release (latest stable by default) and `spec.ceph.community.mirror` points at a
-download.ceph.com mirror for disconnected sites. Red Hat and IBM installs
+download.ceph.com mirror for disconnected sites. Because cephadm's `add-repo`
+enables EPEL unconditionally on EL nodes, the OSS path also installs
+`epel-release` from Fedora so the step succeeds on unregistered RHEL. Red Hat and IBM installs
 reference named `Environment.spec.entitlements[]` entries for RHSM, registry
 entitlement, and license material. Secret bytes never appear in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the

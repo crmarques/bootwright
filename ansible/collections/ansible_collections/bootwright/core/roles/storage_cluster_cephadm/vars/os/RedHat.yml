@@ -19,3 +19,8 @@ bootwright_ceph_ca_trust_update_argv:
 bootwright_ceph_community_default_mirror: https://download.ceph.com
 bootwright_ceph_community_bootstrap_cephadm: /var/tmp/bootwright-cephadm-bootstrap
 bootwright_ceph_community_repo_file: /etc/yum.repos.d/ceph.repo
+# cephadm add-repo unconditionally enables EPEL via "dnf install -y epel-release"
+# on EL nodes; on an unregistered RHEL node no enabled repo provides that package,
+# so Bootwright pre-installs epel-release from Fedora's canonical RPM. Override
+# this URL to an internal EPEL mirror for disconnected sites.
+bootwright_ceph_community_epel_release_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"

@@ -13,6 +13,8 @@ spec:
       # Bootwright configures the upstream community Ceph repo on each node with
       # cephadm. Pin the release here; omit for the latest stable default. Set
       # community.mirror to point at an internal mirror of download.ceph.com.
+      # cephadm's add-repo also enables EPEL, so on these unregistered managed
+      # RHEL nodes Bootwright pre-installs epel-release from dl.fedoraproject.org.
       release: squid
     cephadm:
       addressRef:
