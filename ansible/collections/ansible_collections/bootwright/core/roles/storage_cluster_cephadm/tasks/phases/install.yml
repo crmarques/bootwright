@@ -156,3 +156,33 @@
   loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+
+# Record the empty devices Bootwright is claiming as OSDs on this node so destroy
+# can refuse to wipe a device later added to the declared list out of band. Stamped
+# on every apply so it tracks legitimate device additions, and removed by the
+# destroy flow. Consumed by the destroy device-ownership guard.
+- name: Ensure Bootwright state directory for OSD device marker
+  ansible.builtin.file:
+    path: "{{ bootwright_ceph_osd_marker_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: bootwright_current_storage_node.devices | default([]) | length > 0
+
+- name: Stamp Bootwright OSD device ownership marker
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_osd_marker_path }}"
+    content: >-
+      {{
+        {
+          'manager': 'bootwright',
+          'cluster': bootwright_selected_storage_cluster.name,
+          'node': bootwright_current_storage_node.name,
+          'devices': bootwright_current_storage_node.devices | default([])
+        } | to_nice_json
+      }}
+    owner: root
+    group: root
+    mode: "0600"
+  when: bootwright_current_storage_node.devices | default([]) | length > 0

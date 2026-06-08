@@ -2733,6 +2733,66 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 	}
 }
 
+func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
+	checkIdx := findAnsibleTask(t, tasks, "Check declared OSD devices are empty")
+	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright OSD device ownership marker")
+	// The marker records the devices Bootwright claims as OSDs, captured after the
+	// empty-device check, so destroy can later prove a declared device was ours.
+	if !(checkIdx < stampIdx) {
+		t.Fatalf("OSD device marker must be stamped after the empty-device check (check=%d stamp=%d)", checkIdx, stampIdx)
+	}
+	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
+	if !ok {
+		t.Fatalf("OSD device marker must be written with copy, got %v", tasks[stampIdx])
+	}
+	if got := fmt.Sprint(stamp["dest"]); !strings.Contains(got, "bootwright_ceph_osd_marker_path") {
+		t.Fatalf("OSD device marker must write the marker path, got %v", stamp["dest"])
+	}
+	if got := fmt.Sprint(stamp["content"]); !strings.Contains(got, "bootwright_current_storage_node.devices") {
+		t.Fatalf("OSD device marker must record the node's declared devices, got %v", stamp["content"])
+	}
+	if got := fmt.Sprint(stamp["mode"]); got != "0600" {
+		t.Fatalf("OSD device marker must be mode 0600, got %v", stamp["mode"])
+	}
+}
+
+func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe declared devices not recorded as Bootwright OSDs")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(readIdx < refuseIdx && refuseIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must read the OSD marker and refuse unrecorded devices before wiping (read=%d refuse=%d wipe=%d)", readIdx, refuseIdx, wipeIdx)
+	}
+	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("OSD device guard must be an assert, got %v", tasks[refuseIdx])
+	}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_ceph_recorded_osd_devices") {
+		t.Fatalf("OSD device guard must require declared devices to be in the recorded set, got %v", refuse["that"])
+	}
+	// Marker-gated so a cluster provisioned before this guard still destroys.
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "content is defined") {
+		t.Fatalf("OSD device guard must fall back when no marker exists, got %v", tasks[refuseIdx]["when"])
+	}
+}
+
+func TestStorageCephadmDestroyReprobesMountsBeforeWipe(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	reprobeIdx := findAnsibleTask(t, tasks, "Re-probe declared Ceph destroy devices for active mounts before wipe")
+	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe devices mounted since the first check")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(reprobeIdx < refuseIdx && refuseIdx < wipeIdx) {
+		t.Fatalf("ceph destroy must re-probe mounts and refuse before wiping (reprobe=%d refuse=%d wipe=%d)", reprobeIdx, refuseIdx, wipeIdx)
+	}
+	// The re-probe refusal must sit immediately before the wipe to minimize the
+	// time-of-check/time-of-use window.
+	if refuseIdx+1 != wipeIdx {
+		t.Fatalf("mount re-probe refusal must be the task immediately before the wipe (refuse=%d wipe=%d)", refuseIdx, wipeIdx)
+	}
+}
+
 func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read libvirt domain ownership metadata")
