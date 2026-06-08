@@ -296,6 +296,38 @@
       # destroy flow, which owns /etc/ceph, before a fresh apply re-bootstraps.
       when: bootwright_ceph_conf_check.rc != 0
 
+    # Stamp a host-local ownership marker recording this cluster's fsid right after
+    # bootstrap — before the host/service/operation steps that may fail — so a cephadm
+    # cluster Bootwright created stays reclaimable by a later --override clean rebuild
+    # (fsid match) even if a subsequent step aborts the apply. Gated on a readable
+    # fsid, so it also re-stamps an existing cluster on every apply (refreshing
+    # clusters bootstrapped before the marker existed). Removed by /etc/ceph teardown
+    # in the destroy flow.
+    - name: Capture Ceph fsid for ownership marker
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - fsid
+      register: bootwright_ceph_ownership_fsid
+      changed_when: false
+      failed_when: false
+
+    - name: Stamp Bootwright Ceph ownership marker
+      ansible.builtin.copy:
+        dest: "{{ bootwright_ceph_ownership_marker_path }}"
+        content: >-
+          {{
+            {
+              'manager': 'bootwright',
+              'cluster': bootwright_selected_storage_cluster.name,
+              'fsid': bootwright_ceph_ownership_fsid.stdout | default('') | trim
+            } | to_nice_json
+          }}
+        owner: root
+        group: root
+        mode: "0600"
+      when: bootwright_ceph_ownership_fsid.stdout | default('') | trim | length > 0
+
     - name: Configure cephadm SSH trust
       ansible.builtin.command:
         argv:
@@ -428,36 +460,6 @@
       become: false
       no_log: true
       when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
-
-    # Stamp a host-local ownership marker recording this cluster's fsid so a later
-    # --override clean rebuild can prove the live cephadm cluster is the one
-    # Bootwright created (fsid match) before --zap-osds. Refreshed on every
-    # successful apply, which also re-stamps clusters bootstrapped before the marker
-    # existed. Removed by /etc/ceph teardown in the destroy flow.
-    - name: Capture Ceph fsid for ownership marker
-      ansible.builtin.command:
-        argv:
-          - ceph
-          - fsid
-      register: bootwright_ceph_ownership_fsid
-      changed_when: false
-      failed_when: false
-
-    - name: Stamp Bootwright Ceph ownership marker
-      ansible.builtin.copy:
-        dest: "{{ bootwright_ceph_ownership_marker_path }}"
-        content: >-
-          {{
-            {
-              'manager': 'bootwright',
-              'cluster': bootwright_selected_storage_cluster.name,
-              'fsid': bootwright_ceph_ownership_fsid.stdout | default('') | trim
-            } | to_nice_json
-          }}
-        owner: root
-        group: root
-        mode: "0600"
-      when: bootwright_ceph_ownership_fsid.stdout | default('') | trim | length > 0
 
     - name: Record storage cluster ownership
       ansible.builtin.include_role:
