@@ -461,25 +461,51 @@
   when: (bootwright_component.osInstall.ssh.knownHostsPath | default('') | length) > 0
 
 - name: Verify managed OS SSH authentication
-  ansible.builtin.command:
-    argv:
-      - ssh
-      - -i
-      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
-      - -o
-      - BatchMode=yes
-      - -o
-      - StrictHostKeyChecking=yes
-      - -o
-      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
-      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
-      - "true"
+  # A freshly installed node regenerates its SSH host keys on first boot, and the
+  # known_hosts trust store is durable across installs - so a key pinned once
+  # before this point (here, or by a previous install of the same node) goes
+  # stale and makes StrictHostKeyChecking deadlock forever. When this run
+  # (re)installed the node, re-pin the live host key on every attempt and then
+  # require a key-based login: a successful login proves we reached the node we
+  # provisioned (it holds the key we injected), so the key it just presented is
+  # the one to trust. A node that was already healthy keeps its durable pin
+  # untouched - a genuine key change there must fail loudly, not be re-trusted.
+  # flock serialises the shared known_hosts file across nodes converging in
+  # parallel; the login runs unlocked because ssh-keygen -R removes only this
+  # host, so each node's freshly recorded key survives other nodes' rewrites.
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      kh={{ bootwright_component.osInstall.ssh.knownHostsPath | quote }}
+      addr={{ bootwright_component.osInstall.ssh.address | quote }}
+      if {{ (not (bootwright_managed_os_already_ready | default(false) | bool)) | ternary('true', 'false') }}; then
+        command -v flock >/dev/null 2>&1 || { echo 'flock (util-linux) is required on the provider host' >&2; exit 1; }
+        command -v ssh-keyscan >/dev/null 2>&1 || { echo 'ssh-keyscan (openssh-clients) is required on the provider host' >&2; exit 1; }
+        (
+          flock 9 || exit 1
+          scan=$(ssh-keyscan -T 30 -t ed25519,ecdsa,rsa "$addr" 2>/dev/null | grep -v '^#') || true
+          if [ -n "$scan" ]; then
+            ssh-keygen -R "$addr" -f "$kh" >/dev/null 2>&1 || true
+            rm -f "$kh.old"
+            printf '%s\n' "$scan" >> "$kh"
+          fi
+        ) 9>"$kh.lock"
+      fi
+      exec ssh \
+        -i {{ bootwright_component.osInstall.ssh.privateKeyPath | quote }} \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=yes \
+        -o UserKnownHostsFile="$kh" \
+        {{ (bootwright_component.osInstall.ssh.user ~ '@' ~ bootwright_component.osInstall.ssh.address) | quote }} \
+        true
   delegate_to: localhost
   register: bootwright_os_ssh_auth
   retries: 60
   delay: 10
   until: bootwright_os_ssh_auth.rc == 0
   changed_when: false
+  failed_when: bootwright_os_ssh_auth.rc != 0
 
 - name: Write managed OS install marker
   ansible.builtin.command:

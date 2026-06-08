@@ -125,6 +125,8 @@ Before importing a context, confirm the out-of-band inputs exist:
   `Environment.spec.secrets`.
 - Provider host tooling and permissions are available for the selected
   substrate.
+- The provider host has `ssh-keyscan`/`ssh-keygen` (openssh-clients) and `flock`
+  (util-linux) so managed-OS SSH host-key trust can be recorded.
 - BMCs can reach the artifact endpoint selected for Redfish virtual media.
 - DNS, VIPs, and load balancer addresses are reachable from the bastion and
   the cluster nodes.
