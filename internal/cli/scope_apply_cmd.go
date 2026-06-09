@@ -35,6 +35,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		yes           bool
 		strictSecrets bool
 		override      bool
+		cont          bool
 		parallelism   int
 		perHost       int
 		redfish       int
@@ -79,8 +80,9 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
+	cmd.Flags().BoolVar(&cont, "continue", false, "safe reconcile: create what is missing, skip what already matches desired state, fail on drift; the everyday re-run after a partial or completed apply")
 	if scopeTargetsContainerInstall(scope) {
-		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (install-skip override, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); does not bypass leases, validation, secrets, or foreign ownership")
+		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --continue")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {
@@ -109,6 +111,16 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		}
 		if options.defaultPlan && !dryRun {
 			return failErr(2, errors.New("plan is always read-only"))
+		}
+		if cont && override {
+			return failErr(2, errors.New("--continue and --override are mutually exclusive: --continue reconciles and fails on drift, --override rebuilds drift"))
+		}
+		mode := workflow.ApplyModeCreate
+		switch {
+		case override:
+			mode = workflow.ApplyModeOverride
+		case cont:
+			mode = workflow.ApplyModeContinue
 		}
 		runScope := scope
 		runCommandLabel := commandLabel
@@ -183,8 +195,11 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 					return failErr(1, fmt.Errorf("apply --override would rebuild destroy-protected resources (%s); run `bootwright destroy --override` for the affected scope, then re-apply", strings.Join(protected, ", ")))
 				}
 			}
-			plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_install_override=true")
 		}
+		// The explicit safety mode drives both the Go object preflight and the
+		// per-role Ansible gate (create/continue/override). It replaces the legacy
+		// bootwright_install_override boolean.
+		plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_apply_mode="+string(mode))
 		limits := workflow.ConcurrencyLimits{
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
@@ -280,7 +295,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			DryRun:             dryRun,
 			ResolveInstaller:   plan.targetsClusters,
 			Label:              runCommandLabel,
-			InstallOverride:    override,
+			ApplyMode:          mode,
 		}
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+runScope.name+" to validate secrets, tools, and remote readiness")
@@ -339,52 +354,4 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		return nil
 	}
 	return cmd
-}
-
-func applyStageScope(stage string) (scopeSpec, error) {
-	switch s := strings.TrimSpace(stage); s {
-	case "":
-		return allScope, nil
-	case "infra":
-		return infraScope, nil
-	case "clusters":
-		return clustersScope, nil
-	case "fabric", "machines", "deps", "base", "addons":
-		// Sub-phase stages run a single phase via the task graph for surgical
-		// reruns; the family stages (infra, clusters) remain the common path.
-		return subPhaseStageScope(s), nil
-	default:
-		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters, fabric, machines, deps, base, addons")
-	}
-}
-
-// subPhaseStageScope builds an ad-hoc scope that selects exactly one sub-phase.
-// Apply runs through the task graph (PlanApplyTasksChecked), so no per-phase
-// applyPlaybook is needed; artifacts are keyed by the phase name.
-func subPhaseStageScope(name string) scopeSpec {
-	return scopeSpec{
-		name:              name,
-		phaseNames:        []string{name},
-		artifactsBaseName: name,
-	}
-}
-
-func applyStageCommandLabel(stage, action, defaultLabel string) string {
-	if strings.TrimSpace(stage) == "" {
-		return defaultLabel
-	}
-	return strings.TrimSpace(stage) + " " + action
-}
-
-func scopeUsesAnsible(scope scopeSpec) bool {
-	return scope.name != "addons" && scope.name != "storage-cluster"
-}
-
-func scopeTargetsContainerInstall(scope scopeSpec) bool {
-	switch scope.name {
-	case "clusters", "container-cluster", "all":
-		return true
-	default:
-		return false
-	}
 }

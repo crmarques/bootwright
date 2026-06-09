@@ -147,7 +147,7 @@
       register: bootwright_ceph_override_conf
       changed_when: false
       failed_when: false
-      when: bootwright_install_override | default(false) | bool
+      when: (bootwright_apply_mode | default('continue')) == 'override'
 
     - name: Read Bootwright Ceph ownership marker for override rebuild
       ansible.builtin.slurp:
@@ -155,7 +155,7 @@
       register: bootwright_ceph_override_marker
       changed_when: false
       failed_when: false
-      when: bootwright_install_override | default(false) | bool
+      when: (bootwright_apply_mode | default('continue')) == 'override'
 
     - name: Resolve existing Ceph cluster fsid for override rebuild
       ansible.builtin.set_fact:
@@ -164,7 +164,7 @@
               | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
               | default([], true) | first | default('')) }}
       when:
-        - bootwright_install_override | default(false) | bool
+        - (bootwright_apply_mode | default('continue')) == 'override'
         - (bootwright_ceph_override_conf | default({})).content is defined
 
     - name: Resolve Bootwright ownership marker fsid for override rebuild
@@ -173,7 +173,7 @@
           {{ (bootwright_ceph_override_marker.content | b64decode | from_json).fsid
              | default('', true) | trim }}
       when:
-        - bootwright_install_override | default(false) | bool
+        - (bootwright_apply_mode | default('continue')) == 'override'
         - (bootwright_ceph_override_marker | default({})).content is defined
 
     - name: Decide override rebuild ownership
@@ -185,7 +185,7 @@
             and (bootwright_ceph_override_owned_fsid | default('')
                  == bootwright_ceph_override_fsid | default(''))
           }}
-      when: bootwright_install_override | default(false) | bool
+      when: (bootwright_apply_mode | default('continue')) == 'override'
 
     - name: Refuse override rebuild of a non-Bootwright Ceph cluster
       ansible.builtin.assert:
@@ -198,7 +198,7 @@
           foreign or co-resident Ceph cluster. Re-run a normal apply to re-stamp ownership,
           or remove /etc/ceph manually after verifying the cluster is safe to destroy, then retry.
       when:
-        - bootwright_install_override | default(false) | bool
+        - (bootwright_apply_mode | default('continue')) == 'override'
         - bootwright_ceph_override_fsid | default('') | length > 0
 
     - name: Remove existing cephadm cluster for override rebuild
@@ -216,7 +216,7 @@
       # re-bootstrapping: that would orphan the old cephadm daemons. Fail closed.
       failed_when: bootwright_ceph_override_rm.rc != 0
       when:
-        - bootwright_install_override | default(false) | bool
+        - (bootwright_apply_mode | default('continue')) == 'override'
         - bootwright_ceph_override_owned | default(false) | bool
         - bootwright_ceph_override_fsid | default('') | length > 0
 
@@ -230,7 +230,7 @@
         - /etc/ceph/ceph.pub
         - "{{ bootwright_ceph_ownership_marker_path }}"
       when:
-        - bootwright_install_override | default(false) | bool
+        - (bootwright_apply_mode | default('continue')) == 'override'
         - bootwright_ceph_override_owned | default(false) | bool
         - (bootwright_ceph_override_conf | default({})).content is defined
 

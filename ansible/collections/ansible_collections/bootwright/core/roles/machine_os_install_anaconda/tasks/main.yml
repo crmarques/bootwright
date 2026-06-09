@@ -169,7 +169,7 @@
   when:
     - bootwright_managed_os_already_ready | bool
     - not (bootwright_os_pre_marker_matches | default(false) | bool)
-    - not (bootwright_install_override | default(false) | bool)
+    - (bootwright_apply_mode | default('continue')) != 'override'
 
 - name: Install managed OS from virtual media
   when: not (bootwright_managed_os_already_ready | bool)

@@ -181,7 +181,7 @@ func SaveClusterConnectionRecord(clustersDir string, record ClusterConnectionRec
 	return nil
 }
 
-func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, override bool, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
+func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, contextName, secretsDir, runID string, state v1alpha1.State, tasks []ApplyTask, mode ApplyMode, checker ClusterAvailabilityChecker, now time.Time) ([]ApplyTask, error) {
 	if checker == nil {
 		checker = OCClusterAvailabilityChecker{}
 	}
@@ -199,7 +199,9 @@ func ReconcileApplyClusterInstallState(ctx context.Context, clustersDir, context
 		if err != nil {
 			return out, err
 		}
-		if override {
+		if mode == ApplyModeOverride {
+			// Override authorizes a clean rebuild: skip the install-state reconcile so
+			// the cluster install tasks run from scratch.
 			continue
 		}
 		hashMatches := !found || record.DesiredHash == hash

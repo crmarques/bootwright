@@ -51,6 +51,36 @@ const (
 	applyStoragePlaybook          = "bootwright.core.task_storage_cluster_apply"
 )
 
+// ApplyMode is the explicit safety mode an apply runs under. The CLI chooses it
+// (`apply` = create, `apply --continue`, `apply --override`); it drives both the
+// Go object preflight and the per-role Ansible gate via the bootwright_apply_mode
+// extra-var.
+//
+//   - create:   greenfield only. Refuse if any selected object already exists.
+//   - continue: safe reconcile. Create what is missing, skip what matches, fail on drift.
+//   - override: break-glass. Rebuild drifted/owned objects; never touch foreign ones.
+type ApplyMode string
+
+const (
+	ApplyModeCreate   ApplyMode = "create"
+	ApplyModeContinue ApplyMode = "continue"
+	ApplyModeOverride ApplyMode = "override"
+)
+
+// InstallOverride reports whether the mode authorizes Bootwright-owned destructive
+// rebuilds — the semantics the legacy bootwright_install_override boolean carried.
+func (m ApplyMode) InstallOverride() bool { return m == ApplyModeOverride }
+
+// Valid reports whether m is one of the known modes.
+func (m ApplyMode) Valid() bool {
+	switch m {
+	case ApplyModeCreate, ApplyModeContinue, ApplyModeOverride:
+		return true
+	default:
+		return false
+	}
+}
+
 type ApplyTarget struct {
 	Name                string
 	PhaseNames          []string

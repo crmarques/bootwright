@@ -2461,8 +2461,8 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 			t.Fatalf("%s missing %s", tasks[resolveIdx]["name"], key)
 		}
 	}
-	if got := fmt.Sprint(resolve["bootwright_libvirt_managed_os_reset"]); !strings.Contains(got, "bootwright_component.osManaged") || !strings.Contains(got, "bootwright_install_override") {
-		t.Fatalf("%s must gate managed OS disk reset on osManaged and install override, got %v", tasks[resolveIdx]["name"], got)
+	if got := fmt.Sprint(resolve["bootwright_libvirt_managed_os_reset"]); !strings.Contains(got, "bootwright_component.osManaged") || !strings.Contains(got, "bootwright_apply_mode") {
+		t.Fatalf("%s must gate managed OS disk reset on osManaged and the override apply mode, got %v", tasks[resolveIdx]["name"], got)
 	}
 	if !strings.Contains(fmt.Sprint(resolve["bootwright_libvirt_disk_paths"]), "bootwright_component.profile.dataDisks") {
 		t.Fatalf("%s must include data disk paths, got %v", tasks[resolveIdx]["name"], resolve["bootwright_libvirt_disk_paths"])
@@ -3177,8 +3177,8 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("bootstrap stage must ensure the provider-selected ceph client package, got %v", ensureClient)
 	}
 	rmCluster := block[findAnsibleTask(t, block, "Remove existing cephadm cluster for override rebuild")]
-	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_install_override") {
-		t.Fatalf("destructive cephadm rm-cluster must be gated on the override flag, got when=%v", rmCluster["when"])
+	if got := fmt.Sprint(rmCluster["when"]); !strings.Contains(got, "bootwright_apply_mode") || !strings.Contains(got, "override") {
+		t.Fatalf("destructive cephadm rm-cluster must be gated on the override apply mode, got when=%v", rmCluster["when"])
 	}
 	if got := fmt.Sprint(rmCluster["ansible.builtin.command"]); !strings.Contains(got, "rm-cluster") {
 		t.Fatalf("override rebuild must run cephadm rm-cluster, got %v", rmCluster)
@@ -3308,7 +3308,7 @@ func TestInstallAgentControllerDNSDoesNotMutateHostsFile(t *testing.T) {
 func TestInstallAgentOverrideBypassesExistingClusterSkipGuard(t *testing.T) {
 	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/stage/skip_guard.yml")
 	for _, want := range []string{
-		"not (bootwright_install_override | default(false) | bool)",
+		"(bootwright_apply_mode | default('continue')) != 'override'",
 		"bootwright_install_already_complete",
 		"bootwright_install_cluster_available.stdout",
 	} {

@@ -692,8 +692,8 @@ func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
-	if !slices.Contains(report.ExtraVars, "bootwright_install_override=true") {
-		t.Fatalf("dry-run preview should still carry the install override: %+v", report.ExtraVars)
+	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=override") {
+		t.Fatalf("dry-run preview should still carry the override apply mode: %+v", report.ExtraVars)
 	}
 }
 
@@ -3712,7 +3712,7 @@ func TestDestroyClustersDryRunJSONAcceptsMixedClusterSelection(t *testing.T) {
 	}
 }
 
-func TestApplyClustersOverrideDryRunPassesInstallOverride(t *testing.T) {
+func TestApplyClustersOverrideDryRunPassesApplyMode(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t, "apply", "--stage", "clusters", "--dry-run", "--output", "json", "--override")
 	if code != 0 {
@@ -3722,11 +3722,11 @@ func TestApplyClustersOverrideDryRunPassesInstallOverride(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode apply dry-run json: %v\n%s", err, stdout)
 	}
-	if !slices.Contains(report.ExtraVars, "bootwright_install_override=true") {
-		t.Fatalf("extra vars missing install override: %+v", report.ExtraVars)
+	if !slices.Contains(report.ExtraVars, "bootwright_apply_mode=override") {
+		t.Fatalf("extra vars missing override apply mode: %+v", report.ExtraVars)
 	}
-	if !slices.Contains(report.Command, "bootwright_install_override=true") {
-		t.Fatalf("command missing install override: %+v", report.Command)
+	if !slices.Contains(report.Command, "bootwright_apply_mode=override") {
+		t.Fatalf("command missing override apply mode: %+v", report.Command)
 	}
 }
 

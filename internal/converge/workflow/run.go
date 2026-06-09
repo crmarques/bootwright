@@ -75,8 +75,10 @@ type RunOptions struct {
 	// exclusive with scheduler applies and other lease-holding runs. Set by
 	// destroy, which mutates outside the apply scheduler and would otherwise hold
 	// no lease, letting an apply start concurrently against the same targets.
-	AcquireRunLease            bool
-	InstallOverride            bool
+	AcquireRunLease bool
+	// ApplyMode is the explicit safety mode for this run (create/continue/override).
+	// Empty is treated as continue (the safe reconcile) by consumers.
+	ApplyMode                  ApplyMode
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
 }
 
