@@ -232,6 +232,18 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.state, plan.selected, runScope.applyPlaybook, plan.limit, plan.extraVarPairs, runScope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.state, plan.limit))
 		}
 		if !dryRun {
+			// Mode preflight: classify every selected object against the recorded
+			// convergence state and enforce the apply-mode contract before any
+			// mutation (greenfield-only refuses pre-existing objects; --continue
+			// refuses drift/foreign; --override refuses only foreign). Per-role
+			// Ansible gates enforce the same contract against live state.
+			objects, err := workflow.ClassifyApplyObjects(tasks, ctx.RunsDir)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if err := workflow.EvaluateApplyModePreflight(mode, objects); err != nil {
+				return failErr(1, err)
+			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
