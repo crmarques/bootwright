@@ -3167,13 +3167,20 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		}
 	}
 
+	// OS facts are gathered in the context phase (which main.yml runs before the
+	// repository phase) and must precede the provider set_fact: subscription-backed
+	// providers embed {{ ansible_distribution_major_version }} in rendered repo
+	// definitions, and ansible-core 2.21 finalizes that template at set_fact time.
+	contextTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/context.yml")
+	gatherIdx := findAnsibleTask(t, contextTasks, "Gather storage node OS facts")
+	providerFactIdx := findAnsibleTask(t, contextTasks, "Resolve managed Ceph work paths")
+	if !(gatherIdx < providerFactIdx) {
+		t.Fatalf("storage context phase must gather OS facts before materializing the provider (gather=%d provider=%d)", gatherIdx, providerFactIdx)
+	}
+
 	repositoryTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/repository.yml")
-	gatherIdx := findAnsibleTask(t, repositoryTasks, "Gather storage node OS facts")
 	communityDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure community Ceph package repository")
 	subscriptionDispatchIdx := findAnsibleTask(t, repositoryTasks, "Configure subscription-backed Ceph package repository")
-	if !(gatherIdx < communityDispatchIdx && gatherIdx < subscriptionDispatchIdx) {
-		t.Fatalf("storage repository phase must gather OS facts before dispatching repository preparation")
-	}
 	// Dispatch is keyed on rendered capability flags, not the distribution name,
 	// so the role carries no per-distribution branch (ADR 0002).
 	if got := fmt.Sprint(repositoryTasks[communityDispatchIdx]["when"]); !strings.Contains(got, "community is defined") {
