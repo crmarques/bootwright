@@ -44,7 +44,7 @@ test -s ~/pull-secret.json
 
 Generate (or reuse) the SSH key the bastion will use to reach the provider
 host(s). Cluster admin SSH keys are generated into the Bootwright context
-secrets directory by `bootwright secret generate`.
+secrets directory by `bootwright secret sync`.
 
 ```bash
 install -d -m 0700 ~/.ssh

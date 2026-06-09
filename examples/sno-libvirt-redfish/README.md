@@ -19,7 +19,7 @@ emulated Redfish BMC.
 
 ## Validate And Apply
 
-`secret generate` only materializes the generated entries; you must set the
+`secret sync` only materializes the generated entries; you must set the
 context secrets (`openshift-pull-secret`, `bmc-credentials`) yourself. After each
 step, run `bootwright status` — it prints the suggested next command. See
 [getting started](../../docs/getting-started.md) for the full secret and
@@ -30,7 +30,7 @@ bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
 bootwright secret set openshift-pull-secret --pull-secret <path>
 printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
-bootwright secret generate
+bootwright secret sync
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

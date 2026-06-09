@@ -26,8 +26,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright context init lab -f ./lab-input
   bootwright context update lab -f ./lab-input --yes
   bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-  bootwright secret generate
-  bootwright secret materialize
+  bootwright secret sync
   bootwright host trust
   bootwright bastion setup --yes
   bootwright preflight all

@@ -2,12 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"path/filepath"
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/runtime/secrets"
 )
 
@@ -97,26 +95,6 @@ type secretMaterializeOptions struct {
 type secretMaterializeResult struct {
 	name   string
 	action string
-}
-
-func runSecretMaterialize(stdout io.Writer, command, contextName, secretsDir string, state v1alpha1.State, opts secretMaterializeOptions, emptyStatus cliout.Status) error {
-	results, err := materializeSecretsForContext(contextName, secretsDir, state, opts)
-	if err != nil {
-		return failErr(1, err)
-	}
-	p := cliout.New(stdout)
-	p.Command(command)
-	if len(results) == 0 {
-		p.Summary(emptyStatus, command, "no secret requests found")
-		printNextStatusHint(stdout)
-		return nil
-	}
-	for _, result := range results {
-		p.Status(cliout.StatusOK, result.name, result.action)
-	}
-	p.Summary(cliout.StatusOK, command, fmt.Sprintf("%d secret request(s) handled", len(results)))
-	printNextStatusHint(stdout)
-	return nil
 }
 
 func materializeSecrets(secretsDir string, state v1alpha1.State, opts secretMaterializeOptions) ([]secretMaterializeResult, error) {

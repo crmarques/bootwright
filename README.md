@@ -25,8 +25,7 @@ bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-bootwright secret generate
-bootwright secret materialize
+bootwright secret sync
 bootwright host trust
 bootwright bastion setup --yes
 bootwright preflight all
@@ -168,8 +167,7 @@ bootwright cluster access
 bootwright cluster access --cluster demo-ocp
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
-bootwright secret generate
-bootwright secret materialize
+bootwright secret sync
 bootwright host trust
 bootwright secret list
 bootwright print-env [--sensitive]

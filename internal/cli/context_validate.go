@@ -145,7 +145,7 @@ func declaredSecretContextChecks(contextName, secretsDir string, state v1alpha1.
 func secretContextRemediation(entry secretListEntry) string {
 	switch {
 	case strings.HasPrefix(entry.Type, "generated:"):
-		return "run bootwright secret generate or bootwright secret set " + entry.Name
+		return "run bootwright secret sync or bootwright secret set " + entry.Name
 	case entry.Type == "file" || strings.HasPrefix(entry.Type, "file:"):
 		return "create the referenced file or update Environment.spec.secrets entry " + entry.Name
 	case strings.Contains(entry.Type, "tls"):

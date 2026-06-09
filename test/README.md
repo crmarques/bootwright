@@ -96,7 +96,7 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 - Permission to escalate to root on provider hosts and manage the Bootwright
   host runtime under `/var/lib/bootwright`.
 - Required install secrets in the active context secrets directory; use
-  `bootwright secret set`, `bootwright secret generate`, and
+  `bootwright secret set`, `bootwright secret sync`, and
   `bootwright secret list`.
 
 ## Logs And Artifacts

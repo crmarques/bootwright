@@ -22,7 +22,7 @@ bootwright status
 ```
 
 Each preparing and mutating command (`context init`, `secret set`,
-`secret generate`, `host trust`, `bastion setup`, and the rest) ends by pointing
+`secret sync`, `host trust`, `bastion setup`, and the rest) ends by pointing
 back to `bootwright status`, so the flow is *do a step, then ask status*. The
 numbered steps below are the same path written out once for reference.
 
@@ -196,12 +196,14 @@ secrets directory. Run the commands that match the names declared in
 
 ```text
 bootwright secret set openshift-pull-secret --pull-secret "${HOME}/openshift-pull-secret.json"
-bootwright secret generate
-bootwright secret materialize
-bootwright secret encryption status
+bootwright secret sync
 bootwright host trust
-bootwright secret list
 ```
+
+`secret sync` creates the declared `generated:` secrets, copies `file:`-sourced
+material into the context store when `Environment.spec.secretStorage.mode` is
+`context`, and reports anything still needing `secret set`. `secret list` and
+`secret encryption status` remain available for inspection.
 
 Get the OpenShift pull secret from
 `https://console.redhat.com/openshift/install/pull-secret`. Prefer

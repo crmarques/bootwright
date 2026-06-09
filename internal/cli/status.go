@@ -315,11 +315,8 @@ func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) [
 		}
 	}
 	var hints []string
-	if materializedMissing {
-		hints = append(hints, "bootwright secret materialize")
-	}
-	if generatedMissing {
-		hints = append(hints, "bootwright secret generate")
+	if materializedMissing || generatedMissing {
+		hints = append(hints, "bootwright secret sync")
 	}
 	hints = append(hints, contextSecretSetHints(contextMissing)...)
 	return hints

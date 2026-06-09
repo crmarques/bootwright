@@ -28,7 +28,7 @@ Defaulted fields are intentionally present with short comments so authors can se
 
 ## Validate And Apply
 
-`secret generate` only materializes the `generated:` entries; set the operator
+`secret sync` only materializes the `generated:` entries; set the operator
 secrets this example declares (`openshift-pull-secret`, `bmc-credentials`,
 `ceph-registry-credentials`, `redhat-org`, `redhat-activation-key`) yourself
 first. `bastion-host-ssh` points at a local key file. After each step, run
@@ -44,7 +44,7 @@ printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "
 printf '%s\n' "${REGISTRY_PASS}" | bootwright secret set ceph-registry-credentials --username "${REGISTRY_USER}" --password-stdin
 bootwright secret set redhat-org --raw-file <org-id-file>
 bootwright secret set redhat-activation-key --raw-file <activation-key-file>
-bootwright secret generate
+bootwright secret sync
 bootwright bastion setup --yes
 bootwright preflight all
 bootwright plan

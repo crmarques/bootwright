@@ -385,13 +385,13 @@ func TestHumanOutputStructuredText(t *testing.T) {
 
 func TestJourneyCommandsRouteToStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "secret", "generate")
-	if code != 0 {
-		t.Fatalf("secret generate exited %d, stderr=%q\nstdout:\n%s", code, stderr, stdout)
+	stdout, stderr, code := runCLI(t, "secret", "sync")
+	if code != 1 {
+		t.Fatalf("secret sync exited %d (want 1 while openshift-pull-secret is unset), stderr=%q\nstdout:\n%s", code, stderr, stdout)
 	}
-	for _, want := range []string{"Next steps", "bootwright status"} {
+	for _, want := range []string{"request(s) handled", "Still missing", "Next steps", "bootwright status"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("secret generate stdout missing %q (journey commands must route back to the status hub):\n%s", want, stdout)
+			t.Fatalf("secret sync stdout missing %q (journey commands must route back to the status hub):\n%s", want, stdout)
 		}
 	}
 }
@@ -1478,9 +1478,12 @@ func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 
 func TestSecretListJSONReportsDeclaredStatus(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	_, stderr, code := runCLI(t, "secret", "generate")
-	if code != 0 {
-		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
+	syncOut, stderr, code := runCLI(t, "secret", "sync")
+	if code != 1 {
+		t.Fatalf("secret sync exited %d (want 1 while openshift-pull-secret is unset), stderr=%q", code, stderr)
+	}
+	if !strings.Contains(syncOut, "Still missing") || !strings.Contains(syncOut, "request(s) handled") {
+		t.Fatalf("secret sync stdout missing still-missing report:\n%s", syncOut)
 	}
 	stdout, stderr, code := runCLI(t, "secret", "list", "--output", "json")
 	if code != 0 {
@@ -2742,6 +2745,9 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(sshDir, "bootwright-ssh-key"), []byte("FAKE PRIVATE KEY FOR TESTS\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(sshDir, "bootwright-ssh-key.pub"), []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTests\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -2753,9 +2759,12 @@ func TestRenderOutputDirWritesExternalToolInputs(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("secret set exited %d, stderr=%q", code, stderr)
 	}
-	_, stderr, code = runCLI(t, "secret", "generate")
+	syncOut, stderr, code := runCLI(t, "secret", "sync")
 	if code != 0 {
-		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
+		t.Fatalf("secret sync exited %d, stderr=%q\nstdout:\n%s", code, stderr, syncOut)
+	}
+	if !strings.Contains(syncOut, "request(s) handled") || !strings.Contains(syncOut, "all declared secrets present") {
+		t.Fatalf("secret sync stdout missing success summary:\n%s", syncOut)
 	}
 	outputDir := filepath.Join(t.TempDir(), "rendered")
 	stdout, stderr, code := runCLI(t, "render", "--output-dir", outputDir, "--clusters", "sno-libvirt", "--sensitive")

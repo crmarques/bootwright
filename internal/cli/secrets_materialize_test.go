@@ -159,12 +159,17 @@ func TestMaterializeCopiesSplitNodeSSHFileSources(t *testing.T) {
 func TestSecretShowPublicPartAndDeleteGeneratedSSHKeyPair(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
 
-	stdout, stderr, code := runCLI(t, "secret", "generate")
-	if code != 0 {
-		t.Fatalf("secret generate exited %d, stderr=%q", code, stderr)
+	stdout, stderr, code := runCLI(t, "secret", "sync")
+	if code != 1 {
+		t.Fatalf("secret sync exited %d (want 1 while openshift-pull-secret is unset), stderr=%q", code, stderr)
+	}
+	for _, want := range []string{"request(s) handled", "Still missing", "openshift-pull-secret"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("secret sync stdout missing %q:\n%s", want, stdout)
+		}
 	}
 	if strings.Contains(stdout, "OPENSSH PRIVATE KEY") {
-		t.Fatalf("secret generate leaked private key:\n%s", stdout)
+		t.Fatalf("secret sync leaked private key:\n%s", stdout)
 	}
 	public, stderr, code := runCLI(t, "secret", "show", "--name", "sno-libvirt-cluster-admin-ssh-key", "--part", "public")
 	if code != 0 {

@@ -329,7 +329,7 @@ func generatedSelfSignedDriftChecks(state v1alpha1.State, secretsDir string) []p
 				Status:      output.StatusFail,
 				Evidence:    err.Error(),
 				Impact:      "Generated certificate material cannot be inspected",
-				Remediation: "fix file permissions or remove the generated certificate and rerun bootwright secret generate",
+				Remediation: "fix file permissions or remove the generated certificate and rerun bootwright secret sync",
 			})
 			continue
 		}
@@ -344,7 +344,7 @@ func generatedSelfSignedDriftChecks(state v1alpha1.State, secretsDir string) []p
 				Status:      output.StatusFail,
 				Evidence:    err.Error(),
 				Impact:      "Generated certificate on disk does not match desired state",
-				Remediation: "remove " + certPath + " and " + keyPath + ", then run bootwright secret generate",
+				Remediation: "remove " + certPath + " and " + keyPath + ", then run bootwright secret sync",
 			})
 			continue
 		}

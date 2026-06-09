@@ -187,7 +187,7 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 	if generatedBMC == nil {
 		t.Fatalf("missing generated BMC check: %+v", checks)
 	}
-	if !strings.Contains(generatedBMC.Remediation, "bootwright secret generate or bootwright secret set bmc-credentials") {
+	if !strings.Contains(generatedBMC.Remediation, "bootwright secret sync or bootwright secret set bmc-credentials") {
 		t.Fatalf("generated BMC remediation = %q", generatedBMC.Remediation)
 	}
 }

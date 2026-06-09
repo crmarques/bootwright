@@ -78,7 +78,7 @@ Rules:
 - `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
   catalog entries by name. Omitted values default to `none`.
 - `secretStorage.mode`, when set, must be `source` (default) or `context`.
-  `context` requires `bootwright secret materialize` to copy `file:`-sourced
+  `context` requires `bootwright secret sync` to copy `file:`-sourced
   material into the encrypted context store before workflows read it; `source`
   reads operator file material in place.
 - `registries.mirror`, when set, declares the disconnected mirror: optional

@@ -11,7 +11,7 @@ value, is context-local material written through the encrypted context secret
 store under the current context secrets directory. `file:` points at
 operator-owned local material, and `generated:` describes material Bootwright
 can create under the encrypted context store. `Environment.spec.secretStorage.mode`
-defaults to `source`; `context` requires `bootwright secret materialize` before
+defaults to `source`; `context` requires `bootwright secret sync` before
 workflows read encrypted context-local copies of file-sourced entries.
 
 The context secret store preserves the SecretRef/name UX and logical material
