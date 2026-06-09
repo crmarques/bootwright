@@ -107,6 +107,31 @@ func ConvergeSafetyRecordPath(runsDir, resourceID string) string {
 	return filepath.Join(runsDir, "safety", convergeSafetyRecordFileName(resourceID))
 }
 
+// RemoveConvergeSafetyRecord deletes the convergence-safety record for a resource
+// if present (a no-op when absent). Destroy calls it so a torn-down object
+// reclassifies as missing: a later greenfield apply recreates it instead of
+// refusing, and apply --continue creates it instead of skipping a gone object as
+// already-applied.
+func RemoveConvergeSafetyRecord(runsDir, resourceID string) error {
+	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(resourceID) == "" {
+		return nil
+	}
+	path := ConvergeSafetyRecordPath(runsDir, resourceID)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove converge safety record: %w", err)
+	}
+	return nil
+}
+
+// RemoveApplyTaskConvergeSafety removes the convergence-safety record for one apply
+// task, identified the same way MarkApplyTaskConvergeSafety wrote it.
+func RemoveApplyTaskConvergeSafety(runsDir string, task ApplyTask) error {
+	if strings.TrimSpace(task.Entry.ID) == "" {
+		return nil
+	}
+	return RemoveConvergeSafetyRecord(runsDir, applyTaskSafetyResourceID(task))
+}
+
 func MarkApplyTaskConvergeSafety(runsDir, contextName, runID string, task ApplyTask, status ConvergeSafetyStatus, now time.Time) error {
 	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(task.Entry.ID) == "" {
 		return nil
