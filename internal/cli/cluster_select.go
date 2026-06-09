@@ -181,7 +181,7 @@ func validateClusterNames(state v1alpha1.State, names []string) error {
 	return fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 }
 
-// validateAccessClusterName validates a --cluster value for the access-info
+// validateAccessClusterName validates a --cluster value for the cluster access
 // surface. When storage is in scope the name may resolve to a ContainerCluster
 // or a StorageCluster; otherwise only container clusters are accepted.
 func validateAccessClusterName(state v1alpha1.State, name string, includeStorage bool) error {

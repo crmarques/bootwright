@@ -30,7 +30,6 @@ func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		newContextListCmd(stdout),
 		newContextCurrentCmd(stdout),
 		newContextDeleteCmd(stdin, stdout, stderr),
-		newContextValidateCmd(stdout),
 	)
 	requireSubcommand(cmd)
 	return cmd

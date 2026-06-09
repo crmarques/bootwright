@@ -57,17 +57,17 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	}
 }
 
-func TestClusterAccessInfoReportsStorageClusters(t *testing.T) {
+func TestClusterAccessReportsStorageClusters(t *testing.T) {
 	initTestContext(t, cephFixture)
-	stdout, stderr, code := runCLI(t, "cluster", "access-info")
+	stdout, stderr, code := runCLI(t, "cluster", "access")
 	if code != 0 {
-		t.Fatalf("cluster access-info exited %d, stderr=%q", code, stderr)
+		t.Fatalf("cluster access exited %d, stderr=%q", code, stderr)
 	}
 	if strings.Contains(stdout, "none declared") {
 		t.Fatalf("storage cluster reported as none declared:\n%s", stdout)
 	}
 	for _, want := range []string{
-		"Bootwright: cluster access-info",
+		"Bootwright: cluster access",
 		"Storage cluster ceph-libvirt",
 		"Type: ceph (managed)",
 		"Seed node: ceph-0",
@@ -78,24 +78,24 @@ func TestClusterAccessInfoReportsStorageClusters(t *testing.T) {
 		"[INFO] health:",
 	} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("cluster access-info missing %q:\n%s", want, stdout)
+			t.Fatalf("cluster access missing %q:\n%s", want, stdout)
 		}
 	}
 }
 
-func TestClusterAccessInfoFiltersStorageClusterByName(t *testing.T) {
+func TestClusterAccessFiltersStorageClusterByName(t *testing.T) {
 	initTestContext(t, cephFixture)
-	stdout, stderr, code := runCLI(t, "cluster", "access-info", "--cluster", "ceph-libvirt")
+	stdout, stderr, code := runCLI(t, "cluster", "access", "--cluster", "ceph-libvirt")
 	if code != 0 {
-		t.Fatalf("cluster access-info --cluster exited %d, stderr=%q", code, stderr)
+		t.Fatalf("cluster access --cluster exited %d, stderr=%q", code, stderr)
 	}
 	if !strings.Contains(stdout, "Storage cluster ceph-libvirt") {
 		t.Fatalf("filtered output missing storage cluster:\n%s", stdout)
 	}
 
-	_, stderr, code = runCLI(t, "cluster", "access-info", "--cluster", "missing")
+	_, stderr, code = runCLI(t, "cluster", "access", "--cluster", "missing")
 	if code == 0 {
-		t.Fatal("cluster access-info accepted unknown storage cluster")
+		t.Fatal("cluster access accepted unknown storage cluster")
 	}
 	if !strings.Contains(stderr, "unknown cluster(s): missing") {
 		t.Fatalf("stderr missing unknown cluster message: %q", stderr)
@@ -160,7 +160,7 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 	}
 }
 
-func TestClusterAccessInfoShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
+func TestClusterAccessShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
 	ctx := initTestContext(t, cephFixture)
 	passwordPath := filepath.Join(ctx.ClustersDir, "ceph-libvirt", "secrets", "dashboard-password")
 	if err := os.MkdirAll(filepath.Dir(passwordPath), 0o700); err != nil {
@@ -170,9 +170,9 @@ func TestClusterAccessInfoShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T)
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runCLI(t, "cluster", "access-info", "--cluster", "ceph-libvirt")
+	stdout, stderr, code := runCLI(t, "cluster", "access", "--cluster", "ceph-libvirt")
 	if code != 0 {
-		t.Fatalf("cluster access-info exited %d, stderr=%q", code, stderr)
+		t.Fatalf("cluster access exited %d, stderr=%q", code, stderr)
 	}
 	for _, want := range []string{
 		"Dashboard user: admin",
@@ -181,11 +181,11 @@ func TestClusterAccessInfoShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T)
 		"[OK] dashboard password",
 	} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("cluster access-info missing %q:\n%s", want, stdout)
+			t.Fatalf("cluster access missing %q:\n%s", want, stdout)
 		}
 	}
 	if strings.Contains(stdout, "do-not-print-this-dashboard-password") {
-		t.Fatalf("cluster access-info leaked dashboard password bytes:\n%s", stdout)
+		t.Fatalf("cluster access leaked dashboard password bytes:\n%s", stdout)
 	}
 
 	listOut, _, listCode := runCLI(t, "cluster", "list")

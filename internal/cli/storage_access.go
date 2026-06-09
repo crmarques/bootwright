@@ -156,7 +156,7 @@ func filterStorageAccessSummaries(summaries []storageAccessSummary, name string)
 }
 
 // printStorageAccessSections renders one block per storage cluster into an
-// existing printer, so it composes with both the standalone access-info command
+// existing printer, so it composes with both the standalone cluster access command
 // and the post-apply continuation.
 func printStorageAccessSections(p *cliout.Printer, summaries []storageAccessSummary) {
 	for _, summary := range summaries {

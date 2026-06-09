@@ -73,7 +73,7 @@ func diagnosticFromMessage(message string) Diagnostic {
 	diagnostic := Diagnostic{
 		Message:     message,
 		Rule:        message,
-		Remediation: "fix the desired-state input and rerun bootwright check syntax",
+		Remediation: "fix the desired-state input and rerun bootwright validate",
 	}
 	parts := strings.Fields(message)
 	if len(parts) == 0 {

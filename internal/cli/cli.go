@@ -96,7 +96,7 @@ func commandErrorRemediation(message string) string {
 	case strings.Contains(message, "current context") && strings.Contains(message, "not available in shared storage"):
 		return "run bootwright context list, then bootwright context use <name> or bootwright context init <name> -f <path> --yes"
 	case strings.Contains(message, "context") && strings.Contains(message, "not ready"):
-		return "run bootwright context validate and fix the reported checks"
+		return "run bootwright status and fix the reported checks"
 	case strings.Contains(message, "would write OpenShift installer files with secret material"):
 		return "rerun with --sensitive only for a local, unversioned output directory"
 	case strings.Contains(message, "no such file or directory") || strings.Contains(message, "not found"):

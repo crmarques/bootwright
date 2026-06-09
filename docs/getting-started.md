@@ -164,7 +164,6 @@ bootwright validate -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
 bootwright context update lab -f ./my-sno-lab --yes
 bootwright context current
-bootwright context validate
 bootwright secret list
 ```
 
@@ -202,7 +201,6 @@ bootwright secret materialize
 bootwright secret encryption status
 bootwright host trust
 bootwright secret list
-bootwright context validate
 ```
 
 Get the OpenShift pull secret from
@@ -234,15 +232,15 @@ eval "$(bootwright print-env --sensitive)"
 
 ```text
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright render effective
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
-bootwright cluster access-info
+bootwright cluster access
 ```
 
-`bastion setup` installs bastion-host prerequisites. `check all` validates the
+`bastion setup` installs bastion-host prerequisites. `preflight all` validates the
 full graph before convergence. `render effective` writes
 `effective-state.yaml` with defaults applied so you can inspect the normalized
 state before applying it. `plan` previews the full apply task graph without
@@ -333,22 +331,20 @@ Stable JSON output is intentionally limited. Use these forms for automation:
 
 | Command | JSON support | Behavior |
 | --- | --- | --- |
-| `bootwright context validate --output json` | Supported | Context structure and declared secret material checks |
 | `bootwright validate -f <input-dir> --output json` | Supported | Pre-import diagnostics |
-| `bootwright check syntax -f <input-dir> --output json` | Supported | Pre-import diagnostics |
-| `bootwright check syntax --output json` | Supported | Read-only diagnostics |
-| `bootwright check infra --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check clusters --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check container-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check storage-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check all --dry-run --output json` | Supported | Dry-run preflight plan |
-| `bootwright check addons --output json` | Supported | Read-only addon preflight |
+| `bootwright validate --output json` | Supported | Read-only diagnostics |
+| `bootwright preflight infra --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright preflight clusters --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright preflight container-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright preflight storage-cluster --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright preflight all --dry-run --output json` | Supported | Dry-run preflight plan |
+| `bootwright preflight addons --output json` | Supported | Read-only addon preflight |
 | `bootwright render effective --output json` | Supported | Writes normalized desired state |
 | `bootwright render installer --output json` | Supported | Writes context render output |
 | `bootwright cluster list --output json` | Supported | Read-only cluster access status |
-| `bootwright cluster access-info --output json` | Supported | Read-only cluster access inventory |
+| `bootwright cluster access --output json` | Supported | Read-only cluster access inventory |
 | `bootwright secret list --output json` | Supported | Read-only secret status |
-| `bootwright status --output json` | Supported | Read-only context status |
+| `bootwright status --output json` | Supported | Read-only context status, including `setupChecks` and `error` fields |
 | `bootwright state-check --output json` | Supported | Read-only desired-vs-recorded drift (vs last apply; not a live probe) |
 | `bootwright plan --output json` | Supported | Dry-run apply plan |
 | `bootwright apply --stage infra --dry-run --output json` | Supported | Dry-run apply plan |
@@ -408,7 +404,7 @@ fetches, including HTTPS listeners when the selected artifact server exposes
 them:
 
 ```text
-bootwright destroy infra --clusters artifact-server --yes
+bootwright destroy --stage infra --clusters artifact-server --yes
 ```
 
 This does not destroy container-cluster nodes or the rest of the infrastructure.

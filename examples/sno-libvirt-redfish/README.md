@@ -32,7 +32,7 @@ bootwright secret set openshift-pull-secret --pull-secret <path>
 printf '%s\n' "${BMC_PASS}" | bootwright secret set bmc-credentials --username "${BMC_USER}" --password-stdin
 bootwright secret generate
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright plan
 bootwright apply --yes
 bootwright status --watch

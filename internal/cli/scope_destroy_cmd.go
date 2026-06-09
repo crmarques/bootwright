@@ -23,10 +23,6 @@ type scopeDestroyOptions struct {
 	commandLabel  string
 }
 
-func newScopeDestroyCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	return newScopeDestroyCmdWithOptions(scope, stdin, stdout, stderr, scopeDestroyOptions{})
-}
-
 func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
 		flags         scopeCommonFlags
@@ -45,10 +41,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 	if options.short != "" {
 		short = options.short
 	}
-	example := scopeDestroyExample(scope.name)
-	if options.example != "" {
-		example = options.example
-	}
+	example := options.example
 	commandLabel := scope.name + " destroy"
 	if options.commandLabel != "" {
 		commandLabel = options.commandLabel
@@ -70,14 +63,9 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
-	}
-	if !options.stageSelector && scope.name == "infra" {
-		if f := cmd.Flags().Lookup("clusters"); f != nil {
-			f.Usage = "comma-separated ContainerCluster names to destroy, or artifact-server to remove only the generated artifact publication service"
-		}
 	}
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
@@ -115,7 +103,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		if err != nil {
 			return failErr(1, err)
 		}
-		artifactServerOnly := !options.stageSelector && isInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
+		artifactServerOnly := isInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
 		// For scoped infra destroy, refuse to proceed when selected clusters
 		// share a provider service component with unscoped clusters: the
 		// renderer keys container names and state dirs per (provider, name), so
@@ -370,22 +358,4 @@ func destroyClusterScopeFlag(stageSelector bool) string {
 		return "--clusters"
 	}
 	return "--clusters"
-}
-
-func scopeDestroyExample(scopeName string) string {
-	example := fmt.Sprintf(`  # Preview what would be destroyed
-  bootwright destroy %[1]s --dry-run
-
-  # Destroy non-interactively
-  bootwright destroy %[1]s --yes
-
-  # Destroy only specific clusters
-  bootwright destroy %[1]s --clusters managed-01 --yes`, scopeName)
-	if scopeName == "infra" {
-		example += `
-
-  # Remove only the generated artifact publication service
-  bootwright destroy infra --clusters artifact-server --yes`
-	}
-	return example
 }

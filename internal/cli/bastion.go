@@ -27,7 +27,7 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 		Short: "Check bastion dependencies",
 		Args:  cobra.NoArgs,
 		Example: `  # Check the bastion has the runtime + CLIs the current context needs
-  bootwright check bastion`,
+  bootwright preflight bastion`,
 	}
 	cf := addCommonFlags()
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
@@ -35,7 +35,7 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		output.New(stdout).Command("bastion check")
+		output.New(stdout).Command("bastion preflight")
 		return runBastionChecks(stdout)
 	}
 	return cmd
@@ -43,7 +43,7 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 
 func runBastionChecks(stdout io.Writer) error {
 	checks := collectBastionChecks(defaultPreflightDeps)
-	return renderCheckResults(stdout, "bastion check", checks)
+	return renderCheckResults(stdout, "bastion preflight", checks)
 }
 
 func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {

@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/infra/locality"
@@ -15,76 +13,26 @@ import (
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-func newContextValidateCmd(stdout io.Writer) *cobra.Command {
-	outputFormat := outputText
-	cmd := &cobra.Command{
-		Use:   "validate",
-		Short: "Validate the current context setup",
-		Args:  cobra.NoArgs,
-		Example: `  bootwright context validate
-  bootwright context validate --output json`,
-	}
-	cmd.Flags().StringVar(&outputFormat, "output", outputFormat, "output format: text|json")
-	cmd.RunE = func(_ *cobra.Command, _ []string) error {
-		if err := validateOutputFormat(outputFormat); err != nil {
-			return failErr(2, err)
-		}
-		ctx, checks := currentContextValidation()
-		blocking := blockingCheckCount(checks)
-		warnings := warningCheckCount(checks)
-		if outputFormat == outputJSON {
-			if err := output.JSON(stdout, contextValidateReport{
-				OK:        blocking == 0,
-				Context:   contextValidateContextFrom(ctx),
-				Checks:    contextValidateChecks(checks),
-				NextSteps: contextValidateNextSteps(checks),
-			}); err != nil {
-				return failErr(1, err)
-			}
-			if blocking > 0 {
-				return silentExit(1)
-			}
-			return nil
-		}
-		p := output.New(stdout)
-		p.Command("context validate")
-		if ctx.Name != "" {
-			p.Section("Context")
-			p.Fields(contextFields(ctx))
-		}
-		p.Checks(checks)
-		printContextValidateNextSteps(p, checks)
-		if blocking > 0 {
-			p.Summary(output.StatusMissing, "context validate", fmt.Sprintf("%d blocking check(s)", blocking))
-			return failf(1, "context validate failed: %d blocking check(s)", blocking)
-		}
-		if warnings > 0 {
-			p.Summary(output.StatusWarn, "context validate", fmt.Sprintf("%d warning(s); context structure is ready", warnings))
-			return nil
-		}
-		p.Summary(output.StatusOK, "context validate", fmt.Sprintf("all %d check(s) passed", len(checks)))
-		return nil
-	}
-	return cmd
-}
+// The context setup checks below back `bootwright status`: the status spine
+// reports them inline on a healthy context and falls back to them when the
+// current context is missing or not ready (the surface that used to be
+// `context validate`).
 
-type contextValidateReport struct {
-	OK        bool                   `json:"ok"`
-	Context   contextValidateContext `json:"context,omitempty"`
-	Checks    []contextValidateCheck `json:"checks"`
-	NextSteps []string               `json:"nextSteps,omitempty"`
-}
-
-type contextValidateContext struct {
-	Name               string `json:"name,omitempty"`
-	ContextDir         string `json:"contextDir,omitempty"`
-	InputDir           string `json:"inputDir,omitempty"`
-	RenderedDir        string `json:"renderedDir,omitempty"`
-	SecretsDir         string `json:"secretsDir,omitempty"`
-	ClustersDir        string `json:"clustersDir,omitempty"`
-	RunsDir            string `json:"runsDir,omitempty"`
-	ManagedServicesDir string `json:"managedServicesDir,omitempty"`
-	ProviderStateDir   string `json:"providerStateDir,omitempty"`
+// runStatusSetup reports the context setup checks when the current context is
+// missing or not ready, instead of failing with a bare error. It shows what is
+// wrong and the remediation for each failing check.
+func runStatusSetup(stdout io.Writer, resolveErr error) error {
+	p := output.New(stdout)
+	p.Command("status")
+	ctx, checks := currentContextValidation()
+	if ctx.Name != "" {
+		p.Section("Context")
+		p.Fields(contextFields(ctx))
+	}
+	p.Checks(checks)
+	printContextValidateNextSteps(p, checks)
+	p.Summary(output.StatusMissing, "status", resolveErr.Error())
+	return failf(1, "%v", resolveErr)
 }
 
 type contextValidateCheck struct {
@@ -94,20 +42,6 @@ type contextValidateCheck struct {
 	Evidence    string `json:"evidence,omitempty"`
 	Impact      string `json:"impact,omitempty"`
 	Remediation string `json:"remediation,omitempty"`
-}
-
-func contextValidateContextFrom(ctx contextstore.Context) contextValidateContext {
-	return contextValidateContext{
-		Name:               ctx.Name,
-		ContextDir:         ctx.BaseDir,
-		InputDir:           ctx.InputDir,
-		RenderedDir:        ctx.RenderedDir,
-		SecretsDir:         ctx.SecretsDir,
-		ClustersDir:        ctx.ClustersDir,
-		RunsDir:            ctx.RunsDir,
-		ManagedServicesDir: ctx.ManagedServicesDir,
-		ProviderStateDir:   ctx.ProviderStateDir,
-	}
 }
 
 func contextValidateChecks(checks []output.Check) []contextValidateCheck {
@@ -147,7 +81,7 @@ func currentContextValidation() (contextstore.Context, []output.Check) {
 
 func ensureContextReady(ctx contextstore.Context) error {
 	if missingCheckCount(contextReadinessChecks(ctx)) > 0 {
-		return fmt.Errorf("context %q is not ready; run `bootwright context validate`", ctx.Name)
+		return fmt.Errorf("context %q is not ready; run `bootwright status`", ctx.Name)
 	}
 	return nil
 }
@@ -156,25 +90,31 @@ func validateContextChecks(ctx contextstore.Context) []output.Check {
 	checks := contextReadinessChecks(ctx)
 	state, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths)
 	if err != nil {
-		checks = append(checks, missingContextCheck("desired state", err.Error(), "fix context input files and rerun bootwright context validate"))
+		checks = append(checks, missingContextCheck("desired state", err.Error(), "fix context input files and rerun bootwright validate"))
 	} else {
 		checks = append(checks, okContextCheck("desired state", "loads, normalizes, and validates"))
 		checks = append(checks, declaredSecretContextChecks(ctx.Name, ctx.SecretsDir, state)...)
 		checks = append(checks, contextHostTrustChecks(ctx.BaseDir, state)...)
-		result := locality.CheckController(state, controllerLocalityPolicy)
-		if result.OK {
-			checks = append(checks, okContextCheck("bastion locality", result.Evidence))
-		} else {
-			checks = append(checks, missingContextCheck("bastion locality", result.Evidence, "run bootwright from the local bastion context"))
-		}
+		checks = append(checks, bastionLocalityCheck(state))
 	}
 	return checks
+}
+
+// bastionLocalityCheck reports whether bootwright runs on the declared bastion
+// for the loaded state; status surfaces it both inline and in the setup
+// fallback.
+func bastionLocalityCheck(state v1alpha1.State) output.Check {
+	result := locality.CheckController(state, controllerLocalityPolicy)
+	if result.OK {
+		return okContextCheck("bastion locality", result.Evidence)
+	}
+	return missingContextCheck("bastion locality", result.Evidence, "run bootwright from the local bastion context")
 }
 
 func declaredSecretContextChecks(contextName, secretsDir string, state v1alpha1.State) []output.Check {
 	entries, err := declaredSecretEntriesForContext(contextName, secretsDir, state)
 	if err != nil {
-		return []output.Check{missingContextCheck("declared secrets", err.Error(), "fix Environment.spec.secrets and rerun bootwright context validate")}
+		return []output.Check{missingContextCheck("declared secrets", err.Error(), "fix Environment.spec.secrets and rerun bootwright validate")}
 	}
 	if len(entries) == 0 {
 		return []output.Check{okContextCheck("declared secrets", "none declared")}
@@ -329,7 +269,7 @@ func contextValidateNextSteps(checks []output.Check) []string {
 		steps = append(steps, check.Remediation)
 	}
 	if len(steps) == 0 {
-		return []string{"bootwright bastion setup --yes", "bootwright check all"}
+		return []string{"bootwright bastion setup --yes", "bootwright preflight all"}
 	}
 	return steps
 }

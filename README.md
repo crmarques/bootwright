@@ -24,18 +24,17 @@ bootwright example init lab --output ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
-bootwright context validate
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
 bootwright secret materialize
 bootwright host trust
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright render effective
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
-bootwright cluster access-info
+bootwright cluster access
 ```
 
 `apply` is the normal convergence path. Use `--stage infra` to prepare
@@ -164,11 +163,9 @@ bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
 bootwright context update lab -f ./lab-input
 bootwright context current
-bootwright context validate
-bootwright context validate --output json
 bootwright cluster list
-bootwright cluster access-info
-bootwright cluster access-info --cluster demo-ocp
+bootwright cluster access
+bootwright cluster access --cluster demo-ocp
 bootwright secret list
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret generate
@@ -176,15 +173,15 @@ bootwright secret materialize
 bootwright host trust
 bootwright secret list
 bootwright print-env [--sensitive]
-bootwright check syntax
+bootwright validate
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright render effective
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
-bootwright cluster access-info
-bootwright check all --dry-run
+bootwright cluster access
+bootwright preflight all --dry-run
 bootwright apply --stage infra --dry-run
 bootwright apply --stage infra --yes
 bootwright render installer --clusters demo-ocp
@@ -192,11 +189,11 @@ bootwright render storage --clusters ceph-stretch
 bootwright render --output-dir ./rendered --clusters demo-ocp --sensitive
 bootwright apply --stage clusters --clusters ceph-stretch --yes
 bootwright apply --stage clusters --yes
-bootwright check addons
+bootwright preflight addons
 bootwright status
 bootwright destroy --stage clusters --yes
 bootwright destroy --stage infra --yes
-bootwright destroy infra --clusters artifact-server --yes
+bootwright destroy --stage infra --clusters artifact-server --yes
 ```
 
 The CLI is organized around workflow command groups. `bastion setup` remains a
@@ -204,13 +201,13 @@ separate prerequisite command. Graph apply and destroy use
 `--stage infra|clusters`; omitting `--stage` applies the full graph for
 `apply`, while `destroy` requires a stage. Top-level groups are `validate`,
 `context`, `host`, `bastion`, `cluster`, `container-cluster`, `example`,
-`print-env`, `media`, `secret`, `check`, `status`, `plan`, `render`, `apply`,
+`print-env`, `media`, `secret`, `preflight`, `status`, `plan`, `render`, `apply`,
 `destroy`, and `version`. The formal CLI contract lives in
 [specs/state-model.md](specs/state-model.md#cli-contract).
 
 Human text output is designed for operators and may evolve. Use
 `--output json` where available for automation. `bootwright print-env`
-intentionally prints raw shell exports. `bootwright cluster access-info` prints
+intentionally prints raw shell exports. `bootwright cluster access` prints
 URLs, local kubeconfig paths, and kubeadmin password retrieval commands, but
 never prints kubeconfig or password bytes. Apply runs keep native Ansible, `oc`,
 SSH, SCP, Ceph, and installer process output in run, task, and cluster logs

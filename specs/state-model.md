@@ -778,20 +778,18 @@ Rules:
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
 - Read-only verbs (`status`, `state-check`, `render`, `plan`, `apply --dry-run`,
-  `validate`, `check syntax`, help, and discovery) must not write runtime records
+  `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run
   lease, and must not mutate provider, BMC, cluster, or storage state. `status`,
   `state-check`, `render`, `plan`, and `validate` must not contact provider
-  hosts, BMCs, or clusters at all; `check` may run an Ansible preflight but only
+  hosts, BMCs, or clusters at all; `preflight` may run an Ansible preflight but only
   with read-only or check-mode operations that converge nothing.
 - Cluster selection uses one flag name, `--clusters`, on every command that
-  narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `check` and
-  `destroy` scope subcommands, and `render`. It accepts a comma-separated list
-  of `ContainerCluster` and `StorageCluster` names. `destroy infra --clusters`
-  additionally accepts the literal `artifact-server` to remove only the
-  generated artifact publication service; that targeted infra cleanup is the
-  reason `destroy` keeps the `infra` subcommand alongside the `--stage`
-  selector.
+  narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `preflight`
+  scope subcommands, and `render`. It accepts a comma-separated list
+  of `ContainerCluster` and `StorageCluster` names. `destroy --stage infra
+  --clusters` additionally accepts the literal `artifact-server` to remove only
+  the generated artifact publication service.
 - `apply --stage infra` includes provider, infra-components, machine-infra, and
   storage-infra work.
 - `apply --stage clusters` includes storage-cluster, container-cluster, and
@@ -855,8 +853,8 @@ Rules:
   `infrastructure` root aggregates the provider and infra-component host tasks.
   The report names which resource drifted, not which field; run `render
   effective` and diff, or `plan`, to see the exact change. It
-  is distinct from `status` (local readiness
-  and next-step spine), `check` (Ansible preflight), and `plan`/`apply
+  is distinct from `status` (context setup checks, local readiness,
+  and next-step spine), `preflight` (Ansible preflight), and `plan`/`apply
   --dry-run` (the intended task graph). `--override` is rejected because
   state-check neither mutates nor suppresses its report.
 - Rendered effective state must not include secret bytes.

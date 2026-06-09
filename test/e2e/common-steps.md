@@ -63,7 +63,7 @@ Installs release-specific OpenShift CLIs declared by the context input.
 `Environment.spec.proxyFor.bootwright` from desired state.
 
 ```bash
-bootwright check bastion
+bootwright preflight bastion
 bootwright bastion setup --yes
 ```
 
@@ -86,10 +86,10 @@ managed Squid (see [proxy.md](proxy.md)) when declared. The case's
 apply.
 
 ```bash
-bootwright check infra
+bootwright preflight infra
 bootwright apply --stage infra --dry-run
 bootwright apply --stage infra --yes
-bootwright check infra
+bootwright preflight infra
 ```
 
 If the provider integration drives Ansible over SSH (libvirt or bare metal)
@@ -105,7 +105,7 @@ with placeholder strings in place of pull secret, SSH key, trust bundle, and
 TLS data. These files are generated and can be regenerated.
 
 ```bash
-bootwright check clusters
+bootwright preflight clusters
 bootwright render installer
 
 bootwright apply --stage clusters --dry-run
@@ -173,8 +173,8 @@ oc get nodes
 oc get clusterversion
 oc get clusteroperators
 
-bootwright check infra
-bootwright check clusters
+bootwright preflight infra
+bootwright preflight clusters
 ```
 
 The case README lists the per-case expectation for `oc get nodes`
@@ -203,8 +203,8 @@ oc config use-context "$CLUSTER-admin"
 ## 6. Tear Down The Cluster
 
 ```bash
-bootwright destroy container-cluster --yes
-bootwright destroy infra --yes
+bootwright destroy --stage clusters --yes
+bootwright destroy --stage infra --yes
 ```
 
 After this, return to the bastion doc you used:

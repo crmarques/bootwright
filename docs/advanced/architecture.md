@@ -50,7 +50,7 @@ defaults. That keeps provider swaps and release changes explicit.
 ## Apply Workflow
 
 `bastion setup` prepares bastion-local tools on localhost. `apply --yes` is the
-normal convergence target after `check all` and a dry run. Focused recovery uses
+normal convergence target after `preflight all` and a dry run. Focused recovery uses
 two stages:
 
 - `apply --stage infra` converges provider hosts, substrate state, managed

@@ -30,7 +30,7 @@ bootwright validate -f <input-dir>
 bootwright context init lab -f <input-dir>
 bootwright secret generate
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright plan
 bootwright apply --yes
 bootwright status --watch

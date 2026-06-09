@@ -116,7 +116,7 @@ func runScopeDryRunJSON(cmd *cobra.Command, stdout io.Writer, cf *commonFlags, f
 		DryRun:             true,
 		PlanOnly:           true,
 		ReadinessChecked:   false,
-		ReadinessChecks:    "not run; run bootwright check " + scope.name,
+		ReadinessChecks:    "not run; run bootwright preflight " + scope.name,
 		Phases:             selectedPhaseNames(selected),
 		RenderedDir:        ctx.RenderedDir,
 		ClustersDir:        clustersDir,

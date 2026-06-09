@@ -74,7 +74,7 @@ func newStatusCmd(stdout io.Writer) *cobra.Command {
 func runStatus(stdout io.Writer, cf *commonFlags) error {
 	ctx, err := cf.resolve()
 	if err != nil {
-		return failErr(1, err)
+		return runStatusSetup(stdout, err)
 	}
 	p := cliout.New(stdout)
 	p.Command("status")
@@ -92,6 +92,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		{Key: "ownership-dir", Value: ctx.OwnershipDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 	})
+	p.Checks(contextReadinessChecks(ctx))
 
 	state, loadErr := loadOptionalDesiredState(cf)
 	stateLoaded := loadErr == nil && hasAnyState(state)
@@ -114,6 +115,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 
 	if stateLoaded {
 		printSecretStatus(p, ctx.Name, ctx.SecretsDir, state)
+		p.Checks(append(contextHostTrustChecks(ctx.BaseDir, state), bastionLocalityCheck(state)))
 		printClusterStatus(p, state, ctx.RenderedDir, ctx.ClustersDir)
 		printSharedStatus(p, state)
 	}
@@ -266,7 +268,7 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 		if statusNeedsHostTrust(state, secretsDir) {
 			hints = append(hints, "bootwright host trust")
 		}
-		hints = append(hints, "bootwright bastion setup --yes", "bootwright check all", "bootwright render effective")
+		hints = append(hints, "bootwright bastion setup --yes", "bootwright preflight all", "bootwright render effective")
 		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
 		if len(needsInstaller) > 0 {
 			hints = append(hints, "bootwright plan")
@@ -276,14 +278,14 @@ func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, c
 			"bootwright plan",
 			"bootwright apply --yes",
 			"bootwright status --watch",
-			"bootwright cluster access-info",
+			"bootwright cluster access",
 		)
 		return hints
 	}
 	return []string{
 		"edit desired-state YAML under the context input directory",
 		"bootwright secret list",
-		"bootwright check all",
+		"bootwright preflight all",
 	}
 }
 

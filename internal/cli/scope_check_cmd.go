@@ -18,13 +18,13 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		dryRun bool
 	)
 	cmd := &cobra.Command{
-		Use:     "check",
+		Use:     "preflight",
 		Short:   "Check " + scope.name + " prerequisites",
 		Args:    cobra.NoArgs,
 		Example: scopeCheckExample(scope.name),
 	}
 	cf := addCommonFlags()
-	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "check", true, scopeTargetKind(scope))
+	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(flags.output); err != nil {
@@ -32,7 +32,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		}
 		if flags.output == outputText {
 			p := cliout.New(stdout)
-			p.Command(scope.name + " check")
+			p.Command(scope.name + " preflight")
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -43,7 +43,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		ctx := cf.ctx
 		clustersDir := controllerClustersDir(ctx.Name)
 		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " check"}})
+			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " preflight"}})
 		}
 		state, err = scopeState(state, scope.name, flags.clusterScope)
 		if err != nil {
@@ -52,10 +52,10 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 		limit := ansibleLimitForScope(scope.name)
 		if flags.output == outputJSON {
 			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for scoped check commands"))
+				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))
 			}
 			selected := phasesForState(scope.phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "check", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
@@ -88,7 +88,7 @@ func newScopeCheckCmd(scope scopeSpec, stdout io.Writer, stderr io.Writer) *cobr
 			Limit:              limit,
 			ArtifactsBaseName:  "preflight-" + scope.name,
 			DryRun:             dryRun,
-			Label:              scope.name + " check",
+			Label:              scope.name + " preflight",
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)
@@ -102,21 +102,21 @@ func scopeCheckExample(scopeName string) string {
 	switch scopeName {
 	case "storage-cluster":
 		return fmt.Sprintf(`  # Validate the current context and run the read-only Ansible preflight
-  bootwright check %[1]s
+  bootwright preflight %[1]s
 
   # Limit to specific storage clusters
-  bootwright check %[1]s --clusters ceph-storage
+  bootwright preflight %[1]s --clusters ceph-storage
 
   # Print the planned Ansible command without executing it
-  bootwright check %[1]s --dry-run`, scopeName)
+  bootwright preflight %[1]s --dry-run`, scopeName)
 	default:
 		return fmt.Sprintf(`  # Validate the current context and run the read-only Ansible preflight
-  bootwright check %[1]s
+  bootwright preflight %[1]s
 
   # Limit to specific clusters
-  bootwright check %[1]s --clusters sno-libvirt,managed-01
+  bootwright preflight %[1]s --clusters sno-libvirt,managed-01
 
   # Print the planned Ansible command without executing it
-  bootwright check %[1]s --dry-run`, scopeName)
+  bootwright preflight %[1]s --dry-run`, scopeName)
 	}
 }

@@ -167,11 +167,8 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		return true
-	case "check":
+	case "preflight":
 		if len(args) == 1 {
-			return false
-		}
-		if len(args) >= 2 && args[1] == "syntax" && argsHaveInputFileFlag(args[2:]) {
 			return false
 		}
 		return true
@@ -187,7 +184,7 @@ func argsNeedLocalRoot(args []string) bool {
 		switch args[1] {
 		case "init", "update":
 			return false
-		case "list", "use", "current", "validate":
+		case "list", "use", "current":
 			return true
 		case "delete":
 			return false
@@ -301,10 +298,6 @@ func destroyArgsNeedLocalRoot(args []string) bool {
 func destroyArgsSelectRootfulTarget(args []string) bool {
 	if len(args) == 0 {
 		return false
-	}
-	switch args[0] {
-	case "infra", "container-cluster":
-		return true
 	}
 	for i, arg := range args {
 		if arg == "--stage" && i+1 < len(args) {

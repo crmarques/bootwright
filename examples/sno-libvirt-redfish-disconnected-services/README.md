@@ -26,7 +26,7 @@ bootwright secret generate
 bootwright secret materialize
 bootwright host trust
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright plan
 bootwright apply --yes
 bootwright status --watch

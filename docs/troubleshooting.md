@@ -23,7 +23,7 @@ Current placement:
 
 ## Validation Diagnostics
 
-`bootwright check syntax` reports desired-state validation failures by owning
+`bootwright validate` reports desired-state validation failures by owning
 object and field. JSON output includes a `diagnostics[]` array for CI:
 
 ```json
@@ -35,7 +35,7 @@ object and field. JSON output includes a `diagnostics[]` array for CI:
 }
 ```
 
-Fix the named field in the authored YAML, then rerun `bootwright check syntax`.
+Fix the named field in the authored YAML, then rerun `bootwright validate`.
 
 ## Reference Failures
 
@@ -94,7 +94,7 @@ continuing.
 
 ## SSH Or Artifact Fetch Failures
 
-`check infra` and `apply --stage infra` require SSH to provider/service hosts. Validate
+`preflight infra` and `apply --stage infra` require SSH to provider/service hosts. Validate
 the same key and address declared on the `Machine` before retrying.
 
 Real BMCs must also reach the generated artifact HTTPS endpoint used for the

@@ -318,7 +318,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			ApplyMode:          mode,
 		}
 		if dryRun {
-			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright check "+runScope.name+" to validate secrets, tools, and remote readiness")
+			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
 			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)

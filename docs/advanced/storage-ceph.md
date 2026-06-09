@@ -12,11 +12,11 @@ day-to-day access is by SSH to the seed node plus `cephadm shell`.
 
 ## Access details
 
-`bootwright cluster access-info` prints everything needed to reach a managed Ceph
+`bootwright cluster access` prints everything needed to reach a managed Ceph
 cluster, derived entirely from desired state:
 
 ```text
-$ bootwright cluster access-info --cluster ceph-libvirt
+$ bootwright cluster access --cluster ceph-libvirt
 
 Storage cluster ceph-libvirt
   Type: ceph (managed)
@@ -57,7 +57,7 @@ sudo cat /var/lib/bootwright/contexts/<ctx>/clusters/ceph-libvirt/secrets/dashbo
 !!! note "Captured at install only"
     The password is captured solely from the one-time `cephadm bootstrap`. It is
     never re-read or re-synced on later applies, and — like every secret —
-    `cluster access-info` only ever shows its file path and a `sudo cat` command,
+    `cluster access` only ever shows its file path and a `sudo cat` command,
     never the bytes. As with the kubeadmin password, the file persists after the
     cluster is destroyed; delete the cluster's `secrets/` directory by hand if you
     want the credential gone.
@@ -70,7 +70,7 @@ and no longer matches the stored copy, reset it directly on the cluster. The
 needed:
 
 ```bash
-# SSH to the seed node (the SSH line from cluster access-info)
+# SSH to the seed node (the SSH line from cluster access)
 ssh root@192.168.134.20
 
 # Set a new admin password. Modern Ceph requires the password to be supplied
@@ -85,7 +85,7 @@ rm -f /tmp/dash-pass
 sudo ceph mgr services
 ```
 
-To keep `bootwright cluster access-info` accurate, write the same value back to
+To keep `bootwright cluster access` accurate, write the same value back to
 the stored file on the controller:
 
 ```bash

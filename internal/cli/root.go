@@ -30,12 +30,12 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
   bootwright secret materialize
   bootwright host trust
   bootwright bastion setup --yes
-  bootwright check all
+  bootwright preflight all
   bootwright render effective
   bootwright plan
   bootwright apply --yes
   bootwright status --watch
-  bootwright cluster access-info`,
+  bootwright cluster access`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -59,12 +59,11 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newHostCmd(stdin, stdout, stderr),
 		newBastionCmd(stdin, stdout, stderr),
 		newClusterCmd(stdout),
-		newContainerClusterCmd(stdout),
 		newExampleCmd(stdout),
 		newPrintEnvCmd(stdout),
 		newMediaCmd(stdin, stdout),
 		newSecretCmd(stdin, stdout, stderr),
-		newCheckCmd(stdout, stderr),
+		newPreflightCmd(stdout, stderr),
 		newStatusCmd(stdout),
 		newStateCheckCmd(stdout),
 		newPlanCmd(stdin, stdout, stderr),
@@ -124,8 +123,8 @@ func (cf *commonFlags) resolveWithLocality(checkLocality bool) (contextstore.Con
 //
 //   - FParseErrWhitelist.UnknownFlags lets the args validator run even when
 //     the user typed a subcommand-shaped typo followed by a child's flag
-//     (e.g. `destroy container-cluster -f X --yes`). Without it, pflag bails on the
-//     unknown `-f` before Cobra ever sees `cluster`.
+//     (e.g. `cluster acces --cluster X`). Without it, pflag bails on the
+//     unknown `--cluster` before Cobra ever sees `acces`.
 //   - ValidArgs is derived from the subcommands so OnlyValidArgs can emit
 //     Cobra's built-in "Did you mean ...?" suggestion.
 //   - RunE = Help is needed because Cobra skips ValidateArgs on commands

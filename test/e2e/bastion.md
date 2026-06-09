@@ -122,7 +122,7 @@ on the bastion:
 ```bash
 export CASE=<case-directory>
 bootwright context init "$CASE" -f "test/e2e/$CASE" --yes
-bootwright context validate
+bootwright status
 eval "$(bootwright print-env)"
 ```
 
@@ -137,9 +137,9 @@ The first check is expected to report missing tools on a fresh bastion. The
 release-specific OpenShift CLIs declared by the active context.
 
 ```bash
-bootwright check bastion || true
+bootwright preflight bastion || true
 bootwright bastion setup --yes
-bootwright check bastion || true
+bootwright preflight bastion || true
 ```
 
 In an externally proxied environment, create `proxy-credentials` first as shown

@@ -29,7 +29,7 @@ Any destruction of an already provisioned environment must be explicitly
 authorized by the operator through command input or the scenario's environment
 description. Treat "explicit" narrowly:
 
-- A `check`, `status`, `render`, `plan`, `validate`, help, discovery, or probe
+- A `preflight`, `status`, `render`, `plan`, `validate`, help, discovery, or probe
   flow is read-only unless the current specs document a narrow non-destructive
   runtime record write.
 - Bootwright must provide a well-named, non-mutating command whose sole purpose
@@ -192,7 +192,7 @@ Before judging code, review whether the repo's own guidance is clear and
 consistent. Compare the current specs, AGENTS rules, reusable prompts, docs, CLI
 help, examples, and tests for:
 
-- Read-only command guarantees for `check`, `status`, `render`, validation,
+- Read-only command guarantees for `preflight`, `status`, `render`, validation,
   planning, help, discovery, and probes.
 - Desired-vs-real state checking: a well-named command exists, is explicitly
   non-mutating, loads the same selected desired-state graph as converge/destroy,

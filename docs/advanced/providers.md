@@ -310,7 +310,9 @@ not the command. Human output goes through `internal/cli/output`.
 
 Before shipping a verb, decide whether it is read-only. Read-only verbs —
 `status`, `state-check`, `render`, `plan`, `apply --dry-run`, `validate`,
-`check syntax`, help, and discovery — must not write runtime records, acquire a
+help, and discovery — must not write runtime records, acquire a
 mutating run lease, or mutate provider, BMC, cluster, or storage state, and most
-must not contact hosts at all. The binding rules for that contract are in
-`specs/state-model.md` (CLI Contract).
+must not contact hosts at all. `render` does write generated outputs (rendered
+tool inputs, `effective-state.yaml`) into context state — those are outputs,
+not runtime records — and still never contacts hosts. The binding rules for
+that contract are in `specs/state-model.md` (CLI Contract).

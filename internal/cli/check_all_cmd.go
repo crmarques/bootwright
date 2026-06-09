@@ -21,10 +21,10 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		Short: "Check all provisioning prerequisites",
 		Args:  cobra.NoArgs,
 		Example: `  # Run bastion + infra + cluster checks against the current context
-  bootwright check all
+  bootwright preflight all
 
   # Print the planned Ansible preflight command without executing
-  bootwright check all --dry-run`,
+  bootwright preflight all --dry-run`,
 	}
 	cf := addCommonFlags()
 	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
@@ -40,13 +40,13 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		if output == outputJSON {
 			if !dryRun {
-				return failErr(2, errors.New("--output json is supported with --dry-run for check all"))
+				return failErr(2, errors.New("--output json is supported with --dry-run for preflight all"))
 			}
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
 			selected := phasesForState(allScope.phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, allScope, "check", state, selected, preflightPlaybookPath, ansibleLimitForScope(allScope.name), nil, "preflight-"+allScope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, allScope, "preflight", state, selected, preflightPlaybookPath, ansibleLimitForScope(allScope.name), nil, "preflight-"+allScope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
-		outputpkg(stdout).Command("all check")
+		outputpkg(stdout).Command("all preflight")
 		if err := runBastionChecks(stdout); err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 			Playbook:           "bootwright.core.check_preflight",
 			ArtifactsBaseName:  "preflight-all",
 			DryRun:             dryRun,
-			Label:              "all check",
+			Label:              "all preflight",
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)

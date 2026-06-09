@@ -85,12 +85,12 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright context init lab",
 		"bootwright context update lab",
 		"bootwright bastion setup --yes",
-		"bootwright check all",
+		"bootwright preflight all",
 		"bootwright render effective",
 		"bootwright plan",
 		"bootwright apply --yes",
 		"bootwright status --watch",
-		"bootwright cluster access-info",
+		"bootwright cluster access",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("root help missing %q:\n%s", want, stdout)

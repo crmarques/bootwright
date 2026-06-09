@@ -46,7 +46,7 @@ bootwright secret set redhat-org --raw-file <org-id-file>
 bootwright secret set redhat-activation-key --raw-file <activation-key-file>
 bootwright secret generate
 bootwright bastion setup --yes
-bootwright check all
+bootwright preflight all
 bootwright plan
 bootwright apply --yes
 bootwright status --watch

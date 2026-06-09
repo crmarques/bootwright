@@ -46,9 +46,9 @@ The user-facing equivalent is plain `bootwright`:
 
 ```text
 bootwright context init <case> -f test/e2e/<case> --yes
-bootwright check bastion
-bootwright check infra --dry-run
-bootwright check all --dry-run
+bootwright preflight bastion
+bootwright preflight infra --dry-run
+bootwright preflight all --dry-run
 bootwright plan
 bootwright apply --yes
 ```
@@ -78,8 +78,8 @@ for case_dir in test/e2e/[0-9]*; do
 
   make e2e CASE="$case_name"
   bin/bootwright context init "$case_name" -f "$case_dir" --yes
-  bin/bootwright destroy container-cluster --yes
-  bin/bootwright destroy infra --yes
+  bin/bootwright destroy --stage clusters --yes
+  bin/bootwright destroy --stage infra --yes
   make clean-e2e-state CASE="$case_name"
 done
 ```

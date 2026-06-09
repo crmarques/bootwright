@@ -46,7 +46,7 @@ func newClusterCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newClusterListCmd(stdout),
-		newClusterAccessInfoCmd(stdout),
+		newClusterAccessCommand(stdout),
 		newClusterKubeconfigCmd(stdout),
 	)
 	requireSubcommand(cmd)
@@ -106,27 +106,6 @@ do not commit it.`,
 	return cmd
 }
 
-func newContainerClusterCmd(stdout io.Writer) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:    "container-cluster <command>",
-		Short:  "Inspect container cluster access inventory",
-		Hidden: true,
-	}
-	cmd.AddCommand(
-		newClusterAccessCmd(stdout, clusterAccessCommandSpec{
-			use:   "access",
-			label: "container-cluster access",
-			example: `  # Print access details for every container cluster in the current context
-  bootwright container-cluster access
-
-  # Print access details for one container cluster
-  bootwright container-cluster access --cluster managed-01`,
-		}),
-	)
-	requireSubcommand(cmd)
-	return cmd
-}
-
 func newClusterListCmd(stdout io.Writer) *cobra.Command {
 	outputFormat := outputText
 	cmd := &cobra.Command{
@@ -156,17 +135,17 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 	return cmd
 }
 
-func newClusterAccessInfoCmd(stdout io.Writer) *cobra.Command {
+func newClusterAccessCommand(stdout io.Writer) *cobra.Command {
 	return newClusterAccessCmd(stdout, clusterAccessCommandSpec{
-		use:            "access-info",
-		label:          "cluster access-info",
+		use:            "access",
+		label:          "cluster access",
 		includeStorage: true,
 		example: `  # Print access details for every managed cluster in the current context
-  bootwright cluster access-info
+  bootwright cluster access
 
   # Print access details for one container or storage cluster
-  bootwright cluster access-info --cluster managed-01
-  bootwright cluster access-info --cluster ceph-libvirt`,
+  bootwright cluster access --cluster managed-01
+  bootwright cluster access --cluster ceph-libvirt`,
 	})
 }
 

@@ -32,7 +32,7 @@ Run from the repository root:
 make build
 make list-e2e-cases
 bin/bootwright context init 001-sno-libvirt -f test/e2e/001-sno-libvirt --yes
-bin/bootwright check syntax
+bin/bootwright validate
 bin/bootwright render installer --clusters sno-libvirt
 ```
 
@@ -75,7 +75,7 @@ KVM and permission to manage libvirt on the provider host.
    hosts, addresses, BMC endpoints, and secret references:
 
    ```bash
-   bootwright context validate
+   bootwright status
    sudo vi "/var/lib/bootwright/contexts/$CASE/input/environment.yaml"
    ```
 
@@ -96,8 +96,8 @@ for case_dir in test/e2e/[0-9]*; do
 
   make e2e CASE="$case_name"
   bin/bootwright context init "$case_name" -f "$case_dir" --yes
-  bin/bootwright destroy container-cluster --yes
-  bin/bootwright destroy infra --yes
+  bin/bootwright destroy --stage clusters --yes
+  bin/bootwright destroy --stage infra --yes
   make clean-e2e-state CASE="$case_name"
 done
 ```

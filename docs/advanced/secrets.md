@@ -116,7 +116,7 @@ are host-local, unversioned, non-symlink regular files with mode `0600`.
 
 After a successful cluster install, Bootwright stores the kubeadmin password at
 `clusters/<cluster>/secrets/kubeadmin-password`.
-`bootwright cluster access-info` shows the API and console URLs, kubeconfig path,
+`bootwright cluster access` shows the API and console URLs, kubeconfig path,
 password file path, and the command to retrieve the password without printing
 secret bytes by default.
 

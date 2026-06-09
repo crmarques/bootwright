@@ -13,25 +13,24 @@ func renderOutputDirRequiresSensitiveError(outputDir string) error {
 	return fmt.Errorf("render --output-dir %s would write OpenShift installer files with secret material\nrerun with --sensitive only for a local, unversioned directory\nprotect those files while they exist and remove them when no longer needed", outputDir)
 }
 
-func newCheckCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newPreflightCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "check <target>",
-		Short: "Validate desired state and prerequisites",
-		Long: `Validate desired state and prerequisites.
+		Use:   "preflight <target>",
+		Short: "Run read-only preflight checks on hosts and prerequisites",
+		Long: `Run read-only preflight checks on hosts and prerequisites.
 
-A live check (without --dry-run) runs an Ansible preflight whose result is the
-process exit code: 0 when every check passes, non-zero when any check fails.
-Per-check pass/fail detail is in the terminal output and the run, task, and
-cluster logs under Bootwright storage, not in a single result document.
+A live preflight (without --dry-run) runs an Ansible preflight whose result is
+the process exit code: 0 when every check passes, non-zero when any check
+fails. Per-check pass/fail detail is in the terminal output and the run, task,
+and cluster logs under Bootwright storage, not in a single result document.
 
 --output json is accepted only with --dry-run, and returns the planned preflight
 command graph (the work that would run), not pass/fail results. In CI, gate on
-the live check exit code, and use 'check <target> --dry-run --output json' to
-inspect the plan. 'check syntax' is the exception: it is a pure offline
-validator and emits structured result JSON with --output json.`,
+the live preflight exit code, and use 'preflight <target> --dry-run --output
+json' to inspect the plan. For offline desired-state validation with structured
+result JSON, use 'validate'.`,
 	}
 	cmd.AddCommand(
-		newCheckSyntaxCmd(stdout),
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
 		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
 		retargetCommand(newScopeCheckCmd(clustersScope, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
@@ -151,13 +150,12 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # Destroy a protected environment
   bootwright destroy --stage infra --override --yes
 
+  # Remove only the generated artifact publication service
+  bootwright destroy --stage infra --clusters artifact-server --yes
+
   # Remove selected cluster-stage runtime and managed storage state
   bootwright destroy --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
 	})
-	cmd.AddCommand(
-		retargetCommand(newScopeDestroyCmd(infraScope, stdin, stdout, stderr), "infra", "Tear down infrastructure hosts and substrate"),
-		retargetCommand(newScopeDestroyCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Tear down OpenShift cluster install state"),
-	)
 	return cmd
 }
 

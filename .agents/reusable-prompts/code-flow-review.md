@@ -14,14 +14,14 @@ tests that prove it, and the files likely touched.
 
 Review-only by default — do not edit unless the user asks you to fix findings now.
 Do not run `make check` while reviewing; use targeted read-only commands
-(`bootwright check syntax`, focused render/plan inspection, narrow searches,
+(`bootwright validate`, focused render/plan inspection, narrow searches,
 existing test evidence). If asked to fix in the same turn, make the smallest safe
 fixes in a temporary worktree and run `make check-fast` after the edit set.
 
 ## Input and the Example Baseline
 
 The user should provide one or more of: desired-state files or directories; an
-example, fixture, or import source; a command flow (`check`, `render`,
+example, fixture, or import source; a command flow (`preflight`, `render`,
 `apply --stage infra|clusters`); or the expected intent / final output to verify.
 If the starting point is missing, infer a narrow scope from the conversation or ask
 one blocking question — do not invent a scenario when the review depends on
@@ -34,7 +34,7 @@ the effective resource selection on `Environment` and any files intentionally
 excluded from decoding (e.g. manifest-set payloads); selected container clusters,
 storage clusters, add-on bindings, providers, machines, network configs, infra
 components, storage objects, and add-ons; and the command flows the example
-represents (`check syntax`, `check all`, `render effective|installer|storage`,
+represents (`validate`, `preflight all`, `render effective|installer|storage`,
 `apply --stage infra|clusters`, full `apply`, and relevant destroy/status/access).
 Mentally execute every represented flow to its final side effect, and compare
 examples against each other to surface stale patterns, duplicated flow logic,

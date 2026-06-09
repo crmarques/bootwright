@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 func TestHubCommandsNotAdvertised(t *testing.T) {
 	for _, args := range [][]string{
-		{"check", "--help"},
+		{"preflight", "--help"},
 		{"apply", "--help"},
 	} {
 		stdout, stderr, code := runCLI(t, args...)
@@ -53,12 +53,12 @@ func TestHubCommandsNotAdvertised(t *testing.T) {
 		}
 	}
 
-	_, stderr, code := runCLI(t, "check", "hub")
+	_, stderr, code := runCLI(t, "preflight", "hub")
 	if code == 0 {
-		t.Fatal("bootwright check hub unexpectedly succeeded")
+		t.Fatal("bootwright preflight hub unexpectedly succeeded")
 	}
 	if !strings.Contains(stderr, `invalid argument "hub"`) {
-		t.Fatalf("check hub stderr %q does not reject hub as an invalid target", stderr)
+		t.Fatalf("preflight hub stderr %q does not reject hub as an invalid target", stderr)
 	}
 
 	_, stderr, code = runCLI(t, "apply", "hub")
@@ -72,10 +72,9 @@ func TestHubCommandsNotAdvertised(t *testing.T) {
 
 func TestClusterTargets(t *testing.T) {
 	for _, args := range [][]string{
-		{"check", "clusters", "--help"},
-		{"check", "container-cluster", "--help"},
+		{"preflight", "clusters", "--help"},
+		{"preflight", "container-cluster", "--help"},
 		{"destroy", "--help"},
-		{"destroy", "container-cluster", "--help"},
 		{"apply", "--help"},
 		{"bastion", "setup", "--help"},
 	} {
@@ -86,9 +85,11 @@ func TestClusterTargets(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"check", "cluster"},
+		{"preflight", "cluster"},
 		{"apply", "cluster"},
 		{"destroy", "clusters"},
+		{"destroy", "infra"},
+		{"destroy", "container-cluster"},
 	} {
 		_, stderr, code := runCLI(t, args...)
 		if code == 0 {
@@ -142,13 +143,13 @@ func TestApplyHelpMatchesTargetExecutionModels(t *testing.T) {
 		}
 	}
 
-	stdout, stderr, code = runCLI(t, "check", "storage-cluster", "--help")
+	stdout, stderr, code = runCLI(t, "preflight", "storage-cluster", "--help")
 	if code != 0 {
-		t.Fatalf("check storage-cluster --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("preflight storage-cluster --help exited %d, stderr=%q", code, stderr)
 	}
-	for _, want := range []string{"comma-separated StorageCluster names to check", "bootwright check storage-cluster --clusters ceph-storage"} {
+	for _, want := range []string{"comma-separated StorageCluster names to preflight", "bootwright preflight storage-cluster --clusters ceph-storage"} {
 		if !strings.Contains(stdout, want) {
-			t.Fatalf("check storage-cluster help missing %q:\n%s", want, stdout)
+			t.Fatalf("preflight storage-cluster help missing %q:\n%s", want, stdout)
 		}
 	}
 }
@@ -212,24 +213,24 @@ func TestDestroyRejectsRemovedStagesAndFlags(t *testing.T) {
 	}
 }
 
-func TestDestroyInfraHelpUsesArtifactServerScope(t *testing.T) {
-	stdout, stderr, code := runCLI(t, "destroy", "infra", "--help")
+func TestDestroyHelpUsesArtifactServerScope(t *testing.T) {
+	stdout, stderr, code := runCLI(t, "destroy", "--help")
 	if code != 0 {
-		t.Fatalf("destroy infra --help exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
 	}
 	if !strings.Contains(stdout, "artifact-server") {
-		t.Fatalf("destroy infra help missing artifact-server scope:\n%s", stdout)
+		t.Fatalf("destroy help missing artifact-server scope on --clusters:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "http-server") {
-		t.Fatalf("destroy infra help still exposes http-server scope:\n%s", stdout)
+		t.Fatalf("destroy help still exposes http-server scope:\n%s", stdout)
 	}
 }
 
-func TestCheckSyntaxJSON(t *testing.T) {
+func TestValidateJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "check", "syntax", "--output", "json")
+	stdout, stderr, code := runCLI(t, "validate", "--output", "json")
 	if code != 0 {
-		t.Fatalf("check syntax exited %d, stderr=%q", code, stderr)
+		t.Fatalf("validate exited %d, stderr=%q", code, stderr)
 	}
 	var report syntaxCheckReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -248,22 +249,7 @@ func TestCheckSyntaxJSON(t *testing.T) {
 	}
 }
 
-func TestCheckSyntaxValidatesInputFilesWithoutContext(t *testing.T) {
-	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "check", "syntax", "-f", fixturePath("001-sno-libvirt"), "--output", "json")
-	if code != 0 {
-		t.Fatalf("check syntax -f exited %d, stdout=%q stderr=%q", code, stdout, stderr)
-	}
-	var report syntaxCheckReport
-	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-		t.Fatalf("decode json: %v\n%s", err, stdout)
-	}
-	if !report.OK || report.ContainerClusters != 1 {
-		t.Fatalf("unexpected syntax report: %+v", report)
-	}
-}
-
-func TestValidateCommandMatchesSyntaxCheck(t *testing.T) {
+func TestValidateValidatesInputFilesWithoutContext(t *testing.T) {
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"), "--output", "json")
 	if code != 0 {
@@ -275,6 +261,28 @@ func TestValidateCommandMatchesSyntaxCheck(t *testing.T) {
 	}
 	if !report.OK || report.ContainerClusters != 1 {
 		t.Fatalf("unexpected validate report: %+v", report)
+	}
+}
+
+func TestValidateJSONFailureIncludesDiagnostics(t *testing.T) {
+	setTestHomeAndRoot(t)
+	inputDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(inputDir, "environment.yaml"), []byte("apiVersion: bootwright/v1alpha1\nkind: Environment\nmetadata: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runCLI(t, "validate", "-f", inputDir, "--output", "json")
+	if code != 1 {
+		t.Fatalf("validate -f on invalid input exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("validate json failure wrote stderr: %q", stderr)
+	}
+	var report syntaxCheckReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.OK || report.Error == "" || len(report.Diagnostics) == 0 {
+		t.Fatalf("expected diagnostics in failure report: %+v", report)
 	}
 }
 
@@ -293,9 +301,9 @@ func TestJSONErrorEnvelopeBeforeRootReexec(t *testing.T) {
 	localRootGate.geteuid = func() int { return 1000 }
 	t.Cleanup(func() { localRootGate = previous })
 
-	stdout, stderr, code := runCLI(t, "check", "syntax", "--output", "json")
+	stdout, stderr, code := runCLI(t, "validate", "--output", "json")
 	if code == 0 {
-		t.Fatalf("check syntax unexpectedly succeeded: %s", stdout)
+		t.Fatalf("validate unexpectedly succeeded: %s", stdout)
 	}
 	if stderr != "" {
 		t.Fatalf("json error path wrote stderr: %q", stderr)
@@ -324,9 +332,9 @@ func TestHumanOutputStructuredText(t *testing.T) {
 			want: []string{"Bootwright: validate", "Objects", "Desired state", "[OK] validate"},
 		},
 		{
-			name: "check syntax",
-			args: []string{"check", "syntax"},
-			want: []string{"Bootwright: syntax check", "Objects", "Desired state", "[OK] syntax check"},
+			name: "validate explicit input",
+			args: []string{"validate", "-f", fixturePath("001-sno-libvirt")},
+			want: []string{"Bootwright: validate", "Objects", "Desired state", "[OK] validate"},
 		},
 		{
 			name: "status",
@@ -390,9 +398,9 @@ func TestJourneyCommandsRouteToStatus(t *testing.T) {
 
 func TestFailedCheckOutputIsActionable(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "check", "infra", "--dry-run")
+	stdout, stderr, code := runCLI(t, "preflight", "infra", "--dry-run")
 	if code == 0 {
-		t.Fatalf("check infra should fail with missing local secrets in test context:\n%s", stdout)
+		t.Fatalf("preflight infra should fail with missing local secrets in test context:\n%s", stdout)
 	}
 	for _, want := range []string{"Secret material", "[FAIL]", "impact:", "fix:"} {
 		if !strings.Contains(stdout, want) {
@@ -458,17 +466,18 @@ func TestPlanDryRunJSON(t *testing.T) {
 	}
 }
 
-func TestDestroyInfraArtifactServerScopeDryRunJSON(t *testing.T) {
+func TestDestroyStageInfraArtifactServerScopeDryRunJSON(t *testing.T) {
 	initTestContext(t, "002-sno-emul-baremetal")
 	stdout, stderr, code := runCLI(t,
-		"destroy", "infra",
+		"destroy",
+		"--stage", "infra",
 		"--clusters", "artifact-server",
 		"--dry-run",
 		"--output", "json",
 		"--ask-become-pass=false",
 	)
 	if code != 0 {
-		t.Fatalf("destroy infra artifact-server dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("destroy --stage infra artifact-server dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
@@ -697,22 +706,25 @@ func TestProtectedApplyOverrideDryRunPreviews(t *testing.T) {
 	}
 }
 
-func TestScopedCheckDryRunJSONDoesNotPromptForBecome(t *testing.T) {
+func TestScopedPreflightDryRunJSONDoesNotPromptForBecome(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
-		"check", "infra",
+		"preflight", "infra",
 		"--dry-run",
 		"--output", "json",
 	)
 	if code != 0 {
-		t.Fatalf("check infra dry-run exited %d, stderr=%q", code, stderr)
+		t.Fatalf("preflight infra dry-run exited %d, stderr=%q", code, stderr)
 	}
 	var report scopeDryRunReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode json: %v\n%s", err, stdout)
 	}
+	if report.Action != "preflight" {
+		t.Fatalf("dry-run action = %q, want preflight", report.Action)
+	}
 	if commandContains(report.Command, "--ask-become-pass") {
-		t.Fatalf("check infra preflight should not ask for become password, got %v", report.Command)
+		t.Fatalf("preflight infra should not ask for become password, got %v", report.Command)
 	}
 }
 
@@ -1631,67 +1643,96 @@ func TestSecretEncryptionInitStatusMigrateRotate(t *testing.T) {
 	}
 }
 
-func TestContextValidateReportsReadyAndMissingChecks(t *testing.T) {
+func TestStatusReportsReadyAndMissingSetupChecks(t *testing.T) {
 	ctx := initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "context", "validate")
+	stdout, stderr, code := runCLI(t, "status")
 	if code != 0 {
-		t.Fatalf("context validate exited %d, stderr=%q", code, stderr)
+		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "[OK] desired state") {
-		t.Fatalf("stdout missing desired-state OK:\n%s", stdout)
+	if !strings.Contains(stdout, "[OK] input-dir") {
+		t.Fatalf("stdout missing input-dir OK setup check:\n%s", stdout)
 	}
 	if err := os.RemoveAll(ctx.InputDir); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, code = runCLI(t, "context", "validate")
-	if code == 0 {
-		t.Fatal("context validate unexpectedly passed with missing input dir")
+	stdout, _, code = runCLI(t, "status")
+	if code != 1 {
+		t.Fatalf("status with missing input dir exited %d, want 1", code)
 	}
 	if !strings.Contains(stdout, "[MISSING] input-dir") {
 		t.Fatalf("stdout missing input-dir MISSING:\n%s", stdout)
 	}
+	if !strings.Contains(stdout, "Next steps") {
+		t.Fatalf("stdout missing next steps for unready context:\n%s", stdout)
+	}
 }
 
-func TestContextValidateJSONReportsWarningsWithoutBlocking(t *testing.T) {
-	initTestContext(t, "001-sno-libvirt")
-	stdout, stderr, code := runCLI(t, "context", "validate", "--output", "json")
+func TestStatusJSONReportsSetupChecksWithoutBlocking(t *testing.T) {
+	ctx := initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t, "status", "--output", "json")
 	if code != 0 {
-		t.Fatalf("context validate json exited %d, stderr=%q", code, stderr)
+		t.Fatalf("status json exited %d, stderr=%q", code, stderr)
 	}
 	if stderr != "" {
-		t.Fatalf("context validate json wrote stderr: %q", stderr)
+		t.Fatalf("status json wrote stderr: %q", stderr)
 	}
-	var report contextValidateReport
+	var report statusReport
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-		t.Fatalf("decode context validate json: %v\n%s", err, stdout)
+		t.Fatalf("decode status json: %v\n%s", err, stdout)
 	}
-	if !report.OK || report.Context.Name != "test" {
-		t.Fatalf("unexpected context validate report: %+v", report)
+	if report.Error != "" || report.Context.Name != "test" {
+		t.Fatalf("unexpected status report: %+v", report)
 	}
-	foundSecretWarning := false
-	for _, check := range report.Checks {
-		if check.Group == "Declared secrets" && check.Status == string(output.StatusWarn) {
-			foundSecretWarning = true
-			if check.Remediation == "" {
-				t.Fatalf("secret warning missing remediation: %+v", check)
-			}
+	if len(report.SetupChecks) == 0 {
+		t.Fatalf("status report missing setup checks: %+v", report)
+	}
+	foundMissingSecret := false
+	for _, entry := range report.Secrets {
+		if !entry.Present {
+			foundMissingSecret = true
 		}
 	}
-	if !foundSecretWarning {
-		t.Fatalf("context validate report missing declared-secret warning: %+v", report.Checks)
+	if !foundMissingSecret {
+		t.Fatalf("status report missing declared-secret presence: %+v", report.Secrets)
 	}
 	if len(report.NextSteps) == 0 {
-		t.Fatalf("context validate report missing next steps: %+v", report)
+		t.Fatalf("status report missing next steps: %+v", report)
+	}
+
+	if err := os.RemoveAll(ctx.InputDir); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "status", "--output", "json")
+	if code != 1 {
+		t.Fatalf("status json with missing input dir exited %d, stderr=%q", code, stderr)
+	}
+	report = statusReport{}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode status json: %v\n%s", err, stdout)
+	}
+	if report.Error == "" || len(report.NextSteps) == 0 {
+		t.Fatalf("unready status report missing error or next steps: %+v", report)
+	}
+	foundInputDirMissing := false
+	for _, check := range report.SetupChecks {
+		if check.Name == "input-dir" && check.Status == string(output.StatusMissing) {
+			foundInputDirMissing = true
+		}
+	}
+	if !foundInputDirMissing {
+		t.Fatalf("unready status report missing input-dir setup check: %+v", report.SetupChecks)
 	}
 }
 
-func TestContextValidateRejectsAccidentalAlias(t *testing.T) {
-	stdout, stderr, code := runCLI(t, "context", "validade")
-	if code == 0 {
-		t.Fatalf("context validade unexpectedly succeeded:\n%s", stdout)
-	}
-	if !strings.Contains(stderr, `invalid argument "validade"`) {
-		t.Fatalf("stderr does not reject validade alias: %q", stderr)
+func TestContextValidateSubcommandRemoved(t *testing.T) {
+	for _, target := range []string{"validate", "validade"} {
+		stdout, stderr, code := runCLI(t, "context", target)
+		if code == 0 {
+			t.Fatalf("context %s unexpectedly succeeded:\n%s", target, stdout)
+		}
+		if !strings.Contains(stderr, `invalid argument "`+target+`"`) {
+			t.Fatalf("stderr does not reject context %s: %q", target, stderr)
+		}
 	}
 }
 
@@ -1700,12 +1741,12 @@ func TestContextBackedCommandRequiresReadyContext(t *testing.T) {
 	if err := os.RemoveAll(ctx.InputDir); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runCLI(t, "check", "syntax")
+	_, stderr, code := runCLI(t, "validate")
 	if code == 0 {
-		t.Fatal("check syntax unexpectedly ran with missing context input dir")
+		t.Fatal("validate unexpectedly ran with missing context input dir")
 	}
-	if !strings.Contains(stderr, "bootwright context validate") {
-		t.Fatalf("stderr missing context validate hint: %q", stderr)
+	if !strings.Contains(stderr, "bootwright status") {
+		t.Fatalf("stderr missing bootwright status hint: %q", stderr)
 	}
 }
 
@@ -1722,8 +1763,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "delete", "lab"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge=true"}, want: false},
-		{args: []string{"context", "validate"}, want: true},
-		{args: []string{"help", "check"}, want: false},
+		{args: []string{"help", "preflight"}, want: false},
 		{args: []string{"completion", "bash"}, want: false},
 		{args: []string{cobra.ShellCompRequestCmd, ""}, want: false},
 		{args: []string{cobra.ShellCompNoDescRequestCmd, ""}, want: false},
@@ -1737,11 +1777,9 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"validate", "-f", "./lab-input"}, want: false},
 		{args: []string{"validate", "--file=./lab-input", "--output", "json"}, want: false},
 		{args: []string{"validate"}, want: true},
-		{args: []string{"check"}, want: false},
-		{args: []string{"check", "syntax", "-f", "./lab-input"}, want: false},
-		{args: []string{"check", "syntax", "--file=./lab-input", "--output", "json"}, want: false},
-		{args: []string{"check", "syntax"}, want: true},
-		{args: []string{"check", "--help"}, want: false},
+		{args: []string{"preflight"}, want: false},
+		{args: []string{"preflight", "infra"}, want: true},
+		{args: []string{"preflight", "--help"}, want: false},
 		{args: []string{"apply"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"destroy"}, want: false},
@@ -1749,7 +1787,6 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"destroy", "--stage", "clusters"}, want: true},
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
 		{args: []string{"destroy", "cluster"}, want: false},
-		{args: []string{"destroy", "infra"}, want: true},
 		{args: []string{"render"}, want: false},
 		{args: []string{"render", "--clusters", "managed-01"}, want: false},
 		{args: []string{"render", "installer"}, want: true},
@@ -1786,7 +1823,7 @@ func TestLocalRootGateSkipsRootlessHelpAndCompletion(t *testing.T) {
 	}
 
 	cases := [][]string{
-		{"check"},
+		{"preflight"},
 		{"destroy"},
 		{"secret"},
 		{"render"},
@@ -1820,9 +1857,7 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		{args: []string{"destroy", "--stage", "infra"}, want: true},
 		{args: []string{"destroy", "--stage=clusters"}, want: true},
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
-		{args: []string{"destroy", "infra"}, want: true},
-		{args: []string{"destroy", "container-cluster"}, want: true},
-		{args: []string{"check", "infra"}, want: false},
+		{args: []string{"preflight", "infra"}, want: false},
 		{args: []string{"secret", "set", "pull-secret"}, want: false},
 	}
 	for _, tc := range cases {
@@ -3178,7 +3213,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
 
 	t.Run("missing", func(t *testing.T) {
-		report, err := buildStatusReport(testCommonFlags(t, t.TempDir(), "001-sno-libvirt"))
+		report, _, err := buildStatusReport(testCommonFlags(t, t.TempDir(), "001-sno-libvirt"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3195,7 +3230,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err := os.WriteFile(installer, []byte("{}\n"), 0o644); err != nil {
 			t.Fatalf("write installer: %v", err)
 		}
-		report, err := buildStatusReport(cf)
+		report, _, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3209,7 +3244,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err := os.MkdirAll(installer, 0o755); err != nil {
 			t.Fatalf("mkdir installer path: %v", err)
 		}
-		report, err := buildStatusReport(cf)
+		report, _, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3225,7 +3260,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if _, err := render.All(cf.ctx.RenderedDir, cf.ctx.ClustersDir, t.TempDir(), state); err != nil {
 			t.Fatalf("render: %v", err)
 		}
-		report, err := buildStatusReport(cf)
+		report, _, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3247,7 +3282,7 @@ func TestStatusInstallerFreshness(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(cf.ctx.RenderedDir, "effective-state.yaml"), data, 0o644); err != nil {
 			t.Fatalf("write stale effective state: %v", err)
 		}
-		report, err := buildStatusReport(cf)
+		report, _, err := buildStatusReport(cf)
 		if err != nil {
 			t.Fatal(err)
 		}

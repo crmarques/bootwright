@@ -11,27 +11,9 @@ import (
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
-// newCheckSyntaxCmd exposes a pure-syntax check: load + normalize +
-// validate the current context input YAML without running Ansible, probing hosts,
-// or rendering installer files. Designed to be safe and instant on
-// every edit.
-func newCheckSyntaxCmd(stdout io.Writer) *cobra.Command {
-	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
-		use:   "syntax",
-		short: "Validate context input YAML offline (no Ansible, no host probes)",
-		label: "syntax check",
-		rerun: "bootwright check syntax",
-		example: `  # Validate the current context
-  bootwright check syntax
-
-  # Validate an input directory before importing a context
-  bootwright check syntax -f ./lab-input
-
-  # Machine-readable output for CI
-  bootwright check syntax --output json`,
-	})
-}
-
+// newValidateCmd exposes a pure offline validation: load + normalize + validate
+// the current context input YAML without running Ansible, probing hosts, or
+// rendering installer files. Designed to be safe and instant on every edit.
 func newValidateCmd(stdout io.Writer) *cobra.Command {
 	return newSyntaxValidationCmd(stdout, syntaxValidationCommand{
 		use:   "validate",

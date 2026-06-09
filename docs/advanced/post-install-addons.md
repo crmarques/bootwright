@@ -144,7 +144,7 @@ Use the `clusters` stage when you intentionally want only cluster install,
 storage provisioning, add-ons, and integrations:
 
 ```text
-bootwright check addons
+bootwright preflight addons
 bootwright apply --stage clusters --dry-run
 bootwright apply --stage clusters --yes
 ```

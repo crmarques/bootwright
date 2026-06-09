@@ -15,6 +15,8 @@ import (
 
 type statusReport struct {
 	Context          statusContext           `json:"context"`
+	Error            string                  `json:"error,omitempty"`
+	SetupChecks      []contextValidateCheck  `json:"setupChecks,omitempty"`
 	Desired          statusDesired           `json:"desired"`
 	Clusters         []statusCluster         `json:"clusters"`
 	Shared           []statusShared          `json:"shared"`
@@ -86,17 +88,44 @@ type statusExtension struct {
 }
 
 func runStatusJSON(stdout io.Writer, cf *commonFlags) error {
-	report, err := buildStatusReport(cf)
+	report, blocking, err := buildStatusReport(cf)
 	if err != nil {
 		return failErr(1, err)
 	}
-	return output.JSON(stdout, report)
+	if err := output.JSON(stdout, report); err != nil {
+		return failErr(1, err)
+	}
+	if blocking {
+		return silentExit(1)
+	}
+	return nil
 }
 
-func buildStatusReport(cf *commonFlags) (statusReport, error) {
+func buildStatusReport(cf *commonFlags) (statusReport, bool, error) {
 	ctx, err := cf.resolve()
 	if err != nil {
-		return statusReport{}, err
+		// Context missing or not ready: report the setup checks (the surface
+		// that used to be `context validate`) instead of failing opaquely.
+		vctx, checks := currentContextValidation()
+		report := statusReport{
+			Context: statusContext{
+				Name:               vctx.Name,
+				ContextDir:         vctx.BaseDir,
+				InputDir:           vctx.InputDir,
+				RenderedDir:        vctx.RenderedDir,
+				ClustersDir:        vctx.ClustersDir,
+				RunsDir:            vctx.RunsDir,
+				ManagedServicesDir: vctx.ManagedServicesDir,
+				ProviderStateDir:   vctx.ProviderStateDir,
+				SecretsDir:         vctx.SecretsDir,
+			},
+			Error:       err.Error(),
+			SetupChecks: contextValidateChecks(checks),
+			Clusters:    []statusCluster{},
+			Shared:      []statusShared{},
+			NextSteps:   contextValidateNextSteps(checks),
+		}
+		return report, true, nil
 	}
 	state, loadErr := loadOptionalDesiredState(cf)
 	stateLoaded := loadErr == nil && hasAnyState(state)
@@ -121,10 +150,13 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		Shared:    []statusShared{},
 		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir),
 	}
+	setupChecks := contextReadinessChecks(ctx)
 	if loadErr != nil {
 		report.Desired.LoadError = loadErr.Error()
 	}
 	if stateLoaded {
+		setupChecks = append(setupChecks, contextHostTrustChecks(ctx.BaseDir, state)...)
+		setupChecks = append(setupChecks, bastionLocalityCheck(state))
 		report.Desired.Environments = len(state.Environments)
 		report.Desired.Machines = len(state.Machines)
 		report.Desired.MachineImages = len(state.MachineImages)
@@ -140,6 +172,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 		report.Shared = buildStatusShared(state)
 		report.Secrets, _ = declaredSecretEntriesForContext(ctx.Name, ctx.SecretsDir, state)
 	}
+	report.SetupChecks = contextValidateChecks(setupChecks)
 	if ledger, ok, err := workflow.LoadRunLedger(ctx.RunsDir); err == nil && ok {
 		report.ApplyRun = &ledger
 		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
@@ -148,7 +181,7 @@ func buildStatusReport(cf *commonFlags) (statusReport, error) {
 	} else if err != nil {
 		report.NextSteps = append([]string{"inspect apply ledger: " + err.Error()}, report.NextSteps...)
 	}
-	return report, nil
+	return report, false, nil
 }
 
 func buildStatusShared(state v1alpha1.State) []statusShared {
