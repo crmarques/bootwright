@@ -152,6 +152,12 @@ requires `--override` when selected state sets
 cluster install records, add-on records, managed OS markers, provider metadata,
 and storage comparison results — decide whether a rerun can skip or must fail.
 
+Ownership evidence is a named cross-boundary contract: executing collection
+roles record per-host resource and package ownership through
+`bootwright.core.ownership_record` at mutation time, and Go reads those records
+for destroy scoping, host package removal gating, orphan reporting, and
+state-check. Run, install, and convergence-safety ledgers remain Go-written.
+
 Shared machine services are resolved through one service graph before
 validation, rendering, status, or scoped apply checks make decisions about
 them. The graph owns service identity, consuming clusters, machine placement,

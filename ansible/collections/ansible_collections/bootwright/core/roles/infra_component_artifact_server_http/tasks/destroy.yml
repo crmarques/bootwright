@@ -32,7 +32,7 @@
 
 - name: Remove boot artifact ownership record
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: remove_resource.yml
   vars:
     bootwright_ownership_kind: infra-component

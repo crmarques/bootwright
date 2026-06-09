@@ -1,7 +1,7 @@
 ---
 - name: Install Ceph prerequisites on storage node
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: package_apply.yml
   vars:
     bootwright_ownership_packages: "{{ bootwright_ceph_provider.prerequisitePackages | default(bootwright_ceph_default_prerequisite_packages) }}"

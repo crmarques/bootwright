@@ -125,7 +125,7 @@
 
     - name: Write ceph-common package ownership record
       ansible.builtin.include_role:
-        name: bootwright.core.helper_ownership
+        name: bootwright.core.ownership_record
         tasks_from: package_apply_one.yml
       vars:
         bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"
@@ -206,7 +206,7 @@
     # to the zap below, continue to the idempotent bootstrap skip.
     - name: Enforce apply mode for the Ceph cluster
       ansible.builtin.include_role:
-        name: bootwright.core.helper_ownership
+        name: bootwright.core.ownership_record
         tasks_from: apply_mode_gate.yml
       vars:
         bootwright_gate_object: "storage cluster {{ bootwright_selected_storage_cluster.name }} cephadm cluster"
@@ -360,7 +360,7 @@
     # the end supersedes it with the full paths/labels/attributes.
     - name: Record storage cluster ownership early for recoverability
       ansible.builtin.include_role:
-        name: bootwright.core.helper_ownership
+        name: bootwright.core.ownership_record
         tasks_from: resource.yml
       vars:
         bootwright_ownership_kind: storage-cluster
@@ -543,7 +543,7 @@
 
     - name: Record storage cluster ownership
       ansible.builtin.include_role:
-        name: bootwright.core.helper_ownership
+        name: bootwright.core.ownership_record
         tasks_from: resource.yml
       vars:
         bootwright_ownership_kind: storage-cluster

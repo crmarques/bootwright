@@ -27,7 +27,7 @@
 
 - name: Write cephadm package ownership record
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: package_apply_one.yml
   vars:
     bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephadmPackage | default('cephadm') }}"
@@ -81,7 +81,7 @@
 
 - name: Write ceph-common package ownership record
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: package_apply_one.yml
   vars:
     bootwright_ownership_package_name: "{{ bootwright_ceph_provider.cephCommonPackage | default('ceph-common') }}"

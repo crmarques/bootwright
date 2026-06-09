@@ -4,7 +4,7 @@
 
 - name: Remove libvirt packages introduced by Bootwright
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: package_remove.yml
   vars:
     bootwright_ownership_packages: "{{ bootwright_machine_setup_libvirt_packages }}"

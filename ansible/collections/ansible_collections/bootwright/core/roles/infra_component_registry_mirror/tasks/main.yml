@@ -9,7 +9,7 @@
 
 - name: Enforce apply mode for this infra-component
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: infra_component_container_gate.yml
 
 - name: Load mirror registry package list
@@ -135,7 +135,7 @@
 
 - name: Record mirror registry ownership
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: resource.yml
   vars:
     bootwright_ownership_kind: infra-component

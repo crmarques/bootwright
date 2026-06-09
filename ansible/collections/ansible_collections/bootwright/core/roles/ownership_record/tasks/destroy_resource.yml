@@ -136,7 +136,7 @@
 
 - name: Remove destroyed ownership resource record
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: remove_resource.yml
   vars:
     bootwright_ownership_kind: "{{ bootwright_ownership_destroy_kind }}"

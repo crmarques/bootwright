@@ -4,7 +4,7 @@
 
 - name: Install libvirt host packages
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: package_apply.yml
   vars:
     bootwright_ownership_packages: "{{ bootwright_machine_setup_libvirt_packages }}"

@@ -2712,15 +2712,15 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("override rebuild must read marker, decide ownership, and enforce the apply-mode gate before zapping (read=%d decide=%d gate=%d zap=%d)", readIdx, decideIdx, gateIdx, zapIdx)
 	}
 
-	// The gate is the shared helper_ownership apply-mode gate, fed the cluster's
+	// The gate is the shared ownership_record apply-mode gate, fed the cluster's
 	// existence and decided ownership; it fails closed (foreign) before the zap.
 	gate := tasks[gateIdx]
 	gateInclude, ok := gate["ansible.builtin.include_role"].(map[string]any)
 	if !ok {
-		t.Fatalf("apply-mode gate must include the helper_ownership role, got %v", gate)
+		t.Fatalf("apply-mode gate must include the ownership_record role, got %v", gate)
 	}
-	if gateInclude["name"] != "bootwright.core.helper_ownership" || gateInclude["tasks_from"] != "apply_mode_gate.yml" {
-		t.Fatalf("apply-mode gate must include helper_ownership apply_mode_gate.yml, got %v", gateInclude)
+	if gateInclude["name"] != "bootwright.core.ownership_record" || gateInclude["tasks_from"] != "apply_mode_gate.yml" {
+		t.Fatalf("apply-mode gate must include ownership_record apply_mode_gate.yml, got %v", gateInclude)
 	}
 	gateVars, ok := gate["vars"].(map[string]any)
 	if !ok {
@@ -3138,9 +3138,9 @@ func TestStoragePlaybookDispatchesCephadmRole(t *testing.T) {
 
 func TestOwnershipHelperWritesTimezoneQualifiedTimestamps(t *testing.T) {
 	for _, path := range []string{
-		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/resource.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/package_apply_one.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/helper_ownership/tasks/package_remove_one.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/resource.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_apply_one.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/package_remove_one.yml",
 	} {
 		body := readRepoFile(t, path)
 		if strings.Contains(body, "now(utc=true).isoformat()") {
@@ -3248,7 +3248,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 
 	dependencyTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/dependencies.yml")
 	prereqs := dependencyTasks[findAnsibleTask(t, dependencyTasks, "Install Ceph prerequisites on storage node")]
-	assertIncludeRoleName(t, prereqs, "bootwright.core.helper_ownership")
+	assertIncludeRoleName(t, prereqs, "bootwright.core.ownership_record")
 	if got := fmt.Sprint(prereqs["ansible.builtin.include_role"]); !strings.Contains(got, "package_apply.yml") {
 		t.Fatalf("Ceph prerequisite task must use package ownership helper, got %v", prereqs)
 	}
@@ -3279,7 +3279,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(cephadmPackageBody["name"]), "bootwright_ceph_provider.cephadmPackage") {
 		t.Fatalf("cephadm package fallback must install provider-selected cephadm package, got %v", cephadmPackage)
 	}
-	assertIncludeRoleName(t, installTasks[recordCephadmIdx], "bootwright.core.helper_ownership")
+	assertIncludeRoleName(t, installTasks[recordCephadmIdx], "bootwright.core.ownership_record")
 	if got := installTasks[verifyCephadmIdx]["failed_when"]; got != false {
 		t.Fatalf("cephadm verify must leave failure handling to the targeted assert, got failed_when=%v", got)
 	}
@@ -3304,7 +3304,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(cephCommonPackageBody["name"]), "bootwright_ceph_provider.cephCommonPackage") {
 		t.Fatalf("ceph-common package fallback must install provider-selected ceph-common package, got %v", cephCommonPackage)
 	}
-	assertIncludeRoleName(t, installTasks[recordCephCommonIdx], "bootwright.core.helper_ownership")
+	assertIncludeRoleName(t, installTasks[recordCephCommonIdx], "bootwright.core.ownership_record")
 	if got := installTasks[verifyCephIdx]["failed_when"]; got != false {
 		t.Fatalf("ceph CLI verify must leave failure handling to the targeted assert, got failed_when=%v", got)
 	}

@@ -66,7 +66,7 @@
 
 - name: Record libvirt network ownership
   ansible.builtin.include_role:
-    name: bootwright.core.helper_ownership
+    name: bootwright.core.ownership_record
     tasks_from: resource.yml
   vars:
     bootwright_ownership_kind: libvirt-network

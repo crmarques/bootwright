@@ -49,7 +49,7 @@
 
     - name: Destroy recorded infra component resources
       ansible.builtin.include_role:
-        name: bootwright.core.helper_ownership
+        name: bootwright.core.ownership_record
         tasks_from: destroy_resource.yml
       vars:
         bootwright_ownership_record: "{{ item }}"

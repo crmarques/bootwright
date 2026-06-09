@@ -34,6 +34,7 @@ ansible/collections/ansible_collections/bootwright/core/
     machine_setup_*       substrate setup on provider machines
     machine_os_install_*  Bootwright-managed OS installation (anaconda)
     helper_*              context, credential, and cleanup helpers
+    ownership_record      durable ownership and package records for destroy scoping
     provider_service_*    provider services, including BMC services
     infra_component_*     machine-bound InfraComponent services
     machine_substrate_*   per-cluster substrate state
@@ -117,6 +118,12 @@ virtual-media cleanup block; the emulated BMC service role reads provider BMC
 service `bmcEmulated.*` for libvirt URI, ports, bind address, and auth instead
 of re-deriving defaults. Adding a substrate-dependent fact is a renderer
 change, not a role conditional.
+
+The `ownership_record` role owns durable resource and package ownership
+records: executing roles include it at mutation time, and Go reads the records
+for destroy scoping, package removal gating, orphan reporting, and state-check.
+The record contract is documented in
+[`ownership-records.md`](../../ansible/collections/ansible_collections/bootwright/core/docs/ownership-records.md).
 
 Task playbooks own the host-local selection of
 `bootwright_current_provider`, `bootwright_current_cluster`, and related
