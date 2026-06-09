@@ -127,9 +127,12 @@ deterministic: referenced `profiles` expand in declared order, then direct
 first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
 `clusterRef.name`; use multiple binding resources for multiple clusters.
 
-`bootwright apply --yes` is the normal end-to-end path and includes
-infrastructure, storage, cluster install, and bound post-install components.
-Use `bootwright apply --stage infra --yes` or
+`bootwright apply --yes` is the greenfield end-to-end path (it refuses if any
+selected object already exists) and includes infrastructure, storage, cluster
+install, and bound post-install components. Re-run a partial or completed apply
+with `bootwright apply --continue --yes`, which creates what is missing, skips what
+already matches, and fails on drift; use `--override` only to rebuild drifted
+owned objects. Use `bootwright apply --stage infra --yes` or
 `bootwright apply --stage clusters --yes` for advanced recovery or maintenance
 when you intentionally want one slice of the graph.
 
