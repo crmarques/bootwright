@@ -40,7 +40,7 @@ internal/converge/bundle/ansible_bundle.zip
 __pycache__/
 *.pyc
 
-# GitOpsPackageSet workspace generated output (expanded plan, rendered repos).
+# Workspace-local generated output.
 .bootwright/
 
 # Local scratch area for work-in-progress example fleets (untracked).
