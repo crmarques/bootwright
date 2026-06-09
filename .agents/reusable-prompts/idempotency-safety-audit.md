@@ -36,17 +36,28 @@ description. Treat "explicit" narrowly:
   is to compare selected desired state with the recorded last apply. Audit whether the name
   communicates "state comparison" instead of convergence or cleanup, and propose a
   better name when the current CLI lacks one or overloads a mutating command.
-- A repeated `apply` with unchanged desired state should skip or prove matching
-  state. It must not reinstall clusters, wipe disks, remove VMs, reset BMCs,
-  delete storage, remove packages, clear namespaces, delete cluster resources, or
-  recreate services just because it can.
-- An `apply` that sees foreign, unknown, stale, shared, or destructive drift must
-  fail closed unless the task has a narrow, command-scoped override path and the
-  operator supplied that override.
-- Every audited flow must be evaluated both with and without `--override` when
-  the command supports it. `--override` may permit only the documented unsafe
-  mismatch path for convergent or destructive commands; it must not turn a
-  read-only state check into a mutating command or broaden scope silently.
+- `apply` has three explicit, mutually-understood safety modes; audit the path
+  under each:
+  - bare `apply` is **greenfield-only**: it creates objects that do not yet exist
+    and must **fail closed** (refuse, mutate nothing) if any selected object
+    already exists — recorded by Bootwright or otherwise present.
+  - `apply --continue` is the **safe reconcile**: it creates what is missing,
+    skips what already matches desired state (proving the match, not re-running),
+    and **fails closed** on drift or foreign ownership. A previously-successful
+    run under `--continue` must run end to end mutating nothing.
+  - `apply --override` is the only **break-glass** mode: it rebuilds objects that
+    have drifted and creates what is missing, but leaves objects that already
+    match untouched (no gratuitous rebuild) and **never** rebuilds a foreign
+    object. It does not bypass leases, validation, secrets, destroy-protection, or
+    foreign ownership.
+- An object that already matches is never destroyed to be recreated by any mode;
+  forcing a clean recreate of a matching object is a `destroy` (which must drop it
+  entirely and reset its convergence records) followed by `apply`.
+- Every audited flow must be evaluated under all three modes when the command is
+  `apply`, and with and without `--override` for other commands that support it.
+  `--override` may permit only the documented destructive convergence path
+  (rebuild drift / owned teardown); it must not turn a read-only state check into a
+  mutating command, suppress drift, or broaden scope silently.
 - A `destroy`, `reset`, `cleanup`, `remove`, `purge`, `wipe`, or replacement
   path is destructive only when the command, flags, and selected desired state
   authorize that exact scope. `--yes` skips confirmation only; it is not
@@ -187,7 +198,15 @@ help, examples, and tests for:
   non-mutating, loads the same selected desired-state graph as converge/destroy,
   compares against the durable last-apply convergence record without mutation (it
   does not live-probe), and neither the report nor its docs overstate that as live
-  reality.
+  reality. The comparison primitive is shared: `apply`'s mode preflight and
+  `state-check` classify objects through the same path (`ClassifyConvergeSafety`
+  per task, aggregated per object), so a divergence the state check reports is the
+  same divergence `apply --continue` fails on. Verify the two cannot drift apart.
+- Convergence-record lifecycle: a successful `destroy` must drop the component
+  entirely AND reset its convergence records to absent (so a later greenfield
+  `apply` recreates it rather than refusing, and `--continue` does not skip a gone
+  object as matched). Audit whether destroy clears the converge-safety, install,
+  and ownership records for everything it tore down.
 - State-check report quality: when a selected cluster or storage cluster is
   wholly absent, the report says that succinctly instead of dumping every child
   object as missing; when the root exists, the report names material differences
@@ -313,17 +332,20 @@ for cluster-scoped destroys, read-only checks, status, render, or apply. Package
 disk, VM, storage, and cluster-resource deletion must be limited by ownership and
 selection.
 
-**Apply safety.** Repeated apply should skip completed installs and matching
-resources, resume known-safe partial phases, and fail closed on unsafe mismatch.
-It must not use delete-and-recreate as a generic convergence strategy. If a
-provider requires replacement, the operator should see and explicitly authorize
-the destructive replacement path.
+**Apply safety.** Bare `apply` is greenfield-only and must fail closed when any
+selected object already exists. `apply --continue` skips matching objects, resumes
+known-safe partial phases, creates what is missing, and fails closed on drift or
+foreign ownership — it must never delete-and-recreate to converge. `apply
+--override` may rebuild drifted owned objects and create missing ones, but must
+leave matching objects untouched and never rebuild a foreign object. A clean
+recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
 
-**Override safety.** For every command supporting `--override`, audit both
-variants. Without override, unsafe mismatch, destructive drift, protected destroy,
-or ambiguous ownership should fail before mutation. With override, only the
-documented command-scoped safety barrier should change. Read-only state checking
-must remain read-only and should still report drift rather than hiding it.
+**Override safety.** Audit `apply` under all three modes and other `--override`
+commands both ways. `apply --override` must rebuild only drifted/owned objects
+(skipping matches, refusing foreign); without override, drift fails closed under
+`--continue` and any pre-existing object fails closed under bare `apply`. Override
+must not bypass leases, validation, secrets, or `destroyProtection`, turn a
+read-only state check into a mutating command, or suppress reported drift.
 
 **Go-Ansible contract.** Go should classify intent, scope, ownership, locks, and
 safe drift before rendering and launching Ansible. Ansible should not infer
