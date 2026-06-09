@@ -352,6 +352,7 @@
         TMPDIR: "{{ bootwright_os_install_tmpdir }}"
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
+      changed_when: true
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
@@ -370,6 +371,7 @@
         TMPDIR: "{{ bootwright_os_install_tmpdir }}"
         TMP: "{{ bootwright_os_install_tmpdir }}"
         TEMP: "{{ bootwright_os_install_tmpdir }}"
+      changed_when: true
       when:
         - bootwright_os_install_iso_rebuild_needed | bool
         - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0

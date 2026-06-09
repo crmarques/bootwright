@@ -106,6 +106,7 @@
       - -extensions
       - v3_req
   register: bootwright_artifacts_tls_generated
+  changed_when: true
   when:
     - bootwright_artifacts_https_enabled | bool
     - not (bootwright_artifacts_tls_material_present | default(false) | bool)

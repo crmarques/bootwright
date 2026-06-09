@@ -150,6 +150,7 @@
       - mv
       - "{{ bootwright_libvirt_machine_root }}/disk.qcow2"
       - "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
+  changed_when: true
   when:
     - bootwright_libvirt_machine_disk_locations.results[0].stat.exists | default(false)
     - not (bootwright_libvirt_machine_disk_locations.results[1].stat.exists | default(false))
@@ -180,6 +181,7 @@
   loop_control:
     label: "{{ item.name }}"
     extended: true
+  changed_when: true
   when:
     - bootwright_libvirt_machine_data_disk_source_locations.results[ansible_loop.index0].stat.exists | default(false)
     - not (bootwright_libvirt_machine_data_disk_storage_locations.results[ansible_loop.index0].stat.exists | default(false))
