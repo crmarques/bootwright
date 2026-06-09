@@ -27,6 +27,10 @@ type StateCheckRoot struct {
 type StateCheckReport struct {
 	Roots  []StateCheckRoot `json:"roots"`
 	InSync bool             `json:"inSync"`
+	// Undeclared lists Bootwright-owned resources still recorded in the ownership
+	// store but no longer present in desired state (orphans left by removing an object
+	// without destroying it). Reported, never mutated; a full `destroy` reclaims them.
+	Undeclared []UndeclaredResource `json:"undeclared,omitempty"`
 }
 
 // StateCheck classifies every task in the selected apply graph against the

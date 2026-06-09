@@ -9,10 +9,30 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
+
+// printDestroyOrphans lists Bootwright-owned resources still recorded in the ownership
+// store but no longer declared in desired state. A full `bootwright destroy` reclaims
+// them via the ownership-record sweep; this preview surfaces them so the operator knows
+// they exist. Read-only.
+func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
+	if len(orphans) == 0 {
+		return
+	}
+	p := output.NewContinuation(w)
+	p.Section("Owned but no longer declared")
+	for _, o := range orphans {
+		label := o.Kind + "/" + o.Name
+		if o.Cluster != "" {
+			label += " (cluster " + o.Cluster + ")"
+		}
+		p.Status(output.StatusWarn, label, "not in desired state; a full `bootwright destroy` reclaims it")
+	}
+}
 
 // printDestroyPreview lists the user-visible resources `destroy` will
 // remove for the current scope, before the confirmation prompt. The

@@ -10,6 +10,7 @@ import (
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/runtime/ownership"
 )
 
 func newStateCheckCmd(stdout io.Writer) *cobra.Command {
@@ -55,6 +56,10 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
+		// Orphan detection compares the ownership records against the FULL declared
+		// desired state, before --clusters scoping narrows it (otherwise a scoped check
+		// would report other clusters' resources as undeclared).
+		fullState := state
 		scoped := strings.TrimSpace(clusterScope) != ""
 		if scoped {
 			if _, _, err = clusterRootNamesForTarget(state, clusterScope); err != nil {
@@ -84,6 +89,11 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
+		// Best-effort: report Bootwright-owned resources that are no longer declared
+		// (orphans). Read-only — a failure to read records must not break the check.
+		if records, lerr := ownership.LoadResources(cf.ctx.OwnershipDir); lerr == nil {
+			report.Undeclared = workflow.OwnershipOrphans(fullState, ownership.FilterByContext(records, cf.ctx.Name))
+		}
 		if output == outputJSON {
 			return cliout.JSON(stdout, report)
 		}
@@ -97,28 +107,49 @@ func printStateCheckReport(stdout io.Writer, report workflow.StateCheckReport) {
 	p := cliout.New(stdout)
 	p.Command("state-check")
 	p.Section("Desired vs recorded reality")
-	if len(report.Roots) == 0 {
+	switch {
+	case len(report.Roots) == 0:
 		p.Status(cliout.StatusOK, "scope", "no selected resources to check")
-		return
-	}
-	if report.InSync {
+	case report.InSync:
 		p.Status(cliout.StatusOK, "state", "selected desired state matches the last recorded apply")
-		return
-	}
-	for _, root := range report.Roots {
-		label := root.Kind + "/" + root.Name
-		switch {
-		case root.Absent:
-			p.Status(cliout.StatusWarn, label, "absent (never applied)")
-		case len(root.Resources) == 0:
-			p.Status(cliout.StatusOK, label, "in sync")
-		default:
-			p.Status(cliout.StatusWarn, label, fmt.Sprintf("%d of %d resources drifted from desired state", len(root.Resources), root.Total))
-			for _, resource := range root.Resources {
-				p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
+	default:
+		for _, root := range report.Roots {
+			label := root.Kind + "/" + root.Name
+			switch {
+			case root.Absent:
+				p.Status(cliout.StatusWarn, label, "absent (never applied)")
+			case len(root.Resources) == 0:
+				p.Status(cliout.StatusOK, label, "in sync")
+			default:
+				p.Status(cliout.StatusWarn, label, fmt.Sprintf("%d of %d resources drifted from desired state", len(root.Resources), root.Total))
+				for _, resource := range root.Resources {
+					p.Status(stateCheckResourceStatus(resource.Classification), resource.Label, string(resource.Classification))
+				}
 			}
 		}
 	}
+	printStateCheckOrphans(p, report.Undeclared)
+}
+
+// printStateCheckOrphans lists Bootwright-owned resources that are no longer declared
+// in desired state (orphans). They are not drift and are never auto-removed; the
+// remedy is to re-declare them or run a full `bootwright destroy` to reclaim them.
+func printStateCheckOrphans(p *cliout.Printer, orphans []workflow.UndeclaredResource) {
+	if len(orphans) == 0 {
+		return
+	}
+	p.Section("Owned but no longer declared")
+	for _, o := range orphans {
+		detail := "owned by Bootwright but not in desired state"
+		switch {
+		case o.Cluster != "":
+			detail += fmt.Sprintf(" (cluster %s)", o.Cluster)
+		case o.Provider != "":
+			detail += fmt.Sprintf(" (provider %s)", o.Provider)
+		}
+		p.Status(cliout.StatusWarn, o.Kind+"/"+o.Name, detail)
+	}
+	p.Status(cliout.StatusWarn, "remedy", "re-declare these objects, or run `bootwright destroy` to reclaim them")
 }
 
 func stateCheckResourceStatus(class workflow.ConvergeSafetyClassification) cliout.Status {

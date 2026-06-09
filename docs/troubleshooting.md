@@ -114,3 +114,19 @@ bootwright context update <context-name> -f <input-dir> --yes
 ```
 
 Omit `--yes` to review and confirm the input replacement interactively.
+
+## Resources No Longer In Desired State (Orphans)
+
+`apply` never deletes — it only creates and converges what desired state declares. If
+you remove an object (a `Machine`, an `InfraProvider`, a cluster, …) from desired state
+*without* destroying it first, the live resource keeps running. It is not lost: Bootwright
+still owns it through its ownership records, so a full `bootwright destroy` reclaims it
+(destroy is ownership-record driven and rebuilds its inventory from those records, so it
+can reach a provider host even after that host was removed from desired state).
+
+To find such orphans, run `bootwright state-check`: resources owned by Bootwright but no
+longer declared are listed under **"Owned but no longer declared"** (and as `undeclared`
+in `--output json`). `bootwright destroy --dry-run` shows the same. To resolve one, either
+re-declare the object and re-apply, or run a full `bootwright destroy` to reclaim it.
+Bootwright deliberately does not prune on `apply`: a stray desired-state edit must never
+silently tear down running infrastructure.

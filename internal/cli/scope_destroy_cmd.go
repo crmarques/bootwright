@@ -202,6 +202,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			printDestroyArtifactServerPreview(stdout, plan.state)
 		} else {
 			printDestroyPreview(stdout, runScope, clustersDir, plan.state)
+			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
 		printDestroySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
 		if !dryRun && !yes && !plan.noRemoteWork {
@@ -278,6 +279,13 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			if tasks, perr := workflow.PlanApplyTasksChecked(runScope.applyTarget(), plan.state); perr == nil {
 				for _, task := range tasks {
 					_ = workflow.RemoveApplyTaskConvergeSafety(ctx.RunsDir, task)
+				}
+				// The ansible cluster destroy runs on the OCP nodes and cannot remove the
+				// controller-side install record, connection record, and kubeconfig. Remove
+				// them here so the next apply does not refuse a destroyed container cluster
+				// at the install-state reconcile (surviving kubeconfig / installed record).
+				for _, name := range workflow.ContainerInstallClusterNames(tasks) {
+					_ = workflow.RemoveClusterInstallState(clustersDir, name)
 				}
 			}
 		}

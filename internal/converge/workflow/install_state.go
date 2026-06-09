@@ -127,6 +127,29 @@ func ClusterConnectionPath(clustersDir, cluster string) string {
 	return filepath.Join(ClusterRuntimeDir(clustersDir, cluster), ClusterConnectionFileName)
 }
 
+// RemoveClusterInstallState removes the controller-side install record, connection
+// record, and kubeconfig for a container cluster (each a no-op if absent). Destroy
+// calls it so a torn-down cluster reclassifies as missing and the next apply rebuilds
+// it cleanly. The ansible cluster destroy runs on bootwright_ocp_hosts and cannot
+// remove these controller-side files; without this a surviving install record or
+// kubeconfig makes ReconcileApplyClusterInstallState refuse the next apply ("existing
+// kubeconfig but does not report Available=True; refusing … without --override").
+func RemoveClusterInstallState(clustersDir, cluster string) error {
+	if strings.TrimSpace(clustersDir) == "" || strings.TrimSpace(cluster) == "" {
+		return nil
+	}
+	for _, path := range []string{
+		ClusterInstallRecordPath(clustersDir, cluster),
+		ClusterConnectionPath(clustersDir, cluster),
+		clusterKubeconfigPath(clustersDir, cluster),
+	} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove cluster install state %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
 func LoadClusterInstallRecord(clustersDir, cluster string) (ClusterInstallRecord, bool, error) {
 	path := ClusterInstallRecordPath(clustersDir, cluster)
 	data, err := os.ReadFile(path)
@@ -515,6 +538,13 @@ func clusterConnectionRecord(clustersDir, clusterName string, environments []v1a
 	record.APIURL = render.ClusterAPIURL(clusterName, baseDomain)
 	record.ConsoleURL = render.ClusterConsoleURL(clusterName, baseDomain)
 	return record
+}
+
+// ContainerInstallClusterNames returns, sorted, the container-cluster names that have a
+// cluster-install task (clusterISO/nodeBoot/installWait) in the set. Destroy uses it to
+// know which clusters' controller-side install state to remove via RemoveClusterInstallState.
+func ContainerInstallClusterNames(tasks []ApplyTask) []string {
+	return installTaskClusterNames(tasks)
 }
 
 func installTaskClusterNames(tasks []ApplyTask) []string {
