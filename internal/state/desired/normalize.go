@@ -285,6 +285,14 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	if ocp.Spec.Install.Method == "" {
 		ocp.Spec.Install.Method = v1alpha1.OCPInstallMethodAgent
 	}
+	for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
+		endpoint, ok := ocp.Spec.Install.Endpoints[name]
+		if !ok || endpoint.Source.Type != "" {
+			continue
+		}
+		endpoint.Source.Type = v1alpha1.EndpointSourceOpenShift
+		ocp.Spec.Install.Endpoints[name] = endpoint
+	}
 	applyEnvironmentInstallDefaults(ocp, env)
 	for i := range ocp.Spec.Nodes {
 		node := &ocp.Spec.Nodes[i]

@@ -754,6 +754,10 @@ Rules:
 
 - Unknown kinds and unknown fields are rejected at load time.
 - Retired kinds and fields are not migrated.
+- A default consumed by more than one pipeline stage is materialized by the
+  normalize phase (for example, an omitted standard container endpoint
+  `source.type` becomes `openshift`); validators and renderers read the
+  normalized value instead of recomputing the default.
 - References must resolve to loaded resources selected by `Environment`.
 - Machines must declare `spec.os.provided`.
 - Machines with `os.provided: false` must have `spec.substrate.providerRef`.

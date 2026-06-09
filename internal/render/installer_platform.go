@@ -234,7 +234,7 @@ func vipsFromEndpoints(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1a
 func allContainerEndpointsOpenShift(ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) bool {
 	for _, name := range standardEndpointNames {
 		endpoint, ok := containerEndpoint(ci, ocp, name)
-		if !ok || endpointSourceType(endpoint, v1alpha1.EndpointSourceOpenShift) != v1alpha1.EndpointSourceOpenShift {
+		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceOpenShift {
 			return false
 		}
 	}

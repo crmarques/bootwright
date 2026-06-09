@@ -221,7 +221,7 @@ func validateSNOOpenShiftEndpoints(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 	for _, role := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
 		refName := containerEndpointRefName(ocp, role)
 		endpoint, ok := ci.Endpoints[refName]
-		if ok && effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceOpenShift) == v1alpha1.EndpointSourceOpenShift {
+		if ok && endpoint.Source.Type == v1alpha1.EndpointSourceOpenShift {
 			errs = append(errs, fmt.Sprintf("ContainerCluster/%s single-node clusters forbid spec.install.endpoints.%s source.type=openshift",
 				ocp.Metadata.Name, refName))
 		}
@@ -243,7 +243,7 @@ func validateContainerEndpointRefs(ocp v1alpha1.ContainerCluster, ci v1alpha1.Cl
 			errs = append(errs, fmt.Sprintf("%s is required", prefix))
 			continue
 		}
-		source := effectiveEndpointSource(endpoint, v1alpha1.EndpointSourceOpenShift)
+		source := endpoint.Source.Type
 		switch source {
 		case v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal:
 			if endpoint.Address == "" {
@@ -270,13 +270,6 @@ func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string
 	default:
 		return ""
 	}
-}
-
-func effectiveEndpointSource(endpoint v1alpha1.Endpoint, defaultSource string) string {
-	if endpoint.Source.Type != "" {
-		return endpoint.Source.Type
-	}
-	return defaultSource
 }
 
 func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {

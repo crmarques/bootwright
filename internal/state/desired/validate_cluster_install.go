@@ -103,7 +103,7 @@ func validateClusterEndpoint(prefix string, ci v1alpha1.ClusterInstall, componen
 	for i, cidr := range endpoint.InterfaceNetworks {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.interfaceNetworks[%d]", prefix, i), cidr)...)
 	}
-	switch effectiveEndpointSource(endpoint, "") {
+	switch endpoint.Source.Type {
 	case "", v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceCephadm, v1alpha1.EndpointSourceExternal:
 		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddress != "" {
 			errs = append(errs, prefix+".source component fields are only valid when source.type=infraComponent")

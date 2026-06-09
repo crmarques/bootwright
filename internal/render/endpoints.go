@@ -37,13 +37,6 @@ func containerEndpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInstall, 
 	return endpointAddress(state, ci, containerEndpointRefName(ocp, role))
 }
 
-func endpointSourceType(endpoint v1alpha1.Endpoint, defaultType string) string {
-	if endpoint.Source.Type != "" {
-		return endpoint.Source.Type
-	}
-	return defaultType
-}
-
 func endpointAddress(state v1alpha1.State, ci v1alpha1.ClusterInstall, name string) string {
 	return stateview.EndpointAddress(state, ci, name)
 }
