@@ -2858,12 +2858,36 @@ func TestStorageCephadmDestroyPlayAbortsOnSeedRefusal(t *testing.T) {
 
 func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/install.yml")
-	checkIdx := findAnsibleTask(t, tasks, "Check declared OSD devices are empty")
+	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")
+	resolveIdx := findAnsibleTask(t, tasks, "Resolve devices recorded as Bootwright OSDs for this cluster")
+	checkIdx := findAnsibleTask(t, tasks, "Check declared OSD devices are empty or Bootwright-owned")
 	stampIdx := findAnsibleTask(t, tasks, "Stamp Bootwright OSD device ownership marker")
 	// The marker records the devices Bootwright claims as OSDs, captured after the
 	// empty-device check, so destroy can later prove a declared device was ours.
-	if !(checkIdx < stampIdx) {
-		t.Fatalf("OSD device marker must be stamped after the empty-device check (check=%d stamp=%d)", checkIdx, stampIdx)
+	// The check itself reads the previous apply's marker first: a recorded device
+	// may carry Bootwright's own ceph-volume signatures (owned, half-converged
+	// cluster) without failing the re-apply.
+	if !(readIdx < resolveIdx && resolveIdx < checkIdx && checkIdx < stampIdx) {
+		t.Fatalf("OSD device gate must read and resolve the marker before the device check and stamp after it (read=%d resolve=%d check=%d stamp=%d)", readIdx, resolveIdx, checkIdx, stampIdx)
+	}
+	if got := fmt.Sprint(tasks[readIdx]["failed_when"]); got != "false" {
+		t.Fatalf("OSD marker read must tolerate a missing marker, got failed_when=%v", got)
+	}
+	// Marker-gated so a node with no marker keeps the strict empty-device gate.
+	if got := fmt.Sprint(tasks[resolveIdx]["when"]); !strings.Contains(got, "content is defined") {
+		t.Fatalf("OSD owned-device resolution must be gated on marker content, got when=%v", got)
+	}
+	// Another cluster's (or node's) leftovers must never count as owned.
+	resolve, ok := tasks[resolveIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("OSD owned-device resolution must be a set_fact, got %v", tasks[resolveIdx])
+	}
+	resolved := fmt.Sprint(resolve["bootwright_ceph_owned_osd_devices"])
+	if !strings.Contains(resolved, "bootwright_selected_storage_cluster.name") || !strings.Contains(resolved, "bootwright_current_storage_node.name") {
+		t.Fatalf("OSD owned-device resolution must require cluster and node to match the marker, got %v", resolved)
+	}
+	if got := fmt.Sprint(tasks[checkIdx]["failed_when"]); !strings.Contains(got, "bootwright_ceph_owned_osd_devices") {
+		t.Fatalf("OSD device check must exempt only recorded Bootwright devices, got failed_when=%v", got)
 	}
 	stamp, ok := tasks[stampIdx]["ansible.builtin.copy"].(map[string]any)
 	if !ok {
