@@ -361,7 +361,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			printBundlePath(stdout, bundleResult.Dir)
 		}
 		if plan.targetsClusters {
-			printClusterAccess(stdout, plan.state, renderResult, ledger)
+			printClusterAccess(stdout, plan.state, renderResult, ledger, clustersDir)
 		}
 		return nil
 	}

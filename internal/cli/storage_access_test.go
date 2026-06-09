@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +16,7 @@ const cephFixture = "006-ceph-3nodes-libvirt-managed-os"
 
 func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	state := loadFixtureState(t, cephFixture)
-	summaries := storageAccessSummaries(state)
+	summaries := storageAccessSummaries(state, "")
 	if len(summaries) != 1 {
 		t.Fatalf("summaries = %+v, want one storage cluster", summaries)
 	}
@@ -109,7 +111,7 @@ func TestPrintClusterAccessShowsStorageAfterSuccessfulApply(t *testing.T) {
 	ledger.Finish(workflow.RunStatusOK, now)
 
 	var out bytes.Buffer
-	printClusterAccess(&out, state, render.Result{}, ledger)
+	printClusterAccess(&out, state, render.Result{}, ledger, t.TempDir())
 	got := out.String()
 	for _, want := range []string{
 		"Storage cluster ceph-libvirt",
@@ -130,7 +132,70 @@ func TestStorageAccessSummariesForApplySkipsUnrunCluster(t *testing.T) {
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 
-	if summaries := storageAccessSummariesForApply(state, ledger); len(summaries) != 0 {
+	if summaries := storageAccessSummariesForApply(state, ledger, t.TempDir()); len(summaries) != 0 {
 		t.Fatalf("summaries = %+v, want none for skipped install", summaries)
+	}
+}
+
+func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
+	state := loadFixtureState(t, cephFixture)
+	clustersDir := t.TempDir()
+	summaries := storageAccessSummaries(state, clustersDir)
+	if len(summaries) != 1 {
+		t.Fatalf("summaries = %+v, want one storage cluster", summaries)
+	}
+	summary := summaries[0]
+	wantPath := filepath.Join(clustersDir, "ceph-libvirt", "secrets", "dashboard-password")
+	if summary.DashboardUser != "admin" {
+		t.Fatalf("dashboard user = %q, want admin", summary.DashboardUser)
+	}
+	if summary.DashboardPasswordPath != wantPath {
+		t.Fatalf("dashboard password path = %q, want %q", summary.DashboardPasswordPath, wantPath)
+	}
+	if summary.DashboardPasswordCommand != "sudo cat "+wantPath {
+		t.Fatalf("dashboard password command = %q", summary.DashboardPasswordCommand)
+	}
+	if summary.DashboardPassword.Present {
+		t.Fatalf("dashboard password reported present before install: %+v", summary.DashboardPassword)
+	}
+}
+
+func TestClusterAccessInfoShowsDashboardPasswordAndDoesNotRevealIt(t *testing.T) {
+	ctx := initTestContext(t, cephFixture)
+	passwordPath := filepath.Join(ctx.ClustersDir, "ceph-libvirt", "secrets", "dashboard-password")
+	if err := os.MkdirAll(filepath.Dir(passwordPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(passwordPath, []byte("do-not-print-this-dashboard-password\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runCLI(t, "cluster", "access-info", "--cluster", "ceph-libvirt")
+	if code != 0 {
+		t.Fatalf("cluster access-info exited %d, stderr=%q", code, stderr)
+	}
+	for _, want := range []string{
+		"Dashboard user: admin",
+		"Dashboard password file: " + passwordPath,
+		"Show dashboard password: sudo cat " + passwordPath,
+		"[OK] dashboard password",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("cluster access-info missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "do-not-print-this-dashboard-password") {
+		t.Fatalf("cluster access-info leaked dashboard password bytes:\n%s", stdout)
+	}
+
+	listOut, _, listCode := runCLI(t, "cluster", "list")
+	if listCode != 0 {
+		t.Fatalf("cluster list exited %d", listCode)
+	}
+	if !strings.Contains(listOut, "Dashboard password: OK "+passwordPath) {
+		t.Fatalf("cluster list missing dashboard password status:\n%s", listOut)
+	}
+	if strings.Contains(listOut, "do-not-print-this-dashboard-password") {
+		t.Fatalf("cluster list leaked dashboard password bytes:\n%s", listOut)
 	}
 }

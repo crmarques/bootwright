@@ -37,9 +37,9 @@ type clusterAccessSummary struct {
 	Ready                    bool                  `json:"ready"`
 }
 
-func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger) {
+func printClusterAccess(stdout io.Writer, state v1alpha1.State, result render.Result, ledger workflow.RunLedger, clustersDir string) {
 	container := clusterAccessSummariesForApply(state, result, ledger)
-	storage := storageAccessSummariesForApply(state, ledger)
+	storage := storageAccessSummariesForApply(state, ledger, clustersDir)
 	if len(container) == 0 && len(storage) == 0 {
 		return
 	}

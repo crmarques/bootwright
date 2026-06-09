@@ -46,7 +46,7 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 		t.Fatalf("password path = %q, want %q", summary.KubeadminPasswordPath, passwordPath)
 	}
 	var out bytes.Buffer
-	printClusterAccess(&out, state, result, ledger)
+	printClusterAccess(&out, state, result, ledger, clustersDir)
 	got := out.String()
 	for _, want := range []string{
 		"Cluster access",

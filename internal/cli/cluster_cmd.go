@@ -35,6 +35,7 @@ type clusterListEntry struct {
 	ConsoleURL        string                `json:"consoleURL,omitempty"`
 	Kubeconfig        clusterAccessArtifact `json:"kubeconfig,omitempty"`
 	KubeadminPassword clusterAccessArtifact `json:"kubeadminPassword,omitempty"`
+	DashboardPassword clusterAccessArtifact `json:"dashboardPassword,omitempty"`
 	Ready             bool                  `json:"ready,omitempty"`
 }
 
@@ -145,7 +146,7 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 		}
 		clustersDir := controllerClustersDir(cf.ctx.Name)
 		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
-		storage := storageClusterListEntries(state)
+		storage := storageClusterListEntries(state, clustersDir)
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterListReport{Context: cf.ctx.Name, Clusters: append(clusterListEntries(summaries), storage...)})
 		}
@@ -210,7 +211,7 @@ func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra
 		summaries = filterClusterAccessSummaries(summaries, clusterName)
 		var storage []storageAccessSummary
 		if spec.includeStorage {
-			storage = filterStorageAccessSummaries(storageAccessSummaries(state), clusterName)
+			storage = filterStorageAccessSummaries(storageAccessSummaries(state, clustersDir), clusterName)
 		}
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries, Storage: storage})
@@ -249,6 +250,11 @@ func printClusterList(stdout io.Writer, summaries []clusterAccessSummary, storag
 			detail += " " + cluster.Management
 		}
 		p.Status(cliout.StatusOK, cluster.Name, detail)
+		if cluster.DashboardPassword.Path != "" {
+			p.Fields([]cliout.Field{
+				{Key: "Dashboard password", Value: accessArtifactDetail(cluster.DashboardPassword)},
+			})
+		}
 	}
 }
 
@@ -294,19 +300,25 @@ func clusterListEntries(summaries []clusterAccessSummary) []clusterListEntry {
 	return entries
 }
 
-func storageClusterListEntries(state v1alpha1.State) []clusterListEntry {
+func storageClusterListEntries(state v1alpha1.State, clustersDir string) []clusterListEntry {
 	entries := make([]clusterListEntry, 0, len(state.StorageClusters))
 	for _, cluster := range state.StorageClusters {
 		management := cluster.Spec.Management
 		if management == "" {
 			management = v1alpha1.StorageClusterManagementManaged
 		}
-		entries = append(entries, clusterListEntry{
+		entry := clusterListEntry{
 			Kind:       "storage",
 			Name:       cluster.Metadata.Name,
 			Type:       cluster.Spec.Type,
 			Management: management,
-		})
+		}
+		if management == v1alpha1.StorageClusterManagementManaged && cluster.Spec.Ceph != nil {
+			if path := storageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
+				entry.DashboardPassword = clusterAccessFileStatus(path)
+			}
+		}
+		entries = append(entries, entry)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 	return entries

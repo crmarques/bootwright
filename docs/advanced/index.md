@@ -13,4 +13,5 @@ These pages summarize advanced schema usage. The authoritative field contract is
 - [Networking](networking.md)
 - [Proxy And Disconnected Installs](proxy-and-disconnected.md)
 - [Post-Install Add-Ons](post-install-addons.md)
+- [Ceph Storage Clusters](storage-ceph.md)
 - [Secrets](secrets.md)
