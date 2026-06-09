@@ -181,6 +181,30 @@ func validateClusterNames(state v1alpha1.State, names []string) error {
 	return fmt.Errorf("unknown cluster(s): %s; %s", strings.Join(missing, ", "), availableClusterNamesHint(available))
 }
 
+// validateAccessClusterName validates a --cluster value for the access-info
+// surface. When storage is in scope the name may resolve to a ContainerCluster
+// or a StorageCluster; otherwise only container clusters are accepted.
+func validateAccessClusterName(state v1alpha1.State, name string, includeStorage bool) error {
+	if !includeStorage {
+		return validateClusterNames(state, []string{name})
+	}
+	known := map[string]bool{}
+	for _, ocp := range state.ContainerClusters {
+		known[ocp.Metadata.Name] = true
+	}
+	for _, cluster := range state.StorageClusters {
+		known[cluster.Metadata.Name] = true
+	}
+	if known[name] {
+		return nil
+	}
+	var available []string
+	for declared := range known {
+		available = append(available, declared)
+	}
+	return fmt.Errorf("unknown cluster(s): %s; %s", name, availableClusterNamesHint(available))
+}
+
 // formatDestroyScopeConflicts builds an actionable error message that
 // lists every shared machine service and names the unscoped clusters
 // that would break if the destroy proceeded.
