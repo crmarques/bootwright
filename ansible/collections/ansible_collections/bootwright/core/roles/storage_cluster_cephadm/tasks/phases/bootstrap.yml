@@ -142,9 +142,9 @@
     # `ceph fsid`) so a DOWN cluster stays classifiable and re-stampable. The record
     # is written right after bootstrap (below), so a half-provisioned cluster (conf
     # present, marker absent) is still classified as owned and is recoverable by
-    # `apply --continue` instead of a manual /etc/ceph removal. Computed for every
-    # mode; --override then zaps+rebuilds an owned cluster, --continue leaves its
-    # bootstrap untouched (idempotent resume) and re-stamps it below.
+    # re-running `apply` instead of a manual /etc/ceph removal. Computed for every
+    # mode; override then zaps+rebuilds an owned cluster, the default reconcile
+    # leaves its bootstrap untouched (idempotent resume) and re-stamps it below.
     - name: Read existing Ceph configuration for override rebuild
       ansible.builtin.slurp:
         src: /etc/ceph/ceph.conf
@@ -317,7 +317,7 @@
     # bootstrap — before the host/service/operation steps that may fail — and write
     # the Bootwright ownership record at the same point, so a cephadm cluster
     # Bootwright created stays classified as owned (reclaimable by --override,
-    # recoverable by --continue) even if a subsequent step aborts the apply. The fsid
+    # recoverable by re-apply) even if a subsequent step aborts the apply. The fsid
     # is read from the on-disk ceph.conf, not live `ceph fsid`, so a DOWN cluster is
     # still re-stampable. Both are refreshed on every apply (re-stamping clusters
     # bootstrapped before the marker/record existed). Removed by /etc/ceph teardown in
@@ -356,7 +356,7 @@
     # Write the Bootwright ownership record immediately after bootstrap so a partial
     # apply (one that fails before the enriched record at the end of this play) is
     # still classified as owned by the 3-factor gate above — making it recoverable by
-    # `apply --continue` rather than a manual /etc/ceph removal. The enriched write at
+    # re-running `apply` rather than a manual /etc/ceph removal. The enriched write at
     # the end supersedes it with the full paths/labels/attributes.
     - name: Record storage cluster ownership early for recoverability
       ansible.builtin.include_role:

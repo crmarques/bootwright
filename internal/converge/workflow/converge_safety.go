@@ -109,9 +109,8 @@ func ConvergeSafetyRecordPath(runsDir, resourceID string) string {
 
 // RemoveConvergeSafetyRecord deletes the convergence-safety record for a resource
 // if present (a no-op when absent). Destroy calls it so a torn-down object
-// reclassifies as missing: a later greenfield apply recreates it instead of
-// refusing, and apply --continue creates it instead of skipping a gone object as
-// already-applied.
+// reclassifies as missing: a later apply creates it instead of skipping a gone
+// object as already-applied, and apply --expect-new no longer refuses it.
 func RemoveConvergeSafetyRecord(runsDir, resourceID string) error {
 	if strings.TrimSpace(runsDir) == "" || strings.TrimSpace(resourceID) == "" {
 		return nil

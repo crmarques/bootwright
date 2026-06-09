@@ -38,13 +38,13 @@ description. Treat "explicit" narrowly:
   better name when the current CLI lacks one or overloads a mutating command.
 - `apply` has three explicit, mutually-understood safety modes; audit the path
   under each:
-  - bare `apply` is **greenfield-only**: it creates objects that do not yet exist
-    and must **fail closed** (refuse, mutate nothing) if any selected object
-    already exists — recorded by Bootwright or otherwise present.
-  - `apply --continue` is the **safe reconcile**: it creates what is missing,
+  - bare `apply` is the **safe reconcile** default: it creates what is missing,
     skips what already matches desired state (proving the match, not re-running),
     and **fails closed** on drift or foreign ownership. A previously-successful
-    run under `--continue` must run end to end mutating nothing.
+    run must run end to end mutating nothing.
+  - `apply --expect-new` is the **greenfield assert**: it additionally must
+    **fail closed** (refuse, mutate nothing) if any selected object already
+    exists — recorded by Bootwright or otherwise present.
   - `apply --override` is the only **break-glass** mode: it rebuilds objects that
     have drifted and creates what is missing, but leaves objects that already
     match untouched (no gratuitous rebuild) and **never** rebuilds a foreign
@@ -201,12 +201,12 @@ help, examples, and tests for:
   reality. The comparison primitive is shared: `apply`'s mode preflight and
   `state-check` classify objects through the same path (`ClassifyConvergeSafety`
   per task, aggregated per object), so a divergence the state check reports is the
-  same divergence `apply --continue` fails on. Verify the two cannot drift apart.
+  same divergence a default `apply` fails on. Verify the two cannot drift apart.
 - Convergence-record lifecycle: a successful `destroy` must drop the component
-  entirely AND reset its convergence records to absent (so a later greenfield
-  `apply` recreates it rather than refusing, and `--continue` does not skip a gone
-  object as matched). Audit whether destroy clears the converge-safety, install,
-  and ownership records for everything it tore down.
+  entirely AND reset its convergence records to absent (so a later `apply`
+  recreates it rather than skipping a gone object as matched, and `--expect-new`
+  no longer refuses it). Audit whether destroy clears the converge-safety,
+  install, and ownership records for everything it tore down.
 - State-check report quality: when a selected cluster or storage cluster is
   wholly absent, the report says that succinctly instead of dumping every child
   object as missing; when the root exists, the report names material differences
@@ -332,10 +332,10 @@ for cluster-scoped destroys, read-only checks, status, render, or apply. Package
 disk, VM, storage, and cluster-resource deletion must be limited by ownership and
 selection.
 
-**Apply safety.** Bare `apply` is greenfield-only and must fail closed when any
-selected object already exists. `apply --continue` skips matching objects, resumes
-known-safe partial phases, creates what is missing, and fails closed on drift or
-foreign ownership — it must never delete-and-recreate to converge. `apply
+**Apply safety.** Bare `apply` skips matching objects, resumes known-safe partial
+phases, creates what is missing, and fails closed on drift or foreign ownership —
+it must never delete-and-recreate to converge. `apply --expect-new` must fail
+closed when any selected object already exists. `apply
 --override` may rebuild drifted owned objects and create missing ones, but must
 leave matching objects untouched and never rebuild a foreign object. A clean
 recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
@@ -343,7 +343,7 @@ recreate of a matching object is a `destroy` then `apply`, not an `apply` flag.
 **Override safety.** Audit `apply` under all three modes and other `--override`
 commands both ways. `apply --override` must rebuild only drifted/owned objects
 (skipping matches, refusing foreign); without override, drift fails closed under
-`--continue` and any pre-existing object fails closed under bare `apply`. Override
+bare `apply` and any pre-existing object fails closed under `--expect-new`. Override
 must not bypass leases, validation, secrets, or `destroyProtection`, turn a
 read-only state check into a mutating command, or suppress reported drift. For
 storage sub-objects (StoragePool/Filesystem/ObjectGateway/Export), `--override` must

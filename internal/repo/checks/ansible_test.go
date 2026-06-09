@@ -2759,7 +2759,7 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 
 	// The ownership record is written right after bootstrap (before the failure-prone
 	// SSH-trust/service/operation steps) so a partial apply stays classified as owned
-	// and recoverable by --continue; it is the load-bearing record the gate reads.
+	// and recoverable by re-apply; it is the load-bearing record the gate reads.
 	recordIdx := findAnsibleTask(t, tasks, "Record storage cluster ownership early for recoverability")
 	sshTrustIdx := findAnsibleTask(t, tasks, "Configure cephadm SSH trust")
 	if !(recordIdx < sshTrustIdx) {

@@ -255,19 +255,21 @@ task and a bound add-on with `provides: [data-foundation]`.
 
 Apply runs in one of three explicit safety modes:
 
-- Bare `apply` is **greenfield-only**: it creates the selected objects and stops
-  with a clear message if any of them already exist, so it never silently mutates
-  an environment it did not create.
-- `apply --continue` is the everyday re-run after a partial or completed apply: it
-  creates what is missing, skips objects that already match the recorded desired
-  state, and fails closed on drift or foreign ownership. A previously-successful
-  run under `--continue` runs end to end without changing anything.
+- Bare `apply` is the everyday converge: it creates what is missing, skips
+  objects that already match the recorded desired state, and fails closed on
+  drift or foreign ownership. The first apply and every re-run after a partial
+  or completed apply use the same command; a previously-successful run applies
+  end to end without changing anything.
+- `apply --expect-new` additionally asserts a greenfield run: it stops with a
+  clear message if any selected object already exists. Use it when leftovers
+  must fail the run, for example in pipelines that provision disposable
+  environments.
 - `apply --override` is the break-glass mode: it rebuilds objects that have drifted
   (managed-OS reinstall, owned-Ceph wipe-and-rebuild) and creates what is missing,
   but leaves matching objects untouched and never rebuilds an object Bootwright
   does not own.
 
-`--continue` and `--override` are mutually exclusive. To force a clean recreate of
+`--expect-new` and `--override` are mutually exclusive. To force a clean recreate of
 an object that currently matches, `destroy` it and then `apply` — destruction stays
 behind the `destroy` command. Each object (infra component, machine, container or
 storage cluster, storage pool, add-on) is classified independently against the
@@ -288,10 +290,10 @@ The two families are `infra` (`fabric`, `machines`) and `clusters` (`deps`,
 example `--stage deps` to (re)install prerequisites, or `--stage base` to bring
 up control planes) for surgical reruns. `--clusters` accepts a comma-separated
 mix of `ContainerCluster` and `StorageCluster` names. Running
-`apply --stage clusters --continue --yes` again skips cluster install tasks when the
+`apply --stage clusters --yes` again skips cluster install tasks when the
 prior install record, rendered desired-input fingerprint, and kubeconfig
 availability probe all match, then applies add-ons and integrations idempotently. If
-an interrupted apply already booted nodes, the next `--continue` apply resumes at the
+an interrupted apply already booted nodes, the next apply resumes at the
 install wait phase instead of recreating the ISO or rebooting machines.
 
 Apply terminal output shows a fleet dashboard with log paths, phase status,

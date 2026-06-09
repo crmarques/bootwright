@@ -271,9 +271,9 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		}
 		if !dryRun && !artifactServerOnly {
 			// A successful destroy must reset convergence records for what it tore
-			// down so a later apply re-sees those objects as missing: bare apply
-			// recreates them (greenfield) and --continue creates rather than skipping
-			// a gone object as already-applied. Best-effort — a cleanup miss must not
+			// down so a later apply re-sees those objects as missing: the default
+			// reconcile creates rather than skips a gone object as already-applied,
+			// and --expect-new no longer refuses it. Best-effort — a cleanup miss must not
 			// fail an otherwise-successful destroy. plan.state is already scoped to the
 			// selected roots, so the planned tasks cover exactly what was destroyed.
 			if tasks, perr := workflow.PlanApplyTasksChecked(runScope.applyTarget(), plan.state); perr == nil {

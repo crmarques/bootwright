@@ -3,8 +3,8 @@ package workflow
 import "testing"
 
 // After a destroy removes an object's convergence record, the object must
-// reclassify as missing so a later apply recreates it (greenfield no longer
-// refuses it; --continue no longer skips a gone object as already-applied).
+// reclassify as missing so a later apply recreates it (--expect-new no longer
+// refuses it; a re-apply no longer skips a gone object as already-applied).
 func TestRemoveApplyTaskConvergeSafetyResetsToMissing(t *testing.T) {
 	runsDir := t.TempDir()
 	task := classifyTask("storage.demo", ApplyTaskKindStorageCluster, "demo")

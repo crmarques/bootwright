@@ -4,19 +4,19 @@
 # (bootwright_gate_owned). It is the live backstop to the Go object preflight, which
 # classifies the same object from recorded convergence state before any role runs.
 #
-#   create:   greenfield-only  -> fail if the component already exists (owned or not)
-#   continue: safe reconcile   -> fail if it exists but is NOT Bootwright-owned (foreign)
-#   override: break-glass      -> fail if it exists but is NOT Bootwright-owned (foreign)
+#   create:   greenfield assert (--expect-new) -> fail if the component already exists (owned or not)
+#   continue: safe reconcile (the default)     -> fail if it exists but is NOT Bootwright-owned (foreign)
+#   override: break-glass                      -> fail if it exists but is NOT Bootwright-owned (foreign)
 #
 # An owned-or-absent component proceeds; the role's own idempotent tasks do the work
-# (continue reconciles in place, override rebuilds on config change). Foreign objects
-# are never modified by continue or override.
+# (the default reconciles in place, override rebuilds on config change). Foreign
+# objects are never modified by the default reconcile or override.
 - name: "Refuse greenfield apply over existing {{ bootwright_gate_object }}"
   ansible.builtin.fail:
     msg: >-
       {{ bootwright_gate_object }} already exists on {{ inventory_hostname }};
-      bootwright apply is greenfield-only. Re-run with --continue to reconcile it,
-      or --override to rebuild it.
+      apply --expect-new requires a greenfield environment. Re-run without
+      --expect-new to reconcile it, or with --override to rebuild it.
   when:
     - (bootwright_apply_mode | default('continue')) == 'create'
     - bootwright_gate_exists | default(false) | bool

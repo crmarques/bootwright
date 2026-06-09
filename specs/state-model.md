@@ -810,6 +810,13 @@ Rules:
 - `destroy --stage infra|clusters --override` is required when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`.
   `--yes` only skips the confirmation prompt and never implies `--override`.
+- `apply` reconciles by default: it creates missing objects, skips objects
+  whose recorded desired state matches the current desired state, and fails
+  closed on drift or foreign ownership before any mutation. `apply
+  --expect-new` additionally refuses to proceed when any selected object
+  already exists. `--expect-new` and `--override` are mutually exclusive.
+  Every selected object is classified independently against the recorded last
+  apply by the same classification that powers `state-check`.
 - `apply --override` is command-scoped. It may continue past Bootwright-owned
   unsafe mismatch checks that have an explicit override path: it bypasses the
   skip-if-already-complete install check, reinstalls a managed-OS machine (the

@@ -35,7 +35,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		yes           bool
 		strictSecrets bool
 		override      bool
-		cont          bool
+		expectNew     bool
 		parallelism   int
 		perHost       int
 		redfish       int
@@ -80,9 +80,9 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
-	cmd.Flags().BoolVar(&cont, "continue", false, "safe reconcile: create what is missing, skip what already matches desired state, fail on drift; the everyday re-run after a partial or completed apply")
+	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
 	if scopeTargetsContainerInstall(scope) {
-		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --continue")
+		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
 	if usesAnsible {
@@ -112,15 +112,15 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if options.defaultPlan && !dryRun {
 			return failErr(2, errors.New("plan is always read-only"))
 		}
-		if cont && override {
-			return failErr(2, errors.New("--continue and --override are mutually exclusive: --continue reconciles and fails on drift, --override rebuilds drift"))
+		if expectNew && override {
+			return failErr(2, errors.New("--expect-new and --override are mutually exclusive: --expect-new asserts nothing exists yet, --override rebuilds drift"))
 		}
-		mode := workflow.ApplyModeCreate
+		mode := workflow.ApplyModeContinue
 		switch {
 		case override:
 			mode = workflow.ApplyModeOverride
-		case cont:
-			mode = workflow.ApplyModeContinue
+		case expectNew:
+			mode = workflow.ApplyModeCreate
 		}
 		runScope := scope
 		runCommandLabel := commandLabel
@@ -234,8 +234,8 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if !dryRun {
 			// Mode preflight: classify every selected object against the recorded
 			// convergence state and enforce the apply-mode contract before any
-			// mutation (greenfield-only refuses pre-existing objects; --continue
-			// refuses drift/foreign; --override refuses only foreign). Per-role
+			// mutation (the default reconcile refuses drift/foreign; --expect-new
+			// refuses pre-existing objects; --override refuses only foreign). Per-role
 			// Ansible gates enforce the same contract against live state.
 			objects, err := workflow.ClassifyApplyObjects(tasks, ctx.RunsDir)
 			if err != nil {

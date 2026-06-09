@@ -52,12 +52,12 @@ const (
 )
 
 // ApplyMode is the explicit safety mode an apply runs under. The CLI chooses it
-// (`apply` = create, `apply --continue`, `apply --override`); it drives both the
-// Go object preflight and the per-role Ansible gate via the bootwright_apply_mode
-// extra-var.
+// (`apply` = continue, the default; `apply --expect-new` = create; `apply
+// --override`); it drives both the Go object preflight and the per-role Ansible
+// gate via the bootwright_apply_mode extra-var.
 //
-//   - create:   greenfield only. Refuse if any selected object already exists.
-//   - continue: safe reconcile. Create what is missing, skip what matches, fail on drift.
+//   - create:   greenfield assert (--expect-new). Refuse if any selected object already exists.
+//   - continue: safe reconcile (the default). Create what is missing, skip what matches, fail on drift.
 //   - override: break-glass. Rebuild drifted/owned objects; never touch foreign ones.
 type ApplyMode string
 

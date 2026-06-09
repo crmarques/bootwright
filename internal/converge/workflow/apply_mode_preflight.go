@@ -12,9 +12,10 @@ import (
 // state; this gate gives a fast, meaningful refusal up front. It returns a non-nil
 // error when the chosen mode forbids proceeding.
 //
-//	create:   greenfield only — refuse if any selected object already exists.
-//	continue: safe reconcile — refuse on drift or foreign ownership; otherwise
-//	          proceed (missing objects are created, matching objects no-op).
+//	create:   greenfield assert (--expect-new) — refuse if any selected object
+//	          already exists.
+//	continue: safe reconcile (the default) — refuse on drift or foreign ownership;
+//	          otherwise proceed (missing objects are created, matching objects no-op).
 //	override: break-glass — refuse only on foreign ownership; rebuild drifted and
 //	          create missing objects; objects already matching are left untouched.
 func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) error {
@@ -27,7 +28,7 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(existing) > 0 {
-			return fmt.Errorf("apply is greenfield-only and these objects already exist: %s; run `bootwright apply --continue` to reconcile them, or `bootwright apply --override` to rebuild them", summarizeApplyObjects(existing))
+			return fmt.Errorf("apply --expect-new requires a greenfield environment and these objects already exist: %s; drop --expect-new to reconcile them, or run `bootwright apply --override` to rebuild drifted objects", summarizeApplyObjects(existing))
 		}
 	case ApplyModeContinue:
 		var differ []ObjectClassification
@@ -37,7 +38,7 @@ func EvaluateApplyModePreflight(mode ApplyMode, objects []ObjectClassification) 
 			}
 		}
 		if len(differ) > 0 {
-			return fmt.Errorf("apply --continue refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
+			return fmt.Errorf("apply refuses to mutate objects that differ from their recorded desired state: %s; align the desired state, or run `bootwright apply --override` to rebuild drifted objects (foreign objects are never rebuilt)", summarizeApplyObjects(differ))
 		}
 	case ApplyModeOverride:
 		var foreign []ObjectClassification

@@ -34,8 +34,8 @@ func TestEvaluateApplyModePreflightCreateGreenfieldOnly(t *testing.T) {
 	if err == nil {
 		t.Fatal("create must refuse when objects already exist")
 	}
-	if !strings.Contains(err.Error(), "greenfield-only") {
-		t.Fatalf("create error must explain greenfield: %v", err)
+	if !strings.Contains(err.Error(), "--expect-new") {
+		t.Fatalf("create error must name --expect-new: %v", err)
 	}
 	// All-missing -> create proceeds.
 	missing := classifyTask("addon.demo.new", "clusterAddon", "demo")

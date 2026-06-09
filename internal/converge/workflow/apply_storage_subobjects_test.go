@@ -108,7 +108,7 @@ func TestClassifyApplyObjectsExpandsStorageSubObjects(t *testing.T) {
 }
 
 // Editing an existing pool's size drifts only that pool; the cluster and other pools
-// stay match. --continue would FAIL on this drift; --override rebuilds only this pool.
+// stay match. A default apply would FAIL on this drift; --override rebuilds only this pool.
 func TestClassifyApplyObjectsReportsSubObjectDrift(t *testing.T) {
 	runsDir := t.TempDir()
 	now := time.Unix(1700000000, 0)
