@@ -126,12 +126,6 @@ func TestContainerClusterNetworkingValidation(t *testing.T) {
 		wantSubstring string
 	}{
 		{
-			name: "networking-required",
-			clusterYAML: strings.Replace(newClusterYAML,
-				"  networking:\n    clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]\n    serviceNetwork: [172.30.0.0/16]\n", "", 1),
-			wantSubstring: "ContainerCluster/sno spec.networking is required",
-		},
-		{
 			name:          "cluster-network-cidr-invalid",
 			clusterYAML:   strings.Replace(newClusterYAML, "10.128.0.0/14", "not-a-cidr", 1),
 			wantSubstring: `spec.networking.clusterNetwork[0].cidr "not-a-cidr" is not a valid CIDR`,
@@ -145,11 +139,6 @@ func TestContainerClusterNetworkingValidation(t *testing.T) {
 			name:          "cluster-network-host-prefix-bounds",
 			clusterYAML:   strings.Replace(newClusterYAML, "hostPrefix: 23", "hostPrefix: 14", 1),
 			wantSubstring: "spec.networking.clusterNetwork[0].hostPrefix 14 must be greater than CIDR prefix length 14",
-		},
-		{
-			name:          "service-network-required",
-			clusterYAML:   strings.Replace(newClusterYAML, "    serviceNetwork: [172.30.0.0/16]\n", "", 1),
-			wantSubstring: "ContainerCluster/sno spec.networking.serviceNetwork is required",
 		},
 		{
 			name:          "service-network-cidr-invalid",
@@ -2462,11 +2451,12 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			wantSubstring: `kubevirt.kubeconfigRef "external-virt-cluster-kubeconfig" is not declared in Environment/env spec.secrets`,
 		},
 		{
-			name: "missing-network-binding",
+			// An omitted attachmentRef defaults to the networkConfigRef name
+			// during normalize, so the binding resolves and validates clean.
+			name: "omitted-attachment-ref-defaults-to-network-config",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "      attachmentRef: { name: child-machine-net }\n", "", 1)
 			},
-			wantSubstring: `spec.network.config.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine`,
 		},
 		{
 			name: "missing-network-attachment",

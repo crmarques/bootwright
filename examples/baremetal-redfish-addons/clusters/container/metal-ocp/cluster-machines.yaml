@@ -20,8 +20,6 @@ spec:
     config:
       networkConfigRef:
         name: metal-net
-      attachmentRef:
-        name: metal-net
       interfaceAddresses:
         - interface: primary
           addressRef:

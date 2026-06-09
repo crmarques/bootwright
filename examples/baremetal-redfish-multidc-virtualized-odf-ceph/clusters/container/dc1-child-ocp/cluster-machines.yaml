@@ -24,8 +24,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip
@@ -57,8 +55,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip
@@ -90,8 +86,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip
@@ -123,8 +117,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip
@@ -156,8 +148,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip
@@ -189,8 +179,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: dc1-child-net
 
   addresses:
     - name: ip

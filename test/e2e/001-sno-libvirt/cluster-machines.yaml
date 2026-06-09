@@ -22,8 +22,6 @@ spec:
     config:
       networkConfigRef:
         name: sno-bridge
-      attachmentRef:
-        name: sno-bridge
       interfaceAddresses:
         - interface: primary
           addressRef:

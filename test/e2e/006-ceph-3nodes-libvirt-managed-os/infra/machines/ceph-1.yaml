@@ -24,8 +24,6 @@ spec:
     config:
       networkConfigRef:
         name: ceph-bridge
-      attachmentRef:
-        name: ceph-bridge
       interfaceAddresses:
         - interface: primary
           addressRef:

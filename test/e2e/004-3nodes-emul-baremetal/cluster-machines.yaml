@@ -20,8 +20,6 @@ spec:
     config:
       networkConfigRef:
         name: rack1-vlan
-      attachmentRef:
-        name: rack1-vlan
       interfaceAddresses:
         - interface: primary
           addressRef:
@@ -73,8 +71,6 @@ spec:
     config:
       networkConfigRef:
         name: rack1-vlan
-      attachmentRef:
-        name: rack1-vlan
       interfaceAddresses:
         - interface: primary
           addressRef:
@@ -125,8 +121,6 @@ spec:
   network:
     config:
       networkConfigRef:
-        name: rack1-vlan
-      attachmentRef:
         name: rack1-vlan
       interfaceAddresses:
         - interface: primary

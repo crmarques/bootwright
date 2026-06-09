@@ -11,16 +11,8 @@ spec:
     nodeSSH:
       keyPairRef:
         name: sno-libvirt-cluster-admin-ssh-key
-    platform:
-      type: bareMetal
-      baremetal:
-        provisioningNetwork: disabled
     endpoints:
       api:
-        address: 192.168.132.10
-        source:
-          type: external
-      api-int:
         address: 192.168.132.10
         source:
           type: external
@@ -28,13 +20,6 @@ spec:
         address: 192.168.132.11
         source:
           type: external
-
-  networking:
-    clusterNetwork:
-    - cidr: 10.128.0.0/14
-      hostPrefix: 23
-    serviceNetwork:
-    - 172.30.0.0/16
 
   nodes:
 

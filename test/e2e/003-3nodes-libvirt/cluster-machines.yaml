@@ -22,8 +22,6 @@ spec:
     config:
       networkConfigRef:
         name: cluster-3n-bridge
-      attachmentRef:
-        name: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
           addressRef:
@@ -58,8 +56,6 @@ spec:
     config:
       networkConfigRef:
         name: cluster-3n-bridge
-      attachmentRef:
-        name: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
           addressRef:
@@ -93,8 +89,6 @@ spec:
   network:
     config:
       networkConfigRef:
-        name: cluster-3n-bridge
-      attachmentRef:
         name: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary

@@ -27,8 +27,6 @@ spec:
           addressRef:
             name: ip
           prefixLength: 24
-      attachmentRef:
-        name: sno-bridge
 
   addresses:
     - name: ip

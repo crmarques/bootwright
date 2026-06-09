@@ -8,16 +8,8 @@ spec:
       version: 4.21.15
 
   install:
-    platform:
-      type: bareMetal
-      baremetal:
-        provisioningNetwork: disabled
     endpoints:
       api:
-        address: 192.168.150.10
-        source:
-          type: external
-      api-int:
         address: 192.168.150.10
         source:
           type: external
@@ -34,13 +26,6 @@ spec:
     nodeSSH:
       keyPairRef:
         name: metal-ocp-cluster-admin-ssh-key
-
-  networking:
-    clusterNetwork:
-    - cidr: 10.128.0.0/14
-      hostPrefix: 23
-    serviceNetwork:
-    - 172.30.0.0/16
 
   nodes:
 

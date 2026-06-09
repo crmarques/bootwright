@@ -1,6 +1,8 @@
 package desiredstate
 
 import (
+	"sort"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/view"
@@ -25,6 +27,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		normalizeContainerCluster(&state.ContainerClusters[i], env)
 	}
+	applyClusterPlatformDefaults(state)
 	applyEnvironmentArtifactAccessDefaults(state, env)
 	for i := range state.ClusterAddons {
 		normalizeClusterAddon(&state.ClusterAddons[i])
@@ -71,6 +74,10 @@ func normalizeEnvironment(env *v1alpha1.Environment) {
 func normalizeMachine(m *v1alpha1.Machine) {
 	if m.Spec.Hardware.Management.BMC.Address != "" {
 		normalizeBMC(&m.Spec.Hardware.Management.BMC)
+	}
+	config := &m.Spec.Network.Config
+	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
+		config.AttachmentRef.Name = config.NetworkConfigRef.Name
 	}
 }
 
@@ -285,6 +292,14 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 	if ocp.Spec.Install.Method == "" {
 		ocp.Spec.Install.Method = v1alpha1.OCPInstallMethodAgent
 	}
+	if _, ok := ocp.Spec.Install.Endpoints[v1alpha1.EndpointAPIInt]; !ok {
+		if api, ok := ocp.Spec.Install.Endpoints[v1alpha1.EndpointAPI]; ok {
+			ocp.Spec.Install.Endpoints[v1alpha1.EndpointAPIInt] = v1alpha1.Endpoint{
+				Address: api.Address,
+				Source:  api.Source,
+			}
+		}
+	}
 	for _, name := range []string{v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress} {
 		endpoint, ok := ocp.Spec.Install.Endpoints[name]
 		if !ok || endpoint.Source.Type != "" {
@@ -293,6 +308,18 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 		endpoint.Source.Type = v1alpha1.EndpointSourceOpenShift
 		ocp.Spec.Install.Endpoints[name] = endpoint
 	}
+	if ocp.Spec.Networking == nil {
+		ocp.Spec.Networking = &v1alpha1.OCPNetworkingSpec{}
+	}
+	if len(ocp.Spec.Networking.ClusterNetwork) == 0 {
+		ocp.Spec.Networking.ClusterNetwork = []v1alpha1.ContainerClusterNetworkCIDR{{
+			CIDR:       v1alpha1.DefaultClusterNetworkCIDR,
+			HostPrefix: v1alpha1.DefaultClusterNetworkHostPrefix,
+		}}
+	}
+	if len(ocp.Spec.Networking.ServiceNetwork) == 0 {
+		ocp.Spec.Networking.ServiceNetwork = []string{v1alpha1.DefaultServiceNetworkCIDR}
+	}
 	applyEnvironmentInstallDefaults(ocp, env)
 	for i := range ocp.Spec.Nodes {
 		node := &ocp.Spec.Nodes[i]
@@ -300,6 +327,85 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 			node.MachineRef.Name = node.Hostname
 		}
 	}
+}
+
+// applyClusterPlatformDefaults derives spec.install.platform from the single
+// provider type behind a cluster's node machines when the platform block is
+// fully omitted. The mapping mirrors what every shipped example authors:
+// libvirt and baremetal providers install with platform bareMetal and the
+// provisioning network disabled; kubevirt-hosted clusters install with
+// platform none. Ambiguous bindings (multiple provider types) are left for
+// Validate to diagnose; authored platforms always win.
+func applyClusterPlatformDefaults(state *v1alpha1.State) {
+	for i := range state.ContainerClusters {
+		cluster := &state.ContainerClusters[i]
+		platform := &cluster.Spec.Install.Platform
+		if !installPlatformOmitted(*platform) {
+			continue
+		}
+		binding := clusterNodeProviderBinding(*state, *cluster)
+		if !binding.complete || len(binding.types) != 1 {
+			continue
+		}
+		switch binding.types[0] {
+		case v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerBareMetal:
+			platform.Type = v1alpha1.PlatformTypeBareMetal
+			platform.BareMetal = &v1alpha1.BareMetalInstallPlatform{
+				ProvisioningNetwork: v1alpha1.ProvisioningNetworkDisabled,
+			}
+		case v1alpha1.ProvisionerKubeVirt:
+			platform.Type = v1alpha1.PlatformTypeNone
+		}
+	}
+}
+
+func installPlatformOmitted(platform v1alpha1.InstallPlatform) bool {
+	return platform.Type == "" &&
+		platform.BareMetal == nil &&
+		platform.VSphere == nil &&
+		platform.External == nil
+}
+
+// clusterProviderBinding summarizes the InfraProviders behind a cluster's
+// node machines. types holds the sorted unique provider types; providers
+// holds "InfraProvider/<name> (<type>)" descriptions for diagnostics;
+// complete reports whether every node resolved to a typed provider.
+type clusterProviderBinding struct {
+	types     []string
+	providers []string
+	complete  bool
+}
+
+func clusterNodeProviderBinding(state v1alpha1.State, cluster v1alpha1.ContainerCluster) clusterProviderBinding {
+	binding := clusterProviderBinding{complete: len(cluster.Spec.Nodes) > 0}
+	types := map[string]bool{}
+	providers := map[string]bool{}
+	for _, node := range cluster.Spec.Nodes {
+		machine, ok := stateview.Machine(state, node.MachineRef.Name)
+		if !ok {
+			binding.complete = false
+			continue
+		}
+		provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
+		if !ok || provider.Spec.Type == "" {
+			binding.complete = false
+			continue
+		}
+		types[provider.Spec.Type] = true
+		providers["InfraProvider/"+provider.Metadata.Name+" ("+provider.Spec.Type+")"] = true
+	}
+	binding.types = sortedKeys(types)
+	binding.providers = sortedKeys(providers)
+	return binding
+}
+
+func sortedKeys(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for key := range set {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Environment) {

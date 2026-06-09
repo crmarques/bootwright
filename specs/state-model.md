@@ -201,6 +201,10 @@ Rules:
   `spec`.
 - `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
+  When omitted on a provider-backed machine that sets `networkConfigRef`,
+  `attachmentRef.name` defaults to the `networkConfigRef.name`; `render
+  effective` materializes the default and validation resolves it against the
+  provider's `networkAttachments[]`. An authored `attachmentRef` always wins.
 - `spec.network.config.interfaceAddresses[]` is the single owner of a node's
   static install IP. Each entry binds an NMState `interface` to a named
   `spec.addresses[]` entry through `addressRef` and sets `prefixLength` (and
@@ -483,7 +487,18 @@ Rules:
   accepted.
 - `spec.install.platform.type` accepts `bareMetal`, `vsphere`, `none`, or
   `external`.
-- OpenShift standard endpoint slots are `api`, `api-int`, and `ingress`.
+- An omitted `spec.install.platform` derives from the single `InfraProvider`
+  type behind `spec.nodes[].machineRef` →
+  `Machine.spec.substrate.providerRef`: `libvirt` and `baremetal` providers
+  derive `type: bareMetal` with `baremetal.provisioningNetwork: disabled`;
+  `kubevirt` providers derive `type: none`. `render effective` materializes
+  the derived platform. When the bound machines span multiple provider types
+  and the platform is omitted, validation rejects the cluster naming the
+  conflicting providers. An authored platform always wins.
+- OpenShift standard endpoint slots are `api`, `api-int`, and `ingress`. An
+  omitted `api-int` slot defaults to a copy of the authored `api` endpoint
+  (its `address` and `source`); `render effective` materializes the copy and
+  an authored `api-int` always wins.
 - `endpoints.<slot>.source.type` accepts `openshift`, `external`,
   `infraComponent`, or `cephadm`; an omitted `source.type` defaults to
   `openshift`. The accepted set and required companion fields are
@@ -503,9 +518,15 @@ Rules:
 - Each node hostname must be unique inside the cluster.
 - Node network input is owned by the referenced `Machine`, not by the cluster
   node entry.
-- `spec.distribution.type` accepts `openshift` (default) or `okd`; `openshift`
-  clusters require a pull secret via `spec.install.pullSecretRef` or the
-  `Environment` default.
+- `spec.distribution.type` accepts `openshift` (default, materialized by
+  `render effective`) or `okd`; `openshift` clusters require a pull secret via
+  `spec.install.pullSecretRef` or the `Environment` default.
+- `spec.networking.clusterNetwork` defaults to one entry
+  `{cidr: 10.128.0.0/14, hostPrefix: 23}` and `spec.networking.serviceNetwork`
+  defaults to `[172.30.0.0/16]` (the stock openshift-install networks) when
+  omitted; `render effective` materializes the defaults. Each list is
+  defaulted independently, and an authored list — even a partial one — is
+  left untouched.
 - `spec.install.mode` accepts `connected` (default) or `disconnected`;
   `spec.install.method` accepts `agent` (default). `disconnected` requires
   `Environment.spec.registries.mirror` (trust bundle plus an external mirror URL

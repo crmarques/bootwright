@@ -11,14 +11,8 @@ spec:
     nodeSSH:
       keyPairRef:
         name: dc1-child-ocp-cluster-admin-ssh-key
-    platform:
-      type: none
     endpoints:
       api:
-        address: 192.168.151.20
-        source:
-          type: external
-      api-int:
         address: 192.168.151.20
         source:
           type: external

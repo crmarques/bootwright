@@ -20,8 +20,6 @@ spec:
     config:
       networkConfigRef:
         name: rack1-bond140-machine
-      attachmentRef:
-        name: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140
           addressRef:
@@ -78,8 +76,6 @@ spec:
     config:
       networkConfigRef:
         name: rack1-bond140-machine
-      attachmentRef:
-        name: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140
           addressRef:
@@ -135,8 +131,6 @@ spec:
   network:
     config:
       networkConfigRef:
-        name: rack1-bond140-machine
-      attachmentRef:
         name: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140

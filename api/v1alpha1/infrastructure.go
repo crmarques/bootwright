@@ -142,6 +142,12 @@ const (
 	DefaultPullSecretName             = "openshift-pull-secret"
 	DefaultClusterAdminSSHKeyNamePart = "cluster-admin-ssh-key"
 
+	// Stock openshift-install pod and service networks materialized by
+	// normalize when spec.networking omits them.
+	DefaultClusterNetworkCIDR       = "10.128.0.0/14"
+	DefaultClusterNetworkHostPrefix = 23
+	DefaultServiceNetworkCIDR       = "172.30.0.0/16"
+
 	// Default validity window for generated self-signed certificates.
 	DefaultCertificateDays = 3650
 

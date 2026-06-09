@@ -20,8 +20,6 @@ spec:
     config:
       networkConfigRef:
         name: sno-vlan
-      attachmentRef:
-        name: sno-vlan
       interfaceAddresses:
         - interface: primary
           addressRef:
