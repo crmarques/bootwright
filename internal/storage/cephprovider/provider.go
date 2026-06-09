@@ -1,6 +1,10 @@
 package cephprovider
 
 import (
+	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/entitlements"
 )
@@ -9,18 +13,31 @@ const (
 	RedHatRegistryURL = "registry.redhat.io"
 	IBMRegistryURL    = "cp.icr.io/cp"
 
-	// ibmStorageCephRepoURL is the vendor .repo definition cephadm and ceph
-	// packages are installed from on IBM Storage Ceph nodes. The "-9-" segment
-	// is IBM's release stream (cephadm-ansible's ceph_ibm_version), not the RHEL
-	// version, which the "-rhel-9" suffix carries separately.
-	ibmStorageCephRepoURL = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo"
+	// ossImageRepository is the canonical upstream container image repository.
+	// An oss x.y.z release derives quay.io/ceph/ceph:vX.Y.Z when spec.ceph.image
+	// is unset, pinning the running daemons reproducibly.
+	ossImageRepository = "quay.io/ceph/ceph"
+
+	// ibmStorageCephRepoTemplate is the vendor .repo definition cephadm and ceph
+	// packages are installed from on IBM Storage Ceph nodes. The "%s" segment is
+	// IBM's release stream (cephadm-ansible's ceph_ibm_version), selected by
+	// spec.ceph.release; the "-rhel-9" suffix carries the RHEL track separately.
+	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-9.repo"
 )
 
 const (
 	rhelBaseOSRepo    = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-baseos-rpms"
 	rhelAppStreamRepo = "rhel-{{ ansible_distribution_major_version }}-for-x86_64-appstream-rpms"
-	rhcephToolsRepo   = "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
+	// rhcephToolsRepoTemplate is the Red Hat Ceph Storage tools repository. "%s"
+	// is the product stream major selected by spec.ceph.release; the RHEL major
+	// is expanded by subscription-manager at apply time.
+	rhcephToolsRepoTemplate = "rhceph-%s-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms"
 )
+
+// ossUpstreamVersionPattern matches a full upstream Ceph x.y.z version. Such a
+// release pins the package repository to rpm-x.y.z and derives the matching
+// container image; anything else (squid, reef) is treated as a release name.
+var ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // rhelCephVersions are the RHEL releases the subscription-backed (redhat, ibm)
 // Ceph distributions support on storage nodes.
@@ -32,13 +49,14 @@ var rhelCephVersions = []string{"9.6", "9.7", "10", "10.0", "10.1"}
 // entry plus its api/v1alpha1 constant and validation — never a new code branch
 // in Select, Vars, or the Ansible role.
 type distributionDef struct {
-	requiresRHSM     bool
-	requiresRegistry bool
-	requiresLicense  bool
-	registryURL      string   // default cephadm registry; an entitlement may override it
-	redhatRepos      []string // subscription-manager repositories to enable
-	ibmRepoURL       string   // vendor .repo file to install, when set
-	runtimeOS        RuntimeOS
+	requiresRHSM        bool
+	requiresRegistry    bool
+	requiresLicense     bool
+	registryURL         string   // default cephadm registry; an entitlement may override it
+	baseRepos           []string // stream-independent subscription-manager repositories
+	usesRHCephToolsRepo bool     // append rhceph-<stream>-tools (Red Hat Ceph Storage)
+	ibmRepoTemplate     string   // vendor .repo template taking the stream major, when set
+	runtimeOS           RuntimeOS
 }
 
 func (d distributionDef) requiresEntitlement() bool {
@@ -58,20 +76,21 @@ var distributions = map[string]distributionDef{
 		runtimeOS: RuntimeOS{Family: "linux"},
 	},
 	v1alpha1.StorageCephDistributionRedHat: {
-		requiresRHSM:     true,
-		requiresRegistry: true,
-		registryURL:      RedHatRegistryURL,
-		redhatRepos:      []string{rhelBaseOSRepo, rhelAppStreamRepo, rhcephToolsRepo},
-		runtimeOS:        rhelCephRuntimeOS("Red Hat Ceph Storage 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+		requiresRHSM:        true,
+		requiresRegistry:    true,
+		registryURL:         RedHatRegistryURL,
+		baseRepos:           []string{rhelBaseOSRepo, rhelAppStreamRepo},
+		usesRHCephToolsRepo: true,
+		runtimeOS:           rhelCephRuntimeOS("Red Hat Ceph Storage requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
 	},
 	v1alpha1.StorageCephDistributionIBM: {
 		requiresRHSM:     true,
 		requiresRegistry: true,
 		requiresLicense:  true,
 		registryURL:      IBMRegistryURL,
-		redhatRepos:      []string{rhelBaseOSRepo, rhelAppStreamRepo},
-		ibmRepoURL:       ibmStorageCephRepoURL,
-		runtimeOS:        rhelCephRuntimeOS("IBM Storage Ceph 9 requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+		baseRepos:        []string{rhelBaseOSRepo, rhelAppStreamRepo},
+		ibmRepoTemplate:  ibmStorageCephRepoTemplate,
+		runtimeOS:        rhelCephRuntimeOS("IBM Storage Ceph requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
 	},
 }
 
@@ -84,15 +103,21 @@ type Provider struct {
 	PrerequisitePackages []string
 	CephadmPackage       string
 	CephCommonPackage    string
-	Community            Community
-	Repository           Repository
-	RuntimeOS            RuntimeOS
+	// Image, when set, is the fully-qualified cephadm bootstrap container image
+	// that pins every Ceph daemon. It is explicit for redhat and ibm and either
+	// explicit or derived from an oss x.y.z release.
+	Image      string
+	Community  Community
+	Repository Repository
+	RuntimeOS  RuntimeOS
 }
 
 // Community describes the upstream package source for the oss distribution.
-// It is unset for the redhat and ibm distributions.
+// It is unset for the redhat and ibm distributions. Exactly one of Release (a
+// release name such as squid) or Version (a full x.y.z) is set.
 type Community struct {
 	Release string
+	Version string
 	Mirror  string
 }
 
@@ -115,18 +140,79 @@ func Distribution(cluster v1alpha1.StorageCluster) string {
 	return cluster.Spec.Ceph.Distribution
 }
 
-// communitySource resolves the upstream package source for the oss
-// distribution, defaulting the release when the operator left it unset.
-func communitySource(cluster v1alpha1.StorageCluster) Community {
-	out := Community{Release: v1alpha1.StorageCephCommunityDefaultRelease}
-	if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Community == nil {
-		return out
+// cephRelease returns the operator's spec.ceph.release, empty when unset.
+func cephRelease(cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil {
+		return ""
 	}
-	if release := cluster.Spec.Ceph.Community.Release; release != "" {
+	return cluster.Spec.Ceph.Release
+}
+
+// cephImage returns the operator's explicit spec.ceph.image, empty when unset.
+func cephImage(cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil {
+		return ""
+	}
+	return cluster.Spec.Ceph.Image
+}
+
+// communitySource resolves the upstream package source for the oss
+// distribution, defaulting the release when the operator left it unset and
+// classifying it as a release name or a full x.y.z version.
+func communitySource(cluster v1alpha1.StorageCluster) Community {
+	release := cephRelease(cluster)
+	if release == "" {
+		release = v1alpha1.StorageCephCommunityDefaultRelease
+	}
+	var out Community
+	if ossUpstreamVersionPattern.MatchString(release) {
+		out.Version = release
+	} else {
 		out.Release = release
 	}
-	out.Mirror = cluster.Spec.Ceph.Community.Mirror
+	if cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Community != nil {
+		out.Mirror = cluster.Spec.Ceph.Community.Mirror
+	}
 	return out
+}
+
+// ossImage pins the oss container image: the operator's explicit image when
+// set, otherwise quay.io/ceph/ceph:vX.Y.Z derived from an x.y.z release. A
+// release name leaves it empty (the image floats; not reproducible).
+func ossImage(cluster v1alpha1.StorageCluster, community Community) string {
+	if image := cephImage(cluster); image != "" {
+		return image
+	}
+	if community.Version != "" {
+		return ossImageRepository + ":v" + community.Version
+	}
+	return ""
+}
+
+// subscriptionStream resolves the product stream major (for example 9) for the
+// redhat and ibm distributions from spec.ceph.release, defaulting when unset.
+func subscriptionStream(cluster v1alpha1.StorageCluster) string {
+	release := cephRelease(cluster)
+	if release == "" {
+		return v1alpha1.StorageCephSubscriptionDefaultStream
+	}
+	if i := strings.IndexByte(release, '.'); i >= 0 {
+		return release[:i]
+	}
+	return release
+}
+
+// subscriptionRepository assembles the stream-dependent subscription repos.
+func subscriptionRepository(def distributionDef, stream string) Repository {
+	repos := append([]string(nil), def.baseRepos...)
+	if def.usesRHCephToolsRepo {
+		repos = append(repos, fmt.Sprintf(rhcephToolsRepoTemplate, stream))
+	}
+	repo := Repository{RedHatRepos: repos}
+	if def.ibmRepoTemplate != "" {
+		repo.IBMRepoURL = fmt.Sprintf(def.ibmRepoTemplate, stream)
+	}
+	return repo
 }
 
 func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsDir string) Provider {
@@ -140,17 +226,17 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		RequiresRHSM:         def.requiresRHSM,
 		RequiresRegistry:     def.requiresRegistry,
 		RequiresLicense:      def.requiresLicense,
-		Repository: Repository{
-			RedHatRepos: def.redhatRepos,
-			IBMRepoURL:  def.ibmRepoURL,
-		},
-		RuntimeOS: def.runtimeOS,
+		RuntimeOS:            def.runtimeOS,
 	}
 	if provider.RuntimeOS.Family == "" {
 		provider.RuntimeOS.Family = "linux"
 	}
 	if distribution == v1alpha1.StorageCephDistributionOSS {
 		provider.Community = communitySource(cluster)
+		provider.Image = ossImage(cluster, provider.Community)
+	} else {
+		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster))
+		provider.Image = cephImage(cluster)
 	}
 	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
 		provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
@@ -169,12 +255,20 @@ func Vars(provider Provider) map[string]any {
 		"cephadmPackage":       provider.CephadmPackage,
 		"cephCommonPackage":    provider.CephCommonPackage,
 	}
-	if provider.Community.Release != "" {
-		community := map[string]any{"release": provider.Community.Release}
+	if provider.Community.Release != "" || provider.Community.Version != "" {
+		community := map[string]any{}
+		if provider.Community.Version != "" {
+			community["version"] = provider.Community.Version
+		} else {
+			community["release"] = provider.Community.Release
+		}
 		if provider.Community.Mirror != "" {
 			community["mirror"] = provider.Community.Mirror
 		}
 		out["community"] = community
+	}
+	if provider.Image != "" {
+		out["image"] = provider.Image
 	}
 	if provider.Entitlement.Name != "" {
 		out["entitlement"] = map[string]any{

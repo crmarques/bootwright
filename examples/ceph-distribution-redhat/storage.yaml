@@ -7,6 +7,11 @@ spec:
 
   ceph:
     distribution: redhat
+    # Optional. release selects the Red Hat Ceph Storage product stream (e.g. 9,
+    # the default), choosing the rhceph-<N>-tools subscription repository. RHCS
+    # registry tags are not x.y.z, so pin a reproducible run with spec.ceph.image.
+    # release: "9"
+    # image: registry.redhat.io/rhceph/rhceph-9-rhel9@sha256:<digest>
     entitlementRef:
       name: rhcs
     cephadm:

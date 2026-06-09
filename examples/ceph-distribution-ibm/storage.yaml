@@ -7,6 +7,11 @@ spec:
 
   ceph:
     distribution: ibm
+    # Optional. release selects the IBM Storage Ceph product stream (e.g. 9, the
+    # default), choosing the ibm-storage-ceph-<N> vendor repository. IBM registry
+    # tags are not x.y.z, so pin a reproducible run with spec.ceph.image.
+    # release: "9"
+    # image: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:<digest>
     entitlementRef:
       name: ibm-storage-ceph
     cephadm:

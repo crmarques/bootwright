@@ -309,6 +309,31 @@ func TestManagedOSSStorageProjectsCommunityRepoAndSeedHost(t *testing.T) {
 	}
 }
 
+func TestManagedOSSStorageProjectsVersionAndImagePin(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	for i := range state.StorageClusters {
+		if state.StorageClusters[i].Metadata.Name == "ceph-libvirt" {
+			state.StorageClusters[i].Spec.Ceph.Release = "19.2.1"
+		}
+	}
+	vars := render.VarsWithSecretsDir(state, "/context/secrets")
+	cluster := storageClusterByName(t, vars, "ceph-libvirt")
+	provider := cluster["provider"].(map[string]any)
+	community := provider["community"].(map[string]any)
+	if community["version"] != "19.2.1" {
+		t.Fatalf("oss provider community = %#v, want version 19.2.1", community)
+	}
+	if _, ok := community["release"]; ok {
+		t.Fatalf("community must omit release for a version pin: %#v", community)
+	}
+	if provider["image"] != "quay.io/ceph/ceph:v19.2.1" {
+		t.Fatalf("provider image = %v, want derived quay.io/ceph/ceph:v19.2.1", provider["image"])
+	}
+}
+
 func storageClusterByName(t *testing.T, vars map[string]any, name string) map[string]any {
 	t.Helper()
 	for _, item := range vars["bootwright_storage_clusters"].([]any) {

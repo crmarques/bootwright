@@ -538,12 +538,25 @@ Rules:
 - Managed storage seed/admin operations use `Machine.spec.access.ssh`.
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
+- `spec.ceph.release` selects which Ceph release to install for the chosen
+  distribution. For `oss` it is an upstream release name (`squid`, default) or a
+  full upstream `x.y.z` version (for example `19.2.1`); a version pins the
+  package repository to `rpm-x.y.z` reproducibly. For `redhat` and `ibm` it is
+  the product stream (for example `9`, the default), selecting the
+  `rhceph-<N>-tools` and `ibm-storage-ceph-<N>` repositories.
+- `spec.ceph.image` optionally pins the exact cephadm container image, which
+  `cephadm bootstrap` applies as the default image for every Ceph daemon, making
+  the running cluster version reproducible. It must pin a version tag or a
+  `sha256` digest and must not use a mutable `:latest` tag. For `oss` an `x.y.z`
+  `release` derives `quay.io/ceph/ceph:vX.Y.Z` automatically when `image` is
+  unset; a release name leaves the daemon image unpinned. `redhat` and `ibm`
+  registry tags are not `x.y.z`, so reproducible pins are supplied here
+  explicitly.
 - `distribution: oss` uses upstream/community Ceph package and image sources
   and must not set `entitlementRef`. Bootwright configures the upstream
-  community repository on each node with cephadm. `spec.ceph.community.release`
-  selects the upstream Ceph release (latest stable by default) and
-  `spec.ceph.community.mirror` overrides the `download.ceph.com` base URL.
-  `spec.ceph.community` must be empty for `redhat` and `ibm`.
+  community repository on each node with cephadm. `spec.ceph.community.mirror`
+  overrides the `download.ceph.com` base URL. `spec.ceph.community` must be
+  empty for `redhat` and `ibm`.
 - `distribution: redhat` requires `entitlementRef.name` to resolve to a Red
   Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph

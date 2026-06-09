@@ -3051,15 +3051,18 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("community provider must download cephadm before configuring the community repo")
 	}
 	download, ok := communityTasks[downloadIdx]["ansible.builtin.get_url"].(map[string]any)
-	if !ok || !strings.Contains(fmt.Sprint(download["url"]), "bootwright_ceph_community_release") {
-		t.Fatalf("community cephadm download must build the release-scoped upstream URL, got %v", communityTasks[downloadIdx])
+	if !ok || !strings.Contains(fmt.Sprint(download["url"]), "bootwright_ceph_community_repo_path") {
+		t.Fatalf("community cephadm download must build the release/version-scoped upstream URL, got %v", communityTasks[downloadIdx])
 	}
 	addRepo, ok := communityTasks[addRepoIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok {
 		t.Fatalf("community repo task must run a command, got %v", communityTasks[addRepoIdx])
 	}
-	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") {
-		t.Fatalf("community repo task must run cephadm add-repo --release, got %v", addRepo["argv"])
+	// A release name renders add-repo --release; a full x.y.z renders add-repo
+	// --version (reproducible). The argv carries both literals behind a data-only
+	// conditional on the rendered community.version, with no distribution branch.
+	if got := fmt.Sprint(addRepo["argv"]); !strings.Contains(got, "add-repo") || !strings.Contains(got, "--release") || !strings.Contains(got, "--version") {
+		t.Fatalf("community repo task must run cephadm add-repo with both --release and --version arms, got %v", addRepo["argv"])
 	}
 	if got := fmt.Sprint(addRepo["creates"]); !strings.Contains(got, "bootwright_ceph_community_repo_file") {
 		t.Fatalf("community repo task must be idempotent via creates, got %v", addRepo["creates"])
@@ -3191,6 +3194,11 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	bootstrapArgv := fmt.Sprint(resolveBootstrap["ansible.builtin.set_fact"])
 	if !strings.Contains(bootstrapArgv, "--registry-json") || strings.Contains(bootstrapArgv, "--registry-password") || strings.Contains(bootstrapArgv, "--registry-username") {
 		t.Fatalf("bootstrap argv must use registry JSON without username/password arguments, got %v", resolveBootstrap)
+	}
+	// A pinned spec.ceph.image must reach cephadm bootstrap as --image so the
+	// running daemons are reproducible, gated on the rendered image being set.
+	if !strings.Contains(bootstrapArgv, "--image") || !strings.Contains(bootstrapArgv, "bootwright_ceph_bootstrap_image") {
+		t.Fatalf("bootstrap argv must conditionally pass --image from the rendered pin, got %v", resolveBootstrap)
 	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")

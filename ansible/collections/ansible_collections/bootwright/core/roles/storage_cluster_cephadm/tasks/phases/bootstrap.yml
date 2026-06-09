@@ -279,6 +279,11 @@
               if bootwright_ceph_registry_credentials is defined
               else []
             )
+            + (
+              ['--image', bootwright_ceph_bootstrap_image]
+              if bootwright_ceph_bootstrap_image | default('') | length > 0
+              else []
+            )
           }}
       no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
 

@@ -21,6 +21,64 @@ func TestStorageValidationAcceptsManagedManagementValue(t *testing.T) {
 	}
 }
 
+func TestStorageValidationAcceptsReleaseAndImagePins(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+	}{
+		{
+			name: "oss-version",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Release = "19.2.1"
+			},
+		},
+		{
+			name: "oss-name",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Release = "reef"
+			},
+		},
+		{
+			name: "oss-image-tag",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph:v19.2.1"
+			},
+		},
+		{
+			name: "oss-image-digest",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph@sha256:" + strings.Repeat("a", 64)
+			},
+		},
+		{
+			name: "redhat-stream-and-image",
+			edit: func(state *v1alpha1.State) {
+				state.Environments = []v1alpha1.Environment{{
+					Metadata: v1alpha1.Metadata{Name: "env"},
+					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
+						Name:     "ceph-entitlement",
+						Provider: v1alpha1.EntitlementProviderRedHat,
+						Product:  v1alpha1.EntitlementProductCeph,
+					}}},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+				state.StorageClusters[0].Spec.Ceph.Release = "9"
+				state.StorageClusters[0].Spec.Ceph.Image = "registry.redhat.io/rhceph/rhceph-9-rhel9:9"
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			tc.edit(&state)
+			if errs := validateStorage(state); len(errs) != 0 {
+				t.Fatalf("validateStorage returned errors: %v", errs)
+			}
+		})
+	}
+}
+
 func TestStorageRemovedSSHFieldsRejectUnknown(t *testing.T) {
 	cases := []struct {
 		name string
@@ -68,6 +126,19 @@ spec:
       knownHostsRef: { name: removed-known-hosts }
 `,
 			want: "field knownHostsRef not found",
+		},
+		{
+			name: "community-release-retired",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata: { name: ceph }
+spec:
+  type: ceph
+  ceph:
+    community:
+      release: squid
+`,
+			want: "field release not found",
 		},
 	}
 	for _, tc := range cases {
@@ -186,16 +257,54 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 						Product:  v1alpha1.EntitlementProductCeph,
 					}}},
 				}}
-				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Release: "squid"}
+				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Mirror: "https://download.ceph.com"}
 			},
 			want: "spec.ceph.community must be empty unless distribution=oss",
 		},
 		{
-			name: "community-bad-release",
+			name: "release-bad-oss-name",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Community = &v1alpha1.StorageCephCommunitySpec{Release: "Squid!"}
+				state.StorageClusters[0].Spec.Ceph.Release = "Squid!"
 			},
-			want: `spec.ceph.community.release "Squid!" must be an upstream Ceph release name`,
+			want: `spec.ceph.release "Squid!" must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)`,
+		},
+		{
+			name: "release-bad-oss-partial-version",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Release = "19.2"
+			},
+			want: `spec.ceph.release "19.2" must be an upstream Ceph release name`,
+		},
+		{
+			name: "release-bad-redhat-stream",
+			edit: func(state *v1alpha1.State) {
+				state.Environments = []v1alpha1.Environment{{
+					Metadata: v1alpha1.Metadata{Name: "env"},
+					Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
+						Name:     "ceph-entitlement",
+						Provider: v1alpha1.EntitlementProviderRedHat,
+						Product:  v1alpha1.EntitlementProductCeph,
+					}}},
+				}}
+				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
+				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
+				state.StorageClusters[0].Spec.Ceph.Release = "squid"
+			},
+			want: `spec.ceph.release "squid" must be a product stream version such as 9 or 9.1`,
+		},
+		{
+			name: "image-mutable-latest",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph:latest"
+			},
+			want: `spec.ceph.image "quay.io/ceph/ceph:latest" must not use mutable :latest tag`,
+		},
+		{
+			name: "image-unpinned",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Image = "quay.io/ceph/ceph"
+			},
+			want: `spec.ceph.image "quay.io/ceph/ceph" must pin a version tag or digest`,
 		},
 		{
 			name: "community-bad-mirror",

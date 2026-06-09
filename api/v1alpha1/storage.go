@@ -15,7 +15,23 @@ type StorageClusterSpec struct {
 }
 
 type StorageClusterCephSpec struct {
-	Distribution   string                    `yaml:"distribution,omitempty" json:"distribution,omitempty"`
+	Distribution string `yaml:"distribution,omitempty" json:"distribution,omitempty"`
+	// Release selects which Ceph release to install for the chosen distribution.
+	// For oss it is an upstream release name (squid, reef, quincy) or a full
+	// upstream x.y.z version (for example 19.2.1); a version pins the package
+	// repository reproducibly and, when Image is unset, derives the matching
+	// quay.io/ceph/ceph:vX.Y.Z container image. For redhat and ibm it is the
+	// product stream (for example 9), selecting the rhceph-<N>-tools and
+	// ibm-storage-ceph-<N> repositories. It defaults to
+	// StorageCephCommunityDefaultRelease (oss) or stream 9 (redhat, ibm) when
+	// empty.
+	Release string `yaml:"release,omitempty" json:"release,omitempty"`
+	// Image optionally pins the exact cephadm container image. cephadm bootstrap
+	// applies it as the default image for every Ceph daemon, making the running
+	// cluster version reproducible. It must pin a version tag or a sha256 digest
+	// (no mutable :latest). For oss an x.y.z Release derives this automatically;
+	// redhat and ibm registry tags are not x.y.z, so they pin here explicitly.
+	Image          string                    `yaml:"image,omitempty" json:"image,omitempty"`
 	Community      *StorageCephCommunitySpec `yaml:"community,omitempty" json:"community,omitempty"`
 	EntitlementRef LocalObjectReference      `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 	Cephadm        StorageCephadmSpec        `yaml:"cephadm" json:"cephadm"`
@@ -25,12 +41,9 @@ type StorageClusterCephSpec struct {
 
 // StorageCephCommunitySpec tunes the upstream community package source for the
 // oss distribution. It must be empty for the redhat and ibm distributions,
-// which obtain Ceph from subscription-backed repositories instead.
+// which obtain Ceph from subscription-backed repositories instead. The Ceph
+// release itself is selected by spec.ceph.release, not here.
 type StorageCephCommunitySpec struct {
-	// Release is the upstream Ceph release name cephadm uses to configure the
-	// package repository (for example squid, reef, or quincy). It defaults to
-	// StorageCephCommunityDefaultRelease when empty.
-	Release string `yaml:"release,omitempty" json:"release,omitempty"`
 	// Mirror overrides the upstream package base URL (default
 	// https://download.ceph.com) for mirrored or disconnected environments.
 	Mirror string `yaml:"mirror,omitempty" json:"mirror,omitempty"`

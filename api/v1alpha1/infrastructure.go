@@ -216,9 +216,15 @@ const (
 	StorageCephDistributionIBM    = "ibm"
 
 	// StorageCephCommunityDefaultRelease is the upstream Ceph release Bootwright
-	// pins for the community (oss) distribution when spec.ceph.community.release
-	// is unset. cephadm maps it to the matching package repo and container image.
+	// pins for the community (oss) distribution when spec.ceph.release is unset.
+	// cephadm maps it to the matching package repo and container image.
 	StorageCephCommunityDefaultRelease = "squid"
+
+	// StorageCephSubscriptionDefaultStream is the product stream Bootwright
+	// selects for the subscription-backed (redhat, ibm) distributions when
+	// spec.ceph.release is unset. It names the rhceph-<N>-tools and
+	// ibm-storage-ceph-<N> repositories.
+	StorageCephSubscriptionDefaultStream = "9"
 
 	StorageCephRoleMON     = "mon"
 	StorageCephRoleMGR     = "mgr"

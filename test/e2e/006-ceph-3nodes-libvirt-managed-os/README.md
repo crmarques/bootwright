@@ -59,7 +59,7 @@ the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
   public names to the resolvers in `infra/components/lab-dns.yaml`, and the
   libvirt NAT network carries egress. The OSS distribution adds no
   subscription-backed repo; Bootwright configures the community repo on each node
-  with cephadm using `spec.ceph.community.release`. Because cephadm's `add-repo`
+  with cephadm, scoped to `spec.ceph.release`. Because cephadm's `add-repo`
   enables EPEL and these RHEL nodes are unregistered, Bootwright also pre-installs
   `epel-release` from `dl.fedoraproject.org` and adds the CentOS Stream BaseOS,
   AppStream and CRB repositories (verified against the CentOS Official signing

@@ -81,13 +81,18 @@ core services, storage operations, late RGW/MDS services, and Data Foundation
 credential operations from the rendered storage tree. The managed Ceph
 declaration selects `spec.ceph.distribution`. Upstream/community installs use
 `distribution: oss`, where Bootwright configures the upstream community Ceph
-repository on each node with cephadm; `spec.ceph.community.release` pins the
-release (latest stable by default) and `spec.ceph.community.mirror` points at a
-download.ceph.com mirror for disconnected sites. Because cephadm's `add-repo`
+repository on each node with cephadm; `spec.ceph.community.mirror` points at a
+download.ceph.com mirror for disconnected sites. `spec.ceph.release` picks the
+Ceph release — an upstream name like `squid` (the floating latest stable) or a
+reproducible `x.y.z` such as `19.2.1` — and `spec.ceph.image` pins the exact
+cephadm container image (a version tag or digest), the lever that makes the
+running cluster version reproducible; an `x.y.z` release derives
+`quay.io/ceph/ceph:vX.Y.Z` automatically. Because cephadm's `add-repo`
 enables EPEL unconditionally on EL nodes, the OSS path also installs
 `epel-release` from Fedora so the step succeeds on unregistered RHEL. Red Hat and IBM installs
 reference named `Environment.spec.entitlements[]` entries for RHSM, registry
-entitlement, and license material. Secret bytes never appear in desired state. For imported storage,
+entitlement, and license material; `spec.ceph.release` selects their product
+stream and `spec.ceph.image` pins their (non-`x.y.z`) registry image explicitly. Secret bytes never appear in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
 `storage-export-attachment` effect, bindings provide `exportRef`, and

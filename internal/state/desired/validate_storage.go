@@ -4,11 +4,21 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/storage/topology"
+)
+
+var (
+	// cephOSSReleaseNamePattern matches an upstream Ceph release codename (squid).
+	cephOSSReleaseNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
+	// cephOSSReleaseVersionPattern matches a full upstream x.y.z version.
+	cephOSSReleaseVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	// cephSubscriptionStreamPattern matches a redhat/ibm product stream (9, 9.1).
+	cephSubscriptionStreamPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
 )
 
 func validateStorage(state v1alpha1.State) []string {
@@ -82,6 +92,8 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
 	errs = append(errs, validateStorageCephDistribution(prefix, cluster, env)...)
+	errs = append(errs, validateStorageCephRelease(prefix, storageCephDistribution(cluster), ceph.Release)...)
+	errs = append(errs, validateStorageCephImage(prefix, ceph.Image)...)
 	errs = append(errs, validateStorageCephCommunity(prefix+".community", cluster)...)
 	errs = append(errs, validateStorageCephManagedOS(cluster, machines, installProfiles)...)
 	errs = append(errs, validateStorageCephadm(prefix+".cephadm", cluster, machines)...)
@@ -138,6 +150,38 @@ func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Env
 	return errs
 }
 
+// validateStorageCephRelease checks spec.ceph.release against the meaning the
+// chosen distribution gives it: an upstream release name or x.y.z version for
+// oss, a product stream version for the subscription-backed distributions.
+func validateStorageCephRelease(prefix, distribution, release string) []string {
+	if release == "" {
+		return nil
+	}
+	switch distribution {
+	case v1alpha1.StorageCephDistributionOSS:
+		if !cephOSSReleaseNamePattern.MatchString(release) && !cephOSSReleaseVersionPattern.MatchString(release) {
+			return []string{fmt.Sprintf("%s.release %q must be an upstream Ceph release name (e.g. squid) or an x.y.z version (e.g. 19.2.1)", prefix, release)}
+		}
+	case v1alpha1.StorageCephDistributionRedHat, v1alpha1.StorageCephDistributionIBM:
+		if !cephSubscriptionStreamPattern.MatchString(release) {
+			return []string{fmt.Sprintf("%s.release %q must be a product stream version such as 9 or 9.1", prefix, release)}
+		}
+	}
+	return nil
+}
+
+// validateStorageCephImage checks spec.ceph.image pins a reproducible reference,
+// reusing the same tag/digest rules enforced for pinned component images.
+func validateStorageCephImage(prefix, image string) []string {
+	if image == "" {
+		return nil
+	}
+	if err := validatePinnedImageReference(image); err != "" {
+		return []string{fmt.Sprintf("%s.image %q %s", prefix, image, err)}
+	}
+	return nil
+}
+
 func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster) []string {
 	community := cluster.Spec.Ceph.Community
 	if community == nil {
@@ -147,22 +191,10 @@ func validateStorageCephCommunity(prefix string, cluster v1alpha1.StorageCluster
 		return []string{prefix + " must be empty unless distribution=oss"}
 	}
 	var errs []string
-	if release := community.Release; release != "" && !isStorageCephCommunityRelease(release) {
-		errs = append(errs, fmt.Sprintf("%s.release %q must be an upstream Ceph release name such as squid, reef, or quincy", prefix, release))
-	}
 	if mirror := community.Mirror; mirror != "" && !isHTTPURL(mirror) {
 		errs = append(errs, fmt.Sprintf("%s.mirror %q must be an http or https URL", prefix, mirror))
 	}
 	return errs
-}
-
-func isStorageCephCommunityRelease(release string) bool {
-	for _, r := range release {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '-' {
-			return false
-		}
-	}
-	return true
 }
 
 func isHTTPURL(value string) bool {

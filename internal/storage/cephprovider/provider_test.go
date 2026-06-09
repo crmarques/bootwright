@@ -39,9 +39,9 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 		Spec: v1alpha1.StorageClusterSpec{
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Distribution: v1alpha1.StorageCephDistributionOSS,
+				Release:      "reef",
 				Community: &v1alpha1.StorageCephCommunitySpec{
-					Release: "reef",
-					Mirror:  "https://mirror.example.test/ceph",
+					Mirror: "https://mirror.example.test/ceph",
 				},
 			},
 		},
@@ -53,6 +53,95 @@ func TestSelectOSSProviderHonorsCommunityOverride(t *testing.T) {
 	community := Vars(provider)["community"].(map[string]any)
 	if community["release"] != "reef" || community["mirror"] != "https://mirror.example.test/ceph" {
 		t.Fatalf("community vars = %#v", community)
+	}
+}
+
+func TestSelectOSSProviderClassifiesVersionAndDerivesImage(t *testing.T) {
+	oss := func(release, image string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionOSS,
+			Release:      release,
+			Image:        image,
+		}}}
+	}
+
+	// A full x.y.z release pins the repository as a version and derives the
+	// matching container image.
+	provider := Select(oss("19.2.1", ""), nil, "/context/secrets")
+	if provider.Community.Version != "19.2.1" || provider.Community.Release != "" {
+		t.Fatalf("version not classified: %#v", provider.Community)
+	}
+	if provider.Image != "quay.io/ceph/ceph:v19.2.1" {
+		t.Fatalf("derived image = %q, want quay.io/ceph/ceph:v19.2.1", provider.Image)
+	}
+	vars := Vars(provider)
+	community := vars["community"].(map[string]any)
+	if community["version"] != "19.2.1" {
+		t.Fatalf("community vars = %#v, want version 19.2.1", community)
+	}
+	if _, ok := community["release"]; ok {
+		t.Fatalf("community vars must omit release for a version pin: %#v", community)
+	}
+	if vars["image"] != "quay.io/ceph/ceph:v19.2.1" {
+		t.Fatalf("image var = %v, want derived image", vars["image"])
+	}
+
+	// A release name leaves the image unpinned (floats).
+	nameProvider := Select(oss("squid", ""), nil, "/context/secrets")
+	if nameProvider.Community.Release != "squid" || nameProvider.Image != "" {
+		t.Fatalf("name release derived an image: %#v image=%q", nameProvider.Community, nameProvider.Image)
+	}
+	if _, ok := Vars(nameProvider)["image"]; ok {
+		t.Fatalf("name release must omit image var")
+	}
+
+	// An explicit image overrides the derived one.
+	pinned := Select(oss("19.2.1", "quay.io/ceph/ceph@sha256:abc"), nil, "/context/secrets")
+	if pinned.Image != "quay.io/ceph/ceph@sha256:abc" {
+		t.Fatalf("explicit image not honored: %q", pinned.Image)
+	}
+}
+
+func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
+	redhat := func(release, image string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionRedHat,
+			Release:      release,
+			Image:        image,
+		}}}
+	}
+
+	// Default stream (release unset) keeps rhceph-9-tools.
+	def := Select(redhat("", ""), nil, "/context/secrets").Repository.RedHatRepos
+	if got := def[len(def)-1]; got != "rhceph-9-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
+		t.Fatalf("default tools repo = %q", got)
+	}
+
+	// An explicit stream selects rhceph-<N>-tools and is honored from a major.minor.
+	repos := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, "/context/secrets").Repository.RedHatRepos
+	if got := repos[len(repos)-1]; got != "rhceph-10-tools-for-rhel-{{ ansible_distribution_major_version }}-x86_64-rpms" {
+		t.Fatalf("stream tools repo = %q, want rhceph-10-tools", got)
+	}
+	provider := Select(redhat("10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10"), nil, "/context/secrets")
+	if provider.Image != "registry.redhat.io/rhceph/rhceph-10-rhel9:10" {
+		t.Fatalf("explicit image not honored: %q", provider.Image)
+	}
+	if Vars(provider)["image"] != "registry.redhat.io/rhceph/rhceph-10-rhel9:10" {
+		t.Fatalf("image var missing for redhat: %#v", Vars(provider))
+	}
+
+	// IBM stream selects the matching vendor .repo URL.
+	ibm := func(release string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: v1alpha1.StorageCephDistributionIBM,
+			Release:      release,
+		}}}
+	}
+	if url := Select(ibm(""), nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-9-rhel-9.repo" {
+		t.Fatalf("default ibm repo url = %q", url)
+	}
+	if url := Select(ibm("10"), nil, "/context/secrets").Repository.IBMRepoURL; url != "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-10-rhel-9.repo" {
+		t.Fatalf("stream ibm repo url = %q, want stream 10", url)
 	}
 }
 
