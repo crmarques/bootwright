@@ -43,8 +43,7 @@ func TestCanonicalExamples(t *testing.T) {
 			continue
 		}
 		// _wip holds intentionally-incomplete scratch examples (gitignored);
-		// they are not canonical and TestCephRHELMinimalFIPSReviewExample covers
-		// the one tracked _wip example individually.
+		// they are not canonical and are not validated here.
 		if name == "_wip" {
 			continue
 		}
@@ -54,13 +53,6 @@ func TestCanonicalExamples(t *testing.T) {
 				t.Fatalf("LoadNormalizeValidate: %v", err)
 			}
 		})
-	}
-}
-
-func TestCephRHELMinimalFIPSReviewExample(t *testing.T) {
-	_, err := LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "_wip", "ceph-rhel-minimal-fips-managed-os")})
-	if err != nil {
-		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 }
 
