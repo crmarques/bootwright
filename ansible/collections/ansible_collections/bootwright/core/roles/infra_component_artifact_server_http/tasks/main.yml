@@ -1,4 +1,9 @@
 ---
+- name: Enforce apply mode for this infra-component
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: infra_component_container_gate.yml
+
 - name: Validate boot artifact server settings
   ansible.builtin.assert:
     that:

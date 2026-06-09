@@ -8,6 +8,11 @@
 # Two clusters sharing the same (provider, name, machineRef) consume one
 # aggregated instance whose frontends carry their owning clusterName.
 
+- name: Enforce apply mode for this infra-component
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: infra_component_container_gate.yml
+
 - name: Install HAProxy container runtime
   ansible.builtin.package:
     name: podman

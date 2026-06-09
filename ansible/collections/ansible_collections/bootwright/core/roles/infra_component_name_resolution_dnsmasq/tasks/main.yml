@@ -6,6 +6,11 @@
 # This role writes a dnsmasq config that resolves endpoint host records
 # and apps-domain records for every cluster assigned to this DNS capability.
 
+- name: Enforce apply mode for this infra-component
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: infra_component_container_gate.yml
+
 - name: Install dnsmasq packages
   ansible.builtin.package:
     name:

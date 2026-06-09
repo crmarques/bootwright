@@ -7,6 +7,11 @@
 # role; the operator runs it once the registry is up. The role only
 # stands up the Distribution container, htpasswd, and trust anchor.
 
+- name: Enforce apply mode for this infra-component
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_ownership
+    tasks_from: infra_component_container_gate.yml
+
 - name: Load mirror registry package list
   ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
 
