@@ -140,11 +140,12 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Status:       TaskStatusPending,
 						ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 					},
-					Playbook:      applyStoragePlaybook,
-					Limit:         render.StorageClusterGroupName(cluster.Metadata.Name),
-					ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
-					State:         storageTaskState(state, cluster.Metadata.Name),
-					Forks:         storageClusterNodeCount(cluster),
+					Playbook:        applyStoragePlaybook,
+					Limit:           render.StorageClusterGroupName(cluster.Metadata.Name),
+					ExtraVarPairs:   []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_prereqs_only=true"},
+					State:           storageTaskState(state, cluster.Metadata.Name),
+					DesiredHashVars: storageClusterDesiredHashVars(state, cluster.Metadata.Name),
+					Forks:           storageClusterNodeCount(cluster),
 				},
 			}); err != nil {
 				return nil, err
@@ -179,10 +180,11 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 						Status:       TaskStatusPending,
 						ResourceKeys: []string{"storage:" + cluster.Metadata.Name},
 					},
-					Playbook:      applyStoragePlaybook,
-					Limit:         render.StorageSeedHostName(cluster),
-					ExtraVarPairs: []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
-					State:         storageTaskState(state, cluster.Metadata.Name),
+					Playbook:        applyStoragePlaybook,
+					Limit:           render.StorageSeedHostName(cluster),
+					ExtraVarPairs:   []string{"bootwright_task_storage_cluster_name=" + cluster.Metadata.Name, "bootwright_task_storage_skip_prereqs=true"},
+					State:           storageTaskState(state, cluster.Metadata.Name),
+					DesiredHashVars: storageClusterDesiredHashVars(state, cluster.Metadata.Name),
 				},
 			}); err != nil {
 				return nil, err

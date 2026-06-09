@@ -68,6 +68,24 @@ func storageTaskState(state v1alpha1.State, name string) v1alpha1.State {
 	return filtered
 }
 
+// storageClusterDesiredHashVars projects the desired state hashed for a
+// StorageCluster's convergence record: the cluster's own spec, topology, nodes,
+// and bound machines — but NOT its pools, filesystems, object gateways, exports, or
+// placement policies. Those sub-objects are classified independently (each is its
+// own object), so adding or changing one must never flip the StorageCluster itself
+// to drift. The task still carries the full State for rendering and for the ceph
+// operations loop; only the hash input is projected, mirroring the fabric
+// DesiredHashVars pattern.
+func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.State {
+	s := storageTaskState(state, name)
+	s.StoragePlacementPolicies = nil
+	s.StoragePools = nil
+	s.StorageFilesystems = nil
+	s.StorageObjectGateways = nil
+	s.StorageExports = nil
+	return s
+}
+
 func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
 }
