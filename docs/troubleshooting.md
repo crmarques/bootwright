@@ -103,18 +103,6 @@ the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
 `ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef.name`.
 
-## Context Input Looks Stale
-
-`context init` imports files into
-`/var/lib/bootwright/contexts/<context>/input/`. If you edited the source
-directory after import and only want to refresh inputs, rerun:
-
-```text
-bootwright context update <context-name> -f <input-dir> --yes
-```
-
-Omit `--yes` to review and confirm the input replacement interactively.
-
 ## Resources No Longer In Desired State (Orphans)
 
 `apply` never deletes — it only creates and converges what desired state declares. If

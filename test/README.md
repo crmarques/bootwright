@@ -101,9 +101,11 @@ and log-following, use [`test/e2e/README.md`](e2e/README.md).
 
 ## Logs And Artifacts
 
-Authored inputs are copied to
-`/var/lib/bootwright/contexts/<context>/input/`. Reviewable generated output
-lives under `rendered/`, secret-inlined installer runtime output under
-`clusters/<cluster>/runtime/installer/`, managed service files under
-`managed-services/`, provider state under `provider-state/`, and apply ledgers
-under `runs/`. Failed phases print the relevant log path.
+Authored inputs stay in the workspace directory recorded by `context init`
+(the fixture directory itself); edits there are picked up directly by the next
+command. Reviewable generated output lives under
+`/var/lib/bootwright/contexts/<context>/rendered/`, secret-inlined installer
+runtime output under `clusters/<cluster>/runtime/installer/`, managed service
+files under `managed-services/`, provider state under `provider-state/`, and
+apply ledgers plus per-run input snapshots under `runs/`. Failed phases print
+the relevant log path.

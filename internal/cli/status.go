@@ -83,7 +83,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	p.Fields([]cliout.Field{
 		{Key: "context", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
-		{Key: "input-dir", Value: ctx.InputDir},
+		{Key: "workspace", Value: ctx.InputDir},
 		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "clusters-dir", Value: ctx.ClustersDir},
 		{Key: "runs-dir", Value: ctx.RunsDir},
@@ -106,11 +106,11 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 		p.Status(cliout.StatusFail, "load", loadErr.Error())
 	case !stateLoaded:
 		p.Fields(fields)
-		p.Status(cliout.StatusFail, "load", "no desired state found in context input")
+		p.Status(cliout.StatusFail, "load", "no desired state found in the context workspace")
 	default:
 		fields = append(fields, stateCountFields(state)...)
 		p.Fields(fields)
-		p.Status(cliout.StatusOK, "load", "context input loads, normalizes, and validates")
+		p.Status(cliout.StatusOK, "load", "workspace input loads, normalizes, and validates")
 	}
 
 	if stateLoaded {

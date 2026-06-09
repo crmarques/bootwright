@@ -39,6 +39,21 @@ func LoadNormalizeValidateInputFiles(paths []string) (v1alpha1.State, error) {
 	return state, nil
 }
 
+// LoadedInputFiles returns the YAML files the canonical loader would decode
+// for paths, after Environment spec.resources selection. Mutating runs use it
+// to snapshot the exact input set they were launched from.
+func LoadedInputFiles(paths []string) ([]string, error) {
+	files, err := discoverFiles(paths)
+	if err != nil {
+		return nil, err
+	}
+	selected, _, _, err := selectResourceFiles(files)
+	if err != nil {
+		return nil, err
+	}
+	return selected, nil
+}
+
 func applyEnvironmentClusterSelection(state v1alpha1.State) v1alpha1.State {
 	if len(state.Environments) != 1 {
 		return state

@@ -20,7 +20,7 @@ const (
 	InternalRegistryEnv = "BOOTWRIGHT_INTERNAL_REGISTRY"
 	DefaultRootDir      = "/var/lib/bootwright"
 	CacheDirName        = "cache"
-	InputDirName        = "input"
+	InputSourceFileName = "input-source.yaml"
 	RenderedDirName     = "rendered"
 	SecretsDirName      = "secrets"
 	RunsDirName         = "runs"
@@ -34,6 +34,10 @@ type Store struct {
 	Current string `yaml:"current,omitempty" json:"current,omitempty"`
 }
 
+// Context describes one shared context under the Bootwright root. InputDir
+// and InputPaths point at the operator's workspace directory recorded at
+// `context init` time (see InputSourceFileName); every other directory is
+// Bootwright-owned output/state under BaseDir.
 type Context struct {
 	Name               string   `yaml:"-" json:"name"`
 	BaseDir            string   `yaml:"-" json:"baseDir"`
@@ -96,26 +100,10 @@ func NewContext(name string) (Context, error) {
 	return newContextAt(name, baseDir), nil
 }
 
-func NewStagingContext(name, baseDir string) (Context, error) {
-	if err := ValidateName(name); err != nil {
-		return Context{}, err
-	}
-	baseDir, err := cleanPath(baseDir)
-	if err != nil {
-		return Context{}, err
-	}
-	if _, err := managedroot.ValidateTarget(baseDir); err != nil {
-		return Context{}, err
-	}
-	return newContextAt(name, baseDir), nil
-}
-
 func newContextAt(name, baseDir string) Context {
-	inputDir := filepath.Join(baseDir, InputDirName)
 	return Context{
 		Name:               name,
 		BaseDir:            baseDir,
-		InputDir:           inputDir,
 		RenderedDir:        filepath.Join(baseDir, RenderedDirName),
 		SecretsDir:         filepath.Join(baseDir, SecretsDirName),
 		RunsDir:            filepath.Join(baseDir, RunsDirName),
@@ -123,8 +111,15 @@ func newContextAt(name, baseDir string) Context {
 		ManagedServicesDir: filepath.Join(baseDir, ManagedServicesName),
 		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
 		OwnershipDir:       filepath.Join(baseDir, OwnershipName),
-		InputPaths:         []string{inputDir},
 	}
+}
+
+// WithInputSource returns a copy of ctx whose InputDir and InputPaths point at
+// the given workspace directory.
+func (ctx Context) WithInputSource(sourceDir string) Context {
+	ctx.InputDir = sourceDir
+	ctx.InputPaths = []string{sourceDir}
+	return ctx
 }
 
 func (ctx Context) Cluster(name string) ClusterPaths {
@@ -199,7 +194,7 @@ func Current(store Store) (Context, error) {
 	if current == "" {
 		return Context{}, errors.New("no current context; run `bootwright context init <name> -f <path>` or `bootwright context use <name>`")
 	}
-	ctx, err := RequireExistingContext(current)
+	ctx, err := ResolveExistingContext(current)
 	if err != nil {
 		return Context{}, fmt.Errorf("current context %q is not available in shared storage: %w", current, err)
 	}
@@ -289,6 +284,22 @@ func RequireExistingContext(name string) (Context, error) {
 	return ctx, nil
 }
 
+// ResolveExistingContext returns the context with its recorded workspace
+// directory loaded into InputDir/InputPaths. It is the resolution path every
+// command uses; a context without a recorded workspace path (for example one
+// created before workspace recording existed) fails with a named error.
+func ResolveExistingContext(name string) (Context, error) {
+	ctx, err := RequireExistingContext(name)
+	if err != nil {
+		return Context{}, err
+	}
+	source, err := ReadInputSource(ctx)
+	if err != nil {
+		return Context{}, err
+	}
+	return ctx.WithInputSource(source), nil
+}
+
 func isUsableContext(ctx Context) (bool, error) {
 	info, err := os.Lstat(ctx.BaseDir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -316,7 +327,6 @@ func EnsureDirs(ctx Context) error {
 	}
 	for _, dir := range []string{
 		ctx.BaseDir,
-		ctx.InputDir,
 		ctx.RenderedDir,
 		ctx.SecretsDir,
 		ctx.RunsDir,
@@ -387,7 +397,6 @@ func ValidateContext(ctx Context) error {
 		return err
 	}
 	want := map[string]string{
-		"inputDir":           filepath.Join(baseDir, InputDirName),
 		"renderedDir":        filepath.Join(baseDir, RenderedDirName),
 		"secretsDir":         filepath.Join(baseDir, SecretsDirName),
 		"runsDir":            filepath.Join(baseDir, RunsDirName),
@@ -397,7 +406,6 @@ func ValidateContext(ctx Context) error {
 		"ownershipDir":       filepath.Join(baseDir, OwnershipName),
 	}
 	got := map[string]string{
-		"inputDir":           ctx.InputDir,
 		"renderedDir":        ctx.RenderedDir,
 		"secretsDir":         ctx.SecretsDir,
 		"runsDir":            ctx.RunsDir,

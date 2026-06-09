@@ -23,7 +23,6 @@ The CLI covers the provisioning pipeline:
 bootwright example init lab --output ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
-bootwright context update lab -f ./lab-input
 bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
 bootwright secret sync
 bootwright host trust
@@ -160,7 +159,6 @@ today.
 bootwright example init lab --output ./lab-input
 bootwright validate -f ./lab-input
 bootwright context init lab -f ./lab-input
-bootwright context update lab -f ./lab-input
 bootwright context current
 bootwright cluster list
 bootwright cluster access

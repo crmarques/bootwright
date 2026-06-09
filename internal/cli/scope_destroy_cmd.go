@@ -199,6 +199,13 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			}
 		}
 		if !dryRun && !plan.noRemoteWork {
+			// Record the exact input set this mutating destroy was launched
+			// from. Destroy has no per-run history directory (workflow.Run
+			// mints its run ID internally), so the snapshot is a rolling
+			// last-destroy-input directory under the context runs dir.
+			if err := snapshotMutatingRunInput(workflow.LastDestroyInputSnapshotDir(ctx.RunsDir), ctx); err != nil {
+				return failErr(1, err)
+			}
 			printWorkflowStart(stdout, workflowLabel, plan.selected, plan.askBecomePass)
 		}
 		become := becomeCredential{}

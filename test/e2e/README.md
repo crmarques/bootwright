@@ -58,9 +58,9 @@ KVM and permission to manage libvirt on the provider host.
      isolated Podman-based runs.
    - [bastion.md](bastion.md) for a Linux VM or physical host.
 3. Export the e2e case name and initialize a context from the fixture on the
-   bastion. The command copies the YAML into
-   `/var/lib/bootwright/contexts/<context>/input/`, prepares the context
-   directories, and selects the context:
+   bastion. The command records the fixture directory's absolute path as the
+   context workspace (nothing is copied), prepares the context directories,
+   and selects the context:
 
    ```bash
    export CASE=<case-directory>
@@ -71,12 +71,13 @@ KVM and permission to manage libvirt on the provider host.
    # Containerized bastion alternative; the repo is mounted at /work.
    # bootwright context init "$CASE" -f "/work/test/e2e/$CASE" --yes
    ```
-4. Validate the context and edit the imported desired state for the target
-   hosts, addresses, BMC endpoints, and secret references:
+4. Validate the context and edit the workspace desired state for the target
+   hosts, addresses, BMC endpoints, and secret references. Edits are picked up
+   directly by the next command:
 
    ```bash
    bootwright status
-   sudo vi "/var/lib/bootwright/contexts/$CASE/input/environment.yaml"
+   vi "test/e2e/$CASE/environment.yaml"
    ```
 
    If `print-env` reports that proxy credentials would be printed,

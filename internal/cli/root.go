@@ -24,7 +24,6 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		Example: `  bootwright example init lab --output ./lab-input
   bootwright validate -f ./lab-input
   bootwright context init lab -f ./lab-input
-  bootwright context update lab -f ./lab-input --yes
   bootwright secret set openshift-pull-secret --pull-secret ~/openshift-pull-secret.json
   bootwright secret sync
   bootwright host trust

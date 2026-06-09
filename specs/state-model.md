@@ -54,8 +54,8 @@ Rules:
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
-- When `resources[]` is omitted, the current context input directory loads
-  every discovered YAML file.
+- When `resources[]` is omitted, the current context's recorded workspace
+  directory loads every discovered YAML file.
 - A listed file is loaded as a complete YAML file. A listed directory is walked
   deterministically for YAML files.
 - Every referenced Bootwright resource must also be selected.
@@ -798,6 +798,22 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
+- `context init <name> -f <dir>` records the absolute, cleaned path of the
+  workspace directory in the shared context directory and copies nothing. The
+  workspace is the single owner of authored YAML: every command reads it
+  directly, so edits are visible to the next command with no extra step.
+  Re-running `context init -f` with `--yes` re-points the recorded path; there
+  is no `context update` command. The context directory under
+  `/var/lib/bootwright/contexts/<name>/` holds Bootwright outputs and state
+  only.
+- A recorded workspace path that is missing, unreadable, or not a directory is
+  a named failure at context resolution/readiness time that names the context
+  and the recorded path; there is no fallback copy and no silent degradation.
+- A mutating `apply` records the loaded input YAML files as a forensic output
+  under the run's history directory (`runs/history/<run-id>/input/`); a
+  mutating `destroy` records them under `runs/last-destroy-input/`. The
+  snapshot is what was applied, written at the start of the mutating run;
+  nothing reads it back, and plan/`--dry-run` never write it.
 - Read-only verbs (`status`, `state-check`, `render`, `plan`, `apply --dry-run`,
   `validate`, help, and discovery) must not write runtime records
   (convergence-safety, install, ownership, ledger) or acquire a mutating run

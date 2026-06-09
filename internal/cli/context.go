@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,7 +24,6 @@ func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 	}
 	cmd.AddCommand(
 		newContextInitCmd(stdin, stdout, stderr),
-		newContextUpdateCmd(stdin, stdout, stderr),
 		newContextUseCmd(stdout),
 		newContextListCmd(stdout),
 		newContextCurrentCmd(stdout),
@@ -40,17 +38,39 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "init <ctx-name>",
-		Short: "Create a context from desired-state input files",
-		Args:  cobra.ExactArgs(1),
+		Short: "Create a context that records a workspace directory path",
+		Long: `Create a context that records the absolute path of a workspace directory.
+
+The workspace stays the single owner of the authored desired-state YAML:
+nothing is copied, every command reads the workspace directly, and edits are
+picked up by the next command with no extra step. Re-run init -f with --yes to
+re-point an existing context at a new (or moved) workspace directory.`,
+		Args: cobra.ExactArgs(1),
 		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
-  bootwright context init lab -f ./input --yes`,
+  bootwright context init lab -f ~/lab-input --yes`,
 	}
-	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
-	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context directory")
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "workspace directory with Bootwright YAML; its absolute path is recorded and edits are picked up directly")
+	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context by re-pointing its recorded workspace path")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		if err := contextstore.ValidateName(name); err != nil {
+			return failErr(2, err)
+		}
+		if len(files) != 1 {
+			return failf(2, "context init records exactly one workspace directory; pass a single -f <dir>")
+		}
+		// Resolve before any sudo re-exec so relative paths and ~ expand
+		// against the caller's environment, not root's.
+		source, err := contextstore.ResolveWorkspaceDir(files[0])
+		if err != nil {
+			return failErr(2, err)
+		}
 		if shouldRunContextRootChild() {
-			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "init", name}, files, yes, stdin, stdout, stderr)
+			rootArgs := []string{"context", "init", name, "-f", source}
+			if yes {
+				rootArgs = append(rootArgs, "--yes")
+			}
+			code, err := runWithLocalRoot(cmd.Context(), rootArgs, stdin, stdout, stderr, true)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -72,24 +92,22 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 			return failErr(1, err)
 		}
 		if exists && !yes {
-			return failf(1, "context %q already exists; rerun with --yes to replace it or `bootwright context update %s -f <path> --yes` to refresh inputs", name, name)
+			return failf(1, "context %q already exists; rerun with --yes to re-point it at %s", name, source)
 		}
-		prepared, err := contextstore.PrepareContextImport(name, files)
+		state, err := desiredstate.LoadNormalizeValidateInputFiles([]string{source})
 		if err != nil {
-			return failErr(1, err)
-		}
-		defer prepared.Cancel()
-		state, err := desiredstate.LoadNormalizeValidateInputFiles(prepared.ValidationPaths())
-		if err != nil {
-			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
+			return failErr(1, fmt.Errorf("validate workspace input files: %w", err))
 		}
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
-		copied, err := prepared.Commit(yes)
-		if err != nil {
+		if err := contextstore.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
+		if err := contextstore.WriteInputSource(ctx, source); err != nil {
+			return failErr(1, err)
+		}
+		ctx = ctx.WithInputSource(source)
 		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
 			return failErr(1, err)
@@ -102,8 +120,9 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 		p.Command("context init")
 		p.Section("Context")
 		p.Fields(contextFields(ctx))
-		p.Section("Imported inputs")
-		p.Artifacts([]output.ArtifactGroup{{Paths: copied}})
+		p.Section("Workspace")
+		p.Status(output.StatusOK, "recorded path", source)
+		p.Status(output.StatusOK, "live edits", "commands read the workspace directly; re-run `bootwright context init "+name+" -f <dir>` to re-point it")
 		p.Section("Runtime")
 		if bundleSkipped {
 			p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
@@ -113,91 +132,6 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
 		}
 		p.Summary(output.StatusOK, name, "current context")
-		printNextStatusHint(stdout)
-		return nil
-	}
-	return cmd
-}
-
-func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	var files []string
-	var yes bool
-	cmd := &cobra.Command{
-		Use:   "update <ctx-name>",
-		Short: "Update desired-state input files for an existing context",
-		Args:  cobra.ExactArgs(1),
-		Example: `  bootwright context update lab -f ./input --yes
-  bootwright context update lab -f ./environment.yaml -f ./service-machines.yaml`,
-	}
-	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "Bootwright YAML file or directory to import; may be repeated")
-	cmd.Flags().BoolVar(&yes, "yes", false, "skip the update confirmation prompt")
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-		if shouldRunContextRootChild() {
-			code, err := runContextImportWithLocalRoot(cmd.Context(), []string{"context", "update", name}, files, yes, stdin, stdout, stderr)
-			if err != nil {
-				return failErr(1, err)
-			}
-			if code != 0 {
-				return silentExit(code)
-			}
-			return nil
-		}
-		if err := contextstore.ValidateName(name); err != nil {
-			return failErr(2, err)
-		}
-		ctx, err := contextstore.RequireExistingContext(name)
-		if err != nil {
-			return failErr(1, err)
-		}
-		info, err := os.Stat(ctx.BaseDir)
-		if err != nil {
-			return failErr(1, fmt.Errorf("context %q directory is not ready at %s: %w", name, ctx.BaseDir, err))
-		}
-		if !info.IsDir() {
-			return failErr(1, fmt.Errorf("context %q path is not a directory: %s", name, ctx.BaseDir))
-		}
-		prepared, err := contextstore.PrepareInputImport(files, ctx.InputDir, true)
-		if err != nil {
-			return failErr(1, err)
-		}
-		defer prepared.Cancel()
-		state, err := desiredstate.LoadNormalizeValidateInputFiles(prepared.ValidationPaths())
-		if err != nil {
-			return failErr(1, fmt.Errorf("validate imported input files: %w", err))
-		}
-		if err := enforceControllerLocality(state); err != nil {
-			return failErr(1, err)
-		}
-		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Replace input files for context %s under %s? [y/N] (default: no): ", name, ctx.InputDir)) {
-			return failErr(1, errors.New("context update aborted"))
-		}
-		if err := contextstore.EnsureDirs(ctx); err != nil {
-			return failErr(1, err)
-		}
-		copied, err := prepared.Commit()
-		if err != nil {
-			return failErr(1, err)
-		}
-		bundle, bundleSkipped, err := prepareInitialBundle()
-		if err != nil {
-			return failErr(1, err)
-		}
-		p := output.New(stdout)
-		p.Command("context update")
-		p.Section("Context")
-		p.Fields(contextFields(ctx))
-		p.Section("Imported inputs")
-		p.Artifacts([]output.ArtifactGroup{{Paths: copied}})
-		p.Section("Runtime")
-		if bundleSkipped {
-			p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
-		} else if bundle.Reused {
-			p.Status(output.StatusOK, "Ansible bundle", "cache current at "+bundle.Dir)
-		} else {
-			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
-		}
-		p.Summary(output.StatusOK, name, "context input files updated")
 		printNextStatusHint(stdout)
 		return nil
 	}

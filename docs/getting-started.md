@@ -135,7 +135,7 @@ Before importing a context, confirm the out-of-band inputs exist:
 - Real BMC TLS posture is understood before using
   `disableCertificateVerification: true`.
 
-Validate the edited YAML before it is imported into `/var/lib/bootwright`:
+Validate the edited YAML before pointing a context at it:
 
 ```text
 bootwright validate -f ./my-sno-lab
@@ -162,17 +162,21 @@ Create the context from the edited directory:
 ```text
 bootwright validate -f ./my-sno-lab
 bootwright context init lab -f ./my-sno-lab
-bootwright context update lab -f ./my-sno-lab --yes
 bootwright context current
 bootwright secret list
 ```
 
-Bootwright records only your current context selection in
-`~/.bootwright/contexts.yaml`. Context data is shared under
-`/var/lib/bootwright/contexts/<context-name>/`, and the imported authoring copy
-lives at `input/` inside that directory. Other sudo-capable administrators on
-the same host see the same shared contexts, but keep their own current
-selection. Run `bootwright ...` as your user.
+`context init` records the absolute path of your workspace directory; nothing
+is copied. The workspace stays the single owner of the authored YAML, so edits
+under it are live — the next `bootwright` command reads them directly with no
+extra step. Bootwright records only your current context selection in
+`~/.bootwright/contexts.yaml`. Context data (rendered output, secrets, run
+history, and the recorded workspace path) is shared under
+`/var/lib/bootwright/contexts/<context-name>/`. Other sudo-capable
+administrators on the same host see the same shared contexts and resolve the
+same recorded workspace path, but keep their own current selection; a context
+shared between administrators wants a shared checkout of the workspace that
+every administrator can read. Run `bootwright ...` as your user.
 
 !!! warning
     Do not run `sudo bootwright ...` directly. Bootwright re-escalates with
@@ -182,11 +186,10 @@ selection. Run `bootwright ...` as your user.
     after you imported one. Recover by running `bootwright context use <name>`
     as your user.
 
-Re-run `context init` with `--yes` to replace the entire context directory, or
-use `bootwright context update lab -f <input-dir> --yes` to replace only
-`input/` while preserving secrets, rendered output, runtime data, run history,
-and managed host/service files. Omit `--yes` when you want Bootwright to ask
-for confirmation before replacing imported inputs.
+If the workspace directory moves (or you want the context to track a different
+one), re-run `bootwright context init lab -f <dir> --yes` to re-point the
+recorded path; secrets, rendered output, runtime data, run history, and
+managed host/service files are preserved.
 
 ## 4. Set Secrets
 
@@ -413,8 +416,8 @@ This does not destroy container-cluster nodes or the rest of the infrastructure.
 
 ## Output Boundaries
 
-- Authored YAML lives under
-  `/var/lib/bootwright/contexts/<context>/input/`.
+- Authored YAML lives in your workspace directory; its absolute path is
+  recorded at `/var/lib/bootwright/contexts/<context>/input-source.yaml`.
 - Effective state lives at
   `/var/lib/bootwright/contexts/<context>/rendered/effective-state.yaml`.
 - Placeholder installer output lives under

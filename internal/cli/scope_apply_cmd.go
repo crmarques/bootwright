@@ -342,6 +342,11 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if err != nil {
 			return failErr(1, err)
 		}
+		// Record the exact input set this mutating run was launched from as a
+		// per-run forensic output next to the run's ledger and task logs.
+		if err := snapshotMutatingRunInput(workflow.RunInputSnapshotDir(ctx.RunsDir, prepared.RunID), ctx); err != nil {
+			return failErr(1, err)
+		}
 		if plan.targetsClusters {
 			reporter.ResolveInstallerStart()
 			if _, err := workflow.ResolveInstallerForContext(ctx.Name, clustersDir, ctx.SecretsDir, plan.state); err != nil {

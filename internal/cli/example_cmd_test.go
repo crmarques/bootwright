@@ -83,7 +83,6 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		"bootwright example init lab",
 		"bootwright validate -f ./lab-input",
 		"bootwright context init lab",
-		"bootwright context update lab",
 		"bootwright bastion setup --yes",
 		"bootwright preflight all",
 		"bootwright render effective",
@@ -95,5 +94,8 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("root help missing %q:\n%s", want, stdout)
 		}
+	}
+	if strings.Contains(stdout, "context update") {
+		t.Fatalf("root help still advertises removed context update:\n%s", stdout)
 	}
 }

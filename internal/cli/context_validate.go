@@ -80,6 +80,12 @@ func currentContextValidation() (contextstore.Context, []output.Check) {
 }
 
 func ensureContextReady(ctx contextstore.Context) error {
+	// The recorded workspace is the single owner of authored YAML; a missing,
+	// moved, or unreadable workspace is a hard, named failure with no
+	// fallback, so surface its own error instead of the generic one.
+	if err := contextstore.ValidateInputSource(ctx); err != nil {
+		return err
+	}
 	if missingCheckCount(contextReadinessChecks(ctx)) > 0 {
 		return fmt.Errorf("context %q is not ready; run `bootwright status`", ctx.Name)
 	}
@@ -168,7 +174,7 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 	}
 	checks = append(checks,
 		dirContextCheck("context-dir", ctx.BaseDir),
-		dirContextCheck("input-dir", ctx.InputDir),
+		workspaceContextCheck(ctx),
 		dirContextCheck("rendered-dir", ctx.RenderedDir),
 		dirContextCheck("secrets-dir", ctx.SecretsDir),
 		dirContextCheck("clusters-dir", ctx.ClustersDir),
@@ -179,6 +185,16 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 		secretsDirModeCheck(ctx.SecretsDir),
 	)
 	return checks
+}
+
+// workspaceContextCheck reports whether the workspace directory recorded at
+// `context init` still exists and is readable. Evidence names the recorded
+// path; remediation is re-running context init -f to re-point it.
+func workspaceContextCheck(ctx contextstore.Context) output.Check {
+	if err := contextstore.ValidateInputSource(ctx); err != nil {
+		return missingContextCheck("workspace", err.Error(), fmt.Sprintf("bootwright context init %s -f <dir>", ctx.Name))
+	}
+	return okContextCheck("workspace", ctx.InputDir)
 }
 
 func fileContextCheck(name, path string) output.Check {
