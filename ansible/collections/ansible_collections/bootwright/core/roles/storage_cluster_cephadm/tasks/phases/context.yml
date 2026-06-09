@@ -9,6 +9,19 @@
   delegate_to: localhost
   become: false
 
+# Gather distribution facts before the provider is materialized below.
+# Subscription-backed (redhat, ibm) providers carry repos that embed
+# {{ ansible_distribution_major_version }}; ansible-core finalizes that template
+# when bootwright_ceph_provider is set, so without facts here the set_fact fails
+# with "ansible_distribution_major_version is undefined". context.yml runs before
+# repository.yml, so gathering here also serves the later repo and OS steps.
+- name: Gather storage node OS facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+
 - name: Resolve managed Ceph work paths
   ansible.builtin.set_fact:
     bootwright_ceph_provider: "{{ bootwright_selected_storage_cluster.provider | default({}) }}"

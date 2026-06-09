@@ -1,11 +1,8 @@
 ---
-- name: Gather storage node OS facts
-  ansible.builtin.setup:
-    gather_subset:
-      - "!all"
-      - "!min"
-      - distribution
-
+# Storage node OS facts are gathered in phases/context.yml (which always runs
+# first) so the rendered subscription-backed repos that embed the distribution
+# major version finalize cleanly; the gathered facts remain available here.
+#
 # Distribution dispatch is driven by the rendered provider capability flags, not
 # by the distribution name: community-source distributions carry a `community`
 # block, subscription-backed distributions set `requiresRHSM`. This keeps the
