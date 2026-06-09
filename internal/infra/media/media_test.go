@@ -120,6 +120,43 @@ func TestAddURL(t *testing.T) {
 	}
 }
 
+func TestAddURLRejectsHTTPError(t *testing.T) {
+	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "missing", http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := AddURL("rhel.iso", server.URL+"/rhel.iso", "", false)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("HTTP error = %v", err)
+	}
+}
+
+func TestAddURLRejectsUnreachableServer(t *testing.T) {
+	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.Close()
+
+	_, err := AddURL("rhel.iso", server.URL+"/rhel.iso", "", false)
+	if err == nil || !strings.Contains(err.Error(), "download ISO") {
+		t.Fatalf("unreachable err = %v", err)
+	}
+}
+
+func TestAddURLRejectsChecksumMismatch(t *testing.T) {
+	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("downloaded"))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := AddURL("rhel.iso", server.URL+"/rhel.iso", strings.Repeat("0", 64), false)
+	if err == nil || !strings.Contains(err.Error(), "sha256 mismatch") {
+		t.Fatalf("checksum err = %v", err)
+	}
+}
+
 func TestValidateKeyRejectsTraversal(t *testing.T) {
 	for _, key := range []string{"../rhel.iso", "dir/rhel.iso", "rhel", "rhel.iso/..", "rhel!.iso"} {
 		if err := ValidateKey(key); err == nil {
