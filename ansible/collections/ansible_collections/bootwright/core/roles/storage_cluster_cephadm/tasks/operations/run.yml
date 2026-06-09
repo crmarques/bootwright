@@ -14,7 +14,187 @@
     bootwright_ceph_op_key_line: ""
     bootwright_ceph_op_capture_rgw: false
     bootwright_ceph_op_rgw_payload: {}
+    bootwright_ceph_op_pool_live: {}
+    bootwright_ceph_op_pool_recreate: false
+    bootwright_ceph_op_fs_live: {}
+    bootwright_ceph_op_fs_recreate: false
   no_log: "{{ bootwright_ceph_op.capture is defined }}"
+
+# --override may rebuild a sub-object whose IMMUTABLE identity drifted from desired —
+# a pool's type/erasure profile, a CephFS's metadata pool — because Ceph cannot
+# change these in place. This is DATA-DESTROYING for that sub-object, so it runs only
+# under override mode and only on a proven structural mismatch against the LIVE
+# cluster (the explicit op.structural carried by the rendered create operation vs the
+# probed live object). A sub-object whose only drift is replica size/min-size/crush/
+# application is reconciled in place by the set-* operations and is NEVER destroyed
+# here. create/continue never reach this branch. After a rebuild deletes the object,
+# the skip-if-exists probe below sees it absent and the create operation recreates it.
+- name: Inspect existing Ceph pools for structural override rebuild
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - osd
+      - pool
+      - ls
+      - detail
+      - --format
+      - json
+  register: bootwright_ceph_pool_detail
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Resolve live Ceph pool for structural override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_pool_live: >-
+      {{ ((bootwright_ceph_pool_detail.stdout | default('[]')) | from_json
+          | selectattr('pool_name', 'equalto', bootwright_ceph_op_idempotency_name)
+          | list | first | default({})) }}
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+# Recreate only when the pool exists AND its live type (1=replicated, 3=erasure) no
+# longer matches the desired structural type. If the live type cannot be read we do
+# NOT recreate (fail-safe: fall through to the in-place reconcile, never destroy).
+- name: Decide Ceph pool structural override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_pool_recreate: >-
+      {{
+        (bootwright_ceph_op_pool_live.pool_name | default('') | length > 0)
+        and (
+          ('erasure-coded' if (bootwright_ceph_op_pool_live.type | default(1)) == 3 else 'replicated')
+          != (bootwright_ceph_op.structural.type | default('replicated'))
+        )
+      }}
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Rebuild structurally drifted Ceph pool for override
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_ceph_op_pool_recreate | default(false) | bool
+  block:
+    - name: Allow Ceph pool deletion for override rebuild
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - config
+          - set
+          - mon
+          - mon_allow_pool_delete
+          - "true"
+      changed_when: true
+    - name: Destroy structurally drifted Ceph pool for override rebuild
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - osd
+          - pool
+          - rm
+          - "{{ bootwright_ceph_op_idempotency_name }}"
+          - "{{ bootwright_ceph_op_idempotency_name }}"
+          - --yes-i-really-really-mean-it
+      register: bootwright_ceph_op_pool_rm
+      changed_when: true
+      failed_when: false
+  always:
+    # Re-disable pool deletion even if the rm failed, so a half-finished rebuild never
+    # leaves the cluster permissive. Failure is surfaced by the assert below.
+    - name: Re-disable Ceph pool deletion after override rebuild
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - config
+          - set
+          - mon
+          - mon_allow_pool_delete
+          - "false"
+      changed_when: true
+
+- name: Fail closed when override Ceph pool deletion failed
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_op_pool_rm.rc | default(1) == 0
+    fail_msg: >-
+      Failed to delete structurally drifted Ceph pool
+      {{ bootwright_ceph_op_idempotency_name }} for an --override rebuild; refusing to
+      continue with the pool partly removed.
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ceph-pool'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_ceph_op_pool_recreate | default(false) | bool
+
+- name: Inspect existing CephFS for structural override rebuild
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - fs
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_fs_detail
+  changed_when: false
+  failed_when: false
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Resolve live CephFS for structural override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_fs_live: >-
+      {{ ((bootwright_ceph_fs_detail.stdout | default('[]')) | from_json
+          | selectattr('name', 'equalto', bootwright_ceph_op_idempotency_name)
+          | list | first | default({})) }}
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+# Recreate only when the filesystem exists AND its live metadata pool is readable AND
+# differs from desired. An unreadable live metadata pool does NOT recreate (fail-safe).
+- name: Decide CephFS structural override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_fs_recreate: >-
+      {{
+        (bootwright_ceph_op_fs_live.name | default('') | length > 0)
+        and (bootwright_ceph_op_fs_live.metadata_pool | default('') | length > 0)
+        and (bootwright_ceph_op_fs_live.metadata_pool | default('')
+             != bootwright_ceph_op.structural.metadataPool | default(''))
+      }}
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+
+- name: Rebuild structurally drifted CephFS for override
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'cephfs'
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_ceph_op_fs_recreate | default(false) | bool
+  block:
+    - name: Fail drifted CephFS before override rebuild
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - fs
+          - fail
+          - "{{ bootwright_ceph_op_idempotency_name }}"
+      changed_when: true
+      failed_when: false
+    - name: Destroy structurally drifted CephFS for override rebuild
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - fs
+          - rm
+          - "{{ bootwright_ceph_op_idempotency_name }}"
+          - --yes-i-really-really-mean-it
+      register: bootwright_ceph_op_fs_rm
+      changed_when: true
+      failed_when: bootwright_ceph_op_fs_rm.rc != 0
 
 - name: Check existing Ceph pool
   ansible.builtin.command:

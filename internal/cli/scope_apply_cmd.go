@@ -244,6 +244,14 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			if err := workflow.EvaluateApplyModePreflight(mode, objects); err != nil {
 				return failErr(1, err)
 			}
+			// --override rebuilds drifted storage sub-objects; a structural change
+			// (pool type, CephFS metadata pool) is data-destroying. Warn before the
+			// confirm prompt so the operator sees which pools/filesystems are at risk.
+			if mode == workflow.ApplyModeOverride {
+				if rebuilt := overrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
+					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type or CephFS metadata pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
+				}
+			}
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
@@ -366,4 +374,17 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		return nil
 	}
 	return cmd
+}
+
+// overrideDriftedStorageSubObjects returns the labels of storage sub-objects that
+// --override would rebuild (those that drifted from their recorded desired state), in
+// the classifier's stable order. It drives the data-loss warning before the confirm.
+func overrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) []string {
+	var out []string
+	for _, o := range objects {
+		if workflow.IsStorageSubObjectKind(o.Kind) && o.HasDrift() {
+			out = append(out, o.Label)
+		}
+	}
+	return out
 }

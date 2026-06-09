@@ -64,13 +64,20 @@ func runOneApplyTaskInner(ctx context.Context, stdout io.Writer, stderr io.Write
 		return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
 	}
 	if task.Entry.Kind == ApplyTaskKindStorageCluster && !result.Skipped {
+		clusterName := strings.TrimPrefix(task.Entry.ID, "storage.")
 		if err := storageapply.PersistCephApplyResult(storageapply.CephApplyResultOptions{
 			State:              task.State,
 			ClustersDir:        opts.ClustersDir,
-			StorageClusterName: strings.TrimPrefix(task.Entry.ID, "storage."),
+			StorageClusterName: clusterName,
 			ResultPath:         filepath.Join(taskOpts.ArtifactsRoot, "storage-result.json"),
 		}); err != nil {
 			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: err}
+		}
+		// Record each pool/filesystem/gateway/export so the next apply's preflight and
+		// state-check report sub-object drift independently of the cluster. Runs for
+		// every storage cluster, not only those with dataFoundation bindings.
+		if recordErr := MarkStorageSubObjectsConvergeSafety(runsDir, opts.ContextName, runID, task.State, clusterName, ConvergeSafetyStatusReconciled, now); recordErr != nil {
+			return applyTaskResult{id: task.Entry.ID, skipped: result.Skipped, err: recordErr}
 		}
 	}
 	if !result.Skipped {

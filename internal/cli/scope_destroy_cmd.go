@@ -288,6 +288,13 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 					_ = workflow.RemoveClusterInstallState(clustersDir, name)
 				}
 			}
+			// Storage sub-objects (pools/filesystems/gateways/exports) have no
+			// backing task; a destroyed cluster rm-cluster --zap-osds removes them
+			// all, so reset their records too or a later apply would mis-report a
+			// gone pool as match/drift instead of recreating it.
+			for _, cluster := range plan.state.StorageClusters {
+				_ = workflow.RemoveStorageSubObjectsConvergeSafety(ctx.RunsDir, plan.state, cluster.Metadata.Name)
+			}
 		}
 		if !dryRun && !plan.noRemoteWork {
 			printWorkflowEnd(stdout, workflowLabel)

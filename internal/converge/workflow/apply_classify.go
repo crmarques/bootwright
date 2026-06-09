@@ -61,16 +61,14 @@ func objectIdentity(task ApplyTask) (kind, key, label string) {
 // ClassifyApplyObjects classifies every desired-state object in the selected apply
 // graph against the durable convergence-safety records, returning one entry per
 // object in stable task order. It is the shared comparison the apply mode preflight
-// and (in time) the state-check report both build on.
+// and (in time) the state-check report both build on. Storage sub-objects
+// (StoragePool/Filesystem/ObjectGateway/Export) have no backing apply task — they are
+// operations inside the storage task — so each StorageCluster's sub-objects are
+// expanded from its desired state and classified independently here, once per cluster.
 func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassification, error) {
 	order := make([]string, 0, len(tasks))
 	objs := map[string]*ObjectClassification{}
-	for _, task := range tasks {
-		kind, key, label := objectIdentity(task)
-		class, err := classifyApplyTaskState(task, runsDir)
-		if err != nil {
-			return nil, err
-		}
+	add := func(kind, key, label string, class ConvergeSafetyClassification, taskID string) {
 		o := objs[key]
 		if o == nil {
 			o = &ObjectClassification{ObjectKey: key, Kind: kind, Label: label, counts: map[ConvergeSafetyClassification]int{}}
@@ -78,7 +76,28 @@ func ClassifyApplyObjects(tasks []ApplyTask, runsDir string) ([]ObjectClassifica
 			order = append(order, key)
 		}
 		o.counts[class]++
-		o.TaskIDs = append(o.TaskIDs, task.Entry.ID)
+		if taskID != "" {
+			o.TaskIDs = append(o.TaskIDs, taskID)
+		}
+	}
+	expandedStorage := map[string]bool{}
+	for _, task := range tasks {
+		kind, key, label := objectIdentity(task)
+		class, err := classifyApplyTaskState(task, runsDir)
+		if err != nil {
+			return nil, err
+		}
+		add(kind, key, label, class, task.Entry.ID)
+		if task.Entry.Kind == ApplyTaskKindStorageCluster && !expandedStorage[task.Entry.Cluster] {
+			expandedStorage[task.Entry.Cluster] = true
+			for _, sub := range storageSubObjects(task.State, task.Entry.Cluster) {
+				subClass, err := classifyStorageSubObject(task.State, sub, runsDir)
+				if err != nil {
+					return nil, err
+				}
+				add(sub.Kind, sub.resourceID(), sub.resourceID(), subClass, "")
+			}
+		}
 	}
 	out := make([]ObjectClassification, 0, len(order))
 	for _, key := range order {

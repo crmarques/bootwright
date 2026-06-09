@@ -36,7 +36,9 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if pool.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		ops = append(ops, operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name))
+		createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name)
+		createPool["structural"] = storagePoolStructural(pool)
+		ops = append(ops, createPool)
 		if rule := storagePoolCRUSHRule(state, cluster, pool); rule != "" {
 			ops = append(ops, operationInPhase("storage", "set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
 		}
@@ -52,7 +54,9 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			continue
 		}
 		defaultData := topology.FilesystemDefaultDataPool(fs)
-		ops = append(ops, operationWithIdempotency("storage", "create-cephfs-"+fs.Metadata.Name, "cephfs", fs.Metadata.Name, "ceph", "fs", "new", fs.Metadata.Name, fs.Spec.CephFS.MetadataPoolRef.Name, defaultData))
+		createFS := operationWithIdempotency("storage", "create-cephfs-"+fs.Metadata.Name, "cephfs", fs.Metadata.Name, "ceph", "fs", "new", fs.Metadata.Name, fs.Spec.CephFS.MetadataPoolRef.Name, defaultData)
+		createFS["structural"] = map[string]any{"metadataPool": fs.Spec.CephFS.MetadataPoolRef.Name, "defaultDataPool": defaultData}
+		ops = append(ops, createFS)
 		// `ceph fs new` wires only the default data pool; attach the remaining
 		// declared data pools so a multi-data-pool CephFS matches desired state.
 		// add_data_pool is idempotent on Ceph, so no separate skip probe is needed.
@@ -99,6 +103,26 @@ func operationWithIdempotency(phase, name, kind, resourceName string, command ..
 		"name": resourceName,
 	}
 	return op
+}
+
+// storagePoolStructural is the pool's immutable identity: the only desired-state
+// change that warrants a destroy+recreate under --override (a live Ceph pool cannot
+// change type or erasure profile in place). Replica size/min-size, crush rule, and
+// application reconcile in place via the set-pool-* operations and so are NOT
+// included here — under --override they reconcile without data loss. The role
+// compares this against the live pool and only rebuilds (data-destroying) on a
+// genuine structural mismatch.
+func storagePoolStructural(pool v1alpha1.StoragePool) map[string]any {
+	poolType := pool.Spec.Ceph.Type
+	if poolType == "" {
+		poolType = v1alpha1.StoragePoolTypeReplicated
+	}
+	structural := map[string]any{"type": poolType}
+	if pool.Spec.Ceph.ErasureCoded != nil {
+		structural["dataChunks"] = pool.Spec.Ceph.ErasureCoded.DataChunks
+		structural["codingChunks"] = pool.Spec.Ceph.ErasureCoded.CodingChunks
+	}
+	return structural
 }
 
 func effectivePoolReplicas(state v1alpha1.State, cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) v1alpha1.StorageCephPoolReplicas {

@@ -184,6 +184,81 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 	}
 }
 
+// Per-sub-object --override rebuild is data-destroying, so it must be gated on the
+// override mode and a proven structural mismatch (the explicit op.structural vs the
+// live object — never the op name), delete the pool/filesystem with the Ceph
+// double-confirmation flag, toggle mon_allow_pool_delete back off even on failure,
+// and fail closed.
+func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.T) {
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
+
+	// The pool rebuild decision compares the live pool to the rendered desired
+	// structural identity, gated on the ceph-pool op under override.
+	decide := tasks[findAnsibleTask(t, tasks, "Decide Ceph pool structural override rebuild")]
+	decideFact, ok := decide["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("pool rebuild decision must be a set_fact, got %v", decide)
+	}
+	expr := fmt.Sprint(decideFact["bootwright_ceph_op_pool_recreate"])
+	for _, want := range []string{"bootwright_ceph_op_pool_live", "bootwright_ceph_op.structural.type"} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("pool rebuild decision must compare live pool to desired structural %q, got %s", want, expr)
+		}
+	}
+	if got := fmt.Sprint(decide["when"]); !strings.Contains(got, "ceph-pool") || !strings.Contains(got, "'override'") {
+		t.Fatalf("pool rebuild decision must be gated on the ceph-pool op under override, got %v", decide["when"])
+	}
+
+	// The rebuild block is gated on the structural-mismatch decision; it enables pool
+	// deletion, removes the pool with the double-confirmation flag, and re-disables
+	// deletion in an always block so a failed rebuild never leaves the cluster
+	// permissive.
+	rebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted Ceph pool for override")]
+	if got := fmt.Sprint(rebuild["when"]); !strings.Contains(got, "bootwright_ceph_op_pool_recreate") {
+		t.Fatalf("pool rebuild must be gated on the structural-mismatch decision, got %v", rebuild["when"])
+	}
+	block := nestedAnsibleTasks(t, rebuild, "block")
+	allowIdx := findAnsibleTask(t, block, "Allow Ceph pool deletion for override rebuild")
+	rmIdx := findAnsibleTask(t, block, "Destroy structurally drifted Ceph pool for override rebuild")
+	if !(allowIdx < rmIdx) {
+		t.Fatalf("must enable pool deletion before removing the pool (allow=%d rm=%d)", allowIdx, rmIdx)
+	}
+	rm, ok := block[rmIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok {
+		t.Fatalf("pool rm must be a command, got %v", block[rmIdx])
+	}
+	rmArgv := fmt.Sprint(rm["argv"])
+	if !strings.Contains(rmArgv, "rm") || !strings.Contains(rmArgv, "--yes-i-really-really-mean-it") {
+		t.Fatalf("pool rebuild must rm the pool with --yes-i-really-really-mean-it, got %v", rm["argv"])
+	}
+	always := nestedAnsibleTasks(t, rebuild, "always")
+	disable := always[findAnsibleTask(t, always, "Re-disable Ceph pool deletion after override rebuild")]
+	if got := fmt.Sprint(disable["ansible.builtin.command"]); !strings.Contains(got, "mon_allow_pool_delete") {
+		t.Fatalf("always block must re-disable mon_allow_pool_delete, got %v", disable)
+	}
+
+	// A failed pool deletion aborts the apply instead of recreating over a partly
+	// removed pool.
+	assertTask := tasks[findAnsibleTask(t, tasks, "Fail closed when override Ceph pool deletion failed")]
+	if _, ok := assertTask["ansible.builtin.assert"].(map[string]any); !ok {
+		t.Fatalf("pool deletion failure must be an assert, got %v", assertTask)
+	}
+
+	// CephFS rebuild fails the filesystem before removing it with the
+	// double-confirmation flag.
+	fsRebuild := tasks[findAnsibleTask(t, tasks, "Rebuild structurally drifted CephFS for override")]
+	fsBlock := nestedAnsibleTasks(t, fsRebuild, "block")
+	failIdx := findAnsibleTask(t, fsBlock, "Fail drifted CephFS before override rebuild")
+	fsRmIdx := findAnsibleTask(t, fsBlock, "Destroy structurally drifted CephFS for override rebuild")
+	if !(failIdx < fsRmIdx) {
+		t.Fatalf("must fail the CephFS before removing it (fail=%d rm=%d)", failIdx, fsRmIdx)
+	}
+	fsRm, ok := fsBlock[fsRmIdx]["ansible.builtin.command"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(fsRm["argv"]), "--yes-i-really-really-mean-it") {
+		t.Fatalf("CephFS rebuild must rm with --yes-i-really-really-mean-it, got %v", fsBlock[fsRmIdx])
+	}
+}
+
 func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	for _, path := range []string{
 		"ansible/collections/ansible_collections/bootwright/core/playbooks/check_become.yml",

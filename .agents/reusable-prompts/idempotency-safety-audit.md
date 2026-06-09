@@ -345,7 +345,13 @@ commands both ways. `apply --override` must rebuild only drifted/owned objects
 (skipping matches, refusing foreign); without override, drift fails closed under
 `--continue` and any pre-existing object fails closed under bare `apply`. Override
 must not bypass leases, validation, secrets, or `destroyProtection`, turn a
-read-only state check into a mutating command, or suppress reported drift.
+read-only state check into a mutating command, or suppress reported drift. For
+storage sub-objects (StoragePool/Filesystem/ObjectGateway/Export), `--override` must
+destroy-and-recreate only on a structurally-immutable change (a pool's type/erasure
+profile, a CephFS's metadata pool) proven against the live cluster; reconcilable
+drift (replica size/min-size, crush rule, application) must reconcile in place
+without data loss, and the destructive path must fail closed and leave no lingering
+permissive state (e.g. `mon_allow_pool_delete`).
 
 **Go-Ansible contract.** Go should classify intent, scope, ownership, locks, and
 safe drift before rendering and launching Ansible. Ansible should not infer
