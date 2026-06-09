@@ -4,6 +4,12 @@
     bootwright_redfish_system_vmedia_url: "{{ ('/redfish/v1/Systems/' ~ bootwright_redfish_system_id ~ '/VirtualMedia') | bootwright.core.bootwright_redfish_url(bootwright_component.boot.redfish.baseUrl) }}"
   changed_when: false
 
+# The first GET to any /Systems/<id>/VirtualMedia forces sushy-tools to build
+# its memoized vmedia driver, which initializes an sqlite state DB under a WAL
+# write lock. When nodes boot in parallel that cold init races and every loser
+# returns HTTP 500 ("database is locked"). throttle: 1 serializes the cold init
+# across hosts so the driver is built once, and until/retries heals any residual
+# transient lock before the candidate assertion below.
 - name: List VirtualMedia members for the target system
   ansible.builtin.uri:
     url: "{{ bootwright_redfish_system_vmedia_url }}"
@@ -16,6 +22,10 @@
     url_password: "{{ bootwright_redfish_credentials.password | default(omit) }}"
     timeout: "{{ bootwright_redfish_request_timeout }}"
   register: bootwright_redfish_vm_list
+  throttle: 1
+  until: (bootwright_redfish_vm_list.status | default(0) | int) in [200, 404]
+  retries: "{{ bootwright_redfish_vmedia_probe_retries }}"
+  delay: "{{ bootwright_redfish_vmedia_probe_delay_seconds }}"
   failed_when: false
   changed_when: false
   no_log: "{{ (bootwright_redfish_cred_path | length) > 0 }}"

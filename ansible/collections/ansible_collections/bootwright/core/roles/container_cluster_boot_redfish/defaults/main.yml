@@ -16,6 +16,8 @@ bootwright_redfish_vmedia_insert_retries: 24
 bootwright_redfish_vmedia_insert_delay_seconds: 5
 bootwright_redfish_vmedia_eject_retries: 24
 bootwright_redfish_vmedia_eject_delay_seconds: 5
+bootwright_redfish_vmedia_probe_retries: 12
+bootwright_redfish_vmedia_probe_delay_seconds: 2
 
 bootwright_redfish_power_state_retries: 12
 bootwright_redfish_power_state_delay_seconds: 5
