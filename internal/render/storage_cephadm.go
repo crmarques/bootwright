@@ -13,7 +13,12 @@ func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 			"hostname":     node.Name,
 			"labels":       append([]string(nil), node.Roles...),
 		}
-		if node.Site != "" {
+		// A CRUSH location is only meaningful in stretch mode, where sites map to
+		// real failure-domain buckets (e.g. datacenter). Without stretch the
+		// failure domain is "host", so a location would parent every host bucket
+		// under a bogus host-type bucket named after the site — outside
+		// root=default, where no CRUSH rule maps PGs and all pool I/O hangs.
+		if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil && stretch.Enabled && node.Site != "" {
 			host["location"] = map[string]any{
 				topology.FailureDomain(cluster): node.Site,
 			}

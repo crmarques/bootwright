@@ -194,6 +194,29 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	}
 }
 
+func TestNonStretchHostSpecsOmitCRUSHLocation(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+	result, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state)
+	if err != nil {
+		t.Fatalf("render.All: %v", err)
+	}
+	if len(result.StorageAssets) != 1 {
+		t.Fatalf("storage assets got %d, want 1", len(result.StorageAssets))
+	}
+	bootstrapDocs := readYAMLDocs(t, result.StorageAssets[0].BootstrapSpecPath)
+	for _, doc := range bootstrapDocs {
+		if doc["service_type"] != "host" {
+			continue
+		}
+		if location, ok := doc["location"]; ok {
+			t.Fatalf("non-stretch host %v rendered CRUSH location %#v; host buckets would be created outside root=default and no rule could map PGs", doc["hostname"], location)
+		}
+	}
+}
+
 func TestManagedStorageUsesContextManagedTrustPathDuringRuntimeRender(t *testing.T) {
 	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "test", "e2e", "006-ceph-3nodes-libvirt-managed-os")})
 	if err != nil {
