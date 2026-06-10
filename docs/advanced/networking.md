@@ -156,9 +156,12 @@ spec:
 ```
 
 If a load balancer has exactly one bind address, the endpoint may omit
-`source.bindAddress`. Listener ports for OpenShift roles are derived from the
-consumer role, not from arbitrary endpoint names. Effective VIPs are validated
-against the machine networks selected by cluster machines.
+`source.bindAddress`. A non-empty `source.bindAddress` must always match a
+declared `bindAddresses[].name`, even on a single-bind load balancer; the
+shortcut never applies to an authored name. Listener ports for OpenShift
+roles are derived from the consumer role, not from arbitrary endpoint names.
+Effective VIPs are validated against the machine networks selected by cluster
+machines.
 
 Bootwright renders and converges the HAProxy provider service for
 `source.type=infraComponent` endpoints. Today, automatic VIP attachment is

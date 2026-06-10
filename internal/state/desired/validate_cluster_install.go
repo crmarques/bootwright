@@ -71,7 +71,7 @@ func validateClusterEndpoints(owner string, ci v1alpha1.ClusterInstall, componen
 		if !ok || component.Spec.LoadBalancer == nil {
 			continue
 		}
-		errs = append(errs, validateLoadBalancerBindAddresses(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, refs)...)
+		errs = append(errs, validateLoadBalancerBindAddressUse(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, refs)...)
 	}
 	return errs
 }
@@ -175,7 +175,14 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	if source.BindAddress == "" && len(component.Spec.LoadBalancer.BindAddresses) != 1 {
 		errs = append(errs, prefix+".source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress")
 	}
-	errs = append(errs, validateLoadBalancerBindAddresses(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, nil)...)
+	// A non-empty source.bindAddress is a name reference into the referenced
+	// loadBalancer and must resolve even when it declares a single bindAddress;
+	// the single-bind shortcut applies only when the field is empty.
+	referenced := map[string]bool{}
+	if source.BindAddress != "" {
+		referenced[source.BindAddress] = true
+	}
+	errs = append(errs, validateLoadBalancerBindAddresses(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, referenced)...)
 	return errs
 }
 

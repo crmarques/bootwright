@@ -2047,6 +2047,69 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "single-bind-named-selection-accepted",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+        bindAddress: vip-a
+    api-int:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+        bindAddress: vip-a
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+`)
+				addLoadBalancerInfraComponent(files, "control-plane", "- { name: vip-a, address: 192.168.132.10 }\n")
+			},
+		},
+		{
+			name: "single-bind-dangling-bind-address-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+        bindAddress: vip-b
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+`)
+				addLoadBalancerInfraComponent(files, "control-plane", "- { name: vip-a, address: 192.168.132.10 }\n")
+			},
+			wantSubstring: `source.bindAddress "vip-b" does not match any bindAddresses[].name`,
+		},
+		{
+			name: "single-bind-literal-ip-bind-address-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      source:
+        type: infraComponent
+        componentRef: control-plane
+        bindAddress: 192.168.132.10
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+`)
+				addLoadBalancerInfraComponent(files, "control-plane", "- address: 192.168.132.10\n")
+			},
+			wantSubstring: `source.bindAddress "192.168.132.10" does not match any bindAddresses[].name`,
+		},
+		{
 			name: "multi-bind-address-without-selection-rejected",
 			mutate: func(files map[string]string) {
 				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:

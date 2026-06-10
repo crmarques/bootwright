@@ -504,7 +504,10 @@ Rules:
     `external`, or `infraComponent`; `cephadm` is rejected. `openshift` and
     `external` require `address`. `infraComponent` requires
     `source.componentRef` pointing at a `loadBalancer` `InfraComponent` and
-    `source.bindAddress`, and must not set `address`.
+    `source.bindAddress`, and must not set `address`. `source.bindAddress`
+    may be omitted only when the load balancer declares exactly one
+    bind address; a non-empty `source.bindAddress` must match a
+    `bindAddresses[].name` regardless of bind count.
   - **Single-node clusters** additionally reject `source.type: openshift` on the
     `api`, `api-int`, and `ingress` slots.
   - `source.componentRef` and `source.bindAddress` are valid only when
