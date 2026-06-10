@@ -101,11 +101,11 @@ func rejectProviderArms(prefix string, provider v1alpha1.InfraProvider, keep str
 func validateProviderLibvirt(prefix string, spec *v1alpha1.InfraProviderLibvirt, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	if spec.MachineRef.Name == "" {
-		errs = append(errs, prefix+".machineRef.name is required")
+		errs = append(errs, prefix+".machineRef is required")
 	} else if machine, ok := machines[spec.MachineRef.Name]; !ok {
-		errs = append(errs, fmt.Sprintf("%s.machineRef.name %q does not match any Machine", prefix, spec.MachineRef.Name))
+		errs = append(errs, fmt.Sprintf("%s.machineRef %q does not match any Machine", prefix, spec.MachineRef.Name))
 	} else if !machineHasCapability(machine, v1alpha1.MachineCapabilityLibvirt) {
-		errs = append(errs, fmt.Sprintf("%s.machineRef.name %q lacks capability %q", prefix, spec.MachineRef.Name, v1alpha1.MachineCapabilityLibvirt))
+		errs = append(errs, fmt.Sprintf("%s.machineRef %q lacks capability %q", prefix, spec.MachineRef.Name, v1alpha1.MachineCapabilityLibvirt))
 	}
 	if spec.URI == "" {
 		errs = append(errs, prefix+".uri is required")
@@ -136,7 +136,7 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 			errs = append(errs, owner+".datacenters is required")
 		}
 		if vc.CredentialsRef.Name == "" {
-			errs = append(errs, owner+".credentialsRef.name is required")
+			errs = append(errs, owner+".credentialsRef is required")
 		}
 	}
 	if len(spec.FailureDomains) == 0 {
@@ -185,13 +185,13 @@ func validateProviderKubeVirt(prefix string, spec *v1alpha1.InfraProviderKubeVir
 	}
 	if spec.HostClusterRef != nil {
 		if spec.HostClusterRef.Name == "" {
-			errs = append(errs, prefix+".hostClusterRef.name is required when hostClusterRef is set")
+			errs = append(errs, prefix+".hostClusterRef is required when hostClusterRef is set")
 		} else if _, ok := clusters[spec.HostClusterRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.hostClusterRef.name %q does not match any ContainerCluster", prefix, spec.HostClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.hostClusterRef %q does not match any ContainerCluster", prefix, spec.HostClusterRef.Name))
 		}
 	}
 	if spec.KubeconfigRef != nil && spec.KubeconfigRef.Name == "" {
-		errs = append(errs, prefix+".kubeconfigRef.name is required when kubeconfigRef is set")
+		errs = append(errs, prefix+".kubeconfigRef is required when kubeconfigRef is set")
 	}
 	if spec.Namespace == "" {
 		errs = append(errs, prefix+".namespace is required")
@@ -199,7 +199,7 @@ func validateProviderKubeVirt(prefix string, spec *v1alpha1.InfraProviderKubeVir
 		errs = append(errs, fmt.Sprintf("%s.namespace %q is not a DNS label", prefix, spec.Namespace))
 	}
 	if spec.StorageClassRef != nil && spec.StorageClassRef.Name == "" {
-		errs = append(errs, prefix+".storageClassRef.name is required when storageClassRef is set")
+		errs = append(errs, prefix+".storageClassRef is required when storageClassRef is set")
 	}
 	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", spec.MachineProfiles)...)
 	return errs
@@ -220,7 +220,7 @@ func validateMachineProfiles(prefix string, profiles []v1alpha1.MachineProfile) 
 			errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be non-negative")
 		}
 		if profile.FailureDomainRef.Name != "" && !IsDNSLabel(profile.FailureDomainRef.Name) {
-			errs = append(errs, fmt.Sprintf("%s.failureDomainRef.name %q is not a DNS label", owner, profile.FailureDomainRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.failureDomainRef %q is not a DNS label", owner, profile.FailureDomainRef.Name))
 		}
 		for j, disk := range profile.DataDisks {
 			diskOwner := fmt.Sprintf("%s.dataDisks[%d]", owner, j)
@@ -244,8 +244,8 @@ func validateBMCEmulationDefaults(prefix string, defaults *v1alpha1.BMCEmulation
 	if !enabled {
 		errs = append(errs, prefix+".enabled=false is not supported; current libvirt apply requires emulated Redfish BMC")
 	}
-	if enabled && (defaults.Auth == nil || defaults.Auth.CredentialRef.Name == "") {
-		errs = append(errs, prefix+".auth.credentialRef.name is required when BMC emulation is enabled")
+	if enabled && (defaults.Auth == nil || defaults.Auth.CredentialsRef.Name == "") {
+		errs = append(errs, prefix+".auth.credentialsRef is required when BMC emulation is enabled")
 	}
 	port := effectiveBMCEmulationPort(defaults)
 	vmediaPort := effectiveBMCEmulationVMediaPort(defaults)
@@ -280,12 +280,12 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 	if attachment.KubeVirt != nil {
 		set++
 		if attachment.KubeVirt.NADRef.Name == "" {
-			errs = append(errs, prefix+".kubevirt.nadRef.name is required")
+			errs = append(errs, prefix+".kubevirt.nadRef is required")
 		}
 		if attachment.KubeVirt.NADRef.Namespace == "" {
-			errs = append(errs, prefix+".kubevirt.nadRef.namespace is required")
+			errs = append(errs, prefix+".kubevirt.nadRefspace is required")
 		} else if !IsDNSLabel(attachment.KubeVirt.NADRef.Namespace) {
-			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.namespace %q is not a DNS label", prefix, attachment.KubeVirt.NADRef.Namespace))
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRefspace %q is not a DNS label", prefix, attachment.KubeVirt.NADRef.Namespace))
 		}
 	}
 	if attachment.BareMetal != nil {

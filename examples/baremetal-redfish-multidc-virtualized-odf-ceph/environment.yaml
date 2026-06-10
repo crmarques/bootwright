@@ -7,11 +7,9 @@ spec:
 
   defaults:
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
 
   resources:
     - infra
@@ -52,17 +50,13 @@ spec:
       provider: redhat
       product: ceph
       rhsm:
-        organizationRef:
-          name: redhat-org
-        activationKeyRef:
-          name: redhat-activation-key
+        organizationRef: redhat-org
+        activationKeyRef: redhat-activation-key
       registry:
-        credentialsRef:
-          name: ceph-registry-credentials
+        credentialsRef: ceph-registry-credentials
 
   infraComponents:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server

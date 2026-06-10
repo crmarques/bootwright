@@ -120,7 +120,7 @@ func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageClus
 	switch distribution {
 	case v1alpha1.StorageCephDistributionOSS:
 		if ref != "" {
-			return []string{prefix + ".entitlementRef.name must be empty when distribution=oss"}
+			return []string{prefix + ".entitlementRef must be empty when distribution=oss"}
 		}
 		return nil
 	case v1alpha1.StorageCephDistributionRedHat:
@@ -134,18 +134,18 @@ func validateStorageCephDistribution(prefix string, cluster v1alpha1.StorageClus
 
 func validateStorageCephDistributionEntitlement(prefix string, env *v1alpha1.Environment, ref, provider, product string) []string {
 	if ref == "" {
-		return []string{prefix + ".entitlementRef.name is required when distribution requires subscription or license handling"}
+		return []string{prefix + ".entitlementRef is required when distribution requires subscription or license handling"}
 	}
 	entitlement, ok := entitlements.Find(env, ref)
 	if !ok {
-		return []string{fmt.Sprintf("%s.entitlementRef.name %q does not match any Environment.spec.entitlements[].name", prefix, ref)}
+		return []string{fmt.Sprintf("%s.entitlementRef %q does not match any Environment.spec.entitlements[].name", prefix, ref)}
 	}
 	var errs []string
 	if entitlement.Provider != provider {
-		errs = append(errs, fmt.Sprintf("%s.entitlementRef.name %q resolves to provider %q, want %q", prefix, ref, entitlement.Provider, provider))
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to provider %q, want %q", prefix, ref, entitlement.Provider, provider))
 	}
 	if entitlement.Product != product {
-		errs = append(errs, fmt.Sprintf("%s.entitlementRef.name %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
+		errs = append(errs, fmt.Sprintf("%s.entitlementRef %q resolves to product %q, want %q", prefix, ref, entitlement.Product, product))
 	}
 	return errs
 }
@@ -254,12 +254,12 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	}
 	mon := adm.Bootstrap.MonIP
 	if mon.NodeRef.Name == "" {
-		errs = append(errs, prefix+".bootstrap.monIP.nodeRef.name is required")
+		errs = append(errs, prefix+".bootstrap.monIP.nodeRef is required")
 	} else {
 		if !storageCephNodeExists(cluster, mon.NodeRef.Name) {
-			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef.name %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
 		}
-		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.monIP.addressRef.name", cluster, mon.NodeRef.Name, mon.AddressRef.Name, machines, adm.AddressRef.Name)...)
+		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.monIP.addressRef", cluster, mon.NodeRef.Name, mon.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
 	return errs
 }
@@ -285,29 +285,29 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 			seen[node.Name] = true
 		}
 		if node.MachineRef.Name == "" {
-			errs = append(errs, owner+".machineRef.name is required")
+			errs = append(errs, owner+".machineRef is required")
 		} else {
 			machine, ok := machines[node.MachineRef.Name]
 			if !ok {
-				errs = append(errs, fmt.Sprintf("%s.machineRef.name %q does not match any Machine", owner, node.MachineRef.Name))
+				errs = append(errs, fmt.Sprintf("%s.machineRef %q does not match any Machine", owner, node.MachineRef.Name))
 			} else {
 				if !machineHasCapability(machine, v1alpha1.MachineCapabilityCephNode) {
-					errs = append(errs, fmt.Sprintf("%s.machineRef.name %q lacks capability %q", owner, node.MachineRef.Name, v1alpha1.MachineCapabilityCephNode))
+					errs = append(errs, fmt.Sprintf("%s.machineRef %q lacks capability %q", owner, node.MachineRef.Name, v1alpha1.MachineCapabilityCephNode))
 				}
 				if machine.Spec.Access.SSH == nil {
-					errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s.machineRef.name", machine.Metadata.Name, owner))
+					errs = append(errs, fmt.Sprintf("Machine/%s spec.access.ssh is required for %s.machineRef", machine.Metadata.Name, owner))
 				} else {
 					if !sshSeen {
 						sshUser = machine.Spec.Access.SSH.User
 						sshKeyRef = machine.Spec.Access.SSH.KeyRef.Name
 						sshSeen = true
 					} else if machine.Spec.Access.SSH.User != sshUser {
-						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.user %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.User, sshUser))
 					} else if machine.Spec.Access.SSH.KeyRef.Name != sshKeyRef {
-						errs = append(errs, fmt.Sprintf("%s.machineRef.name %q resolves to Machine/%s with ssh.keyRef.name %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
+						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
-				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef.name", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
+				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
 			}
 		}
 		if node.Site == "" {
@@ -415,7 +415,7 @@ func validateStorageNodeMachineAddress(owner string, cluster v1alpha1.StorageClu
 		resolvedName = machine.Spec.Access.SSH.AddressRef.Name
 	}
 	if resolvedName == "" {
-		return []string{fmt.Sprintf("%s must set addressRef.name or Machine/%s spec.access.ssh.addressRef.name", owner, machine.Metadata.Name)}
+		return []string{fmt.Sprintf("%s must set addressRef or Machine/%s spec.access.ssh.addressRef", owner, machine.Metadata.Name)}
 	}
 	if _, ok := v1alpha1.MachineAddressByName(machine, resolvedName); !ok {
 		return []string{fmt.Sprintf("%s %q does not resolve to Machine/%s spec.addresses[].name", owner, resolvedName, machine.Metadata.Name)}

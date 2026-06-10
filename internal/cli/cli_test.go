@@ -2526,8 +2526,7 @@ func TestContextPrintEnvProxyWithoutAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 	replaceInFile(t, filepath.Join(ctx.InputDir, "environment.yaml"), `          auth:
-            proxyAuthRef:
-              name: proxy-credentials
+            proxyAuthRef: proxy-credentials
 `, "")
 
 	stdout, stderr, code := runCLI(t, "print-env")
@@ -3794,7 +3793,7 @@ metadata:
   name: virtualization-platform
 spec:
   addons:
-    - name: openshift-virtualization
+    - openshift-virtualization
 `), 0o600); err != nil {
 		t.Fatalf("write addon profile: %v", err)
 	}
@@ -3803,10 +3802,9 @@ kind: ClusterAddonBinding
 metadata:
   name: sno-libvirt-addons
 spec:
-  clusterRef:
-    name: sno-libvirt
+  clusterRef: sno-libvirt
   addonProfiles:
-    - name: virtualization-platform
+    - virtualization-platform
 `), 0o600); err != nil {
 		t.Fatalf("write addon binding: %v", err)
 	}

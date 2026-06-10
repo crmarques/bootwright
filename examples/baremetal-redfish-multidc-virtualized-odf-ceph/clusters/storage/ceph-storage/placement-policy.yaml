@@ -3,8 +3,7 @@ kind: StoragePlacementPolicy
 metadata:
   name: stretch-replicated
 spec:
-  storageClusterRef:
-    name: ceph-storage
+  storageClusterRef: ceph-storage
 
   ceph:
     failureDomain: datacenter

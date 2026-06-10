@@ -66,7 +66,7 @@ func TestEnvironmentEntitlementValidation(t *testing.T) {
 					ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
 				},
 			},
-			want: "registry.credentialsRef.name is required",
+			want: "registry.credentialsRef is required",
 		},
 		{
 			name: "ibm-license-not-accepted",

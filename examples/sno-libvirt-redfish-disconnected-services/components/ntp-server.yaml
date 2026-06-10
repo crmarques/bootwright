@@ -13,5 +13,4 @@ spec:
       machineAddress: cluster-lan
     upstreamSources:
     - time.bootwright.test
-    machineRef:
-      name: bastion
+    machineRef: bastion

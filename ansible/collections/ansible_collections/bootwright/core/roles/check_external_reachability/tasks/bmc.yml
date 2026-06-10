@@ -6,7 +6,7 @@
 # authenticate — what the install layer needs.
 #
 # Reads only bootwright_validate_machine.boot.redfish.{baseUrl,
-# credentialRef, validateCerts}; the renderer strips any Ironic-style
+# credentialsRef, validateCerts}; the renderer strips any Ironic-style
 # transport hint and trailing /Systems/<id> before projection, so this
 # task does not parse BMC URLs.
 
@@ -14,8 +14,8 @@
   ansible.builtin.set_fact:
     bootwright_validate_bmc_cred_path: >-
       {{
-        (bootwright_secrets_dir ~ '/' ~ bootwright_validate_machine.boot.redfish.credentialRef)
-        if (bootwright_validate_machine.boot.redfish.credentialRef | default('') | length) > 0
+        (bootwright_secrets_dir ~ '/' ~ bootwright_validate_machine.boot.redfish.credentialsRef)
+        if (bootwright_validate_machine.boot.redfish.credentialsRef | default('') | length) > 0
         else ''
       }}
   changed_when: false
@@ -27,7 +27,7 @@
   vars:
     bootwright_creds_path: "{{ bootwright_validate_bmc_cred_path }}"
     bootwright_creds_var: bootwright_validate_bmc_credentials
-    bootwright_creds_label: "BMC credentialRef {{ bootwright_validate_bmc_cred_path }}"
+    bootwright_creds_label: "BMC credentialsRef {{ bootwright_validate_bmc_cred_path }}"
   when: (bootwright_validate_bmc_cred_path | length) > 0
 
 - name: "[bmc {{ bootwright_validate_machine.name }}] Probe Redfish /Systems"

@@ -123,10 +123,10 @@ func TestWorkspaceInterpolatesClusterName(t *testing.T) {
 	}
 	expectations := map[string][]string{
 		"environment.yaml":                 {"name: my-cluster"},
-		"shared/machines.yaml":             {"name: my-cluster-master-0", "providerRef:\n      name: my-cluster-libvirt"},
+		"shared/machines.yaml":             {"name: my-cluster-master-0", "providerRef: my-cluster-libvirt"},
 		"shared/networks.yaml":             {"name: my-cluster-bridge"},
 		"shared/provider.yaml":             {"name: my-cluster-libvirt"},
-		"clusters/my-cluster/cluster.yaml": {"name: my-cluster", "machineRef:\n        name: my-cluster-master-0"},
+		"clusters/my-cluster/cluster.yaml": {"name: my-cluster", "machineRef: my-cluster-master-0"},
 	}
 	for _, f := range files {
 		wants, ok := expectations[f.Name]

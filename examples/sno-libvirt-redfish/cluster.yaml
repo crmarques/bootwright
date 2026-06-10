@@ -9,8 +9,7 @@ spec:
 
   install:
     nodeSSH:
-      keyPairRef:
-        name: sno-libvirt-cluster-admin-ssh-key
+      keyPairRef: sno-libvirt-cluster-admin-ssh-key
     endpoints:
       api:
         address: 192.168.132.10
@@ -25,5 +24,4 @@ spec:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: sno-libvirt-master-0
+    machineRef: sno-libvirt-master-0

@@ -3,12 +3,10 @@ kind: StorageFilesystem
 metadata:
   name: odf-cephfs
 spec:
-  storageClusterRef:
-    name: ceph-storage
+  storageClusterRef: ceph-storage
 
   cephfs:
-    metadataPoolRef:
-      name: odf-cephfs-metadata
+    metadataPoolRef: odf-cephfs-metadata
     dataPoolRefs:
       - name: odf-cephfs-data
     mds:

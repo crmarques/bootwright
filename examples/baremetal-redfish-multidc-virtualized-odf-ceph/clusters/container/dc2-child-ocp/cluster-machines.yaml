@@ -7,22 +7,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-master
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-master
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -38,22 +34,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-master
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-master
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -69,22 +61,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-master
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-master
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -100,22 +88,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-worker
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-worker
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -131,22 +115,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-worker
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-worker
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -162,22 +142,18 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: kubevirt-provider-dc2
-    profileRef:
-      name: dc2-child-worker
+    providerRef: kubevirt-provider-dc2
+    profileRef: dc2-child-worker
 
   os:
     provided: false
 
   network:
     config:
-      networkConfigRef:
-        name: dc2-child-net
+      networkConfigRef: dc2-child-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:

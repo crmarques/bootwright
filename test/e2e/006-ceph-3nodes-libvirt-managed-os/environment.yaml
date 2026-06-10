@@ -12,8 +12,7 @@ spec:
     nameResolution:
       - name: lab-dns
         type: managed
-        componentRef:
-          name: lab-dns
+        componentRef: lab-dns
 
   secrets:
     - bastion-host-ssh:

@@ -3,8 +3,7 @@ kind: ClusterAddonBinding
 metadata:
   name: dc2-metal-ocp-addons
 spec:
-  clusterRef:
-    name: dc2-metal-ocp
+  clusterRef: dc2-metal-ocp
 
   addons:
     - name: openshift-virtualization
@@ -12,6 +11,5 @@ spec:
       inputs:
         - name: external-storage
           values:
-            exportRef:
-              name: odf-external-ceph
+            exportRef: odf-external-ceph
     - name: child-network-dc2

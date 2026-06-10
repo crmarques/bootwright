@@ -3,11 +3,9 @@ kind: StoragePool
 metadata:
   name: odf-rgw
 spec:
-  storageClusterRef:
-    name: ceph-storage
+  storageClusterRef: ceph-storage
 
-  placementPolicyRef:
-    name: stretch-replicated
+  placementPolicyRef: stretch-replicated
 
   ceph:
     role: rgw

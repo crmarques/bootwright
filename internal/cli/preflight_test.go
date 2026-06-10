@@ -171,7 +171,7 @@ func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
 		switch {
 		case check.Name == "sno-libvirt pullSecretRef":
 			pullSecret = check
-		case strings.Contains(check.Name, "bmcEmulationDefaults credentialRef"):
+		case strings.Contains(check.Name, "bmcEmulationDefaults credentialsRef"):
 			generatedBMC = check
 		}
 	}
@@ -514,7 +514,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 
 func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
-		"exportRef": map[string]any{"name": export},
+		"exportRef": export,
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

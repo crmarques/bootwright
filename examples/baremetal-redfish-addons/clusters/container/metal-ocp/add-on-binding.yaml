@@ -3,8 +3,7 @@ kind: ClusterAddonBinding
 metadata:
   name: metal-ocp-platform
 spec:
-  clusterRef:
-    name: metal-ocp
+  clusterRef: metal-ocp
 
   addonProfiles:
-    - name: platform-bootstrap
+    - platform-bootstrap

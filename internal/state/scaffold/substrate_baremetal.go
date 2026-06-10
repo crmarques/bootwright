@@ -24,10 +24,8 @@ spec:
       address: 192.168.130.1
   access:
     ssh:
-      addressRef:
-        name: ssh
-      keyRef:
-        name: bastion-host-ssh
+      addressRef: ssh
+      keyRef: bastion-host-ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -37,20 +35,17 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: {{.ProviderID}}
+    providerRef: {{.ProviderID}}
   hardware:
     nics:
       - name: primary
         macAddress: 52:54:00:21:11:10
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.example.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
   os:
     provided: false
@@ -59,18 +54,14 @@ spec:
         deviceName: /dev/sda
   network:
     config:
-      networkConfigRef:
-        name: {{.NetworkID}}
-      attachmentRef:
-        name: {{.NetworkID}}
+      networkConfigRef: {{.NetworkID}}
+      attachmentRef: {{.NetworkID}}
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
   addresses:
     - name: ip
@@ -80,8 +71,7 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server
 
 `,
 	ProviderCapabilities: `apiVersion: bootwright.io/v1alpha1
@@ -99,11 +89,9 @@ spec:
         vlan: 0
 `,
 	ClusterArtifactAccess: `    artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
 `,
 	InfraComponentYAML: `apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
@@ -112,8 +100,7 @@ metadata:
 spec:
   type: artifactServer
   artifactServer:
-    machineRef:
-      name: services-host
+    machineRef: services-host
     endpoints:
       - name: bmc
         listener: https

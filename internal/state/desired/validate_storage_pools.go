@@ -20,11 +20,11 @@ func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, c
 		seen[policy.Metadata.Name] = true
 		prefix := fmt.Sprintf("StoragePlacementPolicy/%s spec", policy.Metadata.Name)
 		if policy.Spec.StorageClusterRef.Name == "" {
-			errs = append(errs, prefix+".storageClusterRef.name is required")
+			errs = append(errs, prefix+".storageClusterRef is required")
 		} else if cluster, ok := clusters[policy.Spec.StorageClusterRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, policy.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, policy.Spec.StorageClusterRef.Name))
 		} else if storageClusterExternal(cluster) {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed placement policies are not declared for imported Ceph", prefix, policy.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed placement policies are not declared for imported Ceph", prefix, policy.Spec.StorageClusterRef.Name))
 		}
 		if policy.Spec.Ceph.RuleName == "" {
 			errs = append(errs, prefix+".ceph.ruleName is required")
@@ -48,18 +48,18 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		prefix := fmt.Sprintf("StoragePool/%s spec", pool.Metadata.Name)
 		cluster, ok := clusters[pool.Spec.StorageClusterRef.Name]
 		if pool.Spec.StorageClusterRef.Name == "" {
-			errs = append(errs, prefix+".storageClusterRef.name is required")
+			errs = append(errs, prefix+".storageClusterRef is required")
 		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, pool.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, pool.Spec.StorageClusterRef.Name))
 		} else if storageClusterExternal(cluster) {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed pools are not declared for imported Ceph", prefix, pool.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed pools are not declared for imported Ceph", prefix, pool.Spec.StorageClusterRef.Name))
 		}
 		if pool.Spec.PlacementPolicyRef.Name != "" {
 			policy, policyOK := policies[pool.Spec.PlacementPolicyRef.Name]
 			if !policyOK {
-				errs = append(errs, fmt.Sprintf("%s.placementPolicyRef.name %q does not match any StoragePlacementPolicy", prefix, pool.Spec.PlacementPolicyRef.Name))
+				errs = append(errs, fmt.Sprintf("%s.placementPolicyRef %q does not match any StoragePlacementPolicy", prefix, pool.Spec.PlacementPolicyRef.Name))
 			} else if policy.Spec.StorageClusterRef.Name != pool.Spec.StorageClusterRef.Name {
-				errs = append(errs, fmt.Sprintf("%s.placementPolicyRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Spec.PlacementPolicyRef.Name, policy.Spec.StorageClusterRef.Name, pool.Spec.StorageClusterRef.Name))
+				errs = append(errs, fmt.Sprintf("%s.placementPolicyRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Spec.PlacementPolicyRef.Name, policy.Spec.StorageClusterRef.Name, pool.Spec.StorageClusterRef.Name))
 			}
 			if pool.Spec.Ceph.Replicated.Size != 0 || pool.Spec.Ceph.Replicated.MinSize != 0 {
 				errs = append(errs, prefix+".ceph.replicated must not be set when placementPolicyRef is set; the StoragePlacementPolicy owns replication")
@@ -123,19 +123,19 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		prefix := fmt.Sprintf("StorageFilesystem/%s spec", fs.Metadata.Name)
 		cluster, ok := clusters[fs.Spec.StorageClusterRef.Name]
 		if fs.Spec.StorageClusterRef.Name == "" {
-			errs = append(errs, prefix+".storageClusterRef.name is required")
+			errs = append(errs, prefix+".storageClusterRef is required")
 		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, fs.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, fs.Spec.StorageClusterRef.Name))
 		} else if storageClusterExternal(cluster) {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed filesystems are not declared for imported Ceph", prefix, fs.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed filesystems are not declared for imported Ceph", prefix, fs.Spec.StorageClusterRef.Name))
 		}
 		metadataPool, metadataOK := pools[fs.Spec.CephFS.MetadataPoolRef.Name]
 		if fs.Spec.CephFS.MetadataPoolRef.Name == "" {
-			errs = append(errs, prefix+".cephfs.metadataPoolRef.name is required")
+			errs = append(errs, prefix+".cephfs.metadataPoolRef is required")
 		} else if !metadataOK {
-			errs = append(errs, fmt.Sprintf("%s.cephfs.metadataPoolRef.name %q does not match any StoragePool", prefix, fs.Spec.CephFS.MetadataPoolRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.cephfs.metadataPoolRef %q does not match any StoragePool", prefix, fs.Spec.CephFS.MetadataPoolRef.Name))
 		} else if metadataPool.Spec.StorageClusterRef.Name != fs.Spec.StorageClusterRef.Name {
-			errs = append(errs, fmt.Sprintf("%s.cephfs.metadataPoolRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, metadataPool.Metadata.Name, metadataPool.Spec.StorageClusterRef.Name, fs.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.cephfs.metadataPoolRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, metadataPool.Metadata.Name, metadataPool.Spec.StorageClusterRef.Name, fs.Spec.StorageClusterRef.Name))
 		}
 		defaults := 0
 		for i, ref := range fs.Spec.CephFS.DataPoolRefs {
@@ -183,11 +183,11 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 		prefix := fmt.Sprintf("StorageObjectGateway/%s spec", gw.Metadata.Name)
 		cluster, ok := clusters[gw.Spec.StorageClusterRef.Name]
 		if gw.Spec.StorageClusterRef.Name == "" {
-			errs = append(errs, prefix+".storageClusterRef.name is required")
+			errs = append(errs, prefix+".storageClusterRef is required")
 		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, gw.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, gw.Spec.StorageClusterRef.Name))
 		} else if storageClusterExternal(cluster) {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q references an external StorageCluster; Bootwright-managed object gateways are not declared for imported Ceph", prefix, gw.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q references an external StorageCluster; Bootwright-managed object gateways are not declared for imported Ceph", prefix, gw.Spec.StorageClusterRef.Name))
 		}
 		if gw.Spec.Ceph.ServiceID == "" {
 			errs = append(errs, prefix+".ceph.serviceID is required")

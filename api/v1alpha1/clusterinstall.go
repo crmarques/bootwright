@@ -64,10 +64,6 @@ type EndpointSource struct {
 	BindAddress  string               `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 }
 
-type EndpointRef struct {
-	Name string `yaml:"name" json:"name"`
-}
-
 type LoadBalancerBindAddress struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 	IP   string `yaml:"ip" json:"ip"`

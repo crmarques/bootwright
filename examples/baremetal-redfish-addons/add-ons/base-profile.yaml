@@ -4,6 +4,6 @@ metadata:
   name: base-profile
 spec:
   addons:
-    - name: openshift-virtualization
-    - name: cluster-observability
+    - openshift-virtualization
+    - cluster-observability
 

@@ -123,7 +123,7 @@ func TestMachineImageRedHatCDNInstallSourceRequiresEntitlementRef(t *testing.T) 
 	if len(errs) == 0 {
 		t.Fatal("validateMachineImages accepted redhatCDN source without entitlementRef")
 	}
-	if !strings.Contains(strings.Join(errs, "\n"), "entitlementRef.name is required") {
+	if !strings.Contains(strings.Join(errs, "\n"), "entitlementRef is required") {
 		t.Fatalf("errors = %v", errs)
 	}
 }

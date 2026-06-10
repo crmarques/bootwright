@@ -9,8 +9,7 @@ spec:
 
   install:
     nodeSSH:
-      keyPairRef:
-        name: sno-baremetal-cluster-admin-ssh-key
+      keyPairRef: sno-baremetal-cluster-admin-ssh-key
     endpoints:
       api:
         address: 192.168.140.10
@@ -21,15 +20,12 @@ spec:
         source:
           type: external
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
 
   nodes:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: rack1-srv1
+    machineRef: rack1-srv1

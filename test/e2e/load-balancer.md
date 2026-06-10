@@ -10,8 +10,7 @@ endpoints:
   api:
     source:
       type: infraComponent
-      componentRef:
-        name: control-plane
+      componentRef: control-plane
       bindAddress: control-plane-ip
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -21,8 +20,7 @@ metadata:
 spec:
   loadBalancer:
     implementation: haproxy
-    machineRef:
-      name: services-host
+    machineRef: services-host
     bindAddresses:
       - name: control-plane-ip
         ip: 192.168.133.10

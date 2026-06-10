@@ -24,9 +24,9 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 		prefix := fmt.Sprintf("StorageExport/%s spec", export.Metadata.Name)
 		cluster, clusterOK := clusters[export.Spec.StorageClusterRef.Name]
 		if export.Spec.StorageClusterRef.Name == "" {
-			errs = append(errs, prefix+".storageClusterRef.name is required")
+			errs = append(errs, prefix+".storageClusterRef is required")
 		} else if !clusterOK {
-			errs = append(errs, fmt.Sprintf("%s.storageClusterRef.name %q does not match any StorageCluster", prefix, export.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.storageClusterRef %q does not match any StorageCluster", prefix, export.Spec.StorageClusterRef.Name))
 		}
 		switch export.Spec.Type {
 		case v1alpha1.StorageExportTypeDataFoundation:
@@ -52,24 +52,24 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 			continue
 		}
 		if df.RBDPoolRef.Name == "" {
-			errs = append(errs, prefix+".dataFoundation.rbdPoolRef.name is required")
+			errs = append(errs, prefix+".dataFoundation.rbdPoolRef is required")
 		} else if pool, ok := pools[df.RBDPoolRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.rbdPoolRef.name %q does not match any StoragePool", prefix, df.RBDPoolRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.rbdPoolRef %q does not match any StoragePool", prefix, df.RBDPoolRef.Name))
 		} else if pool.Spec.StorageClusterRef.Name != export.Spec.StorageClusterRef.Name {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.rbdPoolRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Metadata.Name, pool.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.rbdPoolRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Metadata.Name, pool.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
 		}
 		if df.CephFSRef.Name == "" {
-			errs = append(errs, prefix+".dataFoundation.cephFSRef.name is required")
+			errs = append(errs, prefix+".dataFoundation.cephFSRef is required")
 		} else if fs, ok := filesystems[df.CephFSRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef.name %q does not match any StorageFilesystem", prefix, df.CephFSRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef %q does not match any StorageFilesystem", prefix, df.CephFSRef.Name))
 		} else if fs.Spec.StorageClusterRef.Name != export.Spec.StorageClusterRef.Name {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, fs.Metadata.Name, fs.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, fs.Metadata.Name, fs.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
 		}
 		if df.ObjectGatewayRef.Name != "" {
 			if gw, ok := gateways[df.ObjectGatewayRef.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s.dataFoundation.objectGatewayRef.name %q does not match any StorageObjectGateway", prefix, df.ObjectGatewayRef.Name))
+				errs = append(errs, fmt.Sprintf("%s.dataFoundation.objectGatewayRef %q does not match any StorageObjectGateway", prefix, df.ObjectGatewayRef.Name))
 			} else if gw.Spec.StorageClusterRef.Name != export.Spec.StorageClusterRef.Name {
-				errs = append(errs, fmt.Sprintf("%s.dataFoundation.objectGatewayRef.name %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, gw.Metadata.Name, gw.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
+				errs = append(errs, fmt.Sprintf("%s.dataFoundation.objectGatewayRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, gw.Metadata.Name, gw.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
 			}
 		}
 	}
@@ -117,7 +117,7 @@ func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCl
 		errs = append(errs, prefix+".machineRefs is required when storageClusterRef points to external Ceph")
 	}
 	for i, ref := range spec.MachineRefs {
-		owner := fmt.Sprintf("%s.machineRefs[%d].name", prefix, i)
+		owner := fmt.Sprintf("%s.machineRefs[%d]", prefix, i)
 		if ref.Name == "" {
 			errs = append(errs, owner+" is required")
 			continue
@@ -186,11 +186,11 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 		}
 		export, exportOK := exports[exportRef.Name]
 		if !exportOK {
-			errs = append(errs, fmt.Sprintf("%s.values.exportRef.name %q does not match any StorageExport", prefix, exportRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q does not match any StorageExport", prefix, exportRef.Name))
 			continue
 		}
 		if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
-			errs = append(errs, fmt.Sprintf("%s.values.exportRef.name %q must reference a data-foundation StorageExport", prefix, exportRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q must reference a data-foundation StorageExport", prefix, exportRef.Name))
 			continue
 		}
 	}

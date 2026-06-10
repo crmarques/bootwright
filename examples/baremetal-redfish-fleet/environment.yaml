@@ -7,11 +7,9 @@ spec:
 
   defaults:
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
 
   resources:
     - infra
@@ -35,5 +33,4 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server

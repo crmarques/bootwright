@@ -9,8 +9,7 @@ spec:
 
   install:
     nodeSSH:
-      keyPairRef:
-        name: dc2-ocp-cluster-admin-ssh-key
+      keyPairRef: dc2-ocp-cluster-admin-ssh-key
     endpoints:
       api:
         address: 192.168.142.10
@@ -28,15 +27,12 @@ spec:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: dc2-master-0
+    machineRef: dc2-master-0
 
   - hostname: master-1
     role: master
-    machineRef:
-      name: dc2-master-1
+    machineRef: dc2-master-1
 
   - hostname: master-2
     role: master
-    machineRef:
-      name: dc2-master-2
+    machineRef: dc2-master-2

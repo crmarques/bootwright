@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -18,18 +17,14 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: sno-vlan
-      attachmentRef:
-        name: sno-vlan
+      networkConfigRef: sno-vlan
+      attachmentRef: sno-vlan
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -40,12 +35,10 @@ spec:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip
@@ -80,16 +73,13 @@ spec:
         source:
           type: external
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
     method: agent
     mode: connected
     nodeSSH:
-      keyPairRef:
-        name: sno-emul-baremetal-cluster-admin-ssh-key
+      keyPairRef: sno-emul-baremetal-cluster-admin-ssh-key
 
   controlPlane:
     name: master
@@ -109,5 +99,4 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
-        name: rack1-srv1
+      machineRef: rack1-srv1

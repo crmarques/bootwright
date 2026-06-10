@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -18,16 +17,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-vlan
+      networkConfigRef: rack1-vlan
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -38,12 +34,10 @@ spec:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-0
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip
@@ -58,8 +52,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -69,16 +62,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-vlan
+      networkConfigRef: rack1-vlan
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -89,12 +79,10 @@ spec:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-1
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip
@@ -109,8 +97,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -120,16 +107,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-vlan
+      networkConfigRef: rack1-vlan
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -140,12 +124,10 @@ spec:
       bmc:
         address: REPLACE_WITH_REAL_BMC_URL_FOR_master-2
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip

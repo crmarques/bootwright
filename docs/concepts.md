@@ -130,7 +130,7 @@ MVP add-on types are `olm` and `manifestSet`. Profile expansion is
 deterministic: referenced `profiles` expand in declared order, then direct
 `addons` append in declared order, and duplicate add-ons are removed by
 first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
-`clusterRef.name`; use multiple binding resources for multiple clusters.
+`clusterRef`; use multiple binding resources for multiple clusters.
 
 `bootwright apply --yes` is the end-to-end converge path and includes
 infrastructure, storage, cluster install, and bound post-install components.

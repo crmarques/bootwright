@@ -19,10 +19,7 @@ spec:
       provider: redhat
       product: ceph
       rhsm:
-        organizationRef:
-          name: redhat-org
-        activationKeyRef:
-          name: redhat-activation-key
+        organizationRef: redhat-org
+        activationKeyRef: redhat-activation-key
       registry:
-        credentialsRef:
-          name: redhat-registry-credentials
+        credentialsRef: redhat-registry-credentials

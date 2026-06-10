@@ -17,7 +17,5 @@ spec:
 
   access:
     ssh:
-      addressRef:
-        name: ssh
-      keyRef:
-        name: bastion-host-ssh
+      addressRef: ssh
+      keyRef: bastion-host-ssh

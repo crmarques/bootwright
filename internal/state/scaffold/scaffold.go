@@ -357,8 +357,7 @@ spec:
 {{.Substrate.EndpointsYAML}}
 {{.Substrate.ClusterArtifactAccess}}
     nodeSSH:
-      keyPairRef:
-        name: {{.Cluster}}-cluster-admin-ssh-key
+      keyPairRef: {{.Cluster}}-cluster-admin-ssh-key
 
   networking:
     clusterNetwork:
@@ -370,6 +369,5 @@ spec:
   nodes:
     - hostname: master-0
       role: master                      # master | worker
-      machineRef:
-        name: {{.Cluster}}-master-0
+      machineRef: {{.Cluster}}-master-0
 `

@@ -18,16 +18,13 @@ spec:
         source:
           type: external
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
     method: agent
     mode: connected
     nodeSSH:
-      keyPairRef:
-        name: sno-emul-baremetal-cluster-admin-ssh-key
+      keyPairRef: sno-emul-baremetal-cluster-admin-ssh-key
 
   controlPlane:
     name: master
@@ -40,5 +37,4 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
-        name: rack1-srv1
+      machineRef: rack1-srv1

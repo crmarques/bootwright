@@ -29,12 +29,12 @@ func validateClusterAddons(state v1alpha1.State) []string {
 			errs = append(errs, prefix+".type is required")
 		case v1alpha1.ClusterAddonTypeOLM:
 			if extension.Spec.ManifestSet != nil {
-				errs = append(errs, prefix+".type=olm-operator must not set manifestSet")
+				errs = append(errs, prefix+".type=olm must not set manifestSet")
 			}
 			errs = append(errs, validateClusterAddonOLM(extension)...)
 		case v1alpha1.ClusterAddonTypeManifestSet:
 			if extension.Spec.OLM != nil {
-				errs = append(errs, prefix+".type=manifest-set must not set olm")
+				errs = append(errs, prefix+".type=manifestSet must not set olm")
 			}
 			errs = append(errs, validateClusterAddonManifestSet(extension)...)
 		default:
@@ -179,7 +179,7 @@ func validateClusterAddonOLM(extension v1alpha1.ClusterAddon) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.olm", extension.Metadata.Name)
 	if extension.Spec.OLM == nil {
-		return []string{prefix + " is required when spec.type=olm-operator"}
+		return []string{prefix + " is required when spec.type=olm"}
 	}
 	olm := extension.Spec.OLM
 	if olm.Namespace.Name == "" {
@@ -245,7 +245,7 @@ func validateClusterAddonManifestSet(extension v1alpha1.ClusterAddon) []string {
 	var errs []string
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.manifestSet", extension.Metadata.Name)
 	if extension.Spec.ManifestSet == nil {
-		return []string{prefix + " is required when spec.type=manifest-set"}
+		return []string{prefix + " is required when spec.type=manifestSet"}
 	}
 	manifests := extension.Spec.ManifestSet.Manifests
 	if len(manifests) == 0 {
@@ -455,9 +455,9 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 		}
 		seen[binding.Metadata.Name] = true
 		if binding.Spec.ClusterRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef.name is required", binding.Metadata.Name))
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef is required", binding.Metadata.Name))
 		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef.name %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
 		}
 		if len(binding.Spec.AddonProfiles) == 0 && len(binding.Spec.Addons) == 0 {
 			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfiles or addons", binding.Metadata.Name))
@@ -551,19 +551,13 @@ func validateClusterAddonInputValues(prefix string, values map[string]any, schem
 		}
 		owner := prefix + "." + name
 		if property.RefKind != "" || property.SecretRef {
-			ref, ok := raw.(map[string]any)
+			nameValue, ok := raw.(string)
 			if !ok {
-				errs = append(errs, owner+" must be an object with name")
+				errs = append(errs, owner+" must be a plain name string")
 				continue
 			}
-			nameValue, _ := ref["name"].(string)
 			if nameValue == "" {
-				errs = append(errs, owner+".name is required")
-			}
-			for key := range ref {
-				if key != "name" {
-					errs = append(errs, fmt.Sprintf("%s.%s is not supported", owner, key))
-				}
+				errs = append(errs, owner+" is required")
 			}
 		}
 	}

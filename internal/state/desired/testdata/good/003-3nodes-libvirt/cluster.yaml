@@ -7,10 +7,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -20,14 +18,11 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
-      attachmentRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
+      attachmentRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -43,10 +38,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -56,14 +49,11 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
-      attachmentRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
+      attachmentRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -79,10 +69,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -92,14 +80,11 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
-      attachmentRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
+      attachmentRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -125,26 +110,22 @@ spec:
       api:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: control-plane
       api-int:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: control-plane
       ingress:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: apps
     method: agent
     mode: connected
     nodeSSH:
-      keyPairRef:
-        name: 3-nodes-ocp-libvirt-cluster-admin-ssh-key
+      keyPairRef: 3-nodes-ocp-libvirt-cluster-admin-ssh-key
 
   controlPlane:
     name: master
@@ -164,13 +145,10 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
-        name: master-0
+      machineRef: master-0
     - hostname: master-1
       role: master
-      machineRef:
-        name: master-1
+      machineRef: master-1
     - hostname: master-2
       role: master
-      machineRef:
-        name: master-2
+      machineRef: master-2

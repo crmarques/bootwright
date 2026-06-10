@@ -681,7 +681,7 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.InstallMachine) 
 	bindAddress := v1alpha1.DefaultBMCBindAddress
 	port := v1alpha1.DefaultBMCEmulationStartPort
 	vmediaPort := port + 1
-	credentialRef := ""
+	credentialsRef := ""
 	if d := libvirt.BMCEmulationDefaults; d != nil {
 		if d.Protocol != "" {
 			protocol = d.Protocol
@@ -698,10 +698,10 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.InstallMachine) 
 			vmediaPort = port + 1
 		}
 		if d.Auth != nil {
-			credentialRef = d.Auth.CredentialRef.Name
+			credentialsRef = d.Auth.CredentialsRef.Name
 		}
 	}
-	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialRef)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialsRef)
 }
 
 func serviceConsumerClusters(consumers []MachineServiceConsumer) []string {

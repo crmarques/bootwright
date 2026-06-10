@@ -16,10 +16,8 @@ spec:
     bmcEmulationDefaults:
       enabled: true
       auth:
-        credentialRef:
-          name: bmc-credentials
-    machineRef:
-      name: bastion
+        credentialsRef: bmc-credentials
+    machineRef: bastion
     machineProfiles:
     - name: sno
       cpu: 8

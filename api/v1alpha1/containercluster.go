@@ -31,12 +31,6 @@ type OCPInstallSpec struct {
 	ServingCertificates       *ServingCertificatesSpec `yaml:"servingCertificates,omitempty" json:"servingCertificates,omitempty"`
 }
 
-type ContainerEndpointRefs struct {
-	API     EndpointRef `yaml:"api" json:"api"`
-	APIInt  EndpointRef `yaml:"apiInt" json:"apiInt"`
-	Ingress EndpointRef `yaml:"ingress" json:"ingress"`
-}
-
 type NodeSSHSpec struct {
 	KeyPairRef    SecretRef `yaml:"keyPairRef,omitempty" json:"keyPairRef,omitempty"`
 	PublicKeyRef  SecretRef `yaml:"publicKeyRef,omitempty" json:"publicKeyRef,omitempty"`

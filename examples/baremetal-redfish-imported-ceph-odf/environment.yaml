@@ -26,5 +26,4 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server

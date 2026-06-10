@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: baremetal-provider
+    providerRef: baremetal-provider
 
   os:
     install:
@@ -18,16 +17,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: metal-net
+      networkConfigRef: metal-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -37,12 +33,10 @@ spec:
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-metal-master-0.bootwright.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip

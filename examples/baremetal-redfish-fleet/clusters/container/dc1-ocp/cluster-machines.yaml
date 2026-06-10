@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: baremetal-provider
+    providerRef: baremetal-provider
 
   os:
     install:
@@ -18,16 +17,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: dc1-net
+      networkConfigRef: dc1-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -37,12 +33,10 @@ spec:
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc1-master-0.bootwright.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip
@@ -57,8 +51,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: baremetal-provider
+    providerRef: baremetal-provider
 
   os:
     install:
@@ -68,16 +61,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: dc1-net
+      networkConfigRef: dc1-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -87,12 +77,10 @@ spec:
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc1-master-1.bootwright.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip
@@ -107,8 +95,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: baremetal-provider
+    providerRef: baremetal-provider
 
   os:
     install:
@@ -118,16 +105,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: dc1-net
+      networkConfigRef: dc1-net
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
 
   hardware:
@@ -137,12 +121,10 @@ spec:
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-dc1-master-2.bootwright.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
 
   addresses:
     - name: ip

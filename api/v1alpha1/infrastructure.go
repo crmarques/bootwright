@@ -1,10 +1,13 @@
 package v1alpha1
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"regexp"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // Bootwright desired-state API. Every fact has one home; references flow
@@ -285,14 +288,67 @@ type Metadata struct {
 	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
-// LocalObjectReference names a single sibling object in the loaded state.
+// LocalObjectReference names a single sibling object in the loaded state. It
+// is authored and rendered as a plain name string — the Ref suffix on the
+// field carries the "this is a reference" signal; the wrapper exists only so
+// Go keeps the resolution namespace distinct from ordinary strings.
 type LocalObjectReference struct {
 	Name string `yaml:"name" json:"name"`
 }
 
-// SecretRef names a SecretRef known to Environment.spec.secrets.
+func (r *LocalObjectReference) UnmarshalYAML(node *yaml.Node) error {
+	name, err := decodeRefScalar(node)
+	if err != nil {
+		return err
+	}
+	r.Name = name
+	return nil
+}
+
+func (r LocalObjectReference) MarshalYAML() (any, error) { return r.Name, nil }
+
+func (r *LocalObjectReference) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &r.Name)
+}
+
+func (r LocalObjectReference) MarshalJSON() ([]byte, error) { return json.Marshal(r.Name) }
+
+func (r LocalObjectReference) IsZero() bool { return r.Name == "" }
+
+// SecretRef names a secret declared in Environment.spec.secrets. Like
+// LocalObjectReference it is authored and rendered as a plain name string.
 type SecretRef struct {
 	Name string `yaml:"name" json:"name"`
+}
+
+func (r *SecretRef) UnmarshalYAML(node *yaml.Node) error {
+	name, err := decodeRefScalar(node)
+	if err != nil {
+		return err
+	}
+	r.Name = name
+	return nil
+}
+
+func (r SecretRef) MarshalYAML() (any, error) { return r.Name, nil }
+
+func (r *SecretRef) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &r.Name)
+}
+
+func (r SecretRef) MarshalJSON() ([]byte, error) { return json.Marshal(r.Name) }
+
+func (r SecretRef) IsZero() bool { return r.Name == "" }
+
+func decodeRefScalar(node *yaml.Node) (string, error) {
+	if node.Kind != yaml.ScalarNode {
+		return "", fmt.Errorf("line %d: a reference is a plain name string (the {name: ...} object form is not accepted)", node.Line)
+	}
+	var name string
+	if err := node.Decode(&name); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // Helpers

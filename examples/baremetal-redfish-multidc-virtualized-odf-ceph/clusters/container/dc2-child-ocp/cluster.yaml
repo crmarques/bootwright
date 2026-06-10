@@ -9,8 +9,7 @@ spec:
 
   install:
     nodeSSH:
-      keyPairRef:
-        name: dc2-child-ocp-cluster-admin-ssh-key
+      keyPairRef: dc2-child-ocp-cluster-admin-ssh-key
     endpoints:
       api:
         address: 192.168.152.20
@@ -33,30 +32,24 @@ spec:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: dc2-child-ocp-infra-master-0
+    machineRef: dc2-child-ocp-infra-master-0
 
   - hostname: master-1
     role: master
-    machineRef:
-      name: dc2-child-ocp-infra-master-1
+    machineRef: dc2-child-ocp-infra-master-1
 
   - hostname: master-2
     role: master
-    machineRef:
-      name: dc2-child-ocp-infra-master-2
+    machineRef: dc2-child-ocp-infra-master-2
 
   - hostname: worker-0
     role: worker
-    machineRef:
-      name: dc2-child-ocp-infra-worker-0
+    machineRef: dc2-child-ocp-infra-worker-0
 
   - hostname: worker-1
     role: worker
-    machineRef:
-      name: dc2-child-ocp-infra-worker-1
+    machineRef: dc2-child-ocp-infra-worker-1
 
   - hostname: worker-2
     role: worker
-    machineRef:
-      name: dc2-child-ocp-infra-worker-2
+    machineRef: dc2-child-ocp-infra-worker-2

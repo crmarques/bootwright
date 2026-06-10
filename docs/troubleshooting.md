@@ -46,8 +46,7 @@ Every `ContainerCluster.spec.nodes[]` entry must reference one selected
 nodes:
   - hostname: master-0
     role: master
-    machineRef:
-      name: prod-3node-master-0
+    machineRef: prod-3node-master-0
 ```
 
 The referenced `Machine` must be selected by the `Environment`, carry the
@@ -110,7 +109,7 @@ Real BMCs must also reach the generated artifact HTTPS endpoint used for the
 agent ISO. If Redfish virtual media insert fails after the bastion can download
 the ISO, verify reachability from the BMC network and prefer an IP-address
 `InfraComponent.spec.artifactServer.endpoints[]` entry selected by
-`ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef.name`.
+`ContainerCluster.spec.install.artifactAccess.redfishVirtualMedia.endpointRef`.
 
 ## Resources No Longer In Desired State (Orphans)
 

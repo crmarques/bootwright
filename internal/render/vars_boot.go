@@ -73,7 +73,7 @@ func machineEmulatedBMCVars(state v1alpha1.State, l *v1alpha1.InfraProviderLibvi
 		"bindAddress":       "0.0.0.0",
 		"port":              port,
 		"vmediaPort":        vmediaPort,
-		"credentialRef":     "",
+		"credentialsRef":    "",
 		"sushyToolsVersion": componentPinVersion(state, "sushy-tools", defaultSushyToolsVersion),
 	}
 	if d := l.BMCEmulationDefaults; d != nil {
@@ -84,7 +84,7 @@ func machineEmulatedBMCVars(state v1alpha1.State, l *v1alpha1.InfraProviderLibvi
 			out["bindAddress"] = d.BindAddress
 		}
 		if d.Auth != nil {
-			out["credentialRef"] = d.Auth.CredentialRef.Name
+			out["credentialsRef"] = d.Auth.CredentialsRef.Name
 		}
 	}
 	return out
@@ -96,18 +96,18 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	port, vmediaPort := emulatedBMCListenPorts(libvirt)
 	credRef := ""
 	if d := libvirt.BMCEmulationDefaults; d != nil && d.Auth != nil {
-		credRef = d.Auth.CredentialRef.Name
+		credRef = d.Auth.CredentialsRef.Name
 	}
 	systemID := ansibleUUIDv5(clusterName + "-" + m.Name)
 
 	stageDir := fmt.Sprintf("/var/lib/libvirt/images/bootwright/{{ bootwright_provider_state_dir | dirname | basename }}/bmc/%s/vmedia", m.Source.ProviderRef.Name)
 	return map[string]any{
 		"redfish": map[string]any{
-			"baseUrl":       fmt.Sprintf("http://%s:%d", hostAddr, port),
-			"systemId":      systemID,
-			"credentialRef": credRef,
-			"validateCerts": false,
-			"setBootSource": false,
+			"baseUrl":        fmt.Sprintf("http://%s:%d", hostAddr, port),
+			"systemId":       systemID,
+			"credentialsRef": credRef,
+			"validateCerts":  false,
+			"setBootSource":  false,
 		},
 		"readiness": map[string]any{
 			"type": "ssh",
@@ -138,11 +138,11 @@ func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server 
 
 	return map[string]any{
 		"redfish": map[string]any{
-			"baseUrl":       baseURL,
-			"systemId":      systemID,
-			"credentialRef": bmc.CredentialsRef.Name,
-			"validateCerts": !bmc.DisableCertificateVerification,
-			"setBootSource": true,
+			"baseUrl":        baseURL,
+			"systemId":       systemID,
+			"credentialsRef": bmc.CredentialsRef.Name,
+			"validateCerts":  !bmc.DisableCertificateVerification,
+			"setBootSource":  true,
 		},
 		"readiness": map[string]any{
 			"type": "ssh",

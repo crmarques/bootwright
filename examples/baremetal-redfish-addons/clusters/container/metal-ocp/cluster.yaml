@@ -18,18 +18,14 @@ spec:
         source:
           type: external
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
     nodeSSH:
-      keyPairRef:
-        name: metal-ocp-cluster-admin-ssh-key
+      keyPairRef: metal-ocp-cluster-admin-ssh-key
 
   nodes:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: metal-master-0
+    machineRef: metal-master-0

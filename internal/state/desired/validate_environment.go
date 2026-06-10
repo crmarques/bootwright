@@ -190,20 +190,20 @@ func validateEnvironmentEntitlementRHSMRequired(owner string, rhsm *v1alpha1.Env
 	}
 	var errs []string
 	if rhsm.OrganizationRef.Name == "" {
-		errs = append(errs, owner+".organizationRef.name is required")
+		errs = append(errs, owner+".organizationRef is required")
 	}
 	if rhsm.ActivationKeyRef.Name == "" {
-		errs = append(errs, owner+".activationKeyRef.name is required")
+		errs = append(errs, owner+".activationKeyRef is required")
 	}
 	return errs
 }
 
 func validateEnvironmentEntitlementRegistryCredentialsRequired(owner string, registry *v1alpha1.EnvironmentEntitlementRegistry) []string {
 	if registry == nil {
-		return []string{owner + ".credentialsRef.name is required"}
+		return []string{owner + ".credentialsRef is required"}
 	}
 	if registry.CredentialsRef.Name == "" {
-		return []string{owner + ".credentialsRef.name is required"}
+		return []string{owner + ".credentialsRef is required"}
 	}
 	return nil
 }
@@ -412,11 +412,11 @@ func validateEnvironmentInstallTrust(env v1alpha1.Environment) []string {
 	owner := fmt.Sprintf("Environment/%s spec.installTrust.caBundleRefs", env.Metadata.Name)
 	for i, ref := range env.Spec.InstallTrust.CABundleRefs {
 		if ref.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s[%d].name is required", owner, i))
+			errs = append(errs, fmt.Sprintf("%s[%d] is required", owner, i))
 			continue
 		}
 		if seen[ref.Name] {
-			errs = append(errs, fmt.Sprintf("%s[%d].name %q is duplicated", owner, i, ref.Name))
+			errs = append(errs, fmt.Sprintf("%s[%d] %q is duplicated", owner, i, ref.Name))
 			continue
 		}
 		seen[ref.Name] = true
@@ -477,7 +477,7 @@ func validateEnvironmentProxyConnection(envName, owner string, p *v1alpha1.Envir
 		return []string{owner + ".connection is required for external proxy"}
 	}
 	if p.Auth != nil && p.Auth.ProxyAuthRef.Name != "" && !dnsLabel.MatchString(p.Auth.ProxyAuthRef.Name) {
-		errs = append(errs, fmt.Sprintf("%s.auth.proxyAuthRef.name %q is not a DNS label", owner, p.Auth.ProxyAuthRef.Name))
+		errs = append(errs, fmt.Sprintf("%s.auth.proxyAuthRef %q is not a DNS label", owner, p.Auth.ProxyAuthRef.Name))
 	}
 	for _, field := range []struct{ name, value string }{
 		{"httpProxy", p.HTTPProxy},
@@ -697,14 +697,14 @@ func validateNamedEnvironmentComponent(owner, name string, seen map[string]bool)
 
 func validateManagedComponentRef(owner, name string, components map[string]v1alpha1.InfraComponent, arm func(v1alpha1.InfraComponent) bool, armName string) []string {
 	if name == "" {
-		return []string{owner + ".componentRef.name is required for managed entries"}
+		return []string{owner + ".componentRef is required for managed entries"}
 	}
 	component, ok := components[name]
 	if !ok {
-		return []string{fmt.Sprintf("%s.componentRef.name %q does not resolve to an InfraComponent", owner, name)}
+		return []string{fmt.Sprintf("%s.componentRef %q does not resolve to an InfraComponent", owner, name)}
 	}
 	if !arm(component) {
-		return []string{fmt.Sprintf("%s.componentRef.name %q resolves to InfraComponent/%s without spec.%s", owner, name, component.Metadata.Name, armName)}
+		return []string{fmt.Sprintf("%s.componentRef %q resolves to InfraComponent/%s without spec.%s", owner, name, component.Metadata.Name, armName)}
 	}
 	return nil
 }

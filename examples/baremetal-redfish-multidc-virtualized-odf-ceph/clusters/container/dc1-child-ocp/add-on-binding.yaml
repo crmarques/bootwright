@@ -3,13 +3,11 @@ kind: ClusterAddonBinding
 metadata:
   name: dc1-child-ocp-addons
 spec:
-  clusterRef:
-    name: dc1-child-ocp
+  clusterRef: dc1-child-ocp
 
   addons:
     - name: openshift-data-foundation
       inputs:
         - name: external-storage
           values:
-            exportRef:
-              name: odf-external-ceph
+            exportRef: odf-external-ceph

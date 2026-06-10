@@ -345,7 +345,7 @@ func libvirtProvider(name, machine string) v1alpha1.InfraProvider {
 				MachineRef: v1alpha1.LocalObjectReference{Name: machine},
 				URI:        "qemu:///system",
 				BMCEmulationDefaults: &v1alpha1.BMCEmulationDefaults{
-					Auth: &v1alpha1.BMCAuth{CredentialRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
+					Auth: &v1alpha1.BMCAuth{CredentialsRef: v1alpha1.SecretRef{Name: "bmc-credentials"}},
 				},
 				MachineProfiles: []v1alpha1.MachineProfile{{Name: "libvirt-profile"}},
 			},

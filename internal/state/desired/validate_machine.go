@@ -82,7 +82,7 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 	}
 	if *machine.Spec.OS.Provided {
 		if machine.Spec.OS.InstallProfileRef.Name != "" {
-			errs = append(errs, prefix+".installProfileRef.name must be empty when provided=true")
+			errs = append(errs, prefix+".installProfileRef must be empty when provided=true")
 		}
 		if !machine.Spec.OS.Install.IsZero() {
 			errs = append(errs, prefix+".install must be empty when provided=true")
@@ -95,9 +95,9 @@ func validateMachineOS(prefix string, machine v1alpha1.Machine, installProfiles 
 	if machine.Spec.OS.InstallProfileRef.Name != "" {
 		profile, ok := installProfiles[machine.Spec.OS.InstallProfileRef.Name]
 		if !ok {
-			errs = append(errs, fmt.Sprintf("%s.installProfileRef.name %q does not match any MachineInstallProfile", prefix, machine.Spec.OS.InstallProfileRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.installProfileRef %q does not match any MachineInstallProfile", prefix, machine.Spec.OS.InstallProfileRef.Name))
 		} else if !machineInstallStringListContains(profile.Spec.Customizations.Services.Enabled, "sshd") {
-			errs = append(errs, fmt.Sprintf("%s.installProfileRef.name %q references MachineInstallProfile/%s without customizations.services.enabled containing sshd", prefix, machine.Spec.OS.InstallProfileRef.Name, profile.Metadata.Name))
+			errs = append(errs, fmt.Sprintf("%s.installProfileRef %q references MachineInstallProfile/%s without customizations.services.enabled containing sshd", prefix, machine.Spec.OS.InstallProfileRef.Name, profile.Metadata.Name))
 		}
 	}
 	return errs
@@ -112,7 +112,7 @@ func validateMachineAccess(prefix string, machine v1alpha1.Machine) []string {
 	}
 	if *machine.Spec.OS.Provided || machine.Spec.OS.InstallProfileRef.Name != "" {
 		if machine.Spec.Access.SSH == nil {
-			return []string{prefix + ".ssh is required when os.provided=true or os.installProfileRef.name is set"}
+			return []string{prefix + ".ssh is required when os.provided=true or os.installProfileRef is set"}
 		}
 	}
 	if machine.Spec.Access.SSH == nil {
@@ -125,12 +125,12 @@ func validateMachineSSH(prefix string, machine v1alpha1.Machine) []string {
 	var errs []string
 	ssh := machine.Spec.Access.SSH
 	if ssh.AddressRef.Name == "" {
-		errs = append(errs, prefix+".ssh.addressRef.name is required")
+		errs = append(errs, prefix+".ssh.addressRef is required")
 	} else if _, ok := v1alpha1.MachineAddressByName(machine, ssh.AddressRef.Name); !ok {
-		errs = append(errs, fmt.Sprintf("%s.ssh.addressRef.name %q does not resolve to spec.addresses[].name", prefix, ssh.AddressRef.Name))
+		errs = append(errs, fmt.Sprintf("%s.ssh.addressRef %q does not resolve to spec.addresses[].name", prefix, ssh.AddressRef.Name))
 	}
 	if ssh.KeyRef.Name == "" {
-		errs = append(errs, prefix+".ssh.keyRef.name is required")
+		errs = append(errs, prefix+".ssh.keyRef is required")
 	}
 	return errs
 }
@@ -157,31 +157,31 @@ func validateMachineSubstrate(prefix string, machine v1alpha1.Machine, provider 
 	var errs []string
 	providerName := machine.Spec.Substrate.ProviderRef.Name
 	if v1alpha1.MachineRequiresSubstrate(machine) && providerName == "" {
-		errs = append(errs, prefix+".providerRef.name is required when os.provided=false")
+		errs = append(errs, prefix+".providerRef is required when os.provided=false")
 		return errs
 	}
 	if providerName == "" {
 		if machine.Spec.Substrate.ProfileRef.Name != "" {
-			errs = append(errs, prefix+".profileRef.name requires providerRef.name")
+			errs = append(errs, prefix+".profileRef requires providerRef")
 		}
 		return errs
 	}
 	if !providerOK {
-		errs = append(errs, fmt.Sprintf("%s.providerRef.name %q does not match any InfraProvider", prefix, providerName))
+		errs = append(errs, fmt.Sprintf("%s.providerRef %q does not match any InfraProvider", prefix, providerName))
 		return errs
 	}
 	switch provider.Spec.Type {
 	case v1alpha1.ProvisionerBareMetal:
 		if machine.Spec.Substrate.ProfileRef.Name != "" {
-			errs = append(errs, prefix+".profileRef.name must be empty for baremetal providers")
+			errs = append(errs, prefix+".profileRef must be empty for baremetal providers")
 		}
 	case v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerVSphere, v1alpha1.ProvisionerKubeVirt:
 		if v1alpha1.MachineRequiresSubstrate(machine) && machine.Spec.Substrate.ProfileRef.Name == "" {
-			errs = append(errs, prefix+".profileRef.name is required for "+provider.Spec.Type+" providers when os.provided=false")
+			errs = append(errs, prefix+".profileRef is required for "+provider.Spec.Type+" providers when os.provided=false")
 		}
 		if machine.Spec.Substrate.ProfileRef.Name != "" {
 			if _, ok := lookupMachineProfile(provider, machine.Spec.Substrate.ProfileRef.Name); !ok {
-				errs = append(errs, fmt.Sprintf("%s.profileRef.name %q does not match any profile on InfraProvider/%s", prefix, machine.Spec.Substrate.ProfileRef.Name, provider.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s.profileRef %q does not match any profile on InfraProvider/%s", prefix, machine.Spec.Substrate.ProfileRef.Name, provider.Metadata.Name))
 			}
 		}
 	}
@@ -212,7 +212,7 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 	}
 	if machine.Spec.Hardware.Boot.NICRef.Name != "" {
 		if _, ok := nicsByName[machine.Spec.Hardware.Boot.NICRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.boot.nicRef.name %q does not resolve to spec.hardware.nics[].name", prefix, machine.Spec.Hardware.Boot.NICRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.boot.nicRef %q does not resolve to spec.hardware.nics[].name", prefix, machine.Spec.Hardware.Boot.NICRef.Name))
 		}
 	}
 	bmc := machine.Spec.Hardware.Management.BMC
@@ -222,7 +222,7 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 			errs = append(errs, prefix+".nics is required for baremetal machines when os.provided=false")
 		}
 		if machine.Spec.Hardware.Boot.NICRef.Name == "" {
-			errs = append(errs, prefix+".boot.nicRef.name is required for baremetal machines when os.provided=false")
+			errs = append(errs, prefix+".boot.nicRef is required for baremetal machines when os.provided=false")
 		}
 		for i, nic := range machine.Spec.Hardware.NICs {
 			if nic.MACAddress == "" {
@@ -238,7 +238,7 @@ func validateMachineHardware(prefix string, machine v1alpha1.Machine, provider v
 		errs = append(errs, fmt.Sprintf("%s.management.bmc.protocol %q is not supported yet; only %q is implemented", prefix, bmc.Protocol, v1alpha1.DefaultBMCProtocol))
 	}
 	if validateBMC && bmc.CredentialsRef.Name == "" {
-		errs = append(errs, prefix+".management.bmc.credentialsRef.name is required")
+		errs = append(errs, prefix+".management.bmc.credentialsRef is required")
 	}
 	return errs
 }
@@ -253,7 +253,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 		errs = append(errs, prefix+".config.overrides is only valid with "+prefix+".config.networkConfigRef")
 	}
 	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
-		errs = append(errs, prefix+".config.attachmentRef.name is required when networkConfigRef is set on a provider-backed Machine")
+		errs = append(errs, prefix+".config.attachmentRef is required when networkConfigRef is set on a provider-backed Machine")
 	}
 	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
 	injects := machineConfigInterfaceAddresses(machine, config)
@@ -263,7 +263,7 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 			errs = append(errs, nmstate.ShapeErrors(prefix+".config.overrides", n.Spec.Template.NetworkConfig, config.Overrides)...)
 			effective = nmstate.EffectiveConfig(n.Spec.Template.NetworkConfig, config.Overrides, injects)
 		} else {
-			errs = append(errs, fmt.Sprintf("%s.config.networkConfigRef.name %q does not match any NetworkConfig", prefix, config.NetworkConfigRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.config.networkConfigRef %q does not match any NetworkConfig", prefix, config.NetworkConfigRef.Name))
 		}
 	}
 	if config.Spec != nil {
@@ -312,9 +312,9 @@ func validateMachineInterfaceAddresses(prefix string, machine v1alpha1.Machine, 
 			errs = append(errs, fmt.Sprintf("%s.family %q must be ipv4 or ipv6", owner, ia.Family))
 		}
 		if ia.AddressRef.Name == "" {
-			errs = append(errs, owner+".addressRef.name is required")
+			errs = append(errs, owner+".addressRef is required")
 		} else if !addrNames[ia.AddressRef.Name] {
-			errs = append(errs, fmt.Sprintf("%s.addressRef.name %q does not resolve to spec.addresses[].name", owner, ia.AddressRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to spec.addresses[].name", owner, ia.AddressRef.Name))
 		}
 		switch {
 		case ia.PrefixLength < 1 || ia.PrefixLength > 128:
@@ -343,11 +343,11 @@ func validateMachineInterfaceBindings(prefix string, machine v1alpha1.Machine, i
 	for i, binding := range machine.Spec.Network.InterfaceBinding {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		if binding.NICRef.Name == "" {
-			errs = append(errs, owner+".nicRef.name is required")
+			errs = append(errs, owner+".nicRef is required")
 		} else if !nics[binding.NICRef.Name] {
-			errs = append(errs, fmt.Sprintf("%s.nicRef.name %q does not resolve to spec.hardware.nics[].name", owner, binding.NICRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.nicRef %q does not resolve to spec.hardware.nics[].name", owner, binding.NICRef.Name))
 		} else if boundNICs[binding.NICRef.Name] {
-			errs = append(errs, fmt.Sprintf("%s.nicRef.name %q is duplicated", owner, binding.NICRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.nicRef %q is duplicated", owner, binding.NICRef.Name))
 		}
 		boundNICs[binding.NICRef.Name] = true
 		if binding.InterfaceName == "" {
@@ -516,9 +516,9 @@ func validateMachineInstallProfiles(state v1alpha1.State) []string {
 		}
 		imageRef := profile.Spec.Installer.Anaconda.ImageRef.Name
 		if imageRef == "" {
-			errs = append(errs, prefix+".installer.anaconda.imageRef.name is required")
+			errs = append(errs, prefix+".installer.anaconda.imageRef is required")
 		} else if _, ok := images[imageRef]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef.name %q does not match any MachineImage", prefix, imageRef))
+			errs = append(errs, fmt.Sprintf("%s.installer.anaconda.imageRef %q does not match any MachineImage", prefix, imageRef))
 		}
 		errs = append(errs, validateMachineInstallRepositories(prefix+".installer.anaconda.repositories", profile.Spec.Installer.Anaconda.Repositories)...)
 		customizations := profile.Spec.Customizations
@@ -642,7 +642,7 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 		return errs
 	case v1alpha1.MachineImageInstallSourceTypeURL:
 		if installSource.EntitlementRef.Name != "" {
-			errs = append(errs, prefix+".installSource.entitlementRef.name must be empty when installSource.type is url")
+			errs = append(errs, prefix+".installSource.entitlementRef must be empty when installSource.type is url")
 		}
 		if installSource.URL == "" && len(installSource.Repositories) == 0 {
 			errs = append(errs, prefix+".installSource.url or installSource.repositories is required when installSource.type is url")
@@ -664,7 +664,7 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 			errs = append(errs, prefix+".installSource.repositories must be empty when installSource.type is redhatCDN")
 		}
 		if installSource.EntitlementRef.Name == "" {
-			errs = append(errs, prefix+".installSource.entitlementRef.name is required when installSource.type is redhatCDN")
+			errs = append(errs, prefix+".installSource.entitlementRef is required when installSource.type is redhatCDN")
 		}
 	}
 	return errs

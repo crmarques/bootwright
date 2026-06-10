@@ -110,14 +110,14 @@ func validateMachineImageEntitlements(state v1alpha1.State) []string {
 		}
 		entitlement, ok := entitlements.Find(env, ref)
 		if !ok {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q does not match any Environment.spec.entitlements[].name", image.Metadata.Name, ref))
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q does not match any Environment.spec.entitlements[].name", image.Metadata.Name, ref))
 			continue
 		}
 		if entitlement.Provider != v1alpha1.EntitlementProviderRedHat {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q resolves to provider %q, want %q", image.Metadata.Name, ref, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q resolves to provider %q, want %q", image.Metadata.Name, ref, entitlement.Provider, v1alpha1.EntitlementProviderRedHat))
 		}
 		if entitlement.Product != v1alpha1.EntitlementProductRHEL {
-			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef.name %q resolves to product %q, want %q", image.Metadata.Name, ref, entitlement.Product, v1alpha1.EntitlementProductRHEL))
+			errs = append(errs, fmt.Sprintf("MachineImage/%s spec.installSource.entitlementRef %q resolves to product %q, want %q", image.Metadata.Name, ref, entitlement.Product, v1alpha1.EntitlementProductRHEL))
 		}
 	}
 	return errs
@@ -146,7 +146,7 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 				continue
 			}
 			if !provided[parent][v1alpha1.ClusterAddonProvidesKubeVirt] {
-				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.kubevirt.hostClusterRef.name %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q to ContainerCluster/%s",
+				errs = append(errs, fmt.Sprintf("InfraProvider/%s spec.kubevirt.hostClusterRef %q requires a ClusterAddonBinding that applies a ClusterAddon providing %q to ContainerCluster/%s",
 					provider.Metadata.Name, parent, v1alpha1.ClusterAddonProvidesKubeVirt, parent))
 			}
 		}
@@ -214,7 +214,7 @@ func validateDisconnectedRequiresRegistry(state v1alpha1.State) []string {
 	mirror := env.Spec.Registries.Mirror
 	if mirror.TrustBundleRef.Name == "" {
 		return []string{fmt.Sprintf(
-			"ContainerCluster/%s install.mode=disconnected requires Environment/%s spec.registries.mirror.trustBundleRef.name",
+			"ContainerCluster/%s install.mode=disconnected requires Environment/%s spec.registries.mirror.trustBundleRef",
 			strings.Join(disconnected, ","), env.Metadata.Name)}
 	}
 	hasExternalMirror := mirror.URL != ""
@@ -257,18 +257,18 @@ func validateArtifactServerRequirements(state v1alpha1.State) []string {
 			continue
 		}
 		if ci.ArtifactAccess.ServerRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set spec.install.artifactAccess.serverRef.name", prefix))
+			errs = append(errs, fmt.Sprintf("%s requires generated artifact publication; set spec.install.artifactAccess.serverRef", prefix))
 			continue
 		}
 		if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerContainerClusterInstall); !ok {
-				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires spec.install.artifactAccess.containerClusterInstall.endpointRef.name to resolve on the selected artifact server",
+				errs = append(errs, fmt.Sprintf("%s install.mode=disconnected requires spec.install.artifactAccess.containerClusterInstall.endpointRef to resolve on the selected artifact server",
 					prefix))
 			}
 		}
 		if artifacts.ClusterUsesBareMetalMachine(state, ci) {
 			if _, _, ok := artifacts.ResolveConsumerEndpoint(state, ci, v1alpha1.ArtifactConsumerRedfishVirtualMedia); !ok {
-				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires spec.install.artifactAccess.redfishVirtualMedia.endpointRef.name to resolve on the selected artifact server",
+				errs = append(errs, fmt.Sprintf("%s bare-metal Redfish boot requires spec.install.artifactAccess.redfishVirtualMedia.endpointRef to resolve on the selected artifact server",
 					prefix))
 			}
 		}
@@ -381,8 +381,8 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	}
 	for _, p := range state.InfraProviders {
 		if p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil && p.Spec.Libvirt.BMCEmulationDefaults.Auth != nil {
-			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialRef",
-				p.Metadata.Name), p.Spec.Libvirt.BMCEmulationDefaults.Auth.CredentialRef)
+			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialsRef",
+				p.Metadata.Name), p.Spec.Libvirt.BMCEmulationDefaults.Auth.CredentialsRef)
 		}
 		if p.Spec.BareMetal != nil && p.Spec.BareMetal.Defaults.BMC != nil {
 			require(fmt.Sprintf("InfraProvider/%s spec.bareMetal.defaults.bmc.credentialsRef",

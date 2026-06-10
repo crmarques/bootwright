@@ -6,8 +6,7 @@ spec:
   type: artifactServer
 
   artifactServer:
-    machineRef:
-      name: services-host
+    machineRef: services-host
     listeners:
       - name: https
         protocol: https

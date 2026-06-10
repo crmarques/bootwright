@@ -5,8 +5,7 @@ metadata:
 spec:
   type: data-foundation
 
-  storageClusterRef:
-    name: imported-ceph
+  storageClusterRef: imported-ceph
 
   externalDetails:
     fromSecret: imported-ceph-odf-details

@@ -196,7 +196,7 @@ func bmcEmulationDefaultsVars(d *v1alpha1.BMCEmulationDefaults) map[string]any {
 		out["vmediaPort"] = d.VMediaPort
 	}
 	if d.Auth != nil {
-		out["credentialRef"] = d.Auth.CredentialRef.Name
+		out["credentialsRef"] = d.Auth.CredentialsRef.Name
 	}
 	if d.DisableCertificateVerification != nil {
 		out["disableCertificateVerification"] = *d.DisableCertificateVerification

@@ -7,11 +7,9 @@ spec:
 
   defaults:
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       containerClusterInstall:
-        endpointRef:
-          name: cluster
+        endpointRef: cluster
 
   secrets:
     - openshift-pull-secret
@@ -39,27 +37,23 @@ spec:
 
   installTrust:
     caBundleRefs:
-      - name: mirror-registry-ca
+      - mirror-registry-ca
 
   registries:
     mirror:
-      credentialsRef:
-        name: mirror-registry-credentials
-      trustBundleRef:
-        name: mirror-registry-ca
+      credentialsRef: mirror-registry-credentials
+      trustBundleRef: mirror-registry-ca
 
   infraComponents:
     ntpSources:
       - name: default
         type: managed
-        componentRef:
-          name: ntp-server
+        componentRef: ntp-server
         endpoint: cluster
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server
     proxies:
       - name: default
         type: external
@@ -70,8 +64,7 @@ spec:
             - .bootwright.test
             - 192.168.132.0/24
           auth:
-            proxyAuthRef:
-              name: proxy-credentials
+            proxyAuthRef: proxy-credentials
     nameResolution:
       - name: default
         type: external
@@ -82,8 +75,7 @@ spec:
     registries:
       - name: default
         type: managed
-        componentRef:
-          name: mirror-registry
+        componentRef: mirror-registry
 
   proxyFor:
     bootwright: default

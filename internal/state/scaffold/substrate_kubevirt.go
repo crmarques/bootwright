@@ -14,22 +14,17 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: {{.ProviderID}}
-    profileRef:
-      name: sno
+    providerRef: {{.ProviderID}}
+    profileRef: sno
   os:
     provided: false
   network:
     config:
-      networkConfigRef:
-        name: {{.NetworkID}}
-      attachmentRef:
-        name: {{.NetworkID}}
+      networkConfigRef: {{.NetworkID}}
+      attachmentRef: {{.NetworkID}}
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
   addresses:
     - name: ip
@@ -42,8 +37,7 @@ metadata:
 spec:
   type: kubevirt
   kubevirt:
-    kubeconfigRef:
-      name: cnv-cluster-kubeconfig
+    kubeconfigRef: cnv-cluster-kubeconfig
     namespace: bootwright-vms
     machineProfiles:
       - name: sno

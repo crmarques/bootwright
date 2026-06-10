@@ -95,7 +95,7 @@ spec:
   ceph:
     cephadm:
       nodeSSH:
-        keyPairRef: { name: ceph-node-ssh }
+        keyPairRef: ceph-node-ssh
 `,
 			want: "field nodeSSH not found",
 		},
@@ -109,7 +109,7 @@ spec:
   ceph:
     cephadm:
       clusterSSH:
-        keyPairRef: { name: ceph-cluster-ssh }
+        keyPairRef: ceph-cluster-ssh
 `,
 			want: "field clusterSSH not found",
 		},
@@ -120,10 +120,10 @@ kind: StorageExport
 metadata: { name: export }
 spec:
   type: data-foundation
-  storageClusterRef: { name: ceph }
+  storageClusterRef: ceph
   externalDetails:
     sshExecution:
-      knownHostsRef: { name: removed-known-hosts }
+      knownHostsRef: removed-known-hosts
 `,
 			want: "field knownHostsRef not found",
 		},
@@ -217,14 +217,14 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.EntitlementRef.Name = "ceph-entitlement"
 			},
-			want: "spec.ceph.entitlementRef.name must be empty when distribution=oss",
+			want: "spec.ceph.entitlementRef must be empty when distribution=oss",
 		},
 		{
 			name: "redhat-missing-entitlement-ref",
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionRedHat
 			},
-			want: "spec.ceph.entitlementRef.name is required when distribution requires subscription or license handling",
+			want: "spec.ceph.entitlementRef is required when distribution requires subscription or license handling",
 		},
 		{
 			name: "redhat-wrong-entitlement-provider",
@@ -420,8 +420,7 @@ kind: StorageObjectGateway
 metadata:
   name: odf-rgw
 spec:
-  storageClusterRef:
-    name: ceph
+  storageClusterRef: ceph
   ceph:
     serviceID: odf
     clientEndpoint:
@@ -521,7 +520,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].MachineRef = v1alpha1.LocalObjectReference{}
 			},
-			want: "spec.ceph.topology.nodes[0].machineRef.name is required",
+			want: "spec.ceph.topology.nodes[0].machineRef is required",
 		},
 		{
 			name: "missing-machine-ssh",
@@ -549,7 +548,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.Machines[1].Spec.Access.SSH.KeyRef.Name = "other-ceph-node-ssh"
 			},
-			want: `with ssh.keyRef.name "other-ceph-node-ssh"; all storage node Machines in one StorageCluster must use "ceph-node-ssh"`,
+			want: `with ssh.keyRef "other-ceph-node-ssh"; all storage node Machines in one StorageCluster must use "ceph-node-ssh"`,
 		},
 	}
 	for _, tc := range cases {
@@ -575,7 +574,7 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			edit: func(state *v1alpha1.State) {
 				state.StorageExports[0].Spec.Type = "nfs"
 			},
-			want: `values.exportRef.name "export" must reference a data-foundation StorageExport`,
+			want: `values.exportRef "export" must reference a data-foundation StorageExport`,
 		},
 		{
 			name: "external-ceph-spec",
@@ -888,7 +887,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 
 func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
-		"exportRef": map[string]any{"name": export},
+		"exportRef": export,
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

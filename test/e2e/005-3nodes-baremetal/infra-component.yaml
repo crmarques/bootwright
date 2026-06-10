@@ -6,8 +6,7 @@ spec:
   type: artifactServer
 
   artifactServer:
-    machineRef:
-      name: bastion
+    machineRef: bastion
     listeners:
       - name: https
         protocol: https

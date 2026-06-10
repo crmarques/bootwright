@@ -30,7 +30,7 @@ after the target cluster is installed and reachable.
 removed by first occurrence. Cycles are rejected.
 
 `ClusterAddonBinding` names exactly one container cluster with
-`clusterRef.name` and attaches profiles, direct add-ons, and binding-scoped
+`clusterRef` and attaches profiles, direct add-ons, and binding-scoped
 add-on inputs. Use multiple binding resources for multiple clusters.
 Bootwright applies add-ons after the target cluster is installed and uses fixed
 server-side apply defaults.
@@ -108,14 +108,13 @@ metadata:
   name: virtualization-platform
 spec:
   addons:
-    - name: openshift-virtualization
+    - openshift-virtualization
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata:
   name: demo-ocp-addons
 spec:
-  clusterRef:
-    name: demo-ocp
+  clusterRef: demo-ocp
   addonProfiles:
     - name: virtualization-platform
 ```
@@ -128,8 +127,7 @@ kind: ClusterAddonBinding
 metadata:
   name: demo-ocp-gitops
 spec:
-  clusterRef:
-    name: demo-ocp
+  clusterRef: demo-ocp
   addons:
     - name: openshift-gitops
 ```

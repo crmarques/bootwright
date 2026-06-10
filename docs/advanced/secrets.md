@@ -55,10 +55,10 @@ or an object item with an omitted/null value, resolves to
 read that file and `<name>.key`, unless `file:` and `keyFile:` point at
 operator-owned files. Generated SSH key pairs write the private key to
 `<name>` and the public key to `<name>.pub`. Each kind
-references the secret by name: `keyRef.name`, `credentialRef.name`,
-`trustBundleRef.name`, `installTrust.caBundleRefs[].name`,
-`proxyAuthRef.name`, `secretRef.name`, `defaultCertificateRef.name`, or
-`nodeSSH.keyPairRef.name`. Durable SSH targets normally use context-managed
+references the secret by name: `keyRef`, `credentialRef`,
+`trustBundleRef`, `installTrust.caBundleRefs[].name`,
+`proxyAuthRef`, `secretRef`, `defaultCertificateRef`, or
+`nodeSSH.keyPairRef`. Durable SSH targets normally use context-managed
 host trust recorded by `bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef`
 is available when an operator needs to point at explicit known_hosts material.
 
@@ -71,7 +71,7 @@ local post-install probes are stored under different secret names. When
 that name explicitly.
 
 For durable machines Bootwright or managed tools SSH into, put SSH connection
-material on `Machine.spec.access.ssh`. `keyRef.name` supplies private SSH key material;
+material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key material;
 managed Ceph node Hosts also require the public half at `<name>.pub` so
 Bootwright can pass it to cephadm. Bootwright records each non-local Machine
 server key under `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses

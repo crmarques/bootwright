@@ -3,11 +3,9 @@ kind: StoragePool
 metadata:
   name: rgw
 spec:
-  storageClusterRef:
-    name: ceph-libvirt
+  storageClusterRef: ceph-libvirt
 
-  placementPolicyRef:
-    name: lab-replicated
+  placementPolicyRef: lab-replicated
 
   ceph:
     type: replicated

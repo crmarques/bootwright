@@ -10,8 +10,7 @@ spec:
   install:
     mode: disconnected
     nodeSSH:
-      keyPairRef:
-        name: sno-disconnected-cluster-admin-ssh-key
+      keyPairRef: sno-disconnected-cluster-admin-ssh-key
     endpoints:
       api:
         address: 192.168.132.30
@@ -26,5 +25,4 @@ spec:
 
   - hostname: master-0
     role: master
-    machineRef:
-      name: sno-disconnected-master-0
+    machineRef: sno-disconnected-master-0

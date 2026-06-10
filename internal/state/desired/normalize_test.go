@@ -122,13 +122,13 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *
 
 	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "default" {
-		t.Fatalf("serverRef.name = %q, want default", got)
+		t.Fatalf("serverRef = %q, want default", got)
 	}
 	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "bmc" {
-		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want bmc", got)
+		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want bmc", got)
 	}
 	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
-		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want empty", got)
+		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
 	}
 }
 
@@ -143,13 +143,13 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t 
 
 	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "default" {
-		t.Fatalf("serverRef.name = %q, want default", got)
+		t.Fatalf("serverRef = %q, want default", got)
 	}
 	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "cluster" {
-		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want cluster", got)
+		t.Fatalf("containerClusterInstall.endpointRef = %q, want cluster", got)
 	}
 	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "" {
-		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want empty", got)
+		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want empty", got)
 	}
 }
 
@@ -170,13 +170,13 @@ func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing
 
 	access := state.ContainerClusters[0].Spec.Install.ArtifactAccess
 	if got := access.ServerRef.Name; got != "site" {
-		t.Fatalf("serverRef.name = %q, want site", got)
+		t.Fatalf("serverRef = %q, want site", got)
 	}
 	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "oob" {
-		t.Fatalf("redfishVirtualMedia.endpointRef.name = %q, want oob", got)
+		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want oob", got)
 	}
 	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
-		t.Fatalf("containerClusterInstall.endpointRef.name = %q, want empty", got)
+		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
 	}
 }
 

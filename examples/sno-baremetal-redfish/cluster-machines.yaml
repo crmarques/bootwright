@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -18,16 +17,13 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-vlan140-machine
+      networkConfigRef: rack1-vlan140-machine
       interfaceAddresses:
         - interface: eno1
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: eno1
+      - nicRef: eno1
         interfaceName: eno1
 
   hardware:
@@ -39,12 +35,10 @@ spec:
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: eno1
+      nicRef: eno1
 
   addresses:
     - name: ip

@@ -199,11 +199,9 @@ spec:
       address: provider-01.example.test
   access:
     ssh:
-      addressRef:
-        name: ssh
+      addressRef: ssh
       user: core
-      keyRef:
-        name: bastion-host-ssh
+      keyRef: bastion-host-ssh
 `,
 	}
 	for name, body := range files {

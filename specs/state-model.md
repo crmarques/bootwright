@@ -74,7 +74,7 @@ Rules:
   `openshift-install`) from, for disconnected or mirrored labs.
 - `infraComponents.*[]` entries are service access catalog entries. They are
   either `external` with direct access configuration or `managed` with
-  `componentRef.name` pointing at an `InfraComponent` arm of the matching kind.
+  `componentRef` pointing at an `InfraComponent` arm of the matching kind.
 - `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
   catalog entries by name. Omitted values default to `none`.
 - `secretStorage.mode`, when set, must be `source` (default) or `context`.
@@ -140,20 +140,17 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: rack-a
+    providerRef: rack-a
   hardware:
     nics:
       - name: primary
         macAddress: 52:54:00:21:11:10
     boot:
-      nicRef:
-        name: primary
+      nicRef: primary
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc-0.example.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
   os:
     provided: false
     install:
@@ -161,18 +158,14 @@ spec:
         deviceName: /dev/sda
   network:
     config:
-      networkConfigRef:
-        name: ocp-machine-net
-      attachmentRef:
-        name: ocp-install
+      networkConfigRef: ocp-machine-net
+      attachmentRef: ocp-install
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: primary
+      - nicRef: primary
         interfaceName: primary
   addresses:
     - name: ip
@@ -203,7 +196,7 @@ Rules:
 - `spec.network.config.attachmentRef` selects an
   `InfraProvider.spec.networkAttachments[]` entry on the machine provider.
   When omitted on a provider-backed machine that sets `networkConfigRef`,
-  `attachmentRef.name` defaults to the `networkConfigRef.name`; `render
+  `attachmentRef` defaults to the `networkConfigRef`; `render
   effective` materializes the default and validation resolves it against the
   provider's `networkAttachments[]`. An authored `attachmentRef` always wins.
 - `spec.network.config.interfaceAddresses[]` is the single owner of a node's
@@ -240,7 +233,7 @@ spec:
   url: local-media:rhel-9.4-x86_64-dvd.iso
   checksum: sha256:0000000000000000000000000000000000000000000000000000000000000000
   trustRefs:
-    - name: image-ca
+    - image-ca
 ```
 
 Rules:
@@ -254,7 +247,7 @@ Rules:
 - `installSource.type: url` can set `url` as the primary Anaconda install
   tree. Alternatively, `repositories[0].baseURL` becomes the primary install
   tree and subsequent repositories become additional Kickstart `repo` entries.
-- `installSource.type: redhatCDN` sets `entitlementRef.name`, which must
+- `installSource.type: redhatCDN` sets `entitlementRef`, which must
   resolve to a Red Hat `rhel` entitlement. RHSM organization and activation
   key secret refs are owned by that Environment entitlement.
 - `url` is required and accepts `local-media:<filename.iso>`, `file://`
@@ -287,8 +280,7 @@ spec:
   installer:
     type: anaconda
     anaconda:
-      imageRef:
-        name: rhel-94-dvd-iso
+      imageRef: rhel-94-dvd-iso
       repositories:
         - id: extras
           baseURL: https://repos.example.test/rhel/9.4/extras/x86_64/os/
@@ -337,7 +329,7 @@ spec:
 Rules:
 
 - `spec.installer.type` currently accepts `anaconda`.
-- `spec.installer.anaconda.imageRef.name` references a `MachineImage`.
+- `spec.installer.anaconda.imageRef` references a `MachineImage`.
 - `spec.installer.anaconda.repositories[]` declares additional Anaconda
   repositories for the profile. The primary boot-ISO install source is owned by
   the referenced `MachineImage`.
@@ -370,7 +362,7 @@ Rules:
   command line through `mkksiso --cmdline`; changing this field on an installed
   machine is reinstall-only.
 - A `Machine` with `os.provided: false` and managed OS install must set
-  `spec.os.installProfileRef.name`.
+  `spec.os.installProfileRef`.
 
 ## InfraProvider
 
@@ -403,7 +395,7 @@ Rules:
   (loadBalancer), `squid` (proxy), `dnsmasq` (nameResolution), `chrony` (ntp),
   and `mirror-registry` (registry) — the same spelling set
   `Environment.spec.componentImages` is keyed by.
-- Component arms use `machineRef.name` for placement.
+- Component arms use `machineRef` for placement.
 - Artifact server, proxy, name-resolution, NTP, registry, and load-balancer
   arms require compatible machine capabilities.
 - Endpoint entries use `machineAddress` to select a named
@@ -469,14 +461,11 @@ spec:
         source:
           type: external
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
     nodeSSH:
-      keyPairRef:
-        name: ocp-3node-cluster-admin-ssh-key
+      keyPairRef: ocp-3node-cluster-admin-ssh-key
   networking:
     clusterNetwork:
       - cidr: 10.128.0.0/14
@@ -486,8 +475,7 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
-        name: ocp-master-0
+      machineRef: ocp-master-0
 ```
 
 Rules:
@@ -515,14 +503,14 @@ Rules:
   - **Container `api`, `api-int`, `ingress`** accept only `openshift` (default),
     `external`, or `infraComponent`; `cephadm` is rejected. `openshift` and
     `external` require `address`. `infraComponent` requires
-    `source.componentRef.name` pointing at a `loadBalancer` `InfraComponent` and
+    `source.componentRef` pointing at a `loadBalancer` `InfraComponent` and
     `source.bindAddress`, and must not set `address`.
   - **Single-node clusters** additionally reject `source.type: openshift` on the
     `api`, `api-int`, and `ingress` slots.
   - `source.componentRef` and `source.bindAddress` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
-- `spec.nodes[].machineRef.name` references a `Machine` with
+- `spec.nodes[].machineRef` references a `Machine` with
   `openshift-node` capability and `os.provided: false`.
 - Each node hostname must be unique inside the cluster.
 - Node network input is owned by the referenced `Machine`, not by the cluster
@@ -587,22 +575,22 @@ Rules:
   community repository on each node with cephadm. `spec.ceph.community.mirror`
   overrides the `download.ceph.com` base URL. `spec.ceph.community` must be
   empty for `redhat` and `ibm`.
-- `distribution: redhat` requires `entitlementRef.name` to resolve to a Red
+- `distribution: redhat` requires `entitlementRef` to resolve to a Red
   Hat `ceph` entitlement. Red Hat Ceph Storage repositories and registry
   access come from that entitlement and must not mix with upstream Ceph
   packages or images.
-- `distribution: ibm` requires `entitlementRef.name` to resolve to an IBM
+- `distribution: ibm` requires `entitlementRef` to resolve to an IBM
   `ibm-storage-ceph` entitlement with accepted license terms. IBM Storage Ceph
   repositories, registry access, and license acceptance come from that
   entitlement and must not mix with upstream Ceph packages or images.
-- `cephadm.addressRef.name`, when set, selects a named
+- `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
 - `cephadm.bootstrap.seedNode` names a storage topology node.
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
 - `spec.ceph.cephadm.bootstrap.seedNode` and
-  `spec.ceph.cephadm.bootstrap.monIP.nodeRef.name` must name
+  `spec.ceph.cephadm.bootstrap.monIP.nodeRef` must name
   `spec.ceph.topology.nodes[]` entries.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
 - `spec.ceph.topology.nodes[]` require a unique `name`, a `machineRef` to a
@@ -628,7 +616,7 @@ defaults for the pools that select it.
 
 Rules:
 
-- `spec.storageClusterRef.name` is required and must reference a managed
+- `spec.storageClusterRef` is required and must reference a managed
   (non-`external`) `StorageCluster`.
 - `spec.ceph.ruleName` is required.
 - `spec.ceph.failureDomain` and `spec.ceph.replicated.{size,minSize}` are the
@@ -640,9 +628,9 @@ Rules:
 
 Rules:
 
-- `spec.storageClusterRef.name` is required and must reference a managed
+- `spec.storageClusterRef` is required and must reference a managed
   `StorageCluster`.
-- `spec.placementPolicyRef.name`, when set, must reference a
+- `spec.placementPolicyRef`, when set, must reference a
   `StoragePlacementPolicy` on the same `StorageCluster`. The referenced policy
   owns the pool's replication; `spec.ceph.replicated` must not also be set on
   the pool.
@@ -661,9 +649,9 @@ Rules:
 
 Rules:
 
-- `spec.storageClusterRef.name` is required and must reference a managed
+- `spec.storageClusterRef` is required and must reference a managed
   `StorageCluster`.
-- `spec.cephfs.metadataPoolRef.name` is required and must reference a
+- `spec.cephfs.metadataPoolRef` is required and must reference a
   `StoragePool` on the same `StorageCluster`.
 - `spec.cephfs.dataPoolRefs[]` is required; each must reference a `StoragePool`
   on the same `StorageCluster`, must differ from the metadata pool, and exactly
@@ -677,7 +665,7 @@ Rules:
 
 Rules:
 
-- `spec.storageClusterRef.name` is required and must reference a managed
+- `spec.storageClusterRef` is required and must reference a managed
   `StorageCluster`.
 - `spec.ceph.serviceID` is required; `spec.ceph.frontendPort` must be in
   `0`–`65535`.
@@ -698,7 +686,7 @@ platform.
 Rules:
 
 - `spec.type` is required and must be `data-foundation`.
-- `spec.storageClusterRef.name` is required.
+- `spec.storageClusterRef` is required.
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
   `dataFoundation.rbdPoolRef` and `cephFSRef` are required and must reference
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and
@@ -756,7 +744,7 @@ input values.
 
 Rules:
 
-- `spec.clusterRef.name` is required and references a `ContainerCluster`.
+- `spec.clusterRef` is required and references a `ContainerCluster`.
 - A binding must include at least one of `spec.addonProfiles[]` or
   `spec.addons[]`.
 - A given `ClusterAddon` may be applied to one `ContainerCluster` only once
@@ -792,7 +780,7 @@ Rules:
 - Machines must declare `spec.os.provided`.
 - Machines with `os.provided: false` must have `spec.substrate.providerRef`.
 - Machines that are used over SSH must declare
-  `spec.access.ssh.addressRef.name`, `keyRef.name`, and a matching address.
+  `spec.access.ssh.addressRef`, `keyRef`, and a matching address.
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - Container cluster endpoints must resolve to valid addresses or valid

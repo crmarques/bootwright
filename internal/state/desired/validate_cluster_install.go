@@ -158,14 +158,14 @@ func validateEndpointPrefixLength(prefix string, prefixLength int, ip net.IP) []
 func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, components map[string]v1alpha1.InfraComponent) []string {
 	var errs []string
 	if source.ComponentRef.Name == "" {
-		return []string{prefix + ".source.componentRef.name is required when source.type=infraComponent"}
+		return []string{prefix + ".source.componentRef is required when source.type=infraComponent"}
 	}
 	component, ok := components[source.ComponentRef.Name]
 	if !ok {
-		return []string{fmt.Sprintf("%s.source.componentRef.name %q does not match any InfraComponent", prefix, source.ComponentRef.Name)}
+		return []string{fmt.Sprintf("%s.source.componentRef %q does not match any InfraComponent", prefix, source.ComponentRef.Name)}
 	}
 	if component.Spec.LoadBalancer == nil {
-		return []string{fmt.Sprintf("%s.source.componentRef.name %q must reference a loadBalancer InfraComponent", prefix, source.ComponentRef.Name)}
+		return []string{fmt.Sprintf("%s.source.componentRef %q must reference a loadBalancer InfraComponent", prefix, source.ComponentRef.Name)}
 	}
 	// The endpoint must name which loadBalancer bind address it uses unless the
 	// loadBalancer declares exactly one (the accepted single-bind shortcut). With
@@ -193,23 +193,23 @@ func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifact
 	prefix := owner + ".artifactAccess"
 	var errs []string
 	if access.ServerRef.Name == "" {
-		return []string{prefix + ".serverRef.name is required when artifactAccess endpoints are set"}
+		return []string{prefix + ".serverRef is required when artifactAccess endpoints are set"}
 	}
 	if env == nil {
-		return []string{prefix + ".serverRef.name requires an Environment with spec.infraComponents.artifactServers"}
+		return []string{prefix + ".serverRef requires an Environment with spec.infraComponents.artifactServers"}
 	}
 	entry, ok := environmentArtifactServerByName(env, access.ServerRef.Name)
 	if !ok {
-		return []string{fmt.Sprintf("%s.serverRef.name %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name", prefix, access.ServerRef.Name, env.Metadata.Name)}
+		return []string{fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name", prefix, access.ServerRef.Name, env.Metadata.Name)}
 	}
 	endpoints := artifactServerEndpointNames(entry, components)
 	if entry.Type == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
-		errs = append(errs, fmt.Sprintf("%s.serverRef.name %q does not resolve to managed artifact server endpoints", prefix, access.ServerRef.Name))
+		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints", prefix, access.ServerRef.Name))
 	}
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef.name", access.RedfishVirtualMedia.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef.name", access.ContainerClusterInstall.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".machineBoot.endpointRef.name", access.MachineBoot.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".osInstall.endpointRef.name", access.OSInstall.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef", access.RedfishVirtualMedia.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef", access.ContainerClusterInstall.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".machineBoot.endpointRef", access.MachineBoot.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".osInstall.endpointRef", access.OSInstall.EndpointRef.Name, endpoints)...)
 	return errs
 }
 
@@ -261,23 +261,23 @@ func validateMachineNetworkBindings(ci v1alpha1.ClusterInstall, providers map[st
 			mp = fmt.Sprintf("ContainerCluster/%s node Machine", ci.Metadata.Name)
 		}
 		if binding.NetworkConfigRef.Name == "" {
-			errs = append(errs, mp+" spec.network.config.networkConfigRef.name is required")
+			errs = append(errs, mp+" spec.network.config.networkConfigRef is required")
 		} else if _, ok := networkConfigs[binding.NetworkConfigRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s spec.network.config.networkConfigRef.name %q does not match any NetworkConfig", mp, binding.NetworkConfigRef.Name))
+			errs = append(errs, fmt.Sprintf("%s spec.network.config.networkConfigRef %q does not match any NetworkConfig", mp, binding.NetworkConfigRef.Name))
 		}
 		provider, ok := providers[binding.ProviderRef.Name]
 		if binding.ProviderRef.Name == "" {
-			errs = append(errs, mp+" spec.substrate.providerRef.name is required")
+			errs = append(errs, mp+" spec.substrate.providerRef is required")
 		} else if !ok {
-			errs = append(errs, fmt.Sprintf("%s spec.substrate.providerRef.name %q does not match any InfraProvider", mp, binding.ProviderRef.Name))
+			errs = append(errs, fmt.Sprintf("%s spec.substrate.providerRef %q does not match any InfraProvider", mp, binding.ProviderRef.Name))
 		}
 		if binding.AttachmentRef.Name == "" {
-			errs = append(errs, mp+" spec.network.config.attachmentRef.name is required")
+			errs = append(errs, mp+" spec.network.config.attachmentRef is required")
 		} else if ok {
 			if attachment, found := lookupNetworkAttachment(provider, binding.AttachmentRef.Name); !found {
-				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef.name %q does not match any networkAttachments[] on InfraProvider/%s", mp, binding.AttachmentRef.Name, provider.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef %q does not match any networkAttachments[] on InfraProvider/%s", mp, binding.AttachmentRef.Name, provider.Metadata.Name))
 			} else if kind := v1alpha1.NetworkAttachmentKind(attachment); kind != "" && kind != provider.Spec.Type {
-				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef.name %q binds to InfraProvider/%s networkAttachment of kind %q, but provider type is %q",
+				errs = append(errs, fmt.Sprintf("%s spec.network.config.attachmentRef %q binds to InfraProvider/%s networkAttachment of kind %q, but provider type is %q",
 					mp, binding.AttachmentRef.Name, provider.Metadata.Name, kind, provider.Spec.Type))
 			}
 		}

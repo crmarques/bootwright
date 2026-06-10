@@ -4,5 +4,5 @@ providerName: {{ bootwright_component.providerName }}
 bmc:
   address: {{ bootwright_component.bmc.address }}
   protocol: {{ bootwright_component.bmc.protocol | default('redfish') }}
-  credentialRef: {{ bootwright_component.bmc.credentialRef | default('') }}
+  credentialsRef: {{ bootwright_component.bmc.credentialsRef | default('') }}
   disableCertificateVerification: {{ bootwright_component.bmc.disableCertificateVerification | default(false) }}

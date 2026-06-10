@@ -11,8 +11,7 @@ spec:
   installer:
     type: anaconda
     anaconda:
-      imageRef:
-        name: rhel-9-x86-64-dvd
+      imageRef: rhel-9-x86-64-dvd
 
   customizations:
     hostname:

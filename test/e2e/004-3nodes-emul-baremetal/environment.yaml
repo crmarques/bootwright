@@ -27,8 +27,7 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server
     proxies:
       - name: default
         type: external
@@ -38,8 +37,7 @@ spec:
           noProxy:
             - 192.168.133.0/24
           auth:
-            proxyAuthRef:
-              name: proxy-credentials
+            proxyAuthRef: proxy-credentials
 
   proxyFor:
     bootwright: default

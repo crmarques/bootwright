@@ -208,7 +208,7 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 			}
 			address := v1alpha1.MachineSSHAddress(machine)
 			if address == "" {
-				return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef.name %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
+				return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
 			}
 			targets = append(targets, externalDetailsSSHTarget{
 				label:          "Machine/" + machine.Metadata.Name,
@@ -238,7 +238,7 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	}
 	address := v1alpha1.MachineSSHAddress(machine)
 	if address == "" {
-		return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef.name %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
+		return nil, fmt.Errorf("machine/%s spec.access.ssh.addressRef %q does not resolve", machine.Metadata.Name, machine.Spec.Access.SSH.AddressRef.Name)
 	}
 	return []externalDetailsSSHTarget{{
 		label:          "StorageCluster/" + cluster.Metadata.Name + " seedNode/" + seedNode,

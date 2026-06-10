@@ -132,7 +132,7 @@ bootwright_clusters:
           bindAddress: 0.0.0.0
           port: 8000
           vmediaPort: 8001
-          credentialRef: bmc-credentials
+          credentialsRef: bmc-credentials
           sushyToolsVersion: 2.1.0
       - kind: loadBalancer
         name: apps              # rendered component name
@@ -248,7 +248,7 @@ bootwright_provider_services:
       bindAddress: 0.0.0.0
       port: 8000
       vmediaPort: 8001
-      credentialRef: bmc-credentials
+      credentialsRef: bmc-credentials
       sushyToolsVersion: 2.1.0
     machines:
       - clusterName: prod-3node

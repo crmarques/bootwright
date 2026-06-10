@@ -26,8 +26,7 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: rack1-baremetal
+    providerRef: rack1-baremetal
   hardware:
     nics:
       - name: nic1
@@ -35,13 +34,11 @@ spec:
       - name: nic2
         macAddress: 52:54:00:33:11:20
     boot:
-      nicRef:
-        name: nic1
+      nicRef: nic1
     management:
       bmc:
         address: redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
   os:
     provided: false
@@ -58,10 +55,8 @@ The Machine selects its provider attachment and adds IP overrides:
 ```yaml
 network:
   config:
-    networkConfigRef:
-      name: rack1-bonded-machine
-    attachmentRef:
-      name: rack1-machine-net
+    networkConfigRef: rack1-bonded-machine
+    attachmentRef: rack1-machine-net
     overrides:
       interfaces:
         - name: bond0
@@ -70,11 +65,9 @@ network:
               - ip: 192.168.133.20
                 prefix-length: 24
   interfaceBinding:
-    - nicRef:
-        name: nic1
+    - nicRef: nic1
       interfaceName: eno1
-    - nicRef:
-        name: nic2
+    - nicRef: nic2
       interfaceName: eno2
 addresses:
   - name: ip
@@ -99,8 +92,7 @@ spec:
         port: 443
         datacenters:
           - dc1
-        credentialsRef:
-          name: vcenter-credentials
+        credentialsRef: vcenter-credentials
     failureDomains:
       - name: dc1-zone-a
         region: dc1
@@ -120,8 +112,7 @@ spec:
         memoryMiB: 22528
         diskGiB: 120
         template: rhcos
-        failureDomainRef:
-          name: dc1-zone-a
+        failureDomainRef: dc1-zone-a
 ```
 
 The vSphere desired-state shape is present so the schema can stabilize ahead
@@ -141,11 +132,9 @@ metadata:
 spec:
   type: kubevirt
   kubevirt:
-    hostClusterRef:
-      name: metal-ocp
+    hostClusterRef: metal-ocp
     namespace: bootwright-child-ocp
-    storageClassRef:
-      name: lvms-vg1
+    storageClassRef: lvms-vg1
     machineProfiles:
       - name: child-sno
         cpu: 8
@@ -163,8 +152,7 @@ when the host cluster is external:
 
 ```yaml
 kubevirt:
-  kubeconfigRef:
-    name: external-virt-cluster-kubeconfig
+  kubeconfigRef: external-virt-cluster-kubeconfig
   namespace: bootwright-child-ocp
 ```
 
@@ -198,8 +186,7 @@ metadata:
 spec:
   proxy:
     type: squid
-    machineRef:
-      name: services-host
+    machineRef: services-host
     port: 3128
 ```
 
@@ -214,8 +201,7 @@ metadata:
   name: artifact-server
 spec:
   artifactServer:
-    machineRef:
-      name: services-host
+    machineRef: services-host
     listeners:
       - name: https
         protocol: https
@@ -237,19 +223,16 @@ spec:
     artifactServers:
       - name: default
         type: managed
-        componentRef:
-          name: artifact-server
+        componentRef: artifact-server
 ```
 
 ```yaml
 spec:
   defaults:
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       redfishVirtualMedia:
-        endpointRef:
-          name: bmc
+        endpointRef: bmc
 ```
 
 Endpoint names are endpoint selectors; `machineAddress` values resolve against the
@@ -271,7 +254,7 @@ that resolved graph into Ansible vars, and place the converging role under
 `ansible/collections/ansible_collections/bootwright/core/roles/infra_component_*`.
 
 For real BMCs, the artifact server endpoint selected by
-`artifactAccess.redfishVirtualMedia.endpointRef.name` should usually resolve
+`artifactAccess.redfishVirtualMedia.endpointRef` should usually resolve
 to an IP address that the BMC network can reach. Controller reachability alone
 is not enough for virtual-media ISO fetches.
 

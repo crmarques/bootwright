@@ -162,7 +162,7 @@ kind: ClusterAddonProfile
 metadata: { name: set }
 spec:
   addons:
-    - name: missing
+    - missing
 `,
 			},
 			wantSubstring: `ClusterAddonProfile/set spec.addons[0].name "missing" does not match any ClusterAddon`,
@@ -185,21 +185,21 @@ kind: ClusterAddonProfile
 metadata: { name: a }
 spec:
   profiles:
-    - name: b
+    - b
 `,
 				"b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata: { name: b }
 spec:
   profiles:
-    - name: c
+    - c
 `,
 				"c.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata: { name: c }
 spec:
   profiles:
-    - name: a
+    - a
 `,
 			},
 			wantSubstring: "creates cycle",
@@ -232,7 +232,7 @@ spec:
 				"set.yaml":       extensionSetYAML("set", "virt"),
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "set"), "sno", "missing-cluster", 1),
 			},
-			wantSubstring: `spec.clusterRef.name "missing-cluster" does not match any ContainerCluster`,
+			wantSubstring: `spec.clusterRef "missing-cluster" does not match any ContainerCluster`,
 		},
 	}
 	for _, tc := range cases {
@@ -313,8 +313,7 @@ func TestClusterAddonInputValidation(t *testing.T) {
 kind: ClusterAddonBinding
 metadata: { name: binding }
 spec:
-  clusterRef:
-    name: sno
+  clusterRef: sno
   addons:
     - name: virt
 ` + inputYAML
@@ -413,10 +412,10 @@ spec:
 				files["binding.yaml"] = bindingWithInputs(`      inputs:
         - name: config
           values:
-            targetRef: { name: sno }
+            targetRef: sno
         - name: config
           values:
-            targetRef: { name: sno }
+            targetRef: sno
 `)
 				return files
 			},
@@ -443,8 +442,8 @@ spec:
 				files["binding.yaml"] = bindingWithInputs(`      inputs:
         - name: config
           values:
-            targetRef: { name: sno }
-            otherRef: { name: sno }
+            targetRef: sno
+            otherRef: sno
 `)
 				return files
 			},
@@ -458,17 +457,17 @@ spec:
         schema:
           type: object
           properties:
-            credentialRef:
+            credentialsRef:
               secretRef: true
 `)
 				files["binding.yaml"] = bindingWithInputs(`      inputs:
         - name: config
           values:
-            credentialRef: { name: missing-secret }
+            credentialsRef: missing-secret
 `)
 				return files
 			},
-			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialRef "missing-secret" is not declared in Environment/env spec.secrets`,
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialsRef "missing-secret" is not declared in Environment/env spec.secrets`,
 		},
 		{
 			name: "duplicate-effective-application",
@@ -515,16 +514,15 @@ func TestClusterAddonBindingInputsCanConfigureProfileAddon(t *testing.T) {
 kind: ClusterAddonBinding
 metadata: { name: binding }
 spec:
-  clusterRef:
-    name: sno
+  clusterRef: sno
   addonProfiles:
-    - name: set
+    - set
   addons:
     - name: virt
       inputs:
         - name: config
           values:
-            targetRef: { name: sno }
+            targetRef: sno
 `
 	dir := t.TempDir()
 	files := newBaselineFiles()
@@ -577,8 +575,7 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 kind: ClusterAddonBinding
 metadata: { name: demo-ocp-addons }
 spec:
-  clusterRef:
-    name: sno
+  clusterRef: sno
   addons:
     - name: openshift-virtualization
 `
@@ -641,7 +638,7 @@ metadata:
   name: ` + name + `
 spec:
   addons:
-    - name: ` + extension + `
+    - ` + extension + `
 `
 }
 
@@ -651,10 +648,9 @@ kind: ClusterAddonBinding
 metadata:
   name: ` + name + `
 spec:
-  clusterRef:
-    name: sno
+  clusterRef: sno
   addonProfiles:
-    - name: ` + set + `
+    - ` + set + `
 `
 }
 

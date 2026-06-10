@@ -7,8 +7,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -18,19 +17,15 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-bond140-machine
+      networkConfigRef: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: eno1
+      - nicRef: eno1
         interfaceName: eno1
-      - nicRef:
-          name: eno2
+      - nicRef: eno2
         interfaceName: eno2
 
   hardware:
@@ -43,12 +38,10 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: eno1
+      nicRef: eno1
 
   addresses:
     - name: ip
@@ -63,8 +56,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -74,19 +66,15 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-bond140-machine
+      networkConfigRef: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: eno1
+      - nicRef: eno1
         interfaceName: eno1
-      - nicRef:
-          name: eno2
+      - nicRef: eno2
         interfaceName: eno2
 
   hardware:
@@ -99,12 +87,10 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv2.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: eno1
+      nicRef: eno1
 
   addresses:
     - name: ip
@@ -119,8 +105,7 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: rack1-baremetal-provider
+    providerRef: rack1-baremetal-provider
 
   os:
     install:
@@ -130,19 +115,15 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: rack1-bond140-machine
+      networkConfigRef: rack1-bond140-machine
       interfaceAddresses:
         - interface: bond0.140
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
     interfaceBinding:
-      - nicRef:
-          name: eno1
+      - nicRef: eno1
         interfaceName: eno1
-      - nicRef:
-          name: eno2
+      - nicRef: eno2
         interfaceName: eno2
 
   hardware:
@@ -155,12 +136,10 @@ spec:
       bmc:
         address: redfish-virtualmedia+https://bmc-rack1-srv3.bootwright.test/redfish/v1/Systems/1
         protocol: redfish
-        credentialsRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
         disableCertificateVerification: true
     boot:
-      nicRef:
-        name: eno1
+      nicRef: eno1
 
   addresses:
     - name: ip

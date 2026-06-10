@@ -32,7 +32,7 @@ func TestValidateMachineInterfaceAddresses(t *testing.T) {
 	badRef := interfaceAddrMachine([]v1alpha1.MachineInterfaceAddress{
 		{Interface: "primary", AddressRef: v1alpha1.LocalObjectReference{Name: "missing"}, PrefixLength: 24},
 	}, addrs)
-	if !containsSubstring(validateMachineInterfaceAddresses("if", badRef, badRef.Spec.Network.Config), `addressRef.name "missing" does not resolve`) {
+	if !containsSubstring(validateMachineInterfaceAddresses("if", badRef, badRef.Spec.Network.Config), `addressRef "missing" does not resolve`) {
 		t.Fatalf("expected addressRef resolution error")
 	}
 

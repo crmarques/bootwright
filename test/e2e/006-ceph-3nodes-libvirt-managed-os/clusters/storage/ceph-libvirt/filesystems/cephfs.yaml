@@ -3,12 +3,10 @@ kind: StorageFilesystem
 metadata:
   name: cephfs
 spec:
-  storageClusterRef:
-    name: ceph-libvirt
+  storageClusterRef: ceph-libvirt
 
   cephfs:
-    metadataPoolRef:
-      name: cephfs-meta
+    metadataPoolRef: cephfs-meta
     dataPoolRefs:
       - name: cephfs-data
         default: true

@@ -136,10 +136,10 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 		out = append(out, machineSSHSecretRequirements(fmt.Sprintf("machine %s", machine.Metadata.Name), []string{"fabric", "machines", "deps", "base"}, machine, false)...)
 	}
 	for _, p := range state.InfraProviders {
-		if l := p.Spec.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialRef.Name != "" {
+		if l := p.Spec.Libvirt; l != nil && l.BMCEmulationDefaults != nil && l.BMCEmulationDefaults.Auth != nil && l.BMCEmulationDefaults.Auth.CredentialsRef.Name != "" {
 			out = append(out, secretRefRequirement{
-				refName: l.BMCEmulationDefaults.Auth.CredentialRef.Name,
-				label:   fmt.Sprintf("provider %s libvirt bmcEmulationDefaults credentialRef", p.Metadata.Name),
+				refName: l.BMCEmulationDefaults.Auth.CredentialsRef.Name,
+				label:   fmt.Sprintf("provider %s libvirt bmcEmulationDefaults credentialsRef", p.Metadata.Name),
 				phases:  []string{"fabric", "deps", "base"},
 			})
 		}

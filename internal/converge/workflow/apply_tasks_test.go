@@ -1722,7 +1722,7 @@ func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon
 
 func dataFoundationValues(export string) map[string]any {
 	return map[string]any{
-		"exportRef": map[string]any{"name": export},
+		"exportRef": export,
 	}
 }
 

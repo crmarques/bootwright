@@ -7,8 +7,7 @@ spec:
 
   loadBalancer:
     implementation: haproxy
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddresses:
       - name: control-plane
         ip: 192.168.132.10
@@ -24,8 +23,7 @@ spec:
 
   proxy:
     implementation: squid
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 0.0.0.0
     port: 3128
 ---
@@ -38,8 +36,7 @@ spec:
 
   nameResolution:
     implementation: dnsmasq
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 192.168.132.1
     port: 53
     additionalIngressHosts:
@@ -55,8 +52,7 @@ spec:
 
   ntp:
     implementation: chrony
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 192.168.132.1
     port: 123
     endpoints:

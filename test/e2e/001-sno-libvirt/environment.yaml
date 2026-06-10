@@ -27,5 +27,4 @@ spec:
     nameResolution:
       - name: default
         type: managed
-        componentRef:
-          name: name-resolution
+        componentRef: name-resolution

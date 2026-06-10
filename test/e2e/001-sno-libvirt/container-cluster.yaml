@@ -12,20 +12,17 @@ spec:
       api:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: control-plane
       ingress:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: apps
     method: agent
     mode: connected
     nodeSSH:
-      keyPairRef:
-        name: sno-libvirt-cluster-admin-ssh-key
+      keyPairRef: sno-libvirt-cluster-admin-ssh-key
 
   controlPlane:
     name: master
@@ -38,5 +35,4 @@ spec:
   nodes:
     - hostname: master-0
       role: master
-      machineRef:
-        name: master-0
+      machineRef: master-0

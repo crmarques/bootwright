@@ -154,7 +154,7 @@ type BMCEmulationDefaults struct {
 }
 
 type BMCAuth struct {
-	CredentialRef SecretRef `yaml:"credentialRef" json:"credentialRef"`
+	CredentialsRef SecretRef `yaml:"credentialsRef" json:"credentialsRef"`
 }
 
 func NetworkAttachmentKind(attachment NetworkAttachmentCapability) string {

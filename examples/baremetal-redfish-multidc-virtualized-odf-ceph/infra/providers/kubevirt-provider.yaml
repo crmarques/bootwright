@@ -15,10 +15,8 @@ spec:
 
   kubevirt:
     namespace: bootwright-dc1-child-ocp
-    storageClassRef:
-      name: ocs-storagecluster-ceph-rbd
-    hostClusterRef:
-      name: dc1-metal-ocp
+    storageClassRef: ocs-storagecluster-ceph-rbd
+    hostClusterRef: dc1-metal-ocp
     machineProfiles:
     - name: dc1-child-master
       cpu: 8
@@ -46,10 +44,8 @@ spec:
 
   kubevirt:
     namespace: bootwright-dc2-child-ocp
-    storageClassRef:
-      name: ocs-storagecluster-ceph-rbd
-    hostClusterRef:
-      name: dc2-metal-ocp
+    storageClassRef: ocs-storagecluster-ceph-rbd
+    hostClusterRef: dc2-metal-ocp
     machineProfiles:
     - name: dc2-child-master
       cpu: 8

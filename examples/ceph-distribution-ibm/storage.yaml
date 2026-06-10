@@ -12,19 +12,16 @@ spec:
     # tags are not x.y.z, so pin a reproducible run with spec.ceph.image.
     # release: "9"
     # image: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:<digest>
-    entitlementRef:
-      name: ibm-storage-ceph
+    entitlementRef: ibm-storage-ceph
     cephadm:
       bootstrap:
         seedNode: ceph-0
         monIP:
-          nodeRef:
-            name: ceph-0
+          nodeRef: ceph-0
     topology:
       nodes:
         - name: ceph-0
           site: lab
           roles:
             - mon
-          machineRef:
-            name: ceph-0
+          machineRef: ceph-0

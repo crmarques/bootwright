@@ -1,7 +1,7 @@
 ---
 # Bare-metal "substrate" — no provisioning work happens on the
 # provider machine. The machine-infra layer runs this role per machine to
-# record the per-cluster manifest and validate the BMC credentialRef
+# record the per-cluster manifest and validate the BMC credentialsRef
 # exists locally. Actual BMC interaction happens in
 # bootwright.core.container_cluster_boot_redfish on the controller during the
 # install layer.
@@ -32,7 +32,7 @@
 - name: Resolve baremetal credential path
   ansible.builtin.set_fact:
     bootwright_baremetal_cred_path: >-
-      {{ (bootwright_secrets_dir ~ '/' ~ bootwright_component.bmc.credentialRef) if (bootwright_component.bmc.credentialRef | default('') | length) > 0 else '' }}
+      {{ (bootwright_secrets_dir ~ '/' ~ bootwright_component.bmc.credentialsRef) if (bootwright_component.bmc.credentialsRef | default('') | length) > 0 else '' }}
   changed_when: false
 
 - name: Check baremetal BMC credential file

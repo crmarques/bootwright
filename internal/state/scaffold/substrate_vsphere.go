@@ -14,22 +14,17 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: {{.ProviderID}}
-    profileRef:
-      name: sno
+    providerRef: {{.ProviderID}}
+    profileRef: sno
   os:
     provided: false
   network:
     config:
-      networkConfigRef:
-        name: {{.NetworkID}}
-      attachmentRef:
-        name: {{.NetworkID}}
+      networkConfigRef: {{.NetworkID}}
+      attachmentRef: {{.NetworkID}}
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
   addresses:
     - name: ip
@@ -47,8 +42,7 @@ spec:
         port: 443
         datacenters:
           - dc1
-        credentialsRef:
-          name: vcenter-credentials
+        credentialsRef: vcenter-credentials
     failureDomains:
       - name: dc1-zone-a
         region: dc1
@@ -68,8 +62,7 @@ spec:
         memoryMiB: 22528
         diskGiB: 120
         template: rhcos
-        failureDomainRef:
-          name: dc1-zone-a
+        failureDomainRef: dc1-zone-a
   networkAttachments:
     - name: {{.NetworkID}}
       vsphere:

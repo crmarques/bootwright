@@ -69,10 +69,8 @@ Each cluster machine references the template and overrides only its address:
 ```yaml
 network:
   config:
-    networkConfigRef:
-      name: rack1-bonded-machine
-    attachmentRef:
-      name: rack1-machine-net
+    networkConfigRef: rack1-bonded-machine
+    attachmentRef: rack1-machine-net
     overrides:
       interfaces:
         - name: bond0
@@ -81,11 +79,9 @@ network:
               - ip: 192.168.133.20
                 prefix-length: 24
   interfaceBinding:
-    - nicRef:
-        name: nic1
+    - nicRef: nic1
       interfaceName: eno1
-    - nicRef:
-        name: nic2
+    - nicRef: nic2
       interfaceName: eno2
 addresses:
   - name: ip
@@ -114,10 +110,8 @@ Bind that attachment from each installing Machine:
 ```yaml
 network:
   config:
-    networkConfigRef:
-      name: rack1-bonded-machine
-    attachmentRef:
-      name: rack1-machine-net
+    networkConfigRef: rack1-bonded-machine
+    attachmentRef: rack1-machine-net
 ```
 
 ## Endpoints
@@ -139,8 +133,7 @@ endpoints:
   apps:
     source:
       type: infraComponent       # Bootwright-provisioned load balancer
-      componentRef:
-        name: apps
+      componentRef: apps
       bindAddress: apps-ip
 ```
 
@@ -156,8 +149,7 @@ metadata:
 spec:
   loadBalancer:
     implementation: haproxy
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddresses:
       - name: apps-ip
         ip: 192.168.133.11
@@ -233,7 +225,6 @@ infraComponents:
       address: ntp.example.test
     - name: lab-ntp
       type: managed
-      componentRef:
-        name: ntp-server
+      componentRef: ntp-server
       endpoint: cluster
 ```

@@ -641,7 +641,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 
 func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	values := map[string]any{
-		"exportRef": map[string]any{"name": export},
+		"exportRef": export,
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
 		Name: "odf",

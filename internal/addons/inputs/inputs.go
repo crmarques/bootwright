@@ -121,15 +121,9 @@ func SecretRefValue(values map[string]any, field string) v1alpha1.SecretRef {
 }
 
 func namedValue(values map[string]any, field string) string {
-	raw, ok := values[field]
-	if !ok {
-		return ""
-	}
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return ""
-	}
-	name, _ := m["name"].(string)
+	// Reference-typed input values are plain name strings, like every other
+	// *Ref in the API.
+	name, _ := values[field].(string)
 	return name
 }
 

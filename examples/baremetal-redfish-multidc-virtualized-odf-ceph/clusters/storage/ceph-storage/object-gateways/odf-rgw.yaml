@@ -3,8 +3,7 @@ kind: StorageObjectGateway
 metadata:
   name: odf-rgw
 spec:
-  storageClusterRef:
-    name: ceph-storage
+  storageClusterRef: ceph-storage
 
   public:
     dnsName: rgw-ceph.bootwright.test

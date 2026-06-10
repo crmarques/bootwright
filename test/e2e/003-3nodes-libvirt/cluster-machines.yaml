@@ -7,10 +7,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -20,12 +18,10 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -41,10 +37,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -54,12 +48,10 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:
@@ -75,10 +67,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: compact-control-plane
+    providerRef: lab-libvirt-provider
+    profileRef: compact-control-plane
 
   os:
     install:
@@ -88,12 +78,10 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: cluster-3n-bridge
+      networkConfigRef: cluster-3n-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:

@@ -12,11 +12,11 @@ func validateSharedMachineServices(state v1alpha1.State) []string {
 }
 
 type libvirtBMCServiceConfig struct {
-	libvirtURI    string
-	bindAddress   string
-	port          int
-	vmediaPort    int
-	credentialRef string
+	libvirtURI     string
+	bindAddress    string
+	port           int
+	vmediaPort     int
+	credentialsRef string
 }
 
 type libvirtBMCPortOwner struct {
@@ -41,11 +41,11 @@ func validateLibvirtBMCEmulationHostPorts(state v1alpha1.State) []string {
 		owner := fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults", p.Metadata.Name)
 		serviceID := p.Metadata.Name + "|" + l.MachineRef.Name
 		config := libvirtBMCServiceConfig{
-			libvirtURI:    l.URI,
-			bindAddress:   effectiveBMCEmulationBindAddress(d),
-			port:          effectiveBMCEmulationPort(d),
-			vmediaPort:    effectiveBMCEmulationVMediaPort(d),
-			credentialRef: effectiveBMCEmulationCredentialRef(d),
+			libvirtURI:     l.URI,
+			bindAddress:    effectiveBMCEmulationBindAddress(d),
+			port:           effectiveBMCEmulationPort(d),
+			vmediaPort:     effectiveBMCEmulationVMediaPort(d),
+			credentialsRef: effectiveBMCEmulationCredentialsRef(d),
 		}
 		if existing, ok := serviceConfigs[serviceID]; ok && existing != config {
 			errs = append(errs, fmt.Sprintf("%s is incompatible with another libvirt BMC emulation provider using Machine/%s; shared BMC services must use matching URI, bind address, ports, and auth",
@@ -93,9 +93,9 @@ func effectiveBMCEmulationVMediaPort(d *v1alpha1.BMCEmulationDefaults) int {
 	return effectiveBMCEmulationPort(d) + 1
 }
 
-func effectiveBMCEmulationCredentialRef(d *v1alpha1.BMCEmulationDefaults) string {
+func effectiveBMCEmulationCredentialsRef(d *v1alpha1.BMCEmulationDefaults) string {
 	if d == nil || d.Auth == nil {
 		return ""
 	}
-	return d.Auth.CredentialRef.Name
+	return d.Auth.CredentialsRef.Name
 }

@@ -7,10 +7,8 @@ spec:
     - openshift-node
 
   substrate:
-    providerRef:
-      name: lab-libvirt-provider
-    profileRef:
-      name: sno
+    providerRef: lab-libvirt-provider
+    profileRef: sno
 
   os:
     install:
@@ -20,12 +18,10 @@ spec:
 
   network:
     config:
-      networkConfigRef:
-        name: sno-bridge
+      networkConfigRef: sno-bridge
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
 
   addresses:

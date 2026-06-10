@@ -6,15 +6,13 @@ spec:
   type: libvirt
 
   libvirt:
-    machineRef:
-      name: bastion
+    machineRef: bastion
     uri: qemu:///system
     bmcEmulationDefaults:
       enabled: true
       protocol: redfish
       auth:
-        credentialRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
     machineProfiles:
       - name: compact-control-plane
         cpu: 4

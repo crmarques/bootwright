@@ -13,5 +13,4 @@ spec:
     - name: cluster
       listener: https
       machineAddress: lab-lan
-    machineRef:
-      name: bastion
+    machineRef: bastion

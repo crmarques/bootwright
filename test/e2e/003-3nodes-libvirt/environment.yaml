@@ -27,13 +27,11 @@ spec:
     proxies:
       - name: default
         type: managed
-        componentRef:
-          name: proxy
+        componentRef: proxy
     nameResolution:
       - name: default
         type: managed
-        componentRef:
-          name: name-resolution
+        componentRef: name-resolution
 
   proxyFor:
     bootwright: default

@@ -11,5 +11,4 @@ spec:
     additionalIngressHosts:
     - console-openshift-console.apps.sno-libvirt.bootwright.test
     - oauth-openshift.apps.sno-libvirt.bootwright.test
-    machineRef:
-      name: bastion
+    machineRef: bastion

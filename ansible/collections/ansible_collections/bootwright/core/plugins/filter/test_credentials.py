@@ -124,7 +124,7 @@ class ParseCredentialBadInput(unittest.TestCase):
                                contains="username and password must both be non-empty")
 
     def test_label_is_included_in_error(self):
-        # Operators rely on the label to identify which credentialRef is
+        # Operators rely on the label to identify which credentialsRef is
         # malformed — they may have several configured and the error
         # message is the only signal.
         with self.assertRaises(AnsibleFilterError) as ctx:

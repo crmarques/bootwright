@@ -4,8 +4,8 @@ metadata:
   name: platform-bootstrap
 spec:
   profiles:
-    - name: base-profile
+    - base-profile
 
   addons:
-    - name: openshift-gitops
+    - openshift-gitops
 

@@ -27,8 +27,7 @@ spec:
             - .example.test
             - 192.168.133.0/24
           auth:
-            proxyAuthRef:
-              name: proxy-credentials
+            proxyAuthRef: proxy-credentials
 
   proxyFor:
     bootwright: default
@@ -69,10 +68,8 @@ spec:
   registries:
     mirror:
       url: registry.example.test:5000
-      credentialsRef:
-        name: mirror-registry-credentials
-      trustBundleRef:
-        name: mirror-registry-ca
+      credentialsRef: mirror-registry-credentials
+      trustBundleRef: mirror-registry-ca
 ```
 
 Release image sources are distribution-aware. OpenShift and OKD disconnected
@@ -87,14 +84,12 @@ environment default:
 spec:
   defaults:
     artifactAccess:
-      serverRef:
-        name: default
+      serverRef: default
       containerClusterInstall:
-        endpointRef:
-          name: cluster
+        endpointRef: cluster
 ```
 
 When the effective `ContainerCluster.spec.install.artifactAccess` sets
-`containerClusterInstall.endpointRef.name`, Bootwright renders
+`containerClusterInstall.endpointRef`, Bootwright renders
 `minimalISO: true` and an endpoint-derived `bootArtifactsBaseURL` into
 `agent-config.yaml`.

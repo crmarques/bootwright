@@ -7,8 +7,7 @@ spec:
 
   nameResolution:
     implementation: dnsmasq
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 192.168.134.1
     port: 53
     forwarders:

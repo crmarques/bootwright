@@ -171,14 +171,14 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 			errs = append(errs, fmt.Sprintf("%s.role %q must be master or worker", prefix, node.Role))
 		}
 		if node.MachineRef.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.name is required", prefix))
+			errs = append(errs, fmt.Sprintf("%s.machineRef is required", prefix))
 			continue
 		}
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.name %q does not match any Machine", prefix, node.MachineRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.machineRef %q does not match any Machine", prefix, node.MachineRef.Name))
 		} else if !machineHasCapability(machine, v1alpha1.MachineCapabilityOpenShiftNode) {
-			errs = append(errs, fmt.Sprintf("%s.machineRef.name %q lacks capability %q", prefix, node.MachineRef.Name, v1alpha1.MachineCapabilityOpenShiftNode))
+			errs = append(errs, fmt.Sprintf("%s.machineRef %q lacks capability %q", prefix, node.MachineRef.Name, v1alpha1.MachineCapabilityOpenShiftNode))
 		}
 	}
 	if master == 0 {
@@ -299,7 +299,7 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef.name is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
 	}
 	errs = append(errs, validateNodeSSHSpec(
 		fmt.Sprintf("ContainerCluster/%s spec.install.nodeSSH", ocp.Metadata.Name),
@@ -317,11 +317,11 @@ func validateAdditionalTrustBundleRefs(ocp v1alpha1.ContainerCluster) []string {
 	owner := fmt.Sprintf("ContainerCluster/%s spec.install.additionalTrustBundleRefs", ocp.Metadata.Name)
 	for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
 		if ref.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s[%d].name is required", owner, i))
+			errs = append(errs, fmt.Sprintf("%s[%d] is required", owner, i))
 			continue
 		}
 		if seen[ref.Name] {
-			errs = append(errs, fmt.Sprintf("%s[%d].name %q is duplicated", owner, i, ref.Name))
+			errs = append(errs, fmt.Sprintf("%s[%d] %q is duplicated", owner, i, ref.Name))
 			continue
 		}
 		seen[ref.Name] = true
@@ -347,7 +347,7 @@ func validateServingCertificateRefs(state v1alpha1.State, ocp v1alpha1.Container
 		for i, cert := range api.NamedCertificates {
 			owner := fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.apiServer.namedCertificates[%d]", ocp.Metadata.Name, i)
 			if cert.SecretRef.Name == "" {
-				errs = append(errs, owner+".secretRef.name is required")
+				errs = append(errs, owner+".secretRef is required")
 			}
 			if len(cert.Names) == 0 {
 				errs = append(errs, owner+".names requires at least one DNS name")
@@ -371,7 +371,7 @@ func validateServingCertificateRefs(state v1alpha1.State, ocp v1alpha1.Container
 		}
 	}
 	if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.ingress.defaultCertificateRef.name is required", ocp.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.install.servingCertificates.ingress.defaultCertificateRef is required", ocp.Metadata.Name))
 	}
 	return errs
 }

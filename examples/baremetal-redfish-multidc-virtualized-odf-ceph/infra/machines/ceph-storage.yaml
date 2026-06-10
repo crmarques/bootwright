@@ -16,10 +16,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -39,10 +37,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -62,10 +58,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -85,10 +79,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -108,10 +100,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -131,10 +121,8 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -154,7 +142,5 @@ spec:
   access:
     ssh:
       user: root
-      keyRef:
-        name: ceph-storage-cluster-admin-ssh-key
-      addressRef:
-        name: ssh
+      keyRef: ceph-storage-cluster-admin-ssh-key
+      addressRef: ssh

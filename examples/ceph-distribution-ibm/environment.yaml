@@ -19,12 +19,9 @@ spec:
       provider: ibm
       product: ibm-storage-ceph
       rhsm:
-        organizationRef:
-          name: ibm-rhsm-org
-        activationKeyRef:
-          name: ibm-rhsm-activation-key
+        organizationRef: ibm-rhsm-org
+        activationKeyRef: ibm-rhsm-activation-key
       registry:
-        credentialsRef:
-          name: ibm-registry-credentials
+        credentialsRef: ibm-registry-credentials
       license:
         accept: true

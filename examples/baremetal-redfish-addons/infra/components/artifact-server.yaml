@@ -6,8 +6,7 @@ spec:
   type: artifactServer
 
   artifactServer:
-    machineRef:
-      name: bastion
+    machineRef: bastion
     endpoints:
       - name: bmc
         listener: https

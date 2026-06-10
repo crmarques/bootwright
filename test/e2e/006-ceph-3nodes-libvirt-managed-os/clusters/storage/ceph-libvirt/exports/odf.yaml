@@ -5,11 +5,8 @@ metadata:
 spec:
   type: data-foundation
 
-  storageClusterRef:
-    name: ceph-libvirt
+  storageClusterRef: ceph-libvirt
 
   dataFoundation:
-    rbdPoolRef:
-      name: rbd
-    cephFSRef:
-      name: cephfs
+    rbdPoolRef: rbd
+    cephFSRef: cephfs

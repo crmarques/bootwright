@@ -7,5 +7,4 @@ spec:
 
   registry:
     implementation: mirror-registry
-    machineRef:
-      name: bastion
+    machineRef: bastion

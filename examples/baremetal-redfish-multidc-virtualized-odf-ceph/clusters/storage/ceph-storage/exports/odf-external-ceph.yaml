@@ -3,13 +3,9 @@ kind: StorageExport
 metadata:
   name: odf-external-ceph
 spec:
-  storageClusterRef:
-    name: ceph-storage
+  storageClusterRef: ceph-storage
 
   dataFoundation:
-    rbdPoolRef:
-      name: odf-rbd
-    cephFSRef:
-      name: odf-cephfs
-    objectGatewayRef:
-      name: odf-rgw
+    rbdPoolRef: odf-rbd
+    cephFSRef: odf-cephfs
+    objectGatewayRef: odf-rgw

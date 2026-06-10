@@ -11,13 +11,11 @@ var emulatedBareMetalSubstrate = Substrate{
     nameResolution:
       - name: default
         type: managed
-        componentRef:
-          name: name-resolution
+        componentRef: name-resolution
     ntpSources:
       - name: default
         type: managed
-        componentRef:
-          name: ntp-server
+        componentRef: ntp-server
         endpoint: cluster
 
 `,
@@ -41,10 +39,8 @@ spec:
       address: 192.168.130.1
   access:
     ssh:
-      addressRef:
-        name: ssh
-      keyRef:
-        name: bastion-host-ssh
+      addressRef: ssh
+      keyRef: bastion-host-ssh
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -54,22 +50,17 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef:
-      name: {{.ProviderID}}
-    profileRef:
-      name: sno
+    providerRef: {{.ProviderID}}
+    profileRef: sno
   os:
     provided: false
   network:
     config:
-      networkConfigRef:
-        name: {{.NetworkID}}
-      attachmentRef:
-        name: {{.NetworkID}}
+      networkConfigRef: {{.NetworkID}}
+      attachmentRef: {{.NetworkID}}
       interfaceAddresses:
         - interface: primary
-          addressRef:
-            name: ip
+          addressRef: ip
           prefixLength: 24
   addresses:
     - name: ip
@@ -97,13 +88,11 @@ metadata:
 spec:
   type: libvirt
   libvirt:
-    machineRef:
-      name: bastion
+    machineRef: bastion
     uri: qemu:///system
     bmcEmulationDefaults:
       auth:
-        credentialRef:
-          name: bmc-credentials
+        credentialsRef: bmc-credentials
     machineProfiles:
       - name: sno
         cpu: 8
@@ -122,8 +111,7 @@ spec:
   type: loadBalancer
   loadBalancer:
     implementation: haproxy
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddresses:
       - name: control-plane
         ip: 192.168.130.10
@@ -138,8 +126,7 @@ spec:
   type: nameResolution
   nameResolution:
     implementation: dnsmasq
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 192.168.130.1
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -150,8 +137,7 @@ spec:
   type: ntp
   ntp:
     implementation: chrony
-    machineRef:
-      name: bastion
+    machineRef: bastion
     bindAddress: 192.168.130.1
     endpoints:
       - name: cluster
@@ -160,20 +146,17 @@ spec:
 	EndpointsYAML: `      api:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: control-plane
       api-int:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: control-plane
       ingress:
         source:
           type: infraComponent
-          componentRef:
-            name: load-balancer
+          componentRef: load-balancer
           bindAddress: apps
 `,
 	PlatformYAML: `    platform:

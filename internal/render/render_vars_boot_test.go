@@ -196,8 +196,8 @@ func TestMachineBootBlockProjectsSubstrateBlind(t *testing.T) {
 			if got := redfish["systemId"]; got != tc.wantSystemID {
 				t.Errorf("redfish.systemId got %v, want %s", got, tc.wantSystemID)
 			}
-			if got := redfish["credentialRef"]; got != tc.wantCredRef {
-				t.Errorf("redfish.credentialRef got %v, want %s", got, tc.wantCredRef)
+			if got := redfish["credentialsRef"]; got != tc.wantCredRef {
+				t.Errorf("redfish.credentialsRef got %v, want %s", got, tc.wantCredRef)
 			}
 			if got := redfish["validateCerts"]; got != tc.wantValidate {
 				t.Errorf("redfish.validateCerts got %v, want %v", got, tc.wantValidate)
@@ -595,7 +595,7 @@ func TestMachineEmulatedBMCProjection(t *testing.T) {
 		"bindAddress":       "0.0.0.0",
 		"port":              8000,
 		"vmediaPort":        8001,
-		"credentialRef":     "bmc-credentials",
+		"credentialsRef":    "bmc-credentials",
 		"sushyToolsVersion": "2.2.0",
 	}
 	for k, want := range wants {

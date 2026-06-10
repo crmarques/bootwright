@@ -3,8 +3,7 @@ kind: StoragePlacementPolicy
 metadata:
   name: lab-replicated
 spec:
-  storageClusterRef:
-    name: ceph-libvirt
+  storageClusterRef: ceph-libvirt
 
   ceph:
     failureDomain: host
