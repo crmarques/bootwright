@@ -263,6 +263,12 @@
       changed_when: false
       failed_when: false
 
+    # --allow-fqdn-hostname is unconditional, matching IBM's recommended bootstrap
+    # command (--ssh-user --mon-ip --allow-fqdn-hostname --registry-json). cephadm
+    # bootstrap refuses a seed whose hostname is an FQDN unless this is set, and
+    # RHEL/IBM storage nodes routinely use FQDN hostnames; the flag only relaxes
+    # that check, so it is a no-op for short hostnames and a foot-gun removed for
+    # FQDN ones. The host spec hostnames must still equal each node's real hostname.
     - name: Resolve cephadm bootstrap command
       ansible.builtin.set_fact:
         bootwright_ceph_bootstrap_argv: >-
@@ -271,7 +277,8 @@
               'cephadm',
               'bootstrap',
               '--mon-ip',
-              bootwright_selected_storage_cluster.bootstrap.monIP
+              bootwright_selected_storage_cluster.bootstrap.monIP,
+              '--allow-fqdn-hostname'
             ]
             + (
               ['--cluster-network', (bootwright_selected_storage_cluster.clusterNetworkCIDRs | join(','))]

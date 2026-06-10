@@ -79,6 +79,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		p.Fields(stateCountFields(state))
 		checks := []preflightCheck{okCheck("Desired state", "context input", "loads, normalizes, and validates")}
 		checks = append(checks, environmentSelectionChecks(exclusions)...)
+		checks = append(checks, storageBestPracticeChecks(state)...)
 		if err := renderCheckResults(stdout, spec.label, checks); err != nil {
 			return err
 		}
@@ -122,6 +123,26 @@ func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusio
 	return checks
 }
 
+// storageBestPracticeChecks surfaces the non-fatal Ceph best-practice advisories
+// (sub-quorum monitors, a single manager, an unpinned subscription image) as
+// warnings. They never fail validate — a single-node or lab cluster is a valid
+// authored shape — but make a production cluster's departure from IBM Storage
+// Ceph recommendations visible at author time.
+func storageBestPracticeChecks(state v1alpha1.State) []preflightCheck {
+	advisories := desiredstate.StorageAdvisories(state)
+	checks := make([]preflightCheck, 0, len(advisories))
+	for _, advisory := range advisories {
+		checks = append(checks, warnCheck(
+			"Ceph best practice",
+			advisory.Object,
+			advisory.Finding,
+			advisory.Impact,
+			advisory.Remediation,
+		))
+	}
+	return checks
+}
+
 type syntaxCheckReport struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
@@ -131,6 +152,9 @@ type syntaxCheckReport struct {
 	ExcludedContainerClusters []string                  `json:"excludedContainerClusters,omitempty"`
 	ExcludedStorageClusters   []string                  `json:"excludedStorageClusters,omitempty"`
 	Diagnostics               []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	// Advisories are non-fatal Ceph best-practice warnings; their presence does
+	// not set OK=false.
+	Advisories []desiredstate.StorageAdvisory `json:"advisories,omitempty"`
 	Environments              int                       `json:"environments"`
 	Machines                  int                       `json:"machines"`
 	MachineImages             int                       `json:"machineImages"`
@@ -154,6 +178,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		OK:                        checkErr == nil,
 		ExcludedContainerClusters: exclusions.ContainerClusters,
 		ExcludedStorageClusters:   exclusions.StorageClusters,
+		Advisories:                desiredstate.StorageAdvisories(state),
 		Environments:              len(state.Environments),
 		Machines:                  len(state.Machines),
 		MachineImages:             len(state.MachineImages),

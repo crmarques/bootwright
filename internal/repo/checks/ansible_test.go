@@ -3263,6 +3263,25 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("Ceph prerequisites must run on the current storage host, got delegate_to %v", got)
 	}
 
+	// IBM requires time sync before bootstrap: chronyd is started, then a bounded,
+	// non-fatal waitsync gives the clock a chance to converge before the first
+	// monitor binds, so a disconnected node still proceeds.
+	startServicesIdx := findAnsibleTask(t, dependencyTasks, "Start storage node services")
+	waitSyncIdx := findAnsibleTask(t, dependencyTasks, "Wait for storage node time synchronization")
+	if startServicesIdx >= waitSyncIdx {
+		t.Fatalf("time-sync wait must run after chronyd is started (start=%d wait=%d)", startServicesIdx, waitSyncIdx)
+	}
+	waitSync := dependencyTasks[waitSyncIdx]
+	if got := waitSync["failed_when"]; got != false {
+		t.Fatalf("time-sync wait must be non-fatal (failed_when: false), got %v", got)
+	}
+	if got := fmt.Sprint(waitSync["ansible.builtin.command"]); !strings.Contains(got, "waitsync") {
+		t.Fatalf("time-sync wait must run chronyc waitsync, got %v", waitSync)
+	}
+	if got := fmt.Sprint(waitSync["when"]); !strings.Contains(got, "chronyd") {
+		t.Fatalf("time-sync wait must be gated on chronyd being a managed service, got when=%v", got)
+	}
+
 	initialProbeIdx := findAnsibleTask(t, installTasks, "Probe cephadm CLI before package fallback")
 	cephadmPackageIdx := findAnsibleTask(t, installTasks, "Install cephadm package on storage node when not preinstalled")
 	recordCephadmIdx := findAnsibleTask(t, installTasks, "Write cephadm package ownership record")
@@ -3353,6 +3372,12 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 	// running daemons are reproducible, gated on the rendered image being set.
 	if !strings.Contains(bootstrapArgv, "--image") || !strings.Contains(bootstrapArgv, "bootwright_ceph_bootstrap_image") {
 		t.Fatalf("bootstrap argv must conditionally pass --image from the rendered pin, got %v", resolveBootstrap)
+	}
+	// --allow-fqdn-hostname must be passed unconditionally, matching IBM's
+	// recommended bootstrap command: cephadm refuses an FQDN seed hostname
+	// without it, and RHEL/IBM storage nodes routinely use FQDN hostnames.
+	if !strings.Contains(bootstrapArgv, "--allow-fqdn-hostname") {
+		t.Fatalf("bootstrap argv must pass --allow-fqdn-hostname (IBM recommended), got %v", resolveBootstrap)
 	}
 	coreIdx := findAnsibleTask(t, block, "Apply Ceph core service spec")
 	topologyIdx := findAnsibleTask(t, block, "Run rendered Ceph topology and storage operations")

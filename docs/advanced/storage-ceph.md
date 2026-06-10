@@ -35,6 +35,40 @@ hosts:
       all: true       # explicit opt-in: every available device becomes an OSD
 ```
 
+## Production best practices
+
+Bootwright accepts small and single-node Ceph clusters for labs, but
+`bootwright validate` emits **warnings** (it never blocks apply) when a cluster
+departs from the layout IBM Storage Ceph recommends for production:
+
+- **Monitors** — give the `mon` role to at least **3 hosts**, and keep the count
+  **odd** (3, 5, 7) so the cluster holds quorum through a monitor failure.
+- **Managers** — give the `mgr` role to at least **2 hosts** for an
+  active/standby pair; a single manager is a single point of failure for
+  orchestration, the dashboard, and metrics.
+- **Pinned image (`redhat`/`ibm`)** — set `spec.ceph.image` to a digest-pinned
+  reference. Left unset, the install uses the distribution-packaged `cephadm`'s
+  default image tag, which floats, so the running Ceph version is not
+  reproducible across re-installs.
+
+### Networks
+
+`cephadm bootstrap` runs all Ceph traffic on the **public** network by default.
+For production, IBM recommends a dedicated **cluster** network so OSD
+replication, recovery, and heartbeat traffic does not contend with client I/O.
+Declare both under `spec.ceph.networks`: the public CIDRs seed `public_network`
+before the first monitor binds, and the cluster CIDRs render
+`cephadm bootstrap --cluster-network`.
+
+```yaml
+ceph:
+  networks:
+    publicCIDRs:  [10.0.10.0/24]   # client + monitor traffic
+    clusterCIDRs: [10.0.20.0/24]   # OSD replication/recovery (production)
+```
+
+Omit `clusterCIDRs` to keep IBM's default of one network carrying everything.
+
 ## Access details
 
 `bootwright cluster access` prints everything needed to reach a managed Ceph
