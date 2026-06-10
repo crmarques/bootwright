@@ -68,7 +68,13 @@ the public key authorized in `install-config.yaml` and the private key used for
 local post-install probes are stored under different secret names. When
 `install.nodeSSH` is omitted, Bootwright uses
 `<cluster-name>-cluster-admin-ssh-key`; examples still declare and reference
-that name explicitly.
+that name explicitly. Because that name derives from the cluster name,
+renaming a `ContainerCluster` that relies on the omission default re-derives
+it: validation reports the new name as a defaulted, undeclared secret, and
+generated key bytes are keyed by secret name, so declaring the new name
+produces a fresh key pair instead of reusing the one nodes were installed
+with. When renaming a cluster, keep `install.nodeSSH.keyPairRef` pinned to
+the existing secret name (or migrate the key material deliberately).
 
 For durable machines Bootwright or managed tools SSH into, put SSH connection
 material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key material;

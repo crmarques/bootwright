@@ -68,7 +68,10 @@ Rules:
   cluster install values only.
 - `defaults.artifactAccess`, when set, is copied into selected
   `ContainerCluster.spec.install.artifactAccess` fields only for active
-  artifact consumers.
+  artifact consumers. Its `serverRef` and `endpointRef` names are validated
+  at the declaration site regardless of current consumers, so a typo fails
+  when it is written; a per-cluster diagnostic on a normalize-injected value
+  additionally names the Environment default it came from.
 - `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the
   base URL Bootwright downloads the OpenShift clients (`oc`,
   `openshift-install`) from, for disconnected or mirrored labs.
@@ -853,7 +856,11 @@ Rules:
 - A default consumed by more than one pipeline stage is materialized by the
   normalize phase (for example, an omitted standard container endpoint
   `source.type` becomes `openshift`); validators and renderers read the
-  normalized value instead of recomputing the default.
+  normalized value instead of recomputing the default. A diagnostic on a
+  normalize-injected reference the author never wrote (Environment-defaults
+  copies, the `openshift-pull-secret` convention,
+  `<cluster-name>-cluster-admin-ssh-key`) says the value was defaulted and
+  how to override it.
 - References must resolve to loaded resources selected by `Environment`.
 - Machines must declare `spec.os.provided`.
 - Machines with `os.provided: false` must have `spec.substrate.providerRef`.

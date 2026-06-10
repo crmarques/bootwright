@@ -42,7 +42,7 @@ func validateContainerClusters(state v1alpha1.State) []string {
 		ci, ok := stateview.ClusterInstallForContainerCluster(state, ocp)
 		if ok {
 			errs = append(errs, validateClusterEndpoints(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ci, components, networkConfigs, true)...)
-			errs = append(errs, validateClusterArtifactAccess(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ocp.Spec.Install.ArtifactAccess, env, components)...)
+			errs = append(errs, validateClusterArtifactAccess(fmt.Sprintf("ContainerCluster/%s spec.install", ocp.Metadata.Name), ocp.Spec.Install.ArtifactAccess, ocp.DefaultedRefs, env, components)...)
 			errs = append(errs, validateMachineNetworkBindings(ci, providers, networkConfigs)...)
 			errs = append(errs, validateClusterServices(ci, providers)...)
 			errs = append(errs, validateContainerEndpointRefs(ocp, ci)...)
@@ -298,8 +298,14 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 
 func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	var errs []string
+	// Normalize fills pullSecretRef for openshift clusters whenever an
+	// Environment is loaded (Environment default, else the
+	// openshift-pull-secret convention), so an empty ref here means the state
+	// has no Environment — already its own validation failure. Keep the guard
+	// for direct Validate callers, without an inheritance hint that can never
+	// apply on this path.
 	if v1alpha1.DistributionType(ocp) == v1alpha1.DistributionOpenShift && ocp.Spec.Install.PullSecretRef.Name == "" {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef is required for openshift (inheritable from Environment)", ocp.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s install.pullSecretRef is required for openshift", ocp.Metadata.Name))
 	}
 	errs = append(errs, validateNodeSSHSpec(
 		fmt.Sprintf("ContainerCluster/%s spec.install.nodeSSH", ocp.Metadata.Name),

@@ -8,6 +8,24 @@ type ContainerCluster struct {
 	Metadata   Metadata             `yaml:"metadata" json:"metadata"`
 	Spec       ContainerClusterSpec `yaml:"spec" json:"spec"`
 	SourcePath string               `yaml:"-" json:"-"`
+	// DefaultedRefs records which spec.install references the normalize
+	// phase injected (Environment-defaults copies and derived convention
+	// names) rather than the author wrote, so validation can blame a
+	// dangling defaulted reference honestly instead of pointing at a field
+	// absent from the author's files. Computed bookkeeping; never authored
+	// or serialized.
+	DefaultedRefs ContainerClusterDefaultedRefs `yaml:"-" json:"-"`
+}
+
+// ContainerClusterDefaultedRefs flags the spec.install references Normalize
+// filled in. Each flag covers the named field; validation appends a
+// defaulted-from note when the injected reference fails to resolve.
+type ContainerClusterDefaultedRefs struct {
+	PullSecretRef                         bool
+	NodeSSH                               bool
+	ArtifactAccessServerRef               bool
+	ArtifactAccessRedfishVirtualMedia     bool
+	ArtifactAccessContainerClusterInstall bool
 }
 
 type ContainerClusterSpec struct {

@@ -381,7 +381,141 @@ func TestEnvironmentArtifactAccessDefaultsValidateInheritedEndpoint(t *testing.T
 	if err == nil {
 		t.Fatal("LoadNormalizeValidate: expected inherited artifact endpoint error")
 	}
-	want := `spec.install.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`
+	wants := []string{
+		// The dangling default fails at its declaration site...
+		`Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
+		// ...and the per-cluster check says the injected value was defaulted,
+		// since it appears nowhere in the cluster author's file.
+		`ContainerCluster/sno spec.install.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints (defaulted from Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef)`,
+	}
+	for _, want := range wants {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestEnvironmentArtifactAccessDefaultsValidateAtDeclarationSite(t *testing.T) {
+	cases := []struct {
+		name          string
+		defaults      string
+		wantSubstring string
+	}{
+		{
+			name: "dangling-server-ref",
+			defaults: `  defaults:
+    artifactAccess:
+      serverRef: missing
+`,
+			wantSubstring: `Environment/env spec.defaults.artifactAccess.serverRef "missing" does not resolve to Environment/env spec.infraComponents.artifactServers[].name`,
+		},
+		{
+			name: "dangling-endpoint-ref",
+			defaults: `  defaults:
+    artifactAccess:
+      serverRef: default
+      redfishVirtualMedia:
+        endpointRef: missing
+`,
+			wantSubstring: `Environment/env spec.defaults.artifactAccess.redfishVirtualMedia.endpointRef "missing" does not resolve to the selected artifact server endpoints`,
+		},
+		{
+			name: "endpoint-refs-without-server-ref",
+			defaults: `  defaults:
+    artifactAccess:
+      containerClusterInstall:
+        endpointRef: bmc
+`,
+			wantSubstring: `Environment/env spec.defaults.artifactAccess.serverRef is required when artifactAccess endpoints are set`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The baseline cluster authors its own artifactAccess, so nothing
+			// consumes the Environment default; the dangling name must still
+			// fail where it was written.
+			files := newBaselineFiles()
+			files["environment.yaml"] = strings.Replace(files["environment.yaml"],
+				"  baseDomain: bootwright.test\n",
+				"  baseDomain: bootwright.test\n"+tc.defaults, 1)
+
+			dir := t.TempDir()
+			writeFiles(t, dir, files)
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("LoadNormalizeValidate: expected declaration-site artifactAccess error")
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstring) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantSubstring)
+			}
+		})
+	}
+}
+
+func TestDefaultedPullSecretRefErrorSaysDefaulted(t *testing.T) {
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
+		"    pullSecretRef: openshift-pull-secret\n", "", 1)
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"],
+		"    - openshift-pull-secret\n", "", 1)
+
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected defaulted pull secret error")
+	}
+	want := `ContainerCluster/sno install.pullSecretRef "openshift-pull-secret" is not declared in Environment/env spec.secrets (defaulted; declare the secret or set spec.install.pullSecretRef)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+func TestAuthoredPullSecretRefErrorHasNoDefaultedNote(t *testing.T) {
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
+		"    pullSecretRef: openshift-pull-secret", "    pullSecretRef: my-pull-secret", 1)
+
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected authored pull secret error")
+	}
+	want := `ContainerCluster/sno install.pullSecretRef "my-pull-secret" is not declared in Environment/env spec.secrets`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+	if strings.Contains(err.Error(), "(defaulted") {
+		t.Fatalf("error %q claims an authored ref was defaulted", err)
+	}
+}
+
+func TestDefaultedNodeSSHKeyPairRefErrorSaysDefaulted(t *testing.T) {
+	files := newBaselineFiles()
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
+		"    nodeSSH:\n      keyPairRef: sno-cluster-admin-ssh-key\n", "", 1)
+
+	// With install.nodeSSH omitted, the derived <cluster>-cluster-admin-ssh-key
+	// name resolves against the declared secret.
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	if _, err := LoadNormalizeValidate([]string{dir}); err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	// Renaming the cluster re-derives the secret name; the resulting dangling
+	// ref must say it was defaulted rather than blame a field the author
+	// never wrote.
+	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
+		"metadata: { name: sno }", "metadata: { name: sno2 }", 1)
+	dir = t.TempDir()
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("LoadNormalizeValidate: expected defaulted nodeSSH secret error")
+	}
+	want := `ContainerCluster/sno2 install.nodeSSH.keyPairRef "sno2-cluster-admin-ssh-key" is not declared in Environment/env spec.secrets (defaulted; declare the secret or set spec.install.nodeSSH)`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}

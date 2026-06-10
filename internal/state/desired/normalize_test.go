@@ -30,6 +30,10 @@ func TestNormalizeDefaultsClusterInstallSecretRefs(t *testing.T) {
 	if got := install.NodeSSH.KeyPairRef.Name; got != wantSSHKey {
 		t.Fatalf("NodeSSH.KeyPairRef.Name = %q, want %q", got, wantSSHKey)
 	}
+	defaulted := state.ContainerClusters[0].DefaultedRefs
+	if !defaulted.PullSecretRef || !defaulted.NodeSSH {
+		t.Fatalf("DefaultedRefs = %+v, want PullSecretRef and NodeSSH marked defaulted", defaulted)
+	}
 }
 
 func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
@@ -65,6 +69,12 @@ func TestNormalizeUsesEnvironmentInstallDefaults(t *testing.T) {
 	}
 	if got := install.NodeSSH.PrivateKeyRef.Name; got != "cluster-private" {
 		t.Fatalf("NodeSSH.PrivateKeyRef.Name = %q, want cluster-private", got)
+	}
+	// Environment-defaults copies are normalize-injected too: the cluster
+	// author never wrote them, so they carry the defaulted markers.
+	defaulted := state.ContainerClusters[0].DefaultedRefs
+	if !defaulted.PullSecretRef || !defaulted.NodeSSH {
+		t.Fatalf("DefaultedRefs = %+v, want PullSecretRef and NodeSSH marked defaulted", defaulted)
 	}
 }
 
@@ -130,6 +140,10 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForConnectedBareMetal(t *
 	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
 		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
 	}
+	defaulted := state.ContainerClusters[0].DefaultedRefs
+	if !defaulted.ArtifactAccessServerRef || !defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall {
+		t.Fatalf("DefaultedRefs = %+v, want serverRef and redfishVirtualMedia marked defaulted", defaulted)
+	}
 }
 
 func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t *testing.T) {
@@ -150,6 +164,10 @@ func TestNormalizeUsesEnvironmentArtifactAccessDefaultsForDisconnectedInstall(t 
 	}
 	if got := access.RedfishVirtualMedia.EndpointRef.Name; got != "" {
 		t.Fatalf("redfishVirtualMedia.endpointRef = %q, want empty", got)
+	}
+	defaulted := state.ContainerClusters[0].DefaultedRefs
+	if !defaulted.ArtifactAccessServerRef || !defaulted.ArtifactAccessContainerClusterInstall || defaulted.ArtifactAccessRedfishVirtualMedia {
+		t.Fatalf("DefaultedRefs = %+v, want serverRef and containerClusterInstall marked defaulted", defaulted)
 	}
 }
 
@@ -177,6 +195,9 @@ func TestNormalizeEnvironmentArtifactAccessDefaultsKeepExplicitValues(t *testing
 	}
 	if got := access.ContainerClusterInstall.EndpointRef.Name; got != "" {
 		t.Fatalf("containerClusterInstall.endpointRef = %q, want empty", got)
+	}
+	if defaulted := state.ContainerClusters[0].DefaultedRefs; defaulted.ArtifactAccessServerRef || defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall {
+		t.Fatalf("DefaultedRefs = %+v, want explicit artifactAccess left unmarked", defaulted)
 	}
 }
 

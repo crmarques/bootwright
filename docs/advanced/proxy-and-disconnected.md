@@ -89,6 +89,12 @@ spec:
         endpointRef: cluster
 ```
 
+The default's `serverRef` and `endpointRef` names are validated where they
+are declared — against `spec.infraComponents.artifactServers[].name` and the
+selected server's endpoints — even while no cluster consumes them, so a typo
+fails immediately rather than when a disconnected or bare-metal consumer
+appears later.
+
 When the effective `ContainerCluster.spec.install.artifactAccess` sets
 `containerClusterInstall.endpointRef`, Bootwright renders
 `minimalISO: true` and an endpoint-derived `bootArtifactsBaseURL` into

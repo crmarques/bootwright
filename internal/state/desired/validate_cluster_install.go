@@ -186,7 +186,12 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	return errs
 }
 
-func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifactAccess, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+// validateClusterArtifactAccess checks one artifactAccess block. It runs at
+// two sites: the Environment spec.defaults declaration (zero defaulted flags)
+// and each ContainerCluster spec.install, where defaulted flags mark the
+// fields normalize injected from Environment defaults so the diagnostic can
+// say the dangling value is not in the cluster author's file.
+func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifactAccess, defaulted v1alpha1.ContainerClusterDefaultedRefs, env *v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
 	if access.ProviderRef.Name != "" {
 		return []string{owner + ".artifactAccess.providerRef is not valid; select artifact servers with serverRef"}
 	}
@@ -197,26 +202,37 @@ func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifact
 		access.OSInstall.EndpointRef.Name == "" {
 		return nil
 	}
+	note := func(injected bool, field string) string {
+		if !injected || env == nil {
+			return ""
+		}
+		return fmt.Sprintf(" (defaulted from Environment/%s spec.defaults.artifactAccess.%s)", env.Metadata.Name, field)
+	}
 	prefix := owner + ".artifactAccess"
 	var errs []string
 	if access.ServerRef.Name == "" {
-		return []string{prefix + ".serverRef is required when artifactAccess endpoints are set"}
+		msg := prefix + ".serverRef is required when artifactAccess endpoints are set"
+		if env != nil && (defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall) {
+			msg += fmt.Sprintf(" (endpointRefs defaulted from Environment/%s spec.defaults.artifactAccess)", env.Metadata.Name)
+		}
+		return []string{msg}
 	}
 	if env == nil {
 		return []string{prefix + ".serverRef requires an Environment with spec.infraComponents.artifactServers"}
 	}
+	serverRefNote := note(defaulted.ArtifactAccessServerRef, "serverRef")
 	entry, ok := environmentArtifactServerByName(env, access.ServerRef.Name)
 	if !ok {
-		return []string{fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name", prefix, access.ServerRef.Name, env.Metadata.Name)}
+		return []string{fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name%s", prefix, access.ServerRef.Name, env.Metadata.Name, serverRefNote)}
 	}
 	endpoints := artifactServerEndpointNames(entry, components)
 	if entry.Type == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
-		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints", prefix, access.ServerRef.Name))
+		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints%s", prefix, access.ServerRef.Name, serverRefNote))
 	}
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef", access.RedfishVirtualMedia.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef", access.ContainerClusterInstall.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".machineBoot.endpointRef", access.MachineBoot.EndpointRef.Name, endpoints)...)
-	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".osInstall.endpointRef", access.OSInstall.EndpointRef.Name, endpoints)...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef", access.RedfishVirtualMedia.EndpointRef.Name, endpoints, note(defaulted.ArtifactAccessRedfishVirtualMedia, "redfishVirtualMedia.endpointRef"))...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".containerClusterInstall.endpointRef", access.ContainerClusterInstall.EndpointRef.Name, endpoints, note(defaulted.ArtifactAccessContainerClusterInstall, "containerClusterInstall.endpointRef"))...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".machineBoot.endpointRef", access.MachineBoot.EndpointRef.Name, endpoints, "")...)
+	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".osInstall.endpointRef", access.OSInstall.EndpointRef.Name, endpoints, "")...)
 	return errs
 }
 
@@ -248,12 +264,12 @@ func artifactServerEndpointNames(entry v1alpha1.EnvironmentArtifactServerCompone
 	return out
 }
 
-func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string]bool) []string {
+func validateClusterArtifactEndpointRef(owner, name string, endpoints map[string]bool, note string) []string {
 	if name == "" {
 		return nil
 	}
 	if !endpoints[name] {
-		return []string{fmt.Sprintf("%s %q does not resolve to the selected artifact server endpoints", owner, name)}
+		return []string{fmt.Sprintf("%s %q does not resolve to the selected artifact server endpoints%s", owner, name, note)}
 	}
 	return nil
 }

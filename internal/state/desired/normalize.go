@@ -184,12 +184,15 @@ func applyEnvironmentArtifactAccessDefaults(state *v1alpha1.State, env *v1alpha1
 		access := &cluster.Spec.Install.ArtifactAccess
 		if consumer.RedfishVirtualMedia && access.RedfishVirtualMedia.EndpointRef.Name == "" {
 			access.RedfishVirtualMedia = defaults.RedfishVirtualMedia
+			cluster.DefaultedRefs.ArtifactAccessRedfishVirtualMedia = access.RedfishVirtualMedia.EndpointRef.Name != ""
 		}
 		if consumer.ContainerClusterInstall && access.ContainerClusterInstall.EndpointRef.Name == "" {
 			access.ContainerClusterInstall = defaults.ContainerClusterInstall
+			cluster.DefaultedRefs.ArtifactAccessContainerClusterInstall = access.ContainerClusterInstall.EndpointRef.Name != ""
 		}
 		if access.ServerRef.Name == "" && clusterArtifactAccessHasEndpoint(*access) {
 			access.ServerRef = defaults.ServerRef
+			cluster.DefaultedRefs.ArtifactAccessServerRef = access.ServerRef.Name != ""
 		}
 	}
 }
@@ -473,6 +476,7 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 			ref = v1alpha1.SecretRef{Name: v1alpha1.DefaultPullSecretName}
 		}
 		ocp.Spec.Install.PullSecretRef = ref
+		ocp.DefaultedRefs.PullSecretRef = true
 	}
 	if ocp.Spec.Install.NodeSSH.IsZero() {
 		defaultSSH := env.Spec.Defaults.Install.NodeSSH
@@ -482,6 +486,7 @@ func applyEnvironmentInstallDefaults(ocp *v1alpha1.ContainerCluster, env *v1alph
 			}
 		}
 		ocp.Spec.Install.NodeSSH = defaultSSH
+		ocp.DefaultedRefs.NodeSSH = true
 	}
 }
 

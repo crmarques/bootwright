@@ -337,7 +337,11 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		declared[name] = true
 	}
 	var errs []string
-	require := func(owner string, ref v1alpha1.SecretRef) {
+	// requireNoted carries an optional note appended to the dangling-secret
+	// diagnostic; normalize-injected refs use it to say the value was
+	// defaulted and how to override, since it appears nowhere in the
+	// author's files.
+	requireNoted := func(owner string, ref v1alpha1.SecretRef, note string) {
 		if ref.Name == "" {
 			return
 		}
@@ -346,8 +350,15 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			return
 		}
 		if !declared[ref.Name] {
-			errs = append(errs, fmt.Sprintf("%s %q is not declared in Environment/%s spec.secrets", owner, ref.Name, env.Metadata.Name))
+			msg := fmt.Sprintf("%s %q is not declared in Environment/%s spec.secrets", owner, ref.Name, env.Metadata.Name)
+			if note != "" {
+				msg += " " + note
+			}
+			errs = append(errs, msg)
 		}
+	}
+	require := func(owner string, ref v1alpha1.SecretRef) {
+		requireNoted(owner, ref, "")
 	}
 	requireTLS := func(owner string, ref v1alpha1.SecretRef) {
 		require(owner, ref)
@@ -359,8 +370,8 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("%s %q uses file-sourced TLS material but Environment/%s spec.secrets[%s].keyFile is empty", owner, ref.Name, env.Metadata.Name, ref.Name))
 		}
 	}
-	requireSSHKey := func(owner string, ref v1alpha1.SecretRef) {
-		require(owner, ref)
+	requireSSHKeyNoted := func(owner string, ref v1alpha1.SecretRef, note string) {
+		requireNoted(owner, ref, note)
 		if ref.Name == "" || !declared[ref.Name] {
 			return
 		}
@@ -368,6 +379,9 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		if spec.Generated != nil && spec.Generated.SSHKeyPair == nil {
 			errs = append(errs, fmt.Sprintf("%s %q uses generated material but Environment/%s spec.secrets[%s].generated is not sshKeyPair", owner, ref.Name, env.Metadata.Name, ref.Name))
 		}
+	}
+	requireSSHKey := func(owner string, ref v1alpha1.SecretRef) {
+		requireSSHKeyNoted(owner, ref, "")
 	}
 	for i, entry := range env.Spec.InfraComponents.Proxies {
 		if entry.Connection != nil && entry.Connection.Auth != nil {
@@ -380,7 +394,7 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 	}
 	require(fmt.Sprintf("Environment/%s spec.defaults.install.pullSecretRef", env.Metadata.Name), env.Spec.Defaults.Install.PullSecretRef)
-	requireNodeSSH(fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name), env.Spec.Defaults.Install.NodeSSH, requireSSHKey)
+	requireNodeSSH(fmt.Sprintf("Environment/%s spec.defaults.install.nodeSSH", env.Metadata.Name), env.Spec.Defaults.Install.NodeSSH, "", requireSSHKeyNoted)
 	if registries := env.Spec.Registries; registries != nil && registries.Mirror != nil {
 		owner := fmt.Sprintf("Environment/%s spec.registries.mirror", env.Metadata.Name)
 		require(owner+".credentialsRef", registries.Mirror.CredentialsRef)
@@ -447,8 +461,19 @@ func validateSecretReferences(state v1alpha1.State) []string {
 		}
 	}
 	for _, ocp := range state.ContainerClusters {
-		require(fmt.Sprintf("ContainerCluster/%s install.pullSecretRef", ocp.Metadata.Name), ocp.Spec.Install.PullSecretRef)
-		requireNodeSSH(fmt.Sprintf("ContainerCluster/%s install.nodeSSH", ocp.Metadata.Name), ocp.Spec.Install.NodeSSH, requireSSHKey)
+		// Normalize-injected install refs (Environment defaults or invented
+		// convention names) appear nowhere in the cluster author's file;
+		// when one dangles, say it was defaulted and how to override.
+		pullSecretNote := ""
+		if ocp.DefaultedRefs.PullSecretRef {
+			pullSecretNote = "(defaulted; declare the secret or set spec.install.pullSecretRef)"
+		}
+		nodeSSHNote := ""
+		if ocp.DefaultedRefs.NodeSSH {
+			nodeSSHNote = "(defaulted; declare the secret or set spec.install.nodeSSH)"
+		}
+		requireNoted(fmt.Sprintf("ContainerCluster/%s install.pullSecretRef", ocp.Metadata.Name), ocp.Spec.Install.PullSecretRef, pullSecretNote)
+		requireNodeSSH(fmt.Sprintf("ContainerCluster/%s install.nodeSSH", ocp.Metadata.Name), ocp.Spec.Install.NodeSSH, nodeSSHNote, requireSSHKeyNoted)
 		for i, ref := range ocp.Spec.Install.AdditionalTrustBundleRefs {
 			require(fmt.Sprintf("ContainerCluster/%s install.additionalTrustBundleRefs[%d]", ocp.Metadata.Name, i), ref)
 		}
@@ -486,14 +511,14 @@ func validateSecretReferences(state v1alpha1.State) []string {
 	return errs
 }
 
-func requireNodeSSH(owner string, spec v1alpha1.NodeSSHSpec, requireSSHKey func(string, v1alpha1.SecretRef)) {
+func requireNodeSSH(owner string, spec v1alpha1.NodeSSHSpec, note string, requireSSHKey func(string, v1alpha1.SecretRef, string)) {
 	if spec.KeyPairRef.Name != "" {
-		requireSSHKey(owner+".keyPairRef", spec.KeyPairRef)
+		requireSSHKey(owner+".keyPairRef", spec.KeyPairRef, note)
 	}
 	if spec.PublicKeyRef.Name != "" {
-		requireSSHKey(owner+".publicKeyRef", spec.PublicKeyRef)
+		requireSSHKey(owner+".publicKeyRef", spec.PublicKeyRef, note)
 	}
 	if spec.PrivateKeyRef.Name != "" {
-		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef)
+		requireSSHKey(owner+".privateKeyRef", spec.PrivateKeyRef, note)
 	}
 }
