@@ -93,7 +93,7 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 }
 
 func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef.Name)
 	if entry.Connection != nil {
 		connection := map[string]any{}
 		if entry.Connection.HTTPProxy != "" {
@@ -114,7 +114,7 @@ func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map
 }
 
 func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolutionComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef.Name)
 	if entry.Address != "" {
 		out["address"] = entry.Address
 	}
@@ -125,7 +125,7 @@ func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolu
 }
 
 func environmentNTPComponentVars(entry v1alpha1.EnvironmentNTPComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef.Name)
 	if entry.Address != "" {
 		out["address"] = entry.Address
 	}
@@ -148,7 +148,7 @@ func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactSe
 }
 
 func environmentRegistryComponentVars(entry v1alpha1.EnvironmentRegistryComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Management, entry.Default, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, entry.Default, entry.ComponentRef.Name, entry.EndpointRef.Name)
 	if entry.URL != "" {
 		out["url"] = entry.URL
 	}
@@ -187,7 +187,7 @@ func serviceEndpointsVars(endpoints []v1alpha1.ServiceEndpoint) []any {
 	for _, endpoint := range endpoints {
 		out = append(out, map[string]any{
 			"name":       endpoint.Name,
-			"addressRef": endpoint.AddressRef,
+			"addressRef": endpoint.AddressRef.Name,
 		})
 	}
 	return out

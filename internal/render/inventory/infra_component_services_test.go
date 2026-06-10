@@ -86,7 +86,7 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-bridge"},
-			Spec:     v1alpha1.NetworkConfigSpec{NameResolutionRefs: []string{"lab-dns"}},
+			Spec:     v1alpha1.NetworkConfigSpec{NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "lab-dns"}}},
 		}},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "bastion"},
@@ -149,7 +149,7 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 	})
 	state.NetworkConfigs = append(state.NetworkConfigs, state.NetworkConfigs[0])
 	state.NetworkConfigs[1].Metadata.Name = "managed-net-b"
-	state.NetworkConfigs[1].Spec.NameResolutionRefs = []string{"alternate"}
+	state.NetworkConfigs[1].Spec.NameResolutionRefs = []v1alpha1.LocalObjectReference{{Name: "alternate"}}
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
 	state.ContainerClusters[1].Spec.Install.Endpoints = map[string]v1alpha1.Endpoint{

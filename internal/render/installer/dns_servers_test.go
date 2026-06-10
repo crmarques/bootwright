@@ -241,7 +241,7 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 			Metadata: v1alpha1.Metadata{Name: "lab-net"},
 			Spec: v1alpha1.NetworkConfigSpec{
 				MachineNetwork:     []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.130.0/24"}},
-				NameResolutionRefs: []string{"default"},
+				NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "default"}},
 				Template: v1alpha1.NetworkConfigTemplate{
 					NetworkConfig: map[string]any{
 						"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.1"}}},

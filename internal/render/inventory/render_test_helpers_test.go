@@ -12,7 +12,7 @@ const fixtureRoot = "../../state/desired/testdata/good"
 
 func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any {
 	t.Helper()
-	return componentByKind(t, cluster, v1alpha1.ComponentSlotMachines)
+	return componentByKind(t, cluster, v1alpha1.ServiceKindMachines)
 }
 
 func machineByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.Machine {

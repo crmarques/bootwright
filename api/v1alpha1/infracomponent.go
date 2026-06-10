@@ -61,11 +61,12 @@ type ArtifactServerListener struct {
 }
 
 type ArtifactServerEndpoint struct {
-	Name        string `yaml:"name" json:"name"`
-	ListenerRef string `yaml:"listenerRef" json:"listenerRef"`
+	Name string `yaml:"name" json:"name"`
+	// ListenerRef names a listeners[] entry on this artifact server.
+	ListenerRef LocalObjectReference `yaml:"listenerRef" json:"listenerRef"`
 	// AddressRef names a Machine.spec.addresses[] entry on the placement
 	// machine.
-	AddressRef string `yaml:"addressRef" json:"addressRef"`
+	AddressRef LocalObjectReference `yaml:"addressRef" json:"addressRef"`
 }
 
 type LoadBalancerComponent struct {
@@ -114,7 +115,7 @@ type ServiceEndpoint struct {
 	Name string `yaml:"name" json:"name"`
 	// AddressRef names a Machine.spec.addresses[] entry on the placement
 	// machine.
-	AddressRef string `yaml:"addressRef" json:"addressRef"`
+	AddressRef LocalObjectReference `yaml:"addressRef" json:"addressRef"`
 }
 
 // MachineBoundComponent is the shape shared by the machine-bound InfraComponent

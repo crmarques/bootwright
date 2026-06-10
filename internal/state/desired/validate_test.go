@@ -1296,6 +1296,62 @@ func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
 	}
 }
 
+// TestComponentEndpointRefsRejectObjectForm guards the uniform reference
+// grammar on the wrapper-typed endpoint refs: the {name: ...} object form
+// fails decode with the shared reference error instead of a raw YAML type
+// mismatch.
+func TestComponentEndpointRefsRejectObjectForm(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(files map[string]string)
+	}{
+		{
+			name: "artifact server listenerRef",
+			mutate: func(files map[string]string) {
+				files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"], "listenerRef: https", "listenerRef: {name: https}", 1)
+			},
+		},
+		{
+			name: "artifact server addressRef",
+			mutate: func(files map[string]string) {
+				files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"], "addressRef: bmc-lan", "addressRef: {name: bmc-lan}", 1)
+			},
+		},
+		{
+			name: "ntp service endpoint addressRef",
+			mutate: func(files map[string]string) {
+				files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"], "- name: cluster\n        addressRef: bmc-lan", "- name: cluster\n        addressRef: {name: bmc-lan}", 1)
+			},
+		},
+		{
+			name: "environment ntp endpointRef",
+			mutate: func(files map[string]string) {
+				files["environment.yaml"] = environmentYAMLWithNTP(`      - name: managed
+        management: managed
+        componentRef: ntp-server
+        endpointRef: {name: cluster}
+`)
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baselineFilesWithNTPComponent()
+			tc.mutate(files)
+			dir := t.TempDir()
+			writeFiles(t, dir, files)
+
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected object-form reference to be rejected")
+			}
+			if !strings.Contains(err.Error(), "a reference is a plain name string") {
+				t.Fatalf("error %q does not reject the object form", err)
+			}
+		})
+	}
+}
+
 func TestNameResolutionComponentForwarderValidation(t *testing.T) {
 	machines := map[string]v1alpha1.Machine{
 		"bastion": {

@@ -357,7 +357,7 @@ func networkConfig(name string) v1alpha1.NetworkConfig {
 	return v1alpha1.NetworkConfig{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.NetworkConfigSpec{
-			NameResolutionRefs: []string{"default"},
+			NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "default"}},
 		},
 	}
 }
@@ -436,7 +436,7 @@ func containerCluster(name, machineName string) v1alpha1.ContainerCluster {
 						Source: v1alpha1.EndpointSource{
 							Type:           v1alpha1.EndpointSourceInfraComponent,
 							ComponentRef:   v1alpha1.LocalObjectReference{Name: "load-balancer"},
-							BindAddressRef: "api",
+							BindAddressRef: v1alpha1.LocalObjectReference{Name: "api"},
 						},
 					},
 				},
@@ -528,8 +528,8 @@ func artifactServerComponent() v1alpha1.InfraComponent {
 				}},
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
 					Name:        "cluster",
-					ListenerRef: "https",
-					AddressRef:  "ssh",
+					ListenerRef: v1alpha1.LocalObjectReference{Name: "https"},
+					AddressRef:  v1alpha1.LocalObjectReference{Name: "ssh"},
 				}},
 			}},
 	}

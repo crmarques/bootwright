@@ -24,7 +24,7 @@ func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.Cluste
 		return out
 	}
 	for _, ref := range network.Spec.NameResolutionRefs {
-		entry, ok := stateview.NameResolutionEntry(env, ref)
+		entry, ok := stateview.NameResolutionEntry(env, ref.Name)
 		if !ok {
 			continue
 		}

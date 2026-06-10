@@ -411,8 +411,8 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 					}},
 					Endpoints: []v1alpha1.ArtifactServerEndpoint{{
 						Name:        "cluster",
-						ListenerRef: "https",
-						AddressRef:  "cluster-lan",
+						ListenerRef: v1alpha1.LocalObjectReference{Name: "https"},
+						AddressRef:  v1alpha1.LocalObjectReference{Name: "cluster-lan"},
 					}},
 				}},
 		},
@@ -617,7 +617,7 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 	}
 	state.Environments[0].Spec.InfraComponents.NTP = []v1alpha1.EnvironmentNTPComponent{
 		{Name: "external", Management: v1alpha1.EnvironmentComponentExternal, Address: "ntp.example.test"},
-		{Name: "managed", Management: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"}, EndpointRef: "cluster"},
+		{Name: "managed", Management: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"}, EndpointRef: v1alpha1.LocalObjectReference{Name: "cluster"}},
 		{Name: "duplicate", Management: v1alpha1.EnvironmentComponentExternal, Address: "192.168.132.1"},
 	}
 

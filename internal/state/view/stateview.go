@@ -182,14 +182,14 @@ func LoadBalancerBindAddress(state v1alpha1.State, source v1alpha1.EndpointSourc
 		return v1alpha1.LoadBalancerBindAddress{}, false
 	}
 	binds := component.Spec.LoadBalancer.BindAddresses
-	if source.BindAddressRef == "" {
+	if source.BindAddressRef.Name == "" {
 		if len(binds) == 1 {
 			return binds[0], true
 		}
 		return v1alpha1.LoadBalancerBindAddress{}, false
 	}
 	for _, bind := range binds {
-		if bind.Name == source.BindAddressRef {
+		if bind.Name == source.BindAddressRef.Name {
 			return bind, true
 		}
 	}

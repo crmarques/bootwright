@@ -108,18 +108,22 @@ type EnvironmentInfraComponentsSpec struct {
 }
 
 type EnvironmentProxyComponent struct {
-	Name         string                      `yaml:"name" json:"name"`
-	Management   string                      `yaml:"management" json:"management"`
-	ComponentRef LocalObjectReference        `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	EndpointRef  string                      `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
-	Connection   *EnvironmentProxyConnection `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Name         string               `yaml:"name" json:"name"`
+	Management   string               `yaml:"management" json:"management"`
+	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	// EndpointRef names an endpoints[] entry on the managed component
+	// selected by componentRef.
+	EndpointRef LocalObjectReference        `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+	Connection  *EnvironmentProxyConnection `yaml:"connection,omitempty" json:"connection,omitempty"`
 }
 
 type EnvironmentNameResolutionComponent struct {
-	Name                   string               `yaml:"name" json:"name"`
-	Management             string               `yaml:"management" json:"management"`
-	ComponentRef           LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	EndpointRef            string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+	Name         string               `yaml:"name" json:"name"`
+	Management   string               `yaml:"management" json:"management"`
+	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
+	// EndpointRef names an endpoints[] entry on the managed component
+	// selected by componentRef.
+	EndpointRef            LocalObjectReference `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Address                string               `yaml:"address,omitempty" json:"address,omitempty"`
 	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
 }
@@ -128,8 +132,10 @@ type EnvironmentNTPComponent struct {
 	Name         string               `yaml:"name" json:"name"`
 	Management   string               `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
-	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
+	// EndpointRef names an endpoints[] entry on the managed component
+	// selected by componentRef.
+	EndpointRef LocalObjectReference `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+	Address     string               `yaml:"address,omitempty" json:"address,omitempty"`
 }
 
 type EnvironmentArtifactServerComponent struct {
@@ -149,8 +155,10 @@ type EnvironmentRegistryComponent struct {
 	Default      bool                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Management   string               `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
-	URL          string               `yaml:"url,omitempty" json:"url,omitempty"`
+	// EndpointRef names an endpoints[] entry on the managed component
+	// selected by componentRef.
+	EndpointRef LocalObjectReference `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+	URL         string               `yaml:"url,omitempty" json:"url,omitempty"`
 }
 
 type EnvironmentSecretSpec struct {

@@ -179,6 +179,11 @@ spec:
           namespace: bootwright-child-ocp
 ```
 
+`nadRef` is the API's sole object-form reference: the
+NetworkAttachmentDefinition lives on the host cluster, outside the loaded
+state, so it is identified by the external two-part `{name, namespace}`
+identity. Every other reference is a plain name string.
+
 ## Services
 
 Machine-bound shared services are declared as `InfraComponent` objects:

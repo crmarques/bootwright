@@ -85,6 +85,10 @@ type NetworkAttachmentKubeVirt struct {
 	NADRef KubeVirtNADReference `yaml:"nadRef" json:"nadRef"`
 }
 
+// KubeVirtNADReference is the sole sanctioned object-form reference in the
+// API: a NetworkAttachmentDefinition lives on the host cluster, outside the
+// loaded state, so it is identified by the external two-part {name,
+// namespace} identity instead of the plain-name-string reference grammar.
 type KubeVirtNADReference struct {
 	Name      string `yaml:"name" json:"name"`
 	Namespace string `yaml:"namespace" json:"namespace"`

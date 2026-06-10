@@ -65,7 +65,7 @@ type EndpointSource struct {
 	// entry this endpoint resolves to. It is a name reference, not the
 	// literal listen IP the bindAddress fields on InfraComponent service
 	// arms carry.
-	BindAddressRef string `yaml:"bindAddressRef,omitempty" json:"bindAddressRef,omitempty"`
+	BindAddressRef LocalObjectReference `yaml:"bindAddressRef,omitempty" json:"bindAddressRef,omitempty"`
 }
 
 type LoadBalancerBindAddress struct {

@@ -131,15 +131,15 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.ListenerRef == "" {
+		if endpoint.ListenerRef.Name == "" {
 			errs = append(errs, owner+".listenerRef is required")
-		} else if !listenerNames[endpoint.ListenerRef] {
-			errs = append(errs, fmt.Sprintf("%s.listenerRef %q does not match any %s.listeners[].name", owner, endpoint.ListenerRef, prefix))
+		} else if !listenerNames[endpoint.ListenerRef.Name] {
+			errs = append(errs, fmt.Sprintf("%s.listenerRef %q does not match any %s.listeners[].name", owner, endpoint.ListenerRef.Name, prefix))
 		}
-		if endpoint.AddressRef == "" {
+		if endpoint.AddressRef.Name == "" {
 			errs = append(errs, owner+".addressRef is required")
-		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef); !ok {
-			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef, machine.Metadata.Name))
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef.Name); !ok {
+			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef.Name, machine.Metadata.Name))
 		}
 	}
 	return errs
@@ -267,10 +267,10 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.AddressRef == "" {
+		if endpoint.AddressRef.Name == "" {
 			errs = append(errs, owner+".addressRef is required")
-		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef); !ok {
-			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef, machine.Metadata.Name))
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef.Name); !ok {
+			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef.Name, machine.Metadata.Name))
 		}
 	}
 	return errs

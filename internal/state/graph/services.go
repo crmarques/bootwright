@@ -480,7 +480,7 @@ func storageNetworkNameResolutionRefs(state v1alpha1.State, cluster v1alpha1.Sto
 			continue
 		}
 		for _, ref := range network.Spec.NameResolutionRefs {
-			out[ref] = true
+			out[ref.Name] = true
 		}
 	}
 	return out
@@ -576,7 +576,7 @@ func networkNameResolutionRefs(state v1alpha1.State, infra v1alpha1.ClusterInsta
 			continue
 		}
 		for _, ref := range network.Spec.NameResolutionRefs {
-			out[ref] = true
+			out[ref.Name] = true
 		}
 	}
 	return out
@@ -594,7 +594,7 @@ func artifactListenersKey(listeners []v1alpha1.ArtifactServerListener) string {
 func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 	parts := make([]string, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.ListenerRef, endpoint.AddressRef))
+		parts = append(parts, fmt.Sprintf("%s/%s/%s", endpoint.Name, endpoint.ListenerRef.Name, endpoint.AddressRef.Name))
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ",")

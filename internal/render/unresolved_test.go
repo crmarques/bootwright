@@ -38,7 +38,7 @@ func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 						v1alpha1.EndpointAPI: {Source: v1alpha1.EndpointSource{
 							Type:           v1alpha1.EndpointSourceInfraComponent,
 							ComponentRef:   v1alpha1.LocalObjectReference{Name: "lb"},
-							BindAddressRef: "vip-b",
+							BindAddressRef: v1alpha1.LocalObjectReference{Name: "vip-b"},
 						}},
 					},
 				},

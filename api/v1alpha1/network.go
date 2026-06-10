@@ -12,11 +12,11 @@ type NetworkConfig struct {
 
 type NetworkConfigSpec struct {
 	MachineNetwork []MachineNetworkCIDR `yaml:"machineNetwork,omitempty" json:"machineNetwork,omitempty"`
-	// NameResolutionRefs selects Environment
-	// spec.infraComponents.nameResolution[] entries by name; the resolved
+	// NameResolutionRefs names Environment
+	// spec.infraComponents.nameResolution[] entries; the resolved
 	// addresses feed the NMState dns-resolver server list and installer DNS.
-	NameResolutionRefs []string              `yaml:"nameResolutionRefs,omitempty" json:"nameResolutionRefs,omitempty"`
-	Template           NetworkConfigTemplate `yaml:"template,omitempty" json:"template,omitempty"`
+	NameResolutionRefs []LocalObjectReference `yaml:"nameResolutionRefs,omitempty" json:"nameResolutionRefs,omitempty"`
+	Template           NetworkConfigTemplate  `yaml:"template,omitempty" json:"template,omitempty"`
 }
 
 type MachineNetworkCIDR struct {

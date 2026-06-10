@@ -127,7 +127,7 @@ func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterI
 			continue
 		}
 		for _, ref := range network.Spec.NameResolutionRefs {
-			if managed[ref] {
+			if managed[ref.Name] {
 				return true
 			}
 		}

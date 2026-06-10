@@ -61,7 +61,7 @@ func resolvedNTPSourceAddress(state v1alpha1.State, entry v1alpha1.EnvironmentNT
 			return ""
 		}
 		ntp := component.Spec.NTP
-		address := managedServiceEndpointAddress(state, ntp.MachineRef.Name, ntp.Endpoints, entry.EndpointRef)
+		address := managedServiceEndpointAddress(state, ntp.MachineRef.Name, ntp.Endpoints, entry.EndpointRef.Name)
 		if address != "" {
 			return address
 		}
@@ -81,7 +81,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 	if endpointName != "" {
 		for _, endpoint := range endpoints {
 			if endpoint.Name == endpointName {
-				if address, ok := NamedMachineAddress(state, machineRef, endpoint.AddressRef); ok {
+				if address, ok := NamedMachineAddress(state, machineRef, endpoint.AddressRef.Name); ok {
 					return address
 				}
 				return ""
@@ -90,7 +90,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 		return ""
 	}
 	if len(endpoints) == 1 {
-		if address, ok := NamedMachineAddress(state, machineRef, endpoints[0].AddressRef); ok {
+		if address, ok := NamedMachineAddress(state, machineRef, endpoints[0].AddressRef.Name); ok {
 			return address
 		}
 	}
@@ -110,7 +110,7 @@ func ResolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, 
 		if ip := v1alpha1.DNSServiceIP(dns.BindAddress, network); ip != "" {
 			return ip
 		}
-		address := managedServiceEndpointAddress(state, dns.MachineRef.Name, dns.Endpoints, entry.EndpointRef)
+		address := managedServiceEndpointAddress(state, dns.MachineRef.Name, dns.Endpoints, entry.EndpointRef.Name)
 		if address == "" {
 			return ""
 		}

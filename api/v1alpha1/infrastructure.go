@@ -104,7 +104,6 @@ const (
 
 	// Standard component slot names. The authored slot values double as the
 	// InfraComponent spec.type discriminator and equal the populated arm key.
-	ComponentSlotMachines       = "machines"
 	ComponentSlotLoadBalancer   = "loadBalancer"
 	ComponentSlotArtifactServer = "artifactServer"
 	ComponentSlotProxy          = "proxy"
@@ -112,8 +111,10 @@ const (
 	ComponentSlotNTP            = "ntp"
 	ComponentSlotRegistry       = "registry"
 
-	// Provider service kinds that are rendered for Ansible but are not
-	// authored InfraComponent slots.
+	// Service kinds that are rendered for Ansible but are not authored
+	// InfraComponent slots: the per-cluster machines service and the
+	// provider BMC service.
+	ServiceKindMachines    = "machines"
 	ProviderServiceKindBMC = "bmc"
 
 	// EnvironmentComponentNone is the reserved component name/ref sentinel
@@ -314,13 +315,17 @@ type Metadata struct {
 	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
-// LocalObjectReference names a single sibling object in the loaded state. It
+// LocalObjectReference names an object in the loaded state or a named
+// sub-entry inside one; the field comment states the resolution namespace. It
 // is authored and rendered as a plain name string — the Ref suffix on the
 // field carries the "this is a reference" signal; the wrapper exists only so
-// Go keeps the resolution namespace distinct from ordinary strings. One
-// deliberate exception: Environment spec.containerClusters and
+// Go keeps the resolution namespace distinct from ordinary strings and every
+// reference rejects the {name: ...} object form with one shared error. Two
+// deliberate exceptions: Environment spec.containerClusters and
 // spec.storageClusters are fleet selection lists, not references, so they
-// stay plain strings without the Ref suffix.
+// stay plain strings without the Ref suffix; and kubevirt nadRef is the sole
+// object-form reference (KubeVirtNADReference, an external two-part
+// identity).
 type LocalObjectReference struct {
 	Name string `yaml:"name" json:"name"`
 }

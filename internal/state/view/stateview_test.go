@@ -85,7 +85,7 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 				Source: v1alpha1.EndpointSource{
 					Type:           v1alpha1.EndpointSourceInfraComponent,
 					ComponentRef:   v1alpha1.LocalObjectReference{Name: "lb"},
-					BindAddressRef: "api",
+					BindAddressRef: v1alpha1.LocalObjectReference{Name: "api"},
 				},
 			},
 		},

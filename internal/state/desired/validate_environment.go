@@ -346,7 +346,7 @@ func validateEnvironmentNTP(env v1alpha1.Environment, components map[string]v1al
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed ntp entries")
 			}
-			if entry.EndpointRef != "" {
+			if entry.EndpointRef.Name != "" {
 				errs = append(errs, owner+".endpoint is only valid for managed ntp entries")
 			}
 		case v1alpha1.EnvironmentComponentManaged:
@@ -356,14 +356,14 @@ func validateEnvironmentNTP(env v1alpha1.Environment, components map[string]v1al
 			if entry.Address != "" {
 				errs = append(errs, owner+".address is only valid for external ntp entries")
 			}
-			if entry.EndpointRef != "" {
+			if entry.EndpointRef.Name != "" {
 				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.NTP != nil {
 					endpoints := map[string]bool{}
 					for _, endpoint := range component.Spec.NTP.Endpoints {
 						endpoints[endpoint.Name] = true
 					}
-					if !endpoints[entry.EndpointRef] {
-						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.ntp.endpoints", owner, entry.EndpointRef))
+					if !endpoints[entry.EndpointRef.Name] {
+						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.ntp.endpoints", owner, entry.EndpointRef.Name))
 					}
 				}
 			}
@@ -571,7 +571,7 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed nameResolution entries")
 			}
-			if entry.EndpointRef != "" {
+			if entry.EndpointRef.Name != "" {
 				errs = append(errs, owner+".endpoint is only valid for managed nameResolution entries")
 			}
 		case v1alpha1.EnvironmentComponentManaged:
@@ -655,7 +655,7 @@ func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components 
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed registry entries")
 			}
-			if entry.EndpointRef != "" {
+			if entry.EndpointRef.Name != "" {
 				errs = append(errs, owner+".endpoint is only valid for managed registry entries")
 			}
 		case v1alpha1.EnvironmentComponentManaged:
@@ -665,14 +665,14 @@ func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components 
 			if entry.URL != "" {
 				errs = append(errs, owner+".url is only valid for external registry entries")
 			}
-			if entry.EndpointRef != "" {
+			if entry.EndpointRef.Name != "" {
 				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.Registry != nil {
 					endpoints := map[string]bool{}
 					for _, endpoint := range component.Spec.Registry.Endpoints {
 						endpoints[endpoint.Name] = true
 					}
-					if !endpoints[entry.EndpointRef] {
-						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.registry.endpoints", owner, entry.EndpointRef))
+					if !endpoints[entry.EndpointRef.Name] {
+						errs = append(errs, fmt.Sprintf("%s.endpoint %q does not resolve on selected InfraComponent spec.registry.endpoints", owner, entry.EndpointRef.Name))
 					}
 				}
 			}

@@ -64,17 +64,17 @@ func validateNetworkConfigSpec(owner string, spec v1alpha1.NetworkConfigSpec, na
 	seenRefs := map[string]bool{}
 	for i, ref := range spec.NameResolutionRefs {
 		field := fmt.Sprintf("%s.nameResolutionRefs[%d]", owner, i)
-		if ref == "" {
+		if ref.Name == "" {
 			errs = append(errs, field+" must not be empty")
 			continue
 		}
-		if seenRefs[ref] {
-			errs = append(errs, fmt.Sprintf("%s %q is duplicated", field, ref))
+		if seenRefs[ref.Name] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", field, ref.Name))
 			continue
 		}
-		seenRefs[ref] = true
-		if !nameResolutionNames[ref] {
-			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", field, ref))
+		seenRefs[ref.Name] = true
+		if !nameResolutionNames[ref.Name] {
+			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", field, ref.Name))
 		}
 	}
 	return errs

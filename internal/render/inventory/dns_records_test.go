@@ -55,7 +55,7 @@ func dnsRecordsState() v1alpha1.State {
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "managed-net"},
 			Spec: v1alpha1.NetworkConfigSpec{
-				NameResolutionRefs: []string{"default"},
+				NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "default"}},
 			},
 		}},
 		Machines: []v1alpha1.Machine{{

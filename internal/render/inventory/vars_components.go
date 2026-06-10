@@ -119,7 +119,7 @@ func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.Cluste
 	out := []selectedNameResolutionComponent{}
 	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
 		for _, ref := range network.Spec.NameResolutionRefs {
-			entry, ok := stateview.NameResolutionEntry(env, ref)
+			entry, ok := stateview.NameResolutionEntry(env, ref.Name)
 			if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 				continue
 			}
@@ -177,7 +177,7 @@ func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerClu
 func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, secretsDir string) map[string]any {
 	driver := ProviderDriver(state, m)
 	out := map[string]any{
-		"kind":          v1alpha1.ComponentSlotMachines,
+		"kind":          v1alpha1.ServiceKindMachines,
 		"name":          m.Name,
 		"providerName":  m.Source.ProviderRef.Name,
 		"substrateRole": driver.Dispatch.SubstrateRole,

@@ -15,7 +15,7 @@ import (
 
 func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any {
 	t.Helper()
-	return componentByKind(t, cluster, v1alpha1.ComponentSlotMachines)
+	return componentByKind(t, cluster, v1alpha1.ServiceKindMachines)
 }
 
 func writeEncryptedContextSecret(t *testing.T, dir, name string, role secretstore.MaterialRole, data []byte) {
