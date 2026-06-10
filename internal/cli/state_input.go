@@ -17,6 +17,14 @@ func loadDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	return desiredstate.LoadNormalizeValidateInputFiles(ctx.InputPaths)
 }
 
+func loadDesiredStateWithExclusions(cf *commonFlags) (v1alpha1.State, desiredstate.ClusterSelectionExclusions, error) {
+	ctx, err := cf.resolve()
+	if err != nil {
+		return v1alpha1.State{}, desiredstate.ClusterSelectionExclusions{}, err
+	}
+	return desiredstate.LoadNormalizeValidateWithExclusions(ctx.InputPaths)
+}
+
 func loadOptionalDesiredState(cf *commonFlags) (v1alpha1.State, error) {
 	ctx, err := cf.resolve()
 	if err != nil {

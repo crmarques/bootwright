@@ -95,8 +95,11 @@ clusters/storage/<cluster>/*.yaml        optional storage resources
 Edit these first:
 
 - `Environment.spec.baseDomain` and `Environment.spec.secrets`.
-- `Environment.spec.containerClusters[]` if the environment should select only
-  part of the loaded fleet.
+- `Environment.spec.containerClusters[]` and
+  `Environment.spec.storageClusters[]` if the environment should select only
+  part of the loaded fleet. When either list is set, loaded clusters outside
+  the selection are excluded — never validated or applied — and
+  `bootwright validate` warns about each excluded cluster.
 - `Environment.spec.infraComponents.*` and `proxyFor` when the lab uses
   external or managed proxy, DNS, artifact, registry, or NTP services.
 - `Machine.spec.addresses[]` and `Machine.spec.access.ssh` references for

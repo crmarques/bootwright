@@ -20,9 +20,13 @@ type Environment struct {
 }
 
 type EnvironmentSpec struct {
-	BaseDomain        string                                   `yaml:"baseDomain" json:"baseDomain"`
-	Resources         []string                                 `yaml:"resources,omitempty" json:"resources,omitempty"`
-	Safety            EnvironmentSafetySpec                    `yaml:"safety,omitempty" json:"safety,omitempty"`
+	BaseDomain string                `yaml:"baseDomain" json:"baseDomain"`
+	Resources  []string              `yaml:"resources,omitempty" json:"resources,omitempty"`
+	Safety     EnvironmentSafetySpec `yaml:"safety,omitempty" json:"safety,omitempty"`
+	// ContainerClusters and StorageClusters, when either is set, are the
+	// effective fleet selection lists. Loaded clusters outside the selection
+	// are excluded before validation runs and apply never touches them;
+	// `bootwright validate` warns about each excluded cluster.
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`

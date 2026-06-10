@@ -23,20 +23,43 @@ func LoadNormalizeValidate(paths []string) (v1alpha1.State, error) {
 }
 
 func LoadNormalizeValidateInputFiles(paths []string) (v1alpha1.State, error) {
+	state, _, err := LoadNormalizeValidateWithExclusions(paths)
+	return state, err
+}
+
+// ClusterSelectionExclusions names the loaded clusters that Environment
+// spec.containerClusters / spec.storageClusters selection drops from the
+// effective state. Excluded clusters are never validated and apply never
+// touches them, so callers surface them instead of letting an unselected
+// cluster file disappear silently.
+type ClusterSelectionExclusions struct {
+	ContainerClusters []string
+	StorageClusters   []string
+}
+
+func (e ClusterSelectionExclusions) Empty() bool {
+	return len(e.ContainerClusters) == 0 && len(e.StorageClusters) == 0
+}
+
+// LoadNormalizeValidateWithExclusions is LoadNormalizeValidateInputFiles plus
+// the loaded cluster names the Environment cluster selection excluded from
+// the effective state. `bootwright validate` reports them as warnings.
+func LoadNormalizeValidateWithExclusions(paths []string) (v1alpha1.State, ClusterSelectionExclusions, error) {
 	files, err := discoverFiles(paths)
 	if err != nil {
-		return v1alpha1.State{}, err
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
 	state, err := loadSelectedFiles(files)
 	if err != nil {
-		return v1alpha1.State{}, err
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
 	Normalize(&state)
-	state = applyEnvironmentClusterSelection(state)
-	if err := Validate(state); err != nil {
-		return v1alpha1.State{}, err
+	selected := applyEnvironmentClusterSelection(state)
+	exclusions := clusterSelectionExclusions(state, selected)
+	if err := Validate(selected); err != nil {
+		return v1alpha1.State{}, ClusterSelectionExclusions{}, err
 	}
-	return state, nil
+	return selected, exclusions, nil
 }
 
 // LoadedInputFiles returns the YAML files the canonical loader would decode
@@ -63,6 +86,31 @@ func applyEnvironmentClusterSelection(state v1alpha1.State) v1alpha1.State {
 		return state
 	}
 	return stategraph.FilterStateToClusterRoots(state, env.Spec.ContainerClusters, env.Spec.StorageClusters)
+}
+
+// clusterSelectionExclusions diffs the loaded state against the
+// environment-selected state and names the dropped clusters, in the loaded
+// (name-sorted) order.
+func clusterSelectionExclusions(loaded, selected v1alpha1.State) ClusterSelectionExclusions {
+	return ClusterSelectionExclusions{
+		ContainerClusters: excludedClusterNames(loaded.ContainerClusters, selected.ContainerClusters, func(item v1alpha1.ContainerCluster) string { return item.Metadata.Name }),
+		StorageClusters:   excludedClusterNames(loaded.StorageClusters, selected.StorageClusters, func(item v1alpha1.StorageCluster) string { return item.Metadata.Name }),
+	}
+}
+
+func excludedClusterNames[T any](loaded, selected []T, name func(T) string) []string {
+	kept := map[string]bool{}
+	for _, item := range selected {
+		kept[name(item)] = true
+	}
+	var out []string
+	for _, item := range loaded {
+		if n := name(item); !kept[n] {
+			kept[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // Load reads `-f` arguments (files or directories) and decodes either every

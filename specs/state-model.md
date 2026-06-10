@@ -61,6 +61,9 @@ Rules:
 - Every referenced Bootwright resource must also be selected.
 - `containerClusters[]` and `storageClusters[]`, when set, are the effective
   fleet selection lists for render, apply, status, destroy, and check flows.
+  Loaded clusters outside the selection are excluded before validation runs;
+  `bootwright validate` warns about each excluded cluster so an unselected
+  cluster file never disappears silently.
 - `safety.destroyProtection`, when set, must be `allow` or
   `requiredOverride`. Empty means `allow`. Bootwright never infers protection
   from environment names, context names, labels, or cluster names.

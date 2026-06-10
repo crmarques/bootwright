@@ -15,7 +15,7 @@ func TestSyntaxCheckJSONIncludesDiagnostics(t *testing.T) {
 		t.Fatal("expected empty state to fail validation")
 	}
 	var stdout bytes.Buffer
-	if err := writeSyntaxCheckJSON(&stdout, v1alpha1.State{}, checkErr); err != nil {
+	if err := writeSyntaxCheckJSON(&stdout, v1alpha1.State{}, desiredstate.ClusterSelectionExclusions{}, checkErr); err != nil {
 		t.Fatal(err)
 	}
 	var report syntaxCheckReport

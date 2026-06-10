@@ -55,10 +55,10 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
 		}
-		state, err := loadSyntaxCheckState(cf, files)
+		state, exclusions, err := loadSyntaxCheckState(cf, files)
 		if err != nil {
 			if output == outputJSON {
-				if encodeErr := writeSyntaxCheckJSON(stdout, state, err); encodeErr != nil {
+				if encodeErr := writeSyntaxCheckJSON(stdout, state, exclusions, err); encodeErr != nil {
 					return failErr(1, encodeErr)
 				}
 				return silentExit(1)
@@ -71,15 +71,15 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 			return failf(1, "%s failed: %v", spec.label, err)
 		}
 		if output == outputJSON {
-			return writeSyntaxCheckJSON(stdout, state, nil)
+			return writeSyntaxCheckJSON(stdout, state, exclusions, nil)
 		}
 		p := outputpkg(stdout)
 		p.Command(spec.label)
 		p.Section("Objects")
 		p.Fields(stateCountFields(state))
-		if err := renderCheckResults(stdout, spec.label, []preflightCheck{
-			okCheck("Desired state", "context input", "loads, normalizes, and validates"),
-		}); err != nil {
+		checks := []preflightCheck{okCheck("Desired state", "context input", "loads, normalizes, and validates")}
+		checks = append(checks, environmentSelectionChecks(exclusions)...)
+		if err := renderCheckResults(stdout, spec.label, checks); err != nil {
 			return err
 		}
 		return nil
@@ -87,54 +87,89 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 	return cmd
 }
 
-func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, error) {
+func loadSyntaxCheckState(cf *commonFlags, files []string) (v1alpha1.State, desiredstate.ClusterSelectionExclusions, error) {
 	if len(files) > 0 {
-		return desiredstate.LoadNormalizeValidateInputFiles(files)
+		return desiredstate.LoadNormalizeValidateWithExclusions(files)
 	}
-	return loadDesiredState(cf)
+	return loadDesiredStateWithExclusions(cf)
+}
+
+// environmentSelectionChecks warns about loaded clusters that Environment
+// spec.containerClusters / spec.storageClusters selection excludes from the
+// effective state: excluded clusters are never validated and apply never
+// touches them, so a cluster file missing from the selection lists would
+// otherwise disappear silently.
+func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusions) []preflightCheck {
+	checks := make([]preflightCheck, 0, len(exclusions.ContainerClusters)+len(exclusions.StorageClusters))
+	for _, name := range exclusions.ContainerClusters {
+		checks = append(checks, warnCheck(
+			"Environment selection",
+			v1alpha1.KindContainerCluster+"/"+name,
+			"loaded but excluded by Environment cluster selection",
+			"excluded clusters are not validated and apply never touches them",
+			fmt.Sprintf("add %q to Environment spec.containerClusters or remove its YAML", name),
+		))
+	}
+	for _, name := range exclusions.StorageClusters {
+		checks = append(checks, warnCheck(
+			"Environment selection",
+			v1alpha1.KindStorageCluster+"/"+name,
+			"loaded but excluded by Environment cluster selection",
+			"excluded clusters are not validated and apply never touches them",
+			fmt.Sprintf("add %q to Environment spec.storageClusters or remove its YAML", name),
+		))
+	}
+	return checks
 }
 
 type syntaxCheckReport struct {
-	OK                       bool                      `json:"ok"`
-	Error                    string                    `json:"error,omitempty"`
-	Diagnostics              []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
-	Environments             int                       `json:"environments"`
-	Machines                 int                       `json:"machines"`
-	MachineImages            int                       `json:"machineImages"`
-	MachineInstallProfiles   int                       `json:"machineInstallProfiles"`
-	NetworkConfigs           int                       `json:"networkConfigs"`
-	InfraProviders           int                       `json:"infraProviders"`
-	ContainerClusters        int                       `json:"containerClusters"`
-	StorageClusters          int                       `json:"storageClusters"`
-	StoragePlacementPolicies int                       `json:"storagePlacementPolicies"`
-	StoragePools             int                       `json:"storagePools"`
-	StorageFilesystems       int                       `json:"storageFilesystems"`
-	StorageObjectGateways    int                       `json:"storageObjectGateways"`
-	StorageExports           int                       `json:"storageExports"`
-	ClusterAddons            int                       `json:"clusterAddons"`
-	Profiles                 int                       `json:"clusterAddonProfiles"`
-	ExtensionBindings        int                       `json:"clusterAddonBindings"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+	// Excluded* name loaded clusters that Environment spec.containerClusters /
+	// spec.storageClusters selection drops from the effective state; they are
+	// not validated and apply never touches them.
+	ExcludedContainerClusters []string                  `json:"excludedContainerClusters,omitempty"`
+	ExcludedStorageClusters   []string                  `json:"excludedStorageClusters,omitempty"`
+	Diagnostics               []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	Environments              int                       `json:"environments"`
+	Machines                  int                       `json:"machines"`
+	MachineImages             int                       `json:"machineImages"`
+	MachineInstallProfiles    int                       `json:"machineInstallProfiles"`
+	NetworkConfigs            int                       `json:"networkConfigs"`
+	InfraProviders            int                       `json:"infraProviders"`
+	ContainerClusters         int                       `json:"containerClusters"`
+	StorageClusters           int                       `json:"storageClusters"`
+	StoragePlacementPolicies  int                       `json:"storagePlacementPolicies"`
+	StoragePools              int                       `json:"storagePools"`
+	StorageFilesystems        int                       `json:"storageFilesystems"`
+	StorageObjectGateways     int                       `json:"storageObjectGateways"`
+	StorageExports            int                       `json:"storageExports"`
+	ClusterAddons             int                       `json:"clusterAddons"`
+	Profiles                  int                       `json:"clusterAddonProfiles"`
+	ExtensionBindings         int                       `json:"clusterAddonBindings"`
 }
 
-func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, checkErr error) error {
+func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {
 	report := syntaxCheckReport{
-		OK:                       checkErr == nil,
-		Environments:             len(state.Environments),
-		Machines:                 len(state.Machines),
-		MachineImages:            len(state.MachineImages),
-		MachineInstallProfiles:   len(state.MachineInstallProfiles),
-		NetworkConfigs:           len(state.NetworkConfigs),
-		InfraProviders:           len(state.InfraProviders),
-		ContainerClusters:        len(state.ContainerClusters),
-		StorageClusters:          len(state.StorageClusters),
-		StoragePlacementPolicies: len(state.StoragePlacementPolicies),
-		StoragePools:             len(state.StoragePools),
-		StorageFilesystems:       len(state.StorageFilesystems),
-		StorageObjectGateways:    len(state.StorageObjectGateways),
-		StorageExports:           len(state.StorageExports),
-		ClusterAddons:            len(state.ClusterAddons),
-		Profiles:                 len(state.ClusterAddonProfiles),
-		ExtensionBindings:        len(state.ClusterAddonBindings),
+		OK:                        checkErr == nil,
+		ExcludedContainerClusters: exclusions.ContainerClusters,
+		ExcludedStorageClusters:   exclusions.StorageClusters,
+		Environments:              len(state.Environments),
+		Machines:                  len(state.Machines),
+		MachineImages:             len(state.MachineImages),
+		MachineInstallProfiles:    len(state.MachineInstallProfiles),
+		NetworkConfigs:            len(state.NetworkConfigs),
+		InfraProviders:            len(state.InfraProviders),
+		ContainerClusters:         len(state.ContainerClusters),
+		StorageClusters:           len(state.StorageClusters),
+		StoragePlacementPolicies:  len(state.StoragePlacementPolicies),
+		StoragePools:              len(state.StoragePools),
+		StorageFilesystems:        len(state.StorageFilesystems),
+		StorageObjectGateways:     len(state.StorageObjectGateways),
+		StorageExports:            len(state.StorageExports),
+		ClusterAddons:             len(state.ClusterAddons),
+		Profiles:                  len(state.ClusterAddonProfiles),
+		ExtensionBindings:         len(state.ClusterAddonBindings),
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()

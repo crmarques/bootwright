@@ -264,6 +264,63 @@ func TestValidateValidatesInputFilesWithoutContext(t *testing.T) {
 	}
 }
 
+func TestValidateReportsEnvironmentExcludedClusters(t *testing.T) {
+	setTestHomeAndRoot(t)
+	inputDir := copyFixtureYAML(t, "001-sno-libvirt")
+	environmentPath := filepath.Join(inputDir, "environment.yaml")
+	environment, err := os.ReadFile(environmentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := append(environment, []byte("  containerClusters:\n    - sno-libvirt\n")...)
+	if err := os.WriteFile(environmentPath, selection, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := runCLI(t, "validate", "-f", inputDir)
+	if code != 0 {
+		t.Fatalf("validate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if strings.Contains(stdout, "Environment selection") {
+		t.Fatalf("selection covering every cluster still warns:\n%s", stdout)
+	}
+
+	// An excluded cluster skips validation entirely, so the minimal ghost
+	// object must surface as a warning instead of failing or vanishing.
+	ghost := "apiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata:\n  name: ghost-ceph\nspec:\n  type: ceph\n"
+	if err := os.WriteFile(filepath.Join(inputDir, "ghost-storage-cluster.yaml"), []byte(ghost), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "validate", "-f", inputDir)
+	if code != 0 {
+		t.Fatalf("validate with excluded cluster exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, want := range []string{
+		"Environment selection",
+		"[WARN] StorageCluster/ghost-ceph: loaded but excluded by Environment cluster selection",
+		`add "ghost-ceph" to Environment spec.storageClusters or remove its YAML`,
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("validate output missing %q:\n%s", want, stdout)
+		}
+	}
+
+	stdout, stderr, code = runCLI(t, "validate", "-f", inputDir, "--output", "json")
+	if code != 0 {
+		t.Fatalf("validate --output json exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	var report syntaxCheckReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !report.OK || report.StorageClusters != 0 {
+		t.Fatalf("unexpected validate report: %+v", report)
+	}
+	if !slices.Equal(report.ExcludedStorageClusters, []string{"ghost-ceph"}) || len(report.ExcludedContainerClusters) != 0 {
+		t.Fatalf("unexpected excluded clusters in report: %+v", report)
+	}
+}
+
 func TestValidateJSONFailureIncludesDiagnostics(t *testing.T) {
 	setTestHomeAndRoot(t)
 	inputDir := t.TempDir()
