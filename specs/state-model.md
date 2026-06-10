@@ -820,7 +820,14 @@ Rules:
   lease, and must not mutate provider, BMC, cluster, or storage state. `status`,
   `state-check`, `render`, `plan`, and `validate` must not contact provider
   hosts, BMCs, or clusters at all; `preflight` may run an Ansible preflight but only
-  with read-only or check-mode operations that converge nothing.
+  with read-only or check-mode operations that converge nothing. As the one
+  exception to that read-only posture, `preflight` (and `apply` before its host
+  check) may record SSH server-key trust, but only for a host with no existing
+  trust record and only after an explicit interactive per-host fingerprint
+  confirmation; never under `--dry-run`, JSON output, or non-interactive
+  execution (`--yes`). A changed key is never accepted interactively — it keeps
+  failing closed until `bootwright host trust --replace` records it
+  deliberately.
 - Cluster selection uses one flag name, `--clusters`, on every command that
   narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `preflight`
   scope subcommands, and `render`. It accepts a comma-separated list
@@ -872,6 +879,10 @@ Rules:
   affected scope and then re-applies. Dry-run/plan still previews the override
   plan.
 - `bootwright host trust` records SSH server-key trust for declared machines.
+  It remains the scriptable pre-recording path for automation: non-interactive
+  runs never record trust on first use, so pipelines record it with `host
+  trust` before `preflight`/`apply`, and only `host trust --replace` may accept
+  a changed key.
 - `bootwright state-check` is a read-only desired-vs-recorded report. It never
   mutates state, writes convergence records, or runs playbooks, and it accepts
   `--stage`, `--clusters`, and `--output` like the other selection commands. It

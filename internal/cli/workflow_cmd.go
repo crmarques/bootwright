@@ -13,7 +13,7 @@ func renderOutputDirRequiresSensitiveError(outputDir string) error {
 	return fmt.Errorf("render --output-dir %s would write OpenShift installer files with secret material\nrerun with --sensitive only for a local, unversioned directory\nprotect those files while they exist and remove them when no longer needed", outputDir)
 }
 
-func newPreflightCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newPreflightCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "preflight <target>",
 		Short: "Run read-only preflight checks on hosts and prerequisites",
@@ -32,12 +32,12 @@ result JSON, use 'validate'.`,
 	}
 	cmd.AddCommand(
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
-		retargetCommand(newScopeCheckCmd(infraScope, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
-		retargetCommand(newScopeCheckCmd(clustersScope, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
-		retargetCommand(newScopeCheckCmd(containerClusterScope, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
-		retargetCommand(newScopeCheckCmd(storageClusterScope, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
+		retargetCommand(newScopeCheckCmd(infraScope, stdin, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
+		retargetCommand(newScopeCheckCmd(clustersScope, stdin, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
+		retargetCommand(newScopeCheckCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
+		retargetCommand(newScopeCheckCmd(storageClusterScope, stdin, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
 		retargetCommand(newAddonsCheckCmd(stdout), "addons", "Check post-install cluster addon prerequisites"),
-		newCheckAllCmd(stdout, stderr),
+		newCheckAllCmd(stdin, stdout, stderr),
 	)
 	requireSubcommand(cmd)
 	return cmd

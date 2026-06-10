@@ -36,6 +36,14 @@ Machine SSH follows the same boundary. Durable SSH connection details live on
 `Environment.spec.secrets`; when `knownHostsRef` is omitted, Bootwright records
 server keys under context-managed SSH trust state. Non-local durable SSH uses
 strict checking against explicit or context-managed known-hosts material.
+Trust is recorded either by `bootwright host trust` or on first use during an
+interactive `preflight`/`apply`, and first-use recording is allowed only for a
+host with no existing trust record and only after an explicit interactive
+per-host confirmation of the displayed key fingerprint. It never happens under
+`--dry-run`, JSON output, or non-interactive execution, and a changed server
+key is never accepted interactively: it fails closed until the operator
+verifies the new fingerprint and records it deliberately with
+`bootwright host trust --replace`.
 
 KubeVirt child-cluster profiles also follow the same boundary. `hostClusterRef`
 resolves to a generated kubeconfig already stored under Bootwright cluster

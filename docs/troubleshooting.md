@@ -97,6 +97,15 @@ continuing.
 `preflight infra` and `apply --stage infra` require SSH to provider/service hosts. Validate
 the same key and address declared on the `Machine` before retrying.
 
+If the host check fails with a missing SSH host trust record (`fix: bootwright
+host trust`), either run `bootwright host trust`, or rerun `preflight`/`apply`
+interactively: they show each unknown host's key fingerprint and ask before
+recording it (disable the prompt with `--trust-on-first-use=false`).
+Non-interactive runs (`--yes`, `--output json`, `--dry-run`) never prompt and
+keep failing closed until trust is pre-recorded. A *changed* host key is never
+accepted at the prompt — verify the new fingerprint and run
+`bootwright host trust --replace <machine>`.
+
 Real BMCs must also reach the generated artifact HTTPS endpoint used for the
 agent ISO. If Redfish virtual media insert fails after the bastion can download
 the ISO, verify reachability from the BMC network and prefer an IP-address

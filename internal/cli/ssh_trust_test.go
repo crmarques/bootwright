@@ -255,31 +255,7 @@ func hostTrustManagedOSTestState() v1alpha1.State {
 func setHostTrustTestDeps(t *testing.T, keys map[string]string) {
 	t.Helper()
 	previous := defaultHostTrustDeps
-	defaultHostTrustDeps = hostTrustDeps{
-		lookPath: func(name string, _ []string) (string, error) {
-			if name != "ssh-keyscan" {
-				return "", errors.New("unexpected lookup " + name)
-			}
-			return "/usr/bin/ssh-keyscan", nil
-		},
-		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
-			publicKey, ok := keys[address]
-			if !ok {
-				return nil, errors.New("unexpected scan " + address)
-			}
-			fingerprint, err := sshtrust.FingerprintSHA256(publicKey)
-			if err != nil {
-				return nil, err
-			}
-			return []sshtrust.ScannedKey{{
-				Address:           address,
-				KeyType:           "ssh-ed25519",
-				PublicKey:         publicKey,
-				FingerprintSHA256: fingerprint,
-				KnownHostsLine:    sshtrust.KnownHostsLine(address, "ssh-ed25519", publicKey),
-			}}, nil
-		},
-	}
+	defaultHostTrustDeps = hostTrustScanDeps(keys)
 	t.Cleanup(func() { defaultHostTrustDeps = previous })
 }
 

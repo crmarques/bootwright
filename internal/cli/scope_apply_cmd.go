@@ -28,18 +28,19 @@ type scopeApplyOptions struct {
 func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
 	usesAnsible := scopeUsesAnsible(scope)
 	var (
-		flags         scopeCommonFlags
-		dryRun        = options.defaultPlan
-		check         bool
-		askBecomePass bool
-		yes           bool
-		strictSecrets bool
-		override      bool
-		expectNew     bool
-		parallelism   int
-		perHost       int
-		redfish       int
-		stage         string
+		flags           scopeCommonFlags
+		dryRun          = options.defaultPlan
+		check           bool
+		askBecomePass   bool
+		yes             bool
+		strictSecrets   bool
+		override        bool
+		expectNew       bool
+		trustOnFirstUse bool
+		parallelism     int
+		perHost         int
+		redfish         int
+		stage           string
 	)
 	use := "apply"
 	if options.use != "" {
@@ -78,6 +79,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	}
 	if !options.hideApproval {
 		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
+		cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only; never under --yes or --output json); automation must pre-record trust with bootwright host trust")
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
@@ -255,6 +257,14 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			if err := reconcileCurrentApplyBeforeMutation(stdout, ctx.RunsDir); err != nil {
 				return failErr(1, err)
 			}
+			// Trust-on-first-use: only in interactive text runs, and only for
+			// hosts with no recorded key. --yes and JSON runs fail closed on
+			// missing trust exactly as before.
+			if trustOnFirstUse && !yes && flags.output == outputText {
+				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.state, defaultHostTrustDeps); err != nil {
+					return failErr(1, err)
+				}
+			}
 			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, clustersDir); err != nil {
 				return err
 			}
@@ -379,17 +389,4 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		return nil
 	}
 	return cmd
-}
-
-// overrideDriftedStorageSubObjects returns the labels of storage sub-objects that
-// --override would rebuild (those that drifted from their recorded desired state), in
-// the classifier's stable order. It drives the data-loss warning before the confirm.
-func overrideDriftedStorageSubObjects(objects []workflow.ObjectClassification) []string {
-	var out []string
-	for _, o := range objects {
-		if workflow.IsStorageSubObjectKind(o.Kind) && o.HasDrift() {
-			out = append(out, o.Label)
-		}
-	}
-	return out
 }

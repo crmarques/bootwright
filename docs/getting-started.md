@@ -208,6 +208,15 @@ material into the context store when `Environment.spec.secretStorage.mode` is
 `context`, and reports anything still needing `secret set`. `secret list` and
 `secret encryption status` remain available for inspection.
 
+`host trust` records each non-local Machine's SSH server key so later runs can
+use strict host-key checking. For interactive runs it is now optional:
+`preflight` and `apply` show each unknown host's key fingerprint and ask
+before recording it (first use only — a changed key still requires
+`bootwright host trust --replace` after you verify the new fingerprint).
+Automation must still pre-record trust with `bootwright host trust`, because
+non-interactive runs (`--yes`, `--output json`, `--dry-run`) never prompt and
+fail closed on missing trust.
+
 Get the OpenShift pull secret from
 `https://console.redhat.com/openshift/install/pull-secret`. Prefer
 `--password-stdin` for credentials on shared shells; `--password` is useful

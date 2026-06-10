@@ -61,7 +61,7 @@ func newRootCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Comm
 		newPrintEnvCmd(stdout),
 		newMediaCmd(stdin, stdout),
 		newSecretCmd(stdin, stdout, stderr),
-		newPreflightCmd(stdout, stderr),
+		newPreflightCmd(stdin, stdout, stderr),
 		newStatusCmd(stdout),
 		newStateCheckCmd(stdout),
 		newPlanCmd(stdin, stdout, stderr),

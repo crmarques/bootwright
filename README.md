@@ -38,6 +38,9 @@ bootwright cluster access
 `apply` is the normal convergence path. Use `--stage infra` to prepare
 providers, infra services, and selected machines, or `--stage clusters` to
 install selected container and storage clusters, add-ons, and integrations.
+(`host trust` pre-records SSH host-key trust; scripted runs like `apply --yes`
+require it, while interactive `preflight`/`apply` runs can instead confirm
+each unknown host's fingerprint on first use.)
 Use `--clusters <name>[,<name>...]` for focused recovery. `destroy` uses the
 same `--stage infra|clusters` and `--clusters` selector shape. Unscoped
 `destroy --stage infra` performs current-context VM cleanup.

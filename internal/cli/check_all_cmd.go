@@ -10,11 +10,12 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
-		executable string
-		dryRun     bool
-		output     string
+		executable      string
+		dryRun          bool
+		output          string
+		trustOnFirstUse bool
 	)
 	cmd := &cobra.Command{
 		Use:   "all",
@@ -30,6 +31,7 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json (json requires --dry-run)")
+	cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only); automation must pre-record trust with bootwright host trust")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
@@ -52,6 +54,14 @@ func newCheckAllCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 		}
 		ctx := cf.ctx
 		clustersDir := controllerClustersDir(ctx.Name)
+		// Trust-on-first-use: only in interactive text runs, and only for hosts
+		// with no recorded key. Dry-run and JSON runs fail closed on missing
+		// trust exactly as before.
+		if trustOnFirstUse && !dryRun {
+			if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, state, defaultHostTrustDeps); err != nil {
+				return failErr(1, err)
+			}
+		}
 		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}

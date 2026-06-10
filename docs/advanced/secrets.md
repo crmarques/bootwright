@@ -73,11 +73,18 @@ that name explicitly.
 For durable machines Bootwright or managed tools SSH into, put SSH connection
 material on `Machine.spec.access.ssh`. `keyRef.name` supplies private SSH key material;
 managed Ceph node Hosts also require the public half at `<name>.pub` so
-Bootwright can pass it to cephadm. Run `bootwright host trust` after importing
-or updating a context so Bootwright records each non-local Machine server key
-under `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses that
-known_hosts file with strict host-key checking. Verify the displayed
-fingerprints out of band before accepting first-use trust.
+Bootwright can pass it to cephadm. Bootwright records each non-local Machine
+server key under `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses
+that known_hosts file with strict host-key checking. For interactive runs,
+recording trust up front is optional: `preflight` and `apply` show each
+unknown host's key fingerprint and ask before recording it, for hosts with no
+existing record only (opt out with `--trust-on-first-use=false`). Automation
+must still pre-record trust by running `bootwright host trust` after importing
+or updating a context — non-interactive runs (`--yes`, `--output json`,
+`--dry-run`) never prompt and fail closed on missing trust. Verify the
+displayed fingerprints out of band before accepting first-use trust; a
+*changed* server key is never accepted interactively and requires
+`bootwright host trust --replace` after you verify the new fingerprint.
 
 ## Local secrets directory
 
