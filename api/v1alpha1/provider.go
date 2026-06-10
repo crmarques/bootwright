@@ -94,6 +94,11 @@ type NetworkAttachmentBareMetal struct {
 	VLAN int `yaml:"vlan,omitempty" json:"vlan,omitempty"`
 }
 
+// MachineProfile is the shared VM shape across libvirt, vSphere, and KubeVirt
+// providers. Fields a provider's adapter does not consume are rejected at
+// validation: template and failureDomainRef are vSphere-only (failureDomainRef
+// must resolve against spec.vsphere.failureDomains[].name), and dataDisks are
+// libvirt-only.
 type MachineProfile struct {
 	Name             string               `yaml:"name" json:"name"`
 	CPU              int                  `yaml:"cpu,omitempty" json:"cpu,omitempty"`
@@ -116,6 +121,8 @@ type VSphereVCenter struct {
 	CredentialsRef SecretRef `yaml:"credentialsRef" json:"credentialsRef"`
 }
 
+// VSphereFailureDomain places machines on one declared vCenter: server must
+// equal a spec.vsphere.vcenters[].server.
 type VSphereFailureDomain struct {
 	Name     string                 `yaml:"name" json:"name"`
 	Region   string                 `yaml:"region,omitempty" json:"region,omitempty"`

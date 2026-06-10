@@ -2603,6 +2603,50 @@ func TestVSphereFailureDomainRequiresInstallerFields(t *testing.T) {
 	}
 }
 
+// TestVSphereFailureDomainRefMustResolve covers F24/F18/F34: a
+// machineProfiles[].failureDomainRef that names no spec.vsphere.failureDomains[]
+// entry must fail validation instead of flowing raw into Ansible vars.
+func TestVSphereFailureDomainRefMustResolve(t *testing.T) {
+	dir := t.TempDir()
+	files := newVSphereFiles(`    nodeNetworking:
+      external:
+        networkSubnetCidr: [192.168.133.0/24]
+`)
+	files["provider.yaml"] = strings.Replace(files["provider.yaml"], "failureDomainRef: dc1-zone-a", "failureDomainRef: dc1-zone-b", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected dangling failureDomainRef error, got nil")
+	}
+	want := `InfraProvider/vsphere spec.vsphere.machineProfiles[0].failureDomainRef "dc1-zone-b" does not match any failureDomains[].name`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
+// TestVSphereFailureDomainServerMustMatchVCenter covers F59/F24: every
+// failureDomains[].server must equal a declared vcenters[].server instead of
+// binding by unchecked string equality.
+func TestVSphereFailureDomainServerMustMatchVCenter(t *testing.T) {
+	dir := t.TempDir()
+	files := newVSphereFiles(`    nodeNetworking:
+      external:
+        networkSubnetCidr: [192.168.133.0/24]
+`)
+	files["provider.yaml"] = strings.Replace(files["provider.yaml"],
+		"        server: vcenter.example.test\n",
+		"        server: other-vcenter.example.test\n", 1)
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected unmatched failure domain server error, got nil")
+	}
+	want := `InfraProvider/vsphere spec.vsphere.failureDomains[0].server "other-vcenter.example.test" does not match any vcenters[].server`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
+	}
+}
+
 func TestKubeVirtHostClusterValidation(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -3353,6 +3397,7 @@ __NODE_NETWORKING__    machineProfiles:
         cpu: 8
         memoryMiB: 16384
         diskGiB: 120
+        template: rhcos
         failureDomainRef: dc1-zone-a
   networkAttachments:
     - name: vsphere-net

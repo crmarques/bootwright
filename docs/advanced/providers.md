@@ -115,6 +115,11 @@ spec:
         failureDomainRef: dc1-zone-a
 ```
 
+`machineProfiles[].failureDomainRef` must name a `failureDomains[]` entry, and
+every `failureDomains[].server` must equal a declared `vcenters[].server`.
+`template` and `failureDomainRef` are vSphere-only profile fields; profile
+`dataDisks` are libvirt-only.
+
 The vSphere desired-state shape is present so the schema can stabilize ahead
 of the apply adapter. The shipped apply workflows do not converge vSphere
 clusters yet.

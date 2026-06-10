@@ -393,6 +393,12 @@ Rules:
   on `Machine.spec.hardware`.
 - Libvirt, vSphere, and KubeVirt providers declare `machineProfiles[]`.
   Machines select a profile through `Machine.spec.substrate.profileRef`.
+- Profile fields the selected provider's adapter does not consume are
+  rejected: `template` and `failureDomainRef` are vSphere-only, and
+  `dataDisks` are libvirt-only.
+- vSphere `machineProfiles[].failureDomainRef` must name a
+  `spec.vsphere.failureDomains[]` entry, and every
+  `failureDomains[].server` must equal a declared `vcenters[].server`.
 - `networkAttachments[]` names provider-specific attachment targets. Machines
   bind to them through `spec.network.config.attachmentRef`.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.

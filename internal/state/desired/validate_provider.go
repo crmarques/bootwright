@@ -115,7 +115,7 @@ func validateProviderLibvirt(prefix string, spec *v1alpha1.InfraProviderLibvirt,
 	} else {
 		errs = append(errs, prefix+".bmcEmulationDefaults is required for current libvirt apply support")
 	}
-	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", spec.MachineProfiles)...)
+	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", v1alpha1.ProvisionerLibvirt, spec.MachineProfiles, nil)...)
 	return errs
 }
 
@@ -124,10 +124,13 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 	if len(spec.VCenters) == 0 {
 		errs = append(errs, prefix+".vcenters is required")
 	}
+	vcenterServers := map[string]bool{}
 	for i, vc := range spec.VCenters {
 		owner := fmt.Sprintf("%s.vcenters[%d]", prefix, i)
 		if vc.Server == "" {
 			errs = append(errs, owner+".server is required")
+		} else {
+			vcenterServers[vc.Server] = true
 		}
 		if vc.Port < 0 || vc.Port > 65535 {
 			errs = append(errs, fmt.Sprintf("%s.port %d out of range", owner, vc.Port))
@@ -142,10 +145,13 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 	if len(spec.FailureDomains) == 0 {
 		errs = append(errs, prefix+".failureDomains is required")
 	}
+	failureDomains := map[string]bool{}
 	for i, fd := range spec.FailureDomains {
 		owner := fmt.Sprintf("%s.failureDomains[%d]", prefix, i)
 		if fd.Name == "" {
 			errs = append(errs, owner+".name is required")
+		} else {
+			failureDomains[fd.Name] = true
 		}
 		if fd.Region == "" {
 			errs = append(errs, owner+".region is required")
@@ -155,6 +161,8 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 		}
 		if fd.Server == "" {
 			errs = append(errs, owner+".server is required")
+		} else if !vcenterServers[fd.Server] {
+			errs = append(errs, fmt.Sprintf("%s.server %q does not match any vcenters[].server", owner, fd.Server))
 		}
 		if fd.Topology.Datacenter == "" {
 			errs = append(errs, owner+".topology.datacenter is required")
@@ -172,7 +180,7 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 			errs = append(errs, fmt.Sprintf("%s.topology.networks declares multiple vSphere topology networks; spec.vsphere.nodeNetworking is required", owner))
 		}
 	}
-	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", spec.MachineProfiles)...)
+	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", v1alpha1.ProvisionerVSphere, spec.MachineProfiles, failureDomains)...)
 	return errs
 }
 
@@ -201,11 +209,18 @@ func validateProviderKubeVirt(prefix string, spec *v1alpha1.InfraProviderKubeVir
 	if spec.StorageClassRef != nil && spec.StorageClassRef.Name == "" {
 		errs = append(errs, prefix+".storageClassRef is required when storageClassRef is set")
 	}
-	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", spec.MachineProfiles)...)
+	errs = append(errs, validateMachineProfiles(prefix+".machineProfiles", v1alpha1.ProvisionerKubeVirt, spec.MachineProfiles, nil)...)
 	return errs
 }
 
-func validateMachineProfiles(prefix string, profiles []v1alpha1.MachineProfile) []string {
+// validateMachineProfiles validates the shared MachineProfile shape and
+// rejects fields the selected provider's adapter ignores, instead of
+// accepting state that diverges from what the operator authored (the
+// MachinePoolSpec precedent): template and failureDomainRef drive only the
+// vSphere adapter, and dataDisks are provisioned only by the libvirt adapter.
+// failureDomains carries spec.vsphere.failureDomains[].name for vSphere
+// providers so failureDomainRef resolves like every other reference.
+func validateMachineProfiles(prefix, providerType string, profiles []v1alpha1.MachineProfile, failureDomains map[string]bool) []string {
 	var errs []string
 	seen := map[string]bool{}
 	for i, profile := range profiles {
@@ -219,8 +234,20 @@ func validateMachineProfiles(prefix string, profiles []v1alpha1.MachineProfile) 
 		if profile.CPU < 0 || profile.MemoryMiB < 0 || profile.DiskGiB < 0 {
 			errs = append(errs, owner+" cpu/memoryMiB/diskGiB must be non-negative")
 		}
-		if profile.FailureDomainRef.Name != "" && !IsDNSLabel(profile.FailureDomainRef.Name) {
-			errs = append(errs, fmt.Sprintf("%s.failureDomainRef %q is not a DNS label", owner, profile.FailureDomainRef.Name))
+		if providerType == v1alpha1.ProvisionerVSphere {
+			if profile.FailureDomainRef.Name != "" && !failureDomains[profile.FailureDomainRef.Name] {
+				errs = append(errs, fmt.Sprintf("%s.failureDomainRef %q does not match any failureDomains[].name", owner, profile.FailureDomainRef.Name))
+			}
+		} else {
+			if profile.Template != "" {
+				errs = append(errs, fmt.Sprintf("%s.template is not supported when type=%s; only the vsphere adapter clones machines from a template", owner, providerType))
+			}
+			if profile.FailureDomainRef.Name != "" {
+				errs = append(errs, fmt.Sprintf("%s.failureDomainRef is not supported when type=%s; failure domains exist only on vsphere providers", owner, providerType))
+			}
+		}
+		if providerType != v1alpha1.ProvisionerLibvirt && len(profile.DataDisks) > 0 {
+			errs = append(errs, fmt.Sprintf("%s.dataDisks is not supported when type=%s; only the libvirt adapter provisions data disks", owner, providerType))
 		}
 		for j, disk := range profile.DataDisks {
 			diskOwner := fmt.Sprintf("%s.dataDisks[%d]", owner, j)
