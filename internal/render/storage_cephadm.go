@@ -1,6 +1,7 @@
 package render
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -23,10 +24,16 @@ func cephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		labels := append([]string(nil), node.Roles...)
+		for _, label := range node.Labels {
+			if !slices.Contains(labels, label) {
+				labels = append(labels, label)
+			}
+		}
 		host := map[string]any{
 			"service_type": "host",
 			"hostname":     node.Hostname,
-			"labels":       append([]string(nil), node.Roles...),
+			"labels":       labels,
 		}
 		// A CRUSH location is only meaningful in stretch mode, where sites map to
 		// real failure-domain buckets (e.g. datacenter). Without stretch the
@@ -128,16 +135,21 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 	var docs []any
 	explicitHosts := map[string]bool{}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || len(node.Devices) == 0 {
+		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || (len(node.Devices) == 0 && node.OSD == nil) {
 			continue
 		}
 		if !hostSet[node.Hostname] {
 			continue
 		}
-		spec := map[string]any{
-			"data_devices": map[string]any{
-				"paths": append([]string(nil), node.Devices...),
-			},
+		var spec map[string]any
+		if node.OSD != nil {
+			spec = cephadmOSDSpec(node.OSD)
+		} else {
+			spec = map[string]any{
+				"data_devices": map[string]any{
+					"paths": append([]string(nil), node.Devices...),
+				},
+			}
 		}
 		docs = append(docs, cephadmPlacementService("osd", "data-"+node.Hostname, []string{node.Hostname}, 0, spec))
 		explicitHosts[node.Hostname] = true
@@ -153,4 +165,54 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 		docs = append(docs, cephadmPlacementService("osd", "data", autoHosts, 0, spec))
 	}
 	return docs
+}
+
+// cephadmOSDSpec renders the drivegroup-shaped host OSD selection into the
+// cephadm OSD service spec, field for field.
+func cephadmOSDSpec(osd *v1alpha1.StorageCephHostOSD) map[string]any {
+	spec := map[string]any{}
+	if osd.DataDevices != nil {
+		spec["data_devices"] = cephadmDeviceSelection(osd.DataDevices)
+	}
+	if osd.DBDevices != nil {
+		spec["db_devices"] = cephadmDeviceSelection(osd.DBDevices)
+	}
+	if osd.WALDevices != nil {
+		spec["wal_devices"] = cephadmDeviceSelection(osd.WALDevices)
+	}
+	if osd.Encrypted {
+		spec["encrypted"] = true
+	}
+	if osd.OSDsPerDevice > 0 {
+		spec["osds_per_device"] = osd.OSDsPerDevice
+	}
+	if osd.CrushDeviceClass != "" {
+		spec["crush_device_class"] = osd.CrushDeviceClass
+	}
+	return spec
+}
+
+func cephadmDeviceSelection(selection *v1alpha1.StorageCephDeviceSelection) map[string]any {
+	out := map[string]any{}
+	if len(selection.Paths) > 0 {
+		out["paths"] = append([]string(nil), selection.Paths...)
+	}
+	if selection.All {
+		out["all"] = true
+	}
+	if selection.Rotational != nil {
+		// Upstream drivegroups spell rotational as 0/1.
+		rotational := 0
+		if *selection.Rotational {
+			rotational = 1
+		}
+		out["rotational"] = rotational
+	}
+	if selection.Size != "" {
+		out["size"] = selection.Size
+	}
+	if selection.Limit > 0 {
+		out["limit"] = selection.Limit
+	}
+	return out
 }

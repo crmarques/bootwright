@@ -321,6 +321,15 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 			}
 			roleSeen[role] = true
 		}
+		for j, label := range node.Labels {
+			labelOwner := fmt.Sprintf("%s.labels[%d]", owner, j)
+			if label == "" {
+				errs = append(errs, labelOwner+" must not be empty")
+			} else if roleSeen[label] {
+				errs = append(errs, fmt.Sprintf("%s %q duplicates a role; roles always become host labels", labelOwner, label))
+			}
+		}
+		errs = append(errs, validateStorageCephHostOSD(owner, node)...)
 	}
 	return errs
 }
@@ -481,6 +490,51 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 		}
 	}
 	return v1alpha1.StorageCephHost{}, false
+}
+
+// validateStorageCephHostOSD checks the OSD device selection: the lean
+// devices shorthand and the drivegroup-shaped osd object are mutually
+// exclusive, and each device selection must select something coherent.
+func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost) []string {
+	var errs []string
+	if len(node.Devices) > 0 && node.OSD != nil {
+		errs = append(errs, fmt.Sprintf("%s sets both devices and osd; devices is the shorthand for osd.dataDevices.paths — use one", owner))
+	}
+	if node.OSD == nil {
+		return errs
+	}
+	if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) {
+		errs = append(errs, fmt.Sprintf("%s.osd requires the %q role", owner, v1alpha1.StorageCephRoleOSD))
+	}
+	if node.OSD.DataDevices == nil {
+		errs = append(errs, owner+".osd.dataDevices is required")
+	}
+	for _, selection := range []struct {
+		field string
+		value *v1alpha1.StorageCephDeviceSelection
+	}{
+		{"dataDevices", node.OSD.DataDevices},
+		{"dbDevices", node.OSD.DBDevices},
+		{"walDevices", node.OSD.WALDevices},
+	} {
+		if selection.value == nil {
+			continue
+		}
+		selectionOwner := owner + ".osd." + selection.field
+		if len(selection.value.Paths) > 0 && selection.value.All {
+			errs = append(errs, selectionOwner+" must not set both paths and all")
+		}
+		if len(selection.value.Paths) == 0 && !selection.value.All && selection.value.Rotational == nil && selection.value.Size == "" && selection.value.Limit == 0 {
+			errs = append(errs, selectionOwner+" must select devices (paths, all, rotational, size, or limit)")
+		}
+		if selection.value.Limit < 0 {
+			errs = append(errs, selectionOwner+".limit must be non-negative")
+		}
+	}
+	if node.OSD.OSDsPerDevice < 0 {
+		errs = append(errs, owner+".osd.osdsPerDevice must be non-negative")
+	}
+	return errs
 }
 
 func storageCephNodeRolesOnly(node v1alpha1.StorageCephHost, role string) bool {

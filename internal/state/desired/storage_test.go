@@ -189,7 +189,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 				state.StoragePools[0].Spec.Ceph.Type = v1alpha1.StoragePoolTypeErasureCode
 				state.StoragePools[0].Spec.Ceph.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
 			},
-			want: `ceph.type "erasure-coded" is not supported for stretch-mode`,
+			want: `ceph.type "erasure" is not supported for stretch-mode`,
 		},
 		{
 			name: "cephfs-data-pool-equals-metadata",
@@ -337,7 +337,7 @@ func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 			edit: func(spec *v1alpha1.StoragePoolCephSpec) {
 				spec.Type = v1alpha1.StoragePoolTypeErasureCode
 			},
-			want: "ceph.erasureCoded is required when ceph.type=erasure-coded",
+			want: "ceph.erasure is required when ceph.type=erasure",
 		},
 		{
 			name: "erasure-coded-replicated-arm",
@@ -346,7 +346,7 @@ func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 				spec.ErasureCoded = &v1alpha1.StoragePoolErasureCode{DataChunks: 2, CodingChunks: 1}
 				spec.Replicated.Size = 3
 			},
-			want: "ceph.type=erasure-coded must not set replicated",
+			want: "ceph.type=erasure must not set replicated",
 		},
 	}
 	for _, tc := range cases {

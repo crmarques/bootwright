@@ -170,7 +170,7 @@ func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alp
 	if ingress.Address == "" {
 		return v1alpha1.Endpoint{}, false
 	}
-	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.InterfaceNetworks}, true
+	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.VirtualInterfaceNetworks}, true
 }
 
 func CephadmVirtualIP(endpoint v1alpha1.Endpoint) string {

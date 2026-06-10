@@ -18,7 +18,7 @@ spec:
       - name: dc1
         address: 192.168.141.80
         prefixLength: 24
-        interfaceNetworks:
+        virtualInterfaceNetworks:
           - 192.168.141.0/24
         placement:
           sites:
@@ -26,7 +26,7 @@ spec:
       - name: dc2
         address: 192.168.142.80
         prefixLength: 24
-        interfaceNetworks:
+        virtualInterfaceNetworks:
           - 192.168.142.0/24
         placement:
           sites:

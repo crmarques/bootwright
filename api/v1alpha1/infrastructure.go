@@ -242,7 +242,7 @@ const (
 	StorageCephRoleIngress = "ingress"
 
 	StoragePoolTypeReplicated  = "replicated"
-	StoragePoolTypeErasureCode = "erasure-coded"
+	StoragePoolTypeErasureCode = "erasure"
 
 	StoragePoolRoleRBD            = "rbd"
 	StoragePoolRoleCephFSMetadata = "cephfs-metadata"

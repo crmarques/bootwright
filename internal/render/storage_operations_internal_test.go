@@ -103,7 +103,7 @@ func TestStorageOperationsCarryStructuralIdentity(t *testing.T) {
 	}
 	ec := structuralByName["create-pool-ec"]
 	if ec["type"] != v1alpha1.StoragePoolTypeErasureCode || ec["dataChunks"] != 2 || ec["codingChunks"] != 1 {
-		t.Fatalf("create-pool-ec structural = %v, want erasure-coded 2+1", ec)
+		t.Fatalf("create-pool-ec structural = %v, want erasure 2+1", ec)
 	}
 	if got := structuralByName["create-cephfs-fs1"]; got["metadataPool"] != "fs1-meta" || got["defaultDataPool"] != "fs1-data" {
 		t.Fatalf("create-cephfs-fs1 structural = %v, want metadataPool fs1-meta / defaultDataPool fs1-data", got)
@@ -250,5 +250,61 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 	}
 	if electionIdx == -1 || enableIdx == -1 || electionIdx > enableIdx {
 		t.Fatalf("election strategy must precede enable_stretch_mode, got order %v", names)
+	}
+}
+
+// The drivegroup-shaped host osd selection renders 1:1 into the cephadm OSD
+// service spec, and free-form host labels render alongside the roles.
+func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
+	rotational := false
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+				Hostname:   "ceph-0",
+				MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+				Site:       "lab",
+				Roles:      []string{"mon", "osd"},
+				Labels:     []string{"_admin", "mon"},
+				OSD: &v1alpha1.StorageCephHostOSD{
+					DataDevices:      &v1alpha1.StorageCephDeviceSelection{Rotational: &rotational, Limit: 4},
+					DBDevices:        &v1alpha1.StorageCephDeviceSelection{Paths: []string{"/dev/nvme0n1"}},
+					Encrypted:        true,
+					OSDsPerDevice:    2,
+					CrushDeviceClass: "ssd",
+				},
+			}}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+
+	hostDocs := cephadmBootstrapSpec(state, cluster)
+	host := hostDocs[0].(map[string]any)
+	wantLabels := []string{"mon", "osd", "_admin"}
+	if got := host["labels"].([]string); !reflect.DeepEqual(got, wantLabels) {
+		t.Fatalf("host labels = %v, want %v", got, wantLabels)
+	}
+
+	coreDocs := cephadmCoreServicesSpec(state, cluster)
+	var osdSpec map[string]any
+	for _, doc := range coreDocs {
+		m := doc.(map[string]any)
+		if m["service_type"] == "osd" {
+			osdSpec = m["spec"].(map[string]any)
+		}
+	}
+	if osdSpec == nil {
+		t.Fatalf("no osd service in %v", coreDocs)
+	}
+	data := osdSpec["data_devices"].(map[string]any)
+	if data["rotational"] != 0 || data["limit"] != 4 {
+		t.Fatalf("data_devices = %v, want rotational 0 limit 4", data)
+	}
+	db := osdSpec["db_devices"].(map[string]any)
+	if got := db["paths"].([]string); !reflect.DeepEqual(got, []string{"/dev/nvme0n1"}) {
+		t.Fatalf("db_devices paths = %v", got)
+	}
+	if osdSpec["encrypted"] != true || osdSpec["osds_per_device"] != 2 || osdSpec["crush_device_class"] != "ssd" {
+		t.Fatalf("osd spec = %v, want encrypted, osds_per_device 2, crush_device_class ssd", osdSpec)
 	}
 }

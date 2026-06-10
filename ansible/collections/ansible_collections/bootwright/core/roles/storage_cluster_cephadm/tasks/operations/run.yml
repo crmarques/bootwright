@@ -65,7 +65,7 @@
       {{
         (bootwright_ceph_op_pool_live.pool_name | default('') | length > 0)
         and (
-          ('erasure-coded' if (bootwright_ceph_op_pool_live.type | default(1)) == 3 else 'replicated')
+          ('erasure' if (bootwright_ceph_op_pool_live.type | default(1)) == 3 else 'replicated')
           != (bootwright_ceph_op.structural.type | default('replicated'))
         )
       }}

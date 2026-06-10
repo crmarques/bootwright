@@ -73,16 +73,16 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		switch poolType {
 		case v1alpha1.StoragePoolTypeReplicated:
 			if pool.Spec.Ceph.ErasureCoded != nil {
-				errs = append(errs, prefix+".ceph.type=replicated must not set erasureCoded")
+				errs = append(errs, prefix+".ceph.type=replicated must not set erasure")
 			}
 		case v1alpha1.StoragePoolTypeErasureCode:
 			if pool.Spec.Ceph.ErasureCoded == nil {
-				errs = append(errs, prefix+".ceph.erasureCoded is required when ceph.type=erasure-coded")
+				errs = append(errs, prefix+".ceph.erasure is required when ceph.type=erasure")
 			} else if pool.Spec.Ceph.ErasureCoded.DataChunks < 1 || pool.Spec.Ceph.ErasureCoded.CodingChunks < 1 {
-				errs = append(errs, prefix+".ceph.erasureCoded.dataChunks and codingChunks must be positive")
+				errs = append(errs, prefix+".ceph.erasure.dataChunks and codingChunks must be positive")
 			}
 			if pool.Spec.Ceph.Replicated.Size != 0 || pool.Spec.Ceph.Replicated.MinSize != 0 {
-				errs = append(errs, prefix+".ceph.type=erasure-coded must not set replicated")
+				errs = append(errs, prefix+".ceph.type=erasure must not set replicated")
 			}
 			if ok && storageClusterStretchEnabled(cluster) {
 				errs = append(errs, fmt.Sprintf("%s.ceph.type %q is not supported for stretch-mode StorageCluster/%s", prefix, poolType, cluster.Metadata.Name))

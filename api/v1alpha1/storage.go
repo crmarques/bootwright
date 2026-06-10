@@ -98,12 +98,44 @@ type StorageCephPoolReplicas struct {
 
 type StorageCephHost struct {
 	// Hostname is the cephadm host-spec hostname, rendered verbatim; it must
-	// equal the host's actual hostname.
-	Hostname   string               `yaml:"hostname" json:"hostname"`
+	// equal the host's actual hostname. It defaults to the machineRef name.
+	Hostname   string               `yaml:"hostname,omitempty" json:"hostname,omitempty"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	Site       string               `yaml:"site" json:"site"`
 	Roles      []string             `yaml:"roles" json:"roles"`
-	Devices    []string             `yaml:"devices,omitempty" json:"devices,omitempty"`
+	// Labels are additional free-form cephadm host labels (for example
+	// _admin) rendered alongside the roles, which always become labels.
+	Labels []string `yaml:"labels,omitempty" json:"labels,omitempty"`
+	// Devices is the lean OSD shorthand: literal device paths, equivalent to
+	// osd.dataDevices.paths. Omitting both devices and osd on an osd-role
+	// host consumes all available devices. Mutually exclusive with osd.
+	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
+	// OSD is the drivegroup-shaped device selection, mirroring the cephadm
+	// OSD service spec fields. Mutually exclusive with devices.
+	OSD *StorageCephHostOSD `yaml:"osd,omitempty" json:"osd,omitempty"`
+}
+
+// StorageCephHostOSD mirrors the cephadm drivegroup spec for one host's OSD
+// service; field names render 1:1 into the cephadm spec (data_devices,
+// db_devices, wal_devices, encrypted, osds_per_device, crush_device_class).
+type StorageCephHostOSD struct {
+	DataDevices      *StorageCephDeviceSelection `yaml:"dataDevices,omitempty" json:"dataDevices,omitempty"`
+	DBDevices        *StorageCephDeviceSelection `yaml:"dbDevices,omitempty" json:"dbDevices,omitempty"`
+	WALDevices       *StorageCephDeviceSelection `yaml:"walDevices,omitempty" json:"walDevices,omitempty"`
+	Encrypted        bool                        `yaml:"encrypted,omitempty" json:"encrypted,omitempty"`
+	OSDsPerDevice    int                         `yaml:"osdsPerDevice,omitempty" json:"osdsPerDevice,omitempty"`
+	CrushDeviceClass string                      `yaml:"crushDeviceClass,omitempty" json:"crushDeviceClass,omitempty"`
+}
+
+// StorageCephDeviceSelection mirrors the cephadm drivegroup device filter:
+// exactly one of paths or all, optionally narrowed by rotational, size, and
+// limit (upstream data_devices fields, same spellings).
+type StorageCephDeviceSelection struct {
+	Paths      []string `yaml:"paths,omitempty" json:"paths,omitempty"`
+	All        bool     `yaml:"all,omitempty" json:"all,omitempty"`
+	Rotational *bool    `yaml:"rotational,omitempty" json:"rotational,omitempty"`
+	Size       string   `yaml:"size,omitempty" json:"size,omitempty"`
+	Limit      int      `yaml:"limit,omitempty" json:"limit,omitempty"`
 }
 
 type StoragePlacementPolicy struct {
@@ -144,7 +176,7 @@ type StoragePoolCephSpec struct {
 	Role         string                  `yaml:"role,omitempty" json:"role,omitempty"`
 	Application  string                  `yaml:"application,omitempty" json:"application,omitempty"`
 	Replicated   StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
-	ErasureCoded *StoragePoolErasureCode `yaml:"erasureCoded,omitempty" json:"erasureCoded,omitempty"`
+	ErasureCoded *StoragePoolErasureCode `yaml:"erasure,omitempty" json:"erasure,omitempty"`
 }
 
 type StoragePoolErasureCode struct {
@@ -225,11 +257,13 @@ type StorageObjectGatewayCephSpec struct {
 // StorageObjectGatewayIngress is one storage-owned RGW ingress VIP. Address and
 // prefixLength are owned here, not borrowed from a ContainerCluster endpoint.
 type StorageObjectGatewayIngress struct {
-	Name              string           `yaml:"name" json:"name"`
-	Address           string           `yaml:"address" json:"address"`
-	PrefixLength      int              `yaml:"prefixLength" json:"prefixLength"`
-	InterfaceNetworks []string         `yaml:"interfaceNetworks,omitempty" json:"interfaceNetworks,omitempty"`
-	Placement         StoragePlacement `yaml:"placement" json:"placement"`
+	Name         string `yaml:"name" json:"name"`
+	Address      string `yaml:"address" json:"address"`
+	PrefixLength int    `yaml:"prefixLength" json:"prefixLength"`
+	// VirtualInterfaceNetworks renders verbatim to the cephadm ingress spec
+	// virtual_interface_networks field.
+	VirtualInterfaceNetworks []string         `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
+	Placement                StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
 }
 
 type StorageExport struct {

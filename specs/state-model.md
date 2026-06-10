@@ -643,10 +643,12 @@ Rules:
   `StoragePlacementPolicy` on the same `StorageCluster`. The referenced policy
   owns the pool's replication; `spec.ceph.replicated` must not also be set on
   the pool.
-- `spec.ceph.type` accepts `replicated` (default) or `erasure-coded`.
-  `replicated` must not set `ceph.erasureCoded`. `erasure-coded` requires
-  `ceph.erasureCoded.{dataChunks,codingChunks}`, must not set `ceph.replicated`,
-  and is not allowed on stretch-mode clusters.
+- `spec.ceph.type` accepts `replicated` (default) or `erasure` (the upstream
+  `ceph osd pool create` words; the populated arm key equals the type value).
+  `replicated` must not set `ceph.erasure`. `erasure` requires
+  `ceph.erasure.{dataChunks,codingChunks}` (rendered as the erasure-code
+  profile `k=`/`m=`), must not set `ceph.replicated`, and is not allowed on
+  stretch-mode clusters.
 - `spec.ceph.role`, when set, accepts `rbd`, `cephfs-metadata`, `cephfs-data`,
   or `rgw`. `spec.ceph.application` is the cephadm application override.
 - On stretch-mode clusters, `ceph.replicated.size` must be `4` and `minSize`
@@ -684,7 +686,7 @@ Rules:
 - `spec.ceph.placement.hosts[]` select topology nodes that hold the `rgw` role;
   on stretch-mode clusters at least two per data site.
 - `spec.ceph.ingresses[]` require a unique `name`, a storage-owned `address` and
-  `prefixLength` for the ingress VIP (optional `interfaceNetworks[]`), and a
+  `prefixLength` for the ingress VIP (optional `virtualInterfaceNetworks[]`, rendered verbatim to the cephadm ingress `virtual_interface_networks`), and a
   `placement` over `ingress`-role nodes.
 
 ## StorageExport
