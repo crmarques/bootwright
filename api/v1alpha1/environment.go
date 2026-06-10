@@ -69,6 +69,19 @@ type EnvironmentSecretStorageSpec struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
+// EnvironmentEntitlement declares named vendor-controlled access for one
+// provider/product pair. It is the documented outlier among the union
+// grammars (see the package comment): the required arms follow from the
+// provider/product pair instead of a type discriminator. Pairs outside this
+// table are rejected.
+//
+//	provider/product      required arms
+//	community/ceph        none
+//	community/openshift   none
+//	redhat/openshift      none
+//	redhat/rhel           rhsm
+//	redhat/ceph           rhsm + registry.credentialsRef
+//	ibm/ibm-storage-ceph  rhsm + registry.credentialsRef + license.accept: true
 type EnvironmentEntitlement struct {
 	Name     string                          `yaml:"name" json:"name"`
 	Provider string                          `yaml:"provider" json:"provider"`
@@ -167,6 +180,10 @@ type EnvironmentSecretSpec struct {
 	Generated *EnvironmentSecretGenerated `yaml:"generated,omitempty" json:"generated,omitempty"`
 }
 
+// EnvironmentSecrets is the API's single bespoke collection codec (see the
+// package comment): spec.secrets is authored as a list whose items are
+// scalar secret names (context-local material) or single-key {name: spec}
+// objects, and decodes into this name-keyed map.
 type EnvironmentSecrets map[string]EnvironmentSecretSpec
 
 func (s EnvironmentSecrets) IsZero() bool {

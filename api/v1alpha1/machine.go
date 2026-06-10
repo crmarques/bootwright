@@ -268,10 +268,15 @@ type MachineInstallSELinux struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
+// MachineInstallFirewall.Enabled is a tri-state *bool: explicit false
+// renders a real firewall disable, while unset renders nothing and the
+// installed OS default stands.
 type MachineInstallFirewall struct {
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
+// MachineInstallFIPS.Enabled is a plain bool because false and unset mean
+// the same thing: only enabled: true renders FIPS configuration.
 type MachineInstallFIPS struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }

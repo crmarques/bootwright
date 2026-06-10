@@ -65,6 +65,11 @@ type InfraProviderKubeVirt struct {
 	MachineProfiles []MachineProfile      `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
 }
 
+// NetworkAttachmentCapability is a presence union over the provider arm
+// vocabulary: exactly one arm is authored and there is no type discriminator
+// because the parent InfraProvider's spec.type already fixes the kind —
+// validation rejects an arm that does not match it. See the package comment
+// for the two union grammars.
 type NetworkAttachmentCapability struct {
 	Name      string                      `yaml:"name" json:"name"`
 	Libvirt   *NetworkAttachmentLibvirt   `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
@@ -157,6 +162,10 @@ type VSphereNetworkSubnet struct {
 	NetworkSubnetCIDR []string `yaml:"networkSubnetCidr,omitempty" json:"networkSubnetCidr,omitempty"`
 }
 
+// BMCEmulationDefaults tunes the BMC emulation a libvirt provider runs for
+// its machines. An absent block keeps emulation on with stock defaults;
+// enabled defaults to true and false is the opt-out, per the package-comment
+// enable/disable idiom.
 type BMCEmulationDefaults struct {
 	Enabled                        *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Protocol                       string   `yaml:"protocol,omitempty" json:"protocol,omitempty"`
