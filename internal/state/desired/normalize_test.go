@@ -604,6 +604,150 @@ func containerClusterWithMachine(name, machine string) v1alpha1.ContainerCluster
 	}
 }
 
+func TestNormalizeMaterializesMachineImageMediaType(t *testing.T) {
+	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{
+		{
+			Metadata: v1alpha1.Metadata{Name: "dvd"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.7-x86_64-dvd.iso",
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "boot"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "netinstall"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel9-netinst.iso",
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "authored"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type:      v1alpha1.MachineImageTypeISO,
+				MediaType: v1alpha1.MachineImageMediaTypeBoot,
+				URL:       "local-media:rhel-9.7-x86_64-dvd.iso",
+			},
+		},
+	}}
+
+	Normalize(&state)
+
+	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
+		t.Fatalf("dvd-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeDVD)
+	}
+	if got := state.MachineImages[1].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeBoot {
+		t.Fatalf("boot.iso-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeBoot)
+	}
+	// A netinstall ISO whose filename does not end in boot.iso derives dvd;
+	// the derivation is unchanged but now visible in effective state instead
+	// of recomputed independently by validate and render.
+	if got := state.MachineImages[2].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeDVD {
+		t.Fatalf("netinstall-named image mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeDVD)
+	}
+	if got := state.MachineImages[3].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeBoot {
+		t.Fatalf("authored mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeBoot)
+	}
+}
+
+func TestNormalizeMaterializesMachineImageInstallSourceType(t *testing.T) {
+	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{
+		{
+			Metadata: v1alpha1.Metadata{Name: "entitled"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+				InstallSource: v1alpha1.MachineImageInstallSource{
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhel"},
+				},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "tree"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+				InstallSource: v1alpha1.MachineImageInstallSource{
+					URL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+				},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "none"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.7-x86_64-dvd.iso",
+			},
+		},
+	}}
+
+	Normalize(&state)
+
+	if got := state.MachineImages[0].Spec.InstallSource.Type; got != v1alpha1.MachineImageInstallSourceTypeRHSM {
+		t.Fatalf("entitlementRef-only installSource.type = %q, want %q", got, v1alpha1.MachineImageInstallSourceTypeRHSM)
+	}
+	if got := state.MachineImages[1].Spec.InstallSource.Type; got != v1alpha1.MachineImageInstallSourceTypeURL {
+		t.Fatalf("url-only installSource.type = %q, want %q", got, v1alpha1.MachineImageInstallSourceTypeURL)
+	}
+	if got := state.MachineImages[2].Spec.InstallSource.Type; got != "" {
+		t.Fatalf("absent installSource.type = %q, want empty", got)
+	}
+}
+
+func TestNormalizePromotesFirstRepositoryToInstallTree(t *testing.T) {
+	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{
+		{
+			Metadata: v1alpha1.Metadata{Name: "promoted"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+				InstallSource: v1alpha1.MachineImageInstallSource{
+					Repositories: []v1alpha1.MachineInstallRepository{
+						{ID: "baseos", BaseURL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
+						{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+					},
+				},
+			},
+		},
+		{
+			Metadata: v1alpha1.Metadata{Name: "authored-url"},
+			Spec: v1alpha1.MachineImageSpec{
+				Type: v1alpha1.MachineImageTypeISO,
+				URL:  "local-media:rhel-9.8-x86_64-boot.iso",
+				InstallSource: v1alpha1.MachineImageInstallSource{
+					URL: "https://repos.example.test/rhel/9/BaseOS/x86_64/os/",
+					Repositories: []v1alpha1.MachineInstallRepository{
+						{ID: "appstream", BaseURL: "https://repos.example.test/rhel/9/AppStream/x86_64/os/"},
+					},
+				},
+			},
+		},
+	}}
+
+	Normalize(&state)
+
+	promoted := state.MachineImages[0].Spec.InstallSource
+	if promoted.URL != "https://repos.example.test/rhel/9/BaseOS/x86_64/os/" {
+		t.Fatalf("promoted installSource.url = %q, want repositories[0].baseURL", promoted.URL)
+	}
+	if len(promoted.Repositories) != 1 || promoted.Repositories[0].ID != "appstream" {
+		t.Fatalf("promoted installSource.repositories = %+v, want only appstream", promoted.Repositories)
+	}
+	authored := state.MachineImages[1].Spec.InstallSource
+	if authored.URL != "https://repos.example.test/rhel/9/BaseOS/x86_64/os/" {
+		t.Fatalf("authored installSource.url = %q, want unchanged", authored.URL)
+	}
+	if len(authored.Repositories) != 1 || authored.Repositories[0].ID != "appstream" {
+		t.Fatalf("authored installSource.repositories = %+v, want unchanged", authored.Repositories)
+	}
+}
+
 func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{

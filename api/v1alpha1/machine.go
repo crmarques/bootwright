@@ -136,21 +136,51 @@ type MachineImage struct {
 	SourcePath string           `yaml:"-" json:"-"`
 }
 
+// MachineImageSpec describes bootable install media used by managed OS
+// installation. The normalize phase materializes every derivable field
+// (mediaType, installSource.type, the repositories[0] install-tree
+// promotion), so `render effective` shows exactly what rendering consumes.
 type MachineImageSpec struct {
-	Type          string                    `yaml:"type" json:"type"`
-	MediaType     string                    `yaml:"mediaType,omitempty" json:"mediaType,omitempty"`
-	URL           string                    `yaml:"url" json:"url"`
+	// Type currently accepts "iso".
+	Type string `yaml:"type" json:"type"`
+	// MediaType accepts "dvd" or "boot". When omitted, normalize derives
+	// "boot" for url filenames ending in "boot.iso" and "dvd" otherwise; an
+	// authored value always wins (netinstall ISOs not named *boot.iso need
+	// an explicit "boot").
+	MediaType string `yaml:"mediaType,omitempty" json:"mediaType,omitempty"`
+	// URL locates the ISO: "local-media:<filename.iso>" for the managed
+	// media store, a "file://" absolute path, or "http(s)://".
+	URL string `yaml:"url" json:"url"`
+	// InstallSource declares where Anaconda fetches packages; it is
+	// required when mediaType is "boot".
 	InstallSource MachineImageInstallSource `yaml:"installSource,omitempty" json:"installSource,omitempty"`
-	Checksum      string                    `yaml:"checksum,omitempty" json:"checksum,omitempty"`
-	TrustRefs     []SecretRef               `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
-	HeadersRefs   []SecretRef               `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
+	// Checksum optionally pins the ISO content as "sha256:<hex>".
+	Checksum string `yaml:"checksum,omitempty" json:"checksum,omitempty"`
+	// TrustRefs name Environment secrets holding CA bundles trusted when
+	// downloading the ISO.
+	TrustRefs []SecretRef `yaml:"trustRefs,omitempty" json:"trustRefs,omitempty"`
+	// HeadersRefs name Environment secrets holding extra HTTP headers sent
+	// when downloading the ISO.
+	HeadersRefs []SecretRef `yaml:"headersRefs,omitempty" json:"headersRefs,omitempty"`
 }
 
+// MachineImageInstallSource declares the package source for install media
+// that carries no packages.
 type MachineImageInstallSource struct {
-	Type           string                     `yaml:"type,omitempty" json:"type,omitempty"`
-	URL            string                     `yaml:"url,omitempty" json:"url,omitempty"`
-	Repositories   []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
-	EntitlementRef LocalObjectReference       `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
+	// Type accepts "url" (plain HTTP(S) install tree) or "redhatCDN"
+	// (RHSM-backed Red Hat CDN install). When omitted, normalize derives it
+	// from the fields present: entitlementRef means "redhatCDN", url or
+	// repositories mean "url".
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+	// URL is the primary Anaconda install tree for type "url".
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+	// Repositories become additional Kickstart repo entries for type "url".
+	// When url is omitted, normalize promotes repositories[0].baseURL to the
+	// primary install tree (url) and keeps only the remaining entries here.
+	Repositories []MachineInstallRepository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
+	// EntitlementRef names the Environment.spec.entitlements[] entry (a Red
+	// Hat "rhel" entitlement) backing a "redhatCDN" install.
+	EntitlementRef LocalObjectReference `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 }
 
 type MachineInstallProfile struct {

@@ -249,14 +249,21 @@ spec:
 Rules:
 
 - `spec.type` currently accepts `iso`.
-- `spec.mediaType` accepts `dvd` or `boot`. When omitted, Bootwright treats
-  normal install media as `dvd` and filenames ending in `boot.iso` as `boot`.
+- `spec.mediaType` accepts `dvd` or `boot`. When omitted, normalize derives
+  `boot` for `url` filenames ending in `boot.iso` and `dvd` otherwise;
+  `render effective` shows the materialized value. A netinstall ISO whose
+  filename does not end in `boot.iso` derives `dvd`, so author
+  `mediaType: boot` explicitly for it.
 - `spec.installSource` is required for `mediaType: boot`. It accepts
   `type: url` for a plain HTTP(S) install tree or `type: redhatCDN` for an
-  RHSM-backed Red Hat CDN install.
+  RHSM-backed Red Hat CDN install. When `type` is omitted, normalize derives
+  it from the fields present: `entitlementRef` means `redhatCDN`, `url` or
+  `repositories` mean `url`.
 - `installSource.type: url` can set `url` as the primary Anaconda install
   tree. Alternatively, `repositories[0].baseURL` becomes the primary install
-  tree and subsequent repositories become additional Kickstart `repo` entries.
+  tree and subsequent repositories become additional Kickstart `repo`
+  entries; normalize materializes the promotion, so the effective state
+  shows the chosen install tree in `url`.
 - `installSource.type: redhatCDN` sets `entitlementRef`, which must
   resolve to a Red Hat `rhel` entitlement. RHSM organization and activation
   key secret refs are owned by that Environment entitlement.

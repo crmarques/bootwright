@@ -173,7 +173,7 @@ func validateMachineImageEntitlements(state v1alpha1.State) []string {
 	var errs []string
 	for _, image := range state.MachineImages {
 		source := image.Spec.InstallSource
-		if machineImageInstallSourceType(source) != v1alpha1.MachineImageInstallSourceTypeRHSM {
+		if source.Type != v1alpha1.MachineImageInstallSourceTypeRHSM {
 			continue
 		}
 		ref := source.EntitlementRef.Name

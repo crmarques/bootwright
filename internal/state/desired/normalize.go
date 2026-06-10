@@ -2,6 +2,7 @@ package desiredstate
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
@@ -16,6 +17,9 @@ func Normalize(state *v1alpha1.State) {
 	}
 	for i := range state.Machines {
 		normalizeMachine(&state.Machines[i])
+	}
+	for i := range state.MachineImages {
+		normalizeMachineImage(&state.MachineImages[i])
 	}
 	for i := range state.InfraProviders {
 		normalizeProvider(&state.InfraProviders[i])
@@ -90,6 +94,37 @@ func normalizeMachine(m *v1alpha1.Machine) {
 				break
 			}
 		}
+	}
+}
+
+// normalizeMachineImage materializes the install-media derivations so they
+// land in effective state: an omitted mediaType derives from the url filename
+// (boot.iso means boot media, anything else dvd), an omitted installSource.type
+// derives from which fields are present, and a url install source without a
+// url promotes repositories[0].baseURL to the primary install tree. Validators
+// and renderers read the materialized values instead of recomputing them.
+// Authored values always win; invalid ones are left for Validate to reject.
+func normalizeMachineImage(image *v1alpha1.MachineImage) {
+	spec := &image.Spec
+	if spec.MediaType == "" {
+		spec.MediaType = v1alpha1.MachineImageMediaTypeDVD
+		if strings.HasSuffix(strings.ToLower(spec.URL), "boot.iso") {
+			spec.MediaType = v1alpha1.MachineImageMediaTypeBoot
+		}
+	}
+	source := &spec.InstallSource
+	if source.Type == "" {
+		switch {
+		case source.EntitlementRef.Name != "":
+			source.Type = v1alpha1.MachineImageInstallSourceTypeRHSM
+		case source.URL != "" || len(source.Repositories) > 0:
+			source.Type = v1alpha1.MachineImageInstallSourceTypeURL
+		}
+	}
+	if source.Type == v1alpha1.MachineImageInstallSourceTypeURL &&
+		source.URL == "" && len(source.Repositories) > 0 && source.Repositories[0].BaseURL != "" {
+		source.URL = source.Repositories[0].BaseURL
+		source.Repositories = source.Repositories[1:]
 	}
 }
 

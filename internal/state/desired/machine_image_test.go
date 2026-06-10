@@ -165,17 +165,59 @@ func TestEntitlementRHSMSecretRefsMustBeDeclared(t *testing.T) {
 }
 
 func TestMachineImageBootISOInferredFromFilename(t *testing.T) {
-	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+	state := v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},
 		Spec: v1alpha1.MachineImageSpec{
 			Type: v1alpha1.MachineImageTypeISO,
 			URL:  "local-media:rhel-9.8-x86_64-boot.iso",
 		},
-	}}})
+	}}}
+	Normalize(&state)
+	if got := state.MachineImages[0].Spec.MediaType; got != v1alpha1.MachineImageMediaTypeBoot {
+		t.Fatalf("materialized mediaType = %q, want %q", got, v1alpha1.MachineImageMediaTypeBoot)
+	}
+	errs := validateMachineImages(state)
 	if len(errs) == 0 {
 		t.Fatal("validateMachineImages accepted inferred boot ISO without install source")
 	}
 	if !strings.Contains(errs[0], "installSource is required") {
+		t.Fatalf("error = %q", errs[0])
+	}
+}
+
+func TestMachineImageRejectsUnknownMediaType(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: "cdrom",
+			URL:       "local-media:rhel.iso",
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted unknown mediaType")
+	}
+	if !strings.Contains(errs[0], `mediaType "cdrom" must be one of: dvd, boot`) {
+		t.Fatalf("error = %q", errs[0])
+	}
+}
+
+func TestMachineImageRejectsUnknownInstallSourceType(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			InstallSource: v1alpha1.MachineImageInstallSource{
+				Type: "cdn",
+			},
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted unknown installSource.type")
+	}
+	if !strings.Contains(errs[0], `installSource.type "cdn" must be one of: url, redhatCDN`) {
 		t.Fatalf("error = %q", errs[0])
 	}
 }

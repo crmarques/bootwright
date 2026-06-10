@@ -477,8 +477,9 @@ func validateMachineImages(state v1alpha1.State) []string {
 		if image.Spec.Type != v1alpha1.MachineImageTypeISO {
 			errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, image.Spec.Type, v1alpha1.MachineImageTypeISO))
 		}
-		mediaType := machineImageMediaType(image)
-		if image.Spec.MediaType != "" && mediaType == "" {
+		switch image.Spec.MediaType {
+		case "", v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot:
+		default:
 			errs = append(errs, fmt.Sprintf("%s.mediaType %q must be one of: %s, %s", prefix, image.Spec.MediaType, v1alpha1.MachineImageMediaTypeDVD, v1alpha1.MachineImageMediaTypeBoot))
 		}
 		if image.Spec.URL == "" {
@@ -486,7 +487,7 @@ func validateMachineImages(state v1alpha1.State) []string {
 		} else if err := media.ValidateISOReference(image.Spec.URL); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.url %s", prefix, err))
 		}
-		errs = append(errs, validateMachineImageInstallSource(prefix, mediaType, image.Spec.InstallSource)...)
+		errs = append(errs, validateMachineImageInstallSource(prefix, image.Spec.MediaType, image.Spec.InstallSource)...)
 		if _, err := media.NormalizeSHA256(image.Spec.Checksum); err != nil {
 			errs = append(errs, fmt.Sprintf("%s.checksum %s", prefix, err))
 		}
@@ -624,24 +625,15 @@ func machineInstallStringListContains(values []string, want string) bool {
 	return false
 }
 
-func machineImageMediaType(image v1alpha1.MachineImage) string {
-	switch image.Spec.MediaType {
-	case "", v1alpha1.MachineImageMediaTypeDVD:
-		if image.Spec.MediaType == "" && strings.HasSuffix(strings.ToLower(image.Spec.URL), "boot.iso") {
-			return v1alpha1.MachineImageMediaTypeBoot
-		}
-		return v1alpha1.MachineImageMediaTypeDVD
-	case v1alpha1.MachineImageMediaTypeBoot:
-		return v1alpha1.MachineImageMediaTypeBoot
-	default:
-		return ""
-	}
-}
-
+// validateMachineImageInstallSource reads the normalize-materialized
+// mediaType and installSource.type; an empty installSource.type means no
+// install source was authored at all.
 func validateMachineImageInstallSource(prefix, mediaType string, installSource v1alpha1.MachineImageInstallSource) []string {
 	var errs []string
-	sourceType := machineImageInstallSourceType(installSource)
-	if installSource.Type != "" && sourceType == "" {
+	sourceType := installSource.Type
+	switch sourceType {
+	case "", v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM:
+	default:
 		return []string{fmt.Sprintf("%s.installSource.type %q must be one of: %s, %s", prefix, installSource.Type, v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM)}
 	}
 	if mediaType == v1alpha1.MachineImageMediaTypeBoot && sourceType == "" {
@@ -678,21 +670,6 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 		}
 	}
 	return errs
-}
-
-func machineImageInstallSourceType(installSource v1alpha1.MachineImageInstallSource) string {
-	switch installSource.Type {
-	case v1alpha1.MachineImageInstallSourceTypeURL, v1alpha1.MachineImageInstallSourceTypeRHSM:
-		return installSource.Type
-	case "":
-		if installSource.EntitlementRef.Name != "" {
-			return v1alpha1.MachineImageInstallSourceTypeRHSM
-		}
-		if installSource.URL != "" || len(installSource.Repositories) > 0 {
-			return v1alpha1.MachineImageInstallSourceTypeURL
-		}
-	}
-	return ""
 }
 
 func httpURL(s string) bool {

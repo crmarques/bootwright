@@ -161,14 +161,10 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 	return out
 }
 
+// machineOSInstallImageVars renders the normalize-materialized mediaType
+// as-is; the boot.iso filename derivation lives in the normalize phase.
 func machineOSInstallImageVars(resolved media.Resolved, mediaType, checksum string, sourceOnTarget bool) map[string]any {
 	normalizedChecksum, _ := media.NormalizeSHA256(checksum)
-	if mediaType == "" {
-		mediaType = v1alpha1.MachineImageMediaTypeDVD
-		if strings.HasSuffix(strings.ToLower(resolved.Original), "boot.iso") {
-			mediaType = v1alpha1.MachineImageMediaTypeBoot
-		}
-	}
 	out := map[string]any{
 		"kind":      resolved.Kind,
 		"mediaType": mediaType,
@@ -202,26 +198,23 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }
 
+// machineImageInstallSourceVars renders the install source exactly as
+// normalize materialized it: the primary install tree is source.url
+// (normalize already promoted repositories[0].baseURL into it when the url
+// was omitted) and every remaining repository is an additional repo entry.
 func machineImageInstallSourceVars(source v1alpha1.MachineImageInstallSource, env *v1alpha1.Environment, secretsDir string) (string, []any, map[string]any) {
-	sourceURL := source.URL
-	repos := source.Repositories
-	start := 0
-	if sourceURL == "" && len(repos) > 0 {
-		sourceURL = repos[0].BaseURL
-		start = 1
-	}
 	rhsm := map[string]any{}
 	if source.EntitlementRef.Name != "" {
 		resolved, ok := entitlements.Resolve(env, source.EntitlementRef.Name, "", secretsDir)
 		if !ok {
-			return sourceURL, machineInstallRepositoryVars(repos[start:]), rhsm
+			return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
 		}
 		rhsm["enabled"] = true
 		rhsm["organizationPath"] = resolved.RHSM.OrganizationPath
 		rhsm["activationKeyPath"] = resolved.RHSM.ActivationKeyPath
 		rhsm["connectToInsights"] = resolved.RHSM.ConnectToInsights
 	}
-	return sourceURL, machineInstallRepositoryVars(repos[start:]), rhsm
+	return source.URL, machineInstallRepositoryVars(source.Repositories), rhsm
 }
 
 func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []any {
