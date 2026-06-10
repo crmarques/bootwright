@@ -156,6 +156,98 @@ spec:
 	}
 }
 
+// TestStorageCephRoleVocabularyAuthorableFromYAML guards the one role
+// vocabulary end-to-end: an authored host carrying a monitoring role plus the
+// matching monitoring service block must pass validation (placement derives
+// from the role), and a role outside v1alpha1.StorageCephRoles() must still
+// be rejected with the full vocabulary in the error.
+func TestStorageCephRoleVocabularyAuthorableFromYAML(t *testing.T) {
+	const environment = `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: env
+spec:
+  baseDomain: bootwright.test
+  secrets:
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            comment: bootwright-ceph-node
+`
+	const machine = `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+  os:
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.0.2.10
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-node-ssh
+      addressRef: ssh
+`
+	const storage = `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph
+spec:
+  type: ceph
+  ceph:
+    cephadm:
+      bootstrap:
+        host: ceph-0
+    monitoring:
+      prometheus:
+        retentionTime: 15d
+    topology:
+      hosts:
+        - machineRef: ceph-0
+          site: lab
+          roles: [ROLES]
+`
+	cases := []struct {
+		name  string
+		roles string
+		want  string
+	}{
+		{name: "monitoring-role-passes", roles: "mon, prometheus"},
+		{
+			name:  "bogus-role-fails",
+			roles: "mon, observer",
+			want:  `roles[1] "observer" must be one of {mon, mgr, osd, mds, rgw, ingress, prometheus, grafana, alertmanager}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{
+				"environment.yaml": environment,
+				"machine.yaml":     machine,
+				"storage.yaml":     strings.ReplaceAll(storage, "ROLES", tc.roles),
+			})
+			_, err := LoadNormalizeValidate([]string{dir})
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("LoadNormalizeValidate: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected invalid role error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	cases := []struct {
 		name string

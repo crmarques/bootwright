@@ -52,6 +52,9 @@ type StorageClusterCephSpec struct {
 	// cephadm default stack deploys with cephadm's own placement; enabled:
 	// false skips it at bootstrap. Per-service placement derives from the
 	// prometheus/grafana/alertmanager roles, exactly like mon/mgr.
+	// node-exporter deliberately has no role: cephadm deploys it on every
+	// host, so an authored nodeExporter block narrows by explicit placement
+	// only.
 	Monitoring *StorageCephMonitoring `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
 	// Services is the cephadm service-spec passthrough for service types
 	// Bootwright does not model first-class (nfs, loki, ...): serviceType,

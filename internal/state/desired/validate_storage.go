@@ -318,7 +318,7 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 		for j, role := range node.Roles {
 			roleOwner := fmt.Sprintf("%s.roles[%d]", owner, j)
 			if !validStorageCephRole(role) {
-				errs = append(errs, fmt.Sprintf("%s %q must be one of {%s}", roleOwner, role, strings.Join(storageCephRoles(), ", ")))
+				errs = append(errs, fmt.Sprintf("%s %q must be one of {%s}", roleOwner, role, strings.Join(v1alpha1.StorageCephRoles(), ", ")))
 				continue
 			}
 			if roleSeen[role] {
@@ -700,21 +700,10 @@ func storageCephNodeRolesOnly(node v1alpha1.StorageCephHost, role string) bool {
 }
 
 func validStorageCephRole(role string) bool {
-	for _, item := range storageCephRoles() {
+	for _, item := range v1alpha1.StorageCephRoles() {
 		if item == role {
 			return true
 		}
 	}
 	return false
-}
-
-func storageCephRoles() []string {
-	return []string{
-		v1alpha1.StorageCephRoleMON,
-		v1alpha1.StorageCephRoleMGR,
-		v1alpha1.StorageCephRoleOSD,
-		v1alpha1.StorageCephRoleMDS,
-		v1alpha1.StorageCephRoleRGW,
-		v1alpha1.StorageCephRoleIngress,
-	}
 }

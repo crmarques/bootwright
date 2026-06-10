@@ -256,6 +256,27 @@ const (
 	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
 )
 
+// StorageCephRoles is the complete spec.ceph.topology.hosts[].roles
+// vocabulary, the single source of truth for the StorageCephRole constants
+// above: validation accepts exactly these values, and the renderer derives
+// service placement from them (mon/mgr/osd daemons, mds/rgw/ingress
+// placement defaults, and the prometheus/grafana/alertmanager monitoring
+// services). node-exporter has no role on purpose: cephadm deploys it on
+// every host.
+func StorageCephRoles() []string {
+	return []string{
+		StorageCephRoleMON,
+		StorageCephRoleMGR,
+		StorageCephRoleOSD,
+		StorageCephRoleMDS,
+		StorageCephRoleRGW,
+		StorageCephRoleIngress,
+		StorageCephRolePrometheus,
+		StorageCephRoleGrafana,
+		StorageCephRoleAlertmanager,
+	}
+}
+
 func ClusterAdminSSHKeyName(clusterName string) string {
 	return clusterName + "-" + DefaultClusterAdminSSHKeyNamePart
 }
