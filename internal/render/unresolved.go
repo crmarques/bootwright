@@ -62,8 +62,8 @@ func unresolvedEndpointBinds(state v1alpha1.State) []string {
 			}
 			if _, ok := stateview.LoadBalancerBindAddress(state, source); !ok {
 				events = append(events, fmt.Sprintf(
-					"ContainerCluster/%s spec.install.endpoints.%s.source (componentRef %q, bindAddress %q) does not resolve to a loadBalancer bind address",
-					ocp.Metadata.Name, name, source.ComponentRef.Name, source.BindAddress))
+					"ContainerCluster/%s spec.install.endpoints.%s.source (componentRef %q, bindAddressRef %q) does not resolve to a loadBalancer bind address",
+					ocp.Metadata.Name, name, source.ComponentRef.Name, source.BindAddressRef))
 			}
 		}
 	}

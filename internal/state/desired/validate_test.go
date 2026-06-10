@@ -2198,12 +2198,12 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: control-plane
-        bindAddress: vip-a
+        bindAddressRef: vip-a
     api-int:
       source:
         type: infraComponent
         componentRef: control-plane
-        bindAddress: vip-a
+        bindAddressRef: vip-a
     apps:
       address: 192.168.132.11
       source:
@@ -2219,7 +2219,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: control-plane
-        bindAddress: vip-b
+        bindAddressRef: vip-b
     api-int:
       address: 192.168.132.10
       source:
@@ -2231,7 +2231,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 				addLoadBalancerInfraComponent(files, "control-plane", "- { name: vip-a, address: 192.168.132.10 }\n")
 			},
-			wantSubstring: `source.bindAddress "vip-b" does not match any bindAddresses[].name`,
+			wantSubstring: `source.bindAddressRef "vip-b" does not match any bindAddresses[].name`,
 		},
 		{
 			name: "single-bind-literal-ip-bind-address-rejected",
@@ -2240,7 +2240,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: control-plane
-        bindAddress: 192.168.132.10
+        bindAddressRef: 192.168.132.10
     api-int:
       address: 192.168.132.10
       source:
@@ -2252,7 +2252,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 				addLoadBalancerInfraComponent(files, "control-plane", "- address: 192.168.132.10\n")
 			},
-			wantSubstring: `source.bindAddress "192.168.132.10" does not match any bindAddresses[].name`,
+			wantSubstring: `source.bindAddressRef "192.168.132.10" does not match any bindAddresses[].name`,
 		},
 		{
 			name: "multi-bind-address-without-selection-rejected",
@@ -2265,16 +2265,16 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: control-plane
+        bindAddressRef: control-plane
     apps:
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: apps
+        bindAddressRef: apps
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
-			wantSubstring: "spec.install.endpoints.api.source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress",
+			wantSubstring: "spec.install.endpoints.api.source.bindAddressRef is required unless the referenced loadBalancer declares exactly one bindAddress",
 		},
 		{
 			name: "named-bind-address-selection-accepted",
@@ -2283,17 +2283,17 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: control-plane
+        bindAddressRef: control-plane
     api-int:
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: control-plane
+        bindAddressRef: control-plane
     apps:
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: apps
+        bindAddressRef: apps
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
@@ -2305,17 +2305,17 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: control-plane
+        bindAddressRef: control-plane
     api-int:
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: control-plane
+        bindAddressRef: control-plane
     apps:
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: apps
+        bindAddressRef: apps
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { address: 192.168.132.10 }\n    - { address: 192.168.132.11 }\n")
 			},
@@ -2347,7 +2347,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: infraComponent
         componentRef: load-balancer
-        bindAddress: missing
+        bindAddressRef: missing
     api-int:
       address: 192.168.132.10
       source:
@@ -2359,7 +2359,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
-			wantSubstring: `source.bindAddress "missing" does not match`,
+			wantSubstring: `source.bindAddressRef "missing" does not match`,
 		},
 		{
 			name: "vip-outside-selected-machine-network-rejected",
@@ -2398,6 +2398,48 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 `)
 			},
 			wantSubstring: `spec.install.endpoints.api.source.type "manual" must be one of`,
+		},
+		{
+			name: "cephadm-source-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      address: 192.168.132.10
+      source:
+        type: cephadm
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+`)
+			},
+			wantSubstring: `spec.install.endpoints.api.source.type "cephadm" must be one of {openshift, external, infraComponent}`,
+		},
+		{
+			name: "unknown-endpoint-key-rejected",
+			mutate: func(files map[string]string) {
+				files["cluster.yaml"] = replaceBaselineEndpoints(t, files["cluster.yaml"], `    api:
+      address: 192.168.132.10
+      source:
+        type: external
+    api-int:
+      address: 192.168.132.10
+      source:
+        type: external
+    apps:
+      address: 192.168.132.11
+      source:
+        type: external
+    monitoring:
+      address: 192.168.132.12
+      source:
+        type: external
+`)
+			},
+			wantSubstring: "spec.install.endpoints.monitoring is not a consumed endpoint; accepted keys are {api, api-int, ingress}",
 		},
 	}
 

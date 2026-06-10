@@ -234,7 +234,7 @@ selects environment name-resolution entries.
 | NTP sources for agent installs | `Environment.spec.infraComponents.ntpSources[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
 | Artifact publication for Redfish media and disconnected install files | `ContainerCluster.spec.install.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
 | Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
-| Load balancer VIPs | `ContainerCluster.spec.install.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, cephadm, or operator-owned external addresses |
+| Load balancer VIPs | `ContainerCluster.spec.install.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, or operator-owned external addresses |
 
 Generated artifact publication is derived from install requirements and uses
 an `InfraComponent` with `spec.artifactServer`. The artifact server selects a

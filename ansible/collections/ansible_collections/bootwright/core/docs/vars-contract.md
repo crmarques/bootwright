@@ -62,12 +62,12 @@ bootwright_clusters:
         address: 192.168.133.10
         source:
           type: external
-      - name: apps
+      - name: ingress
         address: 192.168.133.11
         source:
           type: infraComponent
           componentRef: apps
-          bindAddress: apps-ip
+          bindAddressRef: apps-ip
     agentIsoPublishTargets:
       - stageHost: services-host
         stagePath: "{{ bootwright_managed_services_dir }}/artifact-server/public/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-prod-3node.iso"

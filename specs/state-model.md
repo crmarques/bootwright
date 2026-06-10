@@ -516,25 +516,22 @@ Rules:
   the derived platform. When the bound machines span multiple provider types
   and the platform is omitted, validation rejects the cluster naming the
   conflicting providers. An authored platform always wins.
-- OpenShift standard endpoint slots are `api`, `api-int`, and `ingress`. An
-  omitted `api-int` slot defaults to a copy of the authored `api` endpoint
-  (its `address` and `source`); `render effective` materializes the copy and
-  an authored `api-int` always wins.
-- `endpoints.<slot>.source.type` accepts `openshift`, `external`,
-  `infraComponent`, or `cephadm`; an omitted `source.type` defaults to
-  `openshift`. The accepted set and required companion fields are
-  consumer-specific:
-  - **Container `api`, `api-int`, `ingress`** accept only `openshift` (default),
-    `external`, or `infraComponent`; `cephadm` is rejected. `openshift` and
-    `external` require `address`. `infraComponent` requires
-    `source.componentRef` pointing at a `loadBalancer` `InfraComponent` and
-    `source.bindAddress`, and must not set `address`. `source.bindAddress`
-    may be omitted only when the load balancer declares exactly one
-    bind address; a non-empty `source.bindAddress` must match a
-    `bindAddresses[].name` regardless of bind count.
+- `spec.install.endpoints` keys are the closed slot vocabulary `api`,
+  `api-int`, and `ingress`; any other key is rejected naming the accepted
+  set. An omitted `api-int` slot defaults to a copy of the authored `api`
+  endpoint (its `address` and `source`); `render effective` materializes the
+  copy and an authored `api-int` always wins.
+- `endpoints.<slot>.source.type` accepts `openshift` (default), `external`,
+  or `infraComponent`. `openshift` and `external` require `address`.
+  `infraComponent` requires `source.componentRef` pointing at a
+  `loadBalancer` `InfraComponent` and must not set `address`.
+  `source.bindAddressRef` names the selected `bindAddresses[]` entry; it may
+  be omitted only when the load balancer declares exactly one bind address,
+  and a non-empty `source.bindAddressRef` must match a `bindAddresses[].name`
+  regardless of bind count.
   - **Single-node clusters** additionally reject `source.type: openshift` on the
     `api`, `api-int`, and `ingress` slots.
-  - `source.componentRef` and `source.bindAddress` are valid only when
+  - `source.componentRef` and `source.bindAddressRef` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
 - `spec.hosts[].machineRef` references a `Machine` with

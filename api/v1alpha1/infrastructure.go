@@ -99,7 +99,6 @@ const (
 	EndpointIngress = "ingress"
 
 	EndpointSourceOpenShift      = "openshift"
-	EndpointSourceCephadm        = "cephadm"
 	EndpointSourceExternal       = "external"
 	EndpointSourceInfraComponent = "infraComponent"
 

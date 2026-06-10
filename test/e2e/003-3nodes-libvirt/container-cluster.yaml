@@ -13,12 +13,12 @@ spec:
         source:
           type: infraComponent
           componentRef: load-balancer
-          bindAddress: control-plane
+          bindAddressRef: control-plane
       ingress:
         source:
           type: infraComponent
           componentRef: load-balancer
-          bindAddress: apps
+          bindAddressRef: apps
     method: agent
     mode: connected
     nodeSSH:

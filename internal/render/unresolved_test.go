@@ -10,7 +10,7 @@ import (
 
 // TestRenderFailsOnUnresolvedEndpointBindAddress constructs the resolution gap
 // directly in Go (Validate rejects it since the bind-name resolution fix): an
-// install endpoint sourced from a loadBalancer whose source.bindAddress
+// install endpoint sourced from a loadBalancer whose source.bindAddressRef
 // matches no bindAddresses[].name. stateview.EndpointAddress degrades to ""
 // for it and the installer platform guards with `if vip != ""`, so without the
 // render-side check the install-config would ship with empty api/ingress VIPs.
@@ -36,9 +36,9 @@ func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 				Install: v1alpha1.OCPInstallSpec{
 					Endpoints: map[string]v1alpha1.Endpoint{
 						v1alpha1.EndpointAPI: {Source: v1alpha1.EndpointSource{
-							Type:         v1alpha1.EndpointSourceInfraComponent,
-							ComponentRef: v1alpha1.LocalObjectReference{Name: "lb"},
-							BindAddress:  "vip-b",
+							Type:           v1alpha1.EndpointSourceInfraComponent,
+							ComponentRef:   v1alpha1.LocalObjectReference{Name: "lb"},
+							BindAddressRef: "vip-b",
 						}},
 					},
 				},
@@ -46,7 +46,7 @@ func TestRenderFailsOnUnresolvedEndpointBindAddress(t *testing.T) {
 		}},
 	}
 
-	want := `ContainerCluster/cluster spec.install.endpoints.api.source (componentRef "lb", bindAddress "vip-b") does not resolve to a loadBalancer bind address`
+	want := `ContainerCluster/cluster spec.install.endpoints.api.source (componentRef "lb", bindAddressRef "vip-b") does not resolve to a loadBalancer bind address`
 	if _, err := render.All(t.TempDir(), t.TempDir(), t.TempDir(), state); err == nil {
 		t.Fatal("render.All succeeded, want unresolved bindAddress error")
 	} else if !strings.Contains(err.Error(), want) {

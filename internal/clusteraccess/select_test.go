@@ -139,9 +139,9 @@ func cliStateWithAllSharedMachineServices() v1alpha1.State {
 		state.ContainerClusters[i].Spec.Install.Endpoints = map[string]v1alpha1.Endpoint{
 			v1alpha1.EndpointAPI: {
 				Source: v1alpha1.EndpointSource{
-					Type:         v1alpha1.EndpointSourceInfraComponent,
-					ComponentRef: v1alpha1.LocalObjectReference{Name: "load-balancer"},
-					BindAddress:  "api",
+					Type:           v1alpha1.EndpointSourceInfraComponent,
+					ComponentRef:   v1alpha1.LocalObjectReference{Name: "load-balancer"},
+					BindAddressRef: "api",
 				},
 			},
 		}

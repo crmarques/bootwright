@@ -11,7 +11,7 @@ endpoints:
     source:
       type: infraComponent
       componentRef: control-plane
-      bindAddress: control-plane-ip
+      bindAddressRef: control-plane-ip
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent

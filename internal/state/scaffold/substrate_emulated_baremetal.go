@@ -147,17 +147,17 @@ spec:
         source:
           type: infraComponent
           componentRef: load-balancer
-          bindAddress: control-plane
+          bindAddressRef: control-plane
       api-int:
         source:
           type: infraComponent
           componentRef: load-balancer
-          bindAddress: control-plane
+          bindAddressRef: control-plane
       ingress:
         source:
           type: infraComponent
           componentRef: load-balancer
-          bindAddress: apps
+          bindAddressRef: apps
 `,
 	PlatformYAML: `    platform:
       type: baremetal

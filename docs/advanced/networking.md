@@ -120,11 +120,10 @@ network:
 
 ## Endpoints
 
-Cluster endpoints live in `ContainerCluster.spec.install.endpoints` as named endpoint
-objects. Consumers bind to those names explicitly; OpenShift install uses
-`ContainerCluster.spec.install.endpointRefs`. Storage gateways do not borrow
-cluster endpoints; they own their RGW public and ingress endpoints directly
-(below).
+Cluster endpoints live in `ContainerCluster.spec.install.endpoints` under the
+closed slot vocabulary `api`, `api-int`, and `ingress`; any other key is
+rejected. Storage gateways do not borrow cluster endpoints; they own their
+RGW public and ingress endpoints directly (below).
 
 ```yaml
 endpoints:
@@ -134,16 +133,16 @@ endpoints:
     address: 192.168.133.10
     source:
       type: external             # external LB/DNS, outside Bootwright
-  apps:
+  ingress:
     source:
       type: infraComponent       # Bootwright-provisioned load balancer
       componentRef: apps
-      bindAddress: apps-ip
+      bindAddressRef: apps-ip
 ```
 
 For Bootwright-provisioned load balancers, declare the target component and its
-bind addresses. `source.bindAddress` is the bind-address name, not the IP
-itself; the effective IP comes from the matching `bindAddresses[].ip`.
+bind addresses. `source.bindAddressRef` is the bind-address name, not the IP
+itself; the effective IP comes from the matching `bindAddresses[].address`.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -160,8 +159,8 @@ spec:
 ```
 
 If a load balancer has exactly one bind address, the endpoint may omit
-`source.bindAddress`. A non-empty `source.bindAddress` must always match a
-declared `bindAddresses[].name`, even on a single-bind load balancer; the
+`source.bindAddressRef`. A non-empty `source.bindAddressRef` must always match
+a declared `bindAddresses[].name`, even on a single-bind load balancer; the
 shortcut never applies to an authored name. Listener ports for OpenShift
 roles are derived from the consumer role, not from arbitrary endpoint names.
 Effective VIPs are validated against the machine networks selected by cluster

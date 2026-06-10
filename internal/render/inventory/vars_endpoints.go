@@ -42,8 +42,8 @@ func endpointsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
 			if e.Source.ComponentRef.Name != "" {
 				source["componentRef"] = e.Source.ComponentRef.Name
 			}
-			if e.Source.BindAddress != "" {
-				source["bindAddress"] = e.Source.BindAddress
+			if e.Source.BindAddressRef != "" {
+				source["bindAddressRef"] = e.Source.BindAddressRef
 			}
 			entry["source"] = source
 		}

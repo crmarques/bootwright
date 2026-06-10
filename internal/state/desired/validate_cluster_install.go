@@ -55,15 +55,22 @@ func validateClusterEndpoints(owner string, ci v1alpha1.ClusterInstall, componen
 	}
 	loadBalancerRefs := map[string]map[string]bool{}
 	for name, endpoint := range ci.Endpoints {
-		if !dnsLabel.MatchString(name) {
-			errs = append(errs, fmt.Sprintf("%s.endpoints.%s name is not a DNS label", owner, name))
+		// The endpoint vocabulary is closed: every consumer (load balancer
+		// frontends, DNS records, install-config VIPs, noProxy) is keyed to
+		// the standard slots, so an unknown key would validate clean and
+		// silently get no wiring.
+		switch name {
+		case v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.endpoints.%s is not a consumed endpoint; accepted keys are {%s, %s, %s}",
+				owner, name, v1alpha1.EndpointAPI, v1alpha1.EndpointAPIInt, v1alpha1.EndpointIngress))
 		}
 		errs = append(errs, validateClusterEndpoint(owner+".endpoints."+name, ci, components, endpoint, networkConfigs)...)
-		if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent && endpoint.Source.ComponentRef.Name != "" && endpoint.Source.BindAddress != "" {
+		if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent && endpoint.Source.ComponentRef.Name != "" && endpoint.Source.BindAddressRef != "" {
 			if loadBalancerRefs[endpoint.Source.ComponentRef.Name] == nil {
 				loadBalancerRefs[endpoint.Source.ComponentRef.Name] = map[string]bool{}
 			}
-			loadBalancerRefs[endpoint.Source.ComponentRef.Name][endpoint.Source.BindAddress] = true
+			loadBalancerRefs[endpoint.Source.ComponentRef.Name][endpoint.Source.BindAddressRef] = true
 		}
 	}
 	for componentName, refs := range loadBalancerRefs {
@@ -104,18 +111,18 @@ func validateClusterEndpoint(prefix string, ci v1alpha1.ClusterInstall, componen
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.interfaceNetworks[%d]", prefix, i), cidr)...)
 	}
 	switch endpoint.Source.Type {
-	case "", v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceCephadm, v1alpha1.EndpointSourceExternal:
-		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddress != "" {
+	case "", v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal:
+		if endpoint.Source.ComponentRef.Name != "" || endpoint.Source.BindAddressRef != "" {
 			errs = append(errs, prefix+".source component fields are only valid when source.type=infraComponent")
 		}
 	case v1alpha1.EndpointSourceInfraComponent:
 		if endpoint.Address != "" {
-			errs = append(errs, prefix+".address must be empty when source.type=infraComponent; use source.bindAddress")
+			errs = append(errs, prefix+".address must be empty when source.type=infraComponent; use source.bindAddressRef")
 		}
 		errs = append(errs, validateEndpointProvider(prefix, endpoint.Source, components)...)
 	default:
-		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s, %s}",
-			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceCephadm, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
+		errs = append(errs, fmt.Sprintf("%s.source.type %q must be one of {%s, %s, %s}",
+			prefix, endpoint.Source.Type, v1alpha1.EndpointSourceOpenShift, v1alpha1.EndpointSourceExternal, v1alpha1.EndpointSourceInfraComponent))
 	}
 	if endpoint.Address == "" && endpoint.DNSName == "" && endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent {
 		errs = append(errs, prefix+" must set address, dnsName, or source.type=infraComponent")
@@ -169,18 +176,18 @@ func validateEndpointProvider(prefix string, source v1alpha1.EndpointSource, com
 	}
 	// The endpoint must name which loadBalancer bind address it uses unless the
 	// loadBalancer declares exactly one (the accepted single-bind shortcut). With
-	// zero or multiple bindAddresses and no source.bindAddress,
+	// zero or multiple bindAddresses and no source.bindAddressRef,
 	// state/view.LoadBalancerBindAddress cannot resolve a VIP and the
 	// install-config ships with an empty api/ingress VIP.
-	if source.BindAddress == "" && len(component.Spec.LoadBalancer.BindAddresses) != 1 {
-		errs = append(errs, prefix+".source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress")
+	if source.BindAddressRef == "" && len(component.Spec.LoadBalancer.BindAddresses) != 1 {
+		errs = append(errs, prefix+".source.bindAddressRef is required unless the referenced loadBalancer declares exactly one bindAddress")
 	}
-	// A non-empty source.bindAddress is a name reference into the referenced
+	// A non-empty source.bindAddressRef is a name reference into the referenced
 	// loadBalancer and must resolve even when it declares a single bindAddress;
 	// the single-bind shortcut applies only when the field is empty.
 	referenced := map[string]bool{}
-	if source.BindAddress != "" {
-		referenced[source.BindAddress] = true
+	if source.BindAddressRef != "" {
+		referenced[source.BindAddressRef] = true
 	}
 	errs = append(errs, validateLoadBalancerBindAddresses(fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name), component.Spec.LoadBalancer.BindAddresses, referenced)...)
 	return errs
