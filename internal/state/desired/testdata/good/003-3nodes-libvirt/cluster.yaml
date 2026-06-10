@@ -118,7 +118,7 @@ spec:
 
   install:
     platform:
-      type: bareMetal
+      type: baremetal
       baremetal:
         provisioningNetwork: disabled
     endpoints:

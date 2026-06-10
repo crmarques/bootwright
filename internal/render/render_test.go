@@ -241,10 +241,11 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "proxy"},
 			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotProxy,
 				Proxy: &v1alpha1.ProxyComponent{
-					Type:       v1alpha1.InfraComponentTypeSquid,
-					MachineRef: v1alpha1.LocalObjectReference{Name: "controller"},
-					Port:       3128,
+					Implementation: v1alpha1.InfraComponentTypeSquid,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "controller"},
+					Port:           3128,
 				},
 			},
 		}},
@@ -399,27 +400,29 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	state.InfraComponents = append(state.InfraComponents,
 		v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "artifact-server"},
-			Spec: v1alpha1.InfraComponentSpec{ArtifactServer: &v1alpha1.ArtifactServerComponent{
-				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
-				Listeners: []v1alpha1.ArtifactServerListener{{
-					Name:     "https",
-					Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
-					Port:     9443,
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotArtifactServer, ArtifactServer: &v1alpha1.ArtifactServerComponent{
+					MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
+					Listeners: []v1alpha1.ArtifactServerListener{{
+						Name:     "https",
+						Protocol: v1alpha1.ArtifactServerProtocolHTTPS,
+						Port:     9443,
+					}},
+					Endpoints: []v1alpha1.ArtifactServerEndpoint{{
+						Name:           "cluster",
+						Listener:       "https",
+						MachineAddress: "cluster-lan",
+					}},
 				}},
-				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
-					Name:           "cluster",
-					Listener:       "https",
-					MachineAddress: "cluster-lan",
-				}},
-			}},
 		},
 		v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "registry"},
-			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-				Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
-				Port:       5000,
-			}},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotRegistry, Registry: &v1alpha1.RegistryComponent{
+					Implementation: v1alpha1.InfraComponentTypeMirrorRegistry,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+					Port:           5000,
+				}},
 		},
 	)
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected

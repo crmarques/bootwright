@@ -140,7 +140,7 @@ bootwright_clusters:
         capabilityName: default # InfraProvider capability name
         machineRef: services-host
         machineAddress: 192.168.133.1
-        realisation: haProxy
+        realisation: haproxy
         applyRole: bootwright.core.infra_component_load_balancer_haproxy
         destroyRole: bootwright.core.infra_component_load_balancer_haproxy
         image: docker.io/library/haproxy:3.3.8
@@ -264,7 +264,7 @@ bootwright_infra_component_services:
     componentName: apps
     machineRef: services-host
     machineAddress: 192.168.133.1
-    realisation: haProxy
+    realisation: haproxy
     applyRole: bootwright.core.infra_component_load_balancer_haproxy
     destroyRole: bootwright.core.infra_component_load_balancer_haproxy
     image: docker.io/library/haproxy:3.3.10

@@ -71,7 +71,7 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 
 func ResourceSummaries(extension v1alpha1.ClusterAddon) []ResourceSummary {
 	switch extension.Spec.Type {
-	case v1alpha1.ClusterAddonTypeOLMOperator:
+	case v1alpha1.ClusterAddonTypeOLM:
 		resources, _ := extensionrender.OLMResources(extension)
 		out := make([]ResourceSummary, 0, len(resources))
 		for _, resource := range resources {

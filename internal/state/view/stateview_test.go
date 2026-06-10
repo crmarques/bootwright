@@ -24,7 +24,8 @@ func TestProviderCapabilityLookups(t *testing.T) {
 	component := v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "lb"},
 		Spec: v1alpha1.InfraComponentSpec{
-			LoadBalancer: &v1alpha1.LoadBalancerComponent{Type: v1alpha1.InfraComponentTypeHAProxy},
+			Type:         v1alpha1.ComponentSlotLoadBalancer,
+			LoadBalancer: &v1alpha1.LoadBalancerComponent{Implementation: v1alpha1.InfraComponentTypeHAProxy},
 		},
 	}
 	state := v1alpha1.State{Machines: []v1alpha1.Machine{machine}, InfraProviders: []v1alpha1.InfraProvider{provider}, InfraComponents: []v1alpha1.InfraComponent{component}}
@@ -105,8 +106,9 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "lb"},
 			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotLoadBalancer,
 				LoadBalancer: &v1alpha1.LoadBalancerComponent{
-					Type: v1alpha1.InfraComponentTypeHAProxy,
+					Implementation: v1alpha1.InfraComponentTypeHAProxy,
 					BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
 						Name: "api",
 						IP:   "192.168.133.10",

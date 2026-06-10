@@ -127,21 +127,21 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 		{
 			name: "unsupported-type",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "type: olm-operator", "type: helm", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "type: olm", "type: helm", 1),
 			},
-			wantSubstring: `spec.type "helm" must be one of {olm-operator, manifest-set}`,
+			wantSubstring: `spec.type "helm" must be one of {olm, manifestSet}`,
 		},
 		{
 			name: "unsupported-provided-capability",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - storage\n", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - storage\n", 1),
 			},
 			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, data-foundation}`,
 		},
 		{
 			name: "duplicated-provided-capability",
 			files: map[string]string{
-				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n    - kubevirt\n", 1),
+				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - kubevirt\n    - kubevirt\n", 1),
 			},
 			wantSubstring: `spec.provides[1] "kubevirt" is duplicated`,
 		},
@@ -149,7 +149,7 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			name: "provided-capability-requires-readiness",
 			files: map[string]string{
 				"extension.yaml": strings.Replace(
-					strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n", 1),
+					strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - kubevirt\n", 1),
 					"  readiness:\n    checks:\n      - type: csvSucceeded\n        namespace: openshift-cnv\n        subscription: hco-operatorhub\n", "", 1),
 			},
 			wantSubstring: `spec.provides requires at least one readiness check`,
@@ -306,7 +306,7 @@ func TestClusterAddonManifestSetPathValidation(t *testing.T) {
 
 func TestClusterAddonInputValidation(t *testing.T) {
 	addonWithInputs := func(inputYAML string) string {
-		return strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", "  type: olm-operator\n  accepts:\n    inputs:\n"+inputYAML, 1)
+		return strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  accepts:\n    inputs:\n"+inputYAML, 1)
 	}
 	bindingWithInputs := func(inputYAML string) string {
 		return `apiVersion: bootwright.io/v1alpha1
@@ -499,7 +499,7 @@ spec:
 }
 
 func TestClusterAddonBindingInputsCanConfigureProfileAddon(t *testing.T) {
-	addon := strings.Replace(extensionYAML("virt"), "  type: olm-operator\n", `  type: olm-operator
+	addon := strings.Replace(extensionYAML("virt"), "  type: olm\n", `  type: olm
   accepts:
     inputs:
       - name: config
@@ -601,7 +601,7 @@ kind: ClusterAddon
 metadata:
   name: ` + name + `
 spec:
-  type: olm-operator
+  type: olm
   olm:
     namespace:
       name: openshift-cnv
@@ -664,7 +664,7 @@ kind: ClusterAddon
 metadata:
   name: ` + name + `
 spec:
-  type: manifest-set
+  type: manifestSet
   manifestSet:
     manifests:
       - path: ` + manifestPath + `

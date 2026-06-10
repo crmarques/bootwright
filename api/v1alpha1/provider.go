@@ -11,7 +11,7 @@ type InfraProvider struct {
 type InfraProviderSpec struct {
 	Type               string                        `yaml:"type" json:"type"`
 	Libvirt            *InfraProviderLibvirt         `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
-	BareMetal          *InfraProviderBareMetal       `yaml:"bareMetal,omitempty" json:"bareMetal,omitempty"`
+	BareMetal          *InfraProviderBareMetal       `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
 	VSphere            *InfraProviderVSphere         `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
 	KubeVirt           *InfraProviderKubeVirt        `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
 	ArtifactAccess     ProviderArtifactAccess        `yaml:"artifactAccess,omitempty" json:"artifactAccess,omitempty"`
@@ -70,7 +70,7 @@ type NetworkAttachmentCapability struct {
 	Libvirt   *NetworkAttachmentLibvirt   `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 	VSphere   *NetworkAttachmentVSphere   `yaml:"vsphere,omitempty" json:"vsphere,omitempty"`
 	KubeVirt  *NetworkAttachmentKubeVirt  `yaml:"kubevirt,omitempty" json:"kubevirt,omitempty"`
-	BareMetal *NetworkAttachmentBareMetal `yaml:"bareMetal,omitempty" json:"bareMetal,omitempty"`
+	BareMetal *NetworkAttachmentBareMetal `yaml:"baremetal,omitempty" json:"baremetal,omitempty"`
 }
 
 type NetworkAttachmentLibvirt struct {

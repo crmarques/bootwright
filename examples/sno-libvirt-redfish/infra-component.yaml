@@ -3,8 +3,10 @@ kind: InfraComponent
 metadata:
   name: name-resolution
 spec:
+  type: nameResolution
+
   nameResolution:
-    type: dnsmasq
+    implementation: dnsmasq
     bindAddress: 192.168.132.1
     additionalIngressHosts:
     - console-openshift-console.apps.sno-libvirt.bootwright.test

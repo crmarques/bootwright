@@ -3,7 +3,7 @@ kind: ClusterAddon
 metadata:
   name: openshift-data-foundation
 spec:
-  type: olm-operator
+  type: olm
 
   provides:
     - data-foundation

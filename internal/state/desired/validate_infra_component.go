@@ -28,10 +28,18 @@ func validateInfraComponents(state v1alpha1.State) []string {
 
 func validateInfraComponentSpec(component v1alpha1.InfraComponent, machines map[string]v1alpha1.Machine) []string {
 	prefix := fmt.Sprintf("InfraComponent/%s spec", component.Metadata.Name)
-	if slots := component.Spec.SetSlots(); len(slots) != 1 {
+	slots := component.Spec.SetSlots()
+	if len(slots) != 1 {
 		return []string{fmt.Sprintf("%s must set exactly one of {artifactServer, loadBalancer, proxy, nameResolution, ntp, registry} (got %d)", prefix, len(slots))}
 	}
 	var errs []string
+	switch component.Spec.Type {
+	case "":
+		errs = append(errs, fmt.Sprintf("%s.type is required and must equal the populated arm key %q", prefix, slots[0]))
+	case slots[0]:
+	default:
+		errs = append(errs, fmt.Sprintf("%s.type %q must equal the populated arm key %q", prefix, component.Spec.Type, slots[0]))
+	}
 	if component.Spec.ArtifactServer != nil {
 		errs = append(errs, validateArtifactServerComponent(component, machines)...)
 	}
@@ -57,7 +65,7 @@ func validateArtifactServerComponent(component v1alpha1.InfraComponent, machines
 	server := component.Spec.ArtifactServer
 	prefix := fmt.Sprintf("InfraComponent/%s spec.artifactServer", component.Metadata.Name)
 	var errs []string
-	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", server.MachineRef, machines, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)...)
+	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", server.MachineRef, machines, v1alpha1.ComponentSlotArtifactServer, v1alpha1.ArtifactServerProtocolHTTP)...)
 	errs = append(errs, validateServiceParams(prefix, server.BindAddress, 0)...)
 	errs = append(errs, validateArtifactServerListeners(prefix, server.Listeners)...)
 	if machine, ok := machines[server.MachineRef.Name]; ok {
@@ -141,8 +149,8 @@ func validateLoadBalancerComponent(component v1alpha1.InfraComponent, machines m
 	lb := component.Spec.LoadBalancer
 	prefix := fmt.Sprintf("InfraComponent/%s spec.loadBalancer", component.Metadata.Name)
 	var errs []string
-	if lb.Type != v1alpha1.InfraComponentTypeHAProxy {
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, lb.Type, v1alpha1.InfraComponentTypeHAProxy))
+	if lb.Implementation != v1alpha1.InfraComponentTypeHAProxy {
+		errs = append(errs, fmt.Sprintf("%s.implementation %q must be %q", prefix, lb.Implementation, v1alpha1.InfraComponentTypeHAProxy))
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", lb.MachineRef, machines, v1alpha1.ComponentSlotLoadBalancer, v1alpha1.InfraComponentTypeHAProxy)...)
 	errs = append(errs, validateLoadBalancerBindAddresses(prefix, lb.BindAddresses, nil)...)
@@ -153,8 +161,8 @@ func validateProxyComponent(component v1alpha1.InfraComponent, machines map[stri
 	proxy := component.Spec.Proxy
 	prefix := fmt.Sprintf("InfraComponent/%s spec.proxy", component.Metadata.Name)
 	var errs []string
-	if proxy.Type != v1alpha1.InfraComponentTypeSquid {
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, proxy.Type, v1alpha1.InfraComponentTypeSquid))
+	if proxy.Implementation != v1alpha1.InfraComponentTypeSquid {
+		errs = append(errs, fmt.Sprintf("%s.implementation %q must be %q", prefix, proxy.Implementation, v1alpha1.InfraComponentTypeSquid))
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", proxy.MachineRef, machines, v1alpha1.ComponentSlotProxy, v1alpha1.InfraComponentTypeSquid)...)
 	errs = append(errs, validateServiceParams(prefix, proxy.BindAddress, proxy.Port)...)
@@ -168,8 +176,8 @@ func validateNameResolutionComponent(component v1alpha1.InfraComponent, machines
 	dns := component.Spec.NameResolution
 	prefix := fmt.Sprintf("InfraComponent/%s spec.nameResolution", component.Metadata.Name)
 	var errs []string
-	if dns.Type != v1alpha1.InfraComponentTypeDnsmasq {
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, dns.Type, v1alpha1.InfraComponentTypeDnsmasq))
+	if dns.Implementation != v1alpha1.InfraComponentTypeDnsmasq {
+		errs = append(errs, fmt.Sprintf("%s.implementation %q must be %q", prefix, dns.Implementation, v1alpha1.InfraComponentTypeDnsmasq))
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", dns.MachineRef, machines, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)...)
 	errs = append(errs, validateServiceParams(prefix, dns.BindAddress, dns.Port)...)
@@ -191,8 +199,8 @@ func validateNTPComponent(component v1alpha1.InfraComponent, machines map[string
 	ntp := component.Spec.NTP
 	prefix := fmt.Sprintf("InfraComponent/%s spec.ntp", component.Metadata.Name)
 	var errs []string
-	if ntp.Type != v1alpha1.InfraComponentTypeChrony {
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, ntp.Type, v1alpha1.InfraComponentTypeChrony))
+	if ntp.Implementation != v1alpha1.InfraComponentTypeChrony {
+		errs = append(errs, fmt.Sprintf("%s.implementation %q must be %q", prefix, ntp.Implementation, v1alpha1.InfraComponentTypeChrony))
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", ntp.MachineRef, machines, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony)...)
 	errs = append(errs, validateServiceParams(prefix, ntp.BindAddress, ntp.Port)...)
@@ -209,8 +217,8 @@ func validateRegistryComponent(component v1alpha1.InfraComponent, machines map[s
 	registry := component.Spec.Registry
 	prefix := fmt.Sprintf("InfraComponent/%s spec.registry", component.Metadata.Name)
 	var errs []string
-	if registry.Type != v1alpha1.InfraComponentTypeMirrorRegistry {
-		errs = append(errs, fmt.Sprintf("%s.type %q must be %q", prefix, registry.Type, v1alpha1.InfraComponentTypeMirrorRegistry))
+	if registry.Implementation != v1alpha1.InfraComponentTypeMirrorRegistry {
+		errs = append(errs, fmt.Sprintf("%s.implementation %q must be %q", prefix, registry.Implementation, v1alpha1.InfraComponentTypeMirrorRegistry))
 	}
 	errs = append(errs, validateServiceMachineRef(prefix+".machineRef", registry.MachineRef, machines, v1alpha1.ComponentSlotRegistry, v1alpha1.InfraComponentTypeMirrorRegistry)...)
 	errs = append(errs, validateServiceParams(prefix, registry.BindAddress, registry.Port)...)

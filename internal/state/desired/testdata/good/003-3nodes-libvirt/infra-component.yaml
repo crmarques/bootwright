@@ -3,8 +3,10 @@ kind: InfraComponent
 metadata:
   name: load-balancer
 spec:
+  type: loadBalancer
+
   loadBalancer:
-    type: haProxy
+    implementation: haproxy
     machineRef:
       name: bastion
     bindAddresses:
@@ -18,8 +20,10 @@ kind: InfraComponent
 metadata:
   name: proxy
 spec:
+  type: proxy
+
   proxy:
-    type: squid
+    implementation: squid
     machineRef:
       name: bastion
     bindAddress: 0.0.0.0
@@ -30,8 +34,10 @@ kind: InfraComponent
 metadata:
   name: name-resolution
 spec:
+  type: nameResolution
+
   nameResolution:
-    type: dnsmasq
+    implementation: dnsmasq
     machineRef:
       name: bastion
     bindAddress: 192.168.133.1
@@ -45,8 +51,10 @@ kind: InfraComponent
 metadata:
   name: ntp-server
 spec:
+  type: ntp
+
   ntp:
-    type: chrony
+    implementation: chrony
     machineRef:
       name: bastion
     bindAddress: 192.168.133.1

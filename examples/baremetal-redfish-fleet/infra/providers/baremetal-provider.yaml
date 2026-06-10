@@ -5,16 +5,16 @@ metadata:
 spec:
   type: baremetal
 
-  bareMetal:
+  baremetal:
     boot:
       method: external
 
   networkAttachments:
 
   - name: dc1-net
-    bareMetal:
+    baremetal:
       vlan: 0
 
   - name: dc2-net
-    bareMetal:
+    baremetal:
       vlan: 0

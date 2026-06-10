@@ -230,7 +230,7 @@ func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {
 			machine = "<unresolved>"
 		}
 		detail := fmt.Sprintf("on %s, used by %s", machine, joinNames(g.ConsumingClusters))
-		if g.Kind == v1alpha1.ComponentSlotArtifacts {
+		if g.Kind == v1alpha1.ComponentSlotArtifactServer {
 			detail += " (environment artifact server)"
 		}
 		p.Status(cliout.StatusOK, fmt.Sprintf("%s/%s/%s", g.ProviderName, g.Kind, g.CapabilityName), detail)

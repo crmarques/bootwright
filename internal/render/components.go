@@ -88,7 +88,7 @@ var servicePinGates = []struct {
 	{support.ServiceKey{Kind: v1alpha1.ComponentSlotRegistry, Realisation: v1alpha1.InfraComponentTypeMirrorRegistry}, usesManagedMirrorRegistry},
 	{support.ServiceKey{Kind: v1alpha1.ComponentSlotProxy, Realisation: v1alpha1.InfraComponentTypeSquid}, usesManagedProxy},
 	{support.ServiceKey{Kind: v1alpha1.ComponentSlotNameResolution, Realisation: v1alpha1.InfraComponentTypeDnsmasq}, usesManagedDNS},
-	{support.ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP}, usesManagedArtifacts},
+	{support.ServiceKey{Kind: v1alpha1.ComponentSlotArtifactServer, Realisation: v1alpha1.ArtifactServerProtocolHTTP}, usesManagedArtifacts},
 }
 
 func appendServicePin(pins []ComponentPin, kind, realisation string) []ComponentPin {

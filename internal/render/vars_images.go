@@ -48,7 +48,7 @@ func managedDnsmasqImage(state v1alpha1.State) string {
 }
 
 func managedArtifactsHTTPImage(state v1alpha1.State) string {
-	return managedServiceImage(state, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
+	return managedServiceImage(state, v1alpha1.ComponentSlotArtifactServer, v1alpha1.ArtifactServerProtocolHTTP)
 }
 
 func managedServiceImage(state v1alpha1.State, kind, realisation string) string {

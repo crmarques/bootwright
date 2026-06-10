@@ -579,9 +579,10 @@ func TestNormalizeDefaultsInfraComponentProxy(t *testing.T) {
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "proxy"},
 			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotProxy,
 				Proxy: &v1alpha1.ProxyComponent{
-					Type:       v1alpha1.InfraComponentTypeSquid,
-					MachineRef: v1alpha1.LocalObjectReference{Name: "services-host"},
+					Implementation: v1alpha1.InfraComponentTypeSquid,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "services-host"},
 				},
 			},
 		}},
@@ -602,6 +603,7 @@ func TestNormalizeDefaultsArtifactServerListener(t *testing.T) {
 	state := v1alpha1.State{
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotArtifactServer,
 				ArtifactServer: &v1alpha1.ArtifactServerComponent{
 					MachineRef: v1alpha1.LocalObjectReference{Name: "services-host"},
 				},

@@ -30,12 +30,13 @@ func TestResolveClusterDNSServersResolvesManagedBindAddress(t *testing.T) {
 	})
 	state.InfraComponents = []v1alpha1.InfraComponent{{
 		Metadata: v1alpha1.Metadata{Name: "dns"},
-		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-			Type:        v1alpha1.InfraComponentTypeDnsmasq,
-			MachineRef:  v1alpha1.LocalObjectReference{Name: "host"},
-			BindAddress: "192.168.130.53",
-			Port:        53,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotNameResolution, NameResolution: &v1alpha1.NameResolutionComponent{
+				Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "host"},
+				BindAddress:    "192.168.130.53",
+				Port:           53,
+			}},
 	}}
 	ci := dnsRefInfra(state)
 	got := resolveClusterDNSServers(state, ci, state.NetworkConfigs[0])

@@ -190,7 +190,7 @@ them isolated, minimal, tested, and documented in the knowledge base.
 It is the installer platform render mode, not the substrate type; substrate
 ownership remains with selected machines and providers.
 
-- `bareMetal` renders bare-metal agent install platform data.
+- `baremetal` renders bare-metal agent install platform data.
 - `vsphere` renders vSphere platform data from selected profiles and optional
   node networking hints.
 - `none` renders platform none for substrates where Bootwright only prepares

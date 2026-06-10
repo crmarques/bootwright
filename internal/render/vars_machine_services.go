@@ -76,7 +76,7 @@ func machineServicesVars(state v1alpha1.State, include func(stategraph.MachineSe
 // enforces that against support.ServiceEntries().
 var machineServiceVarBuilders = map[string]func(v1alpha1.State, stategraph.MachineService) (map[string]any, bool){
 	v1alpha1.ComponentSlotLoadBalancer:   loadBalancerMachineServiceVars,
-	v1alpha1.ComponentSlotArtifacts:      artifactMachineServiceVars,
+	v1alpha1.ComponentSlotArtifactServer: artifactMachineServiceVars,
 	v1alpha1.ComponentSlotProxy:          proxyMachineServiceVars,
 	v1alpha1.ComponentSlotNameResolution: nameResolutionMachineServiceVars,
 	v1alpha1.ComponentSlotNTP:            ntpMachineServiceVars,

@@ -20,7 +20,7 @@ func TestComponentPinsIncludeManagedDNSImage(t *testing.T) {
 	for _, pin := range render.ComponentPins(state) {
 		pins[pin.Name] = pin
 	}
-	pin, ok := pins[v1alpha1.ComponentImageTypeDnsmasq]
+	pin, ok := pins[v1alpha1.InfraComponentTypeDnsmasq]
 	if !ok {
 		t.Fatalf("dnsmasq pin missing from managed DNS state: %v", pins)
 	}
@@ -35,8 +35,8 @@ func TestVarsProjectResolvedComponentImages(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	state.Environments[0].Spec.ComponentImages = map[string]map[string]v1alpha1.ComponentImageSpec{
-		v1alpha1.ComponentImageCategoryDNS: {
-			v1alpha1.ComponentImageTypeDnsmasq: {Public: "registry.example/dnsmasq:2.92_p2"},
+		v1alpha1.ComponentSlotNameResolution: {
+			v1alpha1.InfraComponentTypeDnsmasq: {Public: "registry.example/dnsmasq:2.92_p2"},
 		},
 	}
 
@@ -484,7 +484,7 @@ func TestBareMetalArtifactFetchURLUsesArtifactServerListenerPort(t *testing.T) {
 	}
 
 	services := vars["bootwright_infra_component_services"].([]any)
-	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifacts)
+	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifactServer)
 	if got := service["port"]; got != 9443 {
 		t.Errorf("artifact service port got %v, want 9443", got)
 	}
@@ -718,10 +718,10 @@ func TestProviderServicesAggregateSharedArtifactServer(t *testing.T) {
 	state := twoClusterBareMetalPublicationState(t)
 	vars := render.Vars(state)
 	services := vars["bootwright_infra_component_services"].([]any)
-	if got := providerServiceKindCounts(services)[v1alpha1.ComponentSlotArtifacts]; got != 1 {
+	if got := providerServiceKindCounts(services)[v1alpha1.ComponentSlotArtifactServer]; got != 1 {
 		t.Fatalf("artifact infra component service count got %d, want 1: %v", got, services)
 	}
-	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifacts)
+	service := firstProviderServiceByKind(t, services, v1alpha1.ComponentSlotArtifactServer)
 	if got := service["consumingClusters"].([]string); strings.Join(got, ",") != "sno-emul-baremetal,sno-emul-baremetal-b" {
 		t.Fatalf("artifact consumingClusters got %v", got)
 	}
@@ -761,8 +761,8 @@ func TestBareMetalCorporateFixtureDoesNotRenderManagedProxyOrDNS(t *testing.T) {
 		t.Fatalf("infra component services = %v, want only artifact publication", services)
 	}
 	service := services[0].(map[string]any)
-	if got := service["kind"]; got != v1alpha1.ComponentSlotArtifacts {
-		t.Fatalf("infra component service kind got %v, want %s", got, v1alpha1.ComponentSlotArtifacts)
+	if got := service["kind"]; got != v1alpha1.ComponentSlotArtifactServer {
+		t.Fatalf("infra component service kind got %v, want %s", got, v1alpha1.ComponentSlotArtifactServer)
 	}
 	if got := service["machineRef"]; got != "bastion" {
 		t.Fatalf("artifact service machineRef got %v, want bastion", got)
@@ -951,11 +951,12 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	}}
 	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "registry"},
-		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-			MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
-			Port:       v1alpha1.DefaultMirrorRegistryPort,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotRegistry, Registry: &v1alpha1.RegistryComponent{
+				Implementation: v1alpha1.InfraComponentTypeMirrorRegistry,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+				Port:           v1alpha1.DefaultMirrorRegistryPort,
+			}},
 	})
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}

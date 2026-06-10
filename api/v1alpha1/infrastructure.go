@@ -79,8 +79,9 @@ const (
 	NodeRoleMaster = "master"
 	NodeRoleWorker = "worker"
 
-	// Installer platform render types.
-	PlatformTypeBareMetal = "bareMetal"
+	// Installer platform render types. The baremetal spelling is the
+	// install-config platform key, used verbatim as type value and arm key.
+	PlatformTypeBareMetal = "baremetal"
 	PlatformTypeVSphere   = "vsphere"
 	PlatformTypeNone      = "none"
 	PlatformTypeExternal  = "external"
@@ -99,10 +100,11 @@ const (
 	EndpointSourceExternal       = "external"
 	EndpointSourceInfraComponent = "infraComponent"
 
-	// Standard component slot names.
+	// Standard component slot names. The authored slot values double as the
+	// InfraComponent spec.type discriminator and equal the populated arm key.
 	ComponentSlotMachines       = "machines"
 	ComponentSlotLoadBalancer   = "loadBalancer"
-	ComponentSlotArtifacts      = "artifacts"
+	ComponentSlotArtifactServer = "artifactServer"
 	ComponentSlotProxy          = "proxy"
 	ComponentSlotNameResolution = "nameResolution"
 	ComponentSlotNTP            = "ntp"
@@ -133,11 +135,14 @@ const (
 	EntitlementProductOpenShift      = "openshift"
 	EntitlementProductIBMStorageCeph = "ibm-storage-ceph"
 
-	InfraComponentTypeHAProxy        = "haProxy"
+	// InfraComponent arm implementation choices (spec.<arm>.implementation):
+	// which software realises the component. One spelling set, shared with
+	// the Environment componentImages catalog.
+	InfraComponentTypeHAProxy        = "haproxy"
 	InfraComponentTypeSquid          = "squid"
 	InfraComponentTypeDnsmasq        = "dnsmasq"
 	InfraComponentTypeChrony         = "chrony"
-	InfraComponentTypeMirrorRegistry = "mirrorRegistry"
+	InfraComponentTypeMirrorRegistry = "mirror-registry"
 
 	DefaultPullSecretName             = "openshift-pull-secret"
 	DefaultClusterAdminSSHKeyNamePart = "cluster-admin-ssh-key"
@@ -181,21 +186,15 @@ const (
 	ArtifactConsumerMachineBoot             = "machineBoot"
 	ArtifactConsumerContainerClusterInstall = "containerClusterInstall"
 
-	// Component image catalog — closed set of (category, type) pairs that
-	// Environment.spec.componentImages may pin.
-	ComponentImageCategoryLoadBalancer = "load-balancer"
-	ComponentImageCategoryRegistry     = "registry"
-	ComponentImageCategoryProxy        = "proxy"
-	ComponentImageCategoryDNS          = "dns"
-	ComponentImageCategoryArtifacts    = "artifacts"
-	ComponentImageTypeHAProxy          = "haproxy"
-	ComponentImageTypeMirrorRegistry   = "mirror-registry"
-	ComponentImageTypeSquid            = "squid"
-	ComponentImageTypeDnsmasq          = "dnsmasq"
-	ComponentImageTypeArtifactsHTTP    = "http"
+	// Component image catalog — closed set of (component type, implementation)
+	// pairs that Environment.spec.componentImages may pin. Categories are the
+	// ComponentSlot* values; implementations the InfraComponentType* values,
+	// plus the artifact server's sole implementation:
+	ComponentImageTypeArtifactsHTTP = "http"
 
-	ClusterAddonTypeOLMOperator = "olm-operator"
-	ClusterAddonTypeManifestSet = "manifest-set"
+	// ClusterAddon union: type value == populated arm key.
+	ClusterAddonTypeOLM         = "olm"
+	ClusterAddonTypeManifestSet = "manifestSet"
 
 	InstallPlanApprovalAutomatic = "Automatic"
 	InstallPlanApprovalManual    = "Manual"

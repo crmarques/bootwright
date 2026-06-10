@@ -90,12 +90,12 @@ metadata:
   name: {{.ProviderID}}
 spec:
   type: baremetal
-  bareMetal:
+  baremetal:
     boot:
       method: redfish-virtualmedia
   networkAttachments:
     - name: {{.NetworkID}}
-      bareMetal:
+      baremetal:
         vlan: 0
 `,
 	ClusterArtifactAccess: `    artifactAccess:
@@ -110,6 +110,7 @@ kind: InfraComponent
 metadata:
   name: artifact-server
 spec:
+  type: artifactServer
   artifactServer:
     machineRef:
       name: services-host
@@ -137,7 +138,7 @@ spec:
           type: external
 `,
 	PlatformYAML: `    platform:
-      type: bareMetal
+      type: baremetal
       baremetal:
         provisioningNetwork: disabled
 `,

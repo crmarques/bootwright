@@ -5,11 +5,11 @@ metadata:
 spec:
   type: baremetal
 
-  bareMetal:
+  baremetal:
     boot:
       method: external
 
   networkAttachments:
     - name: sno-vlan
-      bareMetal:
+      baremetal:
         vlan: 0

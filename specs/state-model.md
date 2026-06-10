@@ -91,12 +91,13 @@ Rules:
 - `installTrust.caBundleRefs[]` are fleet-wide additional CA trust-bundle secret
   names rendered into cluster install trust.
 - `componentImages` pins managed-service images as
-  `componentImages.<category>.<type>`. The accepted pairs are
-  `load-balancer.haproxy`, `registry.mirror-registry`, `proxy.squid`,
-  `dns.dnsmasq`, and `artifacts.http`. Each entry sets at least one of `local`
-  or `public`, and every reference must pin an explicit version tag or a
-  `sha256:` digest; mutable references such as `:latest` or an omitted tag are
-  rejected.
+  `componentImages.<componentType>.<implementation>`, keyed by the same
+  component-type vocabulary as `InfraComponent.spec.type`. The accepted pairs
+  are `loadBalancer.haproxy`, `registry.mirror-registry`, `proxy.squid`,
+  `nameResolution.dnsmasq`, and `artifactServer.http`. Each entry sets at least
+  one of `local` or `public`, and every reference must pin an explicit version
+  tag or a `sha256:` digest; mutable references such as `:latest` or an omitted
+  tag are rejected.
 - `secrets[]` declares secret names, never bytes. Each item is exactly one of: a
   scalar secret name; or a single-key map whose value is `null`/omitted
   (context-local material), `{file: <path>}` (operator-owned local material,
@@ -394,6 +395,14 @@ Rules:
 
 Rules:
 
+- `spec.type` is required and selects which kind of component this is:
+  `artifactServer`, `loadBalancer`, `proxy`, `nameResolution`, `ntp`, or
+  `registry`. The populated arm key is byte-identical to the type value.
+- Each arm except `artifactServer` declares `implementation`: which software
+  realises the component. Accepted implementations are `haproxy`
+  (loadBalancer), `squid` (proxy), `dnsmasq` (nameResolution), `chrony` (ntp),
+  and `mirror-registry` (registry) — the same spelling set
+  `Environment.spec.componentImages` is keyed by.
 - Component arms use `machineRef.name` for placement.
 - Artifact server, proxy, name-resolution, NTP, registry, and load-balancer
   arms require compatible machine capabilities.
@@ -443,7 +452,7 @@ spec:
   install:
     method: agent
     platform:
-      type: bareMetal
+      type: baremetal
       baremetal:
         provisioningNetwork: disabled
     endpoints:
@@ -485,12 +494,12 @@ Rules:
 
 - `spec.install.method` defaults to `agent`; only `agent` is currently
   accepted.
-- `spec.install.platform.type` accepts `bareMetal`, `vsphere`, `none`, or
+- `spec.install.platform.type` accepts `baremetal`, `vsphere`, `none`, or
   `external`.
 - An omitted `spec.install.platform` derives from the single `InfraProvider`
   type behind `spec.nodes[].machineRef` →
   `Machine.spec.substrate.providerRef`: `libvirt` and `baremetal` providers
-  derive `type: bareMetal` with `baremetal.provisioningNetwork: disabled`;
+  derive `type: baremetal` with `baremetal.provisioningNetwork: disabled`;
   `kubevirt` providers derive `type: none`. `render effective` materializes
   the derived platform. When the bound machines span multiple provider types
   and the platform is omitted, validation rejects the cluster naming the
@@ -709,13 +718,13 @@ Rules:
 
 Rules:
 
-- `spec.type` is required and must be `olm-operator` or `manifest-set`; the two
+- `spec.type` is required and must be `olm` or `manifestSet`; the two
   arms are mutually exclusive.
-- `olm-operator` requires `spec.olm` and must not set `manifestSet`.
+- `olm` requires `spec.olm` and must not set `manifestSet`.
   `olm.namespace.name` is required; `olm.subscription` requires `name`,
   `package`, `channel`, `source`, `sourceNamespace`, and `installPlanApproval`;
   `installPlanApproval` accepts `Automatic` or `Manual`.
-- `manifest-set` requires `spec.manifestSet.manifests[]` (at least one) and must
+- `manifestSet` requires `spec.manifestSet.manifests[]` (at least one) and must
   not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
   ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
   symlink, and must exist.

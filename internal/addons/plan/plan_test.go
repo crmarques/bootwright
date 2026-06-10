@@ -331,7 +331,7 @@ func testExtension(name string) v1alpha1.ClusterAddon {
 	return v1alpha1.ClusterAddon{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ClusterAddonSpec{
-			Type: v1alpha1.ClusterAddonTypeOLMOperator,
+			Type: v1alpha1.ClusterAddonTypeOLM,
 			OLM: &v1alpha1.ClusterAddonOLMSpec{
 				Namespace: v1alpha1.ClusterAddonOLMNamespace{Name: "openshift-cnv", Create: true},
 				Subscription: v1alpha1.ClusterAddonOLMSubscription{

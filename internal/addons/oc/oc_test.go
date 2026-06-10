@@ -141,7 +141,7 @@ func readyExtensionPlan() extensionplan.ExtensionPlan {
 	extension := v1alpha1.ClusterAddon{
 		Metadata: v1alpha1.Metadata{Name: "ready-extension"},
 		Spec: v1alpha1.ClusterAddonSpec{
-			Type: v1alpha1.ClusterAddonTypeOLMOperator,
+			Type: v1alpha1.ClusterAddonTypeOLM,
 			OLM: &v1alpha1.ClusterAddonOLMSpec{
 				Namespace: v1alpha1.ClusterAddonOLMNamespace{
 					Name:   "installed",

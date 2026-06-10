@@ -104,7 +104,7 @@ func DesiredHash(extension v1alpha1.ClusterAddon, policy v1alpha1.ClusterAddonPo
 		},
 	}
 	switch extension.Spec.Type {
-	case v1alpha1.ClusterAddonTypeOLMOperator:
+	case v1alpha1.ClusterAddonTypeOLM:
 		resources, err := OLMResources(extension)
 		if err != nil {
 			return "", err

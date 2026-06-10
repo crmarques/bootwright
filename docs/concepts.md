@@ -126,7 +126,7 @@ Virtualization are declared as `ClusterAddon` resources, grouped with
 `ClusterAddonProfile`, and attached to installed clusters with
 `ClusterAddonBinding`.
 
-MVP add-on types are `olm-operator` and `manifest-set`. Profile expansion is
+MVP add-on types are `olm` and `manifestSet`. Profile expansion is
 deterministic: referenced `profiles` expand in declared order, then direct
 `addons` append in declared order, and duplicate add-ons are removed by
 first occurrence. Each `ClusterAddonBinding` names exactly one cluster with

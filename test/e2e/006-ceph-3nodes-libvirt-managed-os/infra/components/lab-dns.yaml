@@ -3,8 +3,10 @@ kind: InfraComponent
 metadata:
   name: lab-dns
 spec:
+  type: nameResolution
+
   nameResolution:
-    type: dnsmasq
+    implementation: dnsmasq
     machineRef:
       name: bastion
     bindAddress: 192.168.134.1

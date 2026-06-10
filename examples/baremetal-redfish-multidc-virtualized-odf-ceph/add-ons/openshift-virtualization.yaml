@@ -3,7 +3,7 @@ kind: ClusterAddon
 metadata:
   name: openshift-virtualization
 spec:
-  type: olm-operator
+  type: olm
 
   provides:
     - kubevirt

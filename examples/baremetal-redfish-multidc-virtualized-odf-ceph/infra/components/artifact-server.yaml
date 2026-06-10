@@ -3,6 +3,8 @@ kind: InfraComponent
 metadata:
   name: artifact-server
 spec:
+  type: artifactServer
+
   artifactServer:
     endpoints:
     - name: bmc

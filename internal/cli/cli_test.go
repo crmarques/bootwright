@@ -3821,7 +3821,7 @@ kind: ClusterAddon
 metadata:
   name: openshift-virtualization
 spec:
-  type: olm-operator
+  type: olm
   olm:
     namespace:
       name: openshift-cnv

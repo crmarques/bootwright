@@ -259,7 +259,7 @@ func clusterMachineServiceConsumers(state v1alpha1.State, infra v1alpha1.Cluster
 				cluster.Metadata.Name,
 				infra.Metadata.Name,
 				fmt.Sprintf("Environment artifactServer InfraComponent/%s", server.Component.Metadata.Name),
-				v1alpha1.ComponentSlotArtifacts,
+				v1alpha1.ComponentSlotArtifactServer,
 				v1alpha1.KindInfraComponent,
 				server.Component.Metadata.Name,
 				v1alpha1.ArtifactServerProtocolHTTP,

@@ -136,7 +136,7 @@ func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alph
 
 func artifactServerComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server artifacts.Server) map[string]any {
 	out := map[string]any{
-		"kind":          v1alpha1.ComponentSlotArtifacts,
+		"kind":          v1alpha1.ComponentSlotArtifactServer,
 		"providerName":  v1alpha1.KindInfraComponent,
 		"name":          server.Component.Metadata.Name,
 		"componentName": server.Component.Metadata.Name,
@@ -156,7 +156,7 @@ func artifactServerComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstal
 				out["url"] = url
 			}
 		}
-		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifacts, v1alpha1.ArtifactServerProtocolHTTP)
+		applyServiceRoleContract(out, v1alpha1.ComponentSlotArtifactServer, v1alpha1.ArtifactServerProtocolHTTP)
 	}
 	return out
 }

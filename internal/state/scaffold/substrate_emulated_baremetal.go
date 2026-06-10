@@ -86,7 +86,7 @@ metadata:
   name: {{.Cluster}}-hosts
 spec:
   type: baremetal
-  bareMetal:
+  baremetal:
     boot:
       method: external
 ---
@@ -119,8 +119,9 @@ kind: InfraComponent
 metadata:
   name: load-balancer
 spec:
+  type: loadBalancer
   loadBalancer:
-    type: haProxy
+    implementation: haproxy
     machineRef:
       name: bastion
     bindAddresses:
@@ -134,8 +135,9 @@ kind: InfraComponent
 metadata:
   name: name-resolution
 spec:
+  type: nameResolution
   nameResolution:
-    type: dnsmasq
+    implementation: dnsmasq
     machineRef:
       name: bastion
     bindAddress: 192.168.130.1
@@ -145,8 +147,9 @@ kind: InfraComponent
 metadata:
   name: ntp-server
 spec:
+  type: ntp
   ntp:
-    type: chrony
+    implementation: chrony
     machineRef:
       name: bastion
     bindAddress: 192.168.130.1
@@ -174,7 +177,7 @@ spec:
           bindAddress: apps
 `,
 	PlatformYAML: `    platform:
-      type: bareMetal
+      type: baremetal
       baremetal:
         provisioningNetwork: disabled
 `,

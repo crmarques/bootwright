@@ -138,7 +138,7 @@ func Wait(ctx context.Context, runner OCRunner, cfg RunConfig, plan extensionpla
 // output (which may echo user-inlined secret bytes).
 func applyExtension(ctx context.Context, runner OCRunner, kubeconfig string, plan extensionplan.ExtensionPlan) (observed []string, failedID string, err error) {
 	switch plan.Extension.Spec.Type {
-	case v1alpha1.ClusterAddonTypeOLMOperator:
+	case v1alpha1.ClusterAddonTypeOLM:
 		resources, err := extensionrender.OLMResources(plan.Extension)
 		if err != nil {
 			return nil, "", err

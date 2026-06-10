@@ -31,7 +31,7 @@ func TestValidateScopedApplySharedServicesFailsForInfraClustersAndAllSharedKinds
 				t.Fatal("expected shared service conflict, got nil")
 			}
 			for _, fragment := range []string{
-				"artifacts InfraComponent/artifact-server",
+				"artifactServer InfraComponent/artifact-server",
 				"loadBalancer InfraComponent/load-balancer",
 				"nameResolution InfraComponent/name-resolution",
 				"ntp InfraComponent/ntp-server",
@@ -223,6 +223,7 @@ func cliArtifactServerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "artifact-server"},
 		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotArtifactServer,
 			ArtifactServer: &v1alpha1.ArtifactServerComponent{
 				MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
 				Listeners: []v1alpha1.ArtifactServerListener{{
@@ -243,60 +244,65 @@ func cliArtifactServerComponent() v1alpha1.InfraComponent {
 func cliLoadBalancerComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "load-balancer"},
-		Spec: v1alpha1.InfraComponentSpec{LoadBalancer: &v1alpha1.LoadBalancerComponent{
-			Type:       v1alpha1.InfraComponentTypeHAProxy,
-			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
-				Name: "api",
-				IP:   "10.0.0.10",
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotLoadBalancer, LoadBalancer: &v1alpha1.LoadBalancerComponent{
+				Implementation: v1alpha1.InfraComponentTypeHAProxy,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+				BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
+					Name: "api",
+					IP:   "10.0.0.10",
+				}},
 			}},
-		}},
 	}
 }
 
 func cliNameResolutionComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "name-resolution"},
-		Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-			Type:        v1alpha1.InfraComponentTypeDnsmasq,
-			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
-			BindAddress: "10.0.0.5",
-			Port:        v1alpha1.DefaultDNSPort,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotNameResolution, NameResolution: &v1alpha1.NameResolutionComponent{
+				Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+				BindAddress:    "10.0.0.5",
+				Port:           v1alpha1.DefaultDNSPort,
+			}},
 	}
 }
 
 func cliNTPComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "ntp-server"},
-		Spec: v1alpha1.InfraComponentSpec{NTP: &v1alpha1.NTPComponent{
-			Type:        v1alpha1.InfraComponentTypeChrony,
-			MachineRef:  v1alpha1.LocalObjectReference{Name: "service-host"},
-			BindAddress: "10.0.0.5",
-			Port:        v1alpha1.DefaultNTPPort,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotNTP, NTP: &v1alpha1.NTPComponent{
+				Implementation: v1alpha1.InfraComponentTypeChrony,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+				BindAddress:    "10.0.0.5",
+				Port:           v1alpha1.DefaultNTPPort,
+			}},
 	}
 }
 
 func cliProxyComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "proxy"},
-		Spec: v1alpha1.InfraComponentSpec{Proxy: &v1alpha1.ProxyComponent{
-			Type:       v1alpha1.InfraComponentTypeSquid,
-			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:       v1alpha1.DefaultSquidPort,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotProxy, Proxy: &v1alpha1.ProxyComponent{
+				Implementation: v1alpha1.InfraComponentTypeSquid,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+				Port:           v1alpha1.DefaultSquidPort,
+			}},
 	}
 }
 
 func cliRegistryComponent() v1alpha1.InfraComponent {
 	return v1alpha1.InfraComponent{
 		Metadata: v1alpha1.Metadata{Name: "registry"},
-		Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-			MachineRef: v1alpha1.LocalObjectReference{Name: "service-host"},
-			Port:       v1alpha1.DefaultMirrorRegistryPort,
-		}},
+		Spec: v1alpha1.InfraComponentSpec{
+			Type: v1alpha1.ComponentSlotRegistry, Registry: &v1alpha1.RegistryComponent{
+				Implementation: v1alpha1.InfraComponentTypeMirrorRegistry,
+				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
+				Port:           v1alpha1.DefaultMirrorRegistryPort,
+			}},
 	}
 }
 

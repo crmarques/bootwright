@@ -16,16 +16,16 @@ func infraComponentsVars(state v1alpha1.State) []any {
 		}
 		if lb := component.Spec.LoadBalancer; lb != nil {
 			entry["loadBalancer"] = map[string]any{
-				"type":          lb.Type,
-				"machineRef":    lb.MachineRef.Name,
-				"bindAddresses": loadBalancerBindAddressesVars(lb.BindAddresses),
+				"implementation": lb.Implementation,
+				"machineRef":     lb.MachineRef.Name,
+				"bindAddresses":  loadBalancerBindAddressesVars(lb.BindAddresses),
 			}
 		}
 		if proxy := component.Spec.Proxy; proxy != nil {
-			entry["proxy"] = serviceComponentVars(proxy.Type, proxy.MachineRef.Name, proxy.BindAddress, proxy.Port, proxy.Endpoints)
+			entry["proxy"] = serviceComponentVars(proxy.Implementation, proxy.MachineRef.Name, proxy.BindAddress, proxy.Port, proxy.Endpoints)
 		}
 		if dns := component.Spec.NameResolution; dns != nil {
-			v := serviceComponentVars(dns.Type, dns.MachineRef.Name, dns.BindAddress, dns.Port, dns.Endpoints)
+			v := serviceComponentVars(dns.Implementation, dns.MachineRef.Name, dns.BindAddress, dns.Port, dns.Endpoints)
 			if len(dns.AdditionalIngressHosts) > 0 {
 				v["additionalIngressHosts"] = stringSliceAny(dns.AdditionalIngressHosts)
 			}
@@ -35,14 +35,14 @@ func infraComponentsVars(state v1alpha1.State) []any {
 			entry["nameResolution"] = v
 		}
 		if ntp := component.Spec.NTP; ntp != nil {
-			v := serviceComponentVars(ntp.Type, ntp.MachineRef.Name, ntp.BindAddress, ntp.Port, ntp.Endpoints)
+			v := serviceComponentVars(ntp.Implementation, ntp.MachineRef.Name, ntp.BindAddress, ntp.Port, ntp.Endpoints)
 			if len(ntp.UpstreamSources) > 0 {
 				v["upstreamSources"] = stringSliceAny(ntp.UpstreamSources)
 			}
 			entry["ntp"] = v
 		}
 		if registry := component.Spec.Registry; registry != nil {
-			entry["registry"] = serviceComponentVars(registry.Type, registry.MachineRef.Name, registry.BindAddress, registry.Port, registry.Endpoints)
+			entry["registry"] = serviceComponentVars(registry.Implementation, registry.MachineRef.Name, registry.BindAddress, registry.Port, registry.Endpoints)
 		}
 		out = append(out, entry)
 	}
@@ -171,10 +171,10 @@ func environmentComponentBaseVars(name, typ string, isDefault bool, componentRef
 
 func serviceComponentVars(typ, machineRef, bindAddress string, port int, endpoints []v1alpha1.ServiceEndpoint) map[string]any {
 	out := map[string]any{
-		"type":        typ,
-		"machineRef":  machineRef,
-		"bindAddress": bindAddress,
-		"port":        port,
+		"implementation": typ,
+		"machineRef":     machineRef,
+		"bindAddress":    bindAddress,
+		"port":           port,
 	}
 	if len(endpoints) > 0 {
 		out["endpoints"] = serviceEndpointsVars(endpoints)

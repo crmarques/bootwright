@@ -3,7 +3,7 @@ kind: ClusterAddon
 metadata:
   name: cluster-observability
 spec:
-  type: manifest-set
+  type: manifestSet
 
   manifestSet:
     manifests:

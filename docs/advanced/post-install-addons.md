@@ -21,9 +21,9 @@ after the target cluster is installed and reachable.
 
 `ClusterAddon` declares one reusable component. The MVP supports:
 
-- `olm-operator` for Namespace, OperatorGroup, Subscription, and optional
+- `olm` for Namespace, OperatorGroup, Subscription, and optional
   custom resources
-- `manifest-set` for applying declared YAML manifests in order
+- `manifestSet` for applying declared YAML manifests in order
 
 `ClusterAddonProfile` declares an ordered reusable group. It expands child
 `profiles` first, then direct `addons`; duplicate add-on names are
@@ -60,7 +60,7 @@ kind: ClusterAddon
 metadata:
   name: openshift-virtualization
 spec:
-  type: olm-operator
+  type: olm
   provides:
     - kubevirt
   olm:
@@ -169,7 +169,7 @@ selection is authored cluster bootstrap intent.
 Add-on records are stored under
 `clusters/<cluster>/runtime/addons/<addon>.json`. The desired hash
 includes the add-on spec, apply policy, generated OLM resources, and
-manifest file contents for `manifest-set`.
+manifest file contents for `manifestSet`.
 
 When the desired hash matches and readiness checks pass, Bootwright skips the
 apply. When the hash changes or a previous run failed, Bootwright reapplies and

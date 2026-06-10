@@ -5,11 +5,11 @@ metadata:
 spec:
   type: baremetal
 
-  bareMetal:
+  baremetal:
     boot:
       method: external
 
   networkAttachments:
     - name: rack1-bond140-machine
-      bareMetal:
+      baremetal:
         vlan: 140

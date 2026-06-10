@@ -761,14 +761,14 @@ func TestSchemaCompatibilityValidationRejectsKnownIncompatibleFields(t *testing.
 		{
 			name: "provider-artifact-access",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "  bareMetal: {}\n", "  bareMetal: {}\n  artifactAccess:\n    serverRef:\n      name: default\n", 1)
+				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "  baremetal: {}\n", "  baremetal: {}\n  artifactAccess:\n    serverRef:\n      name: default\n", 1)
 			},
 			wantSubstring: "InfraProvider/rack spec.artifactAccess is not valid on InfraProvider",
 		},
 		{
 			name: "provider-network-attachment-arm",
 			mutate: func(files map[string]string) {
-				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "      bareMetal: {}\n", "      libvirt:\n        bridge: br0\n", 1)
+				files["provider.yaml"] = strings.Replace(files["provider.yaml"], "      baremetal: {}\n", "      libvirt:\n        bridge: br0\n", 1)
 			},
 			wantSubstring: "InfraProvider/rack spec.networkAttachments[cluster-net].libvirt must be empty when InfraProvider/rack spec.type=baremetal",
 		},
@@ -825,8 +825,9 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
 metadata: { name: mirror-registry }
 spec:
+  type: registry
   registry:
-    type: mirrorRegistry
+    implementation: mirror-registry
     machineRef:
       name: services-host
 `
@@ -1097,10 +1098,10 @@ func TestNTPInfraComponentRejectsInvalidFields(t *testing.T) {
 		wantSubstring string
 	}{
 		{
-			name:          "type",
-			replaceOld:    "type: chrony",
-			replaceNew:    "type: ntpd",
-			wantSubstring: `spec.ntp.type "ntpd" must be "chrony"`,
+			name:          "implementation",
+			replaceOld:    "implementation: chrony",
+			replaceNew:    "implementation: ntpd",
+			wantSubstring: `spec.ntp.implementation "ntpd" must be "chrony"`,
 		},
 		{
 			name:          "port",
@@ -1145,11 +1146,12 @@ func TestNameResolutionComponentForwarderValidation(t *testing.T) {
 	component := func(forwarders []string) v1alpha1.InfraComponent {
 		return v1alpha1.InfraComponent{
 			Metadata: v1alpha1.Metadata{Name: "lab-dns"},
-			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-				Type:       v1alpha1.InfraComponentTypeDnsmasq,
-				MachineRef: v1alpha1.LocalObjectReference{Name: "bastion"},
-				Forwarders: forwarders,
-			}},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotNameResolution, NameResolution: &v1alpha1.NameResolutionComponent{
+					Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+					Forwarders:     forwarders,
+				}},
 		}
 	}
 
@@ -2544,7 +2546,7 @@ func TestReleaseChannelDerivation(t *testing.T) {
 
 func newKubeVirtChildFiles() map[string]string {
 	files := newBaselineFiles()
-	files["extension.yaml"] = strings.Replace(extensionYAML("openshift-virtualization"), "  type: olm-operator\n", "  type: olm-operator\n  provides:\n    - kubevirt\n", 1)
+	files["extension.yaml"] = strings.Replace(extensionYAML("openshift-virtualization"), "  type: olm\n", "  type: olm\n  provides:\n    - kubevirt\n", 1)
 	files["set.yaml"] = extensionSetYAML("virtualization-platform", "openshift-virtualization")
 	files["binding.yaml"] = extensionBindingYAML("parent-addons", "virtualization-platform")
 	files["child.yaml"] = `apiVersion: bootwright.io/v1alpha1
@@ -2717,7 +2719,7 @@ spec:
 kind: ClusterAddon
 metadata: { name: openshift-virtualization }
 spec:
-  type: manifest-set
+  type: manifestSet
   provides:
     - kubevirt
   manifestSet:
@@ -3036,8 +3038,9 @@ apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
 metadata: { name: ` + name + ` }
 spec:
+  type: loadBalancer
   loadBalancer:
-    type: haProxy
+    implementation: haproxy
     machineRef: { name: services-host }
     bindAddresses:
     ` + bindAddresses
@@ -3219,16 +3222,17 @@ kind: InfraProvider
 metadata: { name: rack }
 spec:
   type: baremetal
-  bareMetal: {}
+  baremetal: {}
   networkAttachments:
     - name: cluster-net
-      bareMetal: {}
+      baremetal: {}
 `
 
 const newInfraComponentYAML = `apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
 metadata: { name: artifact-server }
 spec:
+  type: artifactServer
   artifactServer:
     machineRef:
       name: services-host
@@ -3246,8 +3250,9 @@ const newNTPComponentYAML = `apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
 metadata: { name: ntp-server }
 spec:
+  type: ntp
   ntp:
-    type: chrony
+    implementation: chrony
     machineRef:
       name: services-host
     bindAddress: 192.168.132.1
@@ -3339,7 +3344,7 @@ spec:
       version: 4.21.15
   install:
     platform:
-      type: bareMetal
+      type: baremetal
       baremetal: { provisioningNetwork: disabled }
     endpoints:
       api:

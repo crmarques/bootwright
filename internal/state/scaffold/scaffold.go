@@ -127,18 +127,18 @@ func formatDesiredStateYAML(body string) string {
 func expandFlowEmptyMaps(line string) []string {
 	trimmed := strings.TrimLeft(line, " ")
 	indent := line[:len(line)-len(trimmed)]
-	if trimmed != "bareMetal: {}" {
+	if trimmed != "baremetal: {}" {
 		return []string{line}
 	}
 	if len(indent) == 2 {
 		return []string{
-			indent + "bareMetal:",
+			indent + "baremetal:",
 			indent + "  boot:",
 			indent + "    method: external",
 		}
 	}
 	return []string{
-		indent + "bareMetal:",
+		indent + "baremetal:",
 		indent + "  vlan: 0",
 	}
 }

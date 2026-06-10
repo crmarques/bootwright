@@ -20,7 +20,7 @@ metadata:
   name: control-plane
 spec:
   loadBalancer:
-    type: haProxy
+    implementation: haproxy
     machineRef:
       name: services-host
     bindAddresses:

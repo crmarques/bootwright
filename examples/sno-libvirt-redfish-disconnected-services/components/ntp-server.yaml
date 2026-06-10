@@ -3,8 +3,10 @@ kind: InfraComponent
 metadata:
   name: ntp-server
 spec:
+  type: ntp
+
   ntp:
-    type: chrony
+    implementation: chrony
     bindAddress: 192.168.132.1
     endpoints:
     - name: cluster

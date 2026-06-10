@@ -230,7 +230,7 @@ func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 func TestSubstratesCarryDistinctNetworkAttachments(t *testing.T) {
 	want := map[scaffold.Provider]string{
 		scaffold.ProviderEmulatedBareMetal: "libvirt:",
-		scaffold.ProviderBareMetal:         "bareMetal:",
+		scaffold.ProviderBareMetal:         "baremetal:",
 		scaffold.ProviderVSphere:           "vsphere:",
 		scaffold.ProviderKubeVirt:          "kubevirt:",
 	}

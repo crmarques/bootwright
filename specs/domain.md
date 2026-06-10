@@ -61,7 +61,7 @@ fact:
 - `InfraProvider` renders substrate profiles, network attachments, and provider
   facts.
 - `InfraComponent` renders shared service placement and routable endpoints.
-- `ClusterAddon` renders generated OLM resources or manifest-set apply plans
+- `ClusterAddon` renders generated OLM resources or manifestSet apply plans
   after the target cluster is installed.
 
 No backward-compatibility shim is kept for abandoned fields or kinds. Old

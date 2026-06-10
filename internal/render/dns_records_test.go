@@ -46,10 +46,11 @@ func dnsRecordsState() v1alpha1.State {
 		}},
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "dns"},
-			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-				Type:       v1alpha1.InfraComponentTypeDnsmasq,
-				MachineRef: v1alpha1.LocalObjectReference{Name: "host"},
-			}},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotNameResolution, NameResolution: &v1alpha1.NameResolutionComponent{
+					Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "host"},
+				}},
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "managed-net"},

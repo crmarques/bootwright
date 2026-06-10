@@ -155,7 +155,7 @@ metadata:
   name: apps
 spec:
   loadBalancer:
-    type: haProxy
+    implementation: haproxy
     machineRef:
       name: bastion
     bindAddresses:

@@ -329,11 +329,12 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 		}, installerNodeMachine("master-0")},
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "registry"},
-			Spec: v1alpha1.InfraComponentSpec{Registry: &v1alpha1.RegistryComponent{
-				Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
-				MachineRef: v1alpha1.LocalObjectReference{Name: "registry-host"},
-				Port:       5000,
-			}},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotRegistry, Registry: &v1alpha1.RegistryComponent{
+					Implementation: v1alpha1.InfraComponentTypeMirrorRegistry,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "registry-host"},
+					Port:           5000,
+				}},
 		}},
 	}
 	ocp := v1alpha1.ContainerCluster{

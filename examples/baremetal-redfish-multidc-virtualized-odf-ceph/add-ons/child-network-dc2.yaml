@@ -3,7 +3,7 @@ kind: ClusterAddon
 metadata:
   name: child-network-dc2
 spec:
-  type: manifest-set
+  type: manifestSet
 
   manifestSet:
     manifests:

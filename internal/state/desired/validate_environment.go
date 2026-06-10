@@ -24,15 +24,16 @@ var ntpHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9](
 var imageVersionTag = regexp.MustCompile(`^v?[0-9][\w.+-]*$`)
 var imageSHA256Digest = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 
-// componentImageCatalog enumerates the (category, type) pairs that
-// Environment.spec.componentImages may pin. Adding a new pair is the
-// same gesture that adds a new managed-service image consumer.
+// componentImageCatalog enumerates the (component type, implementation) pairs
+// that Environment.spec.componentImages may pin, keyed by the same component
+// type vocabulary as InfraComponent spec.type. Adding a new pair is the same
+// gesture that adds a new managed-service image consumer.
 var componentImageCatalog = map[string]map[string]bool{
-	v1alpha1.ComponentImageCategoryLoadBalancer: {v1alpha1.ComponentImageTypeHAProxy: true},
-	v1alpha1.ComponentImageCategoryRegistry:     {v1alpha1.ComponentImageTypeMirrorRegistry: true},
-	v1alpha1.ComponentImageCategoryProxy:        {v1alpha1.ComponentImageTypeSquid: true},
-	v1alpha1.ComponentImageCategoryDNS:          {v1alpha1.ComponentImageTypeDnsmasq: true},
-	v1alpha1.ComponentImageCategoryArtifacts:    {v1alpha1.ComponentImageTypeArtifactsHTTP: true},
+	v1alpha1.ComponentSlotLoadBalancer:   {v1alpha1.InfraComponentTypeHAProxy: true},
+	v1alpha1.ComponentSlotRegistry:       {v1alpha1.InfraComponentTypeMirrorRegistry: true},
+	v1alpha1.ComponentSlotProxy:          {v1alpha1.InfraComponentTypeSquid: true},
+	v1alpha1.ComponentSlotNameResolution: {v1alpha1.InfraComponentTypeDnsmasq: true},
+	v1alpha1.ComponentSlotArtifactServer: {v1alpha1.ComponentImageTypeArtifactsHTTP: true},
 }
 
 func validateEnvironments(state v1alpha1.State) []string {
@@ -781,7 +782,7 @@ func validateComponentImages(env v1alpha1.Environment) []string {
 	for category, types := range env.Spec.ComponentImages {
 		allowedTypes, ok := componentImageCatalog[category]
 		if !ok {
-			errs = append(errs, fmt.Sprintf("Environment/%s spec.componentImages key %q is not a known category (accepted: load-balancer, registry, proxy, dns, artifacts)", env.Metadata.Name, category))
+			errs = append(errs, fmt.Sprintf("Environment/%s spec.componentImages key %q is not a known component type (accepted: loadBalancer, registry, proxy, nameResolution, artifactServer)", env.Metadata.Name, category))
 			continue
 		}
 		for typ, image := range types {

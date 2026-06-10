@@ -27,7 +27,7 @@ func validateClusterAddons(state v1alpha1.State) []string {
 		switch extension.Spec.Type {
 		case "":
 			errs = append(errs, prefix+".type is required")
-		case v1alpha1.ClusterAddonTypeOLMOperator:
+		case v1alpha1.ClusterAddonTypeOLM:
 			if extension.Spec.ManifestSet != nil {
 				errs = append(errs, prefix+".type=olm-operator must not set manifestSet")
 			}
@@ -39,7 +39,7 @@ func validateClusterAddons(state v1alpha1.State) []string {
 			errs = append(errs, validateClusterAddonManifestSet(extension)...)
 		default:
 			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}",
-				prefix, extension.Spec.Type, v1alpha1.ClusterAddonTypeOLMOperator, v1alpha1.ClusterAddonTypeManifestSet))
+				prefix, extension.Spec.Type, v1alpha1.ClusterAddonTypeOLM, v1alpha1.ClusterAddonTypeManifestSet))
 		}
 		errs = append(errs, validateClusterAddonReadiness(extension)...)
 		errs = append(errs, validateClusterAddonProvides(extension)...)

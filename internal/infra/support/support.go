@@ -156,8 +156,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "capabilityName"},
 		Image: ServiceImage{
-			Category:   v1alpha1.ComponentImageCategoryLoadBalancer,
-			Type:       v1alpha1.ComponentImageTypeHAProxy,
+			Category:   v1alpha1.ComponentSlotLoadBalancer,
+			Type:       v1alpha1.InfraComponentTypeHAProxy,
 			Repository: "docker.io/library/haproxy",
 			Version:    "3.3.10",
 			Source:     "https://hub.docker.com/_/haproxy",
@@ -166,14 +166,14 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		Status:  StatusSupported,
 		Summary: "HAProxy managed load balancer",
 	},
-	{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP}: {
-		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifacts, Realisation: v1alpha1.ArtifactServerProtocolHTTP},
+	{Kind: v1alpha1.ComponentSlotArtifactServer, Realisation: v1alpha1.ArtifactServerProtocolHTTP}: {
+		Key:              ServiceKey{Kind: v1alpha1.ComponentSlotArtifactServer, Realisation: v1alpha1.ArtifactServerProtocolHTTP},
 		ApplyRole:        "bootwright.core.infra_component_artifact_server_http",
 		DestroyRole:      "bootwright.core.infra_component_artifact_server_http",
 		HostCapabilities: []string{v1alpha1.MachineCapabilityContainerRuntime},
 		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "listeners", "endpoints"},
 		Image: ServiceImage{
-			Category:   v1alpha1.ComponentImageCategoryArtifacts,
+			Category:   v1alpha1.ComponentSlotArtifactServer,
 			Type:       v1alpha1.ComponentImageTypeArtifactsHTTP,
 			Repository: "docker.io/library/nginx",
 			Version:    "1.29.8-alpine3.23",
@@ -191,8 +191,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultSquidPort,
 		Image: ServiceImage{
-			Category:   v1alpha1.ComponentImageCategoryProxy,
-			Type:       v1alpha1.ComponentImageTypeSquid,
+			Category:   v1alpha1.ComponentSlotProxy,
+			Type:       v1alpha1.InfraComponentTypeSquid,
 			Repository: "docker.io/openeuler/squid",
 			Version:    "7.5-oe2403sp3",
 			Source:     "https://hub.docker.com/r/openeuler/squid",
@@ -210,8 +210,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		MergeStringFields: []string{"additionalIngressHosts"},
 		DefaultPort:       v1alpha1.DefaultDNSPort,
 		Image: ServiceImage{
-			Category:   v1alpha1.ComponentImageCategoryDNS,
-			Type:       v1alpha1.ComponentImageTypeDnsmasq,
+			Category:   v1alpha1.ComponentSlotNameResolution,
+			Type:       v1alpha1.InfraComponentTypeDnsmasq,
 			Repository: "docker.io/dockurr/dnsmasq",
 			Version:    "2.92_p2",
 			Source:     "https://hub.docker.com/r/dockurr/dnsmasq",
@@ -237,8 +237,8 @@ var serviceSupport = map[ServiceKey]ServiceSupport{
 		ConflictFields:   []string{"machineRef", "realisation", "applyRole", "destroyRole", "bindAddress", "port"},
 		DefaultPort:      v1alpha1.DefaultMirrorRegistryPort,
 		Image: ServiceImage{
-			Category:   v1alpha1.ComponentImageCategoryRegistry,
-			Type:       v1alpha1.ComponentImageTypeMirrorRegistry,
+			Category:   v1alpha1.ComponentSlotRegistry,
+			Type:       v1alpha1.InfraComponentTypeMirrorRegistry,
 			Repository: "docker.io/library/registry",
 			Version:    "3.1.1",
 			Source:     "https://hub.docker.com/_/registry",

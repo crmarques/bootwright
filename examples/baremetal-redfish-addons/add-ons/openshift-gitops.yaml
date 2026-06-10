@@ -3,7 +3,7 @@ kind: ClusterAddon
 metadata:
   name: openshift-gitops
 spec:
-  type: olm-operator
+  type: olm
 
   olm:
     namespace:

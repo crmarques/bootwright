@@ -3,7 +3,9 @@ kind: InfraComponent
 metadata:
   name: mirror-registry
 spec:
+  type: registry
+
   registry:
-    type: mirrorRegistry
+    implementation: mirror-registry
     machineRef:
       name: bastion

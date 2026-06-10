@@ -76,12 +76,13 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 		}},
 		InfraComponents: []v1alpha1.InfraComponent{{
 			Metadata: v1alpha1.Metadata{Name: "lab-dns"},
-			Spec: v1alpha1.InfraComponentSpec{NameResolution: &v1alpha1.NameResolutionComponent{
-				Type:        v1alpha1.InfraComponentTypeDnsmasq,
-				MachineRef:  v1alpha1.LocalObjectReference{Name: "bastion"},
-				BindAddress: "192.168.134.1",
-				Forwarders:  []string{"1.1.1.1", "9.9.9.9"},
-			}},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotNameResolution, NameResolution: &v1alpha1.NameResolutionComponent{
+					Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+					BindAddress:    "192.168.134.1",
+					Forwarders:     []string{"1.1.1.1", "9.9.9.9"},
+				}},
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-bridge"},
