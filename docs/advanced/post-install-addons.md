@@ -45,9 +45,11 @@ ready.
 
 `ClusterAddon.spec.accepts.inputs[]` declares input APIs that bindings may
 provide by name. An input schema can require Bootwright object refs and secret
-refs, and `effects[]` can opt into built-in behavior. Data Foundation external
-storage uses a generic `storage-export-attachment` effect; no behavior depends
-on the add-on name.
+refs — binding values for `refKind` properties must name a loaded object of
+that kind — and `effects[]` can opt into built-in behavior. Data Foundation
+external storage uses a generic `storage-export-attachment` effect; no
+behavior depends on the add-on name, but the effect's input schema must
+declare a single required `exportRef` property with `refKind: StorageExport`.
 
 Addon-only bindings are valid, so the same resource works for Virtualization,
 GitOps, or any other post-install component that does not consume inputs.

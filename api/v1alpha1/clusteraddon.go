@@ -33,6 +33,10 @@ type ClusterAddonInputSchema struct {
 	Properties map[string]ClusterAddonInputProperty `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
+// ClusterAddonInputProperty types one binding-supplied input value. Exactly
+// one of refKind or secretRef is set: refKind values are plain object names
+// resolved against the loaded objects of that kind, secretRef values resolve
+// against Environment spec.secrets.
 type ClusterAddonInputProperty struct {
 	RefKind   string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
 	SecretRef bool   `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`

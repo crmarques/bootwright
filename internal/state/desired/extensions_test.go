@@ -470,6 +470,78 @@ spec:
 			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt input[config].values.credentialsRef "missing-secret" is not declared in Environment/env spec.secrets`,
 		},
 		{
+			name: "ref-kind-value-must-exist",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(validInput)
+				files["binding.yaml"] = bindingWithInputs(`      inputs:
+        - name: config
+          values:
+            targetRef: missing-cluster
+`)
+				return files
+			},
+			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.targetRef "missing-cluster" does not match any ContainerCluster`,
+		},
+		{
+			name: "storage-attachment-property-must-be-exportRef",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
+        schema:
+          type: object
+          required:
+            - export
+          properties:
+            export:
+              refKind: StorageExport
+        effects:
+          - type: storage-export-attachment
+            provider: data-foundation
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef is required for data-foundation storage attachment inputs`,
+		},
+		{
+			name: "storage-attachment-exportRef-must-be-required",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
+        schema:
+          type: object
+          properties:
+            exportRef:
+              refKind: StorageExport
+        effects:
+          - type: storage-export-attachment
+            provider: data-foundation
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].schema.required must include "exportRef" for data-foundation storage attachment inputs`,
+		},
+		{
+			name: "storage-attachment-exportRef-wrong-ref-kind",
+			files: func() map[string]string {
+				files := newBaselineFiles()
+				files["extension.yaml"] = addonWithInputs(`      - name: external-storage
+        schema:
+          type: object
+          required:
+            - exportRef
+          properties:
+            exportRef:
+              refKind: Machine
+        effects:
+          - type: storage-export-attachment
+            provider: data-foundation
+`)
+				return files
+			},
+			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef.refKind "Machine" must be "StorageExport" for data-foundation storage attachment inputs`,
+		},
+		{
 			name: "duplicate-effective-application",
 			files: func() map[string]string {
 				files := newBaselineFiles()

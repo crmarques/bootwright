@@ -796,7 +796,10 @@ Rules:
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
 - `spec.accepts.inputs[]` declare binding-scoped inputs; each schema property
   sets exactly one of `refKind` (a known Bootwright kind) or `secretRef`. A
-  data-foundation storage-attachment effect requires an `exportRef` property.
+  data-foundation storage-attachment effect requires the schema to declare
+  exactly one property, literally named `exportRef`, with
+  `refKind: StorageExport` and listed in `required` — the attachment machinery
+  reads that exact value name.
 
 ## ClusterAddonProfile
 
@@ -824,6 +827,9 @@ Rules:
 - `spec.addons[].inputs[]` must be declared by the add-on's
   `spec.accepts.inputs`, have unique names, and satisfy the input schema's
   required values.
+- Input values for `refKind` schema properties must name a loaded object of
+  that kind; values for `secretRef` properties must be declared in
+  `Environment` `spec.secrets`.
 
 ## Rendering Contract
 

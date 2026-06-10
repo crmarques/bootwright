@@ -79,8 +79,23 @@ func validateDataFoundationStorageInputSchema(addon string, index int, input v1a
 	}
 	var errs []string
 	prefix := fmt.Sprintf("ClusterAddon/%s spec.accepts.inputs[%d].schema", addon, index)
-	if _, ok := input.Schema.Properties["exportRef"]; !ok {
+	// The attachment machinery reads the binding value literally named
+	// exportRef, so the schema must pin that exact property as a required
+	// StorageExport reference.
+	if property, ok := input.Schema.Properties["exportRef"]; !ok {
 		errs = append(errs, prefix+".properties.exportRef is required for data-foundation storage attachment inputs")
+	} else if property.RefKind != v1alpha1.KindStorageExport {
+		errs = append(errs, fmt.Sprintf("%s.properties.exportRef.refKind %q must be %q for data-foundation storage attachment inputs", prefix, property.RefKind, v1alpha1.KindStorageExport))
+	}
+	requiresExportRef := false
+	for _, name := range input.Schema.Required {
+		if name == "exportRef" {
+			requiresExportRef = true
+			break
+		}
+	}
+	if !requiresExportRef {
+		errs = append(errs, fmt.Sprintf("%s.required must include %q for data-foundation storage attachment inputs", prefix, "exportRef"))
 	}
 	for name := range input.Schema.Properties {
 		if name != "exportRef" {
@@ -443,6 +458,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 	clusters := indexContainerClusters(state.ContainerClusters)
 	addons := indexClusterAddons(state.ClusterAddons)
 	sets := indexClusterAddonProfiles(state.ClusterAddonProfiles)
+	loaded := selectedResourceKeys(state)
 	seen := map[string]bool{}
 	effectiveApplications := map[string]string{}
 	for _, binding := range state.ClusterAddonBindings {
@@ -522,14 +538,14 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 					errs = append(errs, fmt.Sprintf("%s.name %q is not declared by ClusterAddon/%s spec.accepts.inputs", owner, input.Name, addon.Name))
 					continue
 				}
-				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema)...)
+				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema, loaded)...)
 			}
 		}
 	}
 	return errs
 }
 
-func validateClusterAddonInputValues(prefix string, values map[string]any, schema v1alpha1.ClusterAddonInputSchema) []string {
+func validateClusterAddonInputValues(prefix string, values map[string]any, schema v1alpha1.ClusterAddonInputSchema, loaded map[resourceKey]bool) []string {
 	var errs []string
 	if schema.Type != "" && schema.Type != v1alpha1.ClusterAddonInputSchemaTypeObject {
 		return errs
@@ -558,6 +574,12 @@ func validateClusterAddonInputValues(prefix string, values map[string]any, schem
 			}
 			if nameValue == "" {
 				errs = append(errs, owner+" is required")
+				continue
+			}
+			// secretRef values resolve against Environment spec.secrets in the
+			// comprehensive secret walk; refKind values resolve here.
+			if property.RefKind != "" && !loaded[resourceKey{kind: property.RefKind, name: nameValue}] {
+				errs = append(errs, fmt.Sprintf("%s %q does not match any %s", owner, nameValue, property.RefKind))
 			}
 		}
 	}
