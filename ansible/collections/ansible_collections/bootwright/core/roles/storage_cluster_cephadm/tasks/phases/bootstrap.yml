@@ -7,6 +7,13 @@
         state: directory
         mode: "0700"
 
+    - name: Copy cephadm bootstrap config
+      ansible.builtin.copy:
+        src: "{{ bootwright_selected_storage_cluster.ceph.bootstrapConfPath }}"
+        dest: "{{ bootwright_ceph_remote_bootstrap_conf }}"
+        mode: "0600"
+      when: bootwright_selected_storage_cluster.ceph.bootstrapConfPath | default('') | length > 0
+
     - name: Copy cephadm bootstrap spec
       ansible.builtin.copy:
         src: "{{ bootwright_selected_storage_cluster.ceph.bootstrapSpecPath }}"
@@ -296,6 +303,11 @@
               if bootwright_ceph_bootstrap_image | default('') | length > 0
               else []
             )
+            + (
+              ['--config', bootwright_ceph_remote_bootstrap_conf]
+              if bootwright_selected_storage_cluster.ceph.bootstrapConfPath | default('') | length > 0
+              else []
+            )
           }}
       no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
 
@@ -498,7 +510,9 @@
         loop_var: bootwright_ceph_op
         label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
       when:
-        - bootwright_ceph_op.command | default([]) | length > 0
+        - >-
+          (bootwright_ceph_op.command | default([]) | length > 0)
+          or (bootwright_ceph_op.idempotency.kind | default('') == 'stretch-crush-rule')
         - bootwright_ceph_op.phase | default('storage') in ['topology', 'storage']
 
     - name: Apply Ceph late service spec

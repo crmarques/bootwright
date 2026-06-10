@@ -27,6 +27,7 @@
     bootwright_ceph_provider: "{{ bootwright_selected_storage_cluster.provider | default({}) }}"
     bootwright_ceph_provider_name: "{{ bootwright_selected_storage_cluster.provider.name | default('oss') }}"
     bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
+    bootwright_ceph_remote_bootstrap_conf: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/bootstrap-ceph.conf"
     bootwright_ceph_remote_bootstrap_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/bootstrap-spec.yaml"
     bootwright_ceph_remote_core_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/core-services.yaml"
     bootwright_ceph_remote_late_services_spec: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}/late-services.yaml"

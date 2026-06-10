@@ -14,6 +14,7 @@ type StorageAsset struct {
 	CephadmDir           string
 	CephDir              string
 	DataFoundationDir    string
+	BootstrapConfPath    string
 	BootstrapSpecPath    string
 	CoreServicesSpecPath string
 	LateServicesSpecPath string
@@ -62,6 +63,9 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 		if storageClusterManaged(cluster) {
 			asset.CephadmDir = filepath.Join(dir, "cephadm")
 			asset.CephDir = filepath.Join(dir, "ceph")
+			if cluster.Spec.Ceph != nil && cephadmBootstrapConf(cluster) != "" {
+				asset.BootstrapConfPath = filepath.Join(dir, "cephadm", "bootstrap-ceph.conf")
+			}
 			asset.BootstrapSpecPath = filepath.Join(dir, "cephadm", "bootstrap-spec.yaml")
 			asset.CoreServicesSpecPath = filepath.Join(dir, "cephadm", "core-services.yaml")
 			asset.LateServicesSpecPath = filepath.Join(dir, "cephadm", "late-services.yaml")
@@ -92,6 +96,11 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 			continue
 		}
 		if storageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
+			if asset.BootstrapConfPath != "" {
+				if err := writeText(fs, asset.BootstrapConfPath, cephadmBootstrapConf(cluster)); err != nil {
+					return err
+				}
+			}
 			if err := writeYAMLDocuments(fs, asset.BootstrapSpecPath, cephadmBootstrapSpec(state, cluster)); err != nil {
 				return err
 			}

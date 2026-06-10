@@ -36,6 +36,20 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 		t.Fatalf("storage attachment assets got %d, want 4", len(asset.Attachments))
 	}
 
+	// public_network has no cephadm bootstrap flag; it is seeded via the
+	// rendered initial ceph.conf handed to `cephadm bootstrap --config`.
+	if asset.BootstrapConfPath == "" {
+		t.Fatal("BootstrapConfPath empty for a cluster with publicCIDRs")
+	}
+	conf, err := os.ReadFile(asset.BootstrapConfPath)
+	if err != nil {
+		t.Fatalf("read bootstrap conf: %v", err)
+	}
+	wantConf := "[global]\npublic_network = 192.168.141.0/24,192.168.142.0/24,192.168.143.0/24\n"
+	if string(conf) != wantConf {
+		t.Fatalf("bootstrap conf = %q, want %q", string(conf), wantConf)
+	}
+
 	bootstrapDocs := readYAMLDocs(t, asset.BootstrapSpecPath)
 	if len(bootstrapDocs) != 7 {
 		t.Fatalf("bootstrap docs got %d, want 7", len(bootstrapDocs))
@@ -78,8 +92,12 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	operations := readYAMLDoc(t, asset.OperationsPath)
 	ops := operations["operations"].([]any)
 	assertOperationPhase(t, ops, "create-crush-rule-stretch-replicated", "topology")
-	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-replicated", "crush-rule", "stretch-replicated")
-	assertOperationCommand(t, ops, "create-crush-rule-stretch-replicated", []string{"ceph", "osd", "crush", "rule", "create-replicated", "stretch-replicated", "default", "datacenter"})
+	// The stretch rule is a structured operation (no argv): the role compiles
+	// the two-step rule into the CRUSH map, keyed on the stretch-crush-rule kind.
+	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-replicated", "stretch-crush-rule", "stretch-replicated")
+	assertOperationCommand(t, ops, "set-election-strategy", []string{"ceph", "mon", "set", "election_strategy", "connectivity"})
+	assertOperationCommand(t, ops, "set-public-network", []string{"ceph", "config", "set", "global", "public_network", "192.168.141.0/24,192.168.142.0/24,192.168.143.0/24"})
+	assertOperationCommand(t, ops, "set-cluster-network", []string{"ceph", "config", "set", "global", "cluster_network", "172.21.141.0/24,172.21.142.0/24"})
 	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
 	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-replicated", "datacenter"})
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
@@ -143,6 +161,9 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 		t.Fatalf("bootstrap monIP = %v", got)
 	}
 	ceph := cluster["ceph"].(map[string]any)
+	if got := ceph["bootstrapConfPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/bootstrap-ceph.conf" {
+		t.Fatalf("bootstrapConfPath = %v", got)
+	}
 	if got := ceph["bootstrapSpecPath"]; got != "{{ bootwright_rendered_dir }}/storage/ceph-storage/cephadm/bootstrap-spec.yaml" {
 		t.Fatalf("bootstrapSpecPath = %v", got)
 	}

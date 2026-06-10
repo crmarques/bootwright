@@ -101,6 +101,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 				"monIP":    storageNodeIP(state, cluster, ceph.Cephadm.Bootstrap.MonIP),
 			},
 			"ceph": map[string]any{
+				"bootstrapConfPath":    asset.BootstrapConfPath,
 				"bootstrapSpecPath":    asset.BootstrapSpecPath,
 				"coreServicesSpecPath": asset.CoreServicesSpecPath,
 				"lateServicesSpecPath": asset.LateServicesSpecPath,

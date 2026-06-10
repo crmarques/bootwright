@@ -250,14 +250,124 @@
   register: bootwright_ceph_crush_rules
   changed_when: false
   failed_when: false
-  when: bootwright_ceph_op_idempotency_kind == 'crush-rule'
+  when: bootwright_ceph_op_idempotency_kind in ['crush-rule', 'stretch-crush-rule']
 
 - name: Skip existing CRUSH rule operation
   ansible.builtin.set_fact:
     bootwright_ceph_op_skip: true
   when:
-    - bootwright_ceph_op_idempotency_kind == 'crush-rule'
+    - bootwright_ceph_op_idempotency_kind in ['crush-rule', 'stretch-crush-rule']
     - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json | map(attribute='rule_name') | list)
+
+# The stretch CRUSH rule must place two replicas per data site:
+#   step choose firstn 0 type <failureDomain>
+#   step chooseleaf firstn 2 type host
+# `ceph osd crush rule create-replicated` cannot express that two-step rule, so
+# it is compiled into the CRUSH map directly. crushtool is not installed on the
+# host (only cephadm + ceph-common), so the de/compile steps run inside the
+# cephadm shell container with the work directory mounted.
+- name: Create stretch CRUSH rule in CRUSH map
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'stretch-crush-rule'
+    - not bootwright_ceph_op_skip | bool
+  block:
+    - name: Resolve next free CRUSH rule id for stretch rule
+      ansible.builtin.set_fact:
+        bootwright_ceph_stretch_rule_id: >-
+          {{
+            ((((bootwright_ceph_crush_rules.stdout | default('[]')) | from_json
+               | map(attribute='rule_id') | list) + [0]) | max | int) + 1
+          }}
+
+    - name: Export current CRUSH map
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - osd
+          - getcrushmap
+          - -o
+          - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap.bin"
+      changed_when: false
+
+    - name: Decompile current CRUSH map
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - crushtool
+          - -d
+          - /mnt/stretch-crushmap.bin
+          - -o
+          - /mnt/stretch-crushmap.txt
+      changed_when: false
+
+    - name: Append stretch rule to CRUSH map source
+      ansible.builtin.blockinfile:
+        path: "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap.txt"
+        marker: "# {mark} BOOTWRIGHT STRETCH RULE {{ bootwright_ceph_op_idempotency_name }}"
+        block: |
+          rule {{ bootwright_ceph_op_idempotency_name }} {
+              id {{ bootwright_ceph_stretch_rule_id }}
+              type replicated
+              step take default
+              step choose firstn 0 type {{ bootwright_ceph_op.structural.failureDomain }}
+              step chooseleaf firstn {{ bootwright_ceph_op.structural.replicasPerFailureDomain | default(2) }} type host
+              step emit
+          }
+      changed_when: true
+
+    - name: Compile CRUSH map with stretch rule
+      ansible.builtin.command:
+        argv:
+          - cephadm
+          - shell
+          - --mount
+          - "{{ bootwright_ceph_remote_work_dir }}:/mnt"
+          - --
+          - crushtool
+          - -c
+          - /mnt/stretch-crushmap.txt
+          - -o
+          - /mnt/stretch-crushmap-new.bin
+      changed_when: false
+
+    - name: Install CRUSH map with stretch rule
+      ansible.builtin.command:
+        argv:
+          - ceph
+          - osd
+          - setcrushmap
+          - -i
+          - "{{ bootwright_ceph_remote_work_dir }}/stretch-crushmap-new.bin"
+      changed_when: true
+
+    - name: Mark stretch CRUSH rule operation as handled
+      ansible.builtin.set_fact:
+        bootwright_ceph_op_skip: true
+
+- name: Check existing erasure-code profile
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - osd
+      - erasure-code-profile
+      - ls
+      - --format
+      - json
+  register: bootwright_ceph_ec_profiles
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_op_idempotency_kind == 'ec-profile'
+
+- name: Skip existing erasure-code profile operation
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_skip: true
+  when:
+    - bootwright_ceph_op_idempotency_kind == 'ec-profile'
+    - bootwright_ceph_op_idempotency_name in ((bootwright_ceph_ec_profiles.stdout | default('[]')) | from_json)
 
 - name: Check current stretch mode
   ansible.builtin.command:
@@ -310,7 +420,9 @@
   register: bootwright_ceph_op_run
   changed_when: true
   no_log: "{{ bootwright_ceph_op_capture | length > 0 }}"
-  when: not bootwright_ceph_op_skip | bool
+  when:
+    - not bootwright_ceph_op_skip | bool
+    - bootwright_ceph_op_command | length > 0
 
 - name: Capture Ceph operation output
   ansible.builtin.set_fact:

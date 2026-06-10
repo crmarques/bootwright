@@ -1,9 +1,24 @@
 package render
 
 import (
+	"strings"
+
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
+
+// cephadmBootstrapConf is the initial ceph.conf handed to `cephadm bootstrap
+// --config`. public_network has no bootstrap flag (unlike --cluster-network)
+// and the first monitor binds at bootstrap, so declared public CIDRs must be
+// in the config before bootstrap; the set-public-network operation keeps the
+// value converged on later applies. Empty when nothing needs seeding.
+func cephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
+	publics := cluster.Spec.Ceph.Networks.PublicCIDRs
+	if len(publics) == 0 {
+		return ""
+	}
+	return "[global]\npublic_network = " + strings.Join(publics, ",") + "\n"
+}
 
 func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any

@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage/topology"
@@ -9,14 +10,36 @@ import (
 
 func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]any {
 	var ops []map[string]any
+	// public_network has no cephadm bootstrap flag (unlike --cluster-network);
+	// it is seeded at bootstrap via --config and kept converged here. Both
+	// network ops reconcile in place: `ceph config set` is last-write-wins.
+	if publics := cluster.Spec.Ceph.Networks.PublicCIDRs; len(publics) > 0 {
+		ops = append(ops, operationInPhase("topology", "set-public-network", "ceph", "config", "set", "global", "public_network", strings.Join(publics, ",")))
+	}
+	if clusters := cluster.Spec.Ceph.Networks.ClusterCIDRs; len(clusters) > 0 {
+		ops = append(ops, operationInPhase("topology", "set-cluster-network", "ceph", "config", "set", "global", "cluster_network", strings.Join(clusters, ",")))
+	}
 	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil && stretch.Enabled {
+		// Stretch mode requires the connectivity election strategy before
+		// enable_stretch_mode; `ceph mon set` reconciles in place.
+		ops = append(ops, operationInPhase("topology", "set-election-strategy", "ceph", "mon", "set", "election_strategy", "connectivity"))
 		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
 			if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 				continue
 			}
 			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", node.Name, stretch.FailureDomain+"="+node.Site))
 		}
-		ops = append(ops, operationWithIdempotency("topology", "create-crush-rule-"+stretch.RuleName, "crush-rule", stretch.RuleName, "ceph", "osd", "crush", "rule", "create-replicated", stretch.RuleName, "default", stretch.FailureDomain))
+		// The stretch rule must place two replicas per data site
+		// (choose firstn 0 type <failureDomain> + chooseleaf firstn 2 type
+		// host); `crush rule create-replicated` cannot express that two-step
+		// rule, so the role compiles it into the CRUSH map itself, keyed on
+		// this structured operation (no argv).
+		stretchRule := operationWithIdempotency("topology", "create-crush-rule-"+stretch.RuleName, "stretch-crush-rule", stretch.RuleName)
+		stretchRule["structural"] = map[string]any{
+			"failureDomain":            stretch.FailureDomain,
+			"replicasPerFailureDomain": 2,
+		}
+		ops = append(ops, stretchRule)
 		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Node, stretch.RuleName, stretch.FailureDomain))
 	}
 	for _, policy := range state.StoragePlacementPolicies {
@@ -36,15 +59,41 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		if pool.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name)
-		createPool["structural"] = storagePoolStructural(pool)
-		ops = append(ops, createPool)
-		if rule := storagePoolCRUSHRule(state, cluster, pool); rule != "" {
-			ops = append(ops, operationInPhase("storage", "set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
+		if ec := pool.Spec.Ceph.ErasureCoded; pool.Spec.Ceph.Type == v1alpha1.StoragePoolTypeErasureCode && ec != nil {
+			// An erasure-coded pool needs its profile before create, and the
+			// create itself must say `erasure <profile>` — without it Ceph
+			// silently creates a replicated pool. size/min_size are derived
+			// from k+m on EC pools and the CRUSH rule comes from the profile,
+			// so none of the replicated set-* operations apply.
+			profile := pool.Metadata.Name + "-profile"
+			profileCmd := []string{
+				"ceph", "osd", "erasure-code-profile", "set", profile,
+				fmt.Sprintf("k=%d", ec.DataChunks),
+				fmt.Sprintf("m=%d", ec.CodingChunks),
+				"crush-failure-domain=" + storagePoolFailureDomain(state, cluster, pool),
+			}
+			ops = append(ops, operationWithIdempotency("storage", "create-ec-profile-"+pool.Metadata.Name, "ec-profile", profile, profileCmd...))
+			createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name, "erasure", profile)
+			createPool["structural"] = storagePoolStructural(pool)
+			ops = append(ops, createPool)
+			// RBD images and CephFS data on EC pools require partial-write
+			// support; without it the pool converges but every client write
+			// fails.
+			switch pool.Spec.Ceph.Role {
+			case v1alpha1.StoragePoolRoleRBD, v1alpha1.StoragePoolRoleCephFSData:
+				ops = append(ops, operationInPhase("storage", "set-pool-ec-overwrites-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "allow_ec_overwrites", "true"))
+			}
+		} else {
+			createPool := operationWithIdempotency("storage", "create-pool-"+pool.Metadata.Name, "ceph-pool", pool.Metadata.Name, "ceph", "osd", "pool", "create", pool.Metadata.Name)
+			createPool["structural"] = storagePoolStructural(pool)
+			ops = append(ops, createPool)
+			if rule := storagePoolCRUSHRule(state, cluster, pool); rule != "" {
+				ops = append(ops, operationInPhase("storage", "set-pool-crush-rule-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "crush_rule", rule))
+			}
+			replicas := effectivePoolReplicas(state, cluster, pool)
+			ops = append(ops, operationInPhase("storage", "set-pool-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "size", fmt.Sprint(replicas.Size)))
+			ops = append(ops, operationInPhase("storage", "set-pool-min-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "min_size", fmt.Sprint(replicas.MinSize)))
 		}
-		replicas := effectivePoolReplicas(state, cluster, pool)
-		ops = append(ops, operationInPhase("storage", "set-pool-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "size", fmt.Sprint(replicas.Size)))
-		ops = append(ops, operationInPhase("storage", "set-pool-min-size-"+pool.Metadata.Name, "ceph", "osd", "pool", "set", pool.Metadata.Name, "min_size", fmt.Sprint(replicas.MinSize)))
 		if app := storagePoolApplication(pool); app != "" {
 			ops = append(ops, operationInPhase("storage", "enable-pool-application-"+pool.Metadata.Name, "ceph", "osd", "pool", "application", "enable", pool.Metadata.Name, app))
 		}
@@ -89,6 +138,11 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 }
 
 func operationInPhase(phase, name string, command ...string) map[string]any {
+	if command == nil {
+		// A structured operation (role-implemented, no argv) must render
+		// `command: []`, not null: the role filters on `command | length`.
+		command = []string{}
+	}
 	return map[string]any{
 		"phase":   phase,
 		"name":    name,
@@ -170,6 +224,20 @@ func storagePoolApplication(pool v1alpha1.StoragePool) string {
 	default:
 		return ""
 	}
+}
+
+// storagePoolFailureDomain resolves the CRUSH failure domain for a pool's
+// erasure-code profile: the referenced placement policy's failureDomain when
+// set, else the cluster-wide failure domain (stretch failureDomain or "host").
+func storagePoolFailureDomain(state v1alpha1.State, cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) string {
+	if pool.Spec.PlacementPolicyRef.Name != "" {
+		for _, policy := range state.StoragePlacementPolicies {
+			if policy.Metadata.Name == pool.Spec.PlacementPolicyRef.Name && policy.Spec.Ceph.FailureDomain != "" {
+				return policy.Spec.Ceph.FailureDomain
+			}
+		}
+	}
+	return topology.FailureDomain(cluster)
 }
 
 func storagePoolCRUSHRule(state v1alpha1.State, cluster v1alpha1.StorageCluster, pool v1alpha1.StoragePool) string {
