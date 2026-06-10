@@ -163,11 +163,14 @@ type StorageCephHost struct {
 	// _admin) rendered alongside the roles, which always become labels.
 	Labels []string `yaml:"labels,omitempty" json:"labels,omitempty"`
 	// Devices is the lean OSD shorthand: literal device paths, equivalent to
-	// osd.dataDevices.paths. Omitting both devices and osd on an osd-role
-	// host consumes all available devices. Mutually exclusive with osd.
+	// osd.dataDevices.paths. An osd-role host must select devices via
+	// devices or osd; consuming all available devices is the explicit
+	// opt-in osd: {dataDevices: {all: true}}, never the omission default.
+	// Requires the osd role. Mutually exclusive with osd.
 	Devices []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	// OSD is the drivegroup-shaped device selection, mirroring the cephadm
-	// OSD service spec fields. Mutually exclusive with devices.
+	// OSD service spec fields. Requires the osd role. Mutually exclusive
+	// with devices.
 	OSD *StorageCephHostOSD `yaml:"osd,omitempty" json:"osd,omitempty"`
 }
 

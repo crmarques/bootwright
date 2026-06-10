@@ -1,6 +1,6 @@
 ---
 title: Ceph Storage Clusters
-description: Accessing a managed Ceph storage cluster and recovering its dashboard credentials.
+description: OSD device selection, accessing a managed Ceph storage cluster, and recovering its dashboard credentials.
 ---
 
 # Ceph storage clusters
@@ -9,6 +9,31 @@ A `StorageCluster` of `type: ceph` with `management: managed` is bootstrapped by
 Bootwright with `cephadm`. Ceph keeps no kubeconfig-style admin file on the
 controller — the admin keyring and `ceph.conf` live on the seed node — so
 day-to-day access is by SSH to the seed node plus `cephadm shell`.
+
+## OSD device selection
+
+Every `spec.ceph.topology.hosts[]` entry carrying the `osd` role must say which
+disks it contributes: either the lean `devices:` list of literal paths or the
+drivegroup-shaped `osd:` selection. `bootwright validate` rejects an osd-role
+host that authors neither, and rejects either form on a host without the `osd`
+role. There is no implicit all-devices default — handing every available
+(blank) disk on a host to Ceph is the explicit opt-in
+`osd: {dataDevices: {all: true}}`:
+
+```yaml
+hosts:
+- machineRef: ceph-0
+  site: lab
+  roles: [mon, mgr, osd]
+  devices:            # literal paths ...
+  - /dev/vdb
+- machineRef: ceph-1
+  site: lab
+  roles: [osd]
+  osd:                # ... or a drivegroup-shaped selection
+    dataDevices:
+      all: true       # explicit opt-in: every available device becomes an OSD
+```
 
 ## Access details
 

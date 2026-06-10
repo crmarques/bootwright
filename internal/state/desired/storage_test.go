@@ -418,6 +418,61 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	}
 }
 
+// TestStorageCephHostOSDDeviceSelectionExplicit covers F12/F43/F48: OSD
+// device consumption is explicit opt-in — an osd-role host must author
+// devices or osd.dataDevices (all-devices is the explicit
+// osd: {dataDevices: {all: true}}), and devices requires the osd role
+// exactly like the drivegroup-shaped osd block.
+func TestStorageCephHostOSDDeviceSelectionExplicit(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+		want string
+	}{
+		{
+			name: "osd-role-without-device-selection",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Devices = nil
+			},
+			want: `spec.ceph.topology.hosts[2] carries the "osd" role but selects no devices; author devices or osd.dataDevices (osd: {dataDevices: {all: true}} consumes all available devices)`,
+		},
+		{
+			name: "devices-without-osd-role",
+			edit: func(state *v1alpha1.State) {
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Devices = []string{"/dev/vdb"}
+			},
+			want: `spec.ceph.topology.hosts[6].devices requires the "osd" role`,
+		},
+		{
+			name: "explicit-all-devices-passes",
+			edit: func(state *v1alpha1.State) {
+				host := &state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2]
+				host.Devices = nil
+				host.OSD = &v1alpha1.StorageCephHostOSD{
+					DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			tc.edit(&state)
+			errs := validateStorage(state)
+			if tc.want == "" {
+				if len(errs) != 0 {
+					t.Fatalf("validateStorage returned errors: %v", errs)
+				}
+				return
+			}
+			got := strings.Join(errs, "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	cases := []struct {
 		name string
@@ -954,7 +1009,7 @@ func storageValidationAdminMachine(name string) v1alpha1.Machine {
 }
 
 func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephHost {
-	return v1alpha1.StorageCephHost{
+	node := v1alpha1.StorageCephHost{
 		Hostname: name,
 		MachineRef: v1alpha1.LocalObjectReference{
 			Name: name,
@@ -962,6 +1017,14 @@ func storageValidationCephNode(name, site string, roles []string) v1alpha1.Stora
 		Site:  site,
 		Roles: roles,
 	}
+	// An osd-role host must select devices explicitly; there is no
+	// all-devices omission default.
+	for _, role := range roles {
+		if role == v1alpha1.StorageCephRoleOSD {
+			node.Devices = []string{"/dev/vdb"}
+		}
+	}
+	return node
 }
 
 func externalStorageValidationState() v1alpha1.State {

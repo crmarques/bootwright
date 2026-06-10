@@ -63,10 +63,7 @@ func cephadmCoreServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 	if len(mgrHosts) > 0 {
 		docs = append(docs, cephadmPlacementService("mgr", "", mgrHosts, 0, nil))
 	}
-	osdHosts := topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleOSD)
-	if len(osdHosts) > 0 {
-		docs = append(docs, cephadmOSDServices(cluster, osdHosts)...)
-	}
+	docs = append(docs, cephadmOSDServices(cluster)...)
 	return docs
 }
 
@@ -136,18 +133,14 @@ func cephadmPlacementService(serviceType, serviceID string, hosts []string, coun
 	return doc
 }
 
-func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
-	hostSet := map[string]bool{}
-	for _, host := range hosts {
-		hostSet[host] = true
-	}
+// cephadmOSDServices renders one per-host OSD service for every osd-role
+// host. Validation guarantees each osd-role host authors devices or osd, so
+// device consumption is always explicit — consuming all available devices is
+// the authored osd: {dataDevices: {all: true}}, never an implicit default.
+func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 	var docs []any
-	explicitHosts := map[string]bool{}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || (len(node.Devices) == 0 && node.OSD == nil) {
-			continue
-		}
-		if !hostSet[node.Hostname] {
 			continue
 		}
 		var spec map[string]any
@@ -161,17 +154,6 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 			}
 		}
 		docs = append(docs, cephadmPlacementService("osd", "data-"+node.Hostname, []string{node.Hostname}, 0, spec))
-		explicitHosts[node.Hostname] = true
-	}
-	var autoHosts []string
-	for _, host := range hosts {
-		if !explicitHosts[host] {
-			autoHosts = append(autoHosts, host)
-		}
-	}
-	if len(autoHosts) > 0 {
-		spec := map[string]any{"data_devices": map[string]any{"all": true}}
-		docs = append(docs, cephadmPlacementService("osd", "data", autoHosts, 0, spec))
 	}
 	return docs
 }

@@ -633,6 +633,10 @@ Rules:
   selection mirroring the cephadm OSD spec (`dataDevices`/`dbDevices`/
   `walDevices` with `paths|all|rotational|size|limit`, `encrypted`,
   `osdsPerDevice`, `crushDeviceClass`), mutually exclusive with `devices`.
+  Both require the `osd` role, and every osd-role host must author one of
+  them: OSD device consumption is explicit opt-in, so consuming all available
+  devices is the authored `osd: {dataDevices: {all: true}}`, never an
+  omission default.
   `hostname` is the rendered cephadm host-spec
   hostname; it defaults to the `machineRef` name and is authored only when the
   Ceph hostname genuinely differs from the Machine name. Hostnames must be

@@ -652,16 +652,26 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 
 // validateStorageCephHostOSD checks the OSD device selection: the lean
 // devices shorthand and the drivegroup-shaped osd object are mutually
-// exclusive, and each device selection must select something coherent.
+// exclusive, both require the osd role, an osd-role host must author one of
+// them (consuming all available devices is the explicit opt-in
+// osd: {dataDevices: {all: true}}, never the omission default), and each
+// device selection must select something coherent.
 func validateStorageCephHostOSD(owner string, node v1alpha1.StorageCephHost) []string {
 	var errs []string
 	if len(node.Devices) > 0 && node.OSD != nil {
 		errs = append(errs, fmt.Sprintf("%s sets both devices and osd; devices is the shorthand for osd.dataDevices.paths — use one", owner))
 	}
+	hasOSDRole := topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD)
+	if len(node.Devices) > 0 && !hasOSDRole {
+		errs = append(errs, fmt.Sprintf("%s.devices requires the %q role", owner, v1alpha1.StorageCephRoleOSD))
+	}
+	if hasOSDRole && len(node.Devices) == 0 && node.OSD == nil {
+		errs = append(errs, fmt.Sprintf("%s carries the %q role but selects no devices; author devices or osd.dataDevices (osd: {dataDevices: {all: true}} consumes all available devices)", owner, v1alpha1.StorageCephRoleOSD))
+	}
 	if node.OSD == nil {
 		return errs
 	}
-	if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) {
+	if !hasOSDRole {
 		errs = append(errs, fmt.Sprintf("%s.osd requires the %q role", owner, v1alpha1.StorageCephRoleOSD))
 	}
 	if node.OSD.DataDevices == nil {

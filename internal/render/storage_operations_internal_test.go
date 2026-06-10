@@ -310,6 +310,58 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	}
 }
 
+// OSD device consumption is explicit opt-in: the authored
+// osd: {dataDevices: {all: true}} renders a per-host OSD service, and an
+// osd-role host without a device selection (unreachable for validated state)
+// renders no OSD service — there is no implicit all-devices grouping.
+func TestOSDDeviceConsumptionIsExplicitOptIn(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
+				{
+					Hostname:   "ceph-0",
+					MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+					Site:       "lab",
+					Roles:      []string{"mon", "osd"},
+					OSD: &v1alpha1.StorageCephHostOSD{
+						DataDevices: &v1alpha1.StorageCephDeviceSelection{All: true},
+					},
+				},
+				{
+					Hostname:   "ceph-1",
+					MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"},
+					Site:       "lab",
+					Roles:      []string{"mon", "osd"},
+				},
+			}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+
+	var osdDocs []map[string]any
+	for _, doc := range cephadmCoreServicesSpec(state, cluster) {
+		m := doc.(map[string]any)
+		if m["service_type"] == "osd" {
+			osdDocs = append(osdDocs, m)
+		}
+	}
+	if len(osdDocs) != 1 {
+		t.Fatalf("osd services = %v, want exactly the explicit-all ceph-0 service", osdDocs)
+	}
+	osd := osdDocs[0]
+	if got := osd["service_id"]; got != "data-ceph-0" {
+		t.Fatalf("osd service_id = %v, want data-ceph-0", got)
+	}
+	if got := osd["placement"].(map[string]any)["hosts"].([]string); !reflect.DeepEqual(got, []string{"ceph-0"}) {
+		t.Fatalf("osd placement hosts = %v, want [ceph-0]", got)
+	}
+	data := osd["spec"].(map[string]any)["data_devices"].(map[string]any)
+	if !reflect.DeepEqual(data, map[string]any{"all": true}) {
+		t.Fatalf("data_devices = %v, want {all: true}", data)
+	}
+}
+
 // Declared spec.ceph.config options render as deterministic `ceph config set`
 // operations (sorted by section then key), additive-only by design.
 func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {
