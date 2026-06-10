@@ -69,10 +69,7 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		if fs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
 		}
-		hosts := fs.Spec.CephFS.MDS.Placement.Hosts
-		if len(hosts) == 0 {
-			hosts = topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMDS)
-		}
+		hosts := topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS)
 		if len(hosts) > 0 {
 			docs = append(docs, cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil))
 		}
@@ -82,7 +79,7 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			continue
 		}
 		spec := map[string]any{"rgw_frontend_port": gw.Spec.Ceph.FrontendPort}
-		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, gw.Spec.Ceph.Placement.Hosts, gw.Spec.Ceph.Placement.CountPerHost, spec))
+		docs = append(docs, cephadmPlacementService("rgw", gw.Spec.Ceph.ServiceID, topology.ResolvePlacement(cluster, gw.Spec.Ceph.Placement, v1alpha1.StorageCephRoleRGW), gw.Spec.Ceph.Placement.CountPerHost, spec))
 		publicEndpoint, _ := topology.GatewayPublicEndpoint(gw)
 		for _, ingress := range gw.Spec.Ceph.Ingresses {
 			endpoint, ok := topology.GatewayIngressEndpoint(ingress)
@@ -98,7 +95,7 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			if len(endpoint.InterfaceNetworks) > 0 {
 				ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
 			}
-			docs = append(docs, cephadmPlacementService("ingress", "rgw."+gw.Spec.Ceph.ServiceID+"."+ingress.Name, ingress.Placement.Hosts, 0, ingressSpec))
+			docs = append(docs, cephadmPlacementService("ingress", "rgw."+gw.Spec.Ceph.ServiceID+"."+ingress.Name, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress), 0, ingressSpec))
 		}
 	}
 	return docs

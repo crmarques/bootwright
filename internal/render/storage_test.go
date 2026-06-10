@@ -74,7 +74,21 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	if !reflect.DeepEqual(monHosts, wantMons) {
 		t.Fatalf("mon hosts = %v, want %v", monHosts, wantMons)
 	}
+	// Placement defaults resolve from topology roles (and sites narrowing);
+	// these must match the previously explicit host lists byte for byte.
+	allServiceHosts := []string{"ceph-dc1-0", "ceph-dc1-1", "ceph-dc1-2", "ceph-dc2-0", "ceph-dc2-1", "ceph-dc2-2"}
+	mds := serviceDoc(t, lateServices, "mds", "odf-cephfs")
+	if got := stringSlice(t, mds["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, allServiceHosts) {
+		t.Fatalf("mds hosts = %v, want %v", got, allServiceHosts)
+	}
+	rgw := serviceDoc(t, lateServices, "rgw", "odf")
+	if got := stringSlice(t, rgw["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, allServiceHosts) {
+		t.Fatalf("rgw hosts = %v, want %v", got, allServiceHosts)
+	}
 	ingress := serviceDoc(t, lateServices, "ingress", "rgw.odf.dc1")
+	if got := stringSlice(t, ingress["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, []string{"ceph-dc1-0", "ceph-dc1-1", "ceph-dc1-2"}) {
+		t.Fatalf("ingress dc1 hosts = %v", got)
+	}
 	spec := ingress["spec"].(map[string]any)
 	if got := spec["backend_service"]; got != "rgw.odf" {
 		t.Fatalf("ingress backend_service = %v, want rgw.odf", got)
@@ -91,15 +105,15 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 
 	operations := readYAMLDoc(t, asset.OperationsPath)
 	ops := operations["operations"].([]any)
-	assertOperationPhase(t, ops, "create-crush-rule-stretch-replicated", "topology")
+	assertOperationPhase(t, ops, "create-crush-rule-stretch-rule", "topology")
 	// The stretch rule is a structured operation (no argv): the role compiles
 	// the two-step rule into the CRUSH map, keyed on the stretch-crush-rule kind.
-	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-replicated", "stretch-crush-rule", "stretch-replicated")
+	assertOperationIdempotency(t, ops, "create-crush-rule-stretch-rule", "stretch-crush-rule", "stretch-rule")
 	assertOperationCommand(t, ops, "set-election-strategy", []string{"ceph", "mon", "set", "election_strategy", "connectivity"})
 	assertOperationCommand(t, ops, "set-public-network", []string{"ceph", "config", "set", "global", "public_network", "192.168.141.0/24,192.168.142.0/24,192.168.143.0/24"})
 	assertOperationCommand(t, ops, "set-cluster-network", []string{"ceph", "config", "set", "global", "cluster_network", "172.21.141.0/24,172.21.142.0/24"})
 	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
-	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-replicated", "datacenter"})
+	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-rule", "datacenter"})
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
 	assertOperationIdempotency(t, ops, "create-pool-odf-rbd", "ceph-pool", "odf-rbd")
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")

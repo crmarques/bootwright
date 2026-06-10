@@ -13,13 +13,6 @@ spec:
   ceph:
     serviceID: odf
     placement:
-      hosts:
-        - ceph-dc1-0
-        - ceph-dc1-1
-        - ceph-dc1-2
-        - ceph-dc2-0
-        - ceph-dc2-1
-        - ceph-dc2-2
       countPerHost: 1
     ingresses:
       - name: dc1
@@ -28,17 +21,13 @@ spec:
         interfaceNetworks:
           - 192.168.141.0/24
         placement:
-          hosts:
-            - ceph-dc1-0
-            - ceph-dc1-1
-            - ceph-dc1-2
+          sites:
+            - dc1
       - name: dc2
         address: 192.168.142.80
         prefixLength: 24
         interfaceNetworks:
           - 192.168.142.0/24
         placement:
-          hosts:
-            - ceph-dc2-0
-            - ceph-dc2-1
-            - ceph-dc2-2
+          sites:
+            - dc2

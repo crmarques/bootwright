@@ -181,8 +181,14 @@ type StorageCephFSMetadataServices struct {
 	Placement   StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
 }
 
+// StoragePlacement selects where a Ceph service runs. Omitted hosts default
+// to every topology host carrying the service's role; sites narrows the
+// selection to hosts in the named topology sites; explicit hosts narrow below
+// site granularity. countPerHost renders to the cephadm placement
+// count_per_host field.
 type StoragePlacement struct {
 	Hosts        []string `yaml:"hosts,omitempty" json:"hosts,omitempty"`
+	Sites        []string `yaml:"sites,omitempty" json:"sites,omitempty"`
 	CountPerHost int      `yaml:"countPerHost,omitempty" json:"countPerHost,omitempty"`
 }
 

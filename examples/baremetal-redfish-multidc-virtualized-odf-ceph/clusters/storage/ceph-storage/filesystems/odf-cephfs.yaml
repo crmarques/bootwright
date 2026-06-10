@@ -11,11 +11,3 @@ spec:
       - name: odf-cephfs-data
     mds:
       activeCount: 2
-      placement:
-        hosts:
-          - ceph-dc1-0
-          - ceph-dc1-1
-          - ceph-dc1-2
-          - ceph-dc2-0
-          - ceph-dc2-1
-          - ceph-dc2-2

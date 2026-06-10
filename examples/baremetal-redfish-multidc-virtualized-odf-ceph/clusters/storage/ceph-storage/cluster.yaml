@@ -23,16 +23,8 @@ spec:
     topology:
       stretch:
         failureDomain: datacenter
-        dataSites:
-        - dc1
-        - dc2
         tiebreaker:
-          site: dc3
           host: ceph-arbiter
-        replicatedPoolDefaults:
-          size: 4
-          minSize: 2
-        ruleName: stretch-replicated
       hosts:
       - hostname: ceph-dc1-0
         site: dc1

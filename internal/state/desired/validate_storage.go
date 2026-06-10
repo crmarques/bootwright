@@ -327,8 +327,23 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 
 func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlacement, cluster v1alpha1.StorageCluster, clusterOK bool, role string) []string {
 	var errs []string
-	if len(placement.Hosts) == 0 {
-		return []string{prefix + ".hosts is required"}
+	seenSites := map[string]bool{}
+	for i, site := range placement.Sites {
+		owner := fmt.Sprintf("%s.sites[%d]", prefix, i)
+		if site == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if seenSites[site] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, site))
+		}
+		seenSites[site] = true
+		if clusterOK && !storageTopologyHasSite(cluster, site) {
+			errs = append(errs, fmt.Sprintf("%s %q is not a site of any StorageCluster/%s spec.ceph.topology.hosts[] entry", owner, site, cluster.Metadata.Name))
+		}
+	}
+	if clusterOK && len(topology.ResolvePlacement(cluster, placement, role)) == 0 {
+		errs = append(errs, fmt.Sprintf("%s resolves to no hosts: no StorageCluster/%s spec.ceph.topology.hosts[] entry carries role %q within the selection", prefix, cluster.Metadata.Name, role))
 	}
 	seen := map[string]bool{}
 	for i, host := range placement.Hosts {
@@ -389,6 +404,18 @@ func validateCIDR(owner, value string) []string {
 
 func storageClusterStretchEnabled(cluster v1alpha1.StorageCluster) bool {
 	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil
+}
+
+func storageTopologyHasSite(cluster v1alpha1.StorageCluster, site string) bool {
+	if cluster.Spec.Ceph == nil {
+		return false
+	}
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		if host.Site == site {
+			return true
+		}
+	}
+	return false
 }
 
 func validateStorageNodeMachineAddress(owner string, cluster v1alpha1.StorageCluster, nodeName string, addressName string, machines map[string]v1alpha1.Machine, defaultAddressName string) []string {

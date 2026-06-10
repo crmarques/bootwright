@@ -63,6 +63,40 @@ func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 	return hosts
 }
 
+// HostByName returns the topology host with the given cephadm hostname.
+func HostByName(cluster v1alpha1.StorageCluster, hostname string) (v1alpha1.StorageCephHost, bool) {
+	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+		if host.Hostname == hostname {
+			return host, true
+		}
+	}
+	return v1alpha1.StorageCephHost{}, false
+}
+
+// ResolvePlacement resolves a placement to concrete topology hostnames: the
+// explicit hosts when authored, else every topology host carrying the role,
+// optionally narrowed to the named sites.
+func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.StoragePlacement, role string) []string {
+	base := placement.Hosts
+	if len(base) == 0 {
+		base = CephHostsWithRole(cluster, role)
+	}
+	if len(placement.Sites) == 0 {
+		return base
+	}
+	sites := map[string]bool{}
+	for _, site := range placement.Sites {
+		sites[site] = true
+	}
+	var out []string
+	for _, hostname := range base {
+		if host, ok := HostByName(cluster, hostname); ok && sites[host.Site] {
+			out = append(out, hostname)
+		}
+	}
+	return out
+}
+
 func NodeHasRole(node v1alpha1.StorageCephHost, role string) bool {
 	for _, item := range node.Roles {
 		if item == role {

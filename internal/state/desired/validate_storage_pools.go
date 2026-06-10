@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func validateStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy, clusters map[string]v1alpha1.StorageCluster) []string {
@@ -162,7 +163,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 			errs = append(errs, fmt.Sprintf("%s.cephfs.dataPoolRefs must mark exactly one default data pool", prefix))
 		}
 		if ok && storageClusterStretchEnabled(cluster) {
-			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", fs.Spec.CephFS.MDS.Placement.Hosts, cluster, v1alpha1.StorageCephRoleMDS)...)
+			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS), cluster, v1alpha1.StorageCephRoleMDS)...)
 		}
 	}
 	return errs
@@ -198,7 +199,7 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 		errs = append(errs, validateStorageGatewayPublicEndpoint(prefix+".public", gw)...)
 		errs = append(errs, validateStoragePlacementHosts(prefix+".ceph.placement", gw.Spec.Ceph.Placement, cluster, ok, v1alpha1.StorageCephRoleRGW)...)
 		if ok && storageClusterStretchEnabled(cluster) {
-			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", gw.Spec.Ceph.Placement.Hosts, cluster, v1alpha1.StorageCephRoleRGW)...)
+			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.placement", topology.ResolvePlacement(cluster, gw.Spec.Ceph.Placement, v1alpha1.StorageCephRoleRGW), cluster, v1alpha1.StorageCephRoleRGW)...)
 		}
 		ingressNames := map[string]bool{}
 		var ingressHosts []string
@@ -212,7 +213,7 @@ func validateStorageObjectGateways(state v1alpha1.State, items []v1alpha1.Storag
 			ingressNames[ingress.Name] = true
 			errs = append(errs, validateStorageGatewayIngressEndpoint(owner, ingress, gw)...)
 			errs = append(errs, validateStoragePlacementHosts(owner+".placement", ingress.Placement, cluster, ok, v1alpha1.StorageCephRoleIngress)...)
-			ingressHosts = append(ingressHosts, ingress.Placement.Hosts...)
+			ingressHosts = append(ingressHosts, topology.ResolvePlacement(cluster, ingress.Placement, v1alpha1.StorageCephRoleIngress)...)
 		}
 		if ok && storageClusterStretchEnabled(cluster) && len(gw.Spec.Ceph.Ingresses) > 0 {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".ceph.ingresses", ingressHosts, cluster, v1alpha1.StorageCephRoleIngress)...)
