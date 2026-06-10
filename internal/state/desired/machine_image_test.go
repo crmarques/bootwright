@@ -90,6 +90,29 @@ func TestMachineImageBootISOAcceptsInstallSourceRepositories(t *testing.T) {
 	}
 }
 
+func TestMachineImageInstallSourceRepositoryRejectsNonHTTPBaseURL(t *testing.T) {
+	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
+		Metadata: v1alpha1.Metadata{Name: "rhel"},
+		Spec: v1alpha1.MachineImageSpec{
+			Type:      v1alpha1.MachineImageTypeISO,
+			MediaType: v1alpha1.MachineImageMediaTypeBoot,
+			URL:       "local-media:rhel-9.8-x86_64-boot.iso",
+			InstallSource: v1alpha1.MachineImageInstallSource{
+				Type: v1alpha1.MachineImageInstallSourceTypeURL,
+				Repositories: []v1alpha1.MachineInstallRepository{
+					{ID: "baseos", BaseURL: "ftp://repos.example.test/rhel/9/BaseOS/x86_64/os/"},
+				},
+			},
+		},
+	}}})
+	if len(errs) == 0 {
+		t.Fatal("validateMachineImages accepted non-http repository baseURL")
+	}
+	if !strings.Contains(errs[0], "installSource.repositories[0].baseURL must be http:// or https://") {
+		t.Fatalf("error = %q", errs[0])
+	}
+}
+
 func TestMachineImageBootISOAcceptsRedHatCDNEntitlementRef(t *testing.T) {
 	errs := validateMachineImages(v1alpha1.State{MachineImages: []v1alpha1.MachineImage{{
 		Metadata: v1alpha1.Metadata{Name: "rhel"},

@@ -348,8 +348,9 @@ Rules:
 - `spec.installer.type` currently accepts `anaconda`.
 - `spec.installer.anaconda.imageRef` references a `MachineImage`.
 - `spec.installer.anaconda.repositories[]` declares additional Anaconda
-  repositories for the profile. The primary boot-ISO install source is owned by
-  the referenced `MachineImage`.
+  repositories for the profile; each entry requires an `id` and an `http(s)`
+  `baseURL`. The primary boot-ISO install source is owned by the referenced
+  `MachineImage`.
 - `customizations.hostname.source` accepts `machineName`.
 - `customizations.storage.rootDevice.source` accepts
   `machineRootDeviceHints`.

@@ -455,16 +455,6 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			require(fmt.Sprintf("MachineImage/%s spec.headersRefs[%d]", image.Metadata.Name, i), ref)
 		}
 	}
-	for _, profile := range state.MachineInstallProfiles {
-		if profile.Spec.Installer.Anaconda == nil {
-			continue
-		}
-		for i, repo := range profile.Spec.Installer.Anaconda.Repositories {
-			if strings.HasPrefix(repo.BaseURL, "bootwright-secret-ref:") {
-				require(fmt.Sprintf("MachineInstallProfile/%s spec.installer.anaconda.repositories[%d].baseURL", profile.Metadata.Name, i), v1alpha1.SecretRef{Name: strings.TrimPrefix(repo.BaseURL, "bootwright-secret-ref:")})
-			}
-		}
-	}
 	for _, p := range state.InfraProviders {
 		if p.Spec.Libvirt != nil && p.Spec.Libvirt.BMCEmulationDefaults != nil && p.Spec.Libvirt.BMCEmulationDefaults.Auth != nil {
 			require(fmt.Sprintf("InfraProvider/%s spec.libvirt.bmcEmulationDefaults.auth.credentialsRef",

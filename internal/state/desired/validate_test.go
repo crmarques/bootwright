@@ -1061,6 +1061,17 @@ spec:
 			wantSubstring: `MachineInstallProfile/rhel spec.customizations.security.fips.enabled is only supported for RHEL install profiles`,
 		},
 		{
+			name: "machine-install-repository-base-url-scheme",
+			mutate: func(files map[string]string) {
+				files["machine-install.yaml"] = strings.Replace(machineInstallProfileYAML("rhel", `
+    services:
+      enabled:
+        - sshd
+`), "      imageRef: rhel-iso\n", "      imageRef: rhel-iso\n      repositories:\n        - id: extras\n          baseURL: bootwright-secret-ref:extras-repo\n", 1)
+			},
+			wantSubstring: `MachineInstallProfile/rhel spec.installer.anaconda.repositories[0].baseURL must be http:// or https://`,
+		},
+		{
 			name: "machine-os-install-profile-ref-missing",
 			mutate: func(files map[string]string) {
 				files["managed-machine.yaml"] = managedOSMachineYAML("missing")

@@ -653,11 +653,6 @@ func validateMachineImageInstallSource(prefix, mediaType string, installSource v
 			errs = append(errs, prefix+".installSource.url must be http:// or https://")
 		}
 		errs = append(errs, validateMachineInstallRepositories(prefix+".installSource.repositories", installSource.Repositories)...)
-		for i, repo := range installSource.Repositories {
-			if repo.BaseURL != "" && !httpURL(repo.BaseURL) {
-				errs = append(errs, fmt.Sprintf("%s.installSource.repositories[%d].baseURL must be http:// or https://", prefix, i))
-			}
-		}
 	case v1alpha1.MachineImageInstallSourceTypeRHSM:
 		if installSource.URL != "" {
 			errs = append(errs, prefix+".installSource.url must be empty when installSource.type is redhatCDN")
@@ -685,6 +680,8 @@ func validateMachineInstallRepositories(prefix string, repos []v1alpha1.MachineI
 		}
 		if repo.BaseURL == "" {
 			errs = append(errs, owner+".baseURL is required")
+		} else if !httpURL(repo.BaseURL) {
+			errs = append(errs, owner+".baseURL must be http:// or https://")
 		}
 	}
 	return errs
