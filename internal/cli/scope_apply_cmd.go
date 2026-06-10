@@ -162,7 +162,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
 			// Validate the requested names here; the effective storage selection is
 			// derived from the scoped plan.state below so it includes
-			// data-foundation attachment targets pulled in transitively.
+			// Data Foundation attachment targets pulled in transitively.
 			if _, _, err := clusterRootNamesForTarget(state, flags.clusterScope); err != nil {
 				return failErr(1, err)
 			}
@@ -210,7 +210,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		applyTarget := runScope.applyTarget()
 		if storageSelectionActive {
 			// plan.state already includes the transitive closure of storage clusters
-			// required by the selected container clusters' data-foundation
+			// required by the selected container clusters' Data Foundation
 			// attachments (FilterStateToClusters -> filterStorageToClusters).
 			// Schedule provision for all of them; selecting only the literal
 			// --clusters storage names would skip a transitively-required managed

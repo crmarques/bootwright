@@ -266,7 +266,7 @@ mutating provider hosts, nodes, storage clusters, or managed clusters.
 `apply --yes` is the normal end-to-end convergence path. It includes
 infrastructure, managed storage, OpenShift or OKD cluster install, and bound
 post-install add-ons. Storage-export input effects wait for both the storage
-task and a bound add-on with `provides: [data-foundation]`.
+task and a bound add-on with `provides: [dataFoundation]`.
 
 Apply runs in one of three explicit safety modes:
 

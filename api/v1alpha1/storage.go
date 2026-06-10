@@ -1,5 +1,12 @@
 package v1alpha1
 
+import (
+	"bytes"
+	"encoding/json"
+
+	"go.yaml.in/yaml/v3"
+)
+
 type StorageCluster struct {
 	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string             `yaml:"kind" json:"kind"`
@@ -275,9 +282,50 @@ type StorageCephFSSpec struct {
 	MDS             StorageCephFSMetadataServices `yaml:"mds,omitempty" json:"mds,omitempty"`
 }
 
+// StorageCephFSDataPoolRef names one data pool backing the filesystem. It is
+// authored as a plain pool name; the {name, default} object form exists only
+// to elect the default data pool on multi-pool filesystems (a single entry
+// defaults automatically).
 type StorageCephFSDataPoolRef struct {
 	Name    string `yaml:"name" json:"name"`
 	Default bool   `yaml:"default,omitempty" json:"default,omitempty"`
+}
+
+// storageCephFSDataPoolRef mirrors StorageCephFSDataPoolRef without its
+// methods so the codecs below can decode the object form without recursing.
+type storageCephFSDataPoolRef StorageCephFSDataPoolRef
+
+func (r *StorageCephFSDataPoolRef) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		name, err := decodeRefScalar(node)
+		if err != nil {
+			return err
+		}
+		*r = StorageCephFSDataPoolRef{Name: name}
+		return nil
+	}
+	var out storageCephFSDataPoolRef
+	if err := decodeKnownYAMLNode(node, &out); err != nil {
+		return err
+	}
+	*r = StorageCephFSDataPoolRef(out)
+	return nil
+}
+
+func (r *StorageCephFSDataPoolRef) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		*r = StorageCephFSDataPoolRef{Name: name}
+		return nil
+	}
+	var out storageCephFSDataPoolRef
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&out); err != nil {
+		return err
+	}
+	*r = StorageCephFSDataPoolRef(out)
+	return nil
 }
 
 type StorageCephFSMetadataServices struct {
@@ -360,9 +408,9 @@ type StorageExportDataFoundationSpec struct {
 }
 
 type StorageExportExternalDetailsSpec struct {
-	FromSecret   string                                    `yaml:"fromSecret,omitempty" json:"fromSecret,omitempty"`
-	Generated    *StorageExportExternalDetailsGenerated    `yaml:"generated,omitempty" json:"generated,omitempty"`
-	SSHExecution *StorageExportExternalDetailsSSHExecution `yaml:"sshExecution,omitempty" json:"sshExecution,omitempty"`
+	FromSecretRef SecretRef                                 `yaml:"fromSecretRef,omitempty" json:"fromSecretRef,omitempty"`
+	Generated     *StorageExportExternalDetailsGenerated    `yaml:"generated,omitempty" json:"generated,omitempty"`
+	SSHExecution  *StorageExportExternalDetailsSSHExecution `yaml:"sshExecution,omitempty" json:"sshExecution,omitempty"`
 }
 
 type StorageExportExternalDetailsGenerated struct{}

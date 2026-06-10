@@ -37,9 +37,9 @@ server-side apply defaults.
 
 `ClusterAddon.spec.provides[]` advertises capabilities that other desired
 state may depend on. Current accepted capabilities are `kubevirt` and
-`data-foundation`. Use `kubevirt` on the OpenShift Virtualization add-on so
+`dataFoundation`. Use `kubevirt` on the OpenShift Virtualization add-on so
 KubeVirt child infrastructure waits for the host cluster to be ready. Use
-`data-foundation` on the Red Hat ODF or IBM Fusion Data Foundation operator
+`dataFoundation` on the Red Hat ODF or IBM Fusion Data Foundation operator
 add-on so storage-export input effects wait for external-mode components to be
 ready.
 
@@ -47,7 +47,7 @@ ready.
 provide by name. An input schema can require Bootwright object refs and secret
 refs — binding values for `refKind` properties must name a loaded object of
 that kind — and `effects[]` can opt into built-in behavior. Data Foundation
-external storage uses a generic `storage-export-attachment` effect; no
+external storage uses a generic `storageExportAttachment` effect; no
 behavior depends on the add-on name, but the effect's input schema must
 declare a single required `exportRef` property with `refKind: StorageExport`.
 

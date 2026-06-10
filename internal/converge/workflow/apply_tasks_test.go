@@ -1683,7 +1683,7 @@ func externalStorageAttachmentPlanningState() v1alpha1.State {
 			Type:              v1alpha1.StorageExportTypeDataFoundation,
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
 			ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
-				FromSecret: "shared-ceph-external-details",
+				FromSecretRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
 			},
 		},
 	}}

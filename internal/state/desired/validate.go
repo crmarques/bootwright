@@ -503,6 +503,11 @@ func validateSecretReferences(state v1alpha1.State) []string {
 			}
 		}
 	}
+	for _, export := range state.StorageExports {
+		if details := export.Spec.ExternalDetails; details != nil {
+			require(fmt.Sprintf("StorageExport/%s spec.externalDetails.fromSecretRef", export.Metadata.Name), details.FromSecretRef)
+		}
+	}
 	for _, effective := range addoninputs.EffectiveAddons(state) {
 		accepted := map[string]v1alpha1.ClusterAddonAcceptedInput{}
 		for _, input := range effective.Extension.Spec.Accepts.Inputs {

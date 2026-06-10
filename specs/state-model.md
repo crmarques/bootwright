@@ -744,9 +744,11 @@ Rules:
   `StorageCluster`.
 - `spec.cephfs.metadataPoolRef` is required and must reference a
   `StoragePool` on the same `StorageCluster`.
-- `spec.cephfs.dataPoolRefs[]` is required; each must reference a `StoragePool`
-  on the same `StorageCluster`, must differ from the metadata pool, and exactly
-  one must set `default: true`.
+- `spec.cephfs.dataPoolRefs[]` is required; each entry is a plain pool name
+  (a single entry becomes the default automatically) or `{name, default}` to
+  elect the default data pool on multi-pool filesystems. Each must reference a
+  `StoragePool` on the same `StorageCluster`, must differ from the metadata
+  pool, and exactly one must be the default.
 - `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
   role; `sites`/`hosts` narrow the selection and must resolve to at least one
   `mds`-capable host. On stretch-mode clusters the resolved placement must
@@ -781,7 +783,8 @@ platform.
 
 Rules:
 
-- `spec.type` is required and must be `data-foundation`.
+- `spec.type` is required and must be `dataFoundation` (the type value equals
+  the populated arm key).
 - `spec.storageClusterRef` is required.
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
   `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
@@ -789,8 +792,9 @@ Rules:
   same-cluster.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and
   `spec.externalDetails` is required.
-- `spec.externalDetails` must set exactly one of `fromSecret`, `generated`, or
-  `sshExecution`. `fromSecret` must be declared in `Environment.spec.secrets`.
+- `spec.externalDetails` must set exactly one of `fromSecretRef`, `generated`,
+  or `sshExecution`. `fromSecretRef` must be declared in
+  `Environment.spec.secrets`.
   `generated` is rejected for external clusters. `sshExecution` requires
   `machineRefs[]` to `ceph-admin` `Machine`s with SSH (for external clusters),
   `exporter.source: boundDataFoundationAddon`, and `config.rbdDataPoolName`;
@@ -812,7 +816,7 @@ Rules:
   not set `olm`. Each `manifests[].path` is relative to the `ClusterAddon` file,
   ends in `.yaml`/`.yml`, must stay within the file directory, must not be a
   symlink, and must exist.
-- `spec.provides[]` accepts `kubevirt` or `data-foundation`; declaring any
+- `spec.provides[]` accepts `kubevirt` or `dataFoundation`; declaring any
   `provides` value requires at least one `spec.readiness.checks[]` entry.
 - `spec.readiness.timeout` is a Go duration. `spec.readiness.checks[].type`
   accepts `csvSucceeded` (requires `namespace`, `subscription`), `condition`
@@ -820,7 +824,7 @@ Rules:
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
 - `spec.accepts.inputs[]` declare binding-scoped inputs; each schema property
   sets exactly one of `refKind` (a known Bootwright kind) or `secretRef`. A
-  data-foundation storage-attachment effect requires the schema to declare
+  `dataFoundation` `storageExportAttachment` effect requires the schema to declare
   exactly one property, literally named `exportRef`, with
   `refKind: StorageExport` and listed in `required` — the attachment machinery
   reads that exact value name.

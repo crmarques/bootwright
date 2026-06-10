@@ -146,7 +146,7 @@ External storage provisioning is also separate from `ContainerCluster`.
 `StorageCluster` uses the same lower-layer `Machine` and `InfraProvider`
 objects for machine facts, while storage-export attachments are declared as
 add-on input effects and wait for both the storage cluster and a `ClusterAddon`
-that provides `data-foundation`. Bootwright supports imported external Ceph via
+that provides `dataFoundation`. Bootwright supports imported external Ceph via
 an ODF external-cluster-details secret and managed Ceph where Ansible installs
 cephadm prerequisites on ready or Bootwright-installed storage nodes.
 

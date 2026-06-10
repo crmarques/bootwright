@@ -210,9 +210,9 @@ const (
 	DefaultClusterAddonReadinessTimeout             = "30m"
 	DefaultClusterAddonFieldManager                 = "bootwright"
 	ClusterAddonProvidesKubeVirt                    = "kubevirt"
-	ClusterAddonProvidesDataFoundation              = "data-foundation"
+	ClusterAddonProvidesDataFoundation              = "dataFoundation"
 	ClusterAddonInputSchemaTypeObject               = "object"
-	ClusterAddonInputEffectStorageExportAttachment  = "storage-export-attachment"
+	ClusterAddonInputEffectStorageExportAttachment  = "storageExportAttachment"
 
 	StorageClusterTypeCeph = "ceph"
 
@@ -252,7 +252,8 @@ const (
 	StoragePoolRoleCephFSData     = "cephfs-data"
 	StoragePoolRoleRGW            = "rgw"
 
-	StorageExportTypeDataFoundation                              = "data-foundation"
+	// StorageExport union: type value == populated arm key.
+	StorageExportTypeDataFoundation                              = "dataFoundation"
 	StorageExportExternalDetailsExporterBoundDataFoundationAddon = "boundDataFoundationAddon"
 )
 

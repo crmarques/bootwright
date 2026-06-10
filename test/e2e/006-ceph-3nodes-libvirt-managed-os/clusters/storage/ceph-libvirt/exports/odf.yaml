@@ -3,7 +3,7 @@ kind: StorageExport
 metadata:
   name: odf
 spec:
-  type: data-foundation
+  type: dataFoundation
 
   storageClusterRef: ceph-libvirt
 

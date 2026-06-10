@@ -86,7 +86,7 @@ func ExternalDetailsSourceFromSecret(export v1alpha1.StorageExport) string {
 	if export.Spec.ExternalDetails == nil {
 		return ""
 	}
-	return strings.TrimSpace(export.Spec.ExternalDetails.FromSecret)
+	return strings.TrimSpace(export.Spec.ExternalDetails.FromSecretRef.Name)
 }
 
 func ExternalDetailsSourceSSH(export v1alpha1.StorageExport) *v1alpha1.StorageExportExternalDetailsSSHExecution {
@@ -102,7 +102,7 @@ func LoadExternalDetailsSecretJSON(state v1alpha1.State, secretsDir string, name
 
 func LoadExternalDetailsSecretJSONForContext(contextName string, state v1alpha1.State, secretsDir string, name string) (string, error) {
 	if strings.TrimSpace(name) == "" {
-		return "", fmt.Errorf("data foundation externalDetails.fromSecret is required")
+		return "", fmt.Errorf("data foundation externalDetails.fromSecretRef is required")
 	}
 	env := primaryEnvironment(state)
 	path := secret.ResolvePath(name, env, secretsDir)

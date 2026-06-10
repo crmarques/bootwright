@@ -31,7 +31,7 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export); fromSecret != "" {
 			out = append(out, secretRefRequirement{
 				refName: fromSecret,
-				label:   fmt.Sprintf("StorageExport/%s externalDetails.fromSecret", export.Metadata.Name),
+				label:   fmt.Sprintf("StorageExport/%s externalDetails.fromSecretRef", export.Metadata.Name),
 				phases:  []string{"addons"},
 				role:    secret.MaterialPrimary,
 			})

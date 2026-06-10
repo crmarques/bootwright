@@ -72,7 +72,7 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		}
 		applyTarget := scope.applyTarget()
 		if scoped {
-			// Match scoped apply: report the transitive data-foundation
+			// Match scoped apply: report the transitive Data Foundation
 			// attachment-target storage clusters present in the scoped state, not
 			// only the literal --clusters storage names.
 			names := make([]string, 0, len(state.StorageClusters))

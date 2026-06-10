@@ -6,7 +6,7 @@ spec:
   type: olm
 
   provides:
-    - data-foundation
+    - dataFoundation
 
   accepts:
     inputs:
@@ -19,8 +19,8 @@ spec:
             exportRef:
               refKind: StorageExport
         effects:
-          - type: storage-export-attachment
-            provider: data-foundation
+          - type: storageExportAttachment
+            provider: dataFoundation
 
   olm:
     namespace:

@@ -62,7 +62,7 @@ ClusterAddonBinding.addons[].inputs[]
   -> StorageCluster
   -> Machine (managed storage only)
   -> Machine
-  -> ClusterAddon providing data-foundation
+  -> ClusterAddon providing dataFoundation
 ```
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
@@ -97,8 +97,8 @@ entitlement, and license material; `spec.ceph.release` selects their product
 stream and `spec.ceph.image` pins their (non-`x.y.z`) registry image explicitly. Secret bytes never appear in desired state. For imported storage,
 `StorageCluster.spec.management: external` skips storage provisioning; the
 Data Foundation add-on declares an `external-storage` input with a
-`storage-export-attachment` effect, bindings provide `exportRef`, and
-`StorageExport.spec.externalDetails.fromSecret` points to the
+`storageExportAttachment` effect, bindings provide `exportRef`, and
+`StorageExport.spec.externalDetails.fromSecretRef` points to the
 operator-provided external-cluster details secret. The attachment applies later
 in the add-ons phase after the target
 cluster and Data Foundation add-on are ready. Managed Ceph generates those

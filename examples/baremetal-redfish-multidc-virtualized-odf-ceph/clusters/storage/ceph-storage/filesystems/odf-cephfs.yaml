@@ -8,6 +8,6 @@ spec:
   cephfs:
     metadataPoolRef: odf-cephfs-metadata
     dataPoolRefs:
-      - name: odf-cephfs-data
+      - odf-cephfs-data
     mds:
       activeCount: 2

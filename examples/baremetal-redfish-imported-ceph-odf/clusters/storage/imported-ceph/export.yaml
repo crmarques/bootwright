@@ -3,9 +3,9 @@ kind: StorageExport
 metadata:
   name: imported-ceph-odf
 spec:
-  type: data-foundation
+  type: dataFoundation
 
   storageClusterRef: imported-ceph
 
   externalDetails:
-    fromSecret: imported-ceph-odf-details
+    fromSecretRef: imported-ceph-odf-details

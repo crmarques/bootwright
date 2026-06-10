@@ -136,7 +136,7 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 			files: map[string]string{
 				"extension.yaml": strings.Replace(extensionYAML("virt"), "  type: olm\n", "  type: olm\n  provides:\n    - storage\n", 1),
 			},
-			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, data-foundation}`,
+			wantSubstring: `spec.provides[0] "storage" must be one of {kubevirt, dataFoundation}`,
 		},
 		{
 			name: "duplicated-provided-capability",
@@ -384,12 +384,12 @@ spec:
         schema:
           type: object
         effects:
-          - type: storage-export-attachment
+          - type: storageExportAttachment
             provider: kubevirt
 `)
 				return files
 			},
-			wantSubstring: `provider "kubevirt" must be "data-foundation" when type is "storage-export-attachment"`,
+			wantSubstring: `provider "kubevirt" must be "dataFoundation" when type is "storageExportAttachment"`,
 		},
 		{
 			name: "unknown-supplied-input",
@@ -496,12 +496,12 @@ spec:
             export:
               refKind: StorageExport
         effects:
-          - type: storage-export-attachment
-            provider: data-foundation
+          - type: storageExportAttachment
+            provider: dataFoundation
 `)
 				return files
 			},
-			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef is required for data-foundation storage attachment inputs`,
+			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef is required for dataFoundation storage attachment inputs`,
 		},
 		{
 			name: "storage-attachment-exportRef-must-be-required",
@@ -514,12 +514,12 @@ spec:
             exportRef:
               refKind: StorageExport
         effects:
-          - type: storage-export-attachment
-            provider: data-foundation
+          - type: storageExportAttachment
+            provider: dataFoundation
 `)
 				return files
 			},
-			wantSubstring: `spec.accepts.inputs[0].schema.required must include "exportRef" for data-foundation storage attachment inputs`,
+			wantSubstring: `spec.accepts.inputs[0].schema.required must include "exportRef" for dataFoundation storage attachment inputs`,
 		},
 		{
 			name: "storage-attachment-exportRef-wrong-ref-kind",
@@ -534,12 +534,12 @@ spec:
             exportRef:
               refKind: Machine
         effects:
-          - type: storage-export-attachment
-            provider: data-foundation
+          - type: storageExportAttachment
+            provider: dataFoundation
 `)
 				return files
 			},
-			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef.refKind "Machine" must be "StorageExport" for data-foundation storage attachment inputs`,
+			wantSubstring: `spec.accepts.inputs[0].schema.properties.exportRef.refKind "Machine" must be "StorageExport" for dataFoundation storage attachment inputs`,
 		},
 		{
 			name: "duplicate-effective-application",

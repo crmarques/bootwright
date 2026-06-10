@@ -83,9 +83,9 @@ func validateDataFoundationStorageInputSchema(addon string, index int, input v1a
 	// exportRef, so the schema must pin that exact property as a required
 	// StorageExport reference.
 	if property, ok := input.Schema.Properties["exportRef"]; !ok {
-		errs = append(errs, prefix+".properties.exportRef is required for data-foundation storage attachment inputs")
+		errs = append(errs, prefix+".properties.exportRef is required for dataFoundation storage attachment inputs")
 	} else if property.RefKind != v1alpha1.KindStorageExport {
-		errs = append(errs, fmt.Sprintf("%s.properties.exportRef.refKind %q must be %q for data-foundation storage attachment inputs", prefix, property.RefKind, v1alpha1.KindStorageExport))
+		errs = append(errs, fmt.Sprintf("%s.properties.exportRef.refKind %q must be %q for dataFoundation storage attachment inputs", prefix, property.RefKind, v1alpha1.KindStorageExport))
 	}
 	requiresExportRef := false
 	for _, name := range input.Schema.Required {
@@ -95,11 +95,11 @@ func validateDataFoundationStorageInputSchema(addon string, index int, input v1a
 		}
 	}
 	if !requiresExportRef {
-		errs = append(errs, fmt.Sprintf("%s.required must include %q for data-foundation storage attachment inputs", prefix, "exportRef"))
+		errs = append(errs, fmt.Sprintf("%s.required must include %q for dataFoundation storage attachment inputs", prefix, "exportRef"))
 	}
 	for name := range input.Schema.Properties {
 		if name != "exportRef" {
-			errs = append(errs, fmt.Sprintf("%s.properties.%s is not supported for data-foundation storage attachment inputs", prefix, name))
+			errs = append(errs, fmt.Sprintf("%s.properties.%s is not supported for dataFoundation storage attachment inputs", prefix, name))
 		}
 	}
 	return errs

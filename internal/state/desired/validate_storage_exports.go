@@ -39,7 +39,7 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 		}
 		df := export.Spec.DataFoundation
 		if clusterOK {
-			errs = append(errs, validateStorageExportExternalDetails(state, export, cluster, machines)...)
+			errs = append(errs, validateStorageExportExternalDetails(export, cluster, machines)...)
 		}
 		if clusterOK && storageClusterExternal(cluster) {
 			if df != nil {
@@ -76,7 +76,7 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 	return errs
 }
 
-func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+func validateStorageExportExternalDetails(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	prefix := fmt.Sprintf("StorageExport/%s spec.externalDetails", export.Metadata.Name)
 	details := export.Spec.ExternalDetails
@@ -87,7 +87,7 @@ func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.
 		return nil
 	}
 	sourceCount := 0
-	if strings.TrimSpace(details.FromSecret) != "" {
+	if details.FromSecretRef.Name != "" {
 		sourceCount++
 	}
 	if details.Generated != nil {
@@ -97,13 +97,10 @@ func validateStorageExportExternalDetails(state v1alpha1.State, export v1alpha1.
 		sourceCount++
 	}
 	if sourceCount != 1 {
-		errs = append(errs, prefix+" must set exactly one of fromSecret, generated, or sshExecution")
+		errs = append(errs, prefix+" must set exactly one of fromSecretRef, generated, or sshExecution")
 	}
 	if storageClusterExternal(cluster) && details.Generated != nil {
 		errs = append(errs, prefix+".generated must be empty when storageClusterRef points to external Ceph")
-	}
-	if strings.TrimSpace(details.FromSecret) != "" && !environmentDeclaresSecret(state, details.FromSecret) {
-		errs = append(errs, fmt.Sprintf("%s.fromSecret %q is not declared in Environment spec.secrets", prefix, details.FromSecret))
 	}
 	if details.SSHExecution != nil {
 		errs = append(errs, validateStorageExportSSHExecution(prefix+".sshExecution", cluster, details.SSHExecution, machines)...)
@@ -164,15 +161,6 @@ func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCl
 	return errs
 }
 
-func environmentDeclaresSecret(state v1alpha1.State, name string) bool {
-	for _, env := range state.Environments {
-		if _, ok := env.Spec.Secrets[name]; ok {
-			return true
-		}
-	}
-	return false
-}
-
 func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport) []string {
 	var errs []string
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
@@ -190,7 +178,7 @@ func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[st
 			continue
 		}
 		if export.Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
-			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q must reference a data-foundation StorageExport", prefix, exportRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.values.exportRef %q must reference a %s StorageExport", prefix, exportRef.Name, v1alpha1.StorageExportTypeDataFoundation))
 			continue
 		}
 	}

@@ -270,7 +270,7 @@ func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
 	var detailsCheck *preflightCheck
 	for i := range checks {
 		check := &checks[i]
-		if check.Name == "StorageExport/shared-ceph-data-foundation externalDetails.fromSecret" {
+		if check.Name == "StorageExport/shared-ceph-data-foundation externalDetails.fromSecretRef" {
 			detailsCheck = check
 			break
 		}
@@ -473,7 +473,7 @@ func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
 				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
-					FromSecret: "shared-ceph-external-details",
+					FromSecretRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
 				},
 			},
 		}},

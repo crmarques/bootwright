@@ -1,6 +1,7 @@
 package desiredstate
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -119,7 +120,7 @@ spec:
 kind: StorageExport
 metadata: { name: export }
 spec:
-  type: data-foundation
+  type: dataFoundation
   storageClusterRef: ceph
   externalDetails:
     sshExecution:
@@ -153,6 +154,60 @@ spec:
 				t.Fatalf("error %q does not contain %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestStorageFilesystemDataPoolRefsAcceptPlainNames covers the data pool
+// authoring forms: a plain pool name decodes as {name} (every other ref list's
+// shape) while the {name, default} object form still elects the default data
+// pool on multi-pool filesystems.
+func TestStorageFilesystemDataPoolRefsAcceptPlainNames(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"filesystem.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata: { name: cephfs }
+spec:
+  storageClusterRef: ceph
+  cephfs:
+    metadataPoolRef: cephfs-meta
+    dataPoolRefs:
+      - cephfs-data
+      - name: cephfs-archive
+        default: true
+`})
+	state, err := Load([]string{dir})
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	got := state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs
+	want := []v1alpha1.StorageCephFSDataPoolRef{
+		{Name: "cephfs-data"},
+		{Name: "cephfs-archive", Default: true},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dataPoolRefs = %#v, want %#v", got, want)
+	}
+}
+
+func TestStorageFilesystemDataPoolRefsRejectUnknownObjectFields(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"filesystem.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata: { name: cephfs }
+spec:
+  storageClusterRef: ceph
+  cephfs:
+    metadataPoolRef: cephfs-meta
+    dataPoolRefs:
+      - name: cephfs-data
+        weight: 2
+`})
+	_, err := Load([]string{dir})
+	if err == nil {
+		t.Fatal("expected unknown field error, got nil")
+	}
+	if !strings.Contains(err.Error(), "field weight not found") {
+		t.Fatalf("error %q does not reject unknown field", err)
 	}
 }
 
@@ -571,8 +626,8 @@ func TestStorageAttachmentRequiresDataFoundationProvider(t *testing.T) {
 	state := storageValidationState()
 	state.ClusterAddons[0].Spec.Provides = nil
 	got := strings.Join(validateStorage(state), "; ")
-	if !strings.Contains(got, `requires ClusterAddon/odf to provide "data-foundation"`) {
-		t.Fatalf("validateStorage errors = %q, want data-foundation provider error", got)
+	if !strings.Contains(got, `requires ClusterAddon/odf to provide "dataFoundation"`) {
+		t.Fatalf("validateStorage errors = %q, want dataFoundation provider error", got)
 	}
 }
 
@@ -596,7 +651,7 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 		t.Fatal("single CephFS data pool did not default to default=true")
 	}
 	if state.StorageExports[0].Spec.Type != v1alpha1.StorageExportTypeDataFoundation {
-		t.Fatalf("storage export type = %q, want data-foundation", state.StorageExports[0].Spec.Type)
+		t.Fatalf("storage export type = %q, want dataFoundation", state.StorageExports[0].Spec.Type)
 	}
 	if state.StorageExports[0].Spec.ExternalDetails == nil || state.StorageExports[0].Spec.ExternalDetails.Generated == nil {
 		t.Fatalf("storage export externalDetails = %#v, want generated default", state.StorageExports[0].Spec.ExternalDetails)
@@ -775,7 +830,7 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			edit: func(state *v1alpha1.State) {
 				state.StorageExports[0].Spec.Type = "nfs"
 			},
-			want: `values.exportRef "export" must reference a data-foundation StorageExport`,
+			want: `values.exportRef "export" must reference a dataFoundation StorageExport`,
 		},
 		{
 			name: "external-ceph-spec",
@@ -796,7 +851,7 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			edit: func(state *v1alpha1.State) {
 				state.StorageExports[0].Spec.ExternalDetails.Generated = &v1alpha1.StorageExportExternalDetailsGenerated{}
 			},
-			want: "spec.externalDetails must set exactly one of fromSecret, generated, or sshExecution",
+			want: "spec.externalDetails must set exactly one of fromSecretRef, generated, or sshExecution",
 		},
 		{
 			name: "external-ssh-host-without-ceph-admin-capability",
@@ -841,6 +896,72 @@ func TestExternalStorageValidationRejectsInvalidFieldCombinations(t *testing.T) 
 			got := strings.Join(validateStorage(state), "; ")
 			if !strings.Contains(got, tc.want) {
 				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestStorageExportTypeMustEqualArmKey guards the union grammar: the type
+// value is the camelCase arm key, so the retired kebab-case spelling is
+// rejected with the canonical value in the error.
+func TestStorageExportTypeMustEqualArmKey(t *testing.T) {
+	state := storageValidationState()
+	state.StorageExports[0].Spec.Type = "data-foundation"
+	got := strings.Join(validateStorage(state), "; ")
+	if !strings.Contains(got, `StorageExport/export spec.type "data-foundation" must be "dataFoundation"`) {
+		t.Fatalf("validateStorage errors = %q, want type/arm-key error", got)
+	}
+}
+
+func TestStorageExportFromSecretRefRejectsObjectForm(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"export.yaml": `apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata: { name: export }
+spec:
+  type: dataFoundation
+  storageClusterRef: shared-ceph
+  externalDetails:
+    fromSecretRef:
+      name: shared-ceph-external-details
+`})
+	_, err := Load([]string{dir})
+	if err == nil {
+		t.Fatal("expected object-form fromSecretRef to be rejected")
+	}
+	if !strings.Contains(err.Error(), "a reference is a plain name string") {
+		t.Fatalf("error %q does not reject the object form", err)
+	}
+}
+
+// TestStorageExportFromSecretRefWalksEnvironmentSecrets confirms fromSecretRef
+// rides the comprehensive secret walk: the standard DNS-label check plus the
+// uniform dangling-secret diagnostic.
+func TestStorageExportFromSecretRefWalksEnvironmentSecrets(t *testing.T) {
+	cases := []struct {
+		name string
+		ref  string
+		want string
+	}{
+		{
+			name: "undeclared",
+			ref:  "missing-details",
+			want: `StorageExport/export spec.externalDetails.fromSecretRef "missing-details" is not declared in Environment/env spec.secrets`,
+		},
+		{
+			name: "not-a-dns-label",
+			ref:  "Not_A_Label",
+			want: `StorageExport/export spec.externalDetails.fromSecretRef.name "Not_A_Label" is not a DNS label`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := externalStorageValidationState()
+			state.Environments[0].Metadata.Name = "env"
+			state.StorageExports[0].Spec.ExternalDetails.FromSecretRef = v1alpha1.SecretRef{Name: tc.ref}
+			got := strings.Join(validateSecretReferences(state), "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateSecretReferences errors = %q, want substring %q", got, tc.want)
 			}
 		})
 	}
@@ -1050,7 +1171,7 @@ func externalStorageValidationState() v1alpha1.State {
 				Type:              v1alpha1.StorageExportTypeDataFoundation,
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
 				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
-					FromSecret: "shared-ceph-external-details",
+					FromSecretRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
 				},
 			},
 		}},
