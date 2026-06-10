@@ -344,8 +344,8 @@ func TestArtifactAccessEndpointNamesSelectInfraEndpoint(t *testing.T) {
 		"    - name: bmc-lan\n      address: 192.168.132.1",
 		"    - name: bmc-lan\n      address: 192.168.132.1\n    - name: dnsAlias\n      address: artifact.example.test", 1)
 	files["infra-component.yaml"] = strings.Replace(files["infra-component.yaml"],
-		"name: bmc\n        listener: https\n        machineAddress: bmc-lan",
-		"name: dnsAlias\n        listener: https\n        machineAddress: dnsAlias", 1)
+		"name: bmc\n        listenerRef: https\n        addressRef: bmc-lan",
+		"name: dnsAlias\n        listenerRef: https\n        addressRef: dnsAlias", 1)
 	files["cluster.yaml"] = strings.Replace(files["cluster.yaml"],
 		"endpointRef: bmc",
 		"endpointRef: dnsAlias", 1)
@@ -546,14 +546,14 @@ spec:
 		{
 			name: "artifact-server-endpoint-address-rejected",
 			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
-				"machineAddress: bmc-lan",
-				"machineAddress: missing", 1)},
-			wantSubstring: `spec.artifactServer.endpoints[0].machineAddress "missing" does not resolve to Machine/services-host spec.addresses[].name`,
+				"addressRef: bmc-lan",
+				"addressRef: missing", 1)},
+			wantSubstring: `spec.artifactServer.endpoints[0].addressRef "missing" does not resolve to Machine/services-host spec.addresses[].name`,
 		},
 		{
 			name: "artifact-server-endpoint-address-name-rejected",
 			files: map[string]string{"infra-component.yaml": strings.Replace(newInfraComponentYAML,
-				"machineAddress: bmc-lan",
+				"addressRef: bmc-lan",
 				"addressName: bmc-lan", 1)},
 			wantSubstring: "field addressName not found",
 		},
@@ -799,7 +799,7 @@ spec:
 		{
 			name: "external-name-resolution-endpoint",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        type: external\n        ip: 192.168.132.53\n        endpoint: cluster\n    artifactServers:\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        type: external\n        address: 192.168.132.53\n        endpointRef: cluster\n    artifactServers:\n", 1)
 			},
 			wantSubstring: "spec.infraComponents.nameResolution[0].endpoint is only valid for managed nameResolution entries",
 		},
@@ -970,7 +970,7 @@ func TestEnvironmentNTPSourcesValidateTypedEntries(t *testing.T) {
       - name: managed
         type: managed
         componentRef: ntp-server
-        endpoint: cluster
+        endpointRef: cluster
 `)
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
@@ -1042,7 +1042,7 @@ func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
 			sources: `      - name: default
         type: managed
         componentRef: ntp-server
-        endpoint: missing
+        endpointRef: missing
 `,
 			withComponent: true,
 			wantSubstring: `endpoint "missing" does not resolve on selected InfraComponent spec.ntp.endpoints`,
@@ -1512,7 +1512,7 @@ func TestEnvironmentNameResolutionDefaultRejected(t *testing.T) {
       - name: default
         default: true
         type: external
-        ip: 192.168.132.1
+        address: 192.168.132.1
     artifactServers:
 `, 1)
 	writeFiles(t, dir, files)
@@ -2042,7 +2042,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: external
 `)
-				addLoadBalancerInfraComponent(files, "control-plane", "- ip: 192.168.132.10\n")
+				addLoadBalancerInfraComponent(files, "control-plane", "- address: 192.168.132.10\n")
 			},
 		},
 		{
@@ -2063,7 +2063,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
         componentRef: load-balancer
         bindAddress: apps
 `)
-				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
 			wantSubstring: "spec.install.endpoints.api.source.bindAddress is required unless the referenced loadBalancer declares exactly one bindAddress",
 		},
@@ -2086,7 +2086,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
         componentRef: load-balancer
         bindAddress: apps
 `)
-				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
 		},
 		{
@@ -2108,7 +2108,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
         componentRef: load-balancer
         bindAddress: apps
 `)
-				addLoadBalancerInfraComponent(files, "load-balancer", "- { ip: 192.168.132.10 }\n    - { ip: 192.168.132.11 }\n")
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { address: 192.168.132.10 }\n    - { address: 192.168.132.11 }\n")
 			},
 			wantSubstring: "bindAddresses[0].name is required",
 		},
@@ -2148,7 +2148,7 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
       source:
         type: external
 `)
-				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, ip: 192.168.132.10 }\n    - { name: apps, ip: 192.168.132.11 }\n")
+				addLoadBalancerInfraComponent(files, "load-balancer", "- { name: control-plane, address: 192.168.132.10 }\n    - { name: apps, address: 192.168.132.11 }\n")
 			},
 			wantSubstring: `source.bindAddress "missing" does not match`,
 		},
@@ -2224,7 +2224,7 @@ func TestNetworkConfigDNSRefsSelectEnvironmentEntries(t *testing.T) {
     nameResolution:
       - name: default
         type: external
-        ip: 192.168.132.53
+        address: 192.168.132.53
 `, 1)
 	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
     - default
@@ -2255,7 +2255,7 @@ func TestNetworkConfigDNSRefsRejectDuplicates(t *testing.T) {
     nameResolution:
       - name: default
         type: external
-        ip: 192.168.132.53
+        address: 192.168.132.53
 `, 1)
 	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
     - default
@@ -3219,8 +3219,8 @@ spec:
         port: 8443
     endpoints:
       - name: bmc
-        listener: https
-        machineAddress: bmc-lan
+        listenerRef: https
+        addressRef: bmc-lan
 `
 
 const newNTPComponentYAML = `apiVersion: bootwright.io/v1alpha1
@@ -3234,7 +3234,7 @@ spec:
     bindAddress: 192.168.132.1
     endpoints:
       - name: cluster
-        machineAddress: bmc-lan
+        addressRef: bmc-lan
     upstreamSources:
       - time.bootwright.test
 `

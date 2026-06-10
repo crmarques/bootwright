@@ -49,7 +49,7 @@ spec:
       - name: default
         type: managed
         componentRef: ntp-server
-        endpoint: cluster
+        endpointRef: cluster
     artifactServers:
       - name: default
         type: managed
@@ -68,7 +68,7 @@ spec:
     nameResolution:
       - name: default
         type: external
-        ip: 192.168.132.1
+        address: 192.168.132.1
         additionalIngressHosts:
           - console-openshift-console.apps.sno-disconnected.bootwright.test
           - oauth-openshift.apps.sno-disconnected.bootwright.test

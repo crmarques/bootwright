@@ -93,7 +93,7 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 }
 
 func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.Connection != nil {
 		connection := map[string]any{}
 		if entry.Connection.HTTPProxy != "" {
@@ -114,9 +114,9 @@ func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map
 }
 
 func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolutionComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
-	if entry.IP != "" {
-		out["ip"] = entry.IP
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
+	if entry.Address != "" {
+		out["address"] = entry.Address
 	}
 	if len(entry.AdditionalIngressHosts) > 0 {
 		out["additionalIngressHosts"] = stringSliceAny(entry.AdditionalIngressHosts)
@@ -125,7 +125,7 @@ func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolu
 }
 
 func environmentNTPSourceComponentVars(entry v1alpha1.EnvironmentNTPSourceComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.Endpoint)
+	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.Address != "" {
 		out["address"] = entry.Address
 	}
@@ -148,7 +148,7 @@ func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactSe
 }
 
 func environmentRegistryComponentVars(entry v1alpha1.EnvironmentRegistryComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.Endpoint)
+	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.URL != "" {
 		out["url"] = entry.URL
 	}
@@ -164,7 +164,7 @@ func environmentComponentBaseVars(name, typ string, isDefault bool, componentRef
 		out["componentRef"] = componentRef
 	}
 	if endpoint != "" {
-		out["endpoint"] = endpoint
+		out["endpointRef"] = endpoint
 	}
 	return out
 }
@@ -186,8 +186,8 @@ func serviceEndpointsVars(endpoints []v1alpha1.ServiceEndpoint) []any {
 	out := make([]any, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		out = append(out, map[string]any{
-			"name":           endpoint.Name,
-			"machineAddress": endpoint.MachineAddress,
+			"name":       endpoint.Name,
+			"addressRef": endpoint.AddressRef,
 		})
 	}
 	return out
@@ -196,7 +196,7 @@ func serviceEndpointsVars(endpoints []v1alpha1.ServiceEndpoint) []any {
 func loadBalancerBindAddressesVars(binds []v1alpha1.LoadBalancerBindAddress) []any {
 	out := make([]any, 0, len(binds))
 	for _, bind := range binds {
-		entry := map[string]any{"ip": bind.IP}
+		entry := map[string]any{"address": bind.Address}
 		if bind.Name != "" {
 			entry["name"] = bind.Name
 		}

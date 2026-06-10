@@ -110,8 +110,8 @@ func TestEndpointAddressAndNetworkMatching(t *testing.T) {
 				LoadBalancer: &v1alpha1.LoadBalancerComponent{
 					Implementation: v1alpha1.InfraComponentTypeHAProxy,
 					BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
-						Name: "api",
-						IP:   "192.168.133.10",
+						Name:    "api",
+						Address: "192.168.133.10",
 					}},
 				},
 			},

@@ -10,7 +10,7 @@ spec:
     bindAddress: 192.168.132.1
     endpoints:
     - name: cluster
-      machineAddress: cluster-lan
+      addressRef: cluster-lan
     upstreamSources:
     - time.bootwright.test
     machineRef: bastion

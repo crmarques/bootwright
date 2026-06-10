@@ -23,7 +23,7 @@ spec:
     machineRef: services-host
     bindAddresses:
       - name: control-plane-ip
-        ip: 192.168.133.10
+        address: 192.168.133.10
 ```
 
 External load balancer:

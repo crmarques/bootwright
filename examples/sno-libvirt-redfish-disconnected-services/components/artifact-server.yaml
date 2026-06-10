@@ -8,6 +8,6 @@ spec:
   artifactServer:
     endpoints:
     - name: cluster
-      listener: https
-      machineAddress: cluster-lan
+      listenerRef: https
+      addressRef: cluster-lan
     machineRef: bastion

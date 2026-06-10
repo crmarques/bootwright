@@ -10,9 +10,9 @@ spec:
     machineRef: bastion
     bindAddresses:
       - name: control-plane
-        ip: 192.168.133.10
+        address: 192.168.133.10
       - name: apps
-        ip: 192.168.133.11
+        address: 192.168.133.11
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
@@ -57,6 +57,6 @@ spec:
     port: 123
     endpoints:
       - name: cluster
-        machineAddress: cluster-lan
+        addressRef: cluster-lan
     upstreamSources:
       - time.bootwright.test

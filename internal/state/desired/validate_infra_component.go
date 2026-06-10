@@ -131,15 +131,15 @@ func validateArtifactServerEndpoints(prefix string, listeners []v1alpha1.Artifac
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.Listener == "" {
-			errs = append(errs, owner+".listener is required")
-		} else if !listenerNames[endpoint.Listener] {
-			errs = append(errs, fmt.Sprintf("%s.listener %q does not match any %s.listeners[].name", owner, endpoint.Listener, prefix))
+		if endpoint.ListenerRef == "" {
+			errs = append(errs, owner+".listenerRef is required")
+		} else if !listenerNames[endpoint.ListenerRef] {
+			errs = append(errs, fmt.Sprintf("%s.listenerRef %q does not match any %s.listeners[].name", owner, endpoint.ListenerRef, prefix))
 		}
-		if endpoint.MachineAddress == "" {
-			errs = append(errs, owner+".machineAddress is required")
-		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
+		if endpoint.AddressRef == "" {
+			errs = append(errs, owner+".addressRef is required")
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef); !ok {
+			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef, machine.Metadata.Name))
 		}
 	}
 	return errs
@@ -267,10 +267,10 @@ func validateServiceEndpoints(prefix string, endpoints []v1alpha1.ServiceEndpoin
 			}
 			seen[endpoint.Name] = true
 		}
-		if endpoint.MachineAddress == "" {
-			errs = append(errs, owner+".machineAddress is required")
-		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.MachineAddress); !ok {
-			errs = append(errs, fmt.Sprintf("%s.machineAddress %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.MachineAddress, machine.Metadata.Name))
+		if endpoint.AddressRef == "" {
+			errs = append(errs, owner+".addressRef is required")
+		} else if _, ok := v1alpha1.MachineAddressByName(machine, endpoint.AddressRef); !ok {
+			errs = append(errs, fmt.Sprintf("%s.addressRef %q does not resolve to Machine/%s spec.addresses[].name", owner, endpoint.AddressRef, machine.Metadata.Name))
 		}
 	}
 	return errs

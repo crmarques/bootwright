@@ -97,7 +97,7 @@ type EnvironmentProxyComponent struct {
 	Name         string                      `yaml:"name" json:"name"`
 	Type         string                      `yaml:"type" json:"type"`
 	ComponentRef LocalObjectReference        `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Endpoint     string                      `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	EndpointRef  string                      `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Connection   *EnvironmentProxyConnection `yaml:"connection,omitempty" json:"connection,omitempty"`
 }
 
@@ -105,8 +105,8 @@ type EnvironmentNameResolutionComponent struct {
 	Name                   string               `yaml:"name" json:"name"`
 	Type                   string               `yaml:"type" json:"type"`
 	ComponentRef           LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Endpoint               string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
-	IP                     string               `yaml:"ip,omitempty" json:"ip,omitempty"`
+	EndpointRef            string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
+	Address                string               `yaml:"address,omitempty" json:"address,omitempty"`
 	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
 }
 
@@ -114,7 +114,7 @@ type EnvironmentNTPSourceComponent struct {
 	Name         string               `yaml:"name" json:"name"`
 	Type         string               `yaml:"type" json:"type"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Endpoint     string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
 }
 
@@ -135,7 +135,7 @@ type EnvironmentRegistryComponent struct {
 	Default      bool                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Type         string               `yaml:"type" json:"type"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
-	Endpoint     string               `yaml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	URL          string               `yaml:"url,omitempty" json:"url,omitempty"`
 }
 

@@ -512,9 +512,9 @@ func TestBareMetalArtifactFetchURLUsesSelectedArtifactEndpoint(t *testing.T) {
 		})
 	}
 	state.InfraComponents[0].Spec.ArtifactServer.Endpoints = append(state.InfraComponents[0].Spec.ArtifactServer.Endpoints, v1alpha1.ArtifactServerEndpoint{
-		Name:           "cluster",
-		Listener:       "https",
-		MachineAddress: "cluster-lan",
+		Name:        "cluster",
+		ListenerRef: "https",
+		AddressRef:  "cluster-lan",
 	})
 	state.ContainerClusters[0].Spec.Install.ArtifactAccess = v1alpha1.ClusterArtifactAccess{}
 	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{

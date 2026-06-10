@@ -16,7 +16,7 @@ var emulatedBareMetalSubstrate = Substrate{
       - name: default
         type: managed
         componentRef: ntp-server
-        endpoint: cluster
+        endpointRef: cluster
 
 `,
 	MachinesYAML: `apiVersion: bootwright.io/v1alpha1
@@ -114,9 +114,9 @@ spec:
     machineRef: bastion
     bindAddresses:
       - name: control-plane
-        ip: 192.168.130.10
+        address: 192.168.130.10
       - name: apps
-        ip: 192.168.130.11
+        address: 192.168.130.11
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
@@ -141,7 +141,7 @@ spec:
     bindAddress: 192.168.130.1
     endpoints:
       - name: cluster
-        machineAddress: cluster-lan
+        addressRef: cluster-lan
 `,
 	EndpointsYAML: `      api:
         source:

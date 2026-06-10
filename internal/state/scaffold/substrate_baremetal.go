@@ -103,8 +103,8 @@ spec:
     machineRef: services-host
     endpoints:
       - name: bmc
-        listener: https
-        machineAddress: bmc-lan
+        listenerRef: https
+        addressRef: bmc-lan
 `,
 	NetworkDNSServers: `      dns-resolver:
         config:

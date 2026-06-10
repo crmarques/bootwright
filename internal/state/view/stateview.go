@@ -169,7 +169,7 @@ func EndpointAddress(state v1alpha1.State, infra v1alpha1.ClusterInstall, name s
 	}
 	if endpoint.Source.Type == v1alpha1.EndpointSourceInfraComponent {
 		if bind, ok := LoadBalancerBindAddress(state, endpoint.Source); ok {
-			return bind.IP
+			return bind.Address
 		}
 		return ""
 	}

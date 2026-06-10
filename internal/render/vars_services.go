@@ -177,9 +177,9 @@ func artifactServerEndpointsVars(endpoints []v1alpha1.ArtifactServerEndpoint) []
 	out := make([]any, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		out = append(out, map[string]any{
-			"name":           endpoint.Name,
-			"listener":       endpoint.Listener,
-			"machineAddress": endpoint.MachineAddress,
+			"name":        endpoint.Name,
+			"listenerRef": endpoint.ListenerRef,
+			"addressRef":  endpoint.AddressRef,
 		})
 	}
 	return out

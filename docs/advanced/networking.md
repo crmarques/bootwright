@@ -152,7 +152,7 @@ spec:
     machineRef: bastion
     bindAddresses:
       - name: apps-ip
-        ip: 192.168.133.11
+        address: 192.168.133.11
 ```
 
 If a load balancer has exactly one bind address, the endpoint may omit
@@ -226,5 +226,5 @@ infraComponents:
     - name: lab-ntp
       type: managed
       componentRef: ntp-server
-      endpoint: cluster
+      endpointRef: cluster
 ```

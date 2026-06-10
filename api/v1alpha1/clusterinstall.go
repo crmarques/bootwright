@@ -65,8 +65,8 @@ type EndpointSource struct {
 }
 
 type LoadBalancerBindAddress struct {
-	Name string `yaml:"name,omitempty" json:"name,omitempty"`
-	IP   string `yaml:"ip" json:"ip"`
+	Name    string `yaml:"name,omitempty" json:"name,omitempty"`
+	Address string `yaml:"address" json:"address"`
 }
 
 type InstallMachine struct {

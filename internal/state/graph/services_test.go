@@ -458,8 +458,8 @@ func loadBalancerComponent() v1alpha1.InfraComponent {
 				Implementation: v1alpha1.InfraComponentTypeHAProxy,
 				MachineRef:     v1alpha1.LocalObjectReference{Name: "service-host"},
 				BindAddresses: []v1alpha1.LoadBalancerBindAddress{{
-					Name: "api",
-					IP:   "10.0.0.10",
+					Name:    "api",
+					Address: "10.0.0.10",
 				}},
 			}},
 	}
@@ -527,9 +527,9 @@ func artifactServerComponent() v1alpha1.InfraComponent {
 					Port:     v1alpha1.DefaultArtifactsHTTPPort,
 				}},
 				Endpoints: []v1alpha1.ArtifactServerEndpoint{{
-					Name:           "cluster",
-					Listener:       "https",
-					MachineAddress: "ssh",
+					Name:        "cluster",
+					ListenerRef: "https",
+					AddressRef:  "ssh",
 				}},
 			}},
 	}

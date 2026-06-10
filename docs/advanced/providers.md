@@ -208,11 +208,11 @@ spec:
         port: 9443
     endpoints:
       - name: bmc
-        listener: https
-        machineAddress: lab-lan
+        listenerRef: https
+        addressRef: lab-lan
       - name: cluster
-        listener: https
-        machineAddress: lab-lan
+        listenerRef: https
+        addressRef: lab-lan
 ```
 
 ```yaml

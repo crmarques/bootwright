@@ -66,7 +66,7 @@ func resolvedNTPSourceAddress(state v1alpha1.State, entry v1alpha1.EnvironmentNT
 			return ""
 		}
 		ntp := component.Spec.NTP
-		address := managedServiceEndpointAddress(state, ntp.MachineRef.Name, ntp.Endpoints, entry.Endpoint)
+		address := managedServiceEndpointAddress(state, ntp.MachineRef.Name, ntp.Endpoints, entry.EndpointRef)
 		if address != "" {
 			return address
 		}
@@ -86,7 +86,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 	if endpointName != "" {
 		for _, endpoint := range endpoints {
 			if endpoint.Name == endpointName {
-				if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoint.MachineAddress); ok {
+				if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoint.AddressRef); ok {
 					return address
 				}
 				return ""
@@ -95,7 +95,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 		return ""
 	}
 	if len(endpoints) == 1 {
-		if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoints[0].MachineAddress); ok {
+		if address, ok := stateview.NamedMachineAddress(state, machineRef, endpoints[0].AddressRef); ok {
 			return address
 		}
 	}
@@ -105,7 +105,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 func resolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig, entry v1alpha1.EnvironmentNameResolutionComponent) string {
 	switch entry.Type {
 	case v1alpha1.EnvironmentComponentExternal:
-		return entry.IP
+		return entry.Address
 	case v1alpha1.EnvironmentComponentManaged:
 		component, ok := findInfraComponent(state, entry.ComponentRef.Name)
 		if !ok || component.Spec.NameResolution == nil {
@@ -115,7 +115,7 @@ func resolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, 
 		if ip := v1alpha1.DNSServiceIP(dns.BindAddress, network); ip != "" {
 			return ip
 		}
-		address := managedServiceEndpointAddress(state, dns.MachineRef.Name, dns.Endpoints, entry.Endpoint)
+		address := managedServiceEndpointAddress(state, dns.MachineRef.Name, dns.Endpoints, entry.EndpointRef)
 		if address == "" {
 			return ""
 		}

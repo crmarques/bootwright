@@ -10,9 +10,9 @@ import (
 
 func TestResolveClusterDNSServersAppendsDNSRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
-		IP:   "192.168.130.53",
+		Name:    "default",
+		Type:    v1alpha1.EnvironmentComponentExternal,
+		Address: "192.168.130.53",
 	})
 	ci := dnsRefInfra(state)
 	got := resolveClusterDNSServers(state, ci, state.NetworkConfigs[0])
@@ -48,9 +48,9 @@ func TestResolveClusterDNSServersResolvesManagedBindAddress(t *testing.T) {
 
 func TestResolveClusterDNSServersDeduplicates(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
-		IP:   "10.0.0.1",
+		Name:    "default",
+		Type:    v1alpha1.EnvironmentComponentExternal,
+		Address: "10.0.0.1",
 	})
 	state.NetworkConfigs[0].Spec.Template.NetworkConfig["dns-resolver"].(map[string]any)["config"].(map[string]any)["server"] = []any{"10.0.0.1", "10.0.0.1"}
 	ci := dnsRefInfra(state)
@@ -63,9 +63,9 @@ func TestResolveClusterDNSServersDeduplicates(t *testing.T) {
 
 func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
-		IP:   "192.168.130.53",
+		Name:    "default",
+		Type:    v1alpha1.EnvironmentComponentExternal,
+		Address: "192.168.130.53",
 	})
 	ci := dnsRefInfra(state)
 	got := agentNetworkConfig(state, ci, ci.Machines[0], "")
@@ -77,9 +77,9 @@ func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
 
 func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
-		IP:   "192.168.130.53",
+		Name:    "default",
+		Type:    v1alpha1.EnvironmentComponentExternal,
+		Address: "192.168.130.53",
 	})
 	delete(state.NetworkConfigs[0].Spec.Template.NetworkConfig, "dns-resolver")
 	ci := dnsRefInfra(state)
@@ -92,9 +92,9 @@ func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
 
 func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
-		IP:   "192.168.130.53",
+		Name:    "default",
+		Type:    v1alpha1.EnvironmentComponentExternal,
+		Address: "192.168.130.53",
 	})
 	state.Machines[0].Spec.Network.Config.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
