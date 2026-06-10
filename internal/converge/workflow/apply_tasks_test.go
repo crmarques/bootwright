@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/render"
-	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
+	secretstore "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"

@@ -6,8 +6,10 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
@@ -30,13 +32,13 @@ func newRenderStorageCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
-		names, err := storageClusterNamesForTarget(state, storageScope)
+		names, err := clusteraccess.StorageClusterNamesForTarget(state, storageScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state = filterStateToStorageClusters(state, names)
+		state = clusteraccess.FilterStateToStorageClusters(state, names)
 		state.ContainerClusters = nil
-		result, err := workflow.RenderOnly(ctx.RenderedDir, controllerClustersDir(ctx.Name), ctx.SecretsDir, state)
+		result, err := workflow.RenderOnly(ctx.RenderedDir, workspace.ControllerClustersDir(ctx.Name), ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
 		}

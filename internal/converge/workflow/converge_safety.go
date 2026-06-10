@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	safefs "github.com/crmarques/bootwright/internal/runtime/fs"
+	safefs "github.com/crmarques/bootwright/internal/host/safefs"
 )
 
 const (

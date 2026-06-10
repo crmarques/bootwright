@@ -10,7 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
-	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
+	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
 
 func firstMachineComponent(t *testing.T, cluster map[string]any) map[string]any {
@@ -37,17 +37,6 @@ func containerClusterByName(t *testing.T, state v1alpha1.State, name string) v1a
 	return v1alpha1.ContainerCluster{}
 }
 
-func machineByName(t *testing.T, state v1alpha1.State, name string) v1alpha1.Machine {
-	t.Helper()
-	for _, machine := range state.Machines {
-		if machine.Metadata.Name == name {
-			return machine
-		}
-	}
-	t.Fatalf("Machine/%s not found", name)
-	return v1alpha1.Machine{}
-}
-
 func componentByKind(t *testing.T, cluster map[string]any, kind string) map[string]any {
 	t.Helper()
 	comps, ok := cluster["components"].([]any)
@@ -62,41 +51,6 @@ func componentByKind(t *testing.T, cluster map[string]any, kind string) map[stri
 	}
 	t.Fatalf("no %s component in cluster: %v", kind, cluster)
 	return nil
-}
-
-func firstProviderServiceByKind(t *testing.T, services []any, kind string) map[string]any {
-	t.Helper()
-	for _, raw := range services {
-		service := raw.(map[string]any)
-		if service["kind"] == kind {
-			return service
-		}
-	}
-	t.Fatalf("no %s provider service in %v", kind, services)
-	return nil
-}
-
-func setArtifactHTTPPort(state *v1alpha1.State, port int) {
-	for i := range state.InfraComponents {
-		server := state.InfraComponents[i].Spec.ArtifactServer
-		if server == nil {
-			continue
-		}
-		for j := range server.Listeners {
-			if server.Listeners[j].Name == v1alpha1.ArtifactServerProtocolHTTPS {
-				server.Listeners[j].Port = port
-			}
-		}
-	}
-}
-
-func containsAnyString(values []any, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func assertFileMode(t *testing.T, path string, want os.FileMode) {
@@ -155,14 +109,6 @@ func deepEqualYAML(a, b any) bool {
 	return bytes.Equal(ay, by)
 }
 
-func mapKeys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
 // compile-time check that render.Result hasn't lost the fields the
 // CLI prints and the workflow passes downstream — quietly removing one
 // would mask the breakage; surface it here at compile time.
@@ -173,3 +119,13 @@ var _ = fmt.Sprintf("%s %s %s %s %s",
 	render.Result{}.VarsPath,
 	render.Result{}.ArtifactsDir,
 )
+
+func clustersByName(t *testing.T, vars map[string]any) map[string]map[string]any {
+	t.Helper()
+	out := map[string]map[string]any{}
+	for _, raw := range vars["bootwright_clusters"].([]any) {
+		cluster := raw.(map[string]any)
+		out[cluster["name"].(string)] = cluster
+	}
+	return out
+}

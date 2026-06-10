@@ -9,20 +9,21 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/state/graph"
 )
 
 var currentEUID = os.Geteuid
 
-func printApplySummary(w io.Writer, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
+func printApplySummary(w io.Writer, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
 	printWorkflowSummary(w, "Apply plan", selected, askBecomePass, dryRun, noRemoteWork)
 }
 
-func printDestroySummary(w io.Writer, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
+func printDestroySummary(w io.Writer, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
 	printWorkflowSummary(w, "Destroy plan", selected, askBecomePass, dryRun, noRemoteWork)
 }
 
-func printWorkflowSummary(w io.Writer, title string, selected []Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
+func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, askBecomePass bool, dryRun bool, noRemoteWork bool) {
 	p := output.NewContinuation(w)
 	p.Section(title)
 	var items []output.PlanItem
@@ -51,14 +52,14 @@ func printWorkflowSummary(w io.Writer, title string, selected []Phase, askBecome
 	}
 }
 
-func printWorkflowStart(w io.Writer, workflowName string, selected []Phase, askBecomePass bool) {
+func printWorkflowStart(w io.Writer, workflowName string, selected []converge.Phase, askBecomePass bool) {
 	if len(selected) == 1 {
 		printPhaseStart(w, selected[0], askBecomePass)
 		return
 	}
 	p := output.NewContinuation(w)
 	p.Section("Run")
-	if rootPhaseCount(selected) > 0 {
+	if converge.RootPhaseCount(selected) > 0 {
 		p.List([]output.Item{{Label: workflowName + " [root]", Detail: "phases: " + phaseList(selected)}})
 		if askBecomePass {
 			p.Warning("Sudo", becomePasswordSummary("workflow"))
@@ -68,7 +69,7 @@ func printWorkflowStart(w io.Writer, workflowName string, selected []Phase, askB
 	p.List([]output.Item{{Label: workflowName, Detail: "phases: " + phaseList(selected)}})
 }
 
-func printPhaseStart(w io.Writer, phase Phase, askBecomePass bool) {
+func printPhaseStart(w io.Writer, phase converge.Phase, askBecomePass bool) {
 	p := output.NewContinuation(w)
 	p.Section("Run")
 	if phase.NeedsRoot && askBecomePass {
@@ -86,35 +87,7 @@ func printWorkflowEnd(w io.Writer, workflowName string) {
 	output.NewContinuation(w).Summary(output.StatusOK, workflowName, "complete")
 }
 
-func rootPhaseCount(selected []Phase) int {
-	count := 0
-	for _, p := range selected {
-		if p.NeedsRoot {
-			count++
-		}
-	}
-	return count
-}
-
-func useControllingTTYForWorkflow(selected []Phase, askBecomePass bool) bool {
-	return !askBecomePass && rootPhaseCount(selected) > 0
-}
-
-// selectedTargetsClusters reports whether the selected phases include cluster
-// bringup work (`deps` builds the agent ISO, `base` boots and waits for install).
-// Used to gate ResolveInstaller: the install_agent role consumes secret-inlined
-// installer inputs under the per-cluster runtime work dir, so apply paths that
-// drive that role must inline secrets before handing off to Ansible.
-func selectedTargetsClusters(selected []Phase) bool {
-	for _, p := range selected {
-		if p.Name == "deps" || p.Name == "base" {
-			return true
-		}
-	}
-	return false
-}
-
-func phaseList(selected []Phase) string {
+func phaseList(selected []converge.Phase) string {
 	names := make([]string, 0, len(selected))
 	for _, p := range selected {
 		names = append(names, p.Name)

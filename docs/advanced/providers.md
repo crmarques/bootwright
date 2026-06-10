@@ -254,7 +254,7 @@ Supported authored `InfraComponent` arms are `artifactServer`,
 
 When adding another managed service, keep the service path orthogonal: add a
 typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
-`internal/infra/support`, add its consumer discovery to the service graph, project
+`internal/roles`, add its consumer discovery to the service graph, project
 that resolved graph into Ansible vars, and place the converging role under
 `ansible/collections/ansible_collections/bootwright/core/roles/infra_component_*`.
 
@@ -273,7 +273,7 @@ Go registry, so adding one is a registry plus role operation:
    validators — a machine profile arm for virtual substrates, or explicit
    `Machine.spec.hardware` inventory for physical ones.
 2. Add the dispatch triplet (`substrateRole`, `bmcRole`, `bootRole`) and its
-   `RoleContract` to the registry in `internal/infra/support`. Real backends use
+   `RoleContract` to the registry in `internal/roles`. Real backends use
    status `supported`, schema-only backends use `scaffold`, and no-op arms
    resolve to the explicit `*_none` roles so dispatch stays visible.
 3. Add the converging roles under the matching families in
@@ -287,7 +287,7 @@ Go registry, so adding one is a registry plus role operation:
 
 The normative contract is in `specs/architecture.md` (Providers and Platform
 Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`; the registry in
-`internal/infra/support` is the single source of truth for role names.
+`internal/roles` is the single source of truth for role names.
 
 ## Adding a CLI Verb
 

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/host/safefs"
 )
 
 // RunInputSnapshotDir returns the directory where a mutating apply run records

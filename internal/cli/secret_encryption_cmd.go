@@ -10,7 +10,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func newSecretEncryptionCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
@@ -170,10 +171,10 @@ func newSecretEncryptionRotateCmd(stdin io.Reader, stdout io.Writer) *cobra.Comm
 
 func migrationPrimaryRoleForState(state v1alpha1.State) func(string) secret.MaterialRole {
 	return func(name string) secret.MaterialRole {
-		if secretConsumedAsTLS(name, state) {
+		if secret.ConsumedAsTLS(name, state) {
 			return secret.MaterialPrimary
 		}
-		env := primaryEnvironmentForSync(state)
+		env := stateview.Environment(state)
 		if env != nil {
 			spec, ok := env.Spec.Secrets[name]
 			if ok && spec.Generated != nil {
@@ -183,7 +184,7 @@ func migrationPrimaryRoleForState(state v1alpha1.State) func(string) secret.Mate
 				return secret.MaterialPrimary
 			}
 		}
-		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsStorageSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
+		if secret.ConsumedAsClusterSSHPrivate(name, state) || secret.ConsumedAsStorageSSHPrivate(name, state) || secret.ConsumedAsHostSSH(name, state) {
 			return secret.MaterialSSHPrivate
 		}
 		return secret.MaterialPrimary

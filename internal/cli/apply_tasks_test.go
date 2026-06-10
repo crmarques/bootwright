@@ -12,12 +12,13 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
 func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := workflow.PlanApplyTasks(allScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(converge.AllScope.ApplyTarget(), state)
 	if len(tasks) != 8 {
 		t.Fatalf("planned %d tasks, want 8: %+v", len(tasks), tasks)
 	}
@@ -76,7 +77,7 @@ func TestPlanApplyTasksBuildsDependencies(t *testing.T) {
 
 func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing.T) {
 	state := loadFixtureState(t, "001-sno-libvirt")
-	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -102,7 +103,7 @@ func TestPlanApplyTasksContainerClusterScopeHasIndependentInstallTask(t *testing
 
 func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
 	if len(tasks) != 3 {
 		t.Fatalf("planned %d tasks, want 3: %+v", len(tasks), tasks)
 	}
@@ -133,7 +134,7 @@ func TestPlanApplyTasksBootsAllClusterMachinesBeforeWait(t *testing.T) {
 
 func TestResolveApplyConcurrencyLimitsUsesSafeAutoMaximum(t *testing.T) {
 	state := loadFixtureState(t, "005-3nodes-baremetal")
-	tasks := workflow.PlanApplyTasks(containerClusterScope.applyTarget(), state)
+	tasks := workflow.PlanApplyTasks(converge.ContainerClusterScope.ApplyTarget(), state)
 	limits := workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks)
 	if limits.Parallelism != len(tasks) {
 		t.Fatalf("global parallelism = %d, want %d", limits.Parallelism, len(tasks))
@@ -315,7 +316,7 @@ echo ansible-stderr-line >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil, nil)
+	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, nil, nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
@@ -390,7 +391,7 @@ exit 2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, infraScope.applyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
+	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
 	if err == nil {
 		t.Fatalf("workflow.RunApplyTaskGraph succeeded unexpectedly\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
@@ -481,7 +482,7 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "clusters",
-	}, clustersScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
+	}, converge.ClustersScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
@@ -584,7 +585,7 @@ rmdir "$lock_dir"
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, infraScope.applyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil, nil); err != nil {
+	}, converge.InfraScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, nil, nil); err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph should serialize same resource key: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }

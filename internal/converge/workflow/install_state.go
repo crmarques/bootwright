@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/host/safefs"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/runtime/fs"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/state/view"
 )
 
 const (
@@ -534,9 +535,9 @@ func clusterConnectionRecord(clustersDir, clusterName string, environments []v1a
 	if baseDomain == "" {
 		return record
 	}
-	record.IngressBaseDomain = render.ClusterIngressBaseDomain(clusterName, baseDomain)
-	record.APIURL = render.ClusterAPIURL(clusterName, baseDomain)
-	record.ConsoleURL = render.ClusterConsoleURL(clusterName, baseDomain)
+	record.IngressBaseDomain = stateview.ClusterIngressBaseDomain(clusterName, baseDomain)
+	record.APIURL = stateview.ClusterAPIURL(clusterName, baseDomain)
+	record.ConsoleURL = stateview.ClusterConsoleURL(clusterName, baseDomain)
 	return record
 }
 

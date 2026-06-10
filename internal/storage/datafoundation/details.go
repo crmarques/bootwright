@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 

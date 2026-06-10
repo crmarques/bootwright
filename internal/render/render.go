@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/runtime/fs"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
-	"github.com/crmarques/bootwright/internal/runtime/root/managedroot"
+	"github.com/crmarques/bootwright/internal/host/managedroot"
+	"github.com/crmarques/bootwright/internal/host/safefs"
+	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render/ceph"
+	"github.com/crmarques/bootwright/internal/render/installer"
+	"github.com/crmarques/bootwright/internal/render/inventory"
 )
 
 // File modes for everything the renderer writes. Rendered directories and
@@ -136,7 +139,7 @@ func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, st
 		VarsPath:           filepath.Join(renderedDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(renderedDir, "ansible", "artifacts"),
 		InstallerAssets:    InstallerAssets(clustersDir, state),
-		StorageAssets:      StorageAssets(renderedDir, state),
+		StorageAssets:      ceph.StorageAssets(renderedDir, state),
 	}
 	dirs := []string{renderedDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
@@ -156,8 +159,8 @@ func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, st
 	}{
 		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: InventoryWithOwnershipRecordsAndPathOptions(state, paths, records)},
-		{path: result.VarsPath, value: VarsWithPathOptionsAndOwnership(state, paths, records)},
+		{path: result.InventoryPath, value: inventory.InventoryWithOwnershipRecordsAndPathOptions(state, paths, records)},
+		{path: result.VarsPath, value: inventory.VarsWithPathOptionsAndOwnership(state, paths, records)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {
@@ -229,7 +232,7 @@ func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secre
 	result := Result{InstallerAssets: InstallerAssets(clustersDir, state)}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		secrets, err := LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
+		secrets, err := installer.LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
@@ -238,7 +241,7 @@ func ResolveInstallerOnForContext(fs FileSystem, contextName, clustersDir, secre
 				return result, err
 			}
 		}
-		installConfig, err := InstallerConfigWithSecrets(state, ocp, secrets)
+		installConfig, err := installer.InstallerConfigWithSecrets(state, ocp, secrets)
 		if err != nil {
 			return result, err
 		}
@@ -290,8 +293,8 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 		InventoryPath:      filepath.Join(outputDir, "ansible", "inventory.yaml"),
 		VarsPath:           filepath.Join(outputDir, "ansible", "vars.yaml"),
 		ArtifactsDir:       filepath.Join(outputDir, "ansible", "artifacts"),
-		InstallerAssets:    InstallerToolInputAssets(outputDir, state),
-		StorageAssets:      StorageAssets(outputDir, state),
+		InstallerAssets:    installer.InstallerToolInputAssets(outputDir, state),
+		StorageAssets:      ceph.StorageAssets(outputDir, state),
 	}
 	dirs := []string{outputDir, filepath.Dir(result.InventoryPath), result.ArtifactsDir}
 	for _, asset := range result.InstallerAssets {
@@ -311,8 +314,8 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 	}{
 		{path: result.EffectiveStatePath, value: EffectiveState(state)},
 		{path: result.LockPath, value: Lock(state)},
-		{path: result.InventoryPath, value: Inventory(state, secretsDir)},
-		{path: result.VarsPath, value: VarsWithSecretsDir(state, secretsDir)},
+		{path: result.InventoryPath, value: inventory.Inventory(state, secretsDir)},
+		{path: result.VarsPath, value: inventory.VarsWithSecretsDir(state, secretsDir)},
 	}
 	for _, w := range writes {
 		if err := writeYAML(fs, w.path, w.value); err != nil {
@@ -321,11 +324,11 @@ func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir st
 	}
 	for _, ocp := range state.ContainerClusters {
 		asset := installerAssetFor(result.InstallerAssets, ocp.Metadata.Name)
-		secrets, err := LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
+		secrets, err := installer.LoadInstallerSecretsForContext(contextName, state, ocp, secretsDir)
 		if err != nil {
 			return result, err
 		}
-		installConfig, err := InstallerConfigWithSecrets(state, ocp, secrets)
+		installConfig, err := installer.InstallerConfigWithSecrets(state, ocp, secrets)
 		if err != nil {
 			return result, err
 		}

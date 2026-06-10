@@ -16,7 +16,7 @@ import (
 	"text/template"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/support"
+	"github.com/crmarques/bootwright/internal/roles"
 )
 
 // Provider is the substrate identifier used by internal scaffold fixtures.
@@ -216,18 +216,18 @@ func KnownProviders() []string {
 // ApplySupport maps a scaffold provider to the dispatch support status users
 // will hit after `bootwright apply`. Schema-only scaffolds stay valid authoring
 // examples, but the CLI must not imply their role bundle is converged.
-func ApplySupport(kind Provider) support.DispatchSupport {
+func ApplySupport(kind Provider) roles.DispatchSupport {
 	switch kind {
 	case ProviderEmulatedBareMetal:
-		return support.LookupProfileProvisioner(v1alpha1.ProvisionerLibvirt)
+		return roles.LookupProfileProvisioner(v1alpha1.ProvisionerLibvirt)
 	case ProviderBareMetal:
-		return support.LookupMachineProvisioner(v1alpha1.ProvisionerBareMetal)
+		return roles.LookupMachineProvisioner(v1alpha1.ProvisionerBareMetal)
 	case ProviderVSphere:
-		return support.LookupProfileProvisioner(v1alpha1.ProvisionerVSphere)
+		return roles.LookupProfileProvisioner(v1alpha1.ProvisionerVSphere)
 	case ProviderKubeVirt:
-		return support.LookupProfileProvisioner(v1alpha1.ProvisionerKubeVirt)
+		return roles.LookupProfileProvisioner(v1alpha1.ProvisionerKubeVirt)
 	default:
-		return support.LookupDispatch("none", "none", "none")
+		return roles.LookupDispatch("none", "none", "none")
 	}
 }
 

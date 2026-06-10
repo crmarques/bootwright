@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/roles"
 )
 
 const (
@@ -39,16 +40,16 @@ const (
 	ApplyPhaseBase     = "base"     // bring control planes up: ceph bootstrap / boot+wait
 	ApplyPhaseAddons   = "addons"   // post-install: addons + storage attachment
 
-	applyProviderPlaybook         = "bootwright.core.task_provider_services_apply"
-	applyInfraComponentsPlaybook  = "bootwright.core.task_infra_component_services_apply"
-	applyMachineInfraPrepare      = "bootwright.core.task_machine_infra_prepare"
-	applyClusterInstallPlaybook   = "bootwright.core.task_machine_infra_apply"
-	applyMachineInfraFinalize     = "bootwright.core.task_machine_infra_finalize"
-	applyManagedMachineOSPlaybook = "bootwright.core.task_managed_machine_os_apply"
-	applyCreateISOPlaybook        = "bootwright.core.task_container_cluster_create_agent_iso"
-	applyBootMachinePlaybook      = "bootwright.core.task_container_cluster_boot_agent_machine"
-	applyWaitInstallPlaybook      = "bootwright.core.task_container_cluster_wait_agent_install"
-	applyStoragePlaybook          = "bootwright.core.task_storage_cluster_apply"
+	applyProviderPlaybook         = roles.PlaybookTaskProviderServicesApply
+	applyInfraComponentsPlaybook  = roles.PlaybookTaskInfraComponentServicesApply
+	applyMachineInfraPrepare      = roles.PlaybookTaskMachineInfraPrepare
+	applyClusterInstallPlaybook   = roles.PlaybookTaskMachineInfraApply
+	applyMachineInfraFinalize     = roles.PlaybookTaskMachineInfraFinalize
+	applyManagedMachineOSPlaybook = roles.PlaybookTaskManagedMachineOSApply
+	applyCreateISOPlaybook        = roles.PlaybookTaskContainerClusterCreateAgentISO
+	applyBootMachinePlaybook      = roles.PlaybookTaskContainerClusterBootAgentMachine
+	applyWaitInstallPlaybook      = roles.PlaybookTaskContainerClusterWaitAgentInstall
+	applyStoragePlaybook          = roles.PlaybookTaskStorageClusterApply
 )
 
 // ApplyMode is the explicit safety mode an apply runs under. The CLI chooses it

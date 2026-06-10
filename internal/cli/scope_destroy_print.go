@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
 	"github.com/crmarques/bootwright/internal/state/graph"
@@ -41,8 +42,8 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 // very different things: cluster destroy removes cluster-stage runtime and
 // managed storage state; infra destroy tears down VMs, networks, provider
 // services, infra component services, and provider-owned machine disks.
-func printDestroyPreview(w io.Writer, scope scopeSpec, clustersDir string, state v1alpha1.State) {
-	switch scope.name {
+func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State) {
+	switch scope.Name {
 	case "clusters", "container-cluster":
 		printDestroyClustersPreview(w, clustersDir, state)
 	case "infra":

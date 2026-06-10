@@ -5,15 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/host/callerio"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -142,7 +143,7 @@ func failf(code int, format string, a ...any) *exitError {
 func silentExit(code int) *exitError { return &exitError{code: code, silent: true} }
 
 func resolveBundleDir() (string, error) {
-	return filepath.Abs(filepath.Join(cacheDir(), ansibleBundlesDirName, bundleVersionMarker()))
+	return workspace.BundleDir(bundleVersionMarker())
 }
 
 func prepareWorkflowBundle(skipExtract bool) (bundle.AnsibleBundleResult, error) {
@@ -150,25 +151,15 @@ func prepareWorkflowBundle(skipExtract bool) (bundle.AnsibleBundleResult, error)
 	if err != nil {
 		return bundle.AnsibleBundleResult{}, err
 	}
-	if skipExtract {
-		return bundle.AnsibleBundleResult{Dir: bundleDir, Reused: true}, nil
-	}
-	return bundle.EnsureAnsibleBundle(bundleDir, bundleVersionMarker())
+	return converge.PrepareWorkflowBundle(bundleDir, bundleVersionMarker(), skipExtract)
 }
 
 func prepareInitialBundle() (bundle.AnsibleBundleResult, bool, error) {
-	result, err := prepareWorkflowBundle(false)
-	if err == nil {
-		return result, false, nil
-	}
-	if !bundle.IsEmptyAnsibleBundle(err) {
+	bundleDir, err := resolveBundleDir()
+	if err != nil {
 		return bundle.AnsibleBundleResult{}, false, err
 	}
-	bundleDir, dirErr := resolveBundleDir()
-	if dirErr != nil {
-		return bundle.AnsibleBundleResult{}, false, dirErr
-	}
-	return bundle.AnsibleBundleResult{Dir: bundleDir, Reused: true}, true, nil
+	return converge.PrepareInitialBundle(bundleDir, bundleVersionMarker())
 }
 
 func printRenderResult(stdout io.Writer, result render.Result) {
@@ -196,51 +187,19 @@ func printRenderResult(stdout io.Writer, result render.Result) {
 // warnSecretsDirPerms emits a one-line stderr warning when the local
 // secrets directory exists with permission bits other than 0700.
 func warnSecretsDirPerms(secretsDir string, stderr io.Writer) {
-	if secretsDir == "" || stderr == nil {
+	if stderr == nil {
 		return
 	}
-	info, err := os.Stat(secretsDir)
-	if err != nil || !info.IsDir() {
-		return
+	if warning := secret.DirPermsWarning(secretsDir); warning != "" {
+		output.New(stderr).Warning("secrets-dir permissions", warning)
 	}
-	mode := info.Mode().Perm()
-	if mode == 0o700 {
-		return
-	}
-	output.New(stderr).Warning("secrets-dir permissions", fmt.Sprintf("%s has mode %#o; expected 0700 (run chmod 0700 %s)", secretsDir, mode, secretsDir))
 }
 
 // strictSecretsDirCheck enforces 0700 on the secrets-dir and 0600 on
 // every file inside.
 func strictSecretsDirCheck(secretsDir string) *exitError {
-	if secretsDir == "" {
-		return nil
-	}
-	info, err := os.Stat(secretsDir)
-	if err != nil {
-		return failf(1, "strict-secrets: cannot stat secrets-dir %s: %v", secretsDir, err)
-	}
-	if !info.IsDir() {
-		return failf(1, "strict-secrets: secrets-dir %s is not a directory", secretsDir)
-	}
-	if mode := info.Mode().Perm(); mode != 0o700 {
-		return failf(1, "strict-secrets: secrets-dir %s has mode %#o; required 0700", secretsDir, mode)
-	}
-	entries, err := os.ReadDir(secretsDir)
-	if err != nil {
-		return failf(1, "strict-secrets: cannot read secrets-dir %s: %v", secretsDir, err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		fi, err := entry.Info()
-		if err != nil {
-			return failf(1, "strict-secrets: cannot stat %s/%s: %v", secretsDir, entry.Name(), err)
-		}
-		if mode := fi.Mode().Perm(); mode != 0o600 {
-			return failf(1, "strict-secrets: %s/%s has mode %#o; required 0600", secretsDir, entry.Name(), mode)
-		}
+	if err := secret.StrictDirCheck(secretsDir); err != nil {
+		return failErr(1, err)
 	}
 	return nil
 }

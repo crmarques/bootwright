@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 // OwnershipOrphans flags Bootwright-owned records whose backing object is gone from

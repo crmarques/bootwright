@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/runtime/context"
-	"github.com/crmarques/bootwright/internal/runtime/root/execution"
+	"github.com/crmarques/bootwright/internal/host/become"
+	"github.com/crmarques/bootwright/internal/host/execution"
+	"github.com/crmarques/bootwright/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -53,19 +54,19 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	if err != nil {
 		return 1, fmt.Errorf("resolve caller home for sudo: %w", err)
 	}
-	sudoSession, err := newLocalSudoSession(ctx, stdin, stderr, localRootGate.commandContext)
+	sudoSession, err := become.NewSession(ctx, func() (string, error) { return readSudoPassword(stdin, stderr) }, stderr, localRootGate.commandContext)
 	if err != nil {
 		return 1, err
 	}
-	stopKeepAlive := sudoSession.keepAlive(ctx)
+	stopKeepAlive := sudoSession.KeepAlive(ctx)
 	defer stopKeepAlive()
-	childEnv, cleanupChildEnv, err := sudoSession.childEnv(argsMayUseBecome(args))
+	childEnv, cleanupChildEnv, err := sudoSession.ChildEnv(argsMayUseBecome(args))
 	if err != nil {
 		return 1, err
 	}
 	defer cleanupChildEnv()
 	rootArgs := execution.LocalRootCommandArgs(
-		contextstore.InternalRegistryEnv,
+		workspace.InternalRegistryEnv,
 		registry.tempPath,
 		callerHome,
 		os.Getenv("PATH"),
@@ -73,7 +74,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		childEnv,
 		args,
 	)
-	cmdArgs := sudoSession.sudoArgs(rootArgs...)
+	cmdArgs := sudoSession.SudoArgs(rootArgs...)
 	cmd := localRootGate.commandContext(ctx, "sudo", cmdArgs...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -103,11 +104,11 @@ type localRootRegistry struct {
 }
 
 func prepareLocalRootRegistry() (localRootRegistry, error) {
-	realPath, err := contextstore.DefaultRegistryPath()
+	realPath, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		return localRootRegistry{}, err
 	}
-	store, err := contextstore.Load(realPath)
+	store, err := workspace.Load(realPath)
 	if err != nil {
 		return localRootRegistry{}, err
 	}
@@ -117,10 +118,10 @@ func prepareLocalRootRegistry() (localRootRegistry, error) {
 	}
 	registry := localRootRegistry{
 		realPath: realPath,
-		tempPath: filepath.Join(tempDir, contextstore.RegistryFileName),
+		tempPath: filepath.Join(tempDir, workspace.RegistryFileName),
 		tempDir:  tempDir,
 	}
-	if err := contextstore.Save(registry.tempPath, store); err != nil {
+	if err := workspace.Save(registry.tempPath, store); err != nil {
 		registry.cleanup()
 		return localRootRegistry{}, err
 	}
@@ -134,11 +135,11 @@ func (r localRootRegistry) cleanup() {
 }
 
 func (r localRootRegistry) syncBack() error {
-	store, err := contextstore.Load(r.tempPath)
+	store, err := workspace.Load(r.tempPath)
 	if err != nil {
 		return err
 	}
-	return contextstore.Save(r.realPath, store)
+	return workspace.Save(r.realPath, store)
 }
 
 func argsNeedLocalRoot(args []string) bool {

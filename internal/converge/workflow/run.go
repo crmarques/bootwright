@@ -28,9 +28,9 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/ansible/runconfig"
+	"github.com/crmarques/bootwright/internal/ownership"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
-	"github.com/crmarques/bootwright/internal/runtime/secrets"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // RunOptions describes one ansible-playbook invocation against rendered

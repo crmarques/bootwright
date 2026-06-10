@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/infra/proxy"
 )
 
 func writeShellExport(stdout io.Writer, key, value string) {
@@ -11,7 +13,7 @@ func writeShellExport(stdout io.Writer, key, value string) {
 }
 
 func writeProxyShellExports(stdout io.Writer, env map[string]string) {
-	for _, key := range proxyEnvKeys {
+	for _, key := range proxy.EnvKeys {
 		if value := env[key]; value != "" {
 			writeShellExport(stdout, key, value)
 		}

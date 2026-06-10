@@ -9,6 +9,9 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
+	"github.com/crmarques/bootwright/internal/preflight"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newBastionCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -42,8 +45,8 @@ func newBastionCheckCmd(stdout io.Writer) *cobra.Command {
 }
 
 func runBastionChecks(stdout io.Writer) error {
-	checks := collectBastionChecks(defaultPreflightDeps)
-	return renderCheckResults(stdout, "bastion preflight", checks)
+	checks := preflight.CollectBastionChecks(preflight.DefaultDeps)
+	return renderCheckResults(stdout, "bastion preflight", preflightChecksToOutput(checks))
 }
 
 func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -85,7 +88,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if err != nil {
 			return failErr(1, err)
 		}
-		proxyEnv, err := resolveProxyEnvForContext(ctx.Name, state, ctx.SecretsDir)
+		proxyEnv, err := proxy.ResolveEnvForContext(ctx.Name, state, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -93,7 +96,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if err != nil {
 			return failErr(1, err)
 		}
-		cliSpec := planControllerCLIInstall(state, defaultControllerCLIInstallDir())
+		cliSpec := planControllerCLIInstall(state, workspace.DefaultControllerCLIInstallDir())
 
 		p := output.New(stdout)
 		p.Command("bastion setup")
@@ -107,7 +110,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if summary := localRootSudoSummary(); summary != "" {
 			fields = append(fields, output.Field{Key: "sudo", Value: summary})
 		}
-		if summary := proxySummary(proxyEnv); summary != "" {
+		if summary := proxy.Summary(proxyEnv); summary != "" {
 			fields = append(fields, output.Field{Key: "proxy", Value: summary})
 		} else {
 			fields = append(fields, output.Field{Key: "proxy", Value: "none"})

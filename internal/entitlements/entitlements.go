@@ -2,7 +2,7 @@ package entitlements
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	secret "github.com/crmarques/bootwright/internal/runtime/secrets"
+	secret "github.com/crmarques/bootwright/internal/secrets"
 )
 
 type RHSM struct {

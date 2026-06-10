@@ -9,8 +9,9 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/infra/locality"
-	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/status"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 // The context setup checks below back `bootwright status`: the status spine
@@ -35,14 +36,7 @@ func runStatusSetup(stdout io.Writer, resolveErr error) error {
 	return failf(1, "%v", resolveErr)
 }
 
-type contextValidateCheck struct {
-	Group       string `json:"group"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	Evidence    string `json:"evidence,omitempty"`
-	Impact      string `json:"impact,omitempty"`
-	Remediation string `json:"remediation,omitempty"`
-}
+type contextValidateCheck = status.SetupCheck
 
 func contextValidateChecks(checks []output.Check) []contextValidateCheck {
 	out := make([]contextValidateCheck, 0, len(checks))
@@ -59,31 +53,31 @@ func contextValidateChecks(checks []output.Check) []contextValidateCheck {
 	return out
 }
 
-func currentContextValidation() (contextstore.Context, []output.Check) {
-	registry, err := contextstore.DefaultRegistryPath()
+func currentContextValidation() (workspace.Context, []output.Check) {
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
-		return contextstore.Context{}, []output.Check{missingContextCheck("registry", err.Error(), "fix HOME and rerun")}
+		return workspace.Context{}, []output.Check{missingContextCheck("registry", err.Error(), "fix HOME and rerun")}
 	}
 	checks := []output.Check{fileContextCheck("registry", registry)}
-	store, err := contextstore.Load(registry)
+	store, err := workspace.Load(registry)
 	if err != nil {
 		checks[0] = missingContextCheck("registry", err.Error(), "fix or remove "+registry)
-		return contextstore.Context{}, append(checks, missingContextCheck("current", "registry cannot be loaded", "bootwright context init <name> -f <path>"))
+		return workspace.Context{}, append(checks, missingContextCheck("current", "registry cannot be loaded", "bootwright context init <name> -f <path>"))
 	}
-	ctx, err := contextstore.Current(store)
+	ctx, err := workspace.Current(store)
 	if err != nil {
-		return contextstore.Context{}, append(checks, missingContextCheck("current", err.Error(), "bootwright context init <name> -f <path>"))
+		return workspace.Context{}, append(checks, missingContextCheck("current", err.Error(), "bootwright context init <name> -f <path>"))
 	}
 	checks = append(checks, okContextCheck("current", ctx.Name))
 	checks = append(checks, validateContextChecks(ctx)...)
 	return ctx, checks
 }
 
-func ensureContextReady(ctx contextstore.Context) error {
+func ensureContextReady(ctx workspace.Context) error {
 	// The recorded workspace is the single owner of authored YAML; a missing,
 	// moved, or unreadable workspace is a hard, named failure with no
 	// fallback, so surface its own error instead of the generic one.
-	if err := contextstore.ValidateInputSource(ctx); err != nil {
+	if err := workspace.ValidateInputSource(ctx); err != nil {
 		return err
 	}
 	if missingCheckCount(contextReadinessChecks(ctx)) > 0 {
@@ -92,7 +86,7 @@ func ensureContextReady(ctx contextstore.Context) error {
 	return nil
 }
 
-func validateContextChecks(ctx contextstore.Context) []output.Check {
+func validateContextChecks(ctx workspace.Context) []output.Check {
 	checks := contextReadinessChecks(ctx)
 	state, err := desiredstate.LoadNormalizeValidate(ctx.InputPaths)
 	if err != nil {
@@ -161,14 +155,14 @@ func secretContextRemediation(entry secretListEntry) string {
 	}
 }
 
-func contextReadinessChecks(ctx contextstore.Context) []output.Check {
+func contextReadinessChecks(ctx workspace.Context) []output.Check {
 	checks := []output.Check{}
-	if err := contextstore.ValidateName(ctx.Name); err != nil {
+	if err := workspace.ValidateName(ctx.Name); err != nil {
 		checks = append(checks, missingContextCheck("name", err.Error(), "bootwright context init <name> -f <path>"))
 	} else {
 		checks = append(checks, okContextCheck("name", ctx.Name))
 	}
-	if err := contextstore.ValidateContext(ctx); err != nil {
+	if err := workspace.ValidateContext(ctx); err != nil {
 		checks = append(checks, missingContextCheck("path layout", err.Error(), "bootwright context init <name> -f <path> --yes"))
 		return checks
 	}
@@ -190,8 +184,8 @@ func contextReadinessChecks(ctx contextstore.Context) []output.Check {
 // workspaceContextCheck reports whether the workspace directory recorded at
 // `context init` still exists and is readable. Evidence names the recorded
 // path; remediation is re-running context init -f to re-point it.
-func workspaceContextCheck(ctx contextstore.Context) output.Check {
-	if err := contextstore.ValidateInputSource(ctx); err != nil {
+func workspaceContextCheck(ctx workspace.Context) output.Check {
+	if err := workspace.ValidateInputSource(ctx); err != nil {
 		return missingContextCheck("workspace", err.Error(), fmt.Sprintf("bootwright context init %s -f <dir>", ctx.Name))
 	}
 	return okContextCheck("workspace", ctx.InputDir)

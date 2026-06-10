@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -15,13 +14,21 @@ import (
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 const (
 	outputText = "text"
 	outputJSON = "json"
+)
+
+const (
+	installerFreshnessFresh   = status.InstallerFreshnessFresh
+	installerFreshnessStale   = status.InstallerFreshnessStale
+	installerFreshnessMissing = status.InstallerFreshnessMissing
+	installerFreshnessUnknown = status.InstallerFreshnessUnknown
 )
 
 func validateOutputFormat(value string) error {
@@ -95,7 +102,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	p.Checks(contextReadinessChecks(ctx))
 
 	state, loadErr := loadOptionalDesiredState(cf)
-	stateLoaded := loadErr == nil && hasAnyState(state)
+	stateLoaded := loadErr == nil && status.HasAnyState(state)
 	source := stateSource(cf)
 
 	p.Section("Desired state")
@@ -128,7 +135,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	hints := nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir)
 	if ledgerFound && ledgerErr == nil {
 		activity, _ := workflow.AssessRunActivity(ctx.RunsDir, ledger, time.Now())
-		hints = ledgerNextSteps(ledger, activity, hints)
+		hints = status.LedgerNextSteps(ledger, activity, hints)
 	}
 	if ledgerErr != nil {
 		hints = append([]string{"inspect apply ledger: " + ledgerErr.Error()}, hints...)
@@ -175,7 +182,7 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		return
 	}
 	p.Section("Clusters")
-	freshness := loadEffectiveStateFreshness(state, renderedDir)
+	freshness := status.LoadEffectiveStateFreshness(state, renderedDir)
 	names := make([]string, 0, len(state.ContainerClusters))
 	byName := map[string]v1alpha1.ContainerCluster{}
 	for _, ocp := range state.ContainerClusters {
@@ -183,13 +190,13 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 		byName[ocp.Metadata.Name] = ocp
 	}
 	sort.Strings(names)
-	addons := buildStatusAddons(state, clustersDir)
+	addons := status.BuildAddons(state, clustersDir)
 	for _, name := range names {
 		ocp := byName[name]
 		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
 		p.Status(cliout.StatusOK, name, detail)
-		installer := installerInstallConfigPath(clustersDir, name)
-		result := freshnessForInstaller(freshness, installer)
+		installer := status.InstallerInstallConfigPath(clustersDir, name)
+		result := status.FreshnessForInstaller(freshness, installer)
 		switch result.State {
 		case installerFreshnessFresh:
 			p.Status(cliout.StatusOK, "installer", installer+" (fresh)")
@@ -262,97 +269,18 @@ func printSecretStatus(p *cliout.Printer, contextName, secretsDir string, state 
 }
 
 func nextStepHints(stateLoaded bool, state v1alpha1.State, renderedDir string, clustersDir string, contextName string, secretsDir string) []string {
+	var secretHints []string
+	needsHostTrust := false
 	if stateLoaded {
-		hints := []string{"bootwright secret list"}
-		hints = append(hints, secretNextStepHints(state, contextName, secretsDir)...)
-		if statusNeedsHostTrust(state, secretsDir) {
-			hints = append(hints, "bootwright host trust")
-		}
-		hints = append(hints, "bootwright bastion setup --yes", "bootwright preflight all", "bootwright render effective")
-		needsInstaller := clustersNeedingInstallerRender(state, renderedDir, clustersDir)
-		if len(needsInstaller) > 0 {
-			hints = append(hints, "bootwright plan")
-			return hints
-		}
-		hints = append(hints,
-			"bootwright plan",
-			"bootwright apply --yes",
-			"bootwright status --watch",
-			"bootwright cluster access",
-		)
-		return hints
+		secretHints = secretNextStepHints(state, contextName, secretsDir)
+		needsHostTrust = preflight.NeedsHostTrust(state, secretsDir)
 	}
-	return []string{
-		"edit desired-state YAML under the context input directory",
-		"bootwright secret list",
-		"bootwright preflight all",
-	}
+	return status.NextStepHints(stateLoaded, state, renderedDir, clustersDir, secretHints, needsHostTrust)
 }
 
 func secretNextStepHints(state v1alpha1.State, contextName, secretsDir string) []string {
 	entries, err := declaredSecretEntriesForContext(contextName, secretsDir, state)
-	if err != nil {
-		return nil
-	}
-	generatedMissing := false
-	materializedMissing := false
-	var contextMissing []string
-	env := primaryEnvironmentForSync(state)
-	for _, entry := range entries {
-		if entry.Present {
-			continue
-		}
-		if strings.HasPrefix(entry.Type, "generated:") {
-			generatedMissing = true
-			continue
-		}
-		if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && strings.HasPrefix(entry.Type, "file") {
-			materializedMissing = true
-			continue
-		}
-		if entry.Type == "context" {
-			contextMissing = append(contextMissing, entry.Name)
-		}
-	}
-	var hints []string
-	if materializedMissing || generatedMissing {
-		hints = append(hints, "bootwright secret sync")
-	}
-	hints = append(hints, contextSecretSetHints(contextMissing)...)
-	return hints
-}
-
-// contextSecretSetHints emits a `secret set` hint for every missing
-// context-local secret, not just the first, so an operator following the status
-// spine sees the full set of required secrets in one read. The OpenShift pull
-// secret is surfaced first because it is the most universally required and
-// otherwise sorts last among alphabetically-ordered names.
-func contextSecretSetHints(missing []string) []string {
-	var pull, rest []string
-	for _, name := range missing {
-		if name == v1alpha1.DefaultPullSecretName {
-			pull = append(pull, "bootwright secret set "+name+" --pull-secret <path>")
-		} else {
-			rest = append(rest, "bootwright secret set "+name+" --from-file <path>")
-		}
-	}
-	return append(pull, rest...)
-}
-
-func clustersNeedingInstallerRender(state v1alpha1.State, renderedDir, clustersDir string) []string {
-	freshness := loadEffectiveStateFreshness(state, renderedDir)
-	var needs []string
-	for _, ocp := range state.ContainerClusters {
-		path := installerInstallConfigPath(clustersDir, ocp.Metadata.Name)
-		switch freshnessForInstaller(freshness, path).State {
-		case installerFreshnessFresh:
-			continue
-		default:
-			needs = append(needs, ocp.Metadata.Name)
-		}
-	}
-	sort.Strings(needs)
-	return needs
+	return status.SecretNextStepHints(state, entries, err)
 }
 
 func joinNames(names []string) string {
@@ -374,9 +302,5 @@ func stateSource(cf *commonFlags) string {
 }
 
 func installerInstallConfigPath(clustersDir, clusterName string) string {
-	return filepath.Join(clustersDir, clusterName, "rendered", render.InstallerRelativeDir, "install-config.yaml")
-}
-
-func hasAnyState(s v1alpha1.State) bool {
-	return len(s.Environments)+len(s.Machines)+len(s.MachineImages)+len(s.MachineInstallProfiles)+len(s.InfraProviders)+len(s.ContainerClusters)+len(s.StorageClusters)+len(s.StoragePlacementPolicies)+len(s.StoragePools)+len(s.StorageFilesystems)+len(s.StorageObjectGateways)+len(s.StorageExports)+len(s.ClusterAddons)+len(s.ClusterAddonProfiles)+len(s.ClusterAddonBindings) > 0
+	return status.InstallerInstallConfigPath(clustersDir, clusterName)
 }

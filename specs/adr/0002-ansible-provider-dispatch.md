@@ -88,7 +88,7 @@ driven via Kubernetes API, vSphere VMs driven via vCenter — set
 "no BMC service" was forced to mean "no boot driver", which silently
 no-op'd the OCP boot step.
 
-The kind-to-role mapping lives in one Go registry (`internal/infra/support`), with
+The kind-to-role mapping lives in one Go registry (`internal/roles`), with
 helpers used by the renderer, CLI support checks, scaffold messaging, and repo
 guardrail tests. Every kind resolves to a real role where a role is meaningful;
 both `bootwright.core.provider_service_bmc_none` and

@@ -9,10 +9,11 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 type scopeDestroyOptions struct {
@@ -23,7 +24,7 @@ type scopeDestroyOptions struct {
 	commandLabel  string
 }
 
-func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
+func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeDestroyOptions) *cobra.Command {
 	var (
 		flags         scopeCommonFlags
 		dryRun        bool
@@ -37,12 +38,12 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 	if options.use != "" {
 		use = options.use
 	}
-	short := "Destroy " + scope.name + " runtime state"
+	short := "Destroy " + scope.Name + " runtime state"
 	if options.short != "" {
 		short = options.short
 	}
 	example := options.example
-	commandLabel := scope.name + " destroy"
+	commandLabel := scope.Name + " destroy"
 	if options.commandLabel != "" {
 		commandLabel = options.commandLabel
 	}
@@ -60,7 +61,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
 	if options.stageSelector {
 		flags.output = outputText
-		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
@@ -81,17 +82,17 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 				return failErr(2, fmt.Errorf("--stage must be one of infra, clusters"))
 			}
 			var err error
-			runScope, err = destroyStageScope(stage)
+			runScope, err = converge.DestroyStageScope(stage)
 			if err != nil {
 				return failErr(2, err)
 			}
-			runCommandLabel = destroyStageCommandLabel(stage, commandLabel)
+			runCommandLabel = converge.DestroyStageCommandLabel(stage, commandLabel)
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
 		}
-		clustersDir := controllerClustersDir(ctx.Name)
+		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 		if flags.output == outputText {
 			p := cliout.New(stdout)
@@ -103,53 +104,44 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		if err != nil {
 			return failErr(1, err)
 		}
-		artifactServerOnly := isInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
+		artifactServerOnly := converge.IsInfraArtifactServerDestroyScope(runScope, flags.clusterScope)
 		// For scoped infra destroy, refuse to proceed when selected clusters
 		// share a provider service component with unscoped clusters: the
 		// renderer keys container names and state dirs per (provider, name), so
 		// destroying a shared instance breaks the unscoped consumers silently.
-		if runScope.name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
-			selectedNames, _, err := clusterRootNamesForTarget(state, flags.clusterScope)
+		if runScope.Name == "infra" && strings.TrimSpace(flags.clusterScope) != "" && !artifactServerOnly {
+			selectedNames, _, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
 			if err != nil {
 				return failErr(1, err)
 			}
 			if conflicts := stategraph.SharedDestroyConflicts(state, selectedNames); len(conflicts) > 0 {
-				return failErr(1, formatDestroyScopeConflicts(conflicts, destroyClusterScopeFlag(options.stageSelector)))
+				return failErr(1, clusteraccess.FormatDestroyScopeConflicts(conflicts, destroyClusterScopeFlag(options.stageSelector)))
 			}
 		}
 		if flags.output == outputText {
 			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + runCommandLabel}})
 		}
-		playbook := runScope.destroyPlaybook
-		artifactsBaseName := runScope.artifactsBaseName + "-destroy"
+		playbook := runScope.DestroyPlaybook
+		artifactsBaseName := runScope.ArtifactsBaseName + "-destroy"
 		workflowLabel := runCommandLabel
-		// Destroy tears down resources recorded in the context ownership store even
-		// when the desired state no longer references them. Load those records so the
-		// plan's no-remote-work decision (which gates the confirmation prompt and the
-		// become-password prompt) counts the same hosts workflow.Run will act on.
-		ownershipRecords, err := ownership.LoadResources(ctx.OwnershipDir)
+		ownershipRecords, err := converge.LoadContextOwnershipRecords(ctx.OwnershipDir, ctx.Name)
 		if err != nil {
 			return failErr(1, err)
 		}
-		// Records live under a per-context ownership dir, but drop any record
-		// explicitly stamped with a different context as defense in depth: a
-		// destroy must never tear down resources recorded for another Bootwright
-		// context that share a host or a misconfigured context directory.
-		ownershipRecords = ownership.FilterByContext(ownershipRecords, ctx.Name)
-		var plan scopedWorkflowPlan
+		var plan converge.WorkflowPlan
 		if artifactServerOnly {
-			plan = prepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun, ownershipRecords)
-			playbook = infraDestroyArtifactServerPlaybook
-			artifactsBaseName = infraDestroyArtifactServerArtifactsBaseName
+			plan = converge.PrepareInfraArtifactServerDestroyWorkflow(state, askBecomePass, dryRun, ownershipRecords)
+			playbook = converge.InfraDestroyArtifactServerPlaybook
+			artifactsBaseName = converge.InfraDestroyArtifactServerArtifactsBaseName
 			workflowLabel = "infra destroy artifact-server"
 		} else {
 			plan, err = prepareScopedWorkflow(state, runScope, flags.clusterScope, askBecomePass, dryRun, ownershipRecords)
 			if err != nil {
 				return failErr(1, err)
 			}
-			if runScope.name == "infra" {
+			if runScope.Name == "infra" {
 				if strings.TrimSpace(flags.clusterScope) == "" {
-					plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_infra_destroy_context_sweep=true")
+					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_infra_destroy_context_sweep=true")
 				} else {
 					// Scope the recorded-resource cleanup to the selected roots.
 					// Ownership records are loaded context-wide (so unscoped destroy
@@ -157,16 +149,16 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 					// co-located cluster's VMs/disks on a shared hypervisor. Every
 					// libvirt-domain/libvirt-network/managed-os-install record carries
 					// its cluster, so the playbook gates the cleanup on this set.
-					containerNames, storageNames, err := clusterRootNamesForTarget(state, flags.clusterScope)
+					containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
 					if err != nil {
 						return failErr(1, err)
 					}
 					scope := append(append([]string{}, containerNames...), storageNames...)
-					plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_destroy_cluster_scope="+strings.Join(scope, ","))
+					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_destroy_cluster_scope="+strings.Join(scope, ","))
 				}
 			}
 		}
-		destroySafety := workflow.EvaluateDestroySafety(plan.state, override)
+		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
 		// below). No Ansible destroy role consumes a destroy-override extra-var, so
 		// emitting one would be inert plumbing that reads like an executor-level
@@ -175,7 +167,7 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, destroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.state, plan.selected, playbook, plan.limit, plan.extraVarPairs, artifactsBaseName, check, plan.askBecomePass, false, workflow.ConcurrencyLimits{}, nil, destroyDryRunSafetyReport(destroySafety, override), 0)
+			return runScopeDryRunJSON(c, stdout, cf, flags, converge.DestroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, check, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
 		}
 		if !dryRun && destroySafety.RequiredOverride {
 			return failErr(1, fmt.Errorf("%s requires --override for destroy", destroySafety.Summary()))
@@ -187,33 +179,33 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 		}
 		printDestroySafety(stdout, destroySafety, override, dryRun)
 		if artifactServerOnly {
-			printDestroyArtifactServerPreview(stdout, plan.state)
+			printDestroyArtifactServerPreview(stdout, plan.State)
 		} else {
-			printDestroyPreview(stdout, runScope, clustersDir, plan.state)
+			printDestroyPreview(stdout, runScope, clustersDir, plan.State)
 			printDestroyOrphans(stdout, workflow.OwnershipOrphans(state, ownershipRecords))
 		}
-		printDestroySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
-		if !dryRun && !yes && !plan.noRemoteWork {
+		printDestroySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
+		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, "Continue with destroy? [y/N] (default: no): ") {
 				return failErr(1, errors.New("destroy aborted"))
 			}
 		}
-		if !dryRun && !plan.noRemoteWork {
+		if !dryRun && !plan.NoRemoteWork {
 			// Record the exact input set this mutating destroy was launched
 			// from. Destroy has no per-run history directory (workflow.Run
 			// mints its run ID internally), so the snapshot is a rolling
 			// last-destroy-input directory under the context runs dir.
-			if err := snapshotMutatingRunInput(workflow.LastDestroyInputSnapshotDir(ctx.RunsDir), ctx); err != nil {
+			if err := converge.SnapshotMutatingRunInput(workflow.LastDestroyInputSnapshotDir(ctx.RunsDir), ctx); err != nil {
 				return failErr(1, err)
 			}
-			printWorkflowStart(stdout, workflowLabel, plan.selected, plan.askBecomePass)
+			printWorkflowStart(stdout, workflowLabel, plan.Selected, plan.AskBecomePass)
 		}
 		become := becomeCredential{}
-		if !dryRun && !plan.noRemoteWork && willPromptForBecomePassword(plan.askBecomePass) {
+		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
 			cliout.NewContinuation(stderr).BlankLine()
 		}
-		if !dryRun && !plan.noRemoteWork {
-			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.askBecomePass, false, true)
+		if !dryRun && !plan.NoRemoteWork {
+			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.AskBecomePass, false, true)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -221,77 +213,27 @@ func newScopeDestroyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.W
 			become = credential
 		}
 		reporter := newWorkflowReporter(stdout)
-		if plan.askBecomePass && become.PasswordFile == "" {
+		if plan.AskBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		if !dryRun && !plan.noRemoteWork {
+		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleStart()
 		}
-		bundle, err := prepareWorkflowBundle(dryRun || plan.noRemoteWork)
+		bundle, err := prepareWorkflowBundle(dryRun || plan.NoRemoteWork)
 		if err != nil {
 			return failErr(1, err)
 		}
-		if !dryRun && !plan.noRemoteWork {
+		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleReady(bundle)
 		}
-		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
-		runResult, err := workflow.Run(c.Context(), workflow.RunOptions{
-			State:              plan.state,
-			RenderedDir:        ctx.RenderedDir,
-			ClustersDir:        clustersDir,
-			RunsDir:            ctx.RunsDir,
-			ContextName:        ctx.Name,
-			SecretsDir:         ctx.SecretsDir,
-			ManagedServicesDir: ctx.ManagedServicesDir,
-			ProviderStateDir:   ctx.ProviderStateDir,
-			OwnershipDir:       ctx.OwnershipDir,
-			Executable:         flags.executable,
-			BundleDir:          bundle.Dir,
-			Playbook:           playbook,
-			Limit:              plan.limit,
-			ExtraVarPairs:      plan.extraVarPairs,
-			ArtifactsBaseName:  artifactsBaseName,
-			Check:              check,
-			AskBecomePass:      plan.askBecomePass && become.PasswordFile == "",
-			BecomePasswordFile: become.PasswordFile,
-			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
-			DryRun:             dryRun,
-			Label:              workflowLabel,
-			// Destroy mutates outside the apply scheduler; hold the run lease for
-			// the teardown so it is mutually exclusive with a concurrent apply.
-			AcquireRunLease: true,
-		}, runner, reporter)
+		runResult, err := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, workflowLabel, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}
 		if !dryRun && !artifactServerOnly {
-			// A successful destroy must reset convergence records for what it tore
-			// down so a later apply re-sees those objects as missing: the default
-			// reconcile creates rather than skips a gone object as already-applied,
-			// and --expect-new no longer refuses it. Best-effort — a cleanup miss must not
-			// fail an otherwise-successful destroy. plan.state is already scoped to the
-			// selected roots, so the planned tasks cover exactly what was destroyed.
-			if tasks, perr := workflow.PlanApplyTasksChecked(runScope.applyTarget(), plan.state); perr == nil {
-				for _, task := range tasks {
-					_ = workflow.RemoveApplyTaskConvergeSafety(ctx.RunsDir, task)
-				}
-				// The ansible cluster destroy runs on the OCP nodes and cannot remove the
-				// controller-side install record, connection record, and kubeconfig. Remove
-				// them here so the next apply does not refuse a destroyed container cluster
-				// at the install-state reconcile (surviving kubeconfig / installed record).
-				for _, name := range workflow.ContainerInstallClusterNames(tasks) {
-					_ = workflow.RemoveClusterInstallState(clustersDir, name)
-				}
-			}
-			// Storage sub-objects (pools/filesystems/gateways/exports) have no
-			// backing task; a destroyed cluster rm-cluster --zap-osds removes them
-			// all, so reset their records too or a later apply would mis-report a
-			// gone pool as match/drift instead of recreating it.
-			for _, cluster := range plan.state.StorageClusters {
-				_ = workflow.RemoveStorageSubObjectsConvergeSafety(ctx.RunsDir, plan.state, cluster.Metadata.Name)
-			}
+			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
 		}
-		if !dryRun && !plan.noRemoteWork {
+		if !dryRun && !plan.NoRemoteWork {
 			printWorkflowEnd(stdout, workflowLabel)
 		}
 		printRenderResult(stdout, runResult.Render)
@@ -310,17 +252,6 @@ func destroyTopLevelFlagChanged(cmd *cobra.Command) bool {
 	return false
 }
 
-func destroyDryRunSafetyReport(decision workflow.DestroySafetyDecision, override bool) *scopeDryRunDestroySafety {
-	if len(decision.Reasons) == 0 {
-		return nil
-	}
-	return &scopeDryRunDestroySafety{
-		OverrideRequired: decision.RequiredOverride,
-		Override:         override,
-		Reasons:          append([]string(nil), decision.Reasons...),
-	}
-}
-
 func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {
 	if len(decision.Reasons) == 0 {
 		return
@@ -333,31 +264,6 @@ func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecisio
 	if dryRun {
 		cliout.NewContinuation(stdout).Warning("destroy protection", message+"; mutating destroy requires --override")
 	}
-}
-
-func destroyStageScope(stage string) (scopeSpec, error) {
-	switch strings.TrimSpace(stage) {
-	case "infra":
-		return infraScope, nil
-	case "clusters":
-		return clustersScope, nil
-	default:
-		return scopeSpec{}, fmt.Errorf("--stage must be one of infra, clusters")
-	}
-}
-
-func destroyStageCommandLabel(stage, defaultLabel string) string {
-	if strings.TrimSpace(stage) == "" {
-		return defaultLabel
-	}
-	return strings.TrimSpace(stage) + " destroy"
-}
-
-func destroyDryRunReportScope(scope scopeSpec, stage string, stageSelector bool) scopeSpec {
-	if stageSelector && strings.TrimSpace(stage) == "clusters" {
-		scope.name = "clusters"
-	}
-	return scope
 }
 
 func destroyClusterScopeFlag(stageSelector bool) string {

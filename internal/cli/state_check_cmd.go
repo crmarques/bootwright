@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 func newStateCheckCmd(stdout io.Writer) *cobra.Command {
@@ -48,7 +48,7 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if override {
 			return failErr(2, errors.New("--override is not valid for state-check; it never mutates state or suppresses drift"))
 		}
-		scope, err := applyStageScope(stage)
+		scope, err := converge.ApplyStageScope(stage)
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -56,43 +56,9 @@ func newStateCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		// Orphan detection compares the ownership records against the FULL declared
-		// desired state, before --clusters scoping narrows it (otherwise a scoped check
-		// would report other clusters' resources as undeclared).
-		fullState := state
-		scoped := strings.TrimSpace(clusterScope) != ""
-		if scoped {
-			if _, _, err = clusterRootNamesForTarget(state, clusterScope); err != nil {
-				return failErr(1, err)
-			}
-		}
-		state, err = scopeStateForApply(state, "all", clusterScope)
+		report, err := status.StateCheck(state, clusterScope, scope.ApplyTarget(), cf.ctx.RunsDir, cf.ctx.OwnershipDir, cf.ctx.Name)
 		if err != nil {
 			return failErr(1, err)
-		}
-		applyTarget := scope.applyTarget()
-		if scoped {
-			// Match scoped apply: report the transitive Data Foundation
-			// attachment-target storage clusters present in the scoped state, not
-			// only the literal --clusters storage names.
-			names := make([]string, 0, len(state.StorageClusters))
-			for _, sc := range state.StorageClusters {
-				names = append(names, sc.Metadata.Name)
-			}
-			applyTarget.StorageClusterNames = names
-		}
-		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, state)
-		if err != nil {
-			return failErr(1, err)
-		}
-		report, err := workflow.StateCheck(tasks, cf.ctx.RunsDir)
-		if err != nil {
-			return failErr(1, err)
-		}
-		// Best-effort: report Bootwright-owned resources that are no longer declared
-		// (orphans). Read-only — a failure to read records must not break the check.
-		if records, lerr := ownership.LoadResources(cf.ctx.OwnershipDir); lerr == nil {
-			report.Undeclared = workflow.OwnershipOrphans(fullState, ownership.FilterByContext(records, cf.ctx.Name))
 		}
 		if output == outputJSON {
 			return cliout.JSON(stdout, report)

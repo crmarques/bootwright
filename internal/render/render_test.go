@@ -10,7 +10,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/render/inventory"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
 // fixtureRoot is the relative path from internal/render to
@@ -136,7 +137,7 @@ func TestKubeVirtChildExampleRendersVarsGeneratedMACAndNonSecretState(t *testing
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	vars := render.VarsWithSecretsDir(state, t.TempDir())
+	vars := inventory.VarsWithSecretsDir(state, t.TempDir())
 	child := clustersByName(t, vars)["dc1-child-ocp"]
 	machine := firstMachineComponent(t, child)
 	kubevirt := machine["kubevirt"].(map[string]any)
@@ -196,7 +197,7 @@ func TestProviderMachineLabelsRenderToVars(t *testing.T) {
 		state.Machines[i].Metadata.Labels = map[string]string{"datacenter": "dc1"}
 	}
 
-	vars := render.VarsWithSecretsDir(state, t.TempDir())
+	vars := inventory.VarsWithSecretsDir(state, t.TempDir())
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	component := firstMachineComponent(t, cluster)
 	if got := component["labels"].(map[string]string)["datacenter"]; got != "dc1" {
@@ -599,7 +600,7 @@ func TestAgentConfigRendersLibvirtGeneratedInterface(t *testing.T) {
 		t.Errorf("networkConfig primary mac-address got %v, want deterministic libvirt MAC", got)
 	}
 
-	vars := render.Vars(state)
+	vars := inventory.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	machine := firstMachineComponent(t, cluster)
 	machineInterfaces := machine["interfaces"].([]any)
@@ -629,7 +630,7 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 		t.Fatalf("additionalNTPSources got %v, want %v", got, want)
 	}
 
-	vars := render.Vars(state)
+	vars := inventory.Vars(state)
 	env := vars["bootwright_environment"].(map[string]any)
 	if _, ok := env["ntpSources"]; ok {
 		t.Fatalf("bootwright_environment rendered top-level ntpSources: %v", env["ntpSources"])
@@ -664,7 +665,7 @@ func TestAgentConfigRendersProviderRootDeviceHints(t *testing.T) {
 		t.Fatalf("rootDeviceHints.deviceName got %v, want /dev/sda", got)
 	}
 
-	vars := render.Vars(state)
+	vars := inventory.Vars(state)
 	cluster := vars["bootwright_clusters"].([]any)[0].(map[string]any)
 	machine := firstMachineComponent(t, cluster)
 	machineHints := machine["rootDeviceHints"].(map[string]any)

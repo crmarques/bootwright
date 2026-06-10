@@ -6,8 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/roles"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
@@ -28,7 +31,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
   bootwright preflight all --dry-run`,
 	}
 	cf := addCommonFlags()
-	cmd.Flags().StringVar(&executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+	cmd.Flags().StringVar(&executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json (json requires --dry-run)")
 	cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only); automation must pre-record trust with bootwright host trust")
@@ -45,15 +48,15 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 				return failErr(2, errors.New("--output json is supported with --dry-run for preflight all"))
 			}
 			scopeFlags := scopeCommonFlags{executable: executable, output: output}
-			selected := phasesForState(allScope.phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, allScope, "preflight", state, selected, preflightPlaybookPath, ansibleLimitForScope(allScope.name), nil, "preflight-"+allScope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			selected := converge.PhasesForState(converge.AllScope.Phases(), state)
+			return runScopeDryRunJSON(c, stdout, cf, scopeFlags, converge.AllScope, "preflight", state, selected, converge.PreflightPlaybook, converge.AnsibleLimitForScope(converge.AllScope.Name), nil, "preflight-"+converge.AllScope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		outputpkg(stdout).Command("all preflight")
 		if err := runBastionChecks(stdout); err != nil {
 			return err
 		}
 		ctx := cf.ctx
-		clustersDir := controllerClustersDir(ctx.Name)
+		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		// Trust-on-first-use: only in interactive text runs, and only for hosts
 		// with no recorded key. Dry-run and JSON runs fail closed on missing
 		// trust exactly as before.
@@ -62,7 +65,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, allScope.phases(), ctx.SecretsDir, clustersDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -89,7 +92,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 			OwnershipDir:       ctx.OwnershipDir,
 			Executable:         executable,
 			BundleDir:          bundle.Dir,
-			Playbook:           "bootwright.core.check_preflight",
+			Playbook:           roles.PlaybookCheckPreflight,
 			ArtifactsBaseName:  "preflight-all",
 			DryRun:             dryRun,
 			Label:              "all preflight",

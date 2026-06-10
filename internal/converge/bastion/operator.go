@@ -17,6 +17,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/roles"
 )
 
 // CLIInstallSpec captures the inputs to the controller CLI install
@@ -38,7 +39,7 @@ func (s CLIInstallSpec) PlannedCommand(localInventoryName string) []string {
 	return []string{
 		s.Executable,
 		"-i", filepath.Join(s.BundleDir, localInventoryName),
-		"bootwright.core.workflow_bastion_apply_tools",
+		roles.PlaybookWorkflowBastionApplyTools,
 		"-e", "bootwright_openshift_release_version=" + s.OCPReleaseVersion,
 		"-e", "bootwright_clis_install_dir=" + s.InstallDir,
 		"-e", "bootwright_clis_release_url=" + s.ClisReleaseURL,

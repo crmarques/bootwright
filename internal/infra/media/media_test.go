@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	contextstore "github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func TestAddListRemoveFile(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	source := filepath.Join(t.TempDir(), "rhel.iso")
 	if err := os.WriteFile(source, []byte("iso bytes"), 0o644); err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestAddListRemoveFile(t *testing.T) {
 }
 
 func TestAddRejectsDuplicateAndAllowsForce(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	source := filepath.Join(t.TempDir(), "rhel.iso")
 	if err := os.WriteFile(source, []byte("one"), 0o644); err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestAddRejectsDuplicateAndAllowsForce(t *testing.T) {
 }
 
 func TestAddRejectsChecksumMismatch(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	source := filepath.Join(t.TempDir(), "rhel.iso")
 	if err := os.WriteFile(source, []byte("iso"), 0o644); err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestAddRejectsChecksumMismatch(t *testing.T) {
 }
 
 func TestAddURL(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("downloaded"))
 	}))
@@ -121,7 +121,7 @@ func TestAddURL(t *testing.T) {
 }
 
 func TestAddURLRejectsHTTPError(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "missing", http.StatusNotFound)
 	}))
@@ -134,7 +134,7 @@ func TestAddURLRejectsHTTPError(t *testing.T) {
 }
 
 func TestAddURLRejectsUnreachableServer(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	server.Close()
 
@@ -145,7 +145,7 @@ func TestAddURLRejectsUnreachableServer(t *testing.T) {
 }
 
 func TestAddURLRejectsChecksumMismatch(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("downloaded"))
 	}))
@@ -166,7 +166,7 @@ func TestValidateKeyRejectsTraversal(t *testing.T) {
 }
 
 func TestResolveISOReferences(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	tests := []struct {
 		name string
 		in   string
@@ -196,7 +196,7 @@ func TestResolveISOReferences(t *testing.T) {
 }
 
 func TestResolveExistingRejectsMissingMedia(t *testing.T) {
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(t.TempDir(), "root")))
 	_, err := ResolveExisting("local-media:rhel.iso")
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("ResolveExisting missing media err = %v", err)

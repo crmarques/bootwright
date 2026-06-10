@@ -1,22 +1,68 @@
 # Internal Architecture Map
 
-Bootwright's desired-state pipeline flows through these internal packages:
+Reading this tree top-down follows Bootwright's pipeline: author desired
+state, validate it, render tool inputs, converge, observe.
 
-- `state/desired`: load YAML, strict-decode resources, normalize defaults, and validate ownership and references.
-- `state/view`: read-only selectors over a loaded `v1alpha1.State`.
-- `state/graph`: resolve shared host services, consumers, host placement, merge fields, and scoped-apply conflicts.
-- `infra/support`: dispatch and host-service support registry, including exact Ansible role contracts.
-- `render`: deterministically project desired state into installer inputs, Ansible inventory, Ansible vars, manifests, and locks.
-- `storage/topology`: storage selectors and topology-derived facts shared by render and storage apply.
-- `storage/datafoundation`: Data Foundation external-cluster-details JSON, imported secret loading, and generated credential contracts.
-- `storage`: persist runtime storage apply results and Data Foundation attachment records.
-- `converge/workflow`: plan and run cross-cluster DAG tasks, leases, ledgers, resource locks, and install records.
-- `converge/ansible`: execute rendered Ansible playbooks.
-- `converge/bundle`: materialize the embedded Ansible bundle and collection tree.
-- `addons`: plan, render, apply, and record cluster-bound post-install addons.
-- `runtime`: context state, root-managed filesystem access, secret resolution, local privilege boundaries, and PTY handling.
-- `cli`: Cobra commands and user-facing output adapters.
+## Pipeline contexts
 
-Import direction is one-way: schema and state packages do not import render or converge; storage runtime packages do not import render; render does not import CLI; workflow does not import CLI; all human output stays under `cli/output`.
+- `state/desired`: load YAML, strict-decode resources, normalize defaults, and
+  validate ownership and references.
+- `state/view`: pure point lookups over a loaded `v1alpha1.State` — the one
+  place cross-kind joins and endpoint/network derivations live.
+- `state/graph`: resolve shared host services, consumers, host placement,
+  merge fields, and scoped-apply conflicts.
+- `state/scaffold`: generate per-substrate example workspaces.
+- `render`: deterministically project desired state into installer inputs,
+  Ansible inventory and vars, manifests, and locks. The root package owns all
+  file writes and is the only importable surface; the emission families
+  `render/installer`, `render/inventory`, and `render/ceph` are
+  filesystem-free and one-way (`inventory -> installer`, `inventory -> ceph`).
+- `converge`: the apply/destroy application service — scope and phase model,
+  plan building, dry-run reports, run execution. Subpackages:
+  `converge/workflow` (cross-cluster DAG tasks, leases, ledgers, resource
+  locks, install records), `converge/ansible` (execute rendered playbooks),
+  `converge/bundle` (embedded Ansible bundle), `converge/bastion` (controller
+  tool planning). Subpackages never import the converge root.
+- `preflight`: environmental-readiness rules (tools, secret material, SSH
+  trust, entitlements). Returns plain check data; cli renders it.
+- `status`: observe-stage analysis — report model, freshness, ledger
+  summaries, next-step hints, state-check classification. Returns data.
+- `clusteraccess`: selection-by-name validation, kubeconfig generation, and
+  access summaries for installed clusters.
 
-`repo/checks` and `repo/bundlecheck` hold no production code. They are repository-fitness tests that enforce the rules above — the import direction, the CLI-import boundary, the Ansible registry/role consistency, and embedded-collection lock integrity — and run as part of `go test ./...`.
+## Shared components (single owners)
+
+- `workspace`: context registry and every Bootwright-owned path under
+  `/var/lib/bootwright` and `~/.bootwright` (contexts, cache, venv, bundles).
+- `secrets` (package `secret`): encrypted context store, crypto, resolver,
+  materialization, consumption classification, and directory-permission
+  policy. All secret reads and writes go through here.
+- `sshtrust`: known-hosts store plus trust planning, evaluation, and TOFU
+  decisions (interactive confirmation stays in cli as a callback).
+- `ownership`: durable host-resource ownership records for destroy scoping.
+- `roles`: the Ansible dispatch registry — the only place
+  `bootwright.core.*` role and playbook names are spelled in Go.
+- `infra/{artifacts,locality,media,proxy}`: shared-infrastructure resolvers
+  over state (artifact-server selection, bastion locality, install media,
+  effective proxy).
+- `entitlements`, `nmstate`: small leaves (RHSM entitlements, NMState
+  template rendering).
+- `host/*`: generic host-execution primitives — `safefs`, `ptyexec`,
+  `callerio`, `execution`, `localroot`, `managedroot`, `become`. They import
+  nothing outside `host/` and carry no domain knowledge.
+
+## Presentation
+
+- `cli`: cobra commands, flags, prompts, and output rendering only; only
+  `cmd/` and tests may import it. All human text goes through `cli/output`,
+  and only cli may import `cli/output`.
+
+## Enforcement
+
+`repo/checks` and `repo/bundlecheck` hold no production code. They are
+repository-fitness tests that run as part of `go test ./...` and enforce this
+document structurally: a total per-package import matrix
+(`import_matrix_test.go`), host-primitive genericity, the cli/output
+boundary, the roles-registry literal rule, the CLI-import boundary, stale
+import paths, Ansible registry/role consistency, and embedded-collection lock
+integrity.

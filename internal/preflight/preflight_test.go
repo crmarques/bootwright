@@ -1,0 +1,680 @@
+package preflight
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/locality"
+)
+
+func TestPythonVersionCheckUsesInjectedDeps(t *testing.T) {
+	check := pythonVersionCheck(Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			if name == "python3" {
+				return "/bin/python3", nil
+			}
+			return "", errors.New("not found")
+		},
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Python 3.12.4"), nil
+		},
+		UID: func() int { return 1000 },
+	})
+	if check.Status != "OK" {
+		t.Fatalf("python check failed: %+v", check)
+	}
+	if check.Evidence != "/bin/python3 3.12" {
+		t.Fatalf("evidence = %q", check.Evidence)
+	}
+}
+
+func TestPythonVersionCheckRejectsOldPython(t *testing.T) {
+	check := pythonVersionCheck(Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Python 3.11.9"), nil
+		},
+		UID: func() int { return 1000 },
+	})
+	if check.Status == "OK" {
+		t.Fatalf("old Python accepted: %+v", check)
+	}
+}
+
+func TestCollectBastionChecksUsesInjectedUID(t *testing.T) {
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, errors.New("not used")
+		},
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Python 3.12.4"), nil
+		},
+		UID: func() int { return 0 },
+	}
+	checks := CollectBastionChecks(deps)
+	for _, check := range checks {
+		if check.Name == "sudo" {
+			t.Fatalf("sudo check should be skipped for injected root UID: %+v", checks)
+		}
+	}
+}
+
+func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Python 3.12.4"), nil
+		},
+		UID: func() int { return 1000 },
+	}
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
+	var tools []string
+	for _, check := range checks {
+		if check.Group == checkGroupInstallerTools {
+			tools = append(tools, check.Name)
+		}
+	}
+	if len(tools) != 0 {
+		t.Fatalf("installer tools = %#v, want none; installer CLIs run on the bastion host", tools)
+	}
+}
+
+func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
+	clustersDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	state := v1alpha1.State{InfraProviders: []v1alpha1.InfraProvider{{
+		Metadata: v1alpha1.Metadata{Name: "child-provider"},
+		Spec: v1alpha1.InfraProviderSpec{
+			Type: v1alpha1.ProvisionerKubeVirt,
+			KubeVirt: &v1alpha1.InfraProviderKubeVirt{
+				HostClusterRef: &v1alpha1.LocalObjectReference{Name: "metal-ocp"},
+				Namespace:      "bootwright-child-ocp",
+				MachineProfiles: []v1alpha1.MachineProfile{{
+					Name: "sno",
+				}},
+			},
+		},
+	}}}
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		StatPath: os.Stat,
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			if name == "kubectl" {
+				return []byte("customresourcedefinition.apiextensions.k8s.io/virtualmachines.kubevirt.io\n"), nil
+			}
+			return []byte("Python 3.12.4"), nil
+		},
+		UID: func() int { return 1000 },
+	}
+
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "/context/secrets", clustersDir, deps)
+	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
+	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
+}
+
+func TestKubeVirtHostClusterPreflightRejectsMissingAPI(t *testing.T) {
+	clustersDir := t.TempDir()
+	kubeconfig := filepath.Join(clustersDir, "metal-ocp", "secrets", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatalf("mkdir kubeconfig dir: %v", err)
+	}
+	if err := os.WriteFile(kubeconfig, []byte("apiVersion: v1\n"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	check := kubeVirtAPIReadyCheck("metal-ocp", kubeconfig, Deps{
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			return []byte("Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io \"virtualmachines.kubevirt.io\" not found\n"), errors.New("not found")
+		},
+	})
+	if check.Status == "OK" {
+		t.Fatalf("missing KubeVirt API accepted: %+v", check)
+	}
+	if !strings.Contains(check.Remediation, "bootwright apply --stage clusters --clusters metal-ocp --yes") {
+		t.Fatalf("remediation = %q", check.Remediation)
+	}
+}
+
+func TestSecretRefChecksAcceptContextAndGeneratedMaterial(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	deps := Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, deps)
+
+	var pullSecret, generatedBMC *Check
+	for i := range checks {
+		check := &checks[i]
+		switch {
+		case check.Name == "sno-libvirt pullSecretRef":
+			pullSecret = check
+		case strings.Contains(check.Name, "bmcEmulationDefaults credentialsRef"):
+			generatedBMC = check
+		}
+	}
+	if pullSecret == nil {
+		t.Fatalf("missing pull secret check: %+v", checks)
+	}
+	if !strings.Contains(pullSecret.Evidence, "/context/secrets/openshift-pull-secret missing") {
+		t.Fatalf("pull secret check evidence = %q", pullSecret.Evidence)
+	}
+	if !strings.Contains(pullSecret.Remediation, "bootwright secret set openshift-pull-secret --pull-secret") {
+		t.Fatalf("pull secret remediation = %q", pullSecret.Remediation)
+	}
+	if generatedBMC == nil {
+		t.Fatalf("missing generated BMC check: %+v", checks)
+	}
+	if !strings.Contains(generatedBMC.Remediation, "bootwright secret sync or bootwright secret set bmc-credentials") {
+		t.Fatalf("generated BMC remediation = %q", generatedBMC.Remediation)
+	}
+}
+
+func TestSecretRefChecksRequireInstallTrustCABundle(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments[0].Spec.Secrets["corp-ca"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.InstallTrust = &v1alpha1.EnvironmentInstallTrustSpec{
+		CABundleRefs: []v1alpha1.SecretRef{{Name: "corp-ca"}},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var caCheck *Check
+	for i := range checks {
+		check := &checks[i]
+		if check.Name == "environment installTrust caBundleRefs[0]" {
+			caCheck = check
+			break
+		}
+	}
+	if caCheck == nil {
+		t.Fatalf("missing install trust CA check: %+v", checks)
+	}
+	if !strings.Contains(caCheck.Evidence, "/context/secrets/corp-ca missing") {
+		t.Fatalf("install trust CA evidence = %q", caCheck.Evidence)
+	}
+}
+
+func TestSecretRefChecksStatFileSourcesAsCallerOwned(t *testing.T) {
+	sourceDir := t.TempDir()
+	pullSecret := filepath.Join(sourceDir, "pull-secret.json")
+	if err := os.WriteFile(pullSecret, []byte(`{"auths":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			SourcePath: filepath.Join(sourceDir, "environment.yaml"),
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"openshift-pull-secret": {File: pullSecret},
+				},
+			},
+		}},
+		ContainerClusters: []v1alpha1.ContainerCluster{{
+			Metadata: v1alpha1.Metadata{Name: "cluster"},
+			Spec: v1alpha1.ContainerClusterSpec{Install: v1alpha1.OCPInstallSpec{
+				PullSecretRef: v1alpha1.SecretRef{Name: "openshift-pull-secret"},
+			}},
+		}},
+	}
+	var externalStats int
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			t.Fatalf("file source %s was statted through root-managed path", path)
+			return nil, os.ErrInvalid
+		},
+		StatExternalPath: func(path string) (os.FileInfo, error) {
+			externalStats++
+			return os.Stat(path)
+		},
+	})
+	if externalStats != 1 {
+		t.Fatalf("external stat calls = %d, want 1", externalStats)
+	}
+	assertPreflightCheckStatus(t, checks, "cluster pullSecretRef", "OK")
+}
+
+func TestSecretRefChecksRequireImportedCephExternalDetails(t *testing.T) {
+	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "addons"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var detailsCheck *Check
+	for i := range checks {
+		check := &checks[i]
+		if check.Name == "StorageExport/shared-ceph-data-foundation externalDetails.fromSecretRef" {
+			detailsCheck = check
+			break
+		}
+	}
+	if detailsCheck == nil {
+		t.Fatalf("missing imported Ceph details check: %+v", checks)
+	}
+	if !strings.Contains(detailsCheck.Evidence, "/context/secrets/shared-ceph-external-details missing") {
+		t.Fatalf("external details evidence = %q", detailsCheck.Evidence)
+	}
+}
+
+func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{
+				Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+					"ceph-node-ssh":             {Generated: &v1alpha1.EnvironmentSecretGenerated{SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{}}},
+					"ceph-known-hosts":          {},
+					"ceph-registry-credentials": {},
+					"redhat-org":                {},
+					"redhat-activation-key":     {},
+				},
+				Entitlements: []v1alpha1.EnvironmentEntitlement{{
+					Name:     "rhcs",
+					Provider: v1alpha1.EntitlementProviderRedHat,
+					Product:  v1alpha1.EntitlementProductCeph,
+					RHSM: &v1alpha1.EnvironmentEntitlementRHSM{
+						OrganizationRef:  v1alpha1.SecretRef{Name: "redhat-org"},
+						ActivationKeyRef: v1alpha1.SecretRef{Name: "redhat-activation-key"},
+					},
+					Registry: &v1alpha1.EnvironmentEntitlementRegistry{
+						CredentialsRef: v1alpha1.SecretRef{Name: "ceph-registry-credentials"},
+					},
+				}},
+			},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-0"},
+			Spec: v1alpha1.MachineSpec{
+				Capabilities: []string{v1alpha1.MachineCapabilityCephNode},
+				OS: v1alpha1.MachineOSSpec{
+					Provided: v1alpha1.BoolPtr(true),
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-0.example.test"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{
+						AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
+						KeyRef:        v1alpha1.SecretRef{Name: "ceph-node-ssh"},
+						KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+					},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Distribution:   v1alpha1.StorageCephDistributionRedHat,
+					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
+					Topology: v1alpha1.StorageCephTopology{
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
+							Site:       "dc1",
+							Roles:      []string{v1alpha1.StorageCephRoleMON},
+						}},
+					},
+				},
+			},
+		}},
+	}
+	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	for _, name := range []string{"ansible-playbook", "python3", "ssh", "scp"} {
+		assertPreflightCheckStatus(t, checks, name, "OK")
+	}
+	assertPreflightCheckStatus(t, checks, "StorageCluster/ceph ceph entitlementRef registry credentialsRef", "FAIL")
+}
+
+func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
+	state := importedCephSecretState(v1alpha1.EnvironmentSecretSpec{})
+	state.Environments[0].Spec.Secrets["ceph-known-hosts"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Environments[0].Spec.Secrets["ceph-admin-ssh"] = v1alpha1.EnvironmentSecretSpec{}
+	state.Machines = []v1alpha1.Machine{{
+		Metadata: v1alpha1.Metadata{Name: "ceph-admin-01"},
+		Spec: v1alpha1.MachineSpec{
+			Capabilities: []string{v1alpha1.MachineCapabilityCephAdmin},
+			OS: v1alpha1.MachineOSSpec{
+				Provided: v1alpha1.BoolPtr(true),
+			},
+			Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "ceph-admin-01.example.test"}},
+			Access: v1alpha1.MachineAccess{
+				SSH: &v1alpha1.MachineSSHSpec{
+					AddressRef:    v1alpha1.LocalObjectReference{Name: "ssh"},
+					KeyRef:        v1alpha1.SecretRef{Name: "ceph-admin-ssh"},
+					KnownHostsRef: v1alpha1.SecretRef{Name: "ceph-known-hosts"},
+				},
+			},
+		},
+	}}
+	state.StorageExports[0].Spec.ExternalDetails = &v1alpha1.StorageExportExternalDetailsSpec{
+		SSHExecution: &v1alpha1.StorageExportExternalDetailsSSHExecution{
+			MachineRefs: []v1alpha1.LocalObjectReference{{Name: "ceph-admin-01"}},
+			Exporter: v1alpha1.StorageExportExternalDetailsExporter{
+				Source: v1alpha1.StorageExportExternalDetailsExporterBoundDataFoundationAddon,
+			},
+			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
+		},
+	}
+	checks := CollectChecks(state, []Phase{{Name: "addons"}}, true, "/context/secrets", "/host-state", Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/bin/" + name, nil
+		},
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	assertPreflightCheckStatus(t, checks, "oc", "OK")
+	assertPreflightCheckStatus(t, checks, "ansible-playbook", "OK")
+	assertPreflightCheckStatus(t, checks, "python3", "OK")
+}
+
+func TestSecretRefChecksRequireGeneratedSSHKeyPairFiles(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	keyName := v1alpha1.ClusterAdminSSHKeyName("sno-libvirt")
+	state.Environments[0].Spec.Secrets[keyName] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			SSHKeyPair: &v1alpha1.GeneratedSSHKeyPairSpec{Type: v1alpha1.SSHKeyPairTypeEd25519},
+		},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var privateCheck, publicCheck *Check
+	for i := range checks {
+		check := &checks[i]
+		switch check.Name {
+		case "sno-libvirt nodeSSH keyPairRef private":
+			privateCheck = check
+		case "sno-libvirt nodeSSH keyPairRef public":
+			publicCheck = check
+		}
+	}
+	if privateCheck == nil || publicCheck == nil {
+		t.Fatalf("missing generated SSH key pair checks: %+v", checks)
+	}
+	if !strings.Contains(privateCheck.Evidence, "/context/secrets/"+keyName+" missing") {
+		t.Fatalf("private evidence = %q", privateCheck.Evidence)
+	}
+	if !strings.Contains(publicCheck.Evidence, "/context/secrets/"+keyName+".pub missing") {
+		t.Fatalf("public evidence = %q", publicCheck.Evidence)
+	}
+}
+
+func importedCephSecretState(secretSpec v1alpha1.EnvironmentSecretSpec) v1alpha1.State {
+	return v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{Secrets: map[string]v1alpha1.EnvironmentSecretSpec{
+				"shared-ceph-external-details": secretSpec,
+			}},
+		}},
+		StorageExports: []v1alpha1.StorageExport{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-data-foundation"},
+			Spec: v1alpha1.StorageExportSpec{
+				Type:              v1alpha1.StorageExportTypeDataFoundation,
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "shared-ceph"},
+				ExternalDetails: &v1alpha1.StorageExportExternalDetailsSpec{
+					FromSecretRef: v1alpha1.SecretRef{Name: "shared-ceph-external-details"},
+				},
+			},
+		}},
+		ClusterAddons: []v1alpha1.ClusterAddon{{
+			Metadata: v1alpha1.Metadata{Name: "odf"},
+			Spec: v1alpha1.ClusterAddonSpec{
+				Type:     v1alpha1.ClusterAddonTypeManifestSet,
+				Provides: []string{v1alpha1.ClusterAddonProvidesDataFoundation},
+				Accepts:  dataFoundationAccepts(),
+			},
+		}},
+		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
+			Metadata: v1alpha1.Metadata{Name: "shared-ceph-binding"},
+			Spec: v1alpha1.ClusterAddonBindingSpec{
+				ClusterRef: v1alpha1.LocalObjectReference{Name: "demo"},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{dataFoundationBindingAddon("shared-ceph-data-foundation")},
+			},
+		}},
+	}
+}
+
+func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
+	return v1alpha1.ClusterAddonAccepts{Inputs: []v1alpha1.ClusterAddonAcceptedInput{{
+		Name: "external-storage",
+		Schema: v1alpha1.ClusterAddonInputSchema{
+			Type:     v1alpha1.ClusterAddonInputSchemaTypeObject,
+			Required: []string{"exportRef"},
+			Properties: map[string]v1alpha1.ClusterAddonInputProperty{
+				"exportRef": {RefKind: v1alpha1.KindStorageExport},
+			},
+		},
+		Effects: []v1alpha1.ClusterAddonInputEffect{{
+			Type:     v1alpha1.ClusterAddonInputEffectStorageExportAttachment,
+			Provider: v1alpha1.ClusterAddonProvidesDataFoundation,
+		}},
+	}}}
+}
+
+func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
+	values := map[string]any{
+		"exportRef": export,
+	}
+	return v1alpha1.ClusterAddonBindingAddon{
+		Name: "odf",
+		Inputs: []v1alpha1.ClusterAddonBindingInput{{
+			Name:   "external-storage",
+			Values: values,
+		}},
+	}
+}
+
+func TestClusterPreflightRequiresProviderHostSSHKeyMaterial(t *testing.T) {
+	state := loadFixtureState(t, "005-3nodes-baremetal")
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	}, locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "controller", nil
+		},
+	}})
+
+	for _, check := range checks {
+		if check.Name == "machine bastion keyRef" {
+			if check.Status == "OK" {
+				t.Fatalf("machine SSH key check unexpectedly passed: %+v", check)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing provider-host SSH key check for container-cluster phase: %+v", checks)
+}
+
+func TestClusterPreflightSkipsLoopbackHostSSHKeyMaterial(t *testing.T) {
+	state := loadFixtureState(t, "002-sno-emul-baremetal")
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	for _, check := range checks {
+		if check.Name == "machine services-host keyRef" {
+			t.Fatalf("loopback machine SSH key should not be required: %+v", checks)
+		}
+	}
+}
+
+func TestClusterPreflightSkipsControllerHostnameSSHKeyMaterial(t *testing.T) {
+	state := loadFixtureState(t, "005-3nodes-baremetal")
+	checks := secretRefChecksWithLocalityPolicy(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	}, locality.Policy{Deps: locality.Deps{
+		Hostname: func() (string, error) {
+			return "bastion", nil
+		},
+	}})
+
+	for _, check := range checks {
+		if check.Name == "machine bastion keyRef" {
+			t.Fatalf("controller-local machine SSH key should not be required: %+v", checks)
+		}
+	}
+}
+
+func TestClusterPreflightRequiresTLSPairMaterial(t *testing.T) {
+	state := loadFixtureState(t, "001-sno-libvirt")
+	state.Environments[0].Spec.Secrets["api-tls"] = v1alpha1.EnvironmentSecretSpec{}
+	state.ContainerClusters[0].Spec.Install.ServingCertificates = &v1alpha1.ServingCertificatesSpec{
+		APIServer: &v1alpha1.APIServerServingCertificateSpec{
+			NamedCertificates: []v1alpha1.APIServerNamedCertificateSpec{{
+				Names:     []string{"api.sno-libvirt.bootwright.test"},
+				SecretRef: v1alpha1.SecretRef{Name: "api-tls"},
+			}},
+		},
+	}
+	checks := secretRefChecks(state, "/context/secrets", []Phase{{Name: "base"}}, Deps{
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	})
+
+	var certCheck, keyCheck *Check
+	for i := range checks {
+		check := &checks[i]
+		switch check.Name {
+		case "sno-libvirt apiServer namedCertificates[0] secretRef tls.crt":
+			certCheck = check
+		case "sno-libvirt apiServer namedCertificates[0] secretRef tls.key":
+			keyCheck = check
+		}
+	}
+	if certCheck == nil || keyCheck == nil {
+		t.Fatalf("missing TLS pair checks: %+v", checks)
+	}
+	if !strings.Contains(certCheck.Evidence, "/context/secrets/api-tls missing") {
+		t.Fatalf("cert check evidence = %q", certCheck.Evidence)
+	}
+	if !strings.Contains(keyCheck.Evidence, "/context/secrets/api-tls.key missing") {
+		t.Fatalf("key check evidence = %q", keyCheck.Evidence)
+	}
+}
+
+func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
+	deps := Deps{
+		LookPath: func(name string, _ []string) (string, error) {
+			return "/usr/local/bin/" + name, nil
+		},
+		StatPath: func(path string) (os.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+		CommandOutput: func(name string, args ...string) ([]byte, error) {
+			switch filepath.Base(name) {
+			case "python3":
+				return []byte("Python 3.12.4"), nil
+			case "oc":
+				return []byte("Client Version: 4.21.11\n"), nil
+			case "openshift-install":
+				return []byte("openshift-install 4.21.10\n"), nil
+			default:
+				return []byte(""), nil
+			}
+		},
+		UID: func() int { return 1000 },
+	}
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
+
+	for _, name := range []string{"oc", "openshift-install"} {
+		for _, check := range checks {
+			if check.Name == name {
+				t.Fatalf("local %s preflight check still present; installer CLIs run on the bastion host: %+v", name, checks)
+			}
+		}
+	}
+}
+
+func TestParseOpenShiftInstallVersionAcceptsAbsoluteBinaryPath(t *testing.T) {
+	out := `/usr/local/bin/openshift-install 4.21.15
+built from commit a8bea03c72112c0f859af3694676da9483baec99
+release image quay.io/openshift-release-dev/ocp-release@sha256:05e69ed54453e3d306b136f52493073073b207f57d0562fe1c8a555bde61aa49
+release architecture amd64
+`
+	if got := parseOpenShiftInstallVersion(out); got != "4.21.15" {
+		t.Fatalf("parseOpenShiftInstallVersion = %q, want 4.21.15", got)
+	}
+}
+
+func TestDefaultLookPathPrefersExtraDirs(t *testing.T) {
+	pathDir := t.TempDir()
+	extraDir := t.TempDir()
+	writeExecutable(t, filepath.Join(pathDir, "openshift-install"))
+	want := filepath.Join(extraDir, "openshift-install")
+	writeExecutable(t, want)
+	t.Setenv("PATH", pathDir)
+
+	got, err := DefaultLookPath("openshift-install", []string{extraDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("defaultLookPath = %q, want %q", got, want)
+	}
+}
+
+func assertPreflightCheckStatus(t *testing.T, checks []Check, name, status string) {
+	t.Helper()
+	for _, check := range checks {
+		if check.Name == name {
+			if string(check.Status) != status {
+				t.Fatalf("%s status = %s, want %s: %+v", name, check.Status, status, check)
+			}
+			return
+		}
+	}
+	t.Fatalf("preflight check %q not found: %+v", name, checks)
+}
+
+func writeExecutable(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}

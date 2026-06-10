@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 // UndeclaredResource is a Bootwright-owned resource recorded in the context ownership

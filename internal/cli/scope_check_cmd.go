@@ -8,11 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/converge/ansible"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var (
 		flags           scopeCommonFlags
 		dryRun          bool
@@ -20,9 +22,9 @@ func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 	)
 	cmd := &cobra.Command{
 		Use:     "preflight",
-		Short:   "Check " + scope.name + " prerequisites",
+		Short:   "Check " + scope.Name + " prerequisites",
 		Args:    cobra.NoArgs,
-		Example: scopeCheckExample(scope.name),
+		Example: scopeCheckExample(scope.Name),
 	}
 	cf := addCommonFlags()
 	registerScopeCommonFlagsWithAnsibleTarget(cmd, &flags, scopeAllowsClusterScope(scope, false), "preflight", true, scopeTargetKind(scope))
@@ -34,7 +36,7 @@ func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		}
 		if flags.output == outputText {
 			p := cliout.New(stdout)
-			p.Command(scope.name + " preflight")
+			p.Command(scope.Name + " preflight")
 			p.Section("Prepare")
 			p.List([]cliout.Item{{Label: "Load desired state"}})
 		}
@@ -43,21 +45,21 @@ func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
-		clustersDir := controllerClustersDir(ctx.Name)
+		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		if flags.output == outputText {
-			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.name + " preflight"}})
+			cliout.New(stdout).List([]cliout.Item{{Label: "Plan " + scope.Name + " preflight"}})
 		}
-		state, err = scopeState(state, scope.name, flags.clusterScope)
+		state, err = clusteraccess.ScopeState(state, scope.Name, flags.clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		limit := ansibleLimitForScope(scope.name)
+		limit := converge.AnsibleLimitForScope(scope.Name)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped preflight commands"))
 			}
-			selected := phasesForState(scope.phases(), state)
-			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, preflightPlaybookPath, limit, nil, "preflight-"+scope.name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
+			selected := converge.PhasesForState(scope.Phases(), state)
+			return runScopeDryRunJSON(c, stdout, cf, flags, scope, "preflight", state, selected, converge.PreflightPlaybook, limit, nil, "preflight-"+scope.Name, false, false, false, workflow.ConcurrencyLimits{}, nil, nil, 0)
 		}
 		// Trust-on-first-use: only in interactive text runs, and only for hosts
 		// with no recorded key. Dry-run and JSON runs fail closed on missing
@@ -67,7 +69,7 @@ func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.phases(), ctx.SecretsDir, clustersDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)
@@ -81,26 +83,7 @@ func newScopeCheckCmd(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
-		_, err = workflow.Run(c.Context(), workflow.RunOptions{
-			State:              state,
-			RenderedDir:        ctx.RenderedDir,
-			ClustersDir:        clustersDir,
-			RunsDir:            ctx.RunsDir,
-			ContextName:        ctx.Name,
-			SecretsDir:         ctx.SecretsDir,
-			ManagedServicesDir: ctx.ManagedServicesDir,
-			ProviderStateDir:   ctx.ProviderStateDir,
-			OwnershipDir:       ctx.OwnershipDir,
-			Executable:         flags.executable,
-			BundleDir:          bundle.Dir,
-			Playbook:           preflightPlaybookPath,
-			Limit:              limit,
-			ArtifactsBaseName:  "preflight-" + scope.name,
-			DryRun:             dryRun,
-			Label:              scope.name + " preflight",
-		}, runner, reporter)
-		if err != nil {
+		if err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, scope, state, limit, dryRun, reporter); err != nil {
 			return failErr(1, err)
 		}
 		return nil

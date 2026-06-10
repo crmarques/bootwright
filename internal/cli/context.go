@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/context"
 	"github.com/crmarques/bootwright/internal/state/desired"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 const (
@@ -53,7 +53,7 @@ re-point an existing context at a new (or moved) workspace directory.`,
 	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context by re-pointing its recorded workspace path")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		if err := contextstore.ValidateName(name); err != nil {
+		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
 		if len(files) != 1 {
@@ -61,7 +61,7 @@ re-point an existing context at a new (or moved) workspace directory.`,
 		}
 		// Resolve before any sudo re-exec so relative paths and ~ expand
 		// against the caller's environment, not root's.
-		source, err := contextstore.ResolveWorkspaceDir(files[0])
+		source, err := workspace.ResolveWorkspaceDir(files[0])
 		if err != nil {
 			return failErr(2, err)
 		}
@@ -79,15 +79,15 @@ re-point an existing context at a new (or moved) workspace directory.`,
 			}
 			return nil
 		}
-		ctx, err := contextstore.NewContext(name)
+		ctx, err := workspace.NewContext(name)
 		if err != nil {
 			return failErr(2, err)
 		}
-		registry, store, err := loadContextStore()
+		registry, store, err := workspace.LoadDefaultStore()
 		if err != nil {
 			return failErr(1, err)
 		}
-		exists, err := contextstore.ContextExists(name)
+		exists, err := workspace.ContextExists(name)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -101,10 +101,10 @@ re-point an existing context at a new (or moved) workspace directory.`,
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
-		if err := contextstore.EnsureDirs(ctx); err != nil {
+		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
-		if err := contextstore.WriteInputSource(ctx, source); err != nil {
+		if err := workspace.WriteInputSource(ctx, source); err != nil {
 			return failErr(1, err)
 		}
 		ctx = ctx.WithInputSource(source)
@@ -113,7 +113,7 @@ re-point an existing context at a new (or moved) workspace directory.`,
 			return failErr(1, err)
 		}
 		store.Current = name
-		if err := contextstore.Save(registry, store); err != nil {
+		if err := workspace.Save(registry, store); err != nil {
 			return failErr(1, err)
 		}
 		p := output.New(stdout)
@@ -146,18 +146,18 @@ func newContextUseCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
 		name := args[0]
-		if err := contextstore.ValidateName(name); err != nil {
+		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
-		registry, store, err := loadContextStore()
+		registry, store, err := workspace.LoadDefaultStore()
 		if err != nil {
 			return failErr(1, err)
 		}
-		if _, err := contextstore.RequireExistingContext(name); err != nil {
+		if _, err := workspace.RequireExistingContext(name); err != nil {
 			return failErr(1, err)
 		}
 		store.Current = name
-		if err := contextstore.Save(registry, store); err != nil {
+		if err := workspace.Save(registry, store); err != nil {
 			return failErr(1, err)
 		}
 		output.New(stdout).Status(output.StatusOK, "current context", name)
@@ -173,11 +173,11 @@ func newContextListCmd(stdout io.Writer) *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
-		_, store, err := loadContextStore()
+		_, store, err := workspace.LoadDefaultStore()
 		if err != nil {
 			return failErr(1, err)
 		}
-		contexts, err := contextstore.ListContexts()
+		contexts, err := workspace.ListContexts()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -202,7 +202,7 @@ func newContextListCmd(stdout io.Writer) *cobra.Command {
 			p.List(items)
 		}
 		if current != "" && !foundCurrent {
-			contextsDir, dirErr := contextstore.ContextsDir()
+			contextsDir, dirErr := workspace.ContextsDir()
 			if dirErr != nil {
 				return failErr(1, dirErr)
 			}
@@ -222,7 +222,7 @@ func newContextCurrentCmd(stdout io.Writer) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&short, "short", false, "print only the context name")
 	cmd.RunE = func(_ *cobra.Command, _ []string) error {
-		ctx, err := currentContext()
+		ctx, err := workspace.CurrentContext()
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -250,14 +250,14 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip confirmation when purging context files")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		if err := contextstore.ValidateName(name); err != nil {
+		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
 		if !purge {
 			return failf(1, "context %q is stored in shared root state; rerun with --purge --yes to delete it", name)
 		}
 		if purge && shouldRunContextRootChild() {
-			ctx, ctxErr := contextstore.NewContext(name)
+			ctx, ctxErr := workspace.NewContext(name)
 			if ctxErr != nil {
 				return failErr(2, ctxErr)
 			}
@@ -273,23 +273,23 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 			}
 			return nil
 		}
-		registry, store, err := loadContextStore()
+		registry, store, err := workspace.LoadDefaultStore()
 		if err != nil {
 			return failErr(1, err)
 		}
-		ctx, err := contextstore.RequireExistingContext(name)
+		ctx, err := workspace.RequireExistingContext(name)
 		if err != nil {
 			return failErr(1, err)
 		}
 		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Delete %s and all files under %s? [y/N] (default: no): ", name, ctx.BaseDir)) {
 			return failErr(1, errors.New("context delete aborted"))
 		}
-		if err := contextstore.SafePurgeBaseDir(ctx); err != nil {
+		if err := workspace.SafePurgeBaseDir(ctx); err != nil {
 			return failErr(1, err)
 		}
 		if strings.TrimSpace(store.Current) == name {
 			store.Current = ""
-			if err := contextstore.Save(registry, store); err != nil {
+			if err := workspace.Save(registry, store); err != nil {
 				return failErr(1, err)
 			}
 		}

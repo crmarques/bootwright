@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/render/inventory"
 	"github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
@@ -76,7 +77,7 @@ func unresolvedEndpointBinds(state v1alpha1.State) []string {
 // topology.MonitorEndpoints silently drop entries.
 func unresolvedStorageNodeAddresses(state v1alpha1.State) []string {
 	var events []string
-	for _, cluster := range managedStorageClusters(state) {
+	for _, cluster := range inventory.ManagedStorageClusters(state) {
 		ceph := cluster.Spec.Ceph
 		for i, host := range ceph.Topology.Hosts {
 			if topology.NodeAddress(state, cluster, host.Hostname) == "" {

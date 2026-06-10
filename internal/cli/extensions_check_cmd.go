@@ -8,7 +8,10 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/converge/checks"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
+	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/preflight"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
@@ -44,11 +47,11 @@ func newAddonsCheckCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		state, err = scopeState(state, addonsScope.name, clusterScope)
+		state, err = clusteraccess.ScopeState(state, converge.AddonsScope.Name, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		results := extensionPreflightChecks(controllerClustersDir(cf.ctx.Name), state)
+		results := extensionPreflightChecks(workspace.ControllerClustersDir(cf.ctx.Name), state)
 		failed := 0
 		for _, check := range results {
 			if check.Status != cliout.StatusOK {
@@ -104,20 +107,9 @@ func writeAddonsCheckJSON(stdout io.Writer, checks []cliout.Check, ok bool) erro
 }
 
 func extensionPreflightChecks(clustersDir string, state v1alpha1.State) []cliout.Check {
-	raw := checks.ExtensionPreflight(clustersDir, state, checks.ExtensionDeps{
-		LookPath: defaultPreflightDeps.lookPath,
-		StatPath: defaultPreflightDeps.statPath,
+	raw := preflight.ExtensionPreflight(clustersDir, state, preflight.ExtensionDeps{
+		LookPath: preflight.DefaultDeps.LookPath,
+		StatPath: preflight.DefaultDeps.StatPath,
 	})
-	out := make([]cliout.Check, 0, len(raw))
-	for _, check := range raw {
-		out = append(out, cliout.Check{
-			Group:       check.Group,
-			Name:        check.Name,
-			Status:      cliout.Status(check.Status),
-			Evidence:    check.Evidence,
-			Impact:      check.Impact,
-			Remediation: check.Remediation,
-		})
-	}
-	return out
+	return preflightChecksToOutput(raw)
 }

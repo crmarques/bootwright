@@ -16,8 +16,9 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
+	"github.com/crmarques/bootwright/internal/host/callerio"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
+	"github.com/crmarques/bootwright/internal/workspace"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -26,7 +27,7 @@ import (
 // thin adapter so the CLI doesn't have to know venv layout when
 // computing or running the plan.
 func controllerBootstrapPlan(preserveProxyEnv bool) ([]bastion.BootstrapStep, error) {
-	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), ansibleVenvDir(), ansibleVenvBin, preserveProxyEnv, true)
+	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), workspace.AnsibleVenvDir(), workspace.AnsibleVenvBin, preserveProxyEnv, true)
 }
 
 func controllerBootstrapProcessDeps() bastion.ProcessDeps {
@@ -153,7 +154,7 @@ func refreshBootstrapSudo(ctx context.Context, stderr io.Writer, env []string, p
 // venv-bin resolver and the sudo-safe bundle dir shown in dry-run output.
 // bastion.PlanCLIInstall is the pure planner.
 func planControllerCLIInstall(state v1alpha1.State, installDir string) *bastion.CLIInstallSpec {
-	return bastion.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), ansibleVenvBin)
+	return bastion.PlanCLIInstall(state, installDir, controllerCLIBundleDisplayDir(), workspace.AnsibleVenvBin)
 }
 
 func runControllerCLIInstallWithBecomePasswordFile(ctx context.Context, stdin io.Reader, stdout io.Writer, stderr io.Writer, state v1alpha1.State, secretsDir string, spec bastion.CLIInstallSpec, extraEnv map[string]string, askBecomePass bool, becomePasswordFile string) error {

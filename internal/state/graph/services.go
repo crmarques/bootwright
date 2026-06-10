@@ -7,7 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/infra/support"
+	"github.com/crmarques/bootwright/internal/roles"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -140,7 +140,7 @@ func (g MachineServiceGraph) ValidateSharedServices() []string {
 			continue
 		}
 		first := service.Consumers[0]
-		fields := support.ServiceConflictFields(service.Identity.Kind, first.Fields["realisation"])
+		fields := roles.ServiceConflictFields(service.Identity.Kind, first.Fields["realisation"])
 		for _, other := range service.Consumers[1:] {
 			for _, field := range fields {
 				want := first.Fields[field]
@@ -565,7 +565,7 @@ func servicePort(kind, realisation string, configured int) int {
 	if configured != 0 {
 		return configured
 	}
-	return support.LookupService(kind, realisation).DefaultPort
+	return roles.LookupService(kind, realisation).DefaultPort
 }
 
 func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]bool {
@@ -601,7 +601,7 @@ func artifactEndpointsKey(endpoints []v1alpha1.ArtifactServerEndpoint) string {
 }
 
 func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation string, fields map[string]string, merge map[string][]string) MachineServiceConsumer {
-	driver := support.LookupService(kind, realisation)
+	driver := roles.LookupService(kind, realisation)
 	out := cloneStringMap(fields)
 	out["kind"] = kind
 	out["providerName"] = provider
@@ -620,7 +620,7 @@ func newServiceConsumer(cluster, infra, owner, kind, provider, name, realisation
 
 func supportedMergeStringFields(kind, realisation string, merge map[string][]string) map[string][]string {
 	allowed := map[string]bool{}
-	for _, field := range support.ServiceMergeStringFields(kind, realisation) {
+	for _, field := range roles.ServiceMergeStringFields(kind, realisation) {
 		allowed[field] = true
 	}
 	out := map[string][]string{}
@@ -632,23 +632,23 @@ func supportedMergeStringFields(kind, realisation string, merge map[string][]str
 	return out
 }
 
-func machineDriver(state v1alpha1.State, machine v1alpha1.InstallMachine) support.DispatchSupport {
+func machineDriver(state v1alpha1.State, machine v1alpha1.InstallMachine) roles.DispatchSupport {
 	provider, ok := stateview.Provider(state, machine.Source.ProviderRef.Name)
 	if !ok {
-		return support.LookupDispatch("none", "none", "none")
+		return roles.LookupDispatch("none", "none", "none")
 	}
 	if machine.Source.ProfileRef.Name != "" {
 		if _, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name); !ok {
-			return support.LookupDispatch("none", "none", "none")
+			return roles.LookupDispatch("none", "none", "none")
 		}
-		return support.LookupProfileProvisioner(provider.Spec.Type)
+		return roles.LookupProfileProvisioner(provider.Spec.Type)
 	}
 	if provider.Spec.Type == v1alpha1.ProvisionerBareMetal && machine.Source.MachineRef.Name != "" {
 		if _, ok := stateview.Machine(state, machine.Source.MachineRef.Name); ok {
-			return support.LookupMachineProvisioner(provider.Spec.Type)
+			return roles.LookupMachineProvisioner(provider.Spec.Type)
 		}
 	}
-	return support.LookupDispatch("none", "none", "none")
+	return roles.LookupDispatch("none", "none", "none")
 }
 
 func serviceMachineRef(state v1alpha1.State, machine v1alpha1.InstallMachine) string {

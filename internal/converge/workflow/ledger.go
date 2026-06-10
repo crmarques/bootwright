@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/runtime/fs"
+	"github.com/crmarques/bootwright/internal/host/safefs"
 )
 
 const (

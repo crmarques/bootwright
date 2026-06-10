@@ -2,30 +2,10 @@ package cli
 
 import (
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
-func currentContext() (contextstore.Context, error) {
-	_, store, err := loadContextStore()
-	if err != nil {
-		return contextstore.Context{}, err
-	}
-	return contextstore.Current(store)
-}
-
-func loadContextStore() (string, contextstore.Store, error) {
-	registry, err := contextstore.DefaultRegistryPath()
-	if err != nil {
-		return "", contextstore.Store{}, err
-	}
-	store, err := contextstore.Load(registry)
-	if err != nil {
-		return "", contextstore.Store{}, err
-	}
-	return registry, store, nil
-}
-
-func contextFields(ctx contextstore.Context) []output.Field {
+func contextFields(ctx workspace.Context) []output.Field {
 	return []output.Field{
 		{Key: "name", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},

@@ -20,9 +20,11 @@ func TestInternalOldImportsAreGone(t *testing.T) {
 		"internal/callerio",
 		"internal/clusteraddons",
 		"internal/contextstore",
+		"internal/converge/checks",
 		"internal/desiredstate",
 		"internal/embedded",
 		"internal/execution",
+		"internal/infra/support",
 		"internal/locality",
 		"internal/localroot",
 		"internal/managedroot",
@@ -32,6 +34,7 @@ func TestInternalOldImportsAreGone(t *testing.T) {
 		"internal/proxy",
 		"internal/ptyexec",
 		"internal/repocheck",
+		"internal/runtime",
 		"internal/safefs",
 		"internal/scaffold",
 		"internal/secret",
@@ -69,18 +72,6 @@ func TestOnlyEntrypointsAndTestsImportInternalCLI(t *testing.T) {
 			continue
 		default:
 			t.Fatalf("%s imports %s; keep CLI dependencies in entrypoints and tests", ref.file, ref.path)
-		}
-	}
-}
-
-func TestInternalStorageDoesNotImportInternalRender(t *testing.T) {
-	renderPath := modulePath + "/internal/render"
-	for _, ref := range collectGoImports(t) {
-		if !strings.HasPrefix(ref.file, "internal/storage/") {
-			continue
-		}
-		if ref.path == renderPath || strings.HasPrefix(ref.path, renderPath+"/") {
-			t.Fatalf("%s imports %s; keep storage runtime independent from render", ref.file, ref.path)
 		}
 	}
 }

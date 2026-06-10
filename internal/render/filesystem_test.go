@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/render"
-	secretstore "github.com/crmarques/bootwright/internal/runtime/secrets"
-	"github.com/crmarques/bootwright/internal/state/desired"
+	secretstore "github.com/crmarques/bootwright/internal/secrets"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
 // The render package documents file mode 0o700 for local directories

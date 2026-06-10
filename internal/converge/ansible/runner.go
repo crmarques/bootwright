@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/crmarques/bootwright/internal/runtime/pty"
-	"github.com/crmarques/bootwright/internal/runtime/root/callerio"
-	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
+	"github.com/crmarques/bootwright/internal/host/callerio"
+	"github.com/crmarques/bootwright/internal/host/localroot"
+	"github.com/crmarques/bootwright/internal/host/ptyexec"
 )
 
 const OutputLogName = "ansible-output.log"

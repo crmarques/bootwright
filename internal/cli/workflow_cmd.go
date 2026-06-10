@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/converge"
 )
 
 func renderOutputDirRequiresSensitiveError(outputDir string) error {
@@ -32,10 +33,10 @@ result JSON, use 'validate'.`,
 	}
 	cmd.AddCommand(
 		retargetCommand(newBastionCheckCmd(stdout), "bastion", "Verify bastion dependencies"),
-		retargetCommand(newScopeCheckCmd(infraScope, stdin, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
-		retargetCommand(newScopeCheckCmd(clustersScope, stdin, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
-		retargetCommand(newScopeCheckCmd(containerClusterScope, stdin, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
-		retargetCommand(newScopeCheckCmd(storageClusterScope, stdin, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
+		retargetCommand(newScopeCheckCmd(converge.InfraScope, stdin, stdout, stderr), "infra", "Check infrastructure hosts and substrate"),
+		retargetCommand(newScopeCheckCmd(converge.ClustersScope, stdin, stdout, stderr), "clusters", "Check cluster lifecycle prerequisites"),
+		retargetCommand(newScopeCheckCmd(converge.ContainerClusterScope, stdin, stdout, stderr), "container-cluster", "Check container cluster install prerequisites"),
+		retargetCommand(newScopeCheckCmd(converge.StorageClusterScope, stdin, stdout, stderr), "storage-cluster", "Check storage cluster prerequisites"),
 		retargetCommand(newAddonsCheckCmd(stdout), "addons", "Check post-install cluster addon prerequisites"),
 		newCheckAllCmd(stdin, stdout, stderr),
 	)
@@ -44,7 +45,7 @@ result JSON, use 'validate'.`,
 }
 
 func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	return newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
+	return newScopeApplyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeApplyOptions{
 		use:           "apply",
 		short:         "Apply the provisioning graph",
 		stageSelector: true,
@@ -64,7 +65,7 @@ func newApplyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Com
 }
 
 func newPlanCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	return newScopeApplyCmdWithOptions(allScope, stdin, stdout, stderr, scopeApplyOptions{
+	return newScopeApplyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeApplyOptions{
 		use:           "plan",
 		short:         "Preview the provisioning graph",
 		defaultPlan:   true,
@@ -136,7 +137,7 @@ func newRenderCmd(stdout io.Writer, stderr io.Writer) *cobra.Command {
 }
 
 func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := newScopeDestroyCmdWithOptions(allScope, stdin, stdout, stderr, scopeDestroyOptions{
+	cmd := newScopeDestroyCmdWithOptions(converge.AllScope, stdin, stdout, stderr, scopeDestroyOptions{
 		use:           "destroy",
 		short:         "Tear down a previously applied target",
 		stageSelector: true,

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	contextstore "github.com/crmarques/bootwright/internal/runtime/context"
-	managedroot "github.com/crmarques/bootwright/internal/runtime/root/managedroot"
+	managedroot "github.com/crmarques/bootwright/internal/host/managedroot"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 const (
@@ -58,7 +58,7 @@ type AddOptions struct {
 }
 
 func StoreDir() string {
-	return filepath.Join(contextstore.RootDir(), DirName)
+	return filepath.Join(workspace.RootDir(), DirName)
 }
 
 func Reference(key string) string {
@@ -177,7 +177,7 @@ func Path(key string) (string, error) {
 }
 
 func EnsureStoreDir() (string, error) {
-	root := contextstore.RootDir()
+	root := workspace.RootDir()
 	if _, err := managedroot.Ensure(root, dirMode); err != nil {
 		return "", err
 	}

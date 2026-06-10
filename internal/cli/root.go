@@ -3,7 +3,7 @@ package cli
 import (
 	"io"
 
-	"github.com/crmarques/bootwright/internal/runtime/context"
+	"github.com/crmarques/bootwright/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -81,35 +81,35 @@ func addWorkflow(parent *cobra.Command, cmds ...*cobra.Command) {
 }
 
 type commonFlags struct {
-	ctx contextstore.Context
+	ctx workspace.Context
 }
 
 func addCommonFlags() *commonFlags {
 	return &commonFlags{}
 }
 
-func (cf *commonFlags) resolve() (contextstore.Context, error) {
+func (cf *commonFlags) resolve() (workspace.Context, error) {
 	return cf.resolveWithLocality(true)
 }
 
-func (cf *commonFlags) resolveLocalOnly() (contextstore.Context, error) {
+func (cf *commonFlags) resolveLocalOnly() (workspace.Context, error) {
 	return cf.resolveWithLocality(false)
 }
 
-func (cf *commonFlags) resolveWithLocality(checkLocality bool) (contextstore.Context, error) {
+func (cf *commonFlags) resolveWithLocality(checkLocality bool) (workspace.Context, error) {
 	if cf.ctx.Name != "" {
 		return cf.ctx, nil
 	}
-	ctx, err := currentContext()
+	ctx, err := workspace.CurrentContext()
 	if err != nil {
-		return contextstore.Context{}, err
+		return workspace.Context{}, err
 	}
 	if err := ensureContextReady(ctx); err != nil {
-		return contextstore.Context{}, err
+		return workspace.Context{}, err
 	}
 	if checkLocality {
 		if err := enforceContextLocality(ctx); err != nil {
-			return contextstore.Context{}, err
+			return workspace.Context{}, err
 		}
 	}
 	cf.ctx = ctx

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	contextstore "github.com/crmarques/bootwright/internal/runtime/context"
-	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
+	"github.com/crmarques/bootwright/internal/sshtrust"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 const (
@@ -39,7 +39,7 @@ func TestHostTrustAddsAndReusesManagedHost(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("host trust dry-run json exited %d, stderr=%q", code, stderr)
 	}
-	var report hostTrustReport
+	var report sshtrust.Report
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode report: %v\n%s", err, stdout)
 	}
@@ -89,7 +89,7 @@ func TestHostTrustFiltersSelectedHosts(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("host trust selected dry-run exited %d, stderr=%q", code, stderr)
 	}
-	var report hostTrustReport
+	var report sshtrust.Report
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode report: %v\n%s", err, stdout)
 	}
@@ -98,52 +98,17 @@ func TestHostTrustFiltersSelectedHosts(t *testing.T) {
 	}
 }
 
-func TestHostTrustPreflightFailsWhenManagedTrustMissing(t *testing.T) {
-	state := hostTrustTestState()
-	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machines"}}, preflightDeps{
-		lookPath: func(name string, _ []string) (string, error) {
-			if name == "ssh-keyscan" {
-				return "/usr/bin/ssh-keyscan", nil
-			}
-			return "/usr/bin/" + name, nil
-		},
-		statPath: func(path string) (os.FileInfo, error) {
-			return nil, os.ErrNotExist
-		},
-	})
-	if !hasCheck(checks, checkGroupHostTrust, "Machine/provider-01", "bootwright host trust") {
-		t.Fatalf("checks missing host trust failure: %+v", checks)
-	}
-}
-
-func TestHostTrustPreflightSkipsMachinesWithManagedOS(t *testing.T) {
-	state := hostTrustManagedOSTestState()
-	checks := hostTrustChecks(state, "/context/secrets", []Phase{{Name: "machines"}}, preflightDeps{
-		lookPath: func(name string, _ []string) (string, error) {
-			t.Fatalf("unexpected lookup %s", name)
-			return "", errors.New("unexpected lookup")
-		},
-		statPath: func(path string) (os.FileInfo, error) {
-			t.Fatalf("unexpected stat %s", path)
-			return nil, errors.New("unexpected stat")
-		},
-	})
-	if len(checks) != 0 {
-		t.Fatalf("checks = %+v, want no host trust checks for managed OS machines", checks)
-	}
-}
-
 func TestHostTrustCommandSkipsMachinesWithManagedOS(t *testing.T) {
 	var stdout strings.Builder
 	report, err := runHostTrust(context.Background(), strings.NewReader(""), &stdout, "lab", t.TempDir(), hostTrustManagedOSTestState(), hostTrustOptions{
 		DryRun: true,
 		Output: outputJSON,
-	}, hostTrustDeps{
-		lookPath: func(name string, _ []string) (string, error) {
+	}, sshtrust.Deps{
+		LookPath: func(name string, _ []string) (string, error) {
 			t.Fatalf("unexpected lookup %s", name)
 			return "", errors.New("unexpected lookup")
 		},
-		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+		Scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
 			t.Fatalf("unexpected scan %s", address)
 			return nil, errors.New("unexpected scan")
 		},
@@ -156,7 +121,7 @@ func TestHostTrustCommandSkipsMachinesWithManagedOS(t *testing.T) {
 	}
 }
 
-func initHostTrustTestContext(t *testing.T) contextstore.Context {
+func initHostTrustTestContext(t *testing.T) workspace.Context {
 	t.Helper()
 	setTestHomeAndRoot(t)
 	inputDir := t.TempDir()
@@ -165,7 +130,7 @@ func initHostTrustTestContext(t *testing.T) contextstore.Context {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.RequireExistingContext("lab")
+	ctx, err := workspace.RequireExistingContext("lab")
 	if err != nil {
 		t.Fatalf("RequireExistingContext: %v", err)
 	}
@@ -255,13 +220,4 @@ func setHostTrustTestDeps(t *testing.T, keys map[string]string) {
 	previous := defaultHostTrustDeps
 	defaultHostTrustDeps = hostTrustScanDeps(keys)
 	t.Cleanup(func() { defaultHostTrustDeps = previous })
-}
-
-func hasCheck(checks []preflightCheck, group, name, remediation string) bool {
-	for _, check := range checks {
-		if check.Group == group && check.Name == name && strings.Contains(check.Remediation, remediation) {
-			return true
-		}
-	}
-	return false
 }

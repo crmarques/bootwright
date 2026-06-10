@@ -2,15 +2,17 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
+	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 type scopeApplyOptions struct {
@@ -25,8 +27,8 @@ type scopeApplyOptions struct {
 	action        string
 }
 
-func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
-	usesAnsible := scopeUsesAnsible(scope)
+func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout io.Writer, stderr io.Writer, options scopeApplyOptions) *cobra.Command {
+	usesAnsible := converge.ScopeUsesAnsible(scope)
 	var (
 		flags           scopeCommonFlags
 		dryRun          = options.defaultPlan
@@ -46,7 +48,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	if options.use != "" {
 		use = options.use
 	}
-	short := "Apply " + scope.name + " desired state"
+	short := "Apply " + scope.Name + " desired state"
 	if options.short != "" {
 		short = options.short
 	}
@@ -54,7 +56,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	if options.example != "" {
 		example = options.example
 	}
-	commandLabel := scope.name + " apply"
+	commandLabel := scope.Name + " apply"
 	if options.commandLabel != "" {
 		commandLabel = options.commandLabel
 	}
@@ -83,7 +85,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	}
 	cmd.Flags().BoolVar(&strictSecrets, "strict-secrets", false, "abort if context secrets-dir mode is not 0700 or any secret file mode is not 0600 (default: warn only)")
 	cmd.Flags().BoolVar(&expectNew, "expect-new", false, "assert a greenfield run: fail if any selected object already exists; without it apply reconciles (creates what is missing, skips what matches, fails closed on drift)")
-	if scopeTargetsContainerInstall(scope) {
+	if converge.ScopeTargetsContainerInstall(scope) {
 		cmd.Flags().BoolVar(&override, "override", false, "authorize Bootwright-owned destructive rebuilds (rebuild drifted owned objects, managed-OS VM reinstall, owned-Ceph wipe-and-rebuild); never touches foreign objects, and skips objects already matching desired state; mutually exclusive with --expect-new")
 	}
 	cmd.Flags().IntVar(&parallelism, "parallelism", 0, "maximum concurrent apply tasks (0 auto safe maximum)")
@@ -94,7 +96,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 	if options.stageSelector {
 		flags.output = outputText
 		if usesAnsible {
-			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", resolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
+			cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		}
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported with --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to apply: infra|clusters families, or a sub-phase fabric|machines|deps|base|addons (default full graph)")
@@ -128,17 +130,17 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		runCommandLabel := commandLabel
 		if options.stageSelector {
 			var err error
-			runScope, err = applyStageScope(stage)
+			runScope, err = converge.ApplyStageScope(stage)
 			if err != nil {
 				return failErr(2, err)
 			}
-			runCommandLabel = applyStageCommandLabel(stage, action, commandLabel)
+			runCommandLabel = converge.ApplyStageCommandLabel(stage, action, commandLabel)
 		}
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
 		}
-		clustersDir := controllerClustersDir(ctx.Name)
+		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		if strictSecrets {
 			if e := strictSecretsDirCheck(ctx.SecretsDir); e != nil {
 				return e
@@ -161,14 +163,14 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		storageSelectionActive := false
 		if options.stageSelector && strings.TrimSpace(flags.clusterScope) != "" {
 			// Validate the requested names here; the effective storage selection is
-			// derived from the scoped plan.state below so it includes
+			// derived from the scoped plan.State below so it includes
 			// Data Foundation attachment targets pulled in transitively.
-			if _, _, err := clusterRootNamesForTarget(state, flags.clusterScope); err != nil {
+			if _, _, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope); err != nil {
 				return failErr(1, err)
 			}
 			storageSelectionActive = true
 		}
-		if err := validateScopedApplySharedServices(state, runScope.name, flags.clusterScope); err != nil {
+		if err := clusteraccess.ValidateScopedApplySharedServices(state, runScope.Name, flags.clusterScope); err != nil {
 			return failErr(1, err)
 		}
 		if options.stageSelector {
@@ -180,8 +182,8 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if err != nil {
 			return failErr(1, err)
 		}
-		if scopeUsesAnsible(runScope) {
-			if err := workflow.EnsureApplySupported(plan.state); err != nil {
+		if converge.ScopeUsesAnsible(runScope) {
+			if err := workflow.EnsureApplySupported(plan.State); err != nil {
 				return failErr(1, err)
 			}
 		}
@@ -193,64 +195,35 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			// closed before any mutation and direct the operator to destroy first.
 			// Dry-run/plan still previews the override plan.
 			if !dryRun {
-				if protected := workflow.ProtectedEnvironments(plan.state); len(protected) > 0 {
-					return failErr(1, fmt.Errorf("apply --override would rebuild destroy-protected resources (%s); run `bootwright destroy --override` for the affected scope, then re-apply", strings.Join(protected, ", ")))
+				if err := converge.CheckApplyOverrideDestroyProtection(plan.State); err != nil {
+					return failErr(1, err)
 				}
 			}
 		}
-		// The explicit safety mode drives both the Go object preflight and the
-		// per-role Ansible gate (create/continue/override). It replaces the legacy
-		// bootwright_install_override boolean.
-		plan.extraVarPairs = append(plan.extraVarPairs, "bootwright_apply_mode="+string(mode))
-		limits := workflow.ConcurrencyLimits{
+		applyTarget, tasks, limits, dryRunTasks, err := converge.PlanScopedApply(runScope, &plan, mode, storageSelectionActive, workflow.ConcurrencyLimits{
 			Parallelism:        parallelism,
 			ParallelismPerHost: perHost,
 			ParallelismRedfish: redfish,
-		}
-		applyTarget := runScope.applyTarget()
-		if storageSelectionActive {
-			// plan.state already includes the transitive closure of storage clusters
-			// required by the selected container clusters' Data Foundation
-			// attachments (FilterStateToClusters -> filterStorageToClusters).
-			// Schedule provision for all of them; selecting only the literal
-			// --clusters storage names would skip a transitively-required managed
-			// StorageCluster, failing the attachment task after nodes have booted.
-			names := make([]string, 0, len(plan.state.StorageClusters))
-			for _, sc := range plan.state.StorageClusters {
-				names = append(names, sc.Metadata.Name)
-			}
-			applyTarget.StorageClusterNames = names
-		}
-		tasks, err := workflow.PlanApplyTasksChecked(applyTarget, plan.state)
+		}, clustersDir)
 		if err != nil {
 			return failErr(1, err)
 		}
-		limits = workflow.ResolveApplyConcurrencyLimits(limits, tasks)
-		dryRunTasks := workflow.AnnotateApplyTaskClusterLogPaths(clustersDir, "dry-run", tasks)
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped apply commands"))
 			}
-			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.state, plan.selected, runScope.applyPlaybook, plan.limit, plan.extraVarPairs, runScope.artifactsBaseName, check, plan.askBecomePass, plan.targetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.state, plan.limit))
+			return runScopeDryRunJSON(c, stdout, cf, flags, runScope, action, plan.State, plan.Selected, runScope.ApplyPlaybook, plan.Limit, plan.ExtraVarPairs, runScope.ArtifactsBaseName, check, plan.AskBecomePass, plan.TargetsClusters, limits, dryRunTasks, nil, workflow.AnsibleForksForLimit(plan.State, plan.Limit))
 		}
 		if !dryRun {
-			// Mode preflight: classify every selected object against the recorded
-			// convergence state and enforce the apply-mode contract before any
-			// mutation (the default reconcile refuses drift/foreign; --expect-new
-			// refuses pre-existing objects; --override refuses only foreign). Per-role
-			// Ansible gates enforce the same contract against live state.
-			objects, err := workflow.ClassifyApplyObjects(tasks, ctx.RunsDir)
+			objects, err := converge.ApplyModePreflight(mode, tasks, ctx.RunsDir)
 			if err != nil {
-				return failErr(1, err)
-			}
-			if err := workflow.EvaluateApplyModePreflight(mode, objects); err != nil {
 				return failErr(1, err)
 			}
 			// --override rebuilds drifted storage sub-objects; a structural change
 			// (pool type, CephFS metadata pool) is data-destroying. Warn before the
 			// confirm prompt so the operator sees which pools/filesystems are at risk.
 			if mode == workflow.ApplyModeOverride {
-				if rebuilt := overrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
+				if rebuilt := converge.OverrideDriftedStorageSubObjects(objects); len(rebuilt) > 0 {
 					cliout.NewContinuation(stdout).Warning("override", "rebuilds drifted storage sub-objects: "+strings.Join(rebuilt, ", ")+". A structural change (pool type or CephFS metadata pool) DESTROYS the data in that pool/filesystem; size, crush, and application changes reconcile in place.")
 				}
 			}
@@ -261,29 +234,29 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			// hosts with no recorded key. --yes and JSON runs fail closed on
 			// missing trust exactly as before.
 			if trustOnFirstUse && !yes && flags.output == outputText {
-				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.state, defaultHostTrustDeps); err != nil {
+				if err := offerTrustOnFirstUse(c.Context(), stdin, stdout, ctx.BaseDir, plan.State, defaultHostTrustDeps); err != nil {
 					return failErr(1, err)
 				}
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.state, plan.selected, ctx.SecretsDir, clustersDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.SecretsDir, clustersDir); err != nil {
 				return err
 			}
 		}
-		printApplySummary(stdout, plan.selected, plan.askBecomePass, dryRun, plan.noRemoteWork)
-		if !dryRun && !yes && !plan.noRemoteWork {
+		printApplySummary(stdout, plan.Selected, plan.AskBecomePass, dryRun, plan.NoRemoteWork)
+		if !dryRun && !yes && !plan.NoRemoteWork {
 			if !confirm(stdin, stdout, "Continue with apply? [y/N] (default: no): ") {
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
-		if !dryRun && !plan.noRemoteWork {
-			printWorkflowStart(stdout, runScope.name, plan.selected, plan.askBecomePass)
+		if !dryRun && !plan.NoRemoteWork {
+			printWorkflowStart(stdout, runScope.Name, plan.Selected, plan.AskBecomePass)
 		}
 		become := becomeCredential{}
-		if !dryRun && !plan.noRemoteWork && willPromptForBecomePassword(plan.askBecomePass) {
+		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
 			cliout.NewContinuation(stderr).BlankLine()
 		}
-		if !dryRun && !plan.noRemoteWork {
-			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.askBecomePass, false, true)
+		if !dryRun && !plan.NoRemoteWork {
+			credential, cleanup, err := prepareBecomeCredential(stdin, stderr, plan.AskBecomePass, false, true)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -291,10 +264,10 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			become = credential
 		}
 		reporter := newWorkflowReporter(stdout)
-		if plan.askBecomePass && become.PasswordFile == "" {
+		if plan.AskBecomePass && become.PasswordFile == "" {
 			reporter.WithPromptGap(stderr)
 		}
-		usesAnsible := scopeUsesAnsible(runScope)
+		usesAnsible := converge.ScopeUsesAnsible(runScope)
 		var bundleResult bundle.AnsibleBundleResult
 		if usesAnsible {
 			bundleResult, err = prepareWorkflowBundle(true)
@@ -302,36 +275,12 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 				return failErr(1, err)
 			}
 		}
-		runOpts := workflow.RunOptions{
-			State:              plan.state,
-			RenderedDir:        ctx.RenderedDir,
-			ClustersDir:        clustersDir,
-			RunsDir:            ctx.RunsDir,
-			ContextName:        ctx.Name,
-			SecretsDir:         ctx.SecretsDir,
-			ManagedServicesDir: ctx.ManagedServicesDir,
-			ProviderStateDir:   ctx.ProviderStateDir,
-			OwnershipDir:       ctx.OwnershipDir,
-			Executable:         flags.executable,
-			Playbook:           runScope.applyPlaybook,
-			Limit:              plan.limit,
-			Forks:              workflow.AnsibleForksForLimit(plan.state, plan.limit),
-			ExtraVarPairs:      plan.extraVarPairs,
-			ArtifactsBaseName:  runScope.artifactsBaseName,
-			Check:              check,
-			AskBecomePass:      plan.askBecomePass && become.PasswordFile == "",
-			BecomePasswordFile: become.PasswordFile,
-			UseControllingTTY:  useControllingTTYForWorkflow(plan.selected, plan.askBecomePass && become.PasswordFile == ""),
-			DryRun:             dryRun,
-			ResolveInstaller:   plan.targetsClusters,
-			Label:              runCommandLabel,
-			ApplyMode:          mode,
-		}
+		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, check, become.PasswordFile, dryRun, runCommandLabel, mode)
 		if dryRun {
-			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.name+" to validate secrets, tools, and remote readiness")
+			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
 			printExtensionDryRun(stdout, dryRunTasks)
-			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
+			result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
 			if err != nil {
 				return failErr(1, err)
 			}
@@ -341,38 +290,7 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 			}
 			return nil
 		}
-		if reporter != nil {
-			reporter.RenderStart()
-		}
-		renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.state)
-		if err != nil {
-			return failErr(1, err)
-		}
-		prepared, err := workflow.PrepareApplyTaskGraph(c.Context(), ctx.RunsDir, runOpts, tasks, limits)
-		if err != nil {
-			return failErr(1, err)
-		}
-		// Record the exact input set this mutating run was launched from as a
-		// per-run forensic output next to the run's ledger and task logs.
-		if err := snapshotMutatingRunInput(workflow.RunInputSnapshotDir(ctx.RunsDir, prepared.RunID), ctx); err != nil {
-			return failErr(1, err)
-		}
-		if plan.targetsClusters {
-			reporter.ResolveInstallerStart()
-			if _, err := workflow.ResolveInstallerForContext(ctx.Name, clustersDir, ctx.SecretsDir, plan.state); err != nil {
-				return failErr(1, err)
-			}
-		}
-		if !plan.noRemoteWork && usesAnsible {
-			reporter.BundleStart()
-			bundleResult, err = prepareWorkflowBundle(false)
-			if err != nil {
-				return failErr(1, err)
-			}
-			reporter.BundleReady(bundleResult)
-			runOpts.BundleDir = bundleResult.Dir
-		}
-		ledger, err := workflow.RunPreparedApplyTaskGraph(c.Context(), stdout, stderr, ctx.RunsDir, runOpts, applyTarget, flags.clusterScope, prepared, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir), nil)
+		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir))
 		if err != nil {
 			if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 				return silentExit(1)
@@ -383,8 +301,8 @@ func newScopeApplyCmdWithOptions(scope scopeSpec, stdin io.Reader, stdout io.Wri
 		if usesAnsible {
 			printBundlePath(stdout, bundleResult.Dir)
 		}
-		if plan.targetsClusters {
-			printClusterAccess(stdout, plan.state, renderResult, ledger, clustersDir)
+		if plan.TargetsClusters {
+			printClusterAccess(stdout, plan.State, renderResult, ledger, clustersDir)
 		}
 		return nil
 	}

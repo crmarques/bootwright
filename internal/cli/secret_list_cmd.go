@@ -12,8 +12,9 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli/output"
-	"github.com/crmarques/bootwright/internal/runtime/secrets"
-	"github.com/crmarques/bootwright/internal/storage/topology"
+	"github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
+	"github.com/crmarques/bootwright/internal/status"
 )
 
 type secretListReport struct {
@@ -21,13 +22,7 @@ type secretListReport struct {
 	Secrets []secretListEntry `json:"secrets"`
 }
 
-type secretListEntry struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Paths   []string `json:"paths"`
-	Present bool     `json:"present"`
-	Detail  string   `json:"detail,omitempty"`
-}
+type secretListEntry = status.SecretEntry
 
 func newSecretListCmd(stdout io.Writer) *cobra.Command {
 	outputFormat := outputText
@@ -87,7 +82,7 @@ func declaredSecretEntries(secretsDir string, state v1alpha1.State) ([]secretLis
 }
 
 func declaredSecretEntriesForContext(contextName, secretsDir string, state v1alpha1.State) ([]secretListEntry, error) {
-	env := primaryEnvironmentForSync(state)
+	env := stateview.Environment(state)
 	if env == nil || len(env.Spec.Secrets) == 0 {
 		return nil, nil
 	}
@@ -124,7 +119,7 @@ type secretPathEntry struct {
 
 func secretSpecType(name string, spec v1alpha1.EnvironmentSecretSpec, state v1alpha1.State) string {
 	switch {
-	case secretConsumedAsTLS(name, state):
+	case secret.ConsumedAsTLS(name, state):
 		if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil {
 			return "generated:selfSignedCertificate"
 		}
@@ -160,18 +155,18 @@ func secretSpecPathEntries(name string, spec v1alpha1.EnvironmentSecretSpec, env
 			entry(secret.MaterialSSHPublic),
 		}
 	}
-	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secretConsumedAsTLS(name, state) {
+	if spec.Generated != nil && spec.Generated.SelfSignedCertificate != nil || secret.ConsumedAsTLS(name, state) {
 		return []secretPathEntry{
 			entry(secret.MaterialPrimary),
 			entry(secret.MaterialTLSKey),
 		}
 	}
-	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secretConsumedAsClusterSSH(name, state) || secretConsumedAsStorageSSH(name, state) || secretConsumedAsHostSSH(name, state)) {
+	if env != nil && env.Spec.SecretStorage.Mode == v1alpha1.SecretStorageModeContext && (secret.ConsumedAsClusterSSH(name, state) || secret.ConsumedAsStorageSSH(name, state) || secret.ConsumedAsHostSSH(name, state)) {
 		var paths []secretPathEntry
-		if secretConsumedAsClusterSSHPrivate(name, state) || secretConsumedAsStorageSSHPrivate(name, state) || secretConsumedAsHostSSH(name, state) {
+		if secret.ConsumedAsClusterSSHPrivate(name, state) || secret.ConsumedAsStorageSSHPrivate(name, state) || secret.ConsumedAsHostSSH(name, state) {
 			paths = append(paths, entry(secret.MaterialSSHPrivate))
 		}
-		if secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsStorageSSHPublic(name, state) {
+		if secret.ConsumedAsClusterSSHPublic(name, state) || secret.ConsumedAsStorageSSHPublic(name, state) {
 			paths = append(paths, entry(secret.MaterialSSHPublic))
 		}
 		return paths
@@ -185,82 +180,6 @@ func secretPathEntryPaths(entries []secretPathEntry) []string {
 		paths = append(paths, entry.path)
 	}
 	return paths
-}
-
-func secretConsumedAsTLS(name string, state v1alpha1.State) bool {
-	for _, cluster := range state.ContainerClusters {
-		serving := cluster.Spec.Install.ServingCertificates
-		if serving == nil {
-			continue
-		}
-		if api := serving.APIServer; api != nil {
-			for _, cert := range api.NamedCertificates {
-				if cert.SecretRef.Name == name {
-					return true
-				}
-			}
-		}
-		if ingress := serving.Ingress; ingress != nil && ingress.DefaultCertificateRef.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func secretConsumedAsClusterSSH(name string, state v1alpha1.State) bool {
-	return secretConsumedAsClusterSSHPublic(name, state) || secretConsumedAsClusterSSHPrivate(name, state)
-}
-
-func secretConsumedAsClusterSSHPublic(name string, state v1alpha1.State) bool {
-	for _, cluster := range state.ContainerClusters {
-		ssh := cluster.Spec.Install.NodeSSH
-		if ssh.KeyPairRef.Name == name || ssh.PublicKeyRef.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func secretConsumedAsClusterSSHPrivate(name string, state v1alpha1.State) bool {
-	for _, cluster := range state.ContainerClusters {
-		ssh := cluster.Spec.Install.NodeSSH
-		if ssh.KeyPairRef.Name == name || ssh.PrivateKeyRef.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func secretConsumedAsStorageSSH(name string, state v1alpha1.State) bool {
-	return secretConsumedAsStorageSSHPublic(name, state) || secretConsumedAsStorageSSHPrivate(name, state)
-}
-
-func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
-	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Ceph == nil {
-			continue
-		}
-		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-			machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
-			if ok && machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.KeyRef.Name == name {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func secretConsumedAsStorageSSHPrivate(name string, state v1alpha1.State) bool {
-	return secretConsumedAsStorageSSHPublic(name, state)
-}
-
-func secretConsumedAsHostSSH(name string, state v1alpha1.State) bool {
-	for _, machine := range state.Machines {
-		if machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.KeyRef.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 func secretPathsPresent(store *secret.ContextStore, paths []secretPathEntry) (bool, string) {

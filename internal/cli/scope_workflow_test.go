@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/runtime/ownership"
+	"github.com/crmarques/bootwright/internal/converge"
+	"github.com/crmarques/bootwright/internal/ownership"
 )
 
 // TestPrepareScopedWorkflowDestroyCountsOwnershipRecords guards the destroy
@@ -20,19 +21,19 @@ func TestPrepareScopedWorkflowDestroyCountsOwnershipRecords(t *testing.T) {
 		Host: "provider-0",
 	}}
 
-	withRecords, err := prepareScopedWorkflow(v1alpha1.State{}, infraScope, "", false, false, records)
+	withRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, "", false, false, records)
 	if err != nil {
 		t.Fatalf("prepareScopedWorkflow with records: %v", err)
 	}
-	if withRecords.noRemoteWork {
+	if withRecords.NoRemoteWork {
 		t.Fatal("noRemoteWork = true with host-bearing ownership records: the destroy prompt would be skipped while workflow.Run tears down recorded hosts")
 	}
 
-	withoutRecords, err := prepareScopedWorkflow(v1alpha1.State{}, infraScope, "", false, false, nil)
+	withoutRecords, err := prepareScopedWorkflow(v1alpha1.State{}, converge.InfraScope, "", false, false, nil)
 	if err != nil {
 		t.Fatalf("prepareScopedWorkflow without records: %v", err)
 	}
-	if !withoutRecords.noRemoteWork {
+	if !withoutRecords.NoRemoteWork {
 		t.Fatal("noRemoteWork = false for empty desired state and no records: expected the no-remote-work short-circuit")
 	}
 }

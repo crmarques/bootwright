@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // newSecretSyncCmd converges local secret material toward the declared
@@ -35,7 +36,7 @@ func newSecretSyncCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		results, err := materializeSecretsForContext(ctx.Name, ctx.SecretsDir, state, secretMaterializeOptions{
+		results, err := secret.MaterializeForContext(ctx.Name, ctx.SecretsDir, state, secret.MaterializeOptions{
 			Generated:   true,
 			FileSources: true,
 		})
@@ -45,7 +46,7 @@ func newSecretSyncCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
 		p := cliout.New(stdout)
 		p.Command("secret sync")
 		for _, result := range results {
-			p.Status(cliout.StatusOK, result.name, result.action)
+			p.Status(cliout.StatusOK, result.Name, result.Action)
 		}
 		missing, err := missingDeclaredSecretEntries(ctx.Name, ctx.SecretsDir, state)
 		if err != nil {

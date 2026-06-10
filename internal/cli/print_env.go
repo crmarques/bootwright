@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crmarques/bootwright/internal/infra/proxy"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -29,10 +30,10 @@ func newPrintEnvCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		if proxyEnvRequiresSecrets(state) && !sensitive {
+		if proxy.EnvRequiresSecrets(state) && !sensitive {
 			return failErr(1, errors.New("proxy credentials would be printed; rerun with --sensitive to export them"))
 		}
-		proxyEnv, err := resolveProxyEnvForContext(ctx.Name, state, ctx.SecretsDir)
+		proxyEnv, err := proxy.ResolveEnvForContext(ctx.Name, state, ctx.SecretsDir)
 		if err != nil {
 			return failErr(1, err)
 		}

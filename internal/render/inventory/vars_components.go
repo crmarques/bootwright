@@ -1,0 +1,361 @@
+package inventory
+
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/infra/proxy"
+	"github.com/crmarques/bootwright/internal/render/installer"
+	"github.com/crmarques/bootwright/internal/roles"
+	secret "github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
+)
+
+// componentsVars walks every component slot on a cluster and emits the
+// per-component vars consumed by the bootwright.core task playbooks.
+func componentsVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, secretsDir string) []any {
+	var out []any
+	clusterName := ocp.Metadata.Name
+
+	for _, m := range ci.Machines {
+		out = append(out, machineComponentVars(state, ci, m, clusterName, secretsDir))
+	}
+	for _, component := range loadBalancerComponentsForCluster(state, ci, ocp) {
+		lb := loadBalancerComponentVars(state, component)
+		lb["clusterName"] = clusterName
+		lb["frontends"] = loadBalancerFrontends(state, ci, component.Metadata.Name, clusterName, ci.Machines, stateview.ClusterNodesForInstall(state, ci))
+		out = append(out, lb)
+	}
+	if artifacts.ClusterNeedsPublication(state, ci, ocp) {
+		if server, ok := artifacts.Select(state, ci); ok && server.Config != nil {
+			out = append(out, artifactServerComponentVars(state, ci, server))
+		}
+	}
+	for _, selected := range proxyComponentsForCluster(state) {
+		out = append(out, proxyComponentVars(state, selected.entry, selected.component))
+	}
+	for _, selected := range nameResolutionComponentsForCluster(state, ci) {
+		out = append(out, nameResolutionComponentVars(state, selected.entry, selected.component))
+	}
+	for _, selected := range ntpComponentsForCluster(state) {
+		out = append(out, ntpComponentVars(state, selected.entry, selected.component))
+	}
+	if selected, ok := registryComponentForCluster(state, ocp); ok {
+		out = append(out, registryComponentVars(state, selected.entry, selected.component))
+	}
+	return out
+}
+
+type selectedProxyComponent struct {
+	entry     v1alpha1.EnvironmentProxyComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedNameResolutionComponent struct {
+	entry     v1alpha1.EnvironmentNameResolutionComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedNTPComponent struct {
+	entry     v1alpha1.EnvironmentNTPSourceComponent
+	component v1alpha1.InfraComponent
+}
+
+type selectedRegistryComponent struct {
+	entry     v1alpha1.EnvironmentRegistryComponent
+	component v1alpha1.InfraComponent
+}
+
+func loadBalancerComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) []v1alpha1.InfraComponent {
+	seen := map[string]bool{}
+	out := []v1alpha1.InfraComponent{}
+	for _, role := range installer.StandardEndpointNames {
+		endpoint, ok := stateview.ContainerEndpoint(ci, ocp, role)
+		if !ok || endpoint.Source.Type != v1alpha1.EndpointSourceInfraComponent || endpoint.Source.ComponentRef.Name == "" {
+			continue
+		}
+		name := endpoint.Source.ComponentRef.Name
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		component, ok := stateview.InfraComponent(state, name)
+		if ok && component.Spec.LoadBalancer != nil {
+			out = append(out, component)
+		}
+	}
+	return out
+}
+
+func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedProxyComponent{}
+	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
+		entry, ok := proxy.SelectedProxy(*env, name)
+		if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+			continue
+		}
+		if seen[entry.ComponentRef.Name] {
+			continue
+		}
+		seen[entry.ComponentRef.Name] = true
+		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+		if ok && component.Spec.Proxy != nil {
+			out = append(out, selectedProxyComponent{entry: entry, component: component})
+		}
+	}
+	return out
+}
+
+func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.ClusterInstall) []selectedNameResolutionComponent {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedNameResolutionComponent{}
+	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
+		for _, ref := range network.Spec.DNSRefs {
+			entry, ok := stateview.NameResolutionEntry(env, ref)
+			if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+				continue
+			}
+			if seen[entry.ComponentRef.Name] {
+				continue
+			}
+			seen[entry.ComponentRef.Name] = true
+			component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+			if ok && component.Spec.NameResolution != nil {
+				out = append(out, selectedNameResolutionComponent{entry: entry, component: component})
+			}
+		}
+	}
+	return out
+}
+
+func ntpComponentsForCluster(state v1alpha1.State) []selectedNTPComponent {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []selectedNTPComponent{}
+	for _, entry := range env.Spec.InfraComponents.NTPSources {
+		if entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+			continue
+		}
+		if seen[entry.ComponentRef.Name] {
+			continue
+		}
+		seen[entry.ComponentRef.Name] = true
+		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+		if ok && component.Spec.NTP != nil {
+			out = append(out, selectedNTPComponent{entry: entry, component: component})
+		}
+	}
+	return out
+}
+
+func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (selectedRegistryComponent, bool) {
+	if v1alpha1.InstallMode(ocp) != v1alpha1.InstallModeDisconnected {
+		return selectedRegistryComponent{}, false
+	}
+	entry, ok := stateview.SelectedRegistryEntry(stateview.Environment(state))
+	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+		return selectedRegistryComponent{}, false
+	}
+	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+	if !ok || component.Spec.Registry == nil {
+		return selectedRegistryComponent{}, false
+	}
+	return selectedRegistryComponent{entry: entry, component: component}, true
+}
+
+func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string, secretsDir string) map[string]any {
+	driver := ProviderDriver(state, m)
+	out := map[string]any{
+		"kind":          v1alpha1.ComponentSlotMachines,
+		"name":          m.Name,
+		"providerName":  m.Source.ProviderRef.Name,
+		"substrateRole": driver.Dispatch.SubstrateRole,
+		"bmcRole":       driver.Dispatch.BMCRole,
+		"bootRole":      driver.Dispatch.BootRole,
+		"networkConfig": clusterMachineNetworkConfigVars(m.Network),
+	}
+	if attachment := clusterMachineNetworkAttachmentVars(state, ci, m); attachment != nil {
+		out["networkAttachment"] = attachment
+	}
+	if machine, ok := stateview.Machine(state, m.Name); ok {
+		out["osProvided"] = v1alpha1.MachineOSProvided(machine)
+		out["osManaged"] = !v1alpha1.MachineOSProvided(machine)
+		if root := managedMachineRootDevice(machine); root != "" {
+			out["managedRootDevice"] = root
+		}
+		if len(machine.Metadata.Labels) > 0 {
+			out["labels"] = machine.Metadata.Labels
+		}
+	}
+	applyMachineRoleContract(out, driver.Roles)
+	if ip := machinePrimaryIP(state, ci, m); ip != "" {
+		out["primaryIPAddress"] = ip
+	}
+	if interfaces := installer.MachineInterfaces(state, m, clusterName); len(interfaces) > 0 {
+		out["interfaces"] = machineInterfaceVars(interfaces)
+	}
+	if machineRef := machineHostRef(state, m); machineRef != "" {
+		out["machineRef"] = machineRef
+		out["machineAddress"] = stateview.MachineSSHAddressByName(state, machineRef)
+	}
+	if m.Source.ProfileRef.Name != "" {
+		out["fromProfile"] = m.Source.ProfileRef.Name
+		// Inline the profile spec so Ansible roles do not need to
+		// resolve back across the provider list.
+		if provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name); ok {
+			if profile, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name); ok {
+				out["profile"] = map[string]any{
+					"name":      profile.Name,
+					"cpu":       profile.CPU,
+					"memoryMiB": profile.MemoryMiB,
+					"diskGiB":   profile.DiskGiB,
+					"dataDisks": machineProfileDisksVars(profile.DataDisks),
+				}
+				switch provider.Spec.Type {
+				case v1alpha1.ProvisionerLibvirt:
+					l := provider.Spec.Libvirt
+					if l == nil {
+						break
+					}
+					out["libvirt"] = map[string]any{
+						"machineRef": l.MachineRef.Name,
+						"uri":        l.URI,
+					}
+					if be := machineEmulatedBMCVars(state, l); be != nil && driver.Dispatch.BMCRole == "emulated" {
+						out["bmcEmulated"] = be
+					}
+				case v1alpha1.ProvisionerVSphere:
+					out["vsphere"] = machineProfileProvisionerVars(provider, profile)
+				case v1alpha1.ProvisionerKubeVirt:
+					k := provider.Spec.KubeVirt
+					if k == nil {
+						break
+					}
+					out["kubevirt"] = map[string]any{
+						"namespace": k.Namespace,
+					}
+					if k.HostClusterRef != nil {
+						out["kubevirt"].(map[string]any)["hostClusterRef"] = k.HostClusterRef.Name
+						out["kubevirt"].(map[string]any)["kubeconfig"] = "{{ bootwright_clusters_dir }}/" + k.HostClusterRef.Name + "/secrets/kubeconfig"
+					}
+					if k.KubeconfigRef != nil {
+						out["kubevirt"].(map[string]any)["kubeconfigRef"] = k.KubeconfigRef.Name
+						if path := secret.ResolvePath(k.KubeconfigRef.Name, stateview.Environment(state), secretsDir); path != "" {
+							out["kubevirt"].(map[string]any)["kubeconfig"] = path
+						}
+					}
+					if k.StorageClassRef != nil {
+						out["kubevirt"].(map[string]any)["storageClassRef"] = k.StorageClassRef.Name
+					}
+				}
+			}
+		}
+	}
+	if m.Source.MachineRef.Name != "" {
+		out["fromName"] = m.Source.MachineRef.Name
+		if _, ok := stateview.Provider(state, m.Source.ProviderRef.Name); ok {
+			if server, ok := stateview.Machine(state, m.Source.MachineRef.Name); ok {
+				serverVars := map[string]any{
+					"name":       server.Metadata.Name,
+					"interfaces": providerInterfacesVars(server),
+				}
+				if len(server.Metadata.Labels) > 0 {
+					serverVars["labels"] = server.Metadata.Labels
+				}
+				out["server"] = serverVars
+				if bmc := server.Spec.Hardware.Management.BMC; bmc.Address != "" {
+					out["bmc"] = map[string]any{
+						"address":                        bmc.Address,
+						"protocol":                       bmc.Protocol,
+						"credentialsRef":                 bmc.CredentialsRef.Name,
+						"disableCertificateVerification": bmc.DisableCertificateVerification,
+					}
+				}
+			}
+		}
+	}
+	if hints := installer.MachineRootDeviceHints(state, m); hints != nil {
+		out["rootDeviceHints"] = installer.RootDeviceHintsConfig(hints)
+	}
+	if clusterName != "" {
+		out["clusterName"] = clusterName
+	}
+	if boot := machineBootVars(state, ci, m, clusterName); boot != nil {
+		out["boot"] = boot
+	}
+	return out
+}
+
+func managedMachineRootDevice(machine v1alpha1.Machine) string {
+	if machine.Spec.OS.Install.RootDeviceHints == nil {
+		return ""
+	}
+	return machine.Spec.OS.Install.RootDeviceHints.DeviceName
+}
+
+func applyMachineRoleContract(out map[string]any, roles roles.RoleContract) {
+	if len(roles.MachineSetupRoles) > 0 {
+		out["machineSetupRoles"] = stringSliceAny(roles.MachineSetupRoles)
+	}
+	if roles.SubstratePrepareRole != "" {
+		out["substratePrepareRole"] = roles.SubstratePrepareRole
+	}
+	if roles.SubstratePrepareFrom != "" {
+		out["substratePrepareFrom"] = roles.SubstratePrepareFrom
+	}
+	if roles.SubstrateApplyRole != "" {
+		out["substrateApplyRole"] = roles.SubstrateApplyRole
+	}
+	if roles.SubstrateApplyFrom != "" {
+		out["substrateApplyFrom"] = roles.SubstrateApplyFrom
+	}
+	if roles.SubstrateDestroyRole != "" {
+		out["substrateDestroyRole"] = roles.SubstrateDestroyRole
+	}
+	if roles.BMCApplyRole != "" {
+		out["bmcApplyRole"] = roles.BMCApplyRole
+	}
+	if roles.BMCDestroyRole != "" {
+		out["bmcDestroyRole"] = roles.BMCDestroyRole
+	}
+	if roles.BootApplyRole != "" {
+		out["bootApplyRole"] = roles.BootApplyRole
+	}
+	if roles.MediaPrepareRole != "" {
+		out["mediaPrepareRole"] = roles.MediaPrepareRole
+	}
+	if roles.RequiresKVM {
+		out["requiresKVM"] = true
+	}
+}
+
+func machineHostRef(state v1alpha1.State, m v1alpha1.InstallMachine) string {
+	if m.Source.ProfileRef.Name == "" {
+		return ""
+	}
+	provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name)
+	if !ok {
+		return ""
+	}
+	if _, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name); !ok {
+		return ""
+	}
+	if provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil {
+		return provider.Spec.Libvirt.MachineRef.Name
+	}
+	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
+		return "localhost"
+	}
+	return ""
+}

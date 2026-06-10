@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/support"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/roles"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -4335,7 +4335,7 @@ func registeredAdapterRoles() map[string]bool {
 			out[role] = true
 		}
 	}
-	for _, entry := range support.Entries() {
+	for _, entry := range roles.Entries() {
 		for _, role := range entry.Roles.MachineSetupRoles {
 			add(role)
 		}
@@ -4346,7 +4346,7 @@ func registeredAdapterRoles() map[string]bool {
 		add(entry.Roles.BootApplyRole)
 		add(entry.Roles.MediaPrepareRole)
 	}
-	for _, entry := range support.ServiceEntries() {
+	for _, entry := range roles.ServiceEntries() {
 		add(entry.ApplyRole)
 		add(entry.DestroyRole)
 	}

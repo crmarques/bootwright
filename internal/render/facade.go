@@ -1,0 +1,127 @@
+package render
+
+import (
+	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render/ceph"
+	"github.com/crmarques/bootwright/internal/render/installer"
+	"github.com/crmarques/bootwright/internal/render/inventory"
+	"github.com/crmarques/bootwright/internal/roles"
+)
+
+// This file re-exports the externally consumed surface of the render
+// emission families (installer, inventory, ceph) so callers outside
+// internal/render keep importing the root render package only.
+
+// Types.
+type (
+	InstallerAsset           = installer.InstallerAsset
+	InstallerManifest        = installer.InstallerManifest
+	InstallerSecretInputStat = installer.InstallerSecretInputStat
+	PathOptions              = inventory.PathOptions
+	StorageAsset             = ceph.StorageAsset
+	StorageAttachment        = ceph.StorageAttachment
+	StorageAttachmentAsset   = ceph.StorageAttachmentAsset
+)
+
+// Constants.
+const (
+	InstallerRelativeDir = installer.InstallerRelativeDir
+	RuntimeRelativeDir   = installer.RuntimeRelativeDir
+
+	GroupProviderHosts       = inventory.GroupProviderHosts
+	GroupInfraComponentHosts = inventory.GroupInfraComponentHosts
+	GroupInfraHosts          = inventory.GroupInfraHosts
+	GroupControllerHosts     = inventory.GroupControllerHosts
+	GroupOCPHosts            = inventory.GroupOCPHosts
+)
+
+// Installer emission.
+
+func InstallerAssets(clustersDir string, state v1alpha1.State) []InstallerAsset {
+	return installer.InstallerAssets(clustersDir, state)
+}
+
+func InstallerConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
+	return installer.InstallerConfig(state, ocp)
+}
+
+func AgentConfig(state v1alpha1.State, ocp v1alpha1.ContainerCluster) (map[string]any, error) {
+	return installer.AgentConfig(state, ocp)
+}
+
+func InstallerManifests(ocp v1alpha1.ContainerCluster, secrets installer.InstallerSecrets) []InstallerManifest {
+	return installer.InstallerManifests(ocp, secrets)
+}
+
+func PlaceholderInstallerSecrets(state v1alpha1.State, ocp v1alpha1.ContainerCluster) installer.InstallerSecrets {
+	return installer.PlaceholderInstallerSecrets(state, ocp)
+}
+
+func InstallerSecretInputStatsForContext(contextName string, state v1alpha1.State, ocp v1alpha1.ContainerCluster, secretsDir string) ([]InstallerSecretInputStat, error) {
+	return installer.InstallerSecretInputStatsForContext(contextName, state, ocp, secretsDir)
+}
+
+// Inventory and vars emission.
+
+func ComponentPins(state v1alpha1.State) []inventory.ComponentPin {
+	return inventory.ComponentPins(state)
+}
+
+func OpenShiftClientsReleaseURL(state v1alpha1.State, version string) string {
+	return inventory.OpenShiftClientsReleaseURL(state, version)
+}
+
+func HostGroupCounts(state v1alpha1.State) map[string]int {
+	return inventory.HostGroupCounts(state)
+}
+
+func HostGroupCountsWithOwnershipRecords(state v1alpha1.State, records []ownership.ResourceRecord) map[string]int {
+	return inventory.HostGroupCountsWithOwnershipRecords(state, records)
+}
+
+func HostGroupMembers(state v1alpha1.State) map[string][]string {
+	return inventory.HostGroupMembers(state)
+}
+
+func HostGroupMembersWithOwnershipRecords(state v1alpha1.State, records []ownership.ResourceRecord) map[string][]string {
+	return inventory.HostGroupMembersWithOwnershipRecords(state, records)
+}
+
+func AgentNodeGroupName(clusterName string) string {
+	return inventory.AgentNodeGroupName(clusterName)
+}
+
+func ManagedOSGroupName(clusterName string) string {
+	return inventory.ManagedOSGroupName(clusterName)
+}
+
+func MachineInfraHostName(clusterName, machineName string) string {
+	return inventory.MachineInfraHostName(clusterName, machineName)
+}
+
+func StorageSeedHostName(cluster v1alpha1.StorageCluster) string {
+	return inventory.StorageSeedHostName(cluster)
+}
+
+func StorageNodeHostName(clusterName, nodeName string) string {
+	return inventory.StorageNodeHostName(clusterName, nodeName)
+}
+
+func StorageClusterGroupName(clusterName string) string {
+	return inventory.StorageClusterGroupName(clusterName)
+}
+
+func FabricHostDesiredVars(state v1alpha1.State, host string) []any {
+	return inventory.FabricHostDesiredVars(state, host)
+}
+
+func ProviderDriver(state v1alpha1.State, m v1alpha1.InstallMachine) roles.DispatchSupport {
+	return inventory.ProviderDriver(state, m)
+}
+
+// Ceph and Data Foundation emission.
+
+func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, detailsJSON string, sourceRef string) map[string]any {
+	return ceph.DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, sourceRef)
+}

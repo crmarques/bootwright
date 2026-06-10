@@ -9,8 +9,10 @@ import (
 	"github.com/spf13/cobra"
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Command {
@@ -49,13 +51,13 @@ func newRenderClusterInstallFilesCmd(stdout io.Writer, _ io.Writer) *cobra.Comma
 			return failErr(1, err)
 		}
 		ctx := cf.ctx
-		clustersDir := controllerClustersDir(ctx.Name)
+		clustersDir := workspace.ControllerClustersDir(ctx.Name)
 		warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
-		names, err := clusterNamesForTarget(state, clusterScope)
+		names, err := clusteraccess.ClusterNamesForTarget(state, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state = filterStateToClusters(state, names)
+		state = clusteraccess.FilterStateToClusters(state, names)
 		result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, state)
 		if err != nil {
 			return failErr(1, err)
@@ -90,11 +92,11 @@ func runRenderToolInputs(c *cobra.Command, stdout io.Writer, cf *commonFlags, ou
 	ctx := cf.ctx
 	warnSecretsDirPerms(ctx.SecretsDir, c.ErrOrStderr())
 	if strings.TrimSpace(clusterScope) != "" {
-		names, err := clusterNamesForTarget(state, clusterScope)
+		names, err := clusteraccess.ClusterNamesForTarget(state, clusterScope)
 		if err != nil {
 			return failErr(1, err)
 		}
-		state = filterStateToClusters(state, names)
+		state = clusteraccess.FilterStateToClusters(state, names)
 	}
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {

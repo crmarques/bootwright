@@ -7,6 +7,7 @@
 
 # Credentials and cluster access
 *kubeconfig*
+!internal/clusteraccess/kubeconfig.go
 *pull-secret*
 *.pem
 *.key
@@ -14,8 +15,8 @@
 *.p12
 auth/
 secrets/
-!internal/runtime/secrets/
-!internal/runtime/secrets/*.go
+!internal/secrets/
+!internal/secrets/*.go
 
 # Generated output
 .cache/

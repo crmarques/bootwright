@@ -234,10 +234,10 @@ ansible-syntax-check: check-e2e-deps $(COLLECTIONS_STAMP)
 
 stale-term-check:
 	@if command -v rg >/dev/null 2>&1; then \
-		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer' $(DEFINITION_CHECK_PATHS); \
+		rg -n 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
 		status=$$?; \
 	else \
-		grep -RInE 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer' $(DEFINITION_CHECK_PATHS); \
+		grep -RInE 'providerRefs|HostPool|spec\.machine\.libvirt|services\.bootArtifacts|services\.loadBalancer|services\.proxy|services\.registry|services\.nameResolution|MachineFlavorBareMetal|BuildClosure|input-files|/state/|/workflow/|runtime/[^/]+/installer|internal/runtime/|internal/infra/support|internal/converge/checks' $(DEFINITION_CHECK_PATHS); \
 		status=$$?; \
 	fi; \
 	if [ "$$status" -eq 0 ]; then exit 1; fi; \
@@ -246,17 +246,17 @@ stale-term-check:
 
 # Reject CLI / render files that have grown past the thin-handler
 # threshold. Excludes test files so the lint targets production code
-# only. Scope includes CLI, render, the converge/workflow orchestration, and
-# the internal/state/desired validators — the domain packages that previously
-# accumulated god-files.
+# only. Scope includes CLI, render and its families, converge orchestration,
+# the extracted service components, and the internal/state/desired validators —
+# the packages where god-files previously accumulated.
 cli-file-size-check:
-	@over=$$(find internal/cli internal/render internal/state/scaffold internal/converge/bastion internal/runtime/secrets -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
+	@over=$$(find internal/cli internal/render internal/render/installer internal/render/inventory internal/render/ceph internal/state/scaffold internal/converge internal/converge/bastion internal/secrets internal/sshtrust internal/preflight internal/status internal/clusteraccess internal/infra/proxy internal/host/become -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \
 		| while read -r f; do \
 			n=$$(wc -l <"$$f"); \
 			if [ "$$n" -gt $(CLI_FILE_LINE_LIMIT) ]; then printf '  %s lines\t%s\n' "$$n" "$$f"; fi; \
 		done); \
 	if [ -n "$$over" ]; then \
-		printf '%s\n' "files over $(CLI_FILE_LINE_LIMIT) lines (decompose by concern; CLI handlers belong in internal/converge/workflow/, render emitters split by emission family):" "$$over"; \
+		printf '%s\n' "files over $(CLI_FILE_LINE_LIMIT) lines (decompose by concern; orchestration belongs in internal/converge, readiness rules in internal/preflight, observe logic in internal/status, render emitters split by family under internal/render/):" "$$over"; \
 		exit 1; \
 	fi
 	@over=$$(find internal/converge/workflow -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -printf '%p\n' \

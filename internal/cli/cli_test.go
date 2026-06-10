@@ -25,13 +25,13 @@ import (
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/bastion"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/host/localroot"
 	"github.com/crmarques/bootwright/internal/render"
-	"github.com/crmarques/bootwright/internal/runtime/context"
-	"github.com/crmarques/bootwright/internal/runtime/root/localroot"
-	"github.com/crmarques/bootwright/internal/runtime/secrets"
-	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
+	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/sshtrust"
 	"github.com/crmarques/bootwright/internal/state/desired"
 	"github.com/crmarques/bootwright/internal/state/scaffold"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 func TestMain(m *testing.M) {
@@ -917,7 +917,7 @@ func TestApplyKubeVirtChildOnlySelectionAcceptsReadyParent(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.NewContext("nested")
+	ctx, err := workspace.NewContext("nested")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1056,14 +1056,14 @@ func TestContextInitRecordsWorkspacePathWithoutCopying(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ctx.InputDir != source || len(ctx.InputPaths) != 1 || ctx.InputPaths[0] != source {
 		t.Fatalf("recorded workspace = %q %v, want %q", ctx.InputDir, ctx.InputPaths, source)
 	}
-	if _, err := os.Stat(contextstore.InputSourcePath(ctx.BaseDir)); err != nil {
+	if _, err := os.Stat(workspace.InputSourcePath(ctx.BaseDir)); err != nil {
 		t.Fatalf("recorded workspace path file missing: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(ctx.BaseDir, "input")); !os.IsNotExist(err) {
@@ -1081,7 +1081,7 @@ func TestContextInitYesRepointsWorkspaceAndPreservesState(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1094,7 +1094,7 @@ func TestContextInitYesRepointsWorkspaceAndPreservesState(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err = contextstore.ResolveExistingContext("test")
+	ctx, err = workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1124,7 +1124,7 @@ func TestContextInitYesKeepsRecordedWorkspaceWhenReplacementInvalid(t *testing.T
 	if !strings.Contains(stderr, "field retiredField not found") {
 		t.Fatalf("stderr missing strict decode error: %q", stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1156,7 +1156,7 @@ spec:
 	if code != 0 {
 		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1172,7 +1172,7 @@ func TestContextInitRejectsWorkspaceInsideBootwrightRoot(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1334,11 +1334,11 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context delete --purge exited %d, stderr=%q", code, stderr)
 	}
-	registry, err := contextstore.DefaultRegistryPath()
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := contextstore.Load(registry)
+	store, err := workspace.Load(registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1352,7 +1352,7 @@ func TestContextDeletePurgeRemovesContextDirectory(t *testing.T) {
 
 func TestContextSelectionIsPerHomeWithSharedStorage(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
-	t.Cleanup(contextstore.SetRootDirForTest(root))
+	t.Cleanup(workspace.SetRootDirForTest(root))
 	homeA := t.TempDir()
 	homeB := t.TempDir()
 
@@ -1384,7 +1384,7 @@ func TestContextSelectionIsPerHomeWithSharedStorage(t *testing.T) {
 
 func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
-	t.Cleanup(contextstore.SetRootDirForTest(root))
+	t.Cleanup(workspace.SetRootDirForTest(root))
 	homeA := t.TempDir()
 	homeB := t.TempDir()
 
@@ -1403,11 +1403,11 @@ func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("user A context delete --purge exited %d, stderr=%q", code, stderr)
 	}
-	registryA, err := contextstore.DefaultRegistryPath()
+	registryA, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeA, err := contextstore.Load(registryA)
+	storeA, err := workspace.Load(registryA)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1415,11 +1415,11 @@ func TestContextDeletePurgeClearsOnlyCallerCurrent(t *testing.T) {
 		t.Fatalf("user A current = %q, want cleared", storeA.Current)
 	}
 	t.Setenv("HOME", homeB)
-	registryB, err := contextstore.DefaultRegistryPath()
+	registryB, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeB, err := contextstore.Load(registryB)
+	storeB, err := workspace.Load(registryB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1871,7 +1871,7 @@ func TestEnsureLocalRootForArgsReexecsThroughSudo(t *testing.T) {
 	if gotName != "sudo" {
 		t.Fatalf("command name = %q, want sudo", gotName)
 	}
-	if len(gotArgs) != 10 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], contextstore.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || gotArgs[6] != localRootSudoAuthEnv+"="+localSudoAuthNonInteractive || !reflect.DeepEqual(gotArgs[7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
+	if len(gotArgs) != 10 || gotArgs[0] != "-n" || gotArgs[1] != "env" || !strings.HasPrefix(gotArgs[2], workspace.InternalRegistryEnv+"=") || gotArgs[3] != localroot.InternalEnv+"=1" || gotArgs[4] != secret.InternalCallerHomeEnv+"="+home || gotArgs[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || gotArgs[6] != localRootSudoAuthEnv+"="+localSudoAuthNonInteractive || !reflect.DeepEqual(gotArgs[7:], []string{"/usr/local/bin/bootwright", "check", "syntax"}) {
 		t.Fatalf("sudo args = %v", gotArgs)
 	}
 }
@@ -2295,7 +2295,7 @@ func TestSecretSetRootHelperProcess(t *testing.T) {
 	if len(args) < sep+11 {
 		os.Exit(2)
 	}
-	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
+	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
 		os.Exit(2)
 	}
 	rootArgs = rootArgs[8:]
@@ -2349,11 +2349,11 @@ func TestContextInitPassesWorkspacePathAndSyncsRegistryAroundSudo(t *testing.T) 
 	if !slices.Contains(gotArgs, source) {
 		t.Fatalf("sudo args missing resolved workspace path %q: %v", source, gotArgs)
 	}
-	registry, err := contextstore.DefaultRegistryPath()
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := contextstore.Load(registry)
+	store, err := workspace.Load(registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2378,10 +2378,10 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	if len(args) < sep+9 {
 		os.Exit(2)
 	}
-	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
+	if len(rootArgs) < 13 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=") || rootArgs[3] != localroot.InternalEnv+"=1" || !strings.HasPrefix(rootArgs[4], secret.InternalCallerHomeEnv+"=") || !strings.HasPrefix(rootArgs[5], localroot.CallerPathEnv+"=") || !strings.HasPrefix(rootArgs[6], localRootSudoAuthEnv+"=") {
 		os.Exit(2)
 	}
-	registry := strings.TrimPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=")
+	registry := strings.TrimPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=")
 	rootArgs = rootArgs[8:]
 	if rootArgs[0] != "context" || rootArgs[1] != "init" || rootArgs[2] != "lab" || rootArgs[3] != "-f" {
 		os.Exit(2)
@@ -2392,7 +2392,7 @@ func TestContextInitRootHelperProcess(t *testing.T) {
 	if registry == "" {
 		os.Exit(2)
 	}
-	if err := contextstore.Save(registry, contextstore.Store{Current: "lab"}); err != nil {
+	if err := workspace.Save(registry, workspace.Store{Current: "lab"}); err != nil {
 		os.Exit(2)
 	}
 	os.Exit(0)
@@ -2419,11 +2419,11 @@ func TestContextUseSyncsRegistryAroundSudo(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context use exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	registry, err := contextstore.DefaultRegistryPath()
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := contextstore.Load(registry)
+	store, err := workspace.Load(registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2454,11 +2454,11 @@ func TestContextDeletePurgeSyncsRegistryAroundSudo(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("context delete --purge exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	registry, err := contextstore.DefaultRegistryPath()
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := contextstore.Load(registry)
+	store, err := workspace.Load(registry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2480,18 +2480,18 @@ func TestContextRegistrySyncRootHelperProcess(t *testing.T) {
 	if reflect.DeepEqual(rootArgs, []string{"-n", "-v"}) || reflect.DeepEqual(rootArgs, []string{"-S", "-p", "", "-v"}) {
 		os.Exit(0)
 	}
-	if len(rootArgs) < 10 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=") {
+	if len(rootArgs) < 10 || rootArgs[0] != "-n" || rootArgs[1] != "env" || !strings.HasPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=") {
 		os.Exit(2)
 	}
-	registry := strings.TrimPrefix(rootArgs[2], contextstore.InternalRegistryEnv+"=")
+	registry := strings.TrimPrefix(rootArgs[2], workspace.InternalRegistryEnv+"=")
 	command := rootArgs[8:]
 	switch {
 	case reflect.DeepEqual(command, []string{"context", "use", "lab"}):
-		if err := contextstore.Save(registry, contextstore.Store{Current: "lab"}); err != nil {
+		if err := workspace.Save(registry, workspace.Store{Current: "lab"}); err != nil {
 			os.Exit(2)
 		}
 	case reflect.DeepEqual(command, []string{"context", "delete", "lab", "--purge", "--yes"}):
-		if err := contextstore.Save(registry, contextstore.Store{}); err != nil {
+		if err := workspace.Save(registry, workspace.Store{}); err != nil {
 			os.Exit(2)
 		}
 	default:
@@ -2578,7 +2578,7 @@ func TestContextPrintEnvRequiresSensitiveForProxyCredentials(t *testing.T) {
 
 func TestContextPrintEnvProxyWithoutAuth(t *testing.T) {
 	initTestContext(t, "002-sno-emul-baremetal")
-	ctx, err := currentContext()
+	ctx, err := workspace.CurrentContext()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3818,17 +3818,17 @@ func setTestHomeAndRoot(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Cleanup(contextstore.SetRootDirForTest(filepath.Join(home, "bootwright-root")))
+	t.Cleanup(workspace.SetRootDirForTest(filepath.Join(home, "bootwright-root")))
 	return home
 }
 
 func saveTestContextRegistry(t *testing.T, current string) {
 	t.Helper()
-	registry, err := contextstore.DefaultRegistryPath()
+	registry, err := workspace.DefaultRegistryPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := contextstore.Save(registry, contextstore.Store{Current: current}); err != nil {
+	if err := workspace.Save(registry, workspace.Store{Current: current}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -3962,7 +3962,7 @@ func commandContains(command []string, arg string) bool {
 
 func localRootCommandIndex(t *testing.T, args []string, home, auth string) int {
 	t.Helper()
-	if len(args) < 8 || args[0] != "-n" || args[1] != "env" || !strings.HasPrefix(args[2], contextstore.InternalRegistryEnv+"=") || args[3] != localroot.InternalEnv+"=1" || args[4] != secret.InternalCallerHomeEnv+"="+home || args[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || args[6] != localRootSudoAuthEnv+"="+auth {
+	if len(args) < 8 || args[0] != "-n" || args[1] != "env" || !strings.HasPrefix(args[2], workspace.InternalRegistryEnv+"=") || args[3] != localroot.InternalEnv+"=1" || args[4] != secret.InternalCallerHomeEnv+"="+home || args[5] != localroot.CallerPathEnv+"="+os.Getenv("PATH") || args[6] != localRootSudoAuthEnv+"="+auth {
 		t.Fatalf("local root args prefix = %v", args)
 	}
 	index := 7
@@ -3989,22 +3989,22 @@ func localRootEnvValue(args []string, key string) string {
 // workspace for context "test". The returned context's InputDir/InputPaths
 // point at the workspace, so tests can edit input files there and the next
 // command picks the edits up directly.
-func initTestContext(t *testing.T, fixtureName string) contextstore.Context {
+func initTestContext(t *testing.T, fixtureName string) workspace.Context {
 	t.Helper()
-	workspace := copyFixtureYAML(t, fixtureName)
+	workspaceDir := copyFixtureYAML(t, fixtureName)
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", workspace)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", workspaceDir)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ctx
 }
 
-func initProtectedTestContext(t *testing.T, fixtureName string) contextstore.Context {
+func initProtectedTestContext(t *testing.T, fixtureName string) workspace.Context {
 	t.Helper()
 	setTestHomeAndRoot(t)
 	inputDir := copyFixtureYAML(t, fixtureName)
@@ -4026,7 +4026,7 @@ func initProtectedTestContext(t *testing.T, fixtureName string) contextstore.Con
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	ctx, err := contextstore.ResolveExistingContext("test")
+	ctx, err := workspace.ResolveExistingContext("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4035,8 +4035,8 @@ func initProtectedTestContext(t *testing.T, fixtureName string) contextstore.Con
 
 func testCommonFlags(t *testing.T, rootDir, fixtureName string) *commonFlags {
 	t.Helper()
-	t.Cleanup(contextstore.SetRootDirForTest(rootDir))
-	ctx, err := contextstore.NewContext("test")
+	t.Cleanup(workspace.SetRootDirForTest(rootDir))
+	ctx, err := workspace.NewContext("test")
 	if err != nil {
 		panic(err)
 	}

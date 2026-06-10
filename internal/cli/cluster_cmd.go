@@ -3,20 +3,21 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/workspace"
 )
 
 type clusterAccessReport struct {
-	Context  string                 `json:"context"`
-	Clusters []clusterAccessSummary `json:"clusters"`
-	Storage  []storageAccessSummary `json:"storage,omitempty"`
+	Context  string                         `json:"context"`
+	Clusters []clusteraccess.ClusterSummary `json:"clusters"`
+	Storage  []clusteraccess.StorageSummary `json:"storage,omitempty"`
 }
 
 type clusterListReport struct {
@@ -25,18 +26,18 @@ type clusterListReport struct {
 }
 
 type clusterListEntry struct {
-	Kind              string                `json:"kind"`
-	Name              string                `json:"name"`
-	Type              string                `json:"type,omitempty"`
-	Management        string                `json:"management,omitempty"`
-	InstallMode       string                `json:"installMode,omitempty"`
-	InstallMethod     string                `json:"installMethod,omitempty"`
-	APIURL            string                `json:"apiURL,omitempty"`
-	ConsoleURL        string                `json:"consoleURL,omitempty"`
-	Kubeconfig        clusterAccessArtifact `json:"kubeconfig,omitempty"`
-	KubeadminPassword clusterAccessArtifact `json:"kubeadminPassword,omitempty"`
-	DashboardPassword clusterAccessArtifact `json:"dashboardPassword,omitempty"`
-	Ready             bool                  `json:"ready,omitempty"`
+	Kind              string                 `json:"kind"`
+	Name              string                 `json:"name"`
+	Type              string                 `json:"type,omitempty"`
+	Management        string                 `json:"management,omitempty"`
+	InstallMode       string                 `json:"installMode,omitempty"`
+	InstallMethod     string                 `json:"installMethod,omitempty"`
+	APIURL            string                 `json:"apiURL,omitempty"`
+	ConsoleURL        string                 `json:"consoleURL,omitempty"`
+	Kubeconfig        clusteraccess.Artifact `json:"kubeconfig,omitempty"`
+	KubeadminPassword clusteraccess.Artifact `json:"kubeadminPassword,omitempty"`
+	DashboardPassword clusteraccess.Artifact `json:"dashboardPassword,omitempty"`
+	Ready             bool                   `json:"ready,omitempty"`
 }
 
 func newClusterCmd(stdout io.Writer) *cobra.Command {
@@ -79,24 +80,13 @@ do not commit it.`,
 		if err != nil {
 			return failErr(1, err)
 		}
-		if err := validateClusterNames(state, []string{clusterName}); err != nil {
+		if err := clusteraccess.ValidateClusterNames(state, []string{clusterName}); err != nil {
 			return failErr(2, err)
 		}
-		clustersDir := controllerClustersDir(cf.ctx.Name)
-		summaries := filterClusterAccessSummaries(
-			clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state)),
-			clusterName,
-		)
-		if len(summaries) == 0 {
-			return failf(1, "%q is not an installed container cluster", clusterName)
-		}
-		summary := summaries[0]
-		if !summary.Kubeconfig.Present {
-			return failf(1, "kubeconfig for %q not found at %s; install the cluster first", clusterName, summary.KubeconfigPath)
-		}
-		data, err := os.ReadFile(summary.KubeconfigPath)
+		clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
+		data, err := clusteraccess.Kubeconfig(state, clustersDir, clusterName)
 		if err != nil {
-			return failErr(1, fmt.Errorf("read kubeconfig for %s: %w", clusterName, err))
+			return failErr(1, err)
 		}
 		if _, err := stdout.Write(data); err != nil {
 			return failErr(1, fmt.Errorf("write kubeconfig for %s: %w", clusterName, err))
@@ -123,8 +113,8 @@ func newClusterListCmd(stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
-		clustersDir := controllerClustersDir(cf.ctx.Name)
-		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
+		clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
+		summaries := clusteraccess.ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
 		storage := storageClusterListEntries(state, clustersDir)
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterListReport{Context: cf.ctx.Name, Clusters: append(clusterListEntries(summaries), storage...)})
@@ -181,16 +171,16 @@ func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra
 			return failErr(1, err)
 		}
 		if clusterName != "" {
-			if err := validateAccessClusterName(state, clusterName, spec.includeStorage); err != nil {
+			if err := clusteraccess.ValidateAccessClusterName(state, clusterName, spec.includeStorage); err != nil {
 				return failErr(2, err)
 			}
 		}
-		clustersDir := controllerClustersDir(cf.ctx.Name)
-		summaries := clusterAccessSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
-		summaries = filterClusterAccessSummaries(summaries, clusterName)
-		var storage []storageAccessSummary
+		clustersDir := workspace.ControllerClustersDir(cf.ctx.Name)
+		summaries := clusteraccess.ClusterSummariesFromAssets(state, render.InstallerAssets(clustersDir, state))
+		summaries = clusteraccess.FilterClusterSummaries(summaries, clusterName)
+		var storage []clusteraccess.StorageSummary
 		if spec.includeStorage {
-			storage = filterStorageAccessSummaries(storageAccessSummaries(state, clustersDir), clusterName)
+			storage = clusteraccess.FilterStorageSummaries(clusteraccess.StorageSummaries(state, clustersDir), clusterName)
 		}
 		if outputFormat == outputJSON {
 			return cliout.JSON(stdout, clusterAccessReport{Context: cf.ctx.Name, Clusters: summaries, Storage: storage})
@@ -201,7 +191,7 @@ func newClusterAccessCmd(stdout io.Writer, spec clusterAccessCommandSpec) *cobra
 	return cmd
 }
 
-func printClusterList(stdout io.Writer, summaries []clusterAccessSummary, storage []clusterListEntry) {
+func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary, storage []clusterListEntry) {
 	p := cliout.New(stdout)
 	p.Command("cluster list")
 	if len(summaries) == 0 && len(storage) == 0 {
@@ -237,7 +227,7 @@ func printClusterList(stdout io.Writer, summaries []clusterAccessSummary, storag
 	}
 }
 
-func printClusterAccessSummaries(stdout io.Writer, command string, summaries []clusterAccessSummary, storage []storageAccessSummary) {
+func printClusterAccessSummaries(stdout io.Writer, command string, summaries []clusteraccess.ClusterSummary, storage []clusteraccess.StorageSummary) {
 	p := cliout.New(stdout)
 	p.Command(command)
 	if len(summaries) == 0 && len(storage) == 0 {
@@ -261,7 +251,7 @@ func printClusterAccessSummaries(stdout io.Writer, command string, summaries []c
 	printStorageAccessSections(p, storage)
 }
 
-func clusterListEntries(summaries []clusterAccessSummary) []clusterListEntry {
+func clusterListEntries(summaries []clusteraccess.ClusterSummary) []clusterListEntry {
 	entries := make([]clusterListEntry, 0, len(summaries))
 	for _, summary := range summaries {
 		entries = append(entries, clusterListEntry{
@@ -293,8 +283,8 @@ func storageClusterListEntries(state v1alpha1.State, clustersDir string) []clust
 			Management: management,
 		}
 		if management == v1alpha1.StorageClusterManagementManaged && cluster.Spec.Ceph != nil {
-			if path := storageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
-				entry.DashboardPassword = clusterAccessFileStatus(path)
+			if path := clusteraccess.StorageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
+				entry.DashboardPassword = clusteraccess.FileStatus(path)
 			}
 		}
 		entries = append(entries, entry)
@@ -303,19 +293,7 @@ func storageClusterListEntries(state v1alpha1.State, clustersDir string) []clust
 	return entries
 }
 
-func filterClusterAccessSummaries(summaries []clusterAccessSummary, name string) []clusterAccessSummary {
-	if name == "" {
-		return summaries
-	}
-	for _, summary := range summaries {
-		if summary.Name == name {
-			return []clusterAccessSummary{summary}
-		}
-	}
-	return nil
-}
-
-func clusterAccessStatus(summary clusterAccessSummary) cliout.Status {
+func clusterAccessStatus(summary clusteraccess.ClusterSummary) cliout.Status {
 	switch {
 	case summary.Kubeconfig.Present && summary.KubeadminPassword.Present:
 		return cliout.StatusOK
@@ -326,14 +304,14 @@ func clusterAccessStatus(summary clusterAccessSummary) cliout.Status {
 	}
 }
 
-func accessArtifactStatus(artifact clusterAccessArtifact) cliout.Status {
+func accessArtifactStatus(artifact clusteraccess.Artifact) cliout.Status {
 	if artifact.Present {
 		return cliout.StatusOK
 	}
 	return cliout.StatusMissing
 }
 
-func accessArtifactDetail(artifact clusterAccessArtifact) string {
+func accessArtifactDetail(artifact clusteraccess.Artifact) string {
 	if artifact.Present {
 		return "OK " + artifact.Path
 	}

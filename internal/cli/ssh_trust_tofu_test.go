@@ -9,20 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/runtime/sshtrust"
+	"github.com/crmarques/bootwright/internal/sshtrust"
 )
 
 // hostTrustScanDeps fakes ssh-keyscan with a fixed address -> public-key map;
 // scanning an address outside the map fails.
-func hostTrustScanDeps(keys map[string]string) hostTrustDeps {
-	return hostTrustDeps{
-		lookPath: func(name string, _ []string) (string, error) {
+func hostTrustScanDeps(keys map[string]string) sshtrust.Deps {
+	return sshtrust.Deps{
+		LookPath: func(name string, _ []string) (string, error) {
 			if name != "ssh-keyscan" {
 				return "", errors.New("unexpected lookup " + name)
 			}
 			return "/usr/bin/ssh-keyscan", nil
 		},
-		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+		Scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
 			publicKey, ok := keys[address]
 			if !ok {
 				return nil, errors.New("unexpected scan " + address)
@@ -122,12 +122,12 @@ func TestOfferTrustOnFirstUseSkipsRecordedHostWithoutScan(t *testing.T) {
 	if err := sshtrust.Save(sshtrust.DirForContext(contextDir), store); err != nil {
 		t.Fatalf("seed trust store: %v", err)
 	}
-	deps := hostTrustDeps{
-		lookPath: func(name string, _ []string) (string, error) {
+	deps := sshtrust.Deps{
+		LookPath: func(name string, _ []string) (string, error) {
 			t.Fatalf("unexpected lookup %s for already-recorded host", name)
 			return "", errors.New("unexpected lookup")
 		},
-		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+		Scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
 			t.Fatalf("unexpected scan %s for already-recorded host", address)
 			return nil, errors.New("unexpected scan")
 		},
@@ -143,14 +143,14 @@ func TestOfferTrustOnFirstUseSkipsRecordedHostWithoutScan(t *testing.T) {
 
 func TestOfferTrustOnFirstUseScanErrorWarnsAndContinues(t *testing.T) {
 	contextDir := t.TempDir()
-	deps := hostTrustDeps{
-		lookPath: func(name string, _ []string) (string, error) {
+	deps := sshtrust.Deps{
+		LookPath: func(name string, _ []string) (string, error) {
 			if name != "ssh-keyscan" {
 				return "", errors.New("unexpected lookup " + name)
 			}
 			return "/usr/bin/ssh-keyscan", nil
 		},
-		scan: func(_ context.Context, _ string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+		Scan: func(_ context.Context, _ string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
 			return nil, errors.New("connection refused")
 		},
 	}
@@ -172,11 +172,11 @@ func TestOfferTrustOnFirstUseScanErrorWarnsAndContinues(t *testing.T) {
 
 func TestOfferTrustOnFirstUseMissingKeyscanIsSilent(t *testing.T) {
 	contextDir := t.TempDir()
-	deps := hostTrustDeps{
-		lookPath: func(string, []string) (string, error) {
+	deps := sshtrust.Deps{
+		LookPath: func(string, []string) (string, error) {
 			return "", errors.New("ssh-keyscan not found")
 		},
-		scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
+		Scan: func(_ context.Context, address string, _ time.Duration) ([]sshtrust.ScannedKey, error) {
 			t.Fatalf("unexpected scan %s without ssh-keyscan", address)
 			return nil, errors.New("unexpected scan")
 		},

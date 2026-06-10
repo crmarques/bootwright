@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infra/support"
+	"github.com/crmarques/bootwright/internal/roles"
 )
 
 func validateInfraComponents(state v1alpha1.State) []string {
@@ -230,7 +230,7 @@ func validateRegistryComponent(component v1alpha1.InfraComponent, machines map[s
 
 func validateServiceMachineRef(owner string, ref v1alpha1.LocalObjectReference, machines map[string]v1alpha1.Machine, kind, realisation string) []string {
 	var errs []string
-	capabilities := support.ServiceHostCapabilities(kind, realisation)
+	capabilities := roles.ServiceHostCapabilities(kind, realisation)
 	if len(capabilities) == 0 {
 		return validateMachineRefCapability(owner, ref, machines, "")
 	}

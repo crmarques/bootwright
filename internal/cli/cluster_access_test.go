@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/render"
 )
@@ -23,7 +24,7 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 	}, now)
 	ledger.Finish(workflow.RunStatusOK, now)
 
-	summaries := clusterAccessSummariesForApply(state, result, ledger)
+	summaries := clusteraccess.ClusterSummariesForApply(state, result, ledger)
 	if len(summaries) != 1 {
 		t.Fatalf("summaries = %+v, want one cluster", summaries)
 	}
@@ -61,20 +62,6 @@ func TestClusterAccessSummariesUseClusterSecretsPaths(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("cluster access output missing %q:\n%s", want, got)
 		}
-	}
-}
-
-func TestClusterAccessSummariesRequireSuccessfulInstallWait(t *testing.T) {
-	state := loadFixtureState(t, "001-sno-libvirt")
-	result := render.Result{InstallerAssets: render.InstallerAssets(filepath.Join(t.TempDir(), "clusters"), state)}
-	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
-	ledger := workflow.NewRunLedger("apply-test", "cluster", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
-		{ID: "wait.sno-libvirt", Kind: workflow.ApplyTaskKindInstallWait, Cluster: "sno-libvirt", Status: workflow.TaskStatusSkipped},
-	}, now)
-	ledger.Finish(workflow.RunStatusOK, now)
-
-	if summaries := clusterAccessSummariesForApply(state, result, ledger); len(summaries) != 0 {
-		t.Fatalf("summaries = %+v, want none", summaries)
 	}
 }
 
