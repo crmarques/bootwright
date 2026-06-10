@@ -686,7 +686,15 @@ Rules:
   profile `k=`/`m=`), must not set `ceph.replicated`, and is not allowed on
   stretch-mode clusters.
 - `spec.ceph.role`, when set, accepts `rbd`, `cephfs-metadata`, `cephfs-data`,
-  or `rgw`. `spec.ceph.application` is the cephadm application override.
+  or `rgw`. It drives `StorageExport` wiring and infers the pool application
+  (`rbd` → `rbd`, `cephfs-*` → `cephfs`, `rgw` → `rgw`);
+  `spec.ceph.application` overrides the inference.
+- The pool's structural identity is its `type` (and erasure profile): the only
+  desired-state change that rebuilds a live pool (data-destroying, `--override`
+  only). Replicas, crush rule, and application reconcile in place.
+- On stretch-mode clusters, pools inherit the stretch CRUSH rule and the
+  `replicatedPoolDefaults` replicas without a placement policy; a
+  `placementPolicyRef` is needed only for genuinely divergent placement.
 - On stretch-mode clusters, `ceph.replicated.size` must be `4` and `minSize`
   must be `2` when set.
 
@@ -703,8 +711,9 @@ Rules:
 - `spec.cephfs.dataPoolRefs[]` is required; each must reference a `StoragePool`
   on the same `StorageCluster`, must differ from the metadata pool, and exactly
   one must set `default: true`.
-- `spec.cephfs.mds.placement.hosts[]` select topology nodes; on stretch-mode
-  clusters they must cover at least two MDS-capable hosts per data site.
+- `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
+  role; `sites`/`hosts` narrow the selection. On stretch-mode clusters the
+  resolved placement must cover at least two MDS-capable hosts per data site.
 
 ## StorageObjectGateway
 
@@ -719,11 +728,14 @@ Rules:
 - `spec.public.dnsName` is required and is the storage-owned public S3 endpoint;
   optional `spec.public.scheme` and `spec.public.port` refine it. The gateway
   owns this fact, so a storage-only object store needs no `ContainerCluster`.
-- `spec.ceph.placement.hosts[]` select topology nodes that hold the `rgw` role;
-  on stretch-mode clusters at least two per data site.
+- `spec.ceph.placement` defaults to every topology host with the `rgw` role;
+  `sites`/`hosts` narrow the selection. On stretch-mode clusters the resolved
+  placement must cover at least two per data site.
 - `spec.ceph.ingresses[]` require a unique `name`, a storage-owned `address` and
-  `prefixLength` for the ingress VIP (optional `virtualInterfaceNetworks[]`, rendered verbatim to the cephadm ingress `virtual_interface_networks`), and a
-  `placement` over `ingress`-role nodes.
+  `prefixLength` for the ingress VIP (optional `virtualInterfaceNetworks[]`,
+  rendered verbatim to the cephadm ingress `virtual_interface_networks`), and
+  a `placement` that defaults to every `ingress`-role host, narrowed by
+  `sites`/`hosts` (per-site VIPs author `placement.sites`).
 
 ## StorageExport
 

@@ -9,7 +9,6 @@ spec:
     distribution: redhat
     entitlementRef: rhcs
     cephadm:
-      addressRef: ssh
       bootstrap:
         host: ceph-dc1-0
     networks:
@@ -26,7 +25,7 @@ spec:
         tiebreaker:
           host: ceph-arbiter
       hosts:
-      - hostname: ceph-dc1-0
+      - machineRef: ceph-dc1-0
         site: dc1
         roles:
         - mon
@@ -37,8 +36,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc1-0
-      - hostname: ceph-dc1-1
+      - machineRef: ceph-dc1-1
         site: dc1
         roles:
         - mon
@@ -49,8 +47,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc1-1
-      - hostname: ceph-dc1-2
+      - machineRef: ceph-dc1-2
         site: dc1
         roles:
         - osd
@@ -59,8 +56,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc1-2
-      - hostname: ceph-dc2-0
+      - machineRef: ceph-dc2-0
         site: dc2
         roles:
         - mon
@@ -71,8 +67,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc2-0
-      - hostname: ceph-dc2-1
+      - machineRef: ceph-dc2-1
         site: dc2
         roles:
         - mon
@@ -83,8 +78,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc2-1
-      - hostname: ceph-dc2-2
+      - machineRef: ceph-dc2-2
         site: dc2
         roles:
         - osd
@@ -93,9 +87,7 @@ spec:
         - ingress
         devices:
         - /dev/sdb
-        machineRef: ceph-dc2-2
-      - hostname: ceph-arbiter
+      - machineRef: ceph-arbiter
         site: dc3
         roles:
         - mon
-        machineRef: ceph-arbiter

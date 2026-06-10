@@ -19,7 +19,6 @@ spec:
     # mirror for disconnected sites.
     release: squid
     cephadm:
-      addressRef: ssh
       bootstrap:
         host: ceph-0
     networks:
@@ -29,7 +28,7 @@ spec:
         - 192.168.134.0/24
     topology:
       hosts:
-        - hostname: ceph-0
+        - machineRef: ceph-0
           site: lab
           roles:
             - mon
@@ -41,8 +40,7 @@ spec:
           devices:
             - /dev/vdb
             - /dev/vdc
-          machineRef: ceph-0
-        - hostname: ceph-1
+        - machineRef: ceph-1
           site: lab
           roles:
             - mon
@@ -54,8 +52,7 @@ spec:
           devices:
             - /dev/vdb
             - /dev/vdc
-          machineRef: ceph-1
-        - hostname: ceph-2
+        - machineRef: ceph-2
           site: lab
           roles:
             - mon
@@ -67,4 +64,3 @@ spec:
           devices:
             - /dev/vdb
             - /dev/vdc
-          machineRef: ceph-2

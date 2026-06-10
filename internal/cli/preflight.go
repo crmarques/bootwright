@@ -277,7 +277,7 @@ func secretFileCheck(refName, path, label string, publicKey, contextBacked, exte
 			remediation = "bootwright secret set " + refName + " --pull-secret <path>"
 		case strings.Contains(label, "tls.crt") || strings.Contains(label, "tls.key"):
 			remediation = "bootwright secret set " + refName + " --tls-cert <cert-chain.pem> --tls-key <key.pem>"
-		case strings.Contains(label, "credentialsRef") || strings.Contains(label, "credentialsRef") || strings.Contains(label, "proxyAuthRef"):
+		case strings.Contains(label, "credentialsRef") || strings.Contains(label, "proxyAuthRef"):
 			remediation = "bootwright secret set " + refName + " --from-file <path>"
 		case (strings.Contains(label, " keyRef") || strings.Contains(label, "nodeSSH")) && !contextBacked:
 			remediation = "create the file declared by Environment.spec.secrets[" + refName + "].file"

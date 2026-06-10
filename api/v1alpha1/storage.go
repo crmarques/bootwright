@@ -150,8 +150,12 @@ type StorageCephHost struct {
 	// equal the host's actual hostname. It defaults to the machineRef name.
 	Hostname   string               `yaml:"hostname,omitempty" json:"hostname,omitempty"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
-	Site       string               `yaml:"site" json:"site"`
-	Roles      []string             `yaml:"roles" json:"roles"`
+	// Site is the host's failure-domain bucket. It becomes the cephadm
+	// host-spec CRUSH location only in stretch mode (where failureDomain maps
+	// sites to real buckets); without stretch the failure domain is host and
+	// no location is rendered. placement.sites selects against it.
+	Site  string   `yaml:"site" json:"site"`
+	Roles []string `yaml:"roles" json:"roles"`
 	// Labels are additional free-form cephadm host labels (for example
 	// _admin) rendered alongside the roles, which always become labels.
 	Labels []string `yaml:"labels,omitempty" json:"labels,omitempty"`
@@ -221,8 +225,18 @@ type StoragePoolSpec struct {
 }
 
 type StoragePoolCephSpec struct {
-	Type         string                  `yaml:"type,omitempty" json:"type,omitempty"`
-	Role         string                  `yaml:"role,omitempty" json:"role,omitempty"`
+	// Type is the pool's immutable data-protection strategy: replicated
+	// (default) or erasure — the `ceph osd pool create` words; the populated
+	// arm key equals the type value. Changing it is the only desired-state
+	// change that rebuilds the pool (data-destroying, --override only);
+	// replicas, crush rule, and application reconcile in place.
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+	// Role declares what the pool backs (rbd, cephfs-metadata, cephfs-data,
+	// rgw) and drives the StorageExport wiring plus the default application:
+	// rbd -> rbd, cephfs-* -> cephfs, rgw -> rgw.
+	Role string `yaml:"role,omitempty" json:"role,omitempty"`
+	// Application overrides the inferred `ceph osd pool application enable`
+	// value.
 	Application  string                  `yaml:"application,omitempty" json:"application,omitempty"`
 	Replicated   StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
 	ErasureCoded *StoragePoolErasureCode `yaml:"erasure,omitempty" json:"erasure,omitempty"`

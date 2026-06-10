@@ -23,8 +23,7 @@ spec:
         host: ceph-0
     topology:
       hosts:
-        - hostname: ceph-0
+        - machineRef: ceph-0
           site: lab
           roles:
             - mon
-          machineRef: ceph-0

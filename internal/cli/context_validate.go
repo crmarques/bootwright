@@ -261,16 +261,6 @@ func blockingCheckCount(checks []output.Check) int {
 	return count
 }
 
-func warningCheckCount(checks []output.Check) int {
-	count := 0
-	for _, check := range checks {
-		if check.Status == output.StatusWarn {
-			count++
-		}
-	}
-	return count
-}
-
 func contextValidateNextSteps(checks []output.Check) []string {
 	seen := map[string]bool{}
 	var steps []string
