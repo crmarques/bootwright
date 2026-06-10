@@ -6,6 +6,20 @@ type Machine struct {
 	Metadata   Metadata    `yaml:"metadata" json:"metadata"`
 	Spec       MachineSpec `yaml:"spec" json:"spec"`
 	SourcePath string      `yaml:"-" json:"-"`
+	// DefaultedRefs records which spec references the normalize phase
+	// injected rather than the author wrote, so validation can reject a
+	// defaulted reference whose resolution is ambiguous instead of letting
+	// a name coincidence pick silently. Computed bookkeeping; never
+	// authored or serialized.
+	DefaultedRefs MachineDefaultedRefs `yaml:"-" json:"-"`
+}
+
+// MachineDefaultedRefs flags the spec references Normalize filled in.
+type MachineDefaultedRefs struct {
+	// AttachmentRef is true when spec.network.config.attachmentRef was
+	// copied from the networkConfigRef name; the same-name convention is
+	// only safe while the provider declares a single attachment to bind.
+	AttachmentRef bool
 }
 
 type MachineSpec struct {

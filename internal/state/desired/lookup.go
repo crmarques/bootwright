@@ -57,6 +57,16 @@ func lookupNetworkAttachment(provider v1alpha1.InfraProvider, name string) (v1al
 	return v1alpha1.NetworkAttachmentCapability{}, false
 }
 
+func providerNetworkAttachmentNames(provider v1alpha1.InfraProvider) []string {
+	var names []string
+	for _, attachment := range provider.Spec.NetworkAttachments {
+		if v1alpha1.NetworkAttachmentKind(attachment) == provider.Spec.Type {
+			names = append(names, attachment.Name)
+		}
+	}
+	return names
+}
+
 func indexInfraComponents(items []v1alpha1.InfraComponent) map[string]v1alpha1.InfraComponent {
 	out := make(map[string]v1alpha1.InfraComponent, len(items))
 	for _, c := range items {

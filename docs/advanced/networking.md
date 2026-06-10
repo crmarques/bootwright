@@ -12,7 +12,11 @@ description: NetworkConfig templates, machine overrides, endpoints, and load bal
 
 Substrate network surfaces live on
 `InfraProvider.spec.networkAttachments[]`. `Machine.spec.network.config.attachmentRef`
-maps a logical `NetworkConfig` to the selected provider attachment.
+maps a logical `NetworkConfig` to the selected provider attachment. When a
+provider-backed machine omits `attachmentRef`, it defaults to the
+`networkConfigRef` name; the default is accepted only while the provider
+declares a single attachment — with several, validation requires an authored
+`attachmentRef` naming the one to bind.
 
 ## Bonded Bare-Metal Template
 

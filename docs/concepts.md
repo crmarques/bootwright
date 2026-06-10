@@ -154,7 +154,10 @@ when you intentionally want one slice of the graph.
 Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
 KubeVirt NADs, and bare-metal VLANs, live in
 `InfraProvider.spec.networkAttachments[]`. A cluster selects them with
-`Machine.spec.network.config.attachmentRef`.
+`Machine.spec.network.config.attachmentRef`. On a provider-backed machine an
+omitted `attachmentRef` defaults to the `networkConfigRef` name — accepted
+only while the provider declares a single attachment; with several,
+validation requires an authored `attachmentRef`.
 
 Most provider-sourced nodes reuse the same NMState template and set their static
 install IP through `Machine.spec.network.config.interfaceAddresses[]`, which

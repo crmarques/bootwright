@@ -202,6 +202,10 @@ Rules:
   `attachmentRef` defaults to the `networkConfigRef`; `render
   effective` materializes the default and validation resolves it against the
   provider's `networkAttachments[]`. An authored `attachmentRef` always wins.
+  The default is accepted only while the provider declares a single
+  attachment of its kind; with several, validation rejects the defaulted
+  reference and lists the candidate names, so renaming a `NetworkConfig` can
+  never silently re-bind a machine to a different attachment.
 - `spec.network.config.interfaceAddresses[]` is the single owner of a node's
   static install IP. Each entry binds an NMState `interface` to a named
   `spec.addresses[]` entry through `addressRef` and sets `prefixLength` (and

@@ -360,11 +360,20 @@ func TestNormalizeDefaultsMachineAttachmentRef(t *testing.T) {
 	if got := state.Machines[0].Spec.Network.Config.AttachmentRef.Name; got != "cluster-net" {
 		t.Fatalf("defaulted attachmentRef = %q, want cluster-net", got)
 	}
+	if !state.Machines[0].DefaultedRefs.AttachmentRef {
+		t.Fatalf("DefaultedRefs = %+v, want AttachmentRef marked defaulted", state.Machines[0].DefaultedRefs)
+	}
 	if got := state.Machines[1].Spec.Network.Config.AttachmentRef.Name; got != "other-attachment" {
 		t.Fatalf("authored attachmentRef = %q, want other-attachment", got)
 	}
+	if state.Machines[1].DefaultedRefs.AttachmentRef {
+		t.Fatalf("DefaultedRefs = %+v, want authored attachmentRef left unmarked", state.Machines[1].DefaultedRefs)
+	}
 	if got := state.Machines[2].Spec.Network.Config.AttachmentRef.Name; got != "" {
 		t.Fatalf("provider-less machine attachmentRef = %q, want empty", got)
+	}
+	if state.Machines[2].DefaultedRefs.AttachmentRef {
+		t.Fatalf("DefaultedRefs = %+v, want provider-less machine left unmarked", state.Machines[2].DefaultedRefs)
 	}
 }
 

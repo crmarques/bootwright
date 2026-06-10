@@ -255,6 +255,16 @@ func validateMachineNetwork(prefix string, machine v1alpha1.Machine, networks ma
 	if config.NetworkConfigRef.Name != "" && machine.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		errs = append(errs, prefix+".config.attachmentRef is required when networkConfigRef is set on a provider-backed Machine")
 	}
+	// A defaulted attachmentRef rides the NetworkConfig name; that convention
+	// is only safe while the provider has exactly one attachment to bind.
+	// With several, a NetworkConfig rename could silently re-bind the machine
+	// to a different substrate network, so the choice must be authored.
+	if machine.DefaultedRefs.AttachmentRef {
+		if candidates := providerNetworkAttachmentNames(provider); len(candidates) > 1 {
+			errs = append(errs, fmt.Sprintf("%s.config.attachmentRef was defaulted from networkConfigRef %q, but InfraProvider/%s declares multiple networkAttachments {%s}; author attachmentRef to pick one",
+				prefix, config.NetworkConfigRef.Name, provider.Metadata.Name, strings.Join(candidates, ", ")))
+		}
+	}
 	errs = append(errs, validateMachineInterfaceAddresses(prefix+".config.interfaceAddresses", machine, config)...)
 	injects := machineConfigInterfaceAddresses(machine, config)
 	var effective map[string]any

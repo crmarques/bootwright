@@ -78,6 +78,7 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	config := &m.Spec.Network.Config
 	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		config.AttachmentRef.Name = config.NetworkConfigRef.Name
+		m.DefaultedRefs.AttachmentRef = true
 	}
 	// Documented convention: access.ssh.addressRef defaults to the address
 	// named "ssh" when one exists. No only-address fallback — adding a second

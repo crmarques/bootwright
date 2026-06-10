@@ -18,6 +18,7 @@ spec:
   network:
     config:
       networkConfigRef: dc1-net
+      attachmentRef: dc1-net
       interfaceAddresses:
         - interface: primary
           addressRef: ip
@@ -62,6 +63,7 @@ spec:
   network:
     config:
       networkConfigRef: dc1-net
+      attachmentRef: dc1-net
       interfaceAddresses:
         - interface: primary
           addressRef: ip
@@ -106,6 +108,7 @@ spec:
   network:
     config:
       networkConfigRef: dc1-net
+      attachmentRef: dc1-net
       interfaceAddresses:
         - interface: primary
           addressRef: ip

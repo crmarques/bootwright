@@ -2646,6 +2646,25 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			},
 		},
 		{
+			// The networkConfigRef-name default is rejected when the provider
+			// declares several attachments: a NetworkConfig rename could
+			// silently re-bind the machine, so the choice must be authored.
+			name: "defaulted-attachment-ref-ambiguous-across-multiple-attachments",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = addSecondKubeVirtNetworkAttachment(files["child.yaml"])
+				files["child.yaml"] = strings.Replace(files["child.yaml"], "      attachmentRef: child-machine-net\n", "", 1)
+			},
+			wantSubstring: `Machine/child-master-0 spec.network.config.attachmentRef was defaulted from networkConfigRef "child-machine-net", but InfraProvider/child-kubevirt-provider declares multiple networkAttachments {child-machine-net, child-storage-net}; author attachmentRef to pick one`,
+		},
+		{
+			// An authored attachmentRef names its attachment explicitly, so
+			// several provider attachments are not ambiguous.
+			name: "authored-attachment-ref-with-multiple-attachments",
+			mutate: func(files map[string]string) {
+				files["child.yaml"] = addSecondKubeVirtNetworkAttachment(files["child.yaml"])
+			},
+		},
+		{
 			name: "missing-network-attachment",
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "attachmentRef: child-machine-net", "attachmentRef: missing", 1)
@@ -2951,6 +2970,13 @@ spec:
 
 func addKubeVirtKubeconfigSecret(environmentYAML string) string {
 	return strings.Replace(environmentYAML, "    - bmc-credentials:\n", "    - external-virt-cluster-kubeconfig:\n        file: ~/virt.kubeconfig\n    - bmc-credentials:\n", 1)
+}
+
+func addSecondKubeVirtNetworkAttachment(childYAML string) string {
+	return strings.Replace(childYAML,
+		"    - name: child-machine-net\n      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n",
+		"    - name: child-machine-net\n      kubevirt:\n        nadRef:\n          name: child-ocp-net\n          namespace: bootwright-child-ocp\n    - name: child-storage-net\n      kubevirt:\n        nadRef:\n          name: child-storage-net\n          namespace: bootwright-child-ocp\n",
+		1)
 }
 
 func newKubeVirtCycleFiles() map[string]string {
