@@ -712,8 +712,9 @@ Rules:
   on the same `StorageCluster`, must differ from the metadata pool, and exactly
   one must set `default: true`.
 - `spec.cephfs.mds.placement` defaults to every topology host with the `mds`
-  role; `sites`/`hosts` narrow the selection. On stretch-mode clusters the
-  resolved placement must cover at least two MDS-capable hosts per data site.
+  role; `sites`/`hosts` narrow the selection and must resolve to at least one
+  `mds`-capable host. On stretch-mode clusters the resolved placement must
+  cover at least two MDS-capable hosts per data site.
 
 ## StorageObjectGateway
 

@@ -162,6 +162,7 @@ func validateStorageFilesystems(items []v1alpha1.StorageFilesystem, clusters map
 		if defaults != 1 {
 			errs = append(errs, fmt.Sprintf("%s.cephfs.dataPoolRefs must mark exactly one default data pool", prefix))
 		}
+		errs = append(errs, validateStoragePlacementHosts(prefix+".cephfs.mds.placement", fs.Spec.CephFS.MDS.Placement, cluster, ok, v1alpha1.StorageCephRoleMDS)...)
 		if ok && storageClusterStretchEnabled(cluster) {
 			errs = append(errs, validatePlacementCoversDataSites(prefix+".cephfs.mds.placement", topology.ResolvePlacement(cluster, fs.Spec.CephFS.MDS.Placement, v1alpha1.StorageCephRoleMDS), cluster, v1alpha1.StorageCephRoleMDS)...)
 		}

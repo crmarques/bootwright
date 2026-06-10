@@ -454,6 +454,64 @@ func TestStoragePoolTypeRejectsIncompatibleArms(t *testing.T) {
 	}
 }
 
+// TestStorageFilesystemMDSPlacementValidated covers F13: spec.cephfs.mds.placement
+// goes through validateStoragePlacementHosts like every sibling placement, so a
+// dangling host and a topology with no mds-capable host fail validate instead of
+// silently rendering a filesystem with zero MDS daemons.
+func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*v1alpha1.State)
+		want string
+	}{
+		{
+			name: "dangling-placement-host",
+			edit: func(state *v1alpha1.State) {
+				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement.Hosts = []string{"ceph-typo"}
+			},
+			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" is not listed in StorageCluster/ceph spec.ceph.topology.nodes`,
+		},
+		{
+			name: "no-mds-role-anywhere",
+			edit: func(state *v1alpha1.State) {
+				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement = v1alpha1.StoragePlacement{}
+				hosts := state.StorageClusters[0].Spec.Ceph.Topology.Hosts
+				for i := range hosts {
+					var roles []string
+					for _, role := range hosts[i].Roles {
+						if role != v1alpha1.StorageCephRoleMDS {
+							roles = append(roles, role)
+						}
+					}
+					hosts[i].Roles = roles
+				}
+			},
+			want: `spec.cephfs.mds.placement resolves to no hosts: no StorageCluster/ceph spec.ceph.topology.hosts[] entry carries role "mds" within the selection`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := storageValidationState()
+			state.StorageClusters[0].Spec.Ceph.Topology.Stretch = nil
+			tc.edit(&state)
+			got := strings.Join(validateStorage(state), "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("validateStorage errors = %q, want substring %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestStorageFilesystemMDSRolePlacementPasses confirms the default role-derived
+// placement still validates on a topology whose hosts carry the mds role.
+func TestStorageFilesystemMDSRolePlacementPasses(t *testing.T) {
+	state := storageValidationState()
+	state.StorageFilesystems[0].Spec.CephFS.MDS.Placement = v1alpha1.StoragePlacement{}
+	if errs := validateStorage(state); len(errs) != 0 {
+		t.Fatalf("validateStorage returned errors: %v", errs)
+	}
+}
+
 func TestStorageAttachmentRequiresDataFoundationProvider(t *testing.T) {
 	state := storageValidationState()
 	state.ClusterAddons[0].Spec.Provides = nil
