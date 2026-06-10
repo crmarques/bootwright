@@ -105,6 +105,9 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
+	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
+	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
+	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines)...)
 	if ceph.Topology.Stretch != nil {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
@@ -393,6 +396,100 @@ func sortedStringKeys2(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func validateStorageCephMgrModules(prefix string, modules []string) []string {
+	var errs []string
+	seen := map[string]bool{}
+	for i, module := range modules {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		if module == "" {
+			errs = append(errs, owner+" must not be empty")
+			continue
+		}
+		if seen[module] {
+			errs = append(errs, fmt.Sprintf("%s %q is duplicated", owner, module))
+		}
+		seen[module] = true
+	}
+	return errs
+}
+
+// validateStorageCephMonitoring checks each authored monitoring service: its
+// placement must resolve (role holders or authored placement) — an authored
+// block whose spec could never render would be silently ignored otherwise.
+func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluster) []string {
+	monitoring := cluster.Spec.Ceph.Monitoring
+	if monitoring == nil {
+		return nil
+	}
+	var errs []string
+	if monitoring.Enabled != nil && !*monitoring.Enabled {
+		for field, service := range map[string]*v1alpha1.StorageCephMonitoringService{
+			"prometheus": monitoring.Prometheus, "grafana": monitoring.Grafana,
+			"alertmanager": monitoring.Alertmanager, "nodeExporter": monitoring.NodeExporter,
+		} {
+			if service != nil {
+				errs = append(errs, fmt.Sprintf("%s.%s must be empty when monitoring.enabled is false", prefix, field))
+			}
+		}
+		return errs
+	}
+	for _, item := range []struct {
+		field   string
+		role    string
+		service *v1alpha1.StorageCephMonitoringService
+	}{
+		{"prometheus", v1alpha1.StorageCephRolePrometheus, monitoring.Prometheus},
+		{"grafana", v1alpha1.StorageCephRoleGrafana, monitoring.Grafana},
+		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, monitoring.Alertmanager},
+		{"nodeExporter", "", monitoring.NodeExporter},
+	} {
+		if item.service == nil {
+			continue
+		}
+		owner := prefix + "." + item.field
+		errs = append(errs, validateStoragePlacementHosts(owner+".placement", item.service.Placement, cluster, true, item.role)...)
+		if item.service.Port < 0 || item.service.Port > 65535 {
+			errs = append(errs, fmt.Sprintf("%s.port %d out of range", owner, item.service.Port))
+		}
+		if item.field != "prometheus" && (item.service.RetentionTime != "" || item.service.RetentionSize != "") {
+			errs = append(errs, owner+" retentionTime/retentionSize apply to prometheus only")
+		}
+	}
+	return errs
+}
+
+// validateStorageCephServices checks the cephadm service-spec passthrough:
+// the service type must not collide with a first-class surface (one owner per
+// service), and the placement must be authored explicitly.
+func validateStorageCephServices(prefix string, cluster v1alpha1.StorageCluster) []string {
+	reserved := map[string]bool{
+		"host": true, "mon": true, "mgr": true, "osd": true, "mds": true,
+		"rgw": true, "ingress": true, "prometheus": true, "grafana": true,
+		"alertmanager": true, "node-exporter": true,
+	}
+	var errs []string
+	seen := map[string]bool{}
+	for i, service := range cluster.Spec.Ceph.Services {
+		owner := fmt.Sprintf("%s[%d]", prefix, i)
+		switch {
+		case service.ServiceType == "":
+			errs = append(errs, owner+".serviceType is required")
+		case reserved[service.ServiceType]:
+			errs = append(errs, fmt.Sprintf("%s.serviceType %q is owned by a first-class surface (topology roles, monitoring, gateways); declare it there", owner, service.ServiceType))
+		}
+		identity := service.ServiceType + "/" + service.ServiceID
+		if seen[identity] {
+			errs = append(errs, fmt.Sprintf("%s duplicates serviceType/serviceID %q", owner, identity))
+		}
+		seen[identity] = true
+		if len(service.Placement.Hosts) == 0 && len(service.Placement.Sites) == 0 {
+			errs = append(errs, owner+".placement requires hosts or sites for passthrough services")
+		}
+		errs = append(errs, validateStoragePlacementHosts(owner+".placement", service.Placement, cluster, true, "")...)
+	}
+	return errs
 }
 
 func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlacement, cluster v1alpha1.StorageCluster, clusterOK bool, role string) []string {

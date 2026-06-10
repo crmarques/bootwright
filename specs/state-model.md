@@ -604,9 +604,36 @@ Rules:
   not unset on the cluster (removal semantics belong to the open
   override/reconcile design). `public_network` and `cluster_network` are owned
   by `spec.ceph.networks` and rejected here.
+- `spec.ceph.mgrModules[]` declares mgr modules, rendered as idempotent
+  `ceph mgr module enable` operations. Additive-only, like `config`; module
+  settings are declared under `config.mgr` (`mgr/<module>/<key>`).
+- `spec.ceph.monitoring` declares the cephadm monitoring stack. Absent means
+  the cephadm default stack with cephadm's own placement; `enabled: false`
+  renders `cephadm bootstrap --skip-monitoring-stack` and forbids per-service
+  blocks. The `prometheus`, `grafana`, and `alertmanager` services place by
+  the topology roles of the same names exactly like `mon`/`mgr` (narrow with
+  `placement.sites`/`hosts`); `nodeExporter` keeps the cephadm all-hosts
+  default unless authored. Service knobs render 1:1 into the cephadm service
+  spec: `port`, and (prometheus only) `retentionTime`/`retentionSize` as
+  `retention_time`/`retention_size`. An authored service must resolve to at
+  least one host.
+- `spec.ceph.services[]` is the cephadm service-spec passthrough for service
+  types Bootwright does not model first-class (`nfs`, `loki`, ...):
+  `serviceType`, `serviceID`, `placement`, and `spec` render field for field
+  into a `ceph orch apply` document. Types owned by a first-class surface
+  (topology roles, monitoring, gateways) are rejected; `placement` requires
+  explicit `hosts` or `sites`.
 - `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
   `Machine`, a `site`, and at least one `roles[]` value from `mon`, `mgr`,
-  `osd`, `mds`, `rgw`, `ingress`. `hostname` is the rendered cephadm host-spec
+  `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
+  Optional `labels[]` pass additional free-form cephadm host labels (for
+  example `_admin`) through verbatim; roles always become labels.
+  `devices[]` is the lean OSD shorthand (literal paths ==
+  `osd.dataDevices.paths`); the optional `osd` object is the drivegroup-shaped
+  selection mirroring the cephadm OSD spec (`dataDevices`/`dbDevices`/
+  `walDevices` with `paths|all|rotational|size|limit`, `encrypted`,
+  `osdsPerDevice`, `crushDeviceClass`), mutually exclusive with `devices`.
+  `hostname` is the rendered cephadm host-spec
   hostname; it defaults to the `machineRef` name and is authored only when the
   Ceph hostname genuinely differs from the Machine name. Hostnames must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user

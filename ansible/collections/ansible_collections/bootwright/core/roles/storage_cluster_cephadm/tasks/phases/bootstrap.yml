@@ -308,6 +308,11 @@
               if bootwright_selected_storage_cluster.ceph.bootstrapConfPath | default('') | length > 0
               else []
             )
+            + (
+              ['--skip-monitoring-stack']
+              if bootwright_selected_storage_cluster.skipMonitoringStack | default(false) | bool
+              else []
+            )
           }}
       no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
 

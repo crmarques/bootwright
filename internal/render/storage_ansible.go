@@ -109,6 +109,9 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			},
 			"dataFoundationBindings": storageDataFoundationBindingsVars(state, cluster.Metadata.Name),
 		}
+		if !MonitoringEnabled(cluster) {
+			entry["skipMonitoringStack"] = true
+		}
 		if clusterSSH := storageClusterSSHVars(state, cluster, env, paths); len(clusterSSH) > 0 {
 			entry["clusterSSH"] = clusterSSH
 		}

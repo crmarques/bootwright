@@ -74,12 +74,18 @@ func HostByName(cluster v1alpha1.StorageCluster, hostname string) (v1alpha1.Stor
 }
 
 // ResolvePlacement resolves a placement to concrete topology hostnames: the
-// explicit hosts when authored, else every topology host carrying the role,
-// optionally narrowed to the named sites.
+// explicit hosts when authored, else every topology host carrying the role
+// (every topology host when role is empty — passthrough services have no
+// role), optionally narrowed to the named sites.
 func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.StoragePlacement, role string) []string {
 	base := placement.Hosts
-	if len(base) == 0 {
+	if len(base) == 0 && role != "" {
 		base = CephHostsWithRole(cluster, role)
+	} else if len(base) == 0 {
+		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+			base = append(base, host.Hostname)
+		}
+		sort.Strings(base)
 	}
 	if len(placement.Sites) == 0 {
 		return base

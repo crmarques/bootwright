@@ -128,6 +128,11 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			ops = append(ops, operationInPhase("storage", "set-cephfs-max-mds-"+fs.Metadata.Name, "ceph", "fs", "set", fs.Metadata.Name, "max_mds", fmt.Sprint(fs.Spec.CephFS.MDS.ActiveCount)))
 		}
 	}
+	// mgr modules reconcile additively; the role probes `ceph mgr module ls`
+	// and skips already-enabled (or always-on) modules.
+	for _, module := range cluster.Spec.Ceph.MgrModules {
+		ops = append(ops, operationWithIdempotency("topology", "enable-mgr-module-"+module, "mgr-module", module, "ceph", "mgr", "module", "enable", module))
+	}
 	for _, gw := range state.StorageObjectGateways {
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue

@@ -234,12 +234,15 @@ const (
 	// ibm-storage-ceph-<N> repositories.
 	StorageCephSubscriptionDefaultStream = "9"
 
-	StorageCephRoleMON     = "mon"
-	StorageCephRoleMGR     = "mgr"
-	StorageCephRoleOSD     = "osd"
-	StorageCephRoleMDS     = "mds"
-	StorageCephRoleRGW     = "rgw"
-	StorageCephRoleIngress = "ingress"
+	StorageCephRoleMON          = "mon"
+	StorageCephRoleMGR          = "mgr"
+	StorageCephRoleOSD          = "osd"
+	StorageCephRoleMDS          = "mds"
+	StorageCephRoleRGW          = "rgw"
+	StorageCephRoleIngress      = "ingress"
+	StorageCephRolePrometheus   = "prometheus"
+	StorageCephRoleGrafana      = "grafana"
+	StorageCephRoleAlertmanager = "alertmanager"
 
 	StoragePoolTypeReplicated  = "replicated"
 	StoragePoolTypeErasureCode = "erasure"

@@ -42,8 +42,22 @@ type StorageClusterCephSpec struct {
 	// from the spec are not unset on the cluster (removal semantics belong to
 	// the override/reconcile design). public_network and cluster_network are
 	// owned by spec.ceph.networks and are rejected here.
-	Config   map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
-	Topology StorageCephTopology          `yaml:"topology" json:"topology"`
+	Config map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
+	// MgrModules declares mgr modules to enable, rendered as idempotent
+	// `ceph mgr module enable` operations. Additive-only, like config: modules
+	// removed from the spec are not disabled. Module settings are declared in
+	// spec.ceph.config under the mgr section (mgr/<module>/<key>).
+	MgrModules []string `yaml:"mgrModules,omitempty" json:"mgrModules,omitempty"`
+	// Monitoring declares the cephadm monitoring stack. Absent means the
+	// cephadm default stack deploys with cephadm's own placement; enabled:
+	// false skips it at bootstrap. Per-service placement derives from the
+	// prometheus/grafana/alertmanager roles, exactly like mon/mgr.
+	Monitoring *StorageCephMonitoring `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
+	// Services is the cephadm service-spec passthrough for service types
+	// Bootwright does not model first-class (nfs, loki, ...): serviceType,
+	// serviceID, placement, and spec render 1:1 into a cephadm service spec.
+	Services []StorageCephService `yaml:"services,omitempty" json:"services,omitempty"`
+	Topology StorageCephTopology  `yaml:"topology" json:"topology"`
 }
 
 // StorageCephCommunitySpec tunes the upstream community package source for the
@@ -68,6 +82,34 @@ type StorageCephadmBootstrap struct {
 	// machine's SSH address.
 	Host       string               `yaml:"host" json:"host"`
 	AddressRef LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
+}
+
+type StorageCephMonitoring struct {
+	// Enabled defaults to true (the cephadm default). false renders the
+	// bootstrap --skip-monitoring-stack flag and no monitoring specs.
+	Enabled      *bool                         `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Prometheus   *StorageCephMonitoringService `yaml:"prometheus,omitempty" json:"prometheus,omitempty"`
+	Grafana      *StorageCephMonitoringService `yaml:"grafana,omitempty" json:"grafana,omitempty"`
+	Alertmanager *StorageCephMonitoringService `yaml:"alertmanager,omitempty" json:"alertmanager,omitempty"`
+	NodeExporter *StorageCephMonitoringService `yaml:"nodeExporter,omitempty" json:"nodeExporter,omitempty"`
+}
+
+// StorageCephMonitoringService tunes one monitoring service; the knobs render
+// 1:1 into the cephadm service spec (port, retention_time, retention_size).
+type StorageCephMonitoringService struct {
+	Placement     StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+	Port          int              `yaml:"port,omitempty" json:"port,omitempty"`
+	RetentionTime string           `yaml:"retentionTime,omitempty" json:"retentionTime,omitempty"`
+	RetentionSize string           `yaml:"retentionSize,omitempty" json:"retentionSize,omitempty"`
+}
+
+// StorageCephService is a raw cephadm service spec: serviceType/serviceID/
+// placement/spec render field for field into a `ceph orch apply` document.
+type StorageCephService struct {
+	ServiceType string           `yaml:"serviceType" json:"serviceType"`
+	ServiceID   string           `yaml:"serviceID,omitempty" json:"serviceID,omitempty"`
+	Placement   StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+	Spec        map[string]any   `yaml:"spec,omitempty" json:"spec,omitempty"`
 }
 
 type StorageCephNetworks struct {

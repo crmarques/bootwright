@@ -81,6 +81,15 @@ func cephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 			docs = append(docs, cephadmPlacementService("mds", fs.Metadata.Name, hosts, 0, nil))
 		}
 	}
+	docs = append(docs, cephadmMonitoringSpecs(cluster)...)
+	for _, service := range cluster.Spec.Ceph.Services {
+		hosts := topology.ResolvePlacement(cluster, service.Placement, "")
+		spec := map[string]any{}
+		for key, value := range service.Spec {
+			spec[key] = value
+		}
+		docs = append(docs, cephadmPlacementService(service.ServiceType, service.ServiceID, hosts, service.Placement.CountPerHost, spec))
+	}
 	for _, gw := range state.StorageObjectGateways {
 		if gw.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
 			continue
@@ -215,4 +224,68 @@ func cephadmDeviceSelection(selection *v1alpha1.StorageCephDeviceSelection) map[
 		out["limit"] = selection.Limit
 	}
 	return out
+}
+
+// MonitoringEnabled reports whether the cephadm monitoring stack deploys:
+// absent monitoring block or enabled nil/true means the cephadm default.
+func MonitoringEnabled(cluster v1alpha1.StorageCluster) bool {
+	monitoring := cluster.Spec.Ceph.Monitoring
+	return monitoring == nil || monitoring.Enabled == nil || *monitoring.Enabled
+}
+
+// cephadmMonitoringSpecs renders explicit monitoring service specs for the
+// services whose placement is declared — by the prometheus/grafana/
+// alertmanager roles or an authored placement. A service with neither keeps
+// cephadm's own default deployment, so a zero-config cluster is unchanged.
+func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
+	if !MonitoringEnabled(cluster) {
+		return nil
+	}
+	monitoring := cluster.Spec.Ceph.Monitoring
+	services := []struct {
+		serviceType string
+		role        string
+		config      *v1alpha1.StorageCephMonitoringService
+	}{
+		{"prometheus", v1alpha1.StorageCephRolePrometheus, nil},
+		{"grafana", v1alpha1.StorageCephRoleGrafana, nil},
+		{"alertmanager", v1alpha1.StorageCephRoleAlertmanager, nil},
+		{"node-exporter", "", nil},
+	}
+	if monitoring != nil {
+		services[0].config = monitoring.Prometheus
+		services[1].config = monitoring.Grafana
+		services[2].config = monitoring.Alertmanager
+		services[3].config = monitoring.NodeExporter
+	}
+	var docs []any
+	for _, service := range services {
+		// A role-less service (node-exporter) renders only when authored:
+		// with no block, cephadm's own all-hosts default deployment stands.
+		if service.role == "" && service.config == nil {
+			continue
+		}
+		placement := v1alpha1.StoragePlacement{}
+		if service.config != nil {
+			placement = service.config.Placement
+		}
+		hosts := topology.ResolvePlacement(cluster, placement, service.role)
+		if len(hosts) == 0 {
+			continue
+		}
+		spec := map[string]any{}
+		if service.config != nil {
+			if service.config.Port > 0 {
+				spec["port"] = service.config.Port
+			}
+			if service.config.RetentionTime != "" {
+				spec["retention_time"] = service.config.RetentionTime
+			}
+			if service.config.RetentionSize != "" {
+				spec["retention_size"] = service.config.RetentionSize
+			}
+		}
+		docs = append(docs, cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec))
+	}
+	return docs
 }

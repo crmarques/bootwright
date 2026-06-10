@@ -339,3 +339,77 @@ func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {
 		t.Fatalf("config ops = %v, want %v", got, want)
 	}
 }
+
+// Monitoring services place by their roles exactly like mon/mgr; knobs render
+// 1:1 into the service spec; passthrough services render verbatim; declared
+// mgr modules become idempotent enable operations.
+func TestMonitoringServicesPassthroughAndMgrModules(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			MgrModules: []string{"balancer", "telemetry"},
+			Monitoring: &v1alpha1.StorageCephMonitoring{
+				Prometheus: &v1alpha1.StorageCephMonitoringService{RetentionTime: "15d"},
+			},
+			Services: []v1alpha1.StorageCephService{{
+				ServiceType: "nfs",
+				ServiceID:   "shared",
+				Placement:   v1alpha1.StoragePlacement{Sites: []string{"lab"}},
+				Spec:        map[string]any{"port": 2049},
+			}},
+			Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{
+				{Hostname: "ceph-0", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}, Site: "lab", Roles: []string{"mon", "prometheus", "grafana"}},
+				{Hostname: "ceph-1", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Site: "remote", Roles: []string{"mon"}},
+			}},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+
+	late := cephadmLateServicesSpec(state, cluster)
+	byType := map[string]map[string]any{}
+	for _, doc := range late {
+		m := doc.(map[string]any)
+		byType[m["service_type"].(string)] = m
+	}
+	prometheus := byType["prometheus"]
+	if prometheus == nil {
+		t.Fatalf("missing prometheus spec in %v", late)
+	}
+	if got := prometheus["placement"].(map[string]any)["hosts"].([]string); !reflect.DeepEqual(got, []string{"ceph-0"}) {
+		t.Fatalf("prometheus hosts = %v, want [ceph-0]", got)
+	}
+	if got := prometheus["spec"].(map[string]any)["retention_time"]; got != "15d" {
+		t.Fatalf("prometheus retention_time = %v", got)
+	}
+	if byType["grafana"] == nil {
+		t.Fatal("grafana role on a host must render a grafana spec")
+	}
+	if byType["alertmanager"] != nil || byType["node-exporter"] != nil {
+		t.Fatal("services with neither role nor block must keep the cephadm default (no spec)")
+	}
+	nfs := byType["nfs"]
+	if nfs == nil || nfs["service_id"] != "shared" {
+		t.Fatalf("nfs passthrough spec = %v", nfs)
+	}
+	if got := nfs["placement"].(map[string]any)["hosts"].([]string); !reflect.DeepEqual(got, []string{"ceph-0"}) {
+		t.Fatalf("nfs hosts = %v, want [ceph-0] (sites narrowing)", got)
+	}
+	if got := nfs["spec"].(map[string]any)["port"]; got != 2049 {
+		t.Fatalf("nfs port = %v", got)
+	}
+
+	ops := cephOperations(state, cluster)["operations"].([]map[string]any)
+	var modules [][]string
+	for _, op := range ops {
+		if name, _ := op["name"].(string); strings.HasPrefix(name, "enable-mgr-module-") {
+			modules = append(modules, op["command"].([]string))
+		}
+	}
+	want := [][]string{
+		{"ceph", "mgr", "module", "enable", "balancer"},
+		{"ceph", "mgr", "module", "enable", "telemetry"},
+	}
+	if !reflect.DeepEqual(modules, want) {
+		t.Fatalf("mgr module ops = %v, want %v", modules, want)
+	}
+}
