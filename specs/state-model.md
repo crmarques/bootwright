@@ -595,6 +595,15 @@ Rules:
 - `spec.ceph.cephadm.bootstrap.host` must name a
   `spec.ceph.topology.hosts[]` entry.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
+  They render to the Ceph `public_network`/`cluster_network` configuration
+  (seeded at bootstrap, reconciled by `ceph config set` on later applies).
+- `spec.ceph.config` declares Ceph configuration database options as
+  `config.<section>.<key>: <value>`, rendered as idempotent `ceph config set`
+  operations. Sections are `global`, `mon`, `mgr`, `osd`, `mds`, `client`, or
+  `<type>.<id>`. Convergence is additive-only: keys removed from the spec are
+  not unset on the cluster (removal semantics belong to the open
+  override/reconcile design). `public_network` and `cluster_network` are owned
+  by `spec.ceph.networks` and rejected here.
 - `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
   `Machine`, a `site`, and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`. `hostname` is the rendered cephadm host-spec

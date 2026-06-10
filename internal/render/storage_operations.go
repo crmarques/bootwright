@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -18,6 +19,14 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	}
 	if clusters := cluster.Spec.Ceph.Networks.ClusterCIDRs; len(clusters) > 0 {
 		ops = append(ops, operationInPhase("topology", "set-cluster-network", "ceph", "config", "set", "global", "cluster_network", strings.Join(clusters, ",")))
+	}
+	// Declared ceph config options reconcile in place (`ceph config set` is
+	// last-write-wins); convergence is additive-only by design.
+	for _, section := range sortedKeys(cluster.Spec.Ceph.Config) {
+		options := cluster.Spec.Ceph.Config[section]
+		for _, key := range sortedKeys(options) {
+			ops = append(ops, operationInPhase("topology", "set-config-"+section+"-"+key, "ceph", "config", "set", section, key, options[key]))
+		}
 	}
 	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil {
 		// Stretch mode requires the connectivity election strategy before
@@ -135,6 +144,15 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		},
 		"operations": ops,
 	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func operationInPhase(phase, name string, command ...string) map[string]any {

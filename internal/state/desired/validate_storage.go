@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -103,7 +104,8 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 	for i, cidr := range ceph.Networks.ClusterCIDRs {
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
-	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, machines)...)
+	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
+	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines)...)
 	if ceph.Topology.Stretch != nil {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
@@ -332,6 +334,65 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 		errs = append(errs, validateStorageCephHostOSD(owner, node)...)
 	}
 	return errs
+}
+
+// validateStorageCephConfig checks the declared ceph config options: sections
+// must be valid `ceph config set` who-targets, and keys owned by other spec
+// fields (the networks CIDRs) are rejected — one owner per fact.
+func validateStorageCephConfig(prefix string, config map[string]map[string]string) []string {
+	var errs []string
+	for _, section := range sortedStringKeys(config) {
+		owner := fmt.Sprintf("%s[%s]", prefix, section)
+		if !validCephConfigSection(section) {
+			errs = append(errs, fmt.Sprintf("%s is not a valid ceph config section (accepted: global, mon, mgr, osd, mds, client, or <type>.<id>)", owner))
+		}
+		options := config[section]
+		for _, key := range sortedStringKeys2(options) {
+			keyOwner := fmt.Sprintf("%s.%s", owner, key)
+			if key == "" {
+				errs = append(errs, owner+" contains an empty option key")
+				continue
+			}
+			if key == "public_network" || key == "cluster_network" {
+				errs = append(errs, fmt.Sprintf("%s is owned by spec.ceph.networks (publicCIDRs/clusterCIDRs); declare it there", keyOwner))
+			}
+			if options[key] == "" {
+				errs = append(errs, keyOwner+" must not be empty")
+			}
+		}
+	}
+	return errs
+}
+
+func validCephConfigSection(section string) bool {
+	switch section {
+	case "global", "mon", "mgr", "osd", "mds", "client":
+		return true
+	}
+	for _, daemon := range []string{"mon.", "mgr.", "osd.", "mds.", "client."} {
+		if strings.HasPrefix(section, daemon) && len(section) > len(daemon) {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedStringKeys(m map[string]map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStringKeys2(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlacement, cluster v1alpha1.StorageCluster, clusterOK bool, role string) []string {

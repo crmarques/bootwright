@@ -516,7 +516,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[0].MachineRef = v1alpha1.LocalObjectReference{}
 			},
-			want: "spec.ceph.topology.nodes[0].machineRef is required",
+			want: "spec.ceph.topology.hosts[0].machineRef is required",
 		},
 		{
 			name: "missing-machine-ssh",

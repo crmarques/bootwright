@@ -227,7 +227,7 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	seedNode := cluster.Spec.Ceph.Cephadm.Bootstrap.Host
 	node, ok := storageExportSeedNode(cluster, seedNode)
 	if !ok {
-		return nil, fmt.Errorf("StorageCluster/%s seedNode %q is not listed in spec.ceph.topology.nodes", cluster.Metadata.Name, seedNode)
+		return nil, fmt.Errorf("StorageCluster/%s seedNode %q is not listed in spec.ceph.topology.hosts", cluster.Metadata.Name, seedNode)
 	}
 	machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 	if !ok {

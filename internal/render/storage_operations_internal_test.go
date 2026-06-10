@@ -2,6 +2,7 @@ package render
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
@@ -306,5 +307,35 @@ func TestDrivegroupOSDSpecAndHostLabelsRender(t *testing.T) {
 	}
 	if osdSpec["encrypted"] != true || osdSpec["osds_per_device"] != 2 || osdSpec["crush_device_class"] != "ssd" {
 		t.Fatalf("osd spec = %v, want encrypted, osds_per_device 2, crush_device_class ssd", osdSpec)
+	}
+}
+
+// Declared spec.ceph.config options render as deterministic `ceph config set`
+// operations (sorted by section then key), additive-only by design.
+func TestCephConfigOptionsRenderAsConfigSetOperations(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph"},
+		Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Config: map[string]map[string]string{
+				"osd":    {"osd_memory_target": "4294967296"},
+				"global": {"osd_pool_default_pg_autoscale_mode": "on"},
+			},
+		}},
+	}
+	state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{cluster}}
+	ops := cephOperations(state, cluster)["operations"].([]map[string]any)
+	var got [][]string
+	for _, op := range ops {
+		name, _ := op["name"].(string)
+		if strings.HasPrefix(name, "set-config-") {
+			got = append(got, op["command"].([]string))
+		}
+	}
+	want := [][]string{
+		{"ceph", "config", "set", "global", "osd_pool_default_pg_autoscale_mode", "on"},
+		{"ceph", "config", "set", "osd", "osd_memory_target", "4294967296"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("config ops = %v, want %v", got, want)
 	}
 }

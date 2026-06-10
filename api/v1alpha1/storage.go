@@ -36,7 +36,14 @@ type StorageClusterCephSpec struct {
 	EntitlementRef LocalObjectReference      `yaml:"entitlementRef,omitempty" json:"entitlementRef,omitempty"`
 	Cephadm        StorageCephadmSpec        `yaml:"cephadm" json:"cephadm"`
 	Networks       StorageCephNetworks       `yaml:"networks,omitempty" json:"networks,omitempty"`
-	Topology       StorageCephTopology       `yaml:"topology" json:"topology"`
+	// Config declares Ceph configuration database options as
+	// section -> key -> value, rendered as idempotent `ceph config set`
+	// operations after bootstrap. Convergence is additive-only: keys removed
+	// from the spec are not unset on the cluster (removal semantics belong to
+	// the override/reconcile design). public_network and cluster_network are
+	// owned by spec.ceph.networks and are rejected here.
+	Config   map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
+	Topology StorageCephTopology          `yaml:"topology" json:"topology"`
 }
 
 // StorageCephCommunitySpec tunes the upstream community package source for the
