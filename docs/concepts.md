@@ -67,7 +67,9 @@ ClusterAddonBinding.addons[].inputs[]
 
 `ContainerCluster` has no top-level infrastructure pointer. Each node selects
 the exact `Machine` that backs it through `spec.hosts[].machineRef`; each
-`Machine` owns its own substrate binding and install network.
+`Machine` owns its own substrate binding and install network. A `Machine` is
+node-bound by at most one cluster: `machineRef` entries must be disjoint
+across every `ContainerCluster` and `StorageCluster`.
 
 Bootwright and OpenShift installer actions run on the bastion host where the
 CLI is invoked. Desired state only selects substrate and service hosts.

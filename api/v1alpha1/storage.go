@@ -151,7 +151,10 @@ type StorageCephPoolReplicas struct {
 type StorageCephHost struct {
 	// Hostname is the cephadm host-spec hostname, rendered verbatim; it must
 	// equal the host's actual hostname. It defaults to the machineRef name.
-	Hostname   string               `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	// MachineRef selects the ceph-node Machine that backs this host. A
+	// Machine is node-bound by at most one cluster (and at most one host
+	// entry) across every ContainerCluster and StorageCluster.
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	// Site is the host's failure-domain bucket. It becomes the cephadm
 	// host-spec CRUSH location only in stretch mode (where failureDomain maps

@@ -1,6 +1,7 @@
 package desiredstate
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2528,6 +2529,121 @@ func TestReleaseChannelDerivation(t *testing.T) {
 	cluster.Spec.Distribution.Type = v1alpha1.DistributionOKD
 	if got := v1alpha1.ReleaseChannel(cluster); got != "" {
 		t.Fatalf("OKD ReleaseChannel = %q, want empty", got)
+	}
+}
+
+func TestMachineNodeBindingValidation(t *testing.T) {
+	containerCluster := func(name string, machineRefs ...string) v1alpha1.ContainerCluster {
+		cluster := v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: name}}
+		for i, ref := range machineRefs {
+			cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
+				Hostname:   fmt.Sprintf("%s-node-%d", name, i),
+				Role:       v1alpha1.NodeRoleMaster,
+				MachineRef: v1alpha1.LocalObjectReference{Name: ref},
+			})
+		}
+		return cluster
+	}
+	storageCluster := func(name string, machineRefs ...string) v1alpha1.StorageCluster {
+		cluster := v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: name},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type: v1alpha1.StorageClusterTypeCeph,
+				Ceph: &v1alpha1.StorageClusterCephSpec{},
+			},
+		}
+		for i, ref := range machineRefs {
+			cluster.Spec.Ceph.Topology.Hosts = append(cluster.Spec.Ceph.Topology.Hosts, v1alpha1.StorageCephHost{
+				Hostname:   fmt.Sprintf("%s-host-%d", name, i),
+				MachineRef: v1alpha1.LocalObjectReference{Name: ref},
+				Site:       "lab",
+				Roles:      []string{"mon"},
+			})
+		}
+		return cluster
+	}
+	cases := []struct {
+		name  string
+		state v1alpha1.State
+		want  []string
+	}{
+		{
+			name: "disjoint-fleet-passes",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{
+					containerCluster("dc1", "dc1-master-0", "dc1-master-1"),
+					containerCluster("dc2", "dc2-master-0", "dc2-master-1"),
+				},
+				StorageClusters: []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "ceph-1")},
+			},
+		},
+		{
+			name: "two-container-clusters-sharing-a-machine",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{
+					containerCluster("dc1", "dc1-master-0", "master-1"),
+					containerCluster("dc2", "dc2-master-0", "master-1"),
+				},
+			},
+			want: []string{`ContainerCluster/dc2 spec.hosts[1].machineRef "master-1" is already node-bound by ContainerCluster/dc1 spec.hosts[1]; a Machine may be node-bound by at most one cluster`},
+		},
+		{
+			name: "container-and-storage-cluster-sharing-a-machine",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1", "shared-0")},
+				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "shared-0")},
+			},
+			want: []string{`StorageCluster/ceph spec.ceph.topology.hosts[1].machineRef "shared-0" is already node-bound by ContainerCluster/dc1 spec.hosts[0]; a Machine may be node-bound by at most one cluster`},
+		},
+		{
+			name: "one-cluster-binding-a-machine-twice",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1", "master-0", "master-0")},
+			},
+			want: []string{`ContainerCluster/dc1 spec.hosts[1].machineRef "master-0" is already node-bound by spec.hosts[0] in the same cluster`},
+		},
+		{
+			name: "one-storage-cluster-binding-a-machine-twice",
+			state: v1alpha1.State{
+				StorageClusters: []v1alpha1.StorageCluster{storageCluster("ceph", "ceph-0", "ceph-0")},
+			},
+			want: []string{`StorageCluster/ceph spec.ceph.topology.hosts[1].machineRef "ceph-0" is already node-bound by spec.ceph.topology.hosts[0] in the same cluster`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := validateMachineNodeBindings(tc.state)
+			if len(got) != len(tc.want) {
+				t.Fatalf("validateMachineNodeBindings = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("validateMachineNodeBindings[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestMachineNodeBindingExclusivityAcrossClusters(t *testing.T) {
+	dir := t.TempDir()
+	files := newBaselineFiles()
+	_, clusterDoc, ok := strings.Cut(newClusterYAML, "---\n")
+	if !ok {
+		t.Fatal("baseline cluster YAML is missing the Machine document separator")
+	}
+	clusterB := strings.Replace(clusterDoc, "metadata: { name: sno }", "metadata: { name: sno-b }", 1)
+	clusterB = strings.Replace(clusterB, "address: 192.168.132.10", "address: 192.168.132.12", 2)
+	clusterB = strings.Replace(clusterB, "address: 192.168.132.11", "address: 192.168.132.13", 1)
+	files["cluster-b.yaml"] = clusterB
+	writeFiles(t, dir, files)
+	_, err := LoadNormalizeValidate([]string{dir})
+	if err == nil {
+		t.Fatal("expected two clusters node-binding one machine to fail")
+	}
+	want := `ContainerCluster/sno-b spec.hosts[0].machineRef "srv1" is already node-bound by ContainerCluster/sno spec.hosts[0]; a Machine may be node-bound by at most one cluster`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 

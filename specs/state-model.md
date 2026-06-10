@@ -511,8 +511,12 @@ Rules:
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
 - `spec.hosts[].machineRef` references a `Machine` with
-  `openshift-node` capability and `os.provided: false`.
+  `openshift-node` capability and `os.provided: false`; it defaults to the
+  host's `hostname`.
 - Each node hostname must be unique inside the cluster.
+- A `Machine` is node-bound by at most one cluster (and at most one host
+  entry): `machineRef` entries must be disjoint across every
+  `ContainerCluster` and `StorageCluster`.
 - Node network input is owned by the referenced `Machine`, not by the cluster
   node entry.
 - `spec.distribution.type` accepts `openshift` (default, materialized by
@@ -641,7 +645,8 @@ Rules:
   hostname; it defaults to the `machineRef` name and is authored only when the
   Ceph hostname genuinely differs from the Machine name. Hostnames must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
-  and `keyRef`.
+  and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
+  most one host entry) across every `ContainerCluster` and `StorageCluster`.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
 - Authoring `spec.ceph.topology.stretch` enables stretch mode (presence is the
@@ -849,6 +854,10 @@ Rules:
   (documented convention; there is no only-address fallback).
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
+- A `Machine` is node-bound by at most one cluster across `ContainerCluster`
+  `spec.hosts[].machineRef` and `StorageCluster`
+  `spec.ceph.topology.hosts[].machineRef`, and by at most one host entry
+  within that cluster.
 - Container cluster endpoints must resolve to valid addresses or valid
   InfraComponent bind addresses.
 - Bare-metal boot requires BMC details and artifact access suitable for the

@@ -84,15 +84,62 @@ func validateName(kind, name string) string {
 
 // validateCrossLayer enforces the few rules that span multiple kinds:
 // one ContainerCluster owner per ClusterInstall in v1, the proxy /
-// registry single-source-of-truth rule, and the disconnected-install
-// requirement.
+// registry single-source-of-truth rule, the disconnected-install
+// requirement, and fleet-wide machine node-binding exclusivity.
 func validateCrossLayer(state v1alpha1.State) []string {
 	var errs []string
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedMachineServices(state)...)
+	errs = append(errs, validateMachineNodeBindings(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
 	errs = append(errs, validateMachineImageEntitlements(state)...)
+	return errs
+}
+
+// validateMachineNodeBindings enforces node-binding exclusivity across the
+// whole fleet: a Machine backs at most one ContainerCluster spec.hosts[] or
+// StorageCluster spec.ceph.topology.hosts[] entry. Normalize defaults an
+// omitted container host machineRef to the hostname, so two clusters reusing
+// a hostname would otherwise silently capture (and re-install) the same
+// Machine.
+func validateMachineNodeBindings(state v1alpha1.State) []string {
+	type binding struct {
+		cluster string
+		field   string
+	}
+	bindings := map[string]binding{}
+	var errs []string
+	bind := func(machine, cluster, field string) {
+		if machine == "" {
+			return
+		}
+		existing, ok := bindings[machine]
+		if !ok {
+			bindings[machine] = binding{cluster: cluster, field: field}
+			return
+		}
+		if existing.cluster == cluster {
+			errs = append(errs, fmt.Sprintf("%s %s.machineRef %q is already node-bound by %s in the same cluster", cluster, field, machine, existing.field))
+			return
+		}
+		errs = append(errs, fmt.Sprintf("%s %s.machineRef %q is already node-bound by %s %s; a Machine may be node-bound by at most one cluster", cluster, field, machine, existing.cluster, existing.field))
+	}
+	for _, ocp := range state.ContainerClusters {
+		cluster := fmt.Sprintf("ContainerCluster/%s", ocp.Metadata.Name)
+		for i, node := range ocp.Spec.Hosts {
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.hosts[%d]", i))
+		}
+	}
+	for _, sc := range state.StorageClusters {
+		if sc.Spec.Ceph == nil {
+			continue
+		}
+		cluster := fmt.Sprintf("StorageCluster/%s", sc.Metadata.Name)
+		for i, node := range sc.Spec.Ceph.Topology.Hosts {
+			bind(node.MachineRef.Name, cluster, fmt.Sprintf("spec.ceph.topology.hosts[%d]", i))
+		}
+	}
 	return errs
 }
 

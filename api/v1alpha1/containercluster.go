@@ -104,7 +104,10 @@ type ContainerClusterNetworkCIDR struct {
 }
 
 type OCPHostSpec struct {
-	Hostname   string               `yaml:"hostname" json:"hostname"`
-	Role       string               `yaml:"role" json:"role"`
+	Hostname string `yaml:"hostname" json:"hostname"`
+	Role     string `yaml:"role" json:"role"`
+	// MachineRef selects the Machine that backs this node; it defaults to
+	// the hostname. A Machine is node-bound by at most one cluster (and at
+	// most one host entry) across every ContainerCluster and StorageCluster.
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 }
