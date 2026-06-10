@@ -585,29 +585,38 @@ Rules:
   entitlement and must not mix with upstream Ceph packages or images.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
-- `cephadm.bootstrap.host` names a storage topology node.
+- `cephadm.bootstrap.host` names a storage topology host. The rendered
+  cephadm `--mon-ip` is always an address of this host: the address named by
+  `bootstrap.addressRef`, defaulting to `cephadm.addressRef` and finally the
+  host machine's SSH address.
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
-- `spec.ceph.cephadm.bootstrap.host` and
-  `spec.ceph.cephadm.bootstrap.monIP.nodeRef` must name
-  `spec.ceph.topology.hosts[]` entries.
+- `spec.ceph.cephadm.bootstrap.host` must name a
+  `spec.ceph.topology.hosts[]` entry.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
-- `spec.ceph.topology.hosts[]` require a unique `hostname`, a `machineRef` to a
-  `ceph-node` `Machine`, a `site`, and at least one `roles[]` value from
-  `mon`, `mgr`, `osd`, `mds`, `rgw`, `ingress`. All node `Machine`s in one
-  `StorageCluster` must share one SSH user and `keyRef`.
+- `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
+  `Machine`, a `site`, and at least one `roles[]` value from `mon`, `mgr`,
+  `osd`, `mds`, `rgw`, `ingress`. `hostname` is the rendered cephadm host-spec
+  hostname; it defaults to the `machineRef` name and is authored only when the
+  Ceph hostname genuinely differs from the Machine name. Hostnames must be
+  unique. All host `Machine`s in one `StorageCluster` must share one SSH user
+  and `keyRef`.
 - Storage placement policies, pools, filesystems, gateways, and exports must
   reference the owning `StorageCluster`.
-- When `spec.ceph.topology.stretch.enabled` is true: `failureDomain` (the CRUSH
-  failure domain for the stretch rule) is required; `dataSites` must contain
-  exactly two sites; `tiebreaker.site` must be distinct from the data sites;
-  `tiebreaker.host` and `ruleName` are required; `replicatedPoolDefaults` must
-  be `size: 4` and `minSize: 2`; each data site must hold exactly two `mon`
-  nodes and the tiebreaker site exactly one; the tiebreaker node must be
-  mon-only with no OSD `devices`; erasure-coded pools are rejected; and MDS,
-  RGW, and ingress placement must include at least two role-capable hosts per
-  data site.
+- Authoring `spec.ceph.topology.stretch` enables stretch mode (presence is the
+  signal; there is no `enabled` flag). `failureDomain` (the CRUSH failure
+  domain for the stretch rule) and `tiebreaker.host` are required; everything
+  else is defaulted by normalize and overridable: `dataSites` derives from the
+  topology's non-tiebreaker sites, `tiebreaker.site` from the tiebreaker
+  host's `site`, `ruleName` to `stretch-rule`, and `replicatedPoolDefaults` to
+  `size: 4` / `minSize: 2`. Validation runs post-normalize: `dataSites` must
+  contain exactly two sites; `tiebreaker.site` must be distinct from the data
+  sites; `replicatedPoolDefaults` must be `size: 4` and `minSize: 2`; each
+  data site must hold exactly two `mon` hosts and the tiebreaker site exactly
+  one; the tiebreaker host must be mon-only with no OSD `devices`;
+  erasure-coded pools are rejected; and MDS, RGW, and ingress placement must
+  include at least two role-capable hosts per data site.
 
 ## StoragePlacementPolicy
 
@@ -781,6 +790,8 @@ Rules:
 - Machines with `os.provided: false` must have `spec.substrate.providerRef`.
 - Machines that are used over SSH must declare
   `spec.access.ssh.addressRef`, `keyRef`, and a matching address.
+  `access.ssh.addressRef` defaults to the address named `ssh` when one exists
+  (documented convention; there is no only-address fallback).
 - Provider network attachment refs must exist and match the provider arm used
   by the machine.
 - Container cluster endpoints must resolve to valid addresses or valid

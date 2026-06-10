@@ -195,7 +195,6 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 			},
 			Topology: v1alpha1.StorageCephTopology{
 				Stretch: &v1alpha1.StorageCephStretch{
-					Enabled:       true,
 					FailureDomain: "datacenter",
 					RuleName:      "stretch-rule",
 					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"},

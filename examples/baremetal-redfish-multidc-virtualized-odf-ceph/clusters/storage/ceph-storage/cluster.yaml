@@ -12,8 +12,6 @@ spec:
       addressRef: ssh
       bootstrap:
         host: ceph-dc1-0
-        monIP:
-          nodeRef: ceph-dc1-0
     networks:
       publicCIDRs:
       - 192.168.141.0/24
@@ -24,7 +22,6 @@ spec:
       - 172.21.142.0/24
     topology:
       stretch:
-        enabled: true
         failureDomain: datacenter
         dataSites:
         - dc1

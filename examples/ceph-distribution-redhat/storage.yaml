@@ -16,8 +16,6 @@ spec:
     cephadm:
       bootstrap:
         host: ceph-0
-        monIP:
-          nodeRef: ceph-0
     topology:
       hosts:
         - hostname: ceph-0

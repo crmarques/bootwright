@@ -374,22 +374,18 @@ func TestStorageAttachmentRequiresDataFoundationProvider(t *testing.T) {
 func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	state := storageValidationState()
 	cluster := &state.StorageClusters[0]
-	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.NodeRef = v1alpha1.LocalObjectReference{}
-	cluster.Spec.Ceph.Cephadm.Bootstrap.MonIP.AddressRef = v1alpha1.LocalObjectReference{}
+	cluster.Spec.Ceph.Cephadm.Bootstrap.AddressRef = v1alpha1.LocalObjectReference{}
 	state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default = false
 	state.StorageExports[0].Spec.Type = ""
 
 	Normalize(&state)
 
-	mon := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.MonIP
-	if mon.NodeRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Host {
-		t.Fatalf("mon node name = %q, want seed node", mon.NodeRef.Name)
-	}
+	bootstrap := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap
 	if got := state.StorageClusters[0].Spec.Ceph.Distribution; got != v1alpha1.StorageCephDistributionOSS {
 		t.Fatalf("ceph distribution = %q, want oss", got)
 	}
-	if mon.AddressRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.AddressRef.Name {
-		t.Fatalf("mon addressRef = %q, want cephadm addressRef", mon.AddressRef.Name)
+	if bootstrap.AddressRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.AddressRef.Name {
+		t.Fatalf("bootstrap addressRef = %q, want cephadm addressRef", bootstrap.AddressRef.Name)
 	}
 	if !state.StorageFilesystems[0].Spec.CephFS.DataPoolRefs[0].Default {
 		t.Fatal("single CephFS data pool did not default to default=true")
@@ -674,13 +670,11 @@ func storageValidationState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host:  "ceph-dc1-0",
-							MonIP: v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
+							Host: "ceph-dc1-0",
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
 						Stretch: &v1alpha1.StorageCephStretch{
-							Enabled:       true,
 							FailureDomain: "datacenter",
 							DataSites:     []string{"dc1", "dc2"},
 							Tiebreaker: v1alpha1.StorageCephTiebreaker{

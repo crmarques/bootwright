@@ -104,7 +104,7 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 		errs = append(errs, validateCIDR(fmt.Sprintf("%s.networks.clusterCIDRs[%d]", prefix, i), cidr)...)
 	}
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.nodes", cluster, machines)...)
-	if ceph.Topology.Stretch != nil && ceph.Topology.Stretch.Enabled {
+	if ceph.Topology.Stretch != nil {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
 	return errs
@@ -248,18 +248,11 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.Host == "" {
-		errs = append(errs, prefix+".bootstrap.seedNode is required")
+		errs = append(errs, prefix+".bootstrap.host is required")
 	} else if !storageCephNodeExists(cluster, adm.Bootstrap.Host) {
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.seedNode %q is not listed in spec.ceph.topology.nodes", prefix, adm.Bootstrap.Host))
-	}
-	mon := adm.Bootstrap.MonIP
-	if mon.NodeRef.Name == "" {
-		errs = append(errs, prefix+".bootstrap.monIP.nodeRef is required")
+		errs = append(errs, fmt.Sprintf("%s.bootstrap.host %q is not listed in spec.ceph.topology.hosts", prefix, adm.Bootstrap.Host))
 	} else {
-		if !storageCephNodeExists(cluster, mon.NodeRef.Name) {
-			errs = append(errs, fmt.Sprintf("%s.bootstrap.monIP.nodeRef %q is not listed in spec.ceph.topology.nodes", prefix, mon.NodeRef.Name))
-		}
-		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.monIP.addressRef", cluster, mon.NodeRef.Name, mon.AddressRef.Name, machines, adm.AddressRef.Name)...)
+		errs = append(errs, validateStorageNodeMachineAddress(prefix+".bootstrap.addressRef", cluster, adm.Bootstrap.Host, adm.Bootstrap.AddressRef.Name, machines, adm.AddressRef.Name)...)
 	}
 	return errs
 }
@@ -277,10 +270,10 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 	for i, node := range nodes {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
 		if node.Hostname == "" {
-			errs = append(errs, owner+".name is required")
+			errs = append(errs, owner+".hostname is required")
 		} else {
 			if seen[node.Hostname] {
-				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, node.Hostname))
+				errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", owner, node.Hostname))
 			}
 			seen[node.Hostname] = true
 		}
@@ -365,7 +358,7 @@ func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlac
 
 func validatePlacementCoversDataSites(prefix string, hosts []string, cluster v1alpha1.StorageCluster, role string) []string {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
-	if stretch == nil || !stretch.Enabled {
+	if stretch == nil {
 		return nil
 	}
 	counts := map[string]int{}
@@ -395,7 +388,7 @@ func validateCIDR(owner, value string) []string {
 }
 
 func storageClusterStretchEnabled(cluster v1alpha1.StorageCluster) bool {
-	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil && cluster.Spec.Ceph.Topology.Stretch.Enabled
+	return cluster.Spec.Ceph != nil && cluster.Spec.Ceph.Topology.Stretch != nil
 }
 
 func validateStorageNodeMachineAddress(owner string, cluster v1alpha1.StorageCluster, nodeName string, addressName string, machines map[string]v1alpha1.Machine, defaultAddressName string) []string {

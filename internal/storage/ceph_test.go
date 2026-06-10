@@ -134,8 +134,7 @@ func minimalStorageState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							Host:  "ceph-dc1-0",
-							MonIP: v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
+							Host: "ceph-dc1-0",
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{

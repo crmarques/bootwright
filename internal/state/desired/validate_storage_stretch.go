@@ -36,7 +36,7 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		errs = append(errs, fmt.Sprintf("%s.tiebreaker.site %q must be distinct from dataSites", prefix, stretch.Tiebreaker.Site))
 	}
 	if stretch.Tiebreaker.Host == "" {
-		errs = append(errs, prefix+".tiebreaker.node is required")
+		errs = append(errs, prefix+".tiebreaker.host is required")
 	}
 	if stretch.RuleName == "" {
 		errs = append(errs, prefix+".ruleName is required")

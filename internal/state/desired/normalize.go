@@ -79,6 +79,17 @@ func normalizeMachine(m *v1alpha1.Machine) {
 	if config.NetworkConfigRef.Name != "" && m.Spec.Substrate.ProviderRef.Name != "" && config.AttachmentRef.Name == "" {
 		config.AttachmentRef.Name = config.NetworkConfigRef.Name
 	}
+	// Documented convention: access.ssh.addressRef defaults to the address
+	// named "ssh" when one exists. No only-address fallback — adding a second
+	// address must never silently change behavior.
+	if ssh := m.Spec.Access.SSH; ssh != nil && ssh.AddressRef.Name == "" {
+		for _, address := range m.Spec.Addresses {
+			if address.Name == "ssh" {
+				ssh.AddressRef.Name = "ssh"
+				break
+			}
+		}
+	}
 }
 
 func normalizeProvider(p *v1alpha1.InfraProvider) {
@@ -238,11 +249,55 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 		cluster.Spec.Ceph.Distribution = v1alpha1.StorageCephDistributionOSS
 	}
 	adm := &cluster.Spec.Ceph.Cephadm
-	if adm.Bootstrap.MonIP.NodeRef.Name == "" {
-		adm.Bootstrap.MonIP.NodeRef.Name = adm.Bootstrap.Host
+	if adm.Bootstrap.AddressRef.Name == "" {
+		adm.Bootstrap.AddressRef = adm.AddressRef
 	}
-	if adm.Bootstrap.MonIP.AddressRef.Name == "" {
-		adm.Bootstrap.MonIP.AddressRef = adm.AddressRef
+	// A topology host's cephadm hostname defaults to its Machine name; the
+	// explicit field is a signal that the Ceph hostname genuinely differs.
+	for i := range cluster.Spec.Ceph.Topology.Hosts {
+		if host := &cluster.Spec.Ceph.Topology.Hosts[i]; host.Hostname == "" {
+			host.Hostname = host.MachineRef.Name
+		}
+	}
+	normalizeStorageStretch(cluster)
+}
+
+// normalizeStorageStretch fills the derivable stretch fields: presence of the
+// stretch block is the enablement signal, and only failureDomain plus the
+// tiebreaker host are facts the operator alone knows. Every default is
+// overridable by writing the field; validation runs post-normalize unchanged.
+func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
+	stretch := cluster.Spec.Ceph.Topology.Stretch
+	if stretch == nil {
+		return
+	}
+	if stretch.RuleName == "" {
+		stretch.RuleName = "stretch-rule"
+	}
+	if stretch.ReplicatedPoolDefaults.Size == 0 {
+		stretch.ReplicatedPoolDefaults.Size = 4
+	}
+	if stretch.ReplicatedPoolDefaults.MinSize == 0 {
+		stretch.ReplicatedPoolDefaults.MinSize = 2
+	}
+	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
+		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+			if host.Hostname == stretch.Tiebreaker.Host {
+				stretch.Tiebreaker.Site = host.Site
+				break
+			}
+		}
+	}
+	if len(stretch.DataSites) == 0 {
+		seen := map[string]bool{}
+		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
+			if host.Site == "" || host.Site == stretch.Tiebreaker.Site || seen[host.Site] {
+				continue
+			}
+			seen[host.Site] = true
+			stretch.DataSites = append(stretch.DataSites, host.Site)
+		}
+		sort.Strings(stretch.DataSites)
 	}
 }
 

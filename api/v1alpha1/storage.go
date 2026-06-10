@@ -55,14 +55,11 @@ type StorageCephadmSpec struct {
 }
 
 type StorageCephadmBootstrap struct {
-	// Host names the topology host cephadm bootstraps on; the rendered
-	// cephadm --mon-ip is derived from this host's addresses.
-	Host  string           `yaml:"host" json:"host"`
-	MonIP StorageNodeIPRef `yaml:"monIP" json:"monIP"`
-}
-
-type StorageNodeIPRef struct {
-	NodeRef    LocalObjectReference `yaml:"nodeRef" json:"nodeRef"`
+	// Host names the topology host cephadm bootstraps on. The rendered
+	// cephadm --mon-ip is always an address of this host: the address named
+	// by AddressRef, defaulting to cephadm.addressRef and finally the host
+	// machine's SSH address.
+	Host       string               `yaml:"host" json:"host"`
 	AddressRef LocalObjectReference `yaml:"addressRef,omitempty" json:"addressRef,omitempty"`
 }
 
@@ -76,8 +73,12 @@ type StorageCephTopology struct {
 	Hosts   []StorageCephHost   `yaml:"hosts" json:"hosts"`
 }
 
+// StorageCephStretch enables stretch mode by presence: authoring the stretch
+// block is the enablement signal. Everything except failureDomain and the
+// tiebreaker host is derivable and defaulted by normalize: dataSites from the
+// topology's non-tiebreaker sites, tiebreaker.site from the tiebreaker host's
+// site, ruleName to stretch-rule, replicatedPoolDefaults to size 4 / minSize 2.
 type StorageCephStretch struct {
-	Enabled                bool                    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	FailureDomain          string                  `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
 	DataSites              []string                `yaml:"dataSites,omitempty" json:"dataSites,omitempty"`
 	Tiebreaker             StorageCephTiebreaker   `yaml:"tiebreaker,omitempty" json:"tiebreaker,omitempty"`

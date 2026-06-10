@@ -22,8 +22,6 @@ spec:
       addressRef: ssh
       bootstrap:
         host: ceph-0
-        monIP:
-          nodeRef: ceph-0
     networks:
       publicCIDRs:
         - 192.168.134.0/24

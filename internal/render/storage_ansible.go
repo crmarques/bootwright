@@ -98,7 +98,7 @@ func storageClustersVars(state v1alpha1.State, paths PathOptions) []any {
 			"hosts":               storageHostsVars(state, cluster),
 			"bootstrap": map[string]any{
 				"host":  ceph.Cephadm.Bootstrap.Host,
-				"monIP": storageNodeIP(state, cluster, ceph.Cephadm.Bootstrap.MonIP),
+				"monIP": topology.NodeAddressByRef(state, cluster, ceph.Cephadm.Bootstrap.Host, ceph.Cephadm.Bootstrap.AddressRef.Name),
 			},
 			"ceph": map[string]any{
 				"bootstrapConfPath":    asset.BootstrapConfPath,
@@ -183,12 +183,4 @@ func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster stri
 		out = append(out, entry)
 	}
 	return out
-}
-
-func storageNodeIP(state v1alpha1.State, cluster v1alpha1.StorageCluster, ref v1alpha1.StorageNodeIPRef) string {
-	addressName := ref.AddressRef.Name
-	if addressName == "" {
-		addressName = cluster.Spec.Ceph.Cephadm.AddressRef.Name
-	}
-	return topology.NodeAddressByRef(state, cluster, ref.NodeRef.Name, addressName)
 }

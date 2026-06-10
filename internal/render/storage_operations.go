@@ -19,7 +19,7 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 	if clusters := cluster.Spec.Ceph.Networks.ClusterCIDRs; len(clusters) > 0 {
 		ops = append(ops, operationInPhase("topology", "set-cluster-network", "ceph", "config", "set", "global", "cluster_network", strings.Join(clusters, ",")))
 	}
-	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil && stretch.Enabled {
+	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil {
 		// Stretch mode requires the connectivity election strategy before
 		// enable_stretch_mode; `ceph mon set` reconciles in place.
 		ops = append(ops, operationInPhase("topology", "set-election-strategy", "ceph", "mon", "set", "election_strategy", "connectivity"))
@@ -248,7 +248,7 @@ func storagePoolCRUSHRule(state v1alpha1.State, cluster v1alpha1.StorageCluster,
 			}
 		}
 	}
-	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil && stretch.Enabled {
+	if stretch := cluster.Spec.Ceph.Topology.Stretch; stretch != nil {
 		return stretch.RuleName
 	}
 	return ""
@@ -256,5 +256,5 @@ func storagePoolCRUSHRule(state v1alpha1.State, cluster v1alpha1.StorageCluster,
 
 func storageRuleCreatedByStretch(cluster v1alpha1.StorageCluster, rule string) bool {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
-	return stretch != nil && stretch.Enabled && stretch.RuleName == rule
+	return stretch != nil && stretch.RuleName == rule
 }
