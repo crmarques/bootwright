@@ -131,6 +131,10 @@ These boundaries are reflected in rendering:
 - Extension apply plans are rendered from `ClusterAddonBinding` expansion,
   `ClusterAddonProfile` order, and `ClusterAddon` generated resources or
   manifest paths. They do not mutate installer input.
+- Rendering is a second enforcement line behind validation for name
+  resolution: every render entry point fails before writing anything when an
+  endpoint load-balancer bind or a managed Ceph topology host address does not
+  resolve, instead of degrading to output with empty values.
 
 Convergence is resumable by default. Each mutating workflow task runs under its
 existing resource lock, derives a non-secret desired hash and Bootwright owner

@@ -78,6 +78,9 @@ type Result struct {
 // rendered directory, `clustersDir` is the context cluster directory, and
 // `secretsDir` is the local secrets dir. Uses the
 // default os-backed FileSystem; tests use AllOn to inject a substitute.
+// Every render entry point fails before writing anything when the state
+// carries unresolved names (see checkResolvedNames); Validate is the first
+// enforcement line and rejects such state with field-level diagnostics.
 func All(renderedDir, clustersDir, secretsDir string, state v1alpha1.State) (Result, error) {
 	return AllOn(defaultFS, renderedDir, clustersDir, secretsDir, state)
 }
@@ -103,6 +106,9 @@ func Effective(renderedDir string, state v1alpha1.State) (Result, error) {
 
 // EffectiveOn is Effective parameterised on FileSystem for tests.
 func EffectiveOn(fs FileSystem, renderedDir string, state v1alpha1.State) (Result, error) {
+	if err := checkResolvedNames(state); err != nil {
+		return Result{}, err
+	}
 	result := Result{EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml")}
 	if err := ensureLocalDir(fs, renderedDir); err != nil {
 		return result, err
@@ -120,6 +126,9 @@ func AllOn(fs FileSystem, renderedDir, clustersDir, secretsDir string, state v1a
 }
 
 func allOn(fs FileSystem, renderedDir, clustersDir string, paths PathOptions, state v1alpha1.State, records []ownership.ResourceRecord) (Result, error) {
+	if err := checkResolvedNames(state); err != nil {
+		return Result{}, err
+	}
 	result := Result{
 		EffectiveStatePath: filepath.Join(renderedDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(renderedDir, "bootwright.lock.yaml"),
@@ -272,6 +281,9 @@ func ToolInputsOn(fs FileSystem, outputDir, secretsDir string, state v1alpha1.St
 }
 
 func ToolInputsOnForContext(fs FileSystem, contextName, outputDir, secretsDir string, state v1alpha1.State) (Result, error) {
+	if err := checkResolvedNames(state); err != nil {
+		return Result{}, err
+	}
 	result := Result{
 		EffectiveStatePath: filepath.Join(outputDir, "effective-state.yaml"),
 		LockPath:           filepath.Join(outputDir, "bootwright.lock.yaml"),
