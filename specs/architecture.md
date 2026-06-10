@@ -121,7 +121,7 @@ These boundaries are reflected in rendering:
   environment NTP source entries.
 - Infra component variables are rendered from `InfraComponent` services
   referenced by cluster endpoints, environment catalog entries, and
-  `NetworkConfig.spec.dnsRefs[]`.
+  `NetworkConfig.spec.nameResolutionRefs[]`.
 - Storage tool inputs render to cephadm host, core service, and late service
   specs; explicit operation metadata; Ansible storage contracts; and generated
   Data Foundation manifests for managed storage.

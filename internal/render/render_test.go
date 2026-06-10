@@ -221,7 +221,7 @@ func TestInstallerConfigReturnsManagedProxyURLResolutionError(t *testing.T) {
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					Proxies: []v1alpha1.EnvironmentProxyComponent{{
 						Name:         "managed",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
 					}},
 				},
@@ -379,7 +379,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	}}
 	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
 	state.Environments[0].Spec.Defaults.ArtifactAccess = v1alpha1.ClusterArtifactAccess{
@@ -390,7 +390,7 @@ func TestInstallerConfigDerivesManagedMirrorImageDigestSources(t *testing.T) {
 	}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
 	for i := range state.Machines {
@@ -472,8 +472,8 @@ func TestAgentConfigUsesExternalArtifactEndpointForDisconnectedBootArtifacts(t *
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
 		Endpoints: []v1alpha1.EnvironmentArtifactServerEndpoint{{
 			Name: "install",
 			URL:  "https://artifacts.example.test:9443/install",
@@ -615,10 +615,10 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	state.Environments[0].Spec.InfraComponents.NTPSources = []v1alpha1.EnvironmentNTPSourceComponent{
-		{Name: "external", Type: v1alpha1.EnvironmentComponentExternal, Address: "ntp.example.test"},
-		{Name: "managed", Type: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"}, EndpointRef: "cluster"},
-		{Name: "duplicate", Type: v1alpha1.EnvironmentComponentExternal, Address: "192.168.132.1"},
+	state.Environments[0].Spec.InfraComponents.NTP = []v1alpha1.EnvironmentNTPComponent{
+		{Name: "external", Management: v1alpha1.EnvironmentComponentExternal, Address: "ntp.example.test"},
+		{Name: "managed", Management: v1alpha1.EnvironmentComponentManaged, ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"}, EndpointRef: "cluster"},
+		{Name: "duplicate", Management: v1alpha1.EnvironmentComponentExternal, Address: "192.168.132.1"},
 	}
 
 	agent, err := render.AgentConfig(state, state.ContainerClusters[0])
@@ -632,16 +632,16 @@ func TestAgentConfigRendersInfraComponentNTPSources(t *testing.T) {
 
 	vars := inventory.Vars(state)
 	env := vars["bootwright_environment"].(map[string]any)
-	if _, ok := env["ntpSources"]; ok {
-		t.Fatalf("bootwright_environment rendered top-level ntpSources: %v", env["ntpSources"])
+	if _, ok := env["ntp"]; ok {
+		t.Fatalf("bootwright_environment rendered top-level ntp: %v", env["ntp"])
 	}
 	infra := env["infraComponents"].(map[string]any)
-	entries := infra["ntpSources"].([]any)
+	entries := infra["ntp"].([]any)
 	if len(entries) != 3 {
-		t.Fatalf("infraComponents.ntpSources got %v", entries)
+		t.Fatalf("infraComponents.ntp got %v", entries)
 	}
 	first := entries[0].(map[string]any)
-	if first["name"] != "external" || first["type"] != v1alpha1.EnvironmentComponentExternal || first["address"] != "ntp.example.test" {
+	if first["name"] != "external" || first["management"] != v1alpha1.EnvironmentComponentExternal || first["address"] != "ntp.example.test" {
 		t.Fatalf("external ntp source vars got %v", first)
 	}
 	if got := vars["bootwright_resolved_ntp_sources"]; !reflect.DeepEqual(got, want) {

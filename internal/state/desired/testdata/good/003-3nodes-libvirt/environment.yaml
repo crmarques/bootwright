@@ -26,15 +26,15 @@ spec:
   infraComponents:
     proxies:
       - name: default
-        type: managed
+        management: managed
         componentRef: proxy
     nameResolution:
       - name: default
-        type: managed
+        management: managed
         componentRef: name-resolution
-    ntpSources:
+    ntp:
       - name: default
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpointRef: cluster
 

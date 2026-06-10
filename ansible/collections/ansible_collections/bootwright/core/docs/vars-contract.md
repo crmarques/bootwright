@@ -31,17 +31,17 @@ bootwright_environment:
     bootwright: default
     clusterInstall: default
   infraComponents:
-    ntpSources:
+    ntp:
       - name: external-01
-        type: external
+        management: external
         address: ntp.example.test
       - name: lab-ntp
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpoint: cluster
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
 ```
 
@@ -131,7 +131,7 @@ bootwright_clusters:
           libvirtURI: qemu:///system
           bindAddress: 0.0.0.0
           port: 8000
-          vmediaPort: 8001
+          vMediaPort: 8001
           credentialsRef: bmc-credentials
           sushyToolsVersion: 2.1.0
       - kind: loadBalancer
@@ -247,7 +247,7 @@ bootwright_provider_services:
       libvirtURI: qemu:///system
       bindAddress: 0.0.0.0
       port: 8000
-      vmediaPort: 8001
+      vMediaPort: 8001
       credentialsRef: bmc-credentials
       sushyToolsVersion: 2.1.0
     machines:

@@ -9,7 +9,7 @@ import (
 
 func validateNetworkConfigs(state v1alpha1.State) []string {
 	var errs []string
-	dnsRefs := networkConfigDNSRefs(state)
+	nameResolutionNames := environmentNameResolutionNames(state)
 	seen := map[string]bool{}
 	for _, n := range state.NetworkConfigs {
 		if e := validateName(v1alpha1.KindNetworkConfig, n.Metadata.Name); e != "" {
@@ -20,22 +20,22 @@ func validateNetworkConfigs(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate NetworkConfig %q", n.Metadata.Name))
 		}
 		seen[n.Metadata.Name] = true
-		errs = append(errs, validateNetworkConfigSpec(fmt.Sprintf("NetworkConfig/%s spec", n.Metadata.Name), n.Spec, dnsRefs)...)
+		errs = append(errs, validateNetworkConfigSpec(fmt.Sprintf("NetworkConfig/%s spec", n.Metadata.Name), n.Spec, nameResolutionNames)...)
 	}
 	return errs
 }
 
-func networkConfigDNSRefs(state v1alpha1.State) map[string]bool {
-	dnsRefs := map[string]bool{}
+func environmentNameResolutionNames(state v1alpha1.State) map[string]bool {
+	names := map[string]bool{}
 	if env := primaryEnvironment(&state); env != nil {
 		for _, entry := range env.Spec.InfraComponents.NameResolution {
-			dnsRefs[entry.Name] = true
+			names[entry.Name] = true
 		}
 	}
-	return dnsRefs
+	return names
 }
 
-func validateNetworkConfigSpec(owner string, spec v1alpha1.NetworkConfigSpec, dnsRefs map[string]bool) []string {
+func validateNetworkConfigSpec(owner string, spec v1alpha1.NetworkConfigSpec, nameResolutionNames map[string]bool) []string {
 	var errs []string
 	if len(spec.MachineNetwork) == 0 {
 		errs = append(errs, fmt.Sprintf("%s.machineNetwork is required (at least one cidr)", owner))
@@ -58,22 +58,22 @@ func validateNetworkConfigSpec(owner string, spec v1alpha1.NetworkConfigSpec, dn
 	}
 	if spec.Template.NetworkConfig == nil {
 		errs = append(errs, fmt.Sprintf("%s.template.networkConfig is required", owner))
-	} else if _, ok := spec.Template.NetworkConfig["dnsRefs"]; ok {
-		errs = append(errs, fmt.Sprintf("%s.template.networkConfig.dnsRefs is not valid NMState; use spec.dnsRefs instead", owner))
+	} else if _, ok := spec.Template.NetworkConfig["nameResolutionRefs"]; ok {
+		errs = append(errs, fmt.Sprintf("%s.template.networkConfig.nameResolutionRefs is not valid NMState; use spec.nameResolutionRefs instead", owner))
 	}
-	seenDNSRefs := map[string]bool{}
-	for i, ref := range spec.DNSRefs {
-		field := fmt.Sprintf("%s.dnsRefs[%d]", owner, i)
+	seenRefs := map[string]bool{}
+	for i, ref := range spec.NameResolutionRefs {
+		field := fmt.Sprintf("%s.nameResolutionRefs[%d]", owner, i)
 		if ref == "" {
 			errs = append(errs, field+" must not be empty")
 			continue
 		}
-		if seenDNSRefs[ref] {
+		if seenRefs[ref] {
 			errs = append(errs, fmt.Sprintf("%s %q is duplicated", field, ref))
 			continue
 		}
-		seenDNSRefs[ref] = true
-		if !dnsRefs[ref] {
+		seenRefs[ref] = true
+		if !nameResolutionNames[ref] {
 			errs = append(errs, fmt.Sprintf("%s %q does not match any Environment spec.infraComponents.nameResolution[].name", field, ref))
 		}
 	}

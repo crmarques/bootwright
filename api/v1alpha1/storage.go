@@ -133,16 +133,23 @@ type StorageCephTopology struct {
 }
 
 // StorageCephStretch enables stretch mode by presence: authoring the stretch
-// block is the enablement signal. Everything except failureDomain and the
-// tiebreaker host is derivable and defaulted by normalize: dataSites from the
-// topology's non-tiebreaker sites, tiebreaker.site from the tiebreaker host's
-// site, ruleName to stretch-rule, replicatedPoolDefaults to size 4 / minSize 2.
+// block is the enablement signal. failureDomain and the tiebreaker host are
+// the facts the operator alone knows; normalize derives the rest. Policy-less
+// replicated pools always get size 4 / minSize 2 — the Ceph requirement for
+// two-site stretch — as a render-time constant; non-4/2 stretch is
+// unsupported today and the replication is not authorable.
 type StorageCephStretch struct {
-	FailureDomain          string                  `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
-	DataSites              []string                `yaml:"dataSites,omitempty" json:"dataSites,omitempty"`
-	Tiebreaker             StorageCephTiebreaker   `yaml:"tiebreaker,omitempty" json:"tiebreaker,omitempty"`
-	ReplicatedPoolDefaults StorageCephPoolReplicas `yaml:"replicatedPoolDefaults,omitempty" json:"replicatedPoolDefaults,omitempty"`
-	RuleName               string                  `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
+	FailureDomain string `yaml:"failureDomain,omitempty" json:"failureDomain,omitempty"`
+	// DataSites defaults to the topology's non-tiebreaker sites. Validation
+	// requires exactly the two mon-bearing data sites, so authoring it only
+	// matters when the topology carries additional OSD-only sites the
+	// derivation would wrongly include.
+	DataSites []string `yaml:"dataSites,omitempty" json:"dataSites,omitempty"`
+	// Tiebreaker.site defaults to the tiebreaker host's topology site.
+	Tiebreaker StorageCephTiebreaker `yaml:"tiebreaker,omitempty" json:"tiebreaker,omitempty"`
+	// RuleName names the stretch CRUSH rule that stretch pools inherit;
+	// it defaults to stretch-rule.
+	RuleName string `yaml:"ruleName,omitempty" json:"ruleName,omitempty"`
 }
 
 type StorageCephTiebreaker struct {
@@ -166,8 +173,10 @@ type StorageCephHost struct {
 	// Site is the host's failure-domain bucket. It becomes the cephadm
 	// host-spec CRUSH location only in stretch mode (where failureDomain maps
 	// sites to real buckets); without stretch the failure domain is host and
-	// no location is rendered. placement.sites selects against it.
-	Site  string   `yaml:"site" json:"site"`
+	// no location is rendered. placement.sites selects against it. It is
+	// required exactly where it has effect — when stretch is set or any
+	// placement narrows by sites — and optional otherwise.
+	Site  string   `yaml:"site,omitempty" json:"site,omitempty"`
 	Roles []string `yaml:"roles" json:"roles"`
 	// Labels are additional free-form cephadm host labels (for example
 	// _admin) rendered alongside the roles, which always become labels.

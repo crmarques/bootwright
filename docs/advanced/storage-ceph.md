@@ -23,12 +23,10 @@ role. There is no implicit all-devices default — handing every available
 ```yaml
 hosts:
 - machineRef: ceph-0
-  site: lab
   roles: [mon, mgr, osd]
   devices:            # literal paths ...
   - /dev/vdb
 - machineRef: ceph-1
-  site: lab
   roles: [osd]
   osd:                # ... or a drivegroup-shaped selection
     dataDevices:

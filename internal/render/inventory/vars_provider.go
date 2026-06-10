@@ -194,7 +194,7 @@ func bmcEmulationDefaultsVars(d *v1alpha1.BMCEmulationDefaults) map[string]any {
 		out["port"] = d.Port
 	}
 	if d.VMediaPort != 0 {
-		out["vmediaPort"] = d.VMediaPort
+		out["vMediaPort"] = d.VMediaPort
 	}
 	if d.Auth != nil {
 		out["credentialsRef"] = d.Auth.CredentialsRef.Name

@@ -174,12 +174,10 @@ spec:
       keyPairRef: 3-nodes-ocp-emul-baremetal-cluster-admin-ssh-key
 
   controlPlane:
-    name: master
     replicas: 3
 
   compute:
-    - name: worker
-      replicas: 0
+    - replicas: 0
 
   networking:
     clusterNetwork:

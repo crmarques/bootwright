@@ -640,7 +640,7 @@ spec:
 		{
 			name: "baremetal-artifact-server-required",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        componentRef: artifact-server\n\n", "", 1)},
+				"  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)},
 			wantSubstring: "requires generated artifact publication; set Environment.spec.infraComponents.artifactServers",
 		},
 		{
@@ -661,7 +661,7 @@ spec:
 			name: "environment-infra-ntpsource-scalar-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
 				"  infraComponents:\n",
-				"  infraComponents:\n    ntpSources:\n      - \" ntp.example.test\"\n", 1)},
+				"  infraComponents:\n    ntp:\n      - \" ntp.example.test\"\n", 1)},
 			wantSubstring: `cannot unmarshal`,
 		},
 		{
@@ -716,8 +716,8 @@ spec:
 		{
 			name: "environment-external-artifact-server-spec-rejected",
 			files: map[string]string{"environment.yaml": strings.Replace(newEnvironmentYAML,
-				"      - name: default\n        type: managed\n        componentRef: artifact-server",
-				"      - name: default\n        type: external\n        spec:\n          redfishVirtualMedia"+"URL: https://artifacts.example.test:8443/\n          clusterInstall"+"URL: https://artifacts.example.test:8443/", 1)},
+				"      - name: default\n        management: managed\n        componentRef: artifact-server",
+				"      - name: default\n        management: external\n        spec:\n          redfishVirtualMedia"+"URL: https://artifacts.example.test:8443/\n          clusterInstall"+"URL: https://artifacts.example.test:8443/", 1)},
 			wantSubstring: "field spec not found",
 		},
 		{
@@ -739,6 +739,15 @@ spec:
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"machineRef: srv1", "machineRef: missing", 1)},
 			wantSubstring: `spec.nodes[0].machineRef "missing" does not match any Machine`,
+		},
+		{
+			// machineRef is required: no default is derived from the
+			// hostname, so omission fails instead of silently binding a
+			// same-named Machine.
+			name: "omitted-machine-ref-rejected",
+			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
+				"\n      machineRef: srv1", "", 1)},
+			wantSubstring: "spec.nodes[0].machineRef is required",
 		},
 		{
 			name: "openshift-pull-secret-required",
@@ -934,21 +943,21 @@ spec:
 		{
 			name: "external-name-resolution-endpoint",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        type: external\n        address: 192.168.132.53\n        endpointRef: cluster\n    artifactServers:\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        management: external\n        address: 192.168.132.53\n        endpointRef: cluster\n    artifactServers:\n", 1)
 			},
 			wantSubstring: "spec.infraComponents.nameResolution[0].endpoint is only valid for managed nameResolution entries",
 		},
 		{
 			name: "external-registry-component-ref",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        type: external\n        url: registry.example.test:5000\n        componentRef: artifact-server\n    artifactServers:\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        management: external\n        url: registry.example.test:5000\n        componentRef: artifact-server\n    artifactServers:\n", 1)
 			},
 			wantSubstring: "spec.infraComponents.registries[0].componentRef is only valid for managed registry entries",
 		},
 		{
 			name: "managed-registry-url",
 			mutate: func(files map[string]string) {
-				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        type: managed\n        componentRef: mirror-registry\n        url: registry.example.test:5000\n    artifactServers:\n", 1)
+				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    registries:\n      - name: mirror\n        management: managed\n        componentRef: mirror-registry\n        url: registry.example.test:5000\n    artifactServers:\n", 1)
 				files["service-machines.yaml"] = strings.Replace(files["service-machines.yaml"], "capabilities: [container-runtime]", "capabilities: [container-runtime, registry]", 1)
 				files["infra-component.yaml"] += `---
 apiVersion: bootwright.io/v1alpha1
@@ -1108,13 +1117,13 @@ spec:
 	}
 }
 
-func TestEnvironmentNTPSourcesValidateTypedEntries(t *testing.T) {
+func TestEnvironmentNTPValidateTypedEntries(t *testing.T) {
 	files := baselineFilesWithNTPComponent()
-	files["environment.yaml"] = environmentYAMLWithNTPSources(`      - name: external
-        type: external
+	files["environment.yaml"] = environmentYAMLWithNTP(`      - name: external
+        management: external
         address: ntp.example.test
       - name: managed
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpointRef: cluster
 `)
@@ -1125,15 +1134,15 @@ func TestEnvironmentNTPSourcesValidateTypedEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
-	if got := len(state.Environments[0].Spec.InfraComponents.NTPSources); got != 2 {
-		t.Fatalf("ntpSources got %d, want 2", got)
+	if got := len(state.Environments[0].Spec.InfraComponents.NTP); got != 2 {
+		t.Fatalf("infraComponents.ntp got %d, want 2", got)
 	}
 	if got := state.InfraComponents[1].Spec.NTP.Port; got != v1alpha1.DefaultNTPPort {
 		t.Fatalf("ntp default port got %d, want %d", got, v1alpha1.DefaultNTPPort)
 	}
 }
 
-func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
+func TestEnvironmentNTPRejectInvalidTypedEntries(t *testing.T) {
 	cases := []struct {
 		name          string
 		sources       string
@@ -1143,42 +1152,60 @@ func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
 		{
 			name: "duplicate names",
 			sources: `      - name: default
-        type: external
+        management: external
         address: ntp.example.test
       - name: default
-        type: external
+        management: external
         address: time.example.test
 `,
-			wantSubstring: `spec.infraComponents.ntpSources[1].name "default" is duplicated`,
+			wantSubstring: `spec.infraComponents.ntp[1].name "default" is duplicated`,
+		},
+		{
+			name: "invalid management value",
+			sources: `      - name: default
+        management: sometimes
+        address: ntp.example.test
+`,
+			wantSubstring: `spec.infraComponents.ntp[0].management "sometimes" must be one of {external, managed}`,
+		},
+		{
+			// The managed/external axis is spelled management; the stale
+			// per-entry type key fails strict decode.
+			name: "stale type key rejected",
+			sources: `      - name: default
+        type: external
+        address: ntp.example.test
+`,
+			wantSubstring: "field type not found in type v1alpha1.EnvironmentNTPComponent",
 		},
 		{
 			name: "invalid external address",
 			sources: `      - name: default
-        type: external
+        management: external
         address: " ntp.example.test"
 `,
-			wantSubstring: `spec.infraComponents.ntpSources[0].address " ntp.example.test" must not contain leading or trailing whitespace`,
+			wantSubstring: `spec.infraComponents.ntp[0].address " ntp.example.test" must not contain leading or trailing whitespace`,
 		},
 		{
 			name: "external component ref",
 			sources: `      - name: default
-        type: external
+        management: external
         address: ntp.example.test
         componentRef: ntp-server
 `,
-			wantSubstring: `componentRef is only valid for managed ntpSources entries`,
+			wantSubstring: `componentRef is only valid for managed ntp entries`,
 		},
 		{
 			name: "managed missing component ref",
 			sources: `      - name: default
-        type: managed
+        management: managed
 `,
 			wantSubstring: `componentRef is required for managed entries`,
 		},
 		{
 			name: "managed wrong component arm",
 			sources: `      - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
 `,
 			wantSubstring: `resolves to InfraComponent/artifact-server without spec.ntp`,
@@ -1186,7 +1213,7 @@ func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
 		{
 			name: "managed bad endpoint",
 			sources: `      - name: default
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpointRef: missing
 `,
@@ -1196,12 +1223,12 @@ func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
 		{
 			name: "managed address",
 			sources: `      - name: default
-        type: managed
+        management: managed
         componentRef: ntp-server
         address: ntp.example.test
 `,
 			withComponent: true,
-			wantSubstring: `address is only valid for external ntpSources entries`,
+			wantSubstring: `address is only valid for external ntp entries`,
 		},
 	}
 	for _, tc := range cases {
@@ -1210,7 +1237,7 @@ func TestEnvironmentNTPSourcesRejectInvalidTypedEntries(t *testing.T) {
 			if tc.withComponent {
 				files = baselineFilesWithNTPComponent()
 			}
-			files["environment.yaml"] = environmentYAMLWithNTPSources(tc.sources)
+			files["environment.yaml"] = environmentYAMLWithNTP(tc.sources)
 			dir := t.TempDir()
 			writeFiles(t, dir, files)
 
@@ -1508,7 +1535,7 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			name: "valid-http-proxy",
 			proxyYAML: `    proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: http://proxy.bootwright.test:3128
 `,
@@ -1517,7 +1544,7 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			name: "missing-scheme",
 			proxyYAML: `    proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: proxy.bootwright.test:3128
 `,
@@ -1527,7 +1554,7 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			name: "unsupported-scheme",
 			proxyYAML: `    proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpsProxy: socks5://proxy.bootwright.test:1080
 `,
@@ -1537,7 +1564,7 @@ func TestEnvironmentProxyURLValidation(t *testing.T) {
 			name: "inline-credentials",
 			proxyYAML: `    proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: http://user:pass@proxy.bootwright.test:3128
 `,
@@ -1614,7 +1641,7 @@ func TestEnvironmentProxyOldSpecRejectsStrictDecode(t *testing.T) {
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
       - name: default
-        type: external
+        management: external
         spec:
           httpProxy: http://proxy.bootwright.test:3128
     artifactServers:
@@ -1635,7 +1662,7 @@ func TestEnvironmentProxyDefaultRejected(t *testing.T) {
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    proxies:
       - name: default
         default: true
-        type: external
+        management: external
         connection:
           httpProxy: http://proxy.bootwright.test:3128
     artifactServers:
@@ -1657,7 +1684,7 @@ func TestEnvironmentNameResolutionDefaultRejected(t *testing.T) {
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", `    nameResolution:
       - name: default
         default: true
-        type: external
+        management: external
         address: 192.168.132.1
     artifactServers:
 `, 1)
@@ -2057,7 +2084,7 @@ func TestEnvironmentStorageClusterSelectionOmitsContainerRoots(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(newEnvironmentYAML, "  secrets:\n", "  storageClusters:\n    - imported-ceph\n\n  secrets:\n", 1)
-	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n    artifactServers:\n      - name: default\n        type: managed\n        componentRef: artifact-server\n\n", "", 1)
+	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n    artifactServers:\n      - name: default\n        management: managed\n        componentRef: artifact-server\n\n", "", 1)
 	delete(files, "infra-component.yaml")
 	files["storage.yaml"] = `apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
@@ -2468,16 +2495,16 @@ func TestEndpointVIPOwnershipValidation(t *testing.T) {
 	}
 }
 
-func TestNetworkConfigDNSRefsSelectEnvironmentEntries(t *testing.T) {
+func TestNetworkConfigNameResolutionRefsSelectEnvironmentEntries(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  infraComponents:
     nameResolution:
       - name: default
-        type: external
+        management: external
         address: 192.168.132.53
 `, 1)
-	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  nameResolutionRefs:
     - default
   template:
 `, 1)
@@ -2499,16 +2526,16 @@ func TestNetworkConfigsAllowSharedMachineCIDR(t *testing.T) {
 	}
 }
 
-func TestNetworkConfigDNSRefsRejectDuplicates(t *testing.T) {
+func TestNetworkConfigNameResolutionRefsRejectDuplicates(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["environment.yaml"] = strings.Replace(files["environment.yaml"], "  infraComponents:\n", `  infraComponents:
     nameResolution:
       - name: default
-        type: external
+        management: external
         address: 192.168.132.53
 `, 1)
-	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  nameResolutionRefs:
     - default
     - default
   template:
@@ -2516,62 +2543,62 @@ func TestNetworkConfigDNSRefsRejectDuplicates(t *testing.T) {
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected duplicate dnsRefs error, got nil")
+		t.Fatal("expected duplicate nameResolutionRefs error, got nil")
 	}
-	want := `NetworkConfig/cluster-net spec.dnsRefs[1] "default" is duplicated`
+	want := `NetworkConfig/cluster-net spec.nameResolutionRefs[1] "default" is duplicated`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 
-func TestNetworkConfigDNSRefsRejectUnknownEnvironmentEntry(t *testing.T) {
+func TestNetworkConfigNameResolutionRefsRejectUnknownEnvironmentEntry(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  nameResolutionRefs:
     - missing
   template:
 `, 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected unresolved dnsRefs error, got nil")
+		t.Fatal("expected unresolved nameResolutionRefs error, got nil")
 	}
-	want := `NetworkConfig/cluster-net spec.dnsRefs[0] "missing" does not match any Environment spec.infraComponents.nameResolution[].name`
+	want := `NetworkConfig/cluster-net spec.nameResolutionRefs[0] "missing" does not match any Environment spec.infraComponents.nameResolution[].name`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
 }
 
-func TestNetworkConfigRejectsStaleNameResolutionRefs(t *testing.T) {
+func TestNetworkConfigRejectsStaleDNSRefs(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
-	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  nameResolutionRefs:
+	files["network.yaml"] = strings.Replace(files["network.yaml"], "  template:\n", `  dnsRefs:
     - default
   template:
 `, 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected stale nameResolutionRefs field error, got nil")
+		t.Fatal("expected stale dnsRefs field error, got nil")
 	}
-	if !strings.Contains(err.Error(), "nameResolutionRefs") {
-		t.Fatalf("error %q does not mention nameResolutionRefs", err)
+	if !strings.Contains(err.Error(), "field dnsRefs not found") {
+		t.Fatalf("error %q does not reject the stale dnsRefs field", err)
 	}
 }
 
-func TestNetworkConfigRejectsTemplateDNSRefs(t *testing.T) {
+func TestNetworkConfigRejectsTemplateNameResolutionRefs(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["network.yaml"] = strings.Replace(files["network.yaml"], "    networkConfig:\n", `    networkConfig:
-      dnsRefs:
+      nameResolutionRefs:
         - default
 `, 1)
 	writeFiles(t, dir, files)
 	_, err := LoadNormalizeValidate([]string{dir})
 	if err == nil {
-		t.Fatal("expected invalid networkConfig.dnsRefs error, got nil")
+		t.Fatal("expected invalid networkConfig.nameResolutionRefs error, got nil")
 	}
-	want := "spec.template.networkConfig.dnsRefs is not valid NMState; use spec.dnsRefs instead"
+	want := "spec.template.networkConfig.nameResolutionRefs is not valid NMState; use spec.nameResolutionRefs instead"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
@@ -3154,9 +3181,9 @@ spec:
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: sno-cluster-admin-ssh-key
-  controlPlane: { name: master, replicas: 1 }
+  controlPlane: { replicas: 1 }
   compute:
-    - { name: worker, replicas: 0 }
+    - { replicas: 0 }
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
@@ -3358,9 +3385,9 @@ spec:
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: sno-cluster-admin-ssh-key
-  controlPlane: { name: master, replicas: 1 }
+  controlPlane: { replicas: 1 }
   compute:
-    - { name: worker, replicas: 0 }
+    - { replicas: 0 }
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
@@ -3495,9 +3522,9 @@ spec:
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: sno-cluster-admin-ssh-key
-  controlPlane: { name: master, replicas: 1 }
+  controlPlane: { replicas: 1 }
   compute:
-    - { name: worker, replicas: 0 }
+    - { replicas: 0 }
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
@@ -3641,8 +3668,8 @@ spec:
 `
 }
 
-func environmentYAMLWithNTPSources(sources string) string {
-	return strings.Replace(newEnvironmentYAML, "    artifactServers:\n", "    ntpSources:\n"+sources+"    artifactServers:\n", 1)
+func environmentYAMLWithNTP(sources string) string {
+	return strings.Replace(newEnvironmentYAML, "    artifactServers:\n", "    ntp:\n"+sources+"    artifactServers:\n", 1)
 }
 
 const newEnvironmentYAML = `apiVersion: bootwright.io/v1alpha1
@@ -3653,7 +3680,7 @@ spec:
   infraComponents:
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
 
   secrets:
@@ -3678,7 +3705,7 @@ spec:
   infraComponents:
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
 
   resources:
@@ -3884,9 +3911,9 @@ spec:
     pullSecretRef: openshift-pull-secret
     nodeSSH:
       keyPairRef: sno-cluster-admin-ssh-key
-  controlPlane: { name: master, replicas: 1 }
+  controlPlane: { replicas: 1 }
   compute:
-    - { name: worker, replicas: 0 }
+    - { replicas: 0 }
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]

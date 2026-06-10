@@ -308,7 +308,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					Registries: []v1alpha1.EnvironmentRegistryComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 					}},
 				},

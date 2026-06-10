@@ -10,11 +10,11 @@ var emulatedBareMetalSubstrate = Substrate{
 	EnvArtifactServer: `  infraComponents:
     nameResolution:
       - name: default
-        type: managed
+        management: managed
         componentRef: name-resolution
-    ntpSources:
+    ntp:
       - name: default
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpointRef: cluster
 
@@ -67,7 +67,7 @@ spec:
       address: 192.168.130.20
 `,
 	NetworkDNSServers: "",
-	NetworkDNSRefs: `  dnsRefs:
+	NetworkNameResolutionRefs: `  nameResolutionRefs:
     - default
 
 `,

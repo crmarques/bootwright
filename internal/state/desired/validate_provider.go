@@ -275,15 +275,15 @@ func validateBMCEmulationDefaults(prefix string, defaults *v1alpha1.BMCEmulation
 		errs = append(errs, prefix+".auth.credentialsRef is required when BMC emulation is enabled")
 	}
 	port := effectiveBMCEmulationPort(defaults)
-	vmediaPort := effectiveBMCEmulationVMediaPort(defaults)
+	vMediaPort := effectiveBMCEmulationVMediaPort(defaults)
 	if port < 1 || port > 65535 {
 		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, port))
 	}
-	if vmediaPort < 1 || vmediaPort > 65535 {
-		errs = append(errs, fmt.Sprintf("%s.vmediaPort %d out of range", prefix, vmediaPort))
+	if vMediaPort < 1 || vMediaPort > 65535 {
+		errs = append(errs, fmt.Sprintf("%s.vMediaPort %d out of range", prefix, vMediaPort))
 	}
-	if port == vmediaPort {
-		errs = append(errs, fmt.Sprintf("%s.port and vmediaPort must be different (both %d)", prefix, port))
+	if port == vMediaPort {
+		errs = append(errs, fmt.Sprintf("%s.port and vMediaPort must be different (both %d)", prefix, port))
 	}
 	return errs
 }

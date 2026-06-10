@@ -6,7 +6,7 @@
       - bootwright_component.configConsistent | bool
       - (bootwright_component.bmcEmulated.libvirtURI | default('') | length) > 0
       - (bootwright_component.bmcEmulated.port | default(0) | int) > 0
-      - (bootwright_component.bmcEmulated.vmediaPort | default(0) | int) > 0
+      - (bootwright_component.bmcEmulated.vMediaPort | default(0) | int) > 0
     fail_msg: >-
       bmc_emulated requires one provider-level BMC configuration. Check that all
       machines grouped under provider {{ bootwright_component.providerName }}
@@ -43,6 +43,6 @@
         - "/etc/systemd/system/bootwright-vmedia-{{ bootwright_component.providerName }}.service"
       attributes:
         redfishUnit: "bootwright-sushy-{{ bootwright_component.providerName }}.service"
-        vmediaUnit: "bootwright-vmedia-{{ bootwright_component.providerName }}.service"
+        vMediaUnit: "bootwright-vmedia-{{ bootwright_component.providerName }}.service"
         redfishPort: "{{ bootwright_component.bmcEmulated.port | string }}"
-        vmediaPort: "{{ bootwright_component.bmcEmulated.vmediaPort | string }}"
+        vMediaPort: "{{ bootwright_component.bmcEmulated.vMediaPort | string }}"

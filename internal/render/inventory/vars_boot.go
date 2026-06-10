@@ -14,22 +14,22 @@ import (
 const emulatedVmediaOffset = 1
 const agentISOPublishTokenExpr = "__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__"
 
-func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vmediaPort int) {
+func emulatedBMCListenPorts(l *v1alpha1.InfraProviderLibvirt) (port, vMediaPort int) {
 	port = v1alpha1.DefaultBMCEmulationStartPort
-	vmediaPort = port + emulatedVmediaOffset
+	vMediaPort = port + emulatedVmediaOffset
 	if l == nil || l.BMCEmulationDefaults == nil {
-		return port, vmediaPort
+		return port, vMediaPort
 	}
 	d := l.BMCEmulationDefaults
 	if d.Port != 0 {
 		port = d.Port
 	}
 	if d.VMediaPort != 0 {
-		vmediaPort = d.VMediaPort
+		vMediaPort = d.VMediaPort
 	} else {
-		vmediaPort = port + emulatedVmediaOffset
+		vMediaPort = port + emulatedVmediaOffset
 	}
-	return port, vmediaPort
+	return port, vMediaPort
 }
 
 func machineBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, clusterName string) map[string]any {
@@ -68,13 +68,13 @@ func machineEmulatedBMCVars(state v1alpha1.State, l *v1alpha1.InfraProviderLibvi
 	if l == nil {
 		return nil
 	}
-	port, vmediaPort := emulatedBMCListenPorts(l)
+	port, vMediaPort := emulatedBMCListenPorts(l)
 	out := map[string]any{
 		"protocol":          "redfish",
 		"libvirtURI":        l.URI,
 		"bindAddress":       "0.0.0.0",
 		"port":              port,
-		"vmediaPort":        vmediaPort,
+		"vMediaPort":        vMediaPort,
 		"credentialsRef":    "",
 		"sushyToolsVersion": componentPinVersion(state, "sushy-tools", defaultSushyToolsVersion),
 	}
@@ -95,7 +95,7 @@ func machineEmulatedBMCVars(state v1alpha1.State, l *v1alpha1.InfraProviderLibvi
 func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha1.InstallMachine, libvirt *v1alpha1.InfraProviderLibvirt, clusterName, isoBasename string) map[string]any {
 	machineRef := libvirt.MachineRef.Name
 	hostAddr := stateview.MachineSSHAddressByName(state, machineRef)
-	port, vmediaPort := emulatedBMCListenPorts(libvirt)
+	port, vMediaPort := emulatedBMCListenPorts(libvirt)
 	credRef := ""
 	if d := libvirt.BMCEmulationDefaults; d != nil && d.Auth != nil {
 		credRef = d.Auth.CredentialsRef.Name
@@ -121,7 +121,7 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 		"agentIso": map[string]any{
 			"stageHost": machineRef,
 			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
-			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vmediaPort, agentISOPublishTokenExpr, isoBasename),
+			"fetchUrl":  fmt.Sprintf("http://127.0.0.1:%d/%s/%s", vMediaPort, agentISOPublishTokenExpr, isoBasename),
 		},
 		"media": map[string]any{
 			"libvirt": map[string]any{

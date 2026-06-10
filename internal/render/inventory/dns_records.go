@@ -58,7 +58,7 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 		return false
 	}
 	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
-		for _, ref := range network.Spec.DNSRefs {
+		for _, ref := range network.Spec.NameResolutionRefs {
 			if ref == refName {
 				return true
 			}

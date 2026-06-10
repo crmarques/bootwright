@@ -299,7 +299,7 @@ func storageMachineServiceConsumers(state v1alpha1.State) []MachineServiceConsum
 		if cluster.Spec.Ceph == nil || (cluster.Spec.Management != "" && cluster.Spec.Management != v1alpha1.StorageClusterManagementManaged) {
 			continue
 		}
-		out = append(out, nameResolutionConsumers(state, cluster.Metadata.Name, cluster.Metadata.Name, storageNetworkDNSRefs(state, cluster))...)
+		out = append(out, nameResolutionConsumers(state, cluster.Metadata.Name, cluster.Metadata.Name, storageNetworkNameResolutionRefs(state, cluster))...)
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 			machineObj, ok := stateview.Machine(state, node.MachineRef.Name)
 			if !ok || !v1alpha1.MachineInstallsOS(machineObj) {
@@ -402,7 +402,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 	entries := map[string]v1alpha1.EnvironmentProxyComponent{}
 	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
 		for _, entry := range env.Spec.InfraComponents.Proxies {
-			if entry.Name == name && entry.Type == v1alpha1.EnvironmentComponentManaged {
+			if entry.Name == name && entry.Management == v1alpha1.EnvironmentComponentManaged {
 				entries[entry.ComponentRef.Name] = entry
 			}
 		}
@@ -430,7 +430,7 @@ func selectedManagedProxyConsumers(state v1alpha1.State, infra v1alpha1.ClusterI
 }
 
 func networkNameResolutionConsumers(state v1alpha1.State, infra v1alpha1.ClusterInstall, cluster v1alpha1.ContainerCluster) []MachineServiceConsumer {
-	return nameResolutionConsumers(state, cluster.Metadata.Name, infra.Metadata.Name, networkDNSRefs(state, infra))
+	return nameResolutionConsumers(state, cluster.Metadata.Name, infra.Metadata.Name, networkNameResolutionRefs(state, infra))
 }
 
 func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallName string, refs map[string]bool) []MachineServiceConsumer {
@@ -440,7 +440,7 @@ func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallNa
 	}
 	var out []MachineServiceConsumer
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
-		if !refs[entry.Name] || entry.Type != v1alpha1.EnvironmentComponentManaged {
+		if !refs[entry.Name] || entry.Management != v1alpha1.EnvironmentComponentManaged {
 			continue
 		}
 		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
@@ -453,7 +453,7 @@ func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallNa
 		out = append(out, newServiceConsumer(
 			clusterName,
 			clusterInstallName,
-			fmt.Sprintf("NetworkConfig dnsRefs[%s]", entry.Name),
+			fmt.Sprintf("NetworkConfig nameResolutionRefs[%s]", entry.Name),
 			v1alpha1.ComponentSlotNameResolution,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
@@ -465,7 +465,7 @@ func nameResolutionConsumers(state v1alpha1.State, clusterName, clusterInstallNa
 	return out
 }
 
-func storageNetworkDNSRefs(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]bool {
+func storageNetworkNameResolutionRefs(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]bool {
 	out := map[string]bool{}
 	if cluster.Spec.Ceph == nil {
 		return out
@@ -479,7 +479,7 @@ func storageNetworkDNSRefs(state v1alpha1.State, cluster v1alpha1.StorageCluster
 		if !ok {
 			continue
 		}
-		for _, ref := range network.Spec.DNSRefs {
+		for _, ref := range network.Spec.NameResolutionRefs {
 			out[ref] = true
 		}
 	}
@@ -491,9 +491,9 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterIns
 	if env == nil {
 		return nil
 	}
-	entries := map[string]v1alpha1.EnvironmentNTPSourceComponent{}
-	for _, entry := range env.Spec.InfraComponents.NTPSources {
-		if entry.Type == v1alpha1.EnvironmentComponentManaged {
+	entries := map[string]v1alpha1.EnvironmentNTPComponent{}
+	for _, entry := range env.Spec.InfraComponents.NTP {
+		if entry.Management == v1alpha1.EnvironmentComponentManaged {
 			entries[entry.ComponentRef.Name] = entry
 		}
 	}
@@ -507,7 +507,7 @@ func selectedManagedNTPConsumers(state v1alpha1.State, infra v1alpha1.ClusterIns
 		out = append(out, newServiceConsumer(
 			cluster.Metadata.Name,
 			infra.Metadata.Name,
-			fmt.Sprintf("Environment/%s infraComponents.ntpSources[%s]", env.Metadata.Name, entry.Name),
+			fmt.Sprintf("Environment/%s infraComponents.ntp[%s]", env.Metadata.Name, entry.Name),
 			v1alpha1.ComponentSlotNTP,
 			v1alpha1.KindInfraComponent,
 			component.Metadata.Name,
@@ -528,7 +528,7 @@ func selectedManagedRegistryConsumers(state v1alpha1.State, infra v1alpha1.Clust
 		return nil
 	}
 	entry, ok := selectedRegistry(env.Spec.InfraComponents.Registries)
-	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged {
+	if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged {
 		return nil
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
@@ -568,14 +568,14 @@ func servicePort(kind, realisation string, configured int) int {
 	return roles.LookupService(kind, realisation).DefaultPort
 }
 
-func networkDNSRefs(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]bool {
+func networkNameResolutionRefs(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]bool {
 	out := map[string]bool{}
 	for _, name := range stateview.ClusterConsumedNetworkConfigs(infra) {
 		network, ok := stateview.NetworkConfig(state, name)
 		if !ok {
 			continue
 		}
-		for _, ref := range network.Spec.DNSRefs {
+		for _, ref := range network.Spec.NameResolutionRefs {
 			out[ref] = true
 		}
 	}
@@ -680,7 +680,7 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.InstallMachine) 
 	protocol := v1alpha1.DefaultBMCProtocol
 	bindAddress := v1alpha1.DefaultBMCBindAddress
 	port := v1alpha1.DefaultBMCEmulationStartPort
-	vmediaPort := port + 1
+	vMediaPort := port + 1
 	credentialsRef := ""
 	if d := libvirt.BMCEmulationDefaults; d != nil {
 		if d.Protocol != "" {
@@ -693,15 +693,15 @@ func machineBMCConfigKey(state v1alpha1.State, machine v1alpha1.InstallMachine) 
 			port = d.Port
 		}
 		if d.VMediaPort != 0 {
-			vmediaPort = d.VMediaPort
+			vMediaPort = d.VMediaPort
 		} else {
-			vmediaPort = port + 1
+			vMediaPort = port + 1
 		}
 		if d.Auth != nil {
 			credentialsRef = d.Auth.CredentialsRef.Name
 		}
 	}
-	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vmediaPort, credentialsRef)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", protocol, libvirt.URI, bindAddress, port, vMediaPort, credentialsRef)
 }
 
 func serviceConsumerClusters(consumers []MachineServiceConsumer) []string {

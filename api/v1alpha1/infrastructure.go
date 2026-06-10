@@ -116,6 +116,9 @@ const (
 	// authored InfraComponent slots.
 	ProviderServiceKindBMC = "bmc"
 
+	// EnvironmentComponentNone is the reserved component name/ref sentinel
+	// (never a management value); External and Managed are the
+	// Environment.spec.infraComponents entry management vocabulary.
 	EnvironmentComponentNone     = "none"
 	EnvironmentComponentExternal = "external"
 	EnvironmentComponentManaged  = "managed"

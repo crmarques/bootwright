@@ -34,7 +34,7 @@ func validateStorage(state v1alpha1.State) []string {
 	installProfiles := indexMachineInstallProfiles(state.MachineInstallProfiles)
 	env := primaryEnvironment(&state)
 
-	errs = append(errs, validateStorageClusters(state.StorageClusters, machines, installProfiles, env)...)
+	errs = append(errs, validateStorageClusters(state, machines, installProfiles, env)...)
 	errs = append(errs, validateStoragePlacementPolicies(state.StoragePlacementPolicies, clusters)...)
 	errs = append(errs, validateStoragePools(state.StoragePools, clusters, policies)...)
 	errs = append(errs, validateStorageFilesystems(state.StorageFilesystems, clusters, pools)...)
@@ -44,10 +44,10 @@ func validateStorage(state v1alpha1.State) []string {
 	return errs
 }
 
-func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
+func validateStorageClusters(state v1alpha1.State, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
 	var errs []string
 	seen := map[string]bool{}
-	for _, cluster := range items {
+	for _, cluster := range state.StorageClusters {
 		if e := validateName(v1alpha1.KindStorageCluster, cluster.Metadata.Name); e != "" {
 			errs = append(errs, e)
 			continue
@@ -82,13 +82,13 @@ func validateStorageClusters(items []v1alpha1.StorageCluster, machines map[strin
 			continue
 		}
 		if cluster.Spec.Ceph != nil {
-			errs = append(errs, validateStorageClusterCeph(cluster, machines, installProfiles, env)...)
+			errs = append(errs, validateStorageClusterCeph(state, cluster, machines, installProfiles, env)...)
 		}
 	}
 	return errs
 }
 
-func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
+func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, installProfiles map[string]v1alpha1.MachineInstallProfile, env *v1alpha1.Environment) []string {
 	var errs []string
 	ceph := cluster.Spec.Ceph
 	prefix := fmt.Sprintf("StorageCluster/%s spec.ceph", cluster.Metadata.Name)
@@ -108,7 +108,7 @@ func validateStorageClusterCeph(cluster v1alpha1.StorageCluster, machines map[st
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
-	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines)...)
+	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines, storageSiteRequirement(state, cluster))...)
 	if ceph.Topology.Stretch != nil {
 		errs = append(errs, validateStorageCephStretch(cluster)...)
 	}
@@ -262,7 +262,63 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 	return errs
 }
 
-func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
+// storageSiteRequirement reports why this cluster's topology hosts must
+// declare a site, or "" when site is optional. A site only has effect in
+// stretch mode (where it becomes the cephadm CRUSH location) and under
+// site-narrowed placements (which select hosts by it); requiring it
+// otherwise would force an inert token on single-site clusters.
+func storageSiteRequirement(state v1alpha1.State, cluster v1alpha1.StorageCluster) string {
+	if cluster.Spec.Ceph == nil {
+		return ""
+	}
+	if cluster.Spec.Ceph.Topology.Stretch != nil {
+		return "spec.ceph.topology.stretch is set"
+	}
+	if monitoring := cluster.Spec.Ceph.Monitoring; monitoring != nil {
+		for _, item := range []struct {
+			field   string
+			service *v1alpha1.StorageCephMonitoringService
+		}{
+			{"prometheus", monitoring.Prometheus},
+			{"grafana", monitoring.Grafana},
+			{"alertmanager", monitoring.Alertmanager},
+			{"nodeExporter", monitoring.NodeExporter},
+		} {
+			if item.service != nil && len(item.service.Placement.Sites) > 0 {
+				return fmt.Sprintf("spec.ceph.monitoring.%s.placement narrows by sites", item.field)
+			}
+		}
+	}
+	for i, service := range cluster.Spec.Ceph.Services {
+		if len(service.Placement.Sites) > 0 {
+			return fmt.Sprintf("spec.ceph.services[%d].placement narrows by sites", i)
+		}
+	}
+	for _, fs := range state.StorageFilesystems {
+		if fs.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		if len(fs.Spec.CephFS.MDS.Placement.Sites) > 0 {
+			return fmt.Sprintf("StorageFilesystem/%s spec.cephfs.mds.placement narrows by sites", fs.Metadata.Name)
+		}
+	}
+	for _, gateway := range state.StorageObjectGateways {
+		if gateway.Spec.StorageClusterRef.Name != cluster.Metadata.Name {
+			continue
+		}
+		if len(gateway.Spec.Ceph.Placement.Sites) > 0 {
+			return fmt.Sprintf("StorageObjectGateway/%s spec.ceph.placement narrows by sites", gateway.Metadata.Name)
+		}
+		for i, ingress := range gateway.Spec.Ceph.Ingresses {
+			if len(ingress.Placement.Sites) > 0 {
+				return fmt.Sprintf("StorageObjectGateway/%s spec.ceph.ingresses[%d].placement narrows by sites", gateway.Metadata.Name, i)
+			}
+		}
+	}
+	return ""
+}
+
+func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine, siteRequiredBecause string) []string {
 	var errs []string
 	nodes := cluster.Spec.Ceph.Topology.Hosts
 	if len(nodes) == 0 {
@@ -308,8 +364,8 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Hostname, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
 			}
 		}
-		if node.Site == "" {
-			errs = append(errs, owner+".site is required")
+		if node.Site == "" && siteRequiredBecause != "" {
+			errs = append(errs, fmt.Sprintf("%s.site is required when %s", owner, siteRequiredBecause))
 		}
 		if len(node.Roles) == 0 {
 			errs = append(errs, owner+".roles is required")

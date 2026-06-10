@@ -6,7 +6,7 @@
     bootwright_bmc_libvirt_uri: "{{ bootwright_component.bmcEmulated.libvirtURI }}"
     bootwright_bmc_bind: "{{ bootwright_component.bmcEmulated.bindAddress }}"
     bootwright_bmc_port: "{{ bootwright_component.bmcEmulated.port }}"
-    bootwright_bmc_vmedia_port: "{{ bootwright_component.bmcEmulated.vmediaPort }}"
+    bootwright_bmc_vmedia_port: "{{ bootwright_component.bmcEmulated.vMediaPort }}"
     bootwright_bmc_cred_ref: "{{ bootwright_component.bmcEmulated.credentialsRef }}"
     bootwright_sushy_tools_version: "{{ bootwright_component.bmcEmulated.sushyToolsVersion }}"
   changed_when: false

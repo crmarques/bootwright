@@ -41,9 +41,6 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 	if stretch.RuleName == "" {
 		errs = append(errs, prefix+".ruleName is required")
 	}
-	if stretch.ReplicatedPoolDefaults.Size != 4 || stretch.ReplicatedPoolDefaults.MinSize != 2 {
-		errs = append(errs, fmt.Sprintf("%s.replicatedPoolDefaults must set size: 4 and minSize: 2 for stretch mode", prefix))
-	}
 	monBySite := map[string]int{}
 	for _, node := range nodes {
 		if topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {

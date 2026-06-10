@@ -176,7 +176,7 @@ selected machine-network CIDR.
 
 DNS resolver intent is intentionally outside raw NMState when it selects a
 managed or external Bootwright name-resolution entry. Put the service reference
-in `NetworkConfig.spec.dnsRefs[]`; leave `template.networkConfig.dns-resolver`
+in `NetworkConfig.spec.nameResolutionRefs[]`; leave `template.networkConfig.dns-resolver`
 for literal resolver IPs that are not modeled as Bootwright services.
 
 ## Distribution And Release
@@ -224,14 +224,14 @@ the selected machines, endpoints, and managed components.
 
 Machine-bound shared services live in `InfraComponent` objects. `ContainerCluster`
 references load balancers from endpoints, `Environment` selects proxy,
-artifact, and registry access, and `NetworkConfig.spec.dnsRefs[]`
+artifact, and registry access, and `NetworkConfig.spec.nameResolutionRefs[]`
 selects environment name-resolution entries.
 
 | Service intent | Selector | Implementation owner |
 | --- | --- | --- |
 | Proxy for Bootwright and cluster install traffic | `Environment.spec.infraComponents.proxies[]` plus `proxyFor` | External connection in `Environment`, or managed `InfraComponent.spec.proxy` |
-| Name resolution for installer host networking | `NetworkConfig.spec.dnsRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
-| NTP sources for agent installs | `Environment.spec.infraComponents.ntpSources[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
+| Name resolution for installer host networking | `NetworkConfig.spec.nameResolutionRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
+| NTP sources for agent installs | `Environment.spec.infraComponents.ntp[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
 | Artifact publication for Redfish media and disconnected install files | `ContainerCluster.spec.install.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
 | Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
 | Load balancer VIPs | `ContainerCluster.spec.install.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, or operator-owned external addresses |

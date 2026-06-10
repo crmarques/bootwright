@@ -3,41 +3,78 @@ package desiredstate
 import (
 	"strings"
 	"testing"
-
-	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// TestUnsupportedMachinePoolFieldsRejected covers F8: MachinePoolSpec fields the
-// agent install-config renderer drops (architecture, hyperthreading, platform,
-// custom pool name) must be rejected at validation rather than silently ignored.
-func TestUnsupportedMachinePoolFieldsRejected(t *testing.T) {
-	errs := unsupportedMachinePoolFieldErrors("ContainerCluster/c spec.compute[0]", v1alpha1.MachinePoolSpec{
-		Replicas:       3,
-		Architecture:   "arm64",
-		Hyperthreading: "Disabled",
-		Platform:       map[string]any{"aws": map[string]any{}},
-		Name:           "custom",
-	}, "worker")
-	joined := strings.Join(errs, "\n")
-	for _, want := range []string{
-		"architecture is not supported",
-		"hyperthreading is not supported",
-		"platform is not supported",
-		`name "custom" is not supported`,
-	} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("missing %q in %v", want, errs)
-		}
+// TestRemovedMachinePoolFieldsRejectUnknown covers the MachinePoolSpec
+// fake-knob removal: the agent installer renders a single default-architecture
+// master/worker pool, so architecture, hyperthreading, platform, and name left
+// the authored API and strict decode rejects them with the offending line.
+func TestRemovedMachinePoolFieldsRejectUnknown(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "compute-architecture",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: demo }
+spec:
+  compute:
+    - replicas: 3
+      architecture: arm64
+`,
+			want: "field architecture not found",
+		},
+		{
+			name: "compute-hyperthreading",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: demo }
+spec:
+  compute:
+    - replicas: 3
+      hyperthreading: Disabled
+`,
+			want: "field hyperthreading not found",
+		},
+		{
+			name: "control-plane-platform",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: demo }
+spec:
+  controlPlane:
+    replicas: 3
+    platform: {}
+`,
+			want: "field platform not found",
+		},
+		{
+			name: "compute-name",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata: { name: demo }
+spec:
+  compute:
+    - replicas: 3
+      name: custom
+`,
+			want: "field name not found",
+		},
 	}
-}
-
-// TestSupportedMachinePoolFieldsAccepted confirms the canonical default pools
-// (replicas + master/worker name) are still accepted.
-func TestSupportedMachinePoolFieldsAccepted(t *testing.T) {
-	if errs := unsupportedMachinePoolFieldErrors("ContainerCluster/c spec.compute[0]", v1alpha1.MachinePoolSpec{Replicas: 3, Name: "worker"}, "worker"); len(errs) != 0 {
-		t.Fatalf("default worker pool should be accepted, got %v", errs)
-	}
-	if errs := unsupportedMachinePoolFieldErrors("ContainerCluster/c spec.controlPlane", v1alpha1.MachinePoolSpec{Replicas: 3}, "master"); len(errs) != 0 {
-		t.Fatalf("default master pool should be accepted, got %v", errs)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{"cluster.yaml": tc.body})
+			_, err := LoadNormalizeValidate([]string{dir})
+			if err == nil {
+				t.Fatal("expected unknown field error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+		})
 	}
 }

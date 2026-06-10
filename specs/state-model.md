@@ -78,9 +78,13 @@ Rules:
 - `defaults.clientsMirror`, when set, must be an `http(s)` URL. It overrides the
   base URL Bootwright downloads the OpenShift clients (`oc`,
   `openshift-install`) from, for disconnected or mirrored labs.
-- `infraComponents.*[]` entries are service access catalog entries. They are
-  either `external` with direct access configuration or `managed` with
-  `componentRef` pointing at an `InfraComponent` arm of the matching kind.
+- `infraComponents.*[]` entries are service access catalog entries. Each
+  entry's `management` is either `external` with direct access configuration
+  or `managed` with `componentRef` pointing at an `InfraComponent` arm of the
+  matching kind. The word `type` is reserved API-wide for kind-of-thing
+  discriminators (such as `InfraComponent.spec.type`), so the
+  who-runs-it axis is spelled `management` here, matching
+  `StorageCluster.spec.management`.
 - `proxyFor.bootwright` and `proxyFor.containerClusterInstall` select proxy
   catalog entries by name. Omitted values default to `none`.
 - `secretStorage.mode`, when set, must be `source` (default) or `context`.
@@ -449,7 +453,7 @@ Rules:
   - Any other list shape (for example scalars, or a mix of named and unnamed
     map entries) is rejected as an override error naming the owning field,
     rather than silently dropped.
-- `spec.dnsRefs[]` selects name-resolution catalog entries by name.
+- `spec.nameResolutionRefs[]` selects name-resolution catalog entries by name.
 
 ## ContainerCluster
 
@@ -534,9 +538,11 @@ Rules:
   - `source.componentRef` and `source.bindAddressRef` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
-- `spec.hosts[].machineRef` references a `Machine` with
-  `openshift-node` capability and `os.provided: false`; it defaults to the
-  host's `hostname`.
+- `spec.hosts[].machineRef` is required and references a `Machine` with
+  `openshift-node` capability and `os.provided: false`. No default is derived
+  from the `hostname`: hostnames are cluster-local while `Machine` names are
+  global, so an implicit same-name binding could silently capture a foreign
+  `Machine`.
 - Each node hostname must be unique inside the cluster.
 - A `Machine` is node-bound by at most one cluster (and at most one host
   entry): `machineRef` entries must be disjoint across every
@@ -565,9 +571,12 @@ Rules:
 - `spec.hosts[].role` accepts `master` or `worker`; a cluster requires at least
   one `master` node.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
-  nodes. `spec.compute[]` declare worker machine pools; the summed `replicas` of
-  the default worker pool (name omitted or `worker`) must equal the number of
-  `worker` nodes. A single all-`master` topology omits both.
+  nodes. `spec.compute[]` declare worker machine pools; their summed `replicas`
+  must equal the number of `worker` nodes. A single all-`master` topology omits
+  both. `replicas` is the only machine-pool field: the agent installer renders
+  a single default-architecture `master`/`worker` pool, so the other
+  install-config machine-pool fields (`architecture`, `hyperthreading`,
+  `platform`, `name`) are not authorable.
 - Single-node topologies render installer platform `none` unless
   `platform.type: external` is explicit.
 
@@ -652,8 +661,12 @@ Rules:
   (topology roles, monitoring, gateways) are rejected; `placement` requires
   explicit `hosts` or `sites`.
 - `spec.ceph.topology.hosts[]` require a `machineRef` to a `ceph-node`
-  `Machine`, a `site`, and at least one `roles[]` value from `mon`, `mgr`,
+  `Machine` and at least one `roles[]` value from `mon`, `mgr`,
   `osd`, `mds`, `rgw`, `ingress`, `prometheus`, `grafana`, `alertmanager`.
+  `site` is required exactly where it has effect — when
+  `spec.ceph.topology.stretch` is set (it becomes the cephadm CRUSH location)
+  or when any placement narrows by `sites` — and optional otherwise (no
+  location is rendered without stretch).
   Optional `labels[]` pass additional free-form cephadm host labels (for
   example `_admin`) through verbatim; roles always become labels.
   `devices[]` is the lean OSD shorthand (literal paths ==
@@ -675,17 +688,20 @@ Rules:
   reference the owning `StorageCluster`.
 - Authoring `spec.ceph.topology.stretch` enables stretch mode (presence is the
   signal; there is no `enabled` flag). `failureDomain` (the CRUSH failure
-  domain for the stretch rule) and `tiebreaker.host` are required; everything
-  else is defaulted by normalize and overridable: `dataSites` derives from the
-  topology's non-tiebreaker sites, `tiebreaker.site` from the tiebreaker
-  host's `site`, `ruleName` to `stretch-rule`, and `replicatedPoolDefaults` to
-  `size: 4` / `minSize: 2`. Validation runs post-normalize: `dataSites` must
-  contain exactly two sites; `tiebreaker.site` must be distinct from the data
-  sites; `replicatedPoolDefaults` must be `size: 4` and `minSize: 2`; each
-  data site must hold exactly two `mon` hosts and the tiebreaker site exactly
-  one; the tiebreaker host must be mon-only with no OSD `devices`;
-  erasure-coded pools are rejected; and MDS, RGW, and ingress placement must
-  include at least two role-capable hosts per data site.
+  domain for the stretch rule) and `tiebreaker.host` are required; normalize
+  derives the rest: `dataSites` from the topology's non-tiebreaker sites,
+  `tiebreaker.site` from the tiebreaker host's `site`, and `ruleName` to
+  `stretch-rule`. Authoring `dataSites` only matters when the topology carries
+  additional OSD-only sites the derivation would wrongly include. Stretch
+  replication is not authorable: policy-less replicated pools always render
+  with `size: 4` / `minSize: 2` (the Ceph requirement for two-site stretch);
+  non-4/2 stretch is unsupported today. Validation runs post-normalize:
+  `dataSites` must contain exactly two sites; `tiebreaker.site` must be
+  distinct from the data sites; each data site must hold exactly two `mon`
+  hosts and the tiebreaker site exactly one; the tiebreaker host must be
+  mon-only with no OSD `devices`; erasure-coded pools are rejected; and MDS,
+  RGW, and ingress placement must include at least two role-capable hosts per
+  data site.
 
 ## StoragePlacementPolicy
 
@@ -726,8 +742,9 @@ Rules:
   desired-state change that rebuilds a live pool (data-destroying, `--override`
   only). Replicas, crush rule, and application reconcile in place.
 - On stretch-mode clusters, pools inherit the stretch CRUSH rule and the
-  `replicatedPoolDefaults` replicas without a placement policy; a
-  `placementPolicyRef` is needed only for genuinely divergent placement.
+  fixed stretch replication (`size: 4` / `minSize: 2`) without a placement
+  policy; a `placementPolicyRef` is needed only for genuinely divergent
+  placement.
 - On stretch-mode clusters, `ceph.replicated.size` must be `4` and `minSize`
   must be `2` when set.
 

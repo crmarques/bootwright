@@ -290,7 +290,7 @@ func validateEnvironmentInfraComponents(env v1alpha1.Environment, state v1alpha1
 	errs = append(errs, validateEnvironmentNameResolutionComponents(env, components)...)
 	errs = append(errs, validateEnvironmentArtifactServerComponents(env, components)...)
 	errs = append(errs, validateEnvironmentRegistryComponents(env, components)...)
-	errs = append(errs, validateEnvironmentNTPSources(env, components)...)
+	errs = append(errs, validateEnvironmentNTP(env, components)...)
 	return errs
 }
 
@@ -331,30 +331,30 @@ func validateEnvironmentResources(env v1alpha1.Environment) []string {
 	return errs
 }
 
-func validateEnvironmentNTPSources(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
-	if len(env.Spec.InfraComponents.NTPSources) == 0 {
+func validateEnvironmentNTP(env v1alpha1.Environment, components map[string]v1alpha1.InfraComponent) []string {
+	if len(env.Spec.InfraComponents.NTP) == 0 {
 		return nil
 	}
 	var errs []string
 	seen := map[string]bool{}
-	for i, entry := range env.Spec.InfraComponents.NTPSources {
-		owner := fmt.Sprintf("Environment/%s spec.infraComponents.ntpSources[%d]", env.Metadata.Name, i)
+	for i, entry := range env.Spec.InfraComponents.NTP {
+		owner := fmt.Sprintf("Environment/%s spec.infraComponents.ntp[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		switch entry.Type {
+		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			errs = append(errs, validateNTPAddress(owner+".address", entry.Address)...)
 			if entry.ComponentRef.Name != "" {
-				errs = append(errs, owner+".componentRef is only valid for managed ntpSources entries")
+				errs = append(errs, owner+".componentRef is only valid for managed ntp entries")
 			}
 			if entry.EndpointRef != "" {
-				errs = append(errs, owner+".endpoint is only valid for managed ntpSources entries")
+				errs = append(errs, owner+".endpoint is only valid for managed ntp entries")
 			}
 		case v1alpha1.EnvironmentComponentManaged:
 			errs = append(errs, validateManagedComponentRef(owner, entry.ComponentRef.Name, components, func(c v1alpha1.InfraComponent) bool {
 				return c.Spec.NTP != nil
 			}, "ntp")...)
 			if entry.Address != "" {
-				errs = append(errs, owner+".address is only valid for external ntpSources entries")
+				errs = append(errs, owner+".address is only valid for external ntp entries")
 			}
 			if entry.EndpointRef != "" {
 				if component, ok := components[entry.ComponentRef.Name]; ok && component.Spec.NTP != nil {
@@ -368,7 +368,7 @@ func validateEnvironmentNTPSources(env v1alpha1.Environment, components map[stri
 				}
 			}
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	return errs
@@ -537,7 +537,7 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 	for i, entry := range env.Spec.InfraComponents.Proxies {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.proxies[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		switch entry.Type {
+		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			errs = append(errs, validateEnvironmentProxyConnection(env.Metadata.Name, owner+".connection", entry.Connection)...)
 			if entry.ComponentRef.Name != "" {
@@ -551,7 +551,7 @@ func validateEnvironmentProxyComponents(env v1alpha1.Environment, components map
 				errs = append(errs, owner+".connection is only valid for external proxy entries")
 			}
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	return errs
@@ -563,7 +563,7 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 	for i, entry := range env.Spec.InfraComponents.NameResolution {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		switch entry.Type {
+		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			if net.ParseIP(entry.Address) == nil {
 				errs = append(errs, fmt.Sprintf("%s.ip %q is not a valid IP address", owner, entry.Address))
@@ -582,7 +582,7 @@ func validateEnvironmentNameResolutionComponents(env v1alpha1.Environment, compo
 				errs = append(errs, owner+".ip is only valid for external nameResolution entries")
 			}
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	return errs
@@ -594,7 +594,7 @@ func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, compo
 	for i, entry := range env.Spec.InfraComponents.ArtifactServers {
 		owner := fmt.Sprintf("Environment/%s spec.infraComponents.artifactServers[%d]", env.Metadata.Name, i)
 		errs = append(errs, validateNamedEnvironmentComponent(owner, entry.Name, seen)...)
-		switch entry.Type {
+		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			if entry.ComponentRef.Name != "" {
 				errs = append(errs, owner+".componentRef is only valid for managed artifactServers entries")
@@ -608,7 +608,7 @@ func validateEnvironmentArtifactServerComponents(env v1alpha1.Environment, compo
 				errs = append(errs, owner+".endpoints is only valid for external artifactServers entries")
 			}
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	return errs
@@ -647,7 +647,7 @@ func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components 
 		if entry.Default {
 			defaults++
 		}
-		switch entry.Type {
+		switch entry.Management {
 		case v1alpha1.EnvironmentComponentExternal:
 			if entry.URL == "" {
 				errs = append(errs, owner+".url is required for external registry entries")
@@ -677,7 +677,7 @@ func validateEnvironmentRegistryComponents(env v1alpha1.Environment, components 
 				}
 			}
 		default:
-			errs = append(errs, fmt.Sprintf("%s.type %q must be one of {%s, %s}", owner, entry.Type, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
+			errs = append(errs, fmt.Sprintf("%s.management %q must be one of {%s, %s}", owner, entry.Management, v1alpha1.EnvironmentComponentExternal, v1alpha1.EnvironmentComponentManaged))
 		}
 	}
 	if defaults > 1 {

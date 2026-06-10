@@ -6,7 +6,7 @@ External proxy defaults live in `Environment.spec.infraComponents.proxies[]`:
 infraComponents:
   proxies:
     - name: default
-      type: external
+      management: external
       connection:
         httpProxy: http://proxy.example.test:3128
         httpsProxy: http://proxy.example.test:3128
@@ -21,7 +21,7 @@ proxyFor:
 Omitted `proxyFor` values and the reserved value `none` disable proxy use.
 
 Managed proxy services live in `InfraComponent.spec.proxy` and are selected by
-environment proxy entries with `type: managed`.
+environment proxy entries with `management: managed`.
 
 Disconnected mode is set on each `ContainerCluster`:
 

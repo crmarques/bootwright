@@ -233,7 +233,7 @@ func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifact
 		return []string{fmt.Sprintf("%s.serverRef %q does not resolve to Environment/%s spec.infraComponents.artifactServers[].name%s", prefix, access.ServerRef.Name, env.Metadata.Name, serverRefNote)}
 	}
 	endpoints := artifactServerEndpointNames(entry, components)
-	if entry.Type == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
+	if entry.Management == v1alpha1.EnvironmentComponentManaged && len(endpoints) == 0 {
 		errs = append(errs, fmt.Sprintf("%s.serverRef %q does not resolve to managed artifact server endpoints%s", prefix, access.ServerRef.Name, serverRefNote))
 	}
 	errs = append(errs, validateClusterArtifactEndpointRef(prefix+".redfishVirtualMedia.endpointRef", access.RedfishVirtualMedia.EndpointRef.Name, endpoints, note(defaulted.ArtifactAccessRedfishVirtualMedia, "redfishVirtualMedia.endpointRef"))...)
@@ -254,7 +254,7 @@ func environmentArtifactServerByName(env *v1alpha1.Environment, name string) (v1
 
 func artifactServerEndpointNames(entry v1alpha1.EnvironmentArtifactServerComponent, components map[string]v1alpha1.InfraComponent) map[string]bool {
 	out := map[string]bool{}
-	switch entry.Type {
+	switch entry.Management {
 	case v1alpha1.EnvironmentComponentExternal:
 		for _, endpoint := range entry.Endpoints {
 			out[endpoint.Name] = true

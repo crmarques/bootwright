@@ -37,7 +37,7 @@ func dnsRecordsState() v1alpha1.State {
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:                   "default",
-						Type:                   v1alpha1.EnvironmentComponentManaged,
+						Management:             v1alpha1.EnvironmentComponentManaged,
 						ComponentRef:           v1alpha1.LocalObjectReference{Name: "dns"},
 						AdditionalIngressHosts: []string{"console-openshift-console.apps.cluster-a.example.test"},
 					}},
@@ -55,7 +55,7 @@ func dnsRecordsState() v1alpha1.State {
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "managed-net"},
 			Spec: v1alpha1.NetworkConfigSpec{
-				DNSRefs: []string{"default"},
+				NameResolutionRefs: []string{"default"},
 			},
 		}},
 		Machines: []v1alpha1.Machine{{

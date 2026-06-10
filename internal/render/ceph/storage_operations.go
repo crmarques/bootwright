@@ -9,6 +9,14 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
+// Two-site stretch mode requires exactly size 4 / minSize 2 on replicated
+// pools (two replicas per data site). Non-4/2 stretch is unsupported today,
+// so the replication is a render-time constant rather than authored API.
+const (
+	stretchReplicatedPoolSize    = 4
+	stretchReplicatedPoolMinSize = 2
+)
+
 func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[string]any {
 	var ops []map[string]any
 	// public_network has no cephadm bootstrap flag (unlike --cluster-network);
@@ -218,11 +226,15 @@ func effectivePoolReplicas(state v1alpha1.State, cluster v1alpha1.StorageCluster
 			break
 		}
 	}
+	// Stretch mode pins policy-less replicated pools to size 4 / minSize 2,
+	// the Ceph-required replication for two-site stretch. Non-4/2 stretch is
+	// unsupported today, so this is a render-time constant, not an authorable
+	// knob.
 	if replicas.Size == 0 && cluster.Spec.Ceph.Topology.Stretch != nil {
-		replicas.Size = cluster.Spec.Ceph.Topology.Stretch.ReplicatedPoolDefaults.Size
+		replicas.Size = stretchReplicatedPoolSize
 	}
 	if replicas.MinSize == 0 && cluster.Spec.Ceph.Topology.Stretch != nil {
-		replicas.MinSize = cluster.Spec.Ceph.Topology.Stretch.ReplicatedPoolDefaults.MinSize
+		replicas.MinSize = stretchReplicatedPoolMinSize
 	}
 	if replicas.Size == 0 {
 		replicas.Size = 3

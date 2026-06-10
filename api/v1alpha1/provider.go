@@ -145,6 +145,10 @@ type VSphereNodeNetworking struct {
 	Internal *VSphereNetworkSubnet `yaml:"internal,omitempty" json:"internal,omitempty"`
 }
 
+// VSphereNetworkSubnet mirrors the openshift install-config vSphere
+// nodeNetworking subnet 1:1: networkSubnetCidr is the upstream key verbatim
+// (hence the lowercased Cidr, deviating from the house CIDR casing) and
+// renders unchanged into install-config.
 type VSphereNetworkSubnet struct {
 	NetworkSubnetCIDR []string `yaml:"networkSubnetCidr,omitempty" json:"networkSubnetCidr,omitempty"`
 }
@@ -155,7 +159,7 @@ type BMCEmulationDefaults struct {
 	Emulator                       string   `yaml:"emulator,omitempty" json:"emulator,omitempty"`
 	BindAddress                    string   `yaml:"bindAddress,omitempty" json:"bindAddress,omitempty"`
 	Port                           int      `yaml:"port,omitempty" json:"port,omitempty"`
-	VMediaPort                     int      `yaml:"vmediaPort,omitempty" json:"vmediaPort,omitempty"`
+	VMediaPort                     int      `yaml:"vMediaPort,omitempty" json:"vMediaPort,omitempty"`
 	Auth                           *BMCAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
 	DisableCertificateVerification *bool    `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
 }

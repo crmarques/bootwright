@@ -96,7 +96,7 @@ func TestResourceRecordLoadsNumericAttributes(t *testing.T) {
   "attributes": {
     "redfishUnit": "bootwright-sushy-lab-libvirt-provider.service",
     "redfishPort": 8000,
-    "vmediaPort": 8001
+    "vMediaPort": 8001
   },
   "updatedAt": "2026-06-06T14:11:02Z"
 }
@@ -112,7 +112,7 @@ func TestResourceRecordLoadsNumericAttributes(t *testing.T) {
 		t.Fatalf("records = %d, want 1", len(records))
 	}
 	attrs := records[0].Attributes
-	if attrs["redfishPort"] != "8000" || attrs["vmediaPort"] != "8001" {
+	if attrs["redfishPort"] != "8000" || attrs["vMediaPort"] != "8001" {
 		t.Fatalf("numeric attributes not coerced to strings: %#v", attrs)
 	}
 	if attrs["redfishUnit"] != "bootwright-sushy-lab-libvirt-provider.service" {

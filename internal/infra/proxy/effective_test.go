@@ -19,8 +19,8 @@ func envWithExternalProxy() *v1alpha1.Environment {
 			},
 			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 				Proxies: []v1alpha1.EnvironmentProxyComponent{{
-					Name: "default",
-					Type: v1alpha1.EnvironmentComponentExternal,
+					Name:       "default",
+					Management: v1alpha1.EnvironmentComponentExternal,
 					Connection: &v1alpha1.EnvironmentProxyConnection{
 						HTTPProxy:  "http://external-proxy:3128",
 						HTTPSProxy: "https://external-proxy:3128",
@@ -44,7 +44,7 @@ func stateWithManagedProxy() v1alpha1.State {
 			InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 				Proxies: []v1alpha1.EnvironmentProxyComponent{{
 					Name:         "managed",
-					Type:         v1alpha1.EnvironmentComponentManaged,
+					Management:   v1alpha1.EnvironmentComponentManaged,
 					ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
 				}},
 			},

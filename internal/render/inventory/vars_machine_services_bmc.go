@@ -78,7 +78,7 @@ func bmcConfigKey(m map[string]any) string {
 		m["libvirtURI"],
 		m["bindAddress"],
 		m["port"],
-		m["vmediaPort"],
+		m["vMediaPort"],
 		m["credentialsRef"],
 		m["sushyToolsVersion"],
 	)

@@ -26,11 +26,11 @@ spec:
   infraComponents:
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
     proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: http://192.168.132.1:3128
           httpsProxy: http://192.168.132.1:3128

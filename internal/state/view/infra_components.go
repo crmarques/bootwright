@@ -40,7 +40,7 @@ func ResolvedAdditionalNTPSources(state v1alpha1.State) []string {
 	}
 	seen := map[string]bool{}
 	out := []string{}
-	for _, entry := range env.Spec.InfraComponents.NTPSources {
+	for _, entry := range env.Spec.InfraComponents.NTP {
 		source := resolvedNTPSourceAddress(state, entry)
 		if source == "" || seen[source] {
 			continue
@@ -51,8 +51,8 @@ func ResolvedAdditionalNTPSources(state v1alpha1.State) []string {
 	return out
 }
 
-func resolvedNTPSourceAddress(state v1alpha1.State, entry v1alpha1.EnvironmentNTPSourceComponent) string {
-	switch entry.Type {
+func resolvedNTPSourceAddress(state v1alpha1.State, entry v1alpha1.EnvironmentNTPComponent) string {
+	switch entry.Management {
 	case v1alpha1.EnvironmentComponentExternal:
 		return entry.Address
 	case v1alpha1.EnvironmentComponentManaged:
@@ -98,7 +98,7 @@ func managedServiceEndpointAddress(state v1alpha1.State, machineRef string, endp
 }
 
 func ResolvedNameResolutionIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig, entry v1alpha1.EnvironmentNameResolutionComponent) string {
-	switch entry.Type {
+	switch entry.Management {
 	case v1alpha1.EnvironmentComponentExternal:
 		return entry.Address
 	case v1alpha1.EnvironmentComponentManaged:

@@ -29,7 +29,7 @@ spec:
   machineNetwork:
     - cidr: 192.168.133.0/24
 
-  dnsRefs:
+  nameResolutionRefs:
     - default
 
   template:
@@ -201,10 +201,10 @@ spec:
 
 ## Name Resolution
 
-`NetworkConfig.spec.dnsRefs[]` selects entries from
+`NetworkConfig.spec.nameResolutionRefs[]` selects entries from
 `Environment.spec.infraComponents.nameResolution[]`. Static resolver servers
 may still come from the `NetworkConfig` NMState template; resolved DNS refs are
-appended to the rendered `dns-resolver.config.server` list. Keep `dnsRefs`
+appended to the rendered `dns-resolver.config.server` list. Keep `nameResolutionRefs`
 outside `template.networkConfig`; that map is raw NMState.
 
 Managed name-resolution services render records for `api`, `api-int`, and the
@@ -217,7 +217,7 @@ the environment entry and component merge for shared services.
 
 ## NTP Sources
 
-`Environment.spec.infraComponents.ntpSources[]` declares fleet-wide time
+`Environment.spec.infraComponents.ntp[]` declares fleet-wide time
 sources for agent installs. External entries provide an `address` directly.
 Managed entries reference an `InfraComponent` with `spec.ntp`; Bootwright
 converges chrony on the selected host and renders the managed endpoint, or a
@@ -225,12 +225,12 @@ concrete bind address, into installer `additionalNTPSources`.
 
 ```yaml
 infraComponents:
-  ntpSources:
+  ntp:
     - name: external-01
-      type: external
+      management: external
       address: ntp.example.test
     - name: lab-ntp
-      type: managed
+      management: managed
       componentRef: ntp-server
       endpointRef: cluster
 ```

@@ -45,18 +45,18 @@ spec:
       trustBundleRef: mirror-registry-ca
 
   infraComponents:
-    ntpSources:
+    ntp:
       - name: default
-        type: managed
+        management: managed
         componentRef: ntp-server
         endpointRef: cluster
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
     proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: http://proxy.bootwright.test:3128
           httpsProxy: http://proxy.bootwright.test:3128
@@ -67,14 +67,14 @@ spec:
             proxyAuthRef: proxy-credentials
     nameResolution:
       - name: default
-        type: external
+        management: external
         address: 192.168.132.1
         additionalIngressHosts:
           - console-openshift-console.apps.sno-disconnected.bootwright.test
           - oauth-openshift.apps.sno-disconnected.bootwright.test
     registries:
       - name: default
-        type: managed
+        management: managed
         componentRef: mirror-registry
 
   proxyFor:

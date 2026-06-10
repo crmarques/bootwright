@@ -25,12 +25,10 @@ spec:
       keyPairRef: sno-libvirt-cluster-admin-ssh-key
 
   controlPlane:
-    name: master
     replicas: 1
 
   compute:
-    - name: worker
-      replicas: 0
+    - replicas: 0
 
   hosts:
     - hostname: master-0

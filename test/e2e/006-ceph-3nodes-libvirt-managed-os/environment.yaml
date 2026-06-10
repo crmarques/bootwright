@@ -11,7 +11,7 @@ spec:
   infraComponents:
     nameResolution:
       - name: lab-dns
-        type: managed
+        management: managed
         componentRef: lab-dns
 
   secrets:

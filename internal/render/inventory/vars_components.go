@@ -56,7 +56,7 @@ type selectedNameResolutionComponent struct {
 }
 
 type selectedNTPComponent struct {
-	entry     v1alpha1.EnvironmentNTPSourceComponent
+	entry     v1alpha1.EnvironmentNTPComponent
 	component v1alpha1.InfraComponent
 }
 
@@ -95,7 +95,7 @@ func proxyComponentsForCluster(state v1alpha1.State) []selectedProxyComponent {
 	out := []selectedProxyComponent{}
 	for _, name := range []string{env.Spec.ProxyFor.Bootwright, env.Spec.ProxyFor.ContainerClusterInstall} {
 		entry, ok := proxy.SelectedProxy(*env, name)
-		if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+		if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 			continue
 		}
 		if seen[entry.ComponentRef.Name] {
@@ -118,9 +118,9 @@ func nameResolutionComponentsForCluster(state v1alpha1.State, ci v1alpha1.Cluste
 	seen := map[string]bool{}
 	out := []selectedNameResolutionComponent{}
 	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
-		for _, ref := range network.Spec.DNSRefs {
+		for _, ref := range network.Spec.NameResolutionRefs {
 			entry, ok := stateview.NameResolutionEntry(env, ref)
-			if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+			if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 				continue
 			}
 			if seen[entry.ComponentRef.Name] {
@@ -143,8 +143,8 @@ func ntpComponentsForCluster(state v1alpha1.State) []selectedNTPComponent {
 	}
 	seen := map[string]bool{}
 	out := []selectedNTPComponent{}
-	for _, entry := range env.Spec.InfraComponents.NTPSources {
-		if entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+	for _, entry := range env.Spec.InfraComponents.NTP {
+		if entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 			continue
 		}
 		if seen[entry.ComponentRef.Name] {
@@ -164,7 +164,7 @@ func registryComponentForCluster(state v1alpha1.State, ocp v1alpha1.ContainerClu
 		return selectedRegistryComponent{}, false
 	}
 	entry, ok := stateview.SelectedRegistryEntry(stateview.Environment(state))
-	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
+	if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged || entry.ComponentRef.Name == "" {
 		return selectedRegistryComponent{}, false
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)

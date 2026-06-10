@@ -357,8 +357,8 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			require(fmt.Sprintf("Environment/%s spec.infraComponents.nameResolution[%s].componentRef", env.Metadata.Name, entry.Name),
 				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
 		}
-		for _, entry := range env.Spec.InfraComponents.NTPSources {
-			require(fmt.Sprintf("Environment/%s spec.infraComponents.ntpSources[%s].componentRef", env.Metadata.Name, entry.Name),
+		for _, entry := range env.Spec.InfraComponents.NTP {
+			require(fmt.Sprintf("Environment/%s spec.infraComponents.ntp[%s].componentRef", env.Metadata.Name, entry.Name),
 				v1alpha1.KindInfraComponent, entry.ComponentRef.Name)
 		}
 		for _, entry := range env.Spec.InfraComponents.ArtifactServers {

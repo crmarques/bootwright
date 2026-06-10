@@ -190,42 +190,11 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 	}
 	workerReplicas := 0
 	for _, pool := range ocp.Spec.Compute {
-		if pool.Name == "" || pool.Name == "worker" {
-			workerReplicas += pool.Replicas
-		}
+		workerReplicas += pool.Replicas
 	}
 	if len(ocp.Spec.Compute) > 0 && workerReplicas != worker {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.compute worker replicas %d does not match worker node count %d",
 			ocp.Metadata.Name, workerReplicas, worker))
-	}
-	if cp := ocp.Spec.ControlPlane; cp != nil {
-		errs = append(errs, unsupportedMachinePoolFieldErrors(fmt.Sprintf("ContainerCluster/%s spec.controlPlane", ocp.Metadata.Name), *cp, "master")...)
-	}
-	for i, pool := range ocp.Spec.Compute {
-		errs = append(errs, unsupportedMachinePoolFieldErrors(fmt.Sprintf("ContainerCluster/%s spec.compute[%d]", ocp.Metadata.Name, i), pool, "worker")...)
-	}
-	return errs
-}
-
-// unsupportedMachinePoolFieldErrors rejects MachinePoolSpec fields the agent
-// install-config renderer does not emit. Only replicas (and the canonical
-// master/worker pool name) reach install-config today, so architecture,
-// hyperthreading, platform, and custom pool names would otherwise be accepted by
-// strict decode and silently dropped. Reject them instead of rendering state that
-// diverges from what the operator authored.
-func unsupportedMachinePoolFieldErrors(owner string, pool v1alpha1.MachinePoolSpec, defaultName string) []string {
-	var errs []string
-	if pool.Architecture != "" {
-		errs = append(errs, owner+".architecture is not supported; the agent installer renders a single default-architecture pool")
-	}
-	if pool.Hyperthreading != "" {
-		errs = append(errs, owner+".hyperthreading is not supported in v1alpha1")
-	}
-	if len(pool.Platform) > 0 {
-		errs = append(errs, owner+".platform is not supported in v1alpha1")
-	}
-	if pool.Name != "" && pool.Name != defaultName {
-		errs = append(errs, fmt.Sprintf("%s.name %q is not supported; only the %q pool is rendered", owner, pool.Name, defaultName))
 	}
 	return errs
 }

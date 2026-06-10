@@ -19,7 +19,7 @@ spec:
   infraComponents:
     proxies:
       - name: default
-        type: external
+        management: external
         connection:
           httpProxy: http://proxy.example.test:3128
           httpsProxy: http://proxy.example.test:3128
@@ -38,7 +38,7 @@ spec:
 `proxyFor.containerClusterInstall` renders the selected proxy into installer input.
 Omitted values and the reserved value `none` disable proxy use.
 
-Managed proxy entries use `type: managed` and reference an `InfraComponent`
+Managed proxy entries use `management: managed` and reference an `InfraComponent`
 with `spec.proxy`; the URL is derived from its selected service host and port.
 External proxies are available to every Bootwright phase. Managed proxies are
 created by infrastructure convergence, so `bastion setup` cannot depend on a

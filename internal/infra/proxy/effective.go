@@ -25,7 +25,7 @@ func IsManaged(state v1alpha1.State) bool {
 		return false
 	}
 	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.Bootwright)
-	return ok && entry.Type == v1alpha1.EnvironmentComponentManaged
+	return ok && entry.Management == v1alpha1.EnvironmentComponentManaged
 }
 
 func Resolve(state v1alpha1.State, env *v1alpha1.Environment) *Effective {
@@ -40,7 +40,7 @@ func ResolveFor(state v1alpha1.State, env *v1alpha1.Environment, name string) *E
 		return nil
 	}
 	entry, ok := SelectedProxy(*env, name)
-	if !ok || entry.Type != v1alpha1.EnvironmentComponentExternal || entry.Connection == nil {
+	if !ok || entry.Management != v1alpha1.EnvironmentComponentExternal || entry.Connection == nil {
 		return nil
 	}
 	eff := &Effective{
@@ -84,7 +84,7 @@ func ManagedProxyURL(state v1alpha1.State, ci v1alpha1.ClusterInstall) (string, 
 		return "", nil
 	}
 	entry, ok := SelectedProxy(*env, env.Spec.ProxyFor.ContainerClusterInstall)
-	if !ok || entry.Type != v1alpha1.EnvironmentComponentManaged {
+	if !ok || entry.Management != v1alpha1.EnvironmentComponentManaged {
 		return "", nil
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)

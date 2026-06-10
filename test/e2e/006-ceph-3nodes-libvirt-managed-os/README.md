@@ -26,7 +26,7 @@ The requested managed infra-services VM, artifact service, and storage-owned
 RGW/dashboard ingress endpoints are listed below as implementation work because
 the current workflow cannot model them without Go or Ansible changes. The
 managed DNS service itself now runs on the bastion: a storage cluster schedules
-its `dnsRefs` name-resolution component, and dnsmasq forwards public names so
+its `nameResolutionRefs` name-resolution component, and dnsmasq forwards public names so
 the connected OSS Ceph flow can reach `download.ceph.com` and `quay.io`.
 
 ## Layout
@@ -156,7 +156,7 @@ The remaining requested desired state needs implementation support:
 
 1. Host managed infra services (DNS, artifact) on managed-OS service VMs rather
    than only on the provided bastion. Bastion-hosted managed DNS already works:
-   a storage cluster now schedules its `dnsRefs` name-resolution component.
+   a storage cluster now schedules its `nameResolutionRefs` name-resolution component.
 2. Add a bootstrap path for artifact publication when the artifact service is
    itself hosted on a managed VM.
 3. Add storage-owned endpoint declarations for Ceph dashboard and RGW ingress

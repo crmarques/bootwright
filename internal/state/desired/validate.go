@@ -305,11 +305,11 @@ func selectedManagedRegistry(env *v1alpha1.Environment) *v1alpha1.EnvironmentReg
 	}
 	for i := range env.Spec.InfraComponents.Registries {
 		entry := &env.Spec.InfraComponents.Registries[i]
-		if entry.Type == v1alpha1.EnvironmentComponentManaged && entry.Default {
+		if entry.Management == v1alpha1.EnvironmentComponentManaged && entry.Default {
 			return entry
 		}
 	}
-	if len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Type == v1alpha1.EnvironmentComponentManaged {
+	if len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Management == v1alpha1.EnvironmentComponentManaged {
 		return &env.Spec.InfraComponents.Registries[0]
 	}
 	return nil

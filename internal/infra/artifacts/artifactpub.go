@@ -32,7 +32,7 @@ func SelectByName(state v1alpha1.State, name string) (Server, bool) {
 	if !ok {
 		return Server{}, false
 	}
-	if entry.Type == v1alpha1.EnvironmentComponentExternal {
+	if entry.Management == v1alpha1.EnvironmentComponentExternal {
 		return Server{Entry: entry}, true
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
@@ -99,7 +99,7 @@ func ResolveEndpoint(state v1alpha1.State, server Server, name string) (Resolved
 }
 
 func EndpointAvailable(server Server, endpointName string) bool {
-	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal {
+	if server.Entry.Management == v1alpha1.EnvironmentComponentExternal {
 		_, ok := ExternalEndpoint(server, endpointName)
 		return ok
 	}

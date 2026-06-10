@@ -102,12 +102,13 @@ type ReleaseSpec struct {
 	Image   string `yaml:"image,omitempty" json:"image,omitempty"`
 }
 
+// MachinePoolSpec carries the replica count cross-checked against the
+// spec.hosts roles. The agent installer renders a single default-architecture
+// master/worker pool, so the other install-config machine-pool fields
+// (architecture, hyperthreading, platform, name) are not authorable; strict
+// decode rejects them with the offending line.
 type MachinePoolSpec struct {
-	Name           string         `yaml:"name,omitempty" json:"name,omitempty"`
-	Replicas       int            `yaml:"replicas,omitempty" json:"replicas,omitempty"`
-	Architecture   string         `yaml:"architecture,omitempty" json:"architecture,omitempty"`
-	Hyperthreading string         `yaml:"hyperthreading,omitempty" json:"hyperthreading,omitempty"`
-	Platform       map[string]any `yaml:"platform,omitempty" json:"platform,omitempty"`
+	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"`
 }
 
 type OCPNetworkingSpec struct {
@@ -124,8 +125,10 @@ type ContainerClusterNetworkCIDR struct {
 type OCPHostSpec struct {
 	Hostname string `yaml:"hostname" json:"hostname"`
 	Role     string `yaml:"role" json:"role"`
-	// MachineRef selects the Machine that backs this node; it defaults to
-	// the hostname. A Machine is node-bound by at most one cluster (and at
-	// most one host entry) across every ContainerCluster and StorageCluster.
+	// MachineRef selects the Machine that backs this node. It is required:
+	// hostnames are cluster-local while Machine names are global, so no
+	// default is derived. A Machine is node-bound by at most one cluster
+	// (and at most one host entry) across every ContainerCluster and
+	// StorageCluster.
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 }

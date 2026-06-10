@@ -77,10 +77,10 @@ func effectiveMirrorRegistryURL(state v1alpha1.State, ci v1alpha1.ClusterInstall
 	if !ok {
 		return ""
 	}
-	if entry.Type == v1alpha1.EnvironmentComponentExternal {
+	if entry.Management == v1alpha1.EnvironmentComponentExternal {
 		return strings.TrimRight(entry.URL, "/")
 	}
-	if entry.Type != v1alpha1.EnvironmentComponentManaged {
+	if entry.Management != v1alpha1.EnvironmentComponentManaged {
 		return ""
 	}
 	component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
@@ -240,7 +240,7 @@ func cloneYAMLValue(v any) any {
 // endpoint; external components answer with their configured URL, managed
 // components derive it from the resolved listener and host.
 func ArtifactServerEndpointURL(state v1alpha1.State, server artifacts.Server, endpointName string) string {
-	if server.Entry.Type == v1alpha1.EnvironmentComponentExternal {
+	if server.Entry.Management == v1alpha1.EnvironmentComponentExternal {
 		endpoint, ok := artifacts.ExternalEndpoint(server, endpointName)
 		if !ok {
 			return ""

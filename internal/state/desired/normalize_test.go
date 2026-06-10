@@ -818,6 +818,6 @@ func TestNormalizeDefaultsBMCEmulationPorts(t *testing.T) {
 		t.Fatalf("BMC emulator port = %d, want %d", got, v1alpha1.DefaultBMCEmulationStartPort)
 	}
 	if got := d.VMediaPort; got != v1alpha1.DefaultBMCEmulationStartPort+1 {
-		t.Fatalf("BMC emulator vmediaPort = %d, want %d", got, v1alpha1.DefaultBMCEmulationStartPort+1)
+		t.Fatalf("BMC emulator vMediaPort = %d, want %d", got, v1alpha1.DefaultBMCEmulationStartPort+1)
 	}
 }

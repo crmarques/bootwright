@@ -79,12 +79,12 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 		}
 		out["registries"] = values
 	}
-	if len(env.Spec.InfraComponents.NTPSources) > 0 {
-		values := make([]any, 0, len(env.Spec.InfraComponents.NTPSources))
-		for _, entry := range env.Spec.InfraComponents.NTPSources {
-			values = append(values, environmentNTPSourceComponentVars(entry))
+	if len(env.Spec.InfraComponents.NTP) > 0 {
+		values := make([]any, 0, len(env.Spec.InfraComponents.NTP))
+		for _, entry := range env.Spec.InfraComponents.NTP {
+			values = append(values, environmentNTPComponentVars(entry))
 		}
-		out["ntpSources"] = values
+		out["ntp"] = values
 	}
 	if len(out) == 0 {
 		return nil
@@ -93,7 +93,7 @@ func environmentInfraComponentsVars(env *v1alpha1.Environment) map[string]any {
 }
 
 func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.Connection != nil {
 		connection := map[string]any{}
 		if entry.Connection.HTTPProxy != "" {
@@ -114,7 +114,7 @@ func environmentProxyComponentVars(entry v1alpha1.EnvironmentProxyComponent) map
 }
 
 func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolutionComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.Address != "" {
 		out["address"] = entry.Address
 	}
@@ -124,8 +124,8 @@ func environmentNameResolutionComponentVars(entry v1alpha1.EnvironmentNameResolu
 	return out
 }
 
-func environmentNTPSourceComponentVars(entry v1alpha1.EnvironmentNTPSourceComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, entry.EndpointRef)
+func environmentNTPComponentVars(entry v1alpha1.EnvironmentNTPComponent) map[string]any {
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.Address != "" {
 		out["address"] = entry.Address
 	}
@@ -133,7 +133,7 @@ func environmentNTPSourceComponentVars(entry v1alpha1.EnvironmentNTPSourceCompon
 }
 
 func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactServerComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, false, entry.ComponentRef.Name, "")
+	out := environmentComponentBaseVars(entry.Name, entry.Management, false, entry.ComponentRef.Name, "")
 	if len(entry.Endpoints) > 0 {
 		endpoints := make([]any, 0, len(entry.Endpoints))
 		for _, endpoint := range entry.Endpoints {
@@ -148,15 +148,15 @@ func environmentArtifactServerComponentVars(entry v1alpha1.EnvironmentArtifactSe
 }
 
 func environmentRegistryComponentVars(entry v1alpha1.EnvironmentRegistryComponent) map[string]any {
-	out := environmentComponentBaseVars(entry.Name, entry.Type, entry.Default, entry.ComponentRef.Name, entry.EndpointRef)
+	out := environmentComponentBaseVars(entry.Name, entry.Management, entry.Default, entry.ComponentRef.Name, entry.EndpointRef)
 	if entry.URL != "" {
 		out["url"] = entry.URL
 	}
 	return out
 }
 
-func environmentComponentBaseVars(name, typ string, isDefault bool, componentRef, endpoint string) map[string]any {
-	out := map[string]any{"name": name, "type": typ}
+func environmentComponentBaseVars(name, management string, isDefault bool, componentRef, endpoint string) map[string]any {
+	out := map[string]any{"name": name, "management": management}
 	if isDefault {
 		out["default"] = true
 	}

@@ -15,7 +15,7 @@ type libvirtBMCServiceConfig struct {
 	libvirtURI     string
 	bindAddress    string
 	port           int
-	vmediaPort     int
+	vMediaPort     int
 	credentialsRef string
 }
 
@@ -44,7 +44,7 @@ func validateLibvirtBMCEmulationHostPorts(state v1alpha1.State) []string {
 			libvirtURI:     l.URI,
 			bindAddress:    effectiveBMCEmulationBindAddress(d),
 			port:           effectiveBMCEmulationPort(d),
-			vmediaPort:     effectiveBMCEmulationVMediaPort(d),
+			vMediaPort:     effectiveBMCEmulationVMediaPort(d),
 			credentialsRef: effectiveBMCEmulationCredentialsRef(d),
 		}
 		if existing, ok := serviceConfigs[serviceID]; ok && existing != config {
@@ -53,7 +53,7 @@ func validateLibvirtBMCEmulationHostPorts(state v1alpha1.State) []string {
 		}
 		serviceConfigs[serviceID] = config
 		errs = append(errs, checkBMCEmulationPort(ports, l.MachineRef.Name, config.port, libvirtBMCPortOwner{serviceID: serviceID, owner: owner, field: "port"})...)
-		errs = append(errs, checkBMCEmulationPort(ports, l.MachineRef.Name, config.vmediaPort, libvirtBMCPortOwner{serviceID: serviceID, owner: owner, field: "vmediaPort"})...)
+		errs = append(errs, checkBMCEmulationPort(ports, l.MachineRef.Name, config.vMediaPort, libvirtBMCPortOwner{serviceID: serviceID, owner: owner, field: "vMediaPort"})...)
 	}
 	return errs
 }

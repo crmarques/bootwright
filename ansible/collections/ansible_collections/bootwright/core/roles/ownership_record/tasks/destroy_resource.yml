@@ -83,7 +83,7 @@
   failed_when: false
   loop:
     - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
-    - "{{ bootwright_ownership_destroy_attrs.vmediaUnit | default('') }}"
+    - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default('') }}"
   loop_control:
     label: "{{ item }}"
   when: item | length > 0
@@ -105,7 +105,7 @@
   loop:
     - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
     - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"
-    - "{{ (bootwright_ownership_destroy_attrs.vmediaPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vmediaPort | default('') | string | length) > 0 else '' }}"
+    - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default('') | string | length) > 0 else '' }}"
   loop_control:
     label: "{{ item }}"
   when: item | length > 0

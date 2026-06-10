@@ -541,8 +541,8 @@ func TestBareMetalArtifactFetchURLUsesExternalArtifactEndpoint(t *testing.T) {
 		t.Fatalf("LoadNormalizeValidate: %v", err)
 	}
 	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
-		Name: "default",
-		Type: v1alpha1.EnvironmentComponentExternal,
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
 		Endpoints: []v1alpha1.EnvironmentArtifactServerEndpoint{{
 			Name: "bmc",
 			URL:  "https://artifacts.example.test:9443/vmedia",
@@ -594,7 +594,7 @@ func TestMachineEmulatedBMCProjection(t *testing.T) {
 		"libvirtURI":        "qemu:///system",
 		"bindAddress":       "0.0.0.0",
 		"port":              8000,
-		"vmediaPort":        8001,
+		"vMediaPort":        8001,
 		"credentialsRef":    "bmc-credentials",
 		"sushyToolsVersion": "2.2.0",
 	}
@@ -604,13 +604,13 @@ func TestMachineEmulatedBMCProjection(t *testing.T) {
 		}
 	}
 
-	// boot.agentIso.fetchUrl must use the same vmediaPort the role
+	// boot.agentIso.fetchUrl must use the same vMediaPort the role
 	// will stand up. This pins the cross-projection invariant.
 	boot := machine["boot"].(map[string]any)
 	iso := boot["agentIso"].(map[string]any)
 	fetchURL := iso["fetchUrl"].(string)
-	if !strings.Contains(fetchURL, fmt.Sprintf(":%d/", be["vmediaPort"])) {
-		t.Errorf("agentIso.fetchUrl %q must include vmediaPort=%v", fetchURL, be["vmediaPort"])
+	if !strings.Contains(fetchURL, fmt.Sprintf(":%d/", be["vMediaPort"])) {
+		t.Errorf("agentIso.fetchUrl %q must include vMediaPort=%v", fetchURL, be["vMediaPort"])
 	}
 }
 
@@ -946,7 +946,7 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
 	state.InfraComponents = append(state.InfraComponents, v1alpha1.InfraComponent{

@@ -67,7 +67,7 @@ func cliStateWithSharedDNS() v1alpha1.State {
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "name-resolution"},
 					}},
 				},
@@ -102,12 +102,12 @@ func cliStateWithAllSharedMachineServices() v1alpha1.State {
 	}
 	state.Environments[0].Spec.InfraComponents.Proxies = []v1alpha1.EnvironmentProxyComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
 	}}
 	state.Environments[0].Spec.InfraComponents.ArtifactServers = []v1alpha1.EnvironmentArtifactServerComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 	}}
 	for i := range state.ContainerClusters {
@@ -120,12 +120,12 @@ func cliStateWithAllSharedMachineServices() v1alpha1.State {
 	}
 	state.Environments[0].Spec.InfraComponents.Registries = []v1alpha1.EnvironmentRegistryComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 	}}
-	state.Environments[0].Spec.InfraComponents.NTPSources = []v1alpha1.EnvironmentNTPSourceComponent{{
+	state.Environments[0].Spec.InfraComponents.NTP = []v1alpha1.EnvironmentNTPComponent{{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"},
 	}}
 	state.InfraComponents = append(state.InfraComponents,
@@ -156,7 +156,7 @@ func cliNetworkConfig(name string) v1alpha1.NetworkConfig {
 	return v1alpha1.NetworkConfig{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.NetworkConfigSpec{
-			DNSRefs: []string{"default"},
+			NameResolutionRefs: []string{"default"},
 		},
 	}
 }

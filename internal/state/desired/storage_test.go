@@ -141,6 +141,23 @@ spec:
 `,
 			want: "field release not found",
 		},
+		{
+			name: "stretch-replicated-pool-defaults-retired",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata: { name: ceph }
+spec:
+  type: ceph
+  ceph:
+    topology:
+      stretch:
+        failureDomain: datacenter
+        replicatedPoolDefaults:
+          size: 4
+          minSize: 2
+`,
+			want: "field replicatedPoolDefaults not found",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -303,6 +320,97 @@ spec:
 	}
 }
 
+// TestStorageCephHostSiteRequiredOnlyWhereItHasEffect guards the site
+// requirement: optional on single-site clusters (no CRUSH location is
+// rendered without stretch), required when stretch is set or any placement
+// narrows by sites.
+func TestStorageCephHostSiteRequiredOnlyWhereItHasEffect(t *testing.T) {
+	const environment = `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: env
+spec:
+  baseDomain: bootwright.test
+  secrets:
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            comment: bootwright-ceph-node
+`
+	const machine = `apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-0
+spec:
+  capabilities:
+    - ceph-node
+  os:
+    provided: true
+  addresses:
+    - name: ssh
+      address: 192.0.2.10
+  access:
+    ssh:
+      user: root
+      keyRef: ceph-node-ssh
+      addressRef: ssh
+`
+	const storage = `apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph
+spec:
+  type: ceph
+  ceph:
+    cephadm:
+      bootstrap:
+        host: ceph-0
+MONITORING
+    topology:
+      hosts:
+        - machineRef: ceph-0
+          roles: [mon, prometheus]
+`
+	cases := []struct {
+		name       string
+		monitoring string
+		want       string
+	}{
+		{
+			name:       "site-optional-without-stretch-or-site-placement",
+			monitoring: "",
+		},
+		{
+			name:       "site-required-under-site-narrowed-placement",
+			monitoring: "    monitoring:\n      prometheus:\n        placement:\n          sites: [lab]\n",
+			want:       "spec.ceph.topology.hosts[0].site is required when spec.ceph.monitoring.prometheus.placement narrows by sites",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{
+				"environment.yaml": environment,
+				"machine.yaml":     machine,
+				"storage.yaml":     strings.Replace(storage, "MONITORING\n", tc.monitoring, 1),
+			})
+			_, err := LoadNormalizeValidate([]string{dir})
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("LoadNormalizeValidate: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected site requirement error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 	cases := []struct {
 		name string
@@ -324,11 +432,11 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			want: `requires exactly two mon nodes in data site "dc1"`,
 		},
 		{
-			name: "bad-stretch-replicas",
+			name: "stretch-host-missing-site",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Stretch.ReplicatedPoolDefaults.Size = 3
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[2].Site = ""
 			},
-			want: "replicatedPoolDefaults must set size: 4 and minSize: 2",
+			want: "spec.ceph.topology.hosts[2].site is required when spec.ceph.topology.stretch is set",
 		},
 		{
 			name: "erasure-coded-pool",
@@ -1007,8 +1115,7 @@ func storageValidationState() v1alpha1.State {
 								Site: "dc3",
 								Host: "ceph-arbiter",
 							},
-							ReplicatedPoolDefaults: v1alpha1.StorageCephPoolReplicas{Size: 4, MinSize: 2},
-							RuleName:               "stretch-replicated",
+							RuleName: "stretch-replicated",
 						},
 						Hosts: []v1alpha1.StorageCephHost{
 							storageValidationCephNode("ceph-dc1-0", "dc1", []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}),

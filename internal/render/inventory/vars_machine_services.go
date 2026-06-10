@@ -180,7 +180,7 @@ func ntpMachineServiceVars(state v1alpha1.State, service stategraph.MachineServi
 	if !ok || component.Spec.NTP == nil {
 		return nil, false
 	}
-	entry := v1alpha1.EnvironmentNTPSourceComponent{Name: serviceEntryName(service)}
+	entry := v1alpha1.EnvironmentNTPComponent{Name: serviceEntryName(service)}
 	out := ntpComponentVars(state, entry, component)
 	if networks := ntpAllowedNetworksForGraphService(state, service); len(networks) > 0 {
 		out["allowedNetworks"] = stringSliceAny(networks)

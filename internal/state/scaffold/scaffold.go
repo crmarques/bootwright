@@ -184,7 +184,7 @@ func resolveSubstrateFragments(s Substrate, data templateData) (Substrate, error
 	if s.ProviderNetworkAttachments, err = render("ProviderNetworkAttachments", s.ProviderNetworkAttachments); err != nil {
 		return s, err
 	}
-	if s.NetworkDNSRefs, err = render("NetworkDNSRefs", s.NetworkDNSRefs); err != nil {
+	if s.NetworkNameResolutionRefs, err = render("NetworkNameResolutionRefs", s.NetworkNameResolutionRefs); err != nil {
 		return s, err
 	}
 	if s.ProviderCapabilities, err = render("ProviderCapabilities", s.ProviderCapabilities); err != nil {
@@ -244,7 +244,7 @@ type Substrate struct {
 	EnvArtifactServer          string
 	MachinesYAML               string
 	NetworkDNSServers          string
-	NetworkDNSRefs             string
+	NetworkNameResolutionRefs  string
 	ProviderCapabilities       string
 	ProviderNetworkAttachments string
 	InfraComponentYAML         string
@@ -318,7 +318,7 @@ spec:
   machineNetwork:
     - cidr: 192.168.130.0/24            # change to your cluster machine network
 
-{{.Substrate.NetworkDNSRefs}}
+{{.Substrate.NetworkNameResolutionRefs}}
   template:
     networkConfig:
       interfaces:

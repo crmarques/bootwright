@@ -94,17 +94,22 @@ type EnvironmentEntitlementLicense struct {
 	Accept bool `yaml:"accept,omitempty" json:"accept,omitempty"`
 }
 
+// EnvironmentInfraComponentsSpec catalogs the per-slot service entries. Each
+// entry's management names who runs it: managed (a bootwright-managed
+// InfraComponent selected by componentRef) or external (an address/URL that
+// bootwright only consumes). The word type is reserved API-wide for
+// kind-of-thing discriminators (for example InfraComponent.spec.type).
 type EnvironmentInfraComponentsSpec struct {
 	Proxies         []EnvironmentProxyComponent          `yaml:"proxies,omitempty" json:"proxies,omitempty"`
 	NameResolution  []EnvironmentNameResolutionComponent `yaml:"nameResolution,omitempty" json:"nameResolution,omitempty"`
 	ArtifactServers []EnvironmentArtifactServerComponent `yaml:"artifactServers,omitempty" json:"artifactServers,omitempty"`
 	Registries      []EnvironmentRegistryComponent       `yaml:"registries,omitempty" json:"registries,omitempty"`
-	NTPSources      []EnvironmentNTPSourceComponent      `yaml:"ntpSources,omitempty" json:"ntpSources,omitempty"`
+	NTP             []EnvironmentNTPComponent            `yaml:"ntp,omitempty" json:"ntp,omitempty"`
 }
 
 type EnvironmentProxyComponent struct {
 	Name         string                      `yaml:"name" json:"name"`
-	Type         string                      `yaml:"type" json:"type"`
+	Management   string                      `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference        `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	EndpointRef  string                      `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Connection   *EnvironmentProxyConnection `yaml:"connection,omitempty" json:"connection,omitempty"`
@@ -112,16 +117,16 @@ type EnvironmentProxyComponent struct {
 
 type EnvironmentNameResolutionComponent struct {
 	Name                   string               `yaml:"name" json:"name"`
-	Type                   string               `yaml:"type" json:"type"`
+	Management             string               `yaml:"management" json:"management"`
 	ComponentRef           LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	EndpointRef            string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Address                string               `yaml:"address,omitempty" json:"address,omitempty"`
 	AdditionalIngressHosts []string             `yaml:"additionalIngressHosts,omitempty" json:"additionalIngressHosts,omitempty"`
 }
 
-type EnvironmentNTPSourceComponent struct {
+type EnvironmentNTPComponent struct {
 	Name         string               `yaml:"name" json:"name"`
-	Type         string               `yaml:"type" json:"type"`
+	Management   string               `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	Address      string               `yaml:"address,omitempty" json:"address,omitempty"`
@@ -129,7 +134,7 @@ type EnvironmentNTPSourceComponent struct {
 
 type EnvironmentArtifactServerComponent struct {
 	Name         string                              `yaml:"name" json:"name"`
-	Type         string                              `yaml:"type" json:"type"`
+	Management   string                              `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference                `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	Endpoints    []EnvironmentArtifactServerEndpoint `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
 }
@@ -142,7 +147,7 @@ type EnvironmentArtifactServerEndpoint struct {
 type EnvironmentRegistryComponent struct {
 	Name         string               `yaml:"name" json:"name"`
 	Default      bool                 `yaml:"default,omitempty" json:"default,omitempty"`
-	Type         string               `yaml:"type" json:"type"`
+	Management   string               `yaml:"management" json:"management"`
 	ComponentRef LocalObjectReference `yaml:"componentRef,omitempty" json:"componentRef,omitempty"`
 	EndpointRef  string               `yaml:"endpointRef,omitempty" json:"endpointRef,omitempty"`
 	URL          string               `yaml:"url,omitempty" json:"url,omitempty"`

@@ -303,8 +303,10 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 
 // normalizeStorageStretch fills the derivable stretch fields: presence of the
 // stretch block is the enablement signal, and only failureDomain plus the
-// tiebreaker host are facts the operator alone knows. Every default is
-// overridable by writing the field; validation runs post-normalize unchanged.
+// tiebreaker host are facts the operator alone knows. ruleName takes any
+// authored value; dataSites and tiebreaker.site are echoes of the topology
+// that validation cross-checks post-normalize, so authoring them only
+// narrows (dataSites with OSD-only extra sites) or restates the derivation.
 func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	stretch := cluster.Spec.Ceph.Topology.Stretch
 	if stretch == nil {
@@ -312,12 +314,6 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 	}
 	if stretch.RuleName == "" {
 		stretch.RuleName = "stretch-rule"
-	}
-	if stretch.ReplicatedPoolDefaults.Size == 0 {
-		stretch.ReplicatedPoolDefaults.Size = 4
-	}
-	if stretch.ReplicatedPoolDefaults.MinSize == 0 {
-		stretch.ReplicatedPoolDefaults.MinSize = 2
 	}
 	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
 		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
@@ -415,12 +411,6 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 		ocp.Spec.Networking.ServiceNetwork = []string{v1alpha1.DefaultServiceNetworkCIDR}
 	}
 	applyEnvironmentInstallDefaults(ocp, env)
-	for i := range ocp.Spec.Hosts {
-		node := &ocp.Spec.Hosts[i]
-		if node.MachineRef.Name == "" {
-			node.MachineRef.Name = node.Hostname
-		}
-	}
 }
 
 // applyClusterPlatformDefaults derives spec.install.platform from the single

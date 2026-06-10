@@ -68,7 +68,7 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "lab-dns",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "lab-dns"},
 					}},
 				},
@@ -86,7 +86,7 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 		}},
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "ceph-bridge"},
-			Spec:     v1alpha1.NetworkConfigSpec{DNSRefs: []string{"lab-dns"}},
+			Spec:     v1alpha1.NetworkConfigSpec{NameResolutionRefs: []string{"lab-dns"}},
 		}},
 		Machines: []v1alpha1.Machine{{
 			Metadata: v1alpha1.Metadata{Name: "bastion"},
@@ -143,13 +143,13 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 	state := dnsRecordsState()
 	state.Environments[0].Spec.InfraComponents.NameResolution = append(state.Environments[0].Spec.InfraComponents.NameResolution, v1alpha1.EnvironmentNameResolutionComponent{
 		Name:                   "alternate",
-		Type:                   v1alpha1.EnvironmentComponentManaged,
+		Management:             v1alpha1.EnvironmentComponentManaged,
 		ComponentRef:           v1alpha1.LocalObjectReference{Name: "dns"},
 		AdditionalIngressHosts: []string{"console-openshift-console.apps.cluster-b.example.test"},
 	})
 	state.NetworkConfigs = append(state.NetworkConfigs, state.NetworkConfigs[0])
 	state.NetworkConfigs[1].Metadata.Name = "managed-net-b"
-	state.NetworkConfigs[1].Spec.DNSRefs = []string{"alternate"}
+	state.NetworkConfigs[1].Spec.NameResolutionRefs = []string{"alternate"}
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
 	state.ContainerClusters[1].Spec.Install.Endpoints = map[string]v1alpha1.Endpoint{

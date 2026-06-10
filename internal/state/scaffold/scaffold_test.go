@@ -214,7 +214,7 @@ func TestWorkspaceOmitsDeterministicDefaults(t *testing.T) {
 					"mode: connected",
 					"protocol: redfish",
 					"port: 8000",
-					"vmediaPort: 8001",
+					"vMediaPort: 8001",
 					"port: 8443",
 					"default: true",
 				} {

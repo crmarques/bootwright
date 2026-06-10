@@ -24,6 +24,5 @@ spec:
     topology:
       hosts:
         - machineRef: ceph-0
-          site: lab
           roles:
             - mon

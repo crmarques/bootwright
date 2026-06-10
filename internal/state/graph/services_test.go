@@ -239,27 +239,27 @@ func sharedManagedServiceState() v1alpha1.State {
 				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
 					Proxies: []v1alpha1.EnvironmentProxyComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "proxy"},
 					}},
 					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "name-resolution"},
 					}},
-					NTPSources: []v1alpha1.EnvironmentNTPSourceComponent{{
+					NTP: []v1alpha1.EnvironmentNTPComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "ntp-server"},
 					}},
 					ArtifactServers: []v1alpha1.EnvironmentArtifactServerComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "artifact-server"},
 					}},
 					Registries: []v1alpha1.EnvironmentRegistryComponent{{
 						Name:         "default",
-						Type:         v1alpha1.EnvironmentComponentManaged,
+						Management:   v1alpha1.EnvironmentComponentManaged,
 						ComponentRef: v1alpha1.LocalObjectReference{Name: "registry"},
 					}},
 				},
@@ -357,7 +357,7 @@ func networkConfig(name string) v1alpha1.NetworkConfig {
 	return v1alpha1.NetworkConfig{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.NetworkConfigSpec{
-			DNSRefs: []string{"default"},
+			NameResolutionRefs: []string{"default"},
 		},
 	}
 }

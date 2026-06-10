@@ -8,11 +8,11 @@ import (
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
-func TestResolveClusterDNSServersAppendsDNSRefs(t *testing.T) {
+func TestResolveClusterDNSServersAppendsNameResolutionRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name:    "default",
-		Type:    v1alpha1.EnvironmentComponentExternal,
-		Address: "192.168.130.53",
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Address:    "192.168.130.53",
 	})
 	ci := dnsRefInfra(state)
 	got := ResolveClusterDNSServers(state, ci, state.NetworkConfigs[0])
@@ -25,7 +25,7 @@ func TestResolveClusterDNSServersAppendsDNSRefs(t *testing.T) {
 func TestResolveClusterDNSServersResolvesManagedBindAddress(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
 		Name:         "default",
-		Type:         v1alpha1.EnvironmentComponentManaged,
+		Management:   v1alpha1.EnvironmentComponentManaged,
 		ComponentRef: v1alpha1.LocalObjectReference{Name: "dns"},
 	})
 	state.InfraComponents = []v1alpha1.InfraComponent{{
@@ -48,9 +48,9 @@ func TestResolveClusterDNSServersResolvesManagedBindAddress(t *testing.T) {
 
 func TestResolveClusterDNSServersDeduplicates(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name:    "default",
-		Type:    v1alpha1.EnvironmentComponentExternal,
-		Address: "10.0.0.1",
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Address:    "10.0.0.1",
 	})
 	state.NetworkConfigs[0].Spec.Template.NetworkConfig["dns-resolver"].(map[string]any)["config"].(map[string]any)["server"] = []any{"10.0.0.1", "10.0.0.1"}
 	ci := dnsRefInfra(state)
@@ -61,11 +61,11 @@ func TestResolveClusterDNSServersDeduplicates(t *testing.T) {
 	}
 }
 
-func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
+func TestAgentNetworkConfigAppendsNameResolutionRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name:    "default",
-		Type:    v1alpha1.EnvironmentComponentExternal,
-		Address: "192.168.130.53",
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Address:    "192.168.130.53",
 	})
 	ci := dnsRefInfra(state)
 	got := AgentNetworkConfig(state, ci, ci.Machines[0], "")
@@ -75,11 +75,11 @@ func TestAgentNetworkConfigAppendsDNSRefs(t *testing.T) {
 	}
 }
 
-func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
+func TestAgentNetworkConfigCreatesDNSResolverForNameResolutionRefs(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name:    "default",
-		Type:    v1alpha1.EnvironmentComponentExternal,
-		Address: "192.168.130.53",
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Address:    "192.168.130.53",
 	})
 	delete(state.NetworkConfigs[0].Spec.Template.NetworkConfig, "dns-resolver")
 	ci := dnsRefInfra(state)
@@ -92,9 +92,9 @@ func TestAgentNetworkConfigCreatesDNSResolverForDNSRefs(t *testing.T) {
 
 func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 	state := dnsRefState(v1alpha1.EnvironmentNameResolutionComponent{
-		Name:    "default",
-		Type:    v1alpha1.EnvironmentComponentExternal,
-		Address: "192.168.130.53",
+		Name:       "default",
+		Management: v1alpha1.EnvironmentComponentExternal,
+		Address:    "192.168.130.53",
 	})
 	state.Machines[0].Spec.Network.Config.Overrides = map[string]any{
 		"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.2"}}},
@@ -240,8 +240,8 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 		NetworkConfigs: []v1alpha1.NetworkConfig{{
 			Metadata: v1alpha1.Metadata{Name: "lab-net"},
 			Spec: v1alpha1.NetworkConfigSpec{
-				MachineNetwork: []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.130.0/24"}},
-				DNSRefs:        []string{"default"},
+				MachineNetwork:     []v1alpha1.MachineNetworkCIDR{{CIDR: "192.168.130.0/24"}},
+				NameResolutionRefs: []string{"default"},
 				Template: v1alpha1.NetworkConfigTemplate{
 					NetworkConfig: map[string]any{
 						"dns-resolver": map[string]any{"config": map[string]any{"server": []any{"10.0.0.1"}}},

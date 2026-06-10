@@ -70,7 +70,7 @@ spec:
 	EnvArtifactServer: `  infraComponents:
     artifactServers:
       - name: default
-        type: managed
+        management: managed
         componentRef: artifact-server
 
 `,

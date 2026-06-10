@@ -118,7 +118,7 @@ func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterI
 	}
 	managed := map[string]bool{}
 	for _, entry := range env.Spec.InfraComponents.NameResolution {
-		if entry.Type == v1alpha1.EnvironmentComponentManaged {
+		if entry.Management == v1alpha1.EnvironmentComponentManaged {
 			managed[entry.Name] = true
 		}
 	}
@@ -126,7 +126,7 @@ func clusterUsesManagedNameResolution(state v1alpha1.State, ci v1alpha1.ClusterI
 		if !clusterConsumesNetwork(ci, network.Metadata.Name) {
 			continue
 		}
-		for _, ref := range network.Spec.DNSRefs {
+		for _, ref := range network.Spec.NameResolutionRefs {
 			if managed[ref] {
 				return true
 			}
@@ -145,11 +145,11 @@ func clusterUsesManagedRegistry(state v1alpha1.State, ci v1alpha1.ClusterInstall
 		return false
 	}
 	for _, entry := range env.Spec.InfraComponents.Registries {
-		if entry.Type == v1alpha1.EnvironmentComponentManaged && entry.Default {
+		if entry.Management == v1alpha1.EnvironmentComponentManaged && entry.Default {
 			return true
 		}
 	}
-	return len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Type == v1alpha1.EnvironmentComponentManaged
+	return len(env.Spec.InfraComponents.Registries) == 1 && env.Spec.InfraComponents.Registries[0].Management == v1alpha1.EnvironmentComponentManaged
 }
 
 func environmentUsesManagedProxy(state v1alpha1.State) bool {
@@ -162,7 +162,7 @@ func environmentUsesManagedProxy(state v1alpha1.State) bool {
 		env.Spec.ProxyFor.ContainerClusterInstall: true,
 	}
 	for _, entry := range env.Spec.InfraComponents.Proxies {
-		if selected[entry.Name] && entry.Type == v1alpha1.EnvironmentComponentManaged {
+		if selected[entry.Name] && entry.Management == v1alpha1.EnvironmentComponentManaged {
 			return true
 		}
 	}
@@ -174,8 +174,8 @@ func environmentUsesManagedNTP(state v1alpha1.State) bool {
 	if env == nil {
 		return false
 	}
-	for _, entry := range env.Spec.InfraComponents.NTPSources {
-		if entry.Type == v1alpha1.EnvironmentComponentManaged {
+	for _, entry := range env.Spec.InfraComponents.NTP {
+		if entry.Management == v1alpha1.EnvironmentComponentManaged {
 			return true
 		}
 	}

@@ -295,7 +295,7 @@ func nameResolutionComponentVars(state v1alpha1.State, entry v1alpha1.Environmen
 	return out
 }
 
-func ntpComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNTPSourceComponent, component v1alpha1.InfraComponent) map[string]any {
+func ntpComponentVars(state v1alpha1.State, entry v1alpha1.EnvironmentNTPComponent, component v1alpha1.InfraComponent) map[string]any {
 	ntp := component.Spec.NTP
 	out, _, _ := machineBoundServiceVarsBase(state, component, ntp, v1alpha1.ComponentSlotNTP, v1alpha1.InfraComponentTypeChrony, entry.Name)
 	if len(ntp.UpstreamSources) > 0 {
