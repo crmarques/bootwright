@@ -878,6 +878,10 @@ Rules:
   `spec.hosts[].machineRef` and `StorageCluster`
   `spec.ceph.topology.hosts[].machineRef`, and by at most one host entry
   within that cluster.
+- `ContainerCluster` and `StorageCluster` names share one cluster selection
+  namespace: `--clusters` and the `Environment` cluster lists resolve bare
+  names against both kinds, so a name is declared by at most one cluster root
+  across the two kinds (in addition to the per-kind duplicate rules).
 - Container cluster endpoints must resolve to valid addresses or valid
   InfraComponent bind addresses.
 - Bare-metal boot requires BMC details and artifact access suitable for the
@@ -923,7 +927,9 @@ Rules:
 - Cluster selection uses one flag name, `--clusters`, on every command that
   narrows to specific roots: `apply`/`plan`/`destroy --stage`, the `preflight`
   scope subcommands, and `render`. It accepts a comma-separated list
-  of `ContainerCluster` and `StorageCluster` names. `destroy --stage infra
+  of `ContainerCluster` and `StorageCluster` names; validation keeps the
+  names unique across both kinds, so a name selects exactly one cluster
+  root. `destroy --stage infra
   --clusters` additionally accepts the literal `artifact-server` to remove only
   the generated artifact publication service.
 - `apply --stage infra` includes provider, infra-components, machine-infra, and

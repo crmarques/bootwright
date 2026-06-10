@@ -2841,6 +2841,109 @@ func TestMachineNodeBindingValidation(t *testing.T) {
 	}
 }
 
+func TestClusterRootNameCollisionValidation(t *testing.T) {
+	containerCluster := func(name string) v1alpha1.ContainerCluster {
+		return v1alpha1.ContainerCluster{Metadata: v1alpha1.Metadata{Name: name}}
+	}
+	storageCluster := func(name string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Metadata: v1alpha1.Metadata{Name: name}}
+	}
+	cases := []struct {
+		name  string
+		state v1alpha1.State
+		want  []string
+	}{
+		{
+			name: "disjoint-names-pass",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1"), containerCluster("dc2")},
+				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("ceph")},
+			},
+		},
+		{
+			name: "container-and-storage-cluster-sharing-a-name",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1")},
+				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("dc1")},
+			},
+			want: []string{`StorageCluster/dc1 metadata.name "dc1" is already used by ContainerCluster/dc1; ContainerCluster and StorageCluster names share one cluster selection namespace (--clusters, Environment cluster lists)`},
+		},
+		{
+			// Same-kind duplicates stay with the per-kind `duplicate <Kind>`
+			// rules; the cross-kind check fires once per colliding name even
+			// when the StorageCluster side declares it twice.
+			name: "duplicated-storage-name-colliding-once",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1")},
+				StorageClusters:   []v1alpha1.StorageCluster{storageCluster("dc1"), storageCluster("dc1")},
+			},
+			want: []string{`StorageCluster/dc1 metadata.name "dc1" is already used by ContainerCluster/dc1; ContainerCluster and StorageCluster names share one cluster selection namespace (--clusters, Environment cluster lists)`},
+		},
+		{
+			name: "same-kind-duplicate-alone-passes-here",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{containerCluster("dc1"), containerCluster("dc1")},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := validateClusterRootNameCollisions(tc.state)
+			if len(got) != len(tc.want) {
+				t.Fatalf("validateClusterRootNameCollisions = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("validateClusterRootNameCollisions[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSameKindDuplicateClusterNamesKeepPerKindErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		state v1alpha1.State
+		want  string
+	}{
+		{
+			name: "duplicate-container-cluster",
+			state: v1alpha1.State{
+				ContainerClusters: []v1alpha1.ContainerCluster{
+					{Metadata: v1alpha1.Metadata{Name: "dc1"}},
+					{Metadata: v1alpha1.Metadata{Name: "dc1"}},
+				},
+			},
+			want: `duplicate ContainerCluster "dc1"`,
+		},
+		{
+			name: "duplicate-storage-cluster",
+			state: v1alpha1.State{
+				StorageClusters: []v1alpha1.StorageCluster{
+					{Metadata: v1alpha1.Metadata{Name: "ceph"}},
+					{Metadata: v1alpha1.Metadata{Name: "ceph"}},
+				},
+			},
+			want: `duplicate StorageCluster "ceph"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := Validate(tc.state)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+			if strings.Contains(err.Error(), "share one cluster selection namespace") {
+				t.Fatalf("same-kind duplicate must not trip the cross-kind collision rule: %q", err)
+			}
+		})
+	}
+}
+
 func TestMachineNodeBindingExclusivityAcrossClusters(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()

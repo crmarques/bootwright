@@ -68,7 +68,8 @@ Omitting `--stage` runs the full graph: `infra`, then `clusters`. Each
 sub-phase (`fabric`, `machines`, `deps`, `base`, `addons`) is also selectable
 via `--stage` for surgical reruns.
 `--clusters` accepts a comma-separated mix of `ContainerCluster` and
-`StorageCluster` names.
+`StorageCluster` names; the two kinds share one name namespace (validation
+rejects a name declared by both), so each name selects exactly one cluster.
 
 Destroy uses the same stage selector shape. `destroy --stage infra` tears down
 provider infrastructure and, when unscoped, sweeps current-context VMs that

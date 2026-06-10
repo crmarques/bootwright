@@ -301,7 +301,8 @@ The two families are `infra` (`fabric`, `machines`) and `clusters` (`deps`,
 `base`, `addons`); `--stage` also accepts any individual sub-phase name (for
 example `--stage deps` to (re)install prerequisites, or `--stage base` to bring
 up control planes) for surgical reruns. `--clusters` accepts a comma-separated
-mix of `ContainerCluster` and `StorageCluster` names. Running
+mix of `ContainerCluster` and `StorageCluster` names (unique across both
+kinds, so each name selects exactly one cluster). Running
 `apply --stage clusters --yes` again skips cluster install tasks when the
 prior install record, rendered desired-input fingerprint, and kubeconfig
 availability probe all match, then applies add-ons and integrations idempotently. If

@@ -88,12 +88,37 @@ func validateName(kind, name string) string {
 // requirement, and fleet-wide machine node-binding exclusivity.
 func validateCrossLayer(state v1alpha1.State) []string {
 	var errs []string
+	errs = append(errs, validateClusterRootNameCollisions(state)...)
 	errs = append(errs, validateDisconnectedRequiresRegistry(state)...)
 	errs = append(errs, validateArtifactServerRequirements(state)...)
 	errs = append(errs, validateSharedMachineServices(state)...)
 	errs = append(errs, validateMachineNodeBindings(state)...)
 	errs = append(errs, validateKubeVirtHostClusterDependencies(state)...)
 	errs = append(errs, validateMachineImageEntitlements(state)...)
+	return errs
+}
+
+// validateClusterRootNameCollisions enforces one cluster-root name namespace
+// across ContainerCluster and StorageCluster. Cluster selection resolves bare
+// names against both kinds (`--clusters`, Environment.spec.containerClusters /
+// spec.storageClusters), so a name declared by both would silently widen
+// apply, state-check, and destroy scope to the second cluster. Same-kind
+// duplicates stay with the per-kind `duplicate <Kind>` rules.
+func validateClusterRootNameCollisions(state v1alpha1.State) []string {
+	container := map[string]bool{}
+	for _, ocp := range state.ContainerClusters {
+		container[ocp.Metadata.Name] = true
+	}
+	seen := map[string]bool{}
+	var errs []string
+	for _, sc := range state.StorageClusters {
+		name := sc.Metadata.Name
+		if !container[name] || seen[name] {
+			continue
+		}
+		seen[name] = true
+		errs = append(errs, fmt.Sprintf("StorageCluster/%s metadata.name %q is already used by ContainerCluster/%s; ContainerCluster and StorageCluster names share one cluster selection namespace (--clusters, Environment cluster lists)", name, name, name))
+	}
 	return errs
 }
 
