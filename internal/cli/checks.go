@@ -48,10 +48,6 @@ func contextHostTrustChecks(ctxBaseDir string, state v1alpha1.State) []preflight
 	return checks
 }
 
-func statusNeedsHostTrust(state v1alpha1.State, secretsDir string) bool {
-	return preflight.NeedsHostTrust(state, secretsDir)
-}
-
 func sshtrustKnownSecretsDir(ctxBaseDir string) string {
 	if ctxBaseDir == "" {
 		return ""
