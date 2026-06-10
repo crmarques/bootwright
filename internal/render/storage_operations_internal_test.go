@@ -198,11 +198,11 @@ func TestStretchModeRendersElectionStrategyAndStructuredRule(t *testing.T) {
 					Enabled:       true,
 					FailureDomain: "datacenter",
 					RuleName:      "stretch-rule",
-					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Node: "arbiter"},
+					Tiebreaker:    v1alpha1.StorageCephTiebreaker{Site: "dc3", Host: "arbiter"},
 				},
-				Nodes: []v1alpha1.StorageCephNode{
-					{Name: "a", Site: "dc1", Roles: []string{"mon"}},
-					{Name: "arbiter", Site: "dc3", Roles: []string{"mon"}},
+				Hosts: []v1alpha1.StorageCephHost{
+					{Hostname: "a", Site: "dc1", Roles: []string{"mon"}},
+					{Hostname: "arbiter", Site: "dc3", Roles: []string{"mon"}},
 				},
 			},
 		}},

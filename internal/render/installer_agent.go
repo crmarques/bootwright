@@ -6,7 +6,7 @@ import "github.com/crmarques/bootwright/api/v1alpha1"
 // rendezvous IP. The rendezvous host is the first master node in sorted
 // hostname order.
 func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) ([]any, string) {
-	nodes := sortedNodes(ocp.Spec.Nodes)
+	nodes := sortedNodes(ocp.Spec.Hosts)
 	hosts := make([]any, 0, len(nodes))
 	rendezvous := ""
 	for _, node := range nodes {

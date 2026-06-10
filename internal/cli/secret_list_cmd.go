@@ -240,8 +240,8 @@ func secretConsumedAsStorageSSHPublic(name string, state v1alpha1.State) bool {
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			machine, ok := topology.NodeMachine(state, cluster, node.Name)
+		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+			machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 			if ok && machine.Spec.Access.SSH != nil && machine.Spec.Access.SSH.KeyRef.Name == name {
 				return true
 			}

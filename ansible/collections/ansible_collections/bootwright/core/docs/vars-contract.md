@@ -403,21 +403,22 @@ bootwright_storage_clusters:
     resultPath: "{{ bootwright_ansible_artifacts_dir }}/storage-result.json"
     clusterNetworkCIDRs:
       - 192.168.133.0/24
-    nodes:
-      - name: ceph-dc1-0
+    hosts:
+      - hostname: ceph-dc1-0
         inventoryHost: storage__ceph-stretch__ceph-dc1-0
         address: 192.168.133.30
         devices:
           - /dev/sdb
-      - name: ceph-dc1-1
+      - hostname: ceph-dc1-1
         inventoryHost: storage__ceph-stretch__ceph-dc1-1
         address: 192.168.133.31
         devices:
           - /dev/sdb
     bootstrap:
-      seedNode: ceph-dc1-0
+      host: ceph-dc1-0
       monIP: 192.168.133.30
     ceph:
+      bootstrapConfPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/bootstrap-ceph.conf"
       bootstrapSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/bootstrap-spec.yaml"
       coreServicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/core-services.yaml"
       lateServicesSpecPath: "{{ bootwright_rendered_dir }}/storage/ceph-stretch/cephadm/late-services.yaml"
@@ -439,7 +440,7 @@ The storage inventory contains one synthetic host per declared storage node in
 node, including the cephadm bootstrap seed, renders as
 `storage__<cluster>__<node>`; `seedHost` is the seed node's own host name and is
 used to limit the bootstrap play. Every storage host renders
-`bootwright_storage_cluster_name`, `bootwright_storage_node_name`,
+`bootwright_storage_cluster_name`, `bootwright_storage_host_name`,
 `ansible_host`, `ansible_user`, `ansible_ssh_private_key_file`, and strict
 `ansible_ssh_common_args` from the node's referenced `Machine.spec.access.ssh`. The
 `clusterSSH` vars are also derived from the storage-node Machine SSH identity and

@@ -62,13 +62,13 @@ func validateContainerClusters(state v1alpha1.State) []string {
 // emit the specific conflict instead of the generic "type is required".
 func validateClusterPlatformWithDerivation(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {
 	owner := fmt.Sprintf("ContainerCluster/%s spec.install.platform", ocp.Metadata.Name)
-	if installPlatformOmitted(ocp.Spec.Install.Platform) && len(ocp.Spec.Nodes) > 0 {
+	if installPlatformOmitted(ocp.Spec.Install.Platform) && len(ocp.Spec.Hosts) > 0 {
 		if binding := clusterNodeProviderBinding(state, ocp); len(binding.types) > 1 {
 			return []string{fmt.Sprintf("%s cannot be derived: spec.nodes bind machines across multiple provider types (%s); set spec.install.platform.type explicitly",
 				owner, strings.Join(binding.providers, ", "))}
 		}
 	}
-	return validateClusterPlatform(owner, ocp.Spec.Install.Platform, len(ocp.Spec.Nodes) > 0)
+	return validateClusterPlatform(owner, ocp.Spec.Install.Platform, len(ocp.Spec.Hosts) > 0)
 }
 
 func validateClusterNetworking(ocp v1alpha1.ContainerCluster) []string {
@@ -148,13 +148,13 @@ func validateDistribution(ocp v1alpha1.ContainerCluster) []string {
 
 func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
-	if len(ocp.Spec.Nodes) == 0 {
+	if len(ocp.Spec.Hosts) == 0 {
 		return []string{fmt.Sprintf("ContainerCluster/%s spec.nodes is required", ocp.Metadata.Name)}
 	}
 	master := 0
 	worker := 0
 	seenHostnames := map[string]bool{}
-	for i, node := range ocp.Spec.Nodes {
+	for i, node := range ocp.Spec.Hosts {
 		prefix := fmt.Sprintf("ContainerCluster/%s spec.nodes[%d]", ocp.Metadata.Name, i)
 		if node.Hostname == "" {
 			errs = append(errs, fmt.Sprintf("%s.hostname is required", prefix))
@@ -290,10 +290,10 @@ func containerEndpointRefName(ocp v1alpha1.ContainerCluster, role string) string
 }
 
 func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
-	if len(ocp.Spec.Nodes) != 1 {
+	if len(ocp.Spec.Hosts) != 1 {
 		return false
 	}
-	return ocp.Spec.Nodes[0].Role == v1alpha1.NodeRoleMaster
+	return ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }
 
 func validateInstallRefs(state v1alpha1.State, ocp v1alpha1.ContainerCluster) []string {

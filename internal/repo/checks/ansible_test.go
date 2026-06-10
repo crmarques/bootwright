@@ -2883,7 +2883,7 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 		t.Fatalf("OSD owned-device resolution must be a set_fact, got %v", tasks[resolveIdx])
 	}
 	resolved := fmt.Sprint(resolve["bootwright_ceph_owned_osd_devices"])
-	if !strings.Contains(resolved, "bootwright_selected_storage_cluster.name") || !strings.Contains(resolved, "bootwright_current_storage_node.name") {
+	if !strings.Contains(resolved, "bootwright_selected_storage_cluster.name") || !strings.Contains(resolved, "bootwright_current_storage_host.hostname") {
 		t.Fatalf("OSD owned-device resolution must require cluster and node to match the marker, got %v", resolved)
 	}
 	if got := fmt.Sprint(tasks[checkIdx]["failed_when"]); !strings.Contains(got, "bootwright_ceph_owned_osd_devices") {
@@ -2896,7 +2896,7 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 	if got := fmt.Sprint(stamp["dest"]); !strings.Contains(got, "bootwright_ceph_osd_marker_path") {
 		t.Fatalf("OSD device marker must write the marker path, got %v", stamp["dest"])
 	}
-	if got := fmt.Sprint(stamp["content"]); !strings.Contains(got, "bootwright_current_storage_node.devices") {
+	if got := fmt.Sprint(stamp["content"]); !strings.Contains(got, "bootwright_current_storage_host.devices") {
 		t.Fatalf("OSD device marker must record the node's declared devices, got %v", stamp["content"])
 	}
 	if got := fmt.Sprint(stamp["mode"]); got != "0600" {

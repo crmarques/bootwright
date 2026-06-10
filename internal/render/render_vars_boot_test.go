@@ -960,7 +960,7 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	})
 	state.ContainerClusters[0].Spec.Install.Mode = v1alpha1.InstallModeDisconnected
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"console-openshift-console.apps.sno-libvirt-b.bootwright.test"}
-	machine := machineByName(t, state, state.ContainerClusters[0].Spec.Nodes[0].MachineRef.Name)
+	machine := machineByName(t, state, state.ContainerClusters[0].Spec.Hosts[0].MachineRef.Name)
 	machine.Metadata.Name = "sno-libvirt-b-master-0"
 	machine.Spec.Addresses = append([]v1alpha1.MachineAddress(nil), machine.Spec.Addresses...)
 	for i := range machine.Spec.Addresses {
@@ -971,9 +971,9 @@ func twoClusterLibvirtProviderServicesState(t *testing.T) v1alpha1.State {
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-libvirt-b"
 	ocp.Spec.Install.Mode = v1alpha1.InstallModeDisconnected
-	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
-	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].MachineRef.Name = machine.Metadata.Name
+	ocp.Spec.Hosts = append([]v1alpha1.OCPHostSpec(nil), ocp.Spec.Hosts...)
+	for i := range ocp.Spec.Hosts {
+		ocp.Spec.Hosts[i].MachineRef.Name = machine.Metadata.Name
 	}
 	state.Machines = append(state.Machines, machine)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)
@@ -990,9 +990,9 @@ func twoClusterBareMetalPublicationState(t *testing.T) v1alpha1.State {
 	machine.Metadata.Name = "sno-emul-baremetal-b-master-0"
 	ocp := state.ContainerClusters[0]
 	ocp.Metadata.Name = "sno-emul-baremetal-b"
-	ocp.Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), ocp.Spec.Nodes...)
-	for i := range ocp.Spec.Nodes {
-		ocp.Spec.Nodes[i].MachineRef.Name = machine.Metadata.Name
+	ocp.Spec.Hosts = append([]v1alpha1.OCPHostSpec(nil), ocp.Spec.Hosts...)
+	for i := range ocp.Spec.Hosts {
+		ocp.Spec.Hosts[i].MachineRef.Name = machine.Metadata.Name
 	}
 	state.Machines = append(state.Machines, machine)
 	state.ContainerClusters = append(state.ContainerClusters, ocp)

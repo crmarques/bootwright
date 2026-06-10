@@ -15,12 +15,12 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-			machine, ok := topology.NodeMachine(state, cluster, node.Name)
+		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+			machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 			if !ok {
 				continue
 			}
-			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Name, machine.Metadata.Name), []string{"deps", "base"}, machine, true)...)
+			out = append(out, machineSSHSecretRequirements(fmt.Sprintf("StorageCluster/%s node/%s Machine/%s", cluster.Metadata.Name, node.Hostname, machine.Metadata.Name), []string{"deps", "base"}, machine, true)...)
 		}
 	}
 	clusterByName := map[string]v1alpha1.StorageCluster{}
@@ -50,11 +50,11 @@ func collectStorageSecretRefRequirements(state v1alpha1.State) []secretRefRequir
 		if len(ssh.MachineRefs) == 0 {
 			cluster, ok := clusterByName[export.Spec.StorageClusterRef.Name]
 			if ok && cluster.Spec.Ceph != nil {
-				for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-					if node.Name != cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode {
+				for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+					if node.Hostname != cluster.Spec.Ceph.Cephadm.Bootstrap.Host {
 						continue
 					}
-					machine, ok := topology.NodeMachine(state, cluster, node.Name)
+					machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 					if !ok {
 						continue
 					}

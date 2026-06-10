@@ -11,7 +11,7 @@ spec:
     cephadm:
       addressRef: ssh
       bootstrap:
-        seedNode: ceph-dc1-0
+        host: ceph-dc1-0
         monIP:
           nodeRef: ceph-dc1-0
     networks:
@@ -31,13 +31,13 @@ spec:
         - dc2
         tiebreaker:
           site: dc3
-          node: ceph-arbiter
+          host: ceph-arbiter
         replicatedPoolDefaults:
           size: 4
           minSize: 2
         ruleName: stretch-replicated
-      nodes:
-      - name: ceph-dc1-0
+      hosts:
+      - hostname: ceph-dc1-0
         site: dc1
         roles:
         - mon
@@ -49,7 +49,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc1-0
-      - name: ceph-dc1-1
+      - hostname: ceph-dc1-1
         site: dc1
         roles:
         - mon
@@ -61,7 +61,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc1-1
-      - name: ceph-dc1-2
+      - hostname: ceph-dc1-2
         site: dc1
         roles:
         - osd
@@ -71,7 +71,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc1-2
-      - name: ceph-dc2-0
+      - hostname: ceph-dc2-0
         site: dc2
         roles:
         - mon
@@ -83,7 +83,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc2-0
-      - name: ceph-dc2-1
+      - hostname: ceph-dc2-1
         site: dc2
         roles:
         - mon
@@ -95,7 +95,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc2-1
-      - name: ceph-dc2-2
+      - hostname: ceph-dc2-2
         site: dc2
         roles:
         - osd
@@ -105,7 +105,7 @@ spec:
         devices:
         - /dev/sdb
         machineRef: ceph-dc2-2
-      - name: ceph-arbiter
+      - hostname: ceph-arbiter
         site: dc3
         roles:
         - mon

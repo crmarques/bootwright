@@ -21,7 +21,7 @@ spec:
     cephadm:
       addressRef: ssh
       bootstrap:
-        seedNode: ceph-0
+        host: ceph-0
         monIP:
           nodeRef: ceph-0
     networks:
@@ -30,8 +30,8 @@ spec:
       clusterCIDRs:
         - 192.168.134.0/24
     topology:
-      nodes:
-        - name: ceph-0
+      hosts:
+        - hostname: ceph-0
           site: lab
           roles:
             - mon
@@ -44,7 +44,7 @@ spec:
             - /dev/vdb
             - /dev/vdc
           machineRef: ceph-0
-        - name: ceph-1
+        - hostname: ceph-1
           site: lab
           roles:
             - mon
@@ -57,7 +57,7 @@ spec:
             - /dev/vdb
             - /dev/vdc
           machineRef: ceph-1
-        - name: ceph-2
+        - hostname: ceph-2
           site: lab
           roles:
             - mon

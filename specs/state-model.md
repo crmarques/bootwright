@@ -472,7 +472,7 @@ spec:
         hostPrefix: 23
     serviceNetwork:
       - 172.30.0.0/16
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: ocp-master-0
@@ -485,7 +485,7 @@ Rules:
 - `spec.install.platform.type` accepts `baremetal`, `vsphere`, `none`, or
   `external`.
 - An omitted `spec.install.platform` derives from the single `InfraProvider`
-  type behind `spec.nodes[].machineRef` →
+  type behind `spec.hosts[].machineRef` →
   `Machine.spec.substrate.providerRef`: `libvirt` and `baremetal` providers
   derive `type: baremetal` with `baremetal.provisioningNetwork: disabled`;
   `kubevirt` providers derive `type: none`. `render effective` materializes
@@ -510,7 +510,7 @@ Rules:
   - `source.componentRef` and `source.bindAddress` are valid only when
     `source.type: infraComponent`. Every endpoint must set `address`, `dnsName`,
     or `source.type: infraComponent`.
-- `spec.nodes[].machineRef` references a `Machine` with
+- `spec.hosts[].machineRef` references a `Machine` with
   `openshift-node` capability and `os.provided: false`.
 - Each node hostname must be unique inside the cluster.
 - Node network input is owned by the referenced `Machine`, not by the cluster
@@ -534,7 +534,7 @@ Rules:
 - `spec.install.servingCertificates`, when set, supplies cluster serving
   certificates: `apiServer.namedCertificates[]` (each with `names[]` and a
   `secretRef`) and `ingress.defaultCertificateRef`.
-- `spec.nodes[].role` accepts `master` or `worker`; a cluster requires at least
+- `spec.hosts[].role` accepts `master` or `worker`; a cluster requires at least
   one `master` node.
 - `spec.controlPlane.replicas`, when set, must equal the number of `master`
   nodes. `spec.compute[]` declare worker machine pools; the summed `replicas` of
@@ -585,15 +585,15 @@ Rules:
   entitlement and must not mix with upstream Ceph packages or images.
 - `cephadm.addressRef`, when set, selects a named
   `Machine.spec.addresses[]` entry for cephadm traffic.
-- `cephadm.bootstrap.seedNode` names a storage topology node.
+- `cephadm.bootstrap.host` names a storage topology node.
 - `spec.type` is required and must be `ceph`.
 - Managed clusters require `spec.ceph`; external clusters must not set
   `spec.ceph`.
-- `spec.ceph.cephadm.bootstrap.seedNode` and
+- `spec.ceph.cephadm.bootstrap.host` and
   `spec.ceph.cephadm.bootstrap.monIP.nodeRef` must name
-  `spec.ceph.topology.nodes[]` entries.
+  `spec.ceph.topology.hosts[]` entries.
 - `spec.ceph.networks.publicCIDRs[]` and `clusterCIDRs[]` must be valid CIDRs.
-- `spec.ceph.topology.nodes[]` require a unique `name`, a `machineRef` to a
+- `spec.ceph.topology.hosts[]` require a unique `hostname`, a `machineRef` to a
   `ceph-node` `Machine`, a `site`, and at least one `roles[]` value from
   `mon`, `mgr`, `osd`, `mds`, `rgw`, `ingress`. All node `Machine`s in one
   `StorageCluster` must share one SSH user and `keyRef`.
@@ -602,7 +602,7 @@ Rules:
 - When `spec.ceph.topology.stretch.enabled` is true: `failureDomain` (the CRUSH
   failure domain for the stretch rule) is required; `dataSites` must contain
   exactly two sites; `tiebreaker.site` must be distinct from the data sites;
-  `tiebreaker.node` and `ruleName` are required; `replicatedPoolDefaults` must
+  `tiebreaker.host` and `ruleName` are required; `replicatedPoolDefaults` must
   be `size: 4` and `minSize: 2`; each data site must hold exactly two `mon`
   nodes and the tiebreaker site exactly one; the tiebreaker node must be
   mon-only with no OSD `devices`; erasure-coded pools are rejected; and MDS,
@@ -688,7 +688,7 @@ Rules:
 - `spec.type` is required and must be `data-foundation`.
 - `spec.storageClusterRef` is required.
 - For managed `StorageCluster`s, `spec.dataFoundation` is required;
-  `dataFoundation.rbdPoolRef` and `cephFSRef` are required and must reference
+  `dataFoundation.rbdPoolRef` and `filesystemRef` are required and must reference
   resources on the same `StorageCluster`; `objectGatewayRef` is optional and
   same-cluster.
 - For external `StorageCluster`s, `spec.dataFoundation` must be empty and

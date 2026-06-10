@@ -11,7 +11,7 @@ func TestInfraComponentServicesVarsMergeSharedDNSWithoutMutatingState(t *testing
 	state := dnsRecordsState()
 	state.ContainerClusters = append(state.ContainerClusters, state.ContainerClusters[0])
 	state.ContainerClusters[1].Metadata.Name = "cluster-b"
-	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "master-b"
+	state.ContainerClusters[1].Spec.Hosts[0].MachineRef.Name = "master-b"
 	state.Machines = append(state.Machines, state.Machines[1])
 	state.Machines[2].Metadata.Name = "master-b"
 	state.Environments[0].Spec.InfraComponents.NameResolution[0].AdditionalIngressHosts = []string{"app-a.example.test", "shared.example.test"}
@@ -113,7 +113,7 @@ func TestInfraComponentServicesVarsSchedulesStorageNameResolutionWithForwarders(
 				Management: v1alpha1.StorageClusterManagementManaged,
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Topology: v1alpha1.StorageCephTopology{
-						Nodes: []v1alpha1.StorageCephNode{{
+						Hosts: []v1alpha1.StorageCephHost{{
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 						}},
 					},
@@ -157,8 +157,8 @@ func TestInfraComponentServicesVarsUsesGraphEntryConsumersForSharedDNS(t *testin
 		v1alpha1.EndpointAPIInt:  {Address: "192.168.131.10"},
 		v1alpha1.EndpointIngress: {Address: "192.168.131.11"},
 	}
-	state.ContainerClusters[1].Spec.Nodes = append([]v1alpha1.OCPNodeSpec(nil), state.ContainerClusters[1].Spec.Nodes...)
-	state.ContainerClusters[1].Spec.Nodes[0].MachineRef.Name = "master-b"
+	state.ContainerClusters[1].Spec.Hosts = append([]v1alpha1.OCPHostSpec(nil), state.ContainerClusters[1].Spec.Hosts...)
+	state.ContainerClusters[1].Spec.Hosts[0].MachineRef.Name = "master-b"
 	state.Machines = append(state.Machines, state.Machines[1])
 	state.Machines[2].Metadata.Name = "master-b"
 	state.Machines[2].Spec.Network.Config.NetworkConfigRef.Name = "managed-net-b"

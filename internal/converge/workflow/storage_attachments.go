@@ -224,12 +224,12 @@ func storageExportSSHExternalDetailsTargets(state v1alpha1.State, cluster v1alph
 	if cluster.Spec.Ceph == nil {
 		return nil, fmt.Errorf("StorageCluster/%s spec.ceph is required for default sshExecution target", cluster.Metadata.Name)
 	}
-	seedNode := cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode
+	seedNode := cluster.Spec.Ceph.Cephadm.Bootstrap.Host
 	node, ok := storageExportSeedNode(cluster, seedNode)
 	if !ok {
 		return nil, fmt.Errorf("StorageCluster/%s seedNode %q is not listed in spec.ceph.topology.nodes", cluster.Metadata.Name, seedNode)
 	}
-	machine, ok := topology.NodeMachine(state, cluster, node.Name)
+	machine, ok := topology.NodeMachine(state, cluster, node.Hostname)
 	if !ok {
 		return nil, fmt.Errorf("StorageCluster/%s seedNode %q does not resolve to a Machine", cluster.Metadata.Name, seedNode)
 	}
@@ -263,13 +263,13 @@ func workflowMachineKnownHostsPath(machine v1alpha1.Machine, env *v1alpha1.Envir
 	return sshtrust.KnownHostsPathForSecrets(trustSecretsDir)
 }
 
-func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-		if node.Name == name {
+func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.Hostname == name {
 			return node, true
 		}
 	}
-	return v1alpha1.StorageCephNode{}, false
+	return v1alpha1.StorageCephHost{}, false
 }
 
 func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {

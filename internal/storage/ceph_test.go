@@ -134,12 +134,12 @@ func minimalStorageState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							SeedNode: "ceph-dc1-0",
-							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
+							Host:  "ceph-dc1-0",
+							MonIP: v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
 						},
 					},
-					Topology: v1alpha1.StorageCephTopology{Nodes: []v1alpha1.StorageCephNode{{
-						Name:       "ceph-dc1-0",
+					Topology: v1alpha1.StorageCephTopology{Hosts: []v1alpha1.StorageCephHost{{
+						Hostname:   "ceph-dc1-0",
 						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"},
 						Site:       "dc1",
 						Roles:      []string{v1alpha1.StorageCephRoleMON},
@@ -176,7 +176,7 @@ func dataFoundationStorageState() v1alpha1.State {
 			StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
 			DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
 				RBDPoolRef:       v1alpha1.LocalObjectReference{Name: "rbd"},
-				CephFSRef:        v1alpha1.LocalObjectReference{Name: "cephfs"},
+				FilesystemRef:    v1alpha1.LocalObjectReference{Name: "cephfs"},
 				ObjectGatewayRef: v1alpha1.LocalObjectReference{Name: "rgw"},
 			},
 		},

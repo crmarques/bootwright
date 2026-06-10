@@ -333,8 +333,8 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 					Distribution:   v1alpha1.StorageCephDistributionRedHat,
 					EntitlementRef: v1alpha1.LocalObjectReference{Name: "rhcs"},
 					Topology: v1alpha1.StorageCephTopology{
-						Nodes: []v1alpha1.StorageCephNode{{
-							Name:       "ceph-0",
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Site:       "dc1",
 							Roles:      []string{v1alpha1.StorageCephRoleMON},

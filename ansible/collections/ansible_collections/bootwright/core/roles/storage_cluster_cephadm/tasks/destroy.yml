@@ -10,9 +10,9 @@
 
 - name: Resolve current storage node
   ansible.builtin.set_fact:
-    bootwright_current_storage_node_matches: >-
+    bootwright_current_storage_host_matches: >-
       {{
-        bootwright_selected_storage_cluster.nodes
+        bootwright_selected_storage_cluster.hosts
         | default([])
         | selectattr('inventoryHost', 'equalto', inventory_hostname)
         | list
@@ -22,14 +22,14 @@
 - name: Validate current storage node context
   ansible.builtin.assert:
     that:
-      - bootwright_current_storage_node_matches | length == 1
+      - bootwright_current_storage_host_matches | length == 1
     fail_msg: >-
       Storage node {{ inventory_hostname }} is not declared exactly once in
       {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
 
 - name: Set current storage node
   ansible.builtin.set_fact:
-    bootwright_current_storage_node: "{{ bootwright_current_storage_node_matches | first }}"
+    bootwright_current_storage_host: "{{ bootwright_current_storage_host_matches | first }}"
   changed_when: false
 
 - name: Validate declared Ceph destroy devices
@@ -38,11 +38,11 @@
       - item is match('^/dev/(disk/by-id/[^/]+|disk/by-path/[^/]+|mapper/[^/]+|nvme[0-9]+n[0-9]+|[svx]d[a-z]+)$')
     fail_msg: >-
       Refusing to wipe undeclared or unsupported storage device {{ item }}
-      for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}.
+      for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}.
       Declare stable /dev/disk/by-id, /dev/disk/by-path, /dev/mapper, NVMe, or /dev/sdX paths only.
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 # A declared device that is mounted, holds the root/boot filesystem, or is
 # otherwise in use is not a Bootwright OSD device; wiping it would be irreversible
@@ -60,9 +60,9 @@
   register: bootwright_ceph_device_mounts
   changed_when: false
   failed_when: false
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 - name: Refuse to wipe mounted or in-use Ceph destroy devices
   ansible.builtin.assert:
@@ -71,12 +71,12 @@
       - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
     fail_msg: >-
       Refusing to wipe storage device {{ item.item }} for
-      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}:
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it is mounted or in use ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}),
       so it is not a wipeable Bootwright OSD device. Correct the declared devices list before destroying.
   loop: "{{ bootwright_ceph_device_mounts.results | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item.item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 # Each apply records the exact devices Bootwright provisioned as OSDs on this node.
 # Refuse to wipe a declared device that is not in that recorded set: it was added
@@ -102,14 +102,14 @@
       - item in (bootwright_ceph_recorded_osd_devices | default([]))
     fail_msg: >-
       Refusing to wipe storage device {{ item }} for
-      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}:
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it is not in this node's recorded Bootwright OSD device set
       ({{ bootwright_ceph_recorded_osd_devices | default([]) | join(', ') }}), so it was not
       provisioned by Bootwright as an OSD. It may have been added to the devices list after
       apply. Re-apply to re-record OSD devices, or verify and wipe it manually.
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
   when: (bootwright_ceph_osd_device_marker | default({})).content is defined
 
 - name: Check Ceph fsid on seed host
@@ -259,9 +259,9 @@
   register: bootwright_ceph_device_mounts_final
   changed_when: false
   failed_when: false
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 - name: Refuse to wipe devices mounted since the first check
   ansible.builtin.assert:
@@ -270,12 +270,12 @@
       - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
     fail_msg: >-
       Refusing to wipe storage device {{ item.item }} for
-      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_node.name }}:
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it became mounted or in use after the initial check
       ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}).
   loop: "{{ bootwright_ceph_device_mounts_final.results | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item.item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
 - name: Wipe declared Ceph device signatures
   ansible.builtin.command:
@@ -287,9 +287,9 @@
   register: bootwright_ceph_wipefs
   changed_when: true
   failed_when: bootwright_ceph_wipefs.rc != 0
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 - name: Zap declared Ceph device partition tables
   ansible.builtin.command:
@@ -302,9 +302,9 @@
   # A failed zap leaves a half-cleared partition table that can corrupt the next
   # provision or a later repurpose of the device. Fail closed instead of swallowing.
   failed_when: bootwright_ceph_sgdisk.rc != 0
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 - name: Remove managed Ceph local state
   ansible.builtin.file:

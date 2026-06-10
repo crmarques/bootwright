@@ -9,4 +9,4 @@ spec:
 
   dataFoundation:
     rbdPoolRef: rbd
-    cephFSRef: cephfs
+    filesystemRef: cephfs

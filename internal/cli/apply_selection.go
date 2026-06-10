@@ -51,7 +51,7 @@ func validateKubeVirtClusterSelection(state v1alpha1.State, scope scopeSpec, clu
 func kubeVirtHostParentsByChild(state v1alpha1.State) map[string][]string {
 	out := map[string][]string{}
 	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Nodes {
+		for _, node := range cluster.Spec.Hosts {
 			machine, ok := stateview.Machine(state, node.MachineRef.Name)
 			if !ok {
 				continue

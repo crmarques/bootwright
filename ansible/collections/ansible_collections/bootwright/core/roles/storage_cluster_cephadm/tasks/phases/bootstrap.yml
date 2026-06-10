@@ -104,9 +104,9 @@
       register: bootwright_ceph_seed_ssh_check
       changed_when: false
       no_log: true
-      loop: "{{ bootwright_selected_storage_cluster.nodes | default([]) }}"
+      loop: "{{ bootwright_selected_storage_cluster.hosts | default([]) }}"
       loop_control:
-        label: "{{ item.name }}"
+        label: "{{ item.hostname }}"
       when:
         - bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
         - bootwright_selected_storage_cluster.clusterSSH.knownHostsPath | default('') | length > 0

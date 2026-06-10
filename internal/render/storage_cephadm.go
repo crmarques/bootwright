@@ -22,10 +22,10 @@ func cephadmBootstrapConf(cluster v1alpha1.StorageCluster) string {
 
 func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster) []any {
 	var docs []any
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		host := map[string]any{
 			"service_type": "host",
-			"hostname":     node.Name,
+			"hostname":     node.Hostname,
 			"labels":       append([]string(nil), node.Roles...),
 		}
 		// A CRUSH location is only meaningful in stretch mode, where sites map to
@@ -38,7 +38,7 @@ func cephadmBootstrapSpec(state v1alpha1.State, cluster v1alpha1.StorageCluster)
 				topology.FailureDomain(cluster): node.Site,
 			}
 		}
-		if addr := topology.NodeAddress(state, cluster, node.Name); addr != "" {
+		if addr := topology.NodeAddress(state, cluster, node.Hostname); addr != "" {
 			host["addr"] = addr
 		}
 		docs = append(docs, host)
@@ -130,11 +130,11 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 	}
 	var docs []any
 	explicitHosts := map[string]bool{}
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleOSD) || len(node.Devices) == 0 {
 			continue
 		}
-		if !hostSet[node.Name] {
+		if !hostSet[node.Hostname] {
 			continue
 		}
 		spec := map[string]any{
@@ -142,8 +142,8 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster, hosts []string) []any {
 				"paths": append([]string(nil), node.Devices...),
 			},
 		}
-		docs = append(docs, cephadmPlacementService("osd", "data-"+node.Name, []string{node.Name}, 0, spec))
-		explicitHosts[node.Name] = true
+		docs = append(docs, cephadmPlacementService("osd", "data-"+node.Hostname, []string{node.Hostname}, 0, spec))
+		explicitHosts[node.Hostname] = true
 	}
 	var autoHosts []string
 	for _, host := range hosts {

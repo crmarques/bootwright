@@ -52,8 +52,8 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 		MonitorEndpoints: topology.MonitorEndpoints(state, cluster),
 	}
 	if df != nil {
-		input.CephFSName = df.CephFSRef.Name
-		if fs, ok := topology.FilesystemByName(state, df.CephFSRef.Name); ok {
+		input.CephFSName = df.FilesystemRef.Name
+		if fs, ok := topology.FilesystemByName(state, df.FilesystemRef.Name); ok {
 			input.CephFSPool = topology.FilesystemDefaultDataPool(fs)
 		}
 		input.RBDPool = df.RBDPoolRef.Name

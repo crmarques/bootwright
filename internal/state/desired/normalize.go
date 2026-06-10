@@ -239,7 +239,7 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	}
 	adm := &cluster.Spec.Ceph.Cephadm
 	if adm.Bootstrap.MonIP.NodeRef.Name == "" {
-		adm.Bootstrap.MonIP.NodeRef.Name = adm.Bootstrap.SeedNode
+		adm.Bootstrap.MonIP.NodeRef.Name = adm.Bootstrap.Host
 	}
 	if adm.Bootstrap.MonIP.AddressRef.Name == "" {
 		adm.Bootstrap.MonIP.AddressRef = adm.AddressRef
@@ -321,8 +321,8 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 		ocp.Spec.Networking.ServiceNetwork = []string{v1alpha1.DefaultServiceNetworkCIDR}
 	}
 	applyEnvironmentInstallDefaults(ocp, env)
-	for i := range ocp.Spec.Nodes {
-		node := &ocp.Spec.Nodes[i]
+	for i := range ocp.Spec.Hosts {
+		node := &ocp.Spec.Hosts[i]
 		if node.MachineRef.Name == "" {
 			node.MachineRef.Name = node.Hostname
 		}
@@ -377,10 +377,10 @@ type clusterProviderBinding struct {
 }
 
 func clusterNodeProviderBinding(state v1alpha1.State, cluster v1alpha1.ContainerCluster) clusterProviderBinding {
-	binding := clusterProviderBinding{complete: len(cluster.Spec.Nodes) > 0}
+	binding := clusterProviderBinding{complete: len(cluster.Spec.Hosts) > 0}
 	types := map[string]bool{}
 	providers := map[string]bool{}
-	for _, node := range cluster.Spec.Nodes {
+	for _, node := range cluster.Spec.Hosts {
 		machine, ok := stateview.Machine(state, node.MachineRef.Name)
 		if !ok {
 			binding.complete = false

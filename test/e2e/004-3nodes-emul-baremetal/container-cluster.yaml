@@ -34,7 +34,7 @@ spec:
     - name: worker
       replicas: 0
 
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: rack1-srv1

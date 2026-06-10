@@ -263,7 +263,7 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, ocp := range state.ContainerClusters {
-		for i, node := range ocp.Spec.Nodes {
+		for i, node := range ocp.Spec.Hosts {
 			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].machineRef", ocp.Metadata.Name, i),
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
@@ -307,7 +307,7 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		if cluster.Spec.Ceph == nil {
 			continue
 		}
-		for i, node := range cluster.Spec.Ceph.Topology.Nodes {
+		for i, node := range cluster.Spec.Ceph.Topology.Hosts {
 			require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%d].machineRef", cluster.Metadata.Name, i),
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
@@ -342,8 +342,8 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		if df := export.Spec.DataFoundation; df != nil {
 			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.rbdPoolRef", export.Metadata.Name),
 				v1alpha1.KindStoragePool, df.RBDPoolRef.Name)
-			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.cephFSRef", export.Metadata.Name),
-				v1alpha1.KindStorageFilesystem, df.CephFSRef.Name)
+			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.filesystemRef", export.Metadata.Name),
+				v1alpha1.KindStorageFilesystem, df.FilesystemRef.Name)
 			require(fmt.Sprintf("StorageExport/%s spec.dataFoundation.objectGatewayRef", export.Metadata.Name),
 				v1alpha1.KindStorageObjectGateway, df.ObjectGatewayRef.Name)
 		}

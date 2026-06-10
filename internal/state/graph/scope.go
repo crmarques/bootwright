@@ -155,7 +155,7 @@ func filterStorageToClusters(state v1alpha1.State, selectedClusters map[string]b
 		selectedStorageClusters[export.Spec.StorageClusterRef.Name] = true
 		if df := export.Spec.DataFoundation; df != nil {
 			selectedPools[df.RBDPoolRef.Name] = true
-			selectedFilesystems[df.CephFSRef.Name] = true
+			selectedFilesystems[df.FilesystemRef.Name] = true
 			selectedGateways[df.ObjectGatewayRef.Name] = true
 		}
 	}
@@ -244,7 +244,7 @@ func storageAttachmentContainerClusters(state v1alpha1.State) map[string]bool {
 }
 
 func addContainerClusterMachines(out map[string]bool, cluster v1alpha1.ContainerCluster) {
-	for _, node := range cluster.Spec.Nodes {
+	for _, node := range cluster.Spec.Hosts {
 		if node.MachineRef.Name != "" {
 			out[node.MachineRef.Name] = true
 		}
@@ -255,7 +255,7 @@ func addStorageClusterMachines(out map[string]bool, cluster v1alpha1.StorageClus
 	if cluster.Spec.Ceph == nil {
 		return
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if node.MachineRef.Name != "" {
 			out[node.MachineRef.Name] = true
 		}

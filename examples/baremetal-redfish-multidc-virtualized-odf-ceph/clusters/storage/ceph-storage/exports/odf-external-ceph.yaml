@@ -7,5 +7,5 @@ spec:
 
   dataFoundation:
     rbdPoolRef: odf-rbd
-    cephFSRef: odf-cephfs
+    filesystemRef: odf-cephfs
     objectGatewayRef: odf-rgw

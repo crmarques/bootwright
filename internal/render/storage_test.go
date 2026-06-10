@@ -184,11 +184,11 @@ func TestStorageExampleRendersAnsibleStorageVars(t *testing.T) {
 	if got := registry["credentialsPath"]; got != filepath.Join("/context/secrets", "ceph-registry-credentials") {
 		t.Fatalf("registry credentials path = %v", got)
 	}
-	nodes := cluster["nodes"].([]any)
-	if len(nodes) != 7 {
-		t.Fatalf("storage nodes got %d, want 7", len(nodes))
+	hosts := cluster["hosts"].([]any)
+	if len(hosts) != 7 {
+		t.Fatalf("storage hosts got %d, want 7", len(hosts))
 	}
-	firstNode := nodes[0].(map[string]any)
+	firstNode := hosts[0].(map[string]any)
 	if got := firstNode["inventoryHost"]; got != render.StorageSeedHostName(state.StorageClusters[0]) {
 		t.Fatalf("seed inventory host = %v", got)
 	}

@@ -264,7 +264,7 @@ func dnsRefState(entry v1alpha1.EnvironmentNameResolutionComponent) v1alpha1.Sta
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "c1"},
-			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}}},

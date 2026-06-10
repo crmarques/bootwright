@@ -27,7 +27,7 @@ func TestExternalDetailsRGWPoolPrefixUsesServiceID(t *testing.T) {
 		Spec: v1alpha1.StorageExportSpec{
 			DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
 				RBDPoolRef:       v1alpha1.LocalObjectReference{Name: "odf-rbd"},
-				CephFSRef:        v1alpha1.LocalObjectReference{Name: "odf-cephfs"},
+				FilesystemRef:    v1alpha1.LocalObjectReference{Name: "odf-cephfs"},
 				ObjectGatewayRef: v1alpha1.LocalObjectReference{Name: "odf-rgw"},
 			},
 		},

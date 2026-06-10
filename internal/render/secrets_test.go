@@ -154,7 +154,7 @@ func TestLoadInstallerSecretsUsesGeneratedSSHPublicKey(t *testing.T) {
 				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
 				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
-			Nodes: []v1alpha1.OCPNodeSpec{{
+			Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
@@ -208,7 +208,7 @@ func TestLoadInstallerSecretsUsesNodeSSHPublicKeyRef(t *testing.T) {
 					PrivateKeyRef: v1alpha1.SecretRef{Name: "cluster-private"},
 				},
 			},
-			Nodes: []v1alpha1.OCPNodeSpec{{
+			Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
@@ -345,7 +345,7 @@ func TestLoadInstallerSecretsMergesManagedMirrorAuth(t *testing.T) {
 				PullSecretRef: v1alpha1.SecretRef{Name: "pull"},
 				NodeSSH:       v1alpha1.NodeSSHSpec{KeyPairRef: v1alpha1.SecretRef{Name: "ssh"}},
 			},
-			Nodes: []v1alpha1.OCPNodeSpec{{
+			Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				Role:       v1alpha1.NodeRoleMaster,
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},

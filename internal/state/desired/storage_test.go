@@ -165,14 +165,14 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 		{
 			name: "tiebreaker-not-mon-only",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Roles = append(state.StorageClusters[0].Spec.Ceph.Topology.Nodes[6].Roles, v1alpha1.StorageCephRoleMGR)
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles = append(state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles, v1alpha1.StorageCephRoleMGR)
 			},
 			want: `tiebreaker.node "ceph-arbiter" must be mon-only`,
 		},
 		{
 			name: "bad-data-site-mon-count",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[1].Roles = []string{v1alpha1.StorageCephRoleOSD}
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[1].Roles = []string{v1alpha1.StorageCephRoleOSD}
 			},
 			want: `requires exactly two mon nodes in data site "dc1"`,
 		},
@@ -382,7 +382,7 @@ func TestStorageDefaultsAndPublicEndpointNormalize(t *testing.T) {
 	Normalize(&state)
 
 	mon := state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.MonIP
-	if mon.NodeRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.SeedNode {
+	if mon.NodeRef.Name != state.StorageClusters[0].Spec.Ceph.Cephadm.Bootstrap.Host {
 		t.Fatalf("mon node name = %q, want seed node", mon.NodeRef.Name)
 	}
 	if got := state.StorageClusters[0].Spec.Ceph.Distribution; got != v1alpha1.StorageCephDistributionOSS {
@@ -518,7 +518,7 @@ func TestManagedStorageValidationRejectsInvalidHostSSH(t *testing.T) {
 		{
 			name: "missing-machine-ref",
 			edit: func(state *v1alpha1.State) {
-				state.StorageClusters[0].Spec.Ceph.Topology.Nodes[0].MachineRef = v1alpha1.LocalObjectReference{}
+				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[0].MachineRef = v1alpha1.LocalObjectReference{}
 			},
 			want: "spec.ceph.topology.nodes[0].machineRef is required",
 		},
@@ -674,8 +674,8 @@ func storageValidationState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							SeedNode: "ceph-dc1-0",
-							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
+							Host:  "ceph-dc1-0",
+							MonIP: v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-dc1-0"}},
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
@@ -685,12 +685,12 @@ func storageValidationState() v1alpha1.State {
 							DataSites:     []string{"dc1", "dc2"},
 							Tiebreaker: v1alpha1.StorageCephTiebreaker{
 								Site: "dc3",
-								Node: "ceph-arbiter",
+								Host: "ceph-arbiter",
 							},
 							ReplicatedPoolDefaults: v1alpha1.StorageCephPoolReplicas{Size: 4, MinSize: 2},
 							RuleName:               "stretch-replicated",
 						},
-						Nodes: []v1alpha1.StorageCephNode{
+						Hosts: []v1alpha1.StorageCephHost{
 							storageValidationCephNode("ceph-dc1-0", "dc1", []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}),
 							storageValidationCephNode("ceph-dc1-1", "dc1", []string{"mon", "mgr", "osd", "mds", "rgw", "ingress"}),
 							storageValidationCephNode("ceph-dc1-2", "dc1", []string{"osd", "mds", "rgw", "ingress"}),
@@ -741,7 +741,7 @@ func storageValidationState() v1alpha1.State {
 				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
 				DataFoundation: &v1alpha1.StorageExportDataFoundationSpec{
 					RBDPoolRef:       v1alpha1.LocalObjectReference{Name: "rbd"},
-					CephFSRef:        v1alpha1.LocalObjectReference{Name: "cephfs"},
+					FilesystemRef:    v1alpha1.LocalObjectReference{Name: "cephfs"},
 					ObjectGatewayRef: v1alpha1.LocalObjectReference{Name: "rgw"},
 				},
 			},
@@ -809,9 +809,9 @@ func storageValidationAdminMachine(name string) v1alpha1.Machine {
 	}
 }
 
-func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephNode {
-	return v1alpha1.StorageCephNode{
-		Name: name,
+func storageValidationCephNode(name, site string, roles []string) v1alpha1.StorageCephHost {
+	return v1alpha1.StorageCephHost{
+		Hostname: name,
 		MachineRef: v1alpha1.LocalObjectReference{
 			Name: name,
 		},

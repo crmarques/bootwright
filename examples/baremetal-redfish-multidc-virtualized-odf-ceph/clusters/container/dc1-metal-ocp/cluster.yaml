@@ -23,7 +23,7 @@ spec:
   networking:
     networkType: OVNKubernetes
 
-  nodes:
+  hosts:
 
   - hostname: master-0
     role: master

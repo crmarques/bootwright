@@ -58,9 +58,9 @@
 
 - name: Resolve current storage node
   ansible.builtin.set_fact:
-    bootwright_current_storage_node_matches: >-
+    bootwright_current_storage_host_matches: >-
       {{
-        bootwright_selected_storage_cluster.nodes
+        bootwright_selected_storage_cluster.hosts
         | default([])
         | selectattr('inventoryHost', 'equalto', inventory_hostname)
         | list
@@ -71,7 +71,7 @@
 - name: Validate current storage node context
   ansible.builtin.assert:
     that:
-      - bootwright_current_storage_node_matches | length == 1
+      - bootwright_current_storage_host_matches | length == 1
     fail_msg: >-
       Storage node {{ inventory_hostname }} is not declared exactly once in
       {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
@@ -79,6 +79,6 @@
 
 - name: Set current storage node
   ansible.builtin.set_fact:
-    bootwright_current_storage_node: "{{ bootwright_current_storage_node_matches | first }}"
+    bootwright_current_storage_host: "{{ bootwright_current_storage_host_matches | first }}"
   changed_when: false
   when: not bootwright_task_storage_skip_prereqs | default(false) | bool

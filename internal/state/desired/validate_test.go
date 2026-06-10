@@ -588,8 +588,8 @@ spec:
 		{
 			name: "containermachine-infranoderef-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
-				"nodes:\n    - hostname: master-0",
-				"nodes:\n    - hostname: master-x\n      role: master\n      infraNodeRef: { clusterInstall: other, name: master-x }\n    - hostname: master-0", 1)},
+				"hosts:\n    - hostname: master-0",
+				"hosts:\n    - hostname: master-x\n      role: master\n      infraNodeRef: { clusterInstall: other, name: master-x }\n    - hostname: master-0", 1)},
 			wantSubstring: "field infraNodeRef not found",
 		},
 		{
@@ -2628,7 +2628,7 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: child-master-0
@@ -2825,7 +2825,7 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: ` + infra + `-master-0
@@ -2961,7 +2961,7 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: vsphere-master-0
@@ -3350,7 +3350,7 @@ spec:
   networking:
     clusterNetwork: [{ cidr: 10.128.0.0/14, hostPrefix: 23 }]
     serviceNetwork: [172.30.0.0/16]
-  nodes:
+  hosts:
     - hostname: master-0
       role: master
       machineRef: srv1

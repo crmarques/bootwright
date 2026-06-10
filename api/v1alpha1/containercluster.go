@@ -16,7 +16,7 @@ type ContainerClusterSpec struct {
 	ControlPlane *MachinePoolSpec   `yaml:"controlPlane,omitempty" json:"controlPlane,omitempty"`
 	Compute      []MachinePoolSpec  `yaml:"compute,omitempty" json:"compute,omitempty"`
 	Networking   *OCPNetworkingSpec `yaml:"networking,omitempty" json:"networking,omitempty"`
-	Nodes        []OCPNodeSpec      `yaml:"nodes,omitempty" json:"nodes,omitempty"`
+	Hosts        []OCPHostSpec      `yaml:"hosts,omitempty" json:"hosts,omitempty"`
 }
 
 type OCPInstallSpec struct {
@@ -103,7 +103,7 @@ type ContainerClusterNetworkCIDR struct {
 	HostPrefix int    `yaml:"hostPrefix,omitempty" json:"hostPrefix,omitempty"`
 }
 
-type OCPNodeSpec struct {
+type OCPHostSpec struct {
 	Hostname   string               `yaml:"hostname" json:"hostname"`
 	Role       string               `yaml:"role" json:"role"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`

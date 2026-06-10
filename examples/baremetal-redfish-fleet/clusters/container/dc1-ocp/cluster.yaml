@@ -16,7 +16,7 @@ spec:
       ingress:
         address: 192.168.141.11
 
-  nodes:
+  hosts:
 
   - hostname: master-0
     role: master

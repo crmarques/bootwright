@@ -16,12 +16,12 @@ func FailureDomain(cluster v1alpha1.StorageCluster) string {
 
 func MonitorEndpoints(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
 	var endpoints []string
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if !NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 			continue
 		}
-		if ip := NodeAddress(state, cluster, node.Name); ip != "" {
-			endpoints = append(endpoints, fmt.Sprintf("%s=%s:6789", node.Name, ip))
+		if ip := NodeAddress(state, cluster, node.Hostname); ip != "" {
+			endpoints = append(endpoints, fmt.Sprintf("%s=%s:6789", node.Hostname, ip))
 		}
 	}
 	sort.Strings(endpoints)
@@ -54,16 +54,16 @@ func NodeMachine(state v1alpha1.State, cluster v1alpha1.StorageCluster, node str
 
 func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 	var hosts []string
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if NodeHasRole(node, role) {
-			hosts = append(hosts, node.Name)
+			hosts = append(hosts, node.Hostname)
 		}
 	}
 	sort.Strings(hosts)
 	return hosts
 }
 
-func NodeHasRole(node v1alpha1.StorageCephNode, role string) bool {
+func NodeHasRole(node v1alpha1.StorageCephHost, role string) bool {
 	for _, item := range node.Roles {
 		if item == role {
 			return true
@@ -153,16 +153,16 @@ func EndpointPort(endpoint v1alpha1.Endpoint, defaultPort int) int {
 	return defaultPort
 }
 
-func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
+func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
 	if cluster.Spec.Ceph == nil {
-		return v1alpha1.StorageCephNode{}, false
+		return v1alpha1.StorageCephHost{}, false
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-		if node.Name == name {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.Hostname == name {
 			return node, true
 		}
 	}
-	return v1alpha1.StorageCephNode{}, false
+	return v1alpha1.StorageCephHost{}, false
 }
 
 func MachineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {

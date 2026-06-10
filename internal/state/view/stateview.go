@@ -84,9 +84,9 @@ func MachineHasCapability(machine v1alpha1.Machine, want string) bool {
 }
 
 func ClusterInstallForContainerCluster(state v1alpha1.State, cluster v1alpha1.ContainerCluster) (v1alpha1.ClusterInstall, bool) {
-	nodes := make([]v1alpha1.InstallMachine, 0, len(cluster.Spec.Nodes))
-	networkBindings := make([]v1alpha1.MachineNetworkBinding, 0, len(cluster.Spec.Nodes))
-	for _, node := range cluster.Spec.Nodes {
+	nodes := make([]v1alpha1.InstallMachine, 0, len(cluster.Spec.Hosts))
+	networkBindings := make([]v1alpha1.MachineNetworkBinding, 0, len(cluster.Spec.Hosts))
+	for _, node := range cluster.Spec.Hosts {
 		machine, ok := Machine(state, node.MachineRef.Name)
 		if !ok {
 			continue
@@ -133,7 +133,7 @@ func clusterNodeFromMachine(machine v1alpha1.Machine) v1alpha1.InstallMachine {
 }
 
 func ClusterInstallNames(cluster v1alpha1.ContainerCluster) []string {
-	if len(cluster.Spec.Nodes) == 0 {
+	if len(cluster.Spec.Hosts) == 0 {
 		return nil
 	}
 	return []string{cluster.Metadata.Name}
@@ -148,13 +148,13 @@ func ClusterForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) (v1a
 	return v1alpha1.ContainerCluster{}, false
 }
 
-func ClusterNodesForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]v1alpha1.OCPNodeSpec {
+func ClusterNodesForInstall(state v1alpha1.State, infra v1alpha1.ClusterInstall) map[string]v1alpha1.OCPHostSpec {
 	for _, cluster := range state.ContainerClusters {
 		if cluster.Metadata.Name != infra.Metadata.Name {
 			continue
 		}
-		out := map[string]v1alpha1.OCPNodeSpec{}
-		for _, node := range cluster.Spec.Nodes {
+		out := map[string]v1alpha1.OCPHostSpec{}
+		for _, node := range cluster.Spec.Hosts {
 			out[node.Hostname] = node
 		}
 		return out

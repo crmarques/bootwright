@@ -19,7 +19,7 @@ Current placement:
   `Machine.spec.network.config`
 - cluster release belongs in `ContainerCluster.spec.distribution`, and install
   mode belongs in `ContainerCluster.spec.install.mode`
-- node bindings belong in `ContainerCluster.spec.nodes[]`
+- node bindings belong in `ContainerCluster.spec.hosts[]`
 
 ## Validation Diagnostics
 
@@ -39,7 +39,7 @@ Fix the named field in the authored YAML, then rerun `bootwright validate`.
 
 ## Reference Failures
 
-Every `ContainerCluster.spec.nodes[]` entry must reference one selected
+Every `ContainerCluster.spec.hosts[]` entry must reference one selected
 `Machine` through `machineRef`:
 
 ```yaml

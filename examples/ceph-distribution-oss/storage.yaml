@@ -20,12 +20,12 @@ spec:
       mirror: https://download.ceph.com
     cephadm:
       bootstrap:
-        seedNode: ceph-0
+        host: ceph-0
         monIP:
           nodeRef: ceph-0
     topology:
-      nodes:
-        - name: ceph-0
+      hosts:
+        - hostname: ceph-0
           site: lab
           roles:
             - mon

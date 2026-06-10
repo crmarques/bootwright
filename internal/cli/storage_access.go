@@ -45,7 +45,7 @@ type storageAccessSummary struct {
 	Name                     string                `json:"name"`
 	Type                     string                `json:"type"`
 	Management               string                `json:"management"`
-	SeedNode                 string                `json:"seedNode,omitempty"`
+	SeedHost                 string                `json:"seedHost,omitempty"`
 	SeedAddress              string                `json:"seedAddress,omitempty"`
 	SSHCommand               string                `json:"sshCommand,omitempty"`
 	MonitorEndpoints         []string              `json:"monitorEndpoints,omitempty"`
@@ -81,16 +81,16 @@ func storageAccessSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageClust
 		Name:             cluster.Metadata.Name,
 		Type:             cluster.Spec.Type,
 		Management:       management,
-		SeedNode:         cluster.Spec.Ceph.Cephadm.Bootstrap.SeedNode,
+		SeedHost:         cluster.Spec.Ceph.Cephadm.Bootstrap.Host,
 		MonitorEndpoints: topology.MonitorEndpoints(state, cluster),
 		ConfigPath:       cephAdminConfigPath,
 		KeyringPath:      cephAdminKeyringPath,
 	}
-	if summary.SeedNode != "" {
-		summary.SeedAddress = topology.NodeAddress(state, cluster, summary.SeedNode)
+	if summary.SeedHost != "" {
+		summary.SeedAddress = topology.NodeAddress(state, cluster, summary.SeedHost)
 	}
 	if summary.SeedAddress != "" {
-		summary.SSHCommand = "ssh " + storageSeedSSHTarget(state, cluster, summary.SeedNode, summary.SeedAddress)
+		summary.SSHCommand = "ssh " + storageSeedSSHTarget(state, cluster, summary.SeedHost, summary.SeedAddress)
 		summary.HealthCommand = summary.SSHCommand + " sudo cephadm shell -- ceph -s"
 		summary.ShellCommand = summary.SSHCommand + " sudo cephadm shell"
 		summary.DashboardURL = "https://" + summary.SeedAddress + ":" + cephDashboardPort
@@ -171,8 +171,8 @@ func printStorageAccessSections(p *cliout.Printer, summaries []storageAccessSumm
 
 func storageAccessFields(summary storageAccessSummary) []cliout.Field {
 	fields := []cliout.Field{{Key: "Type", Value: storageAccessTypeDetail(summary)}}
-	if summary.SeedNode != "" {
-		fields = append(fields, cliout.Field{Key: "Seed node", Value: summary.SeedNode})
+	if summary.SeedHost != "" {
+		fields = append(fields, cliout.Field{Key: "Seed node", Value: summary.SeedHost})
 	}
 	if summary.SSHCommand != "" {
 		fields = append(fields, cliout.Field{Key: "SSH", Value: summary.SSHCommand})
@@ -197,8 +197,8 @@ func storageAccessFields(summary storageAccessSummary) []cliout.Field {
 		)
 	}
 	return append(fields,
-		cliout.Field{Key: "ceph.conf", Value: storageAccessNodePath(summary.ConfigPath, summary.SeedNode)},
-		cliout.Field{Key: "Admin keyring", Value: storageAccessNodePath(summary.KeyringPath, summary.SeedNode)},
+		cliout.Field{Key: "ceph.conf", Value: storageAccessNodePath(summary.ConfigPath, summary.SeedHost)},
+		cliout.Field{Key: "Admin keyring", Value: storageAccessNodePath(summary.KeyringPath, summary.SeedHost)},
 	)
 }
 

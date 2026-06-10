@@ -20,7 +20,7 @@ func kubeVirtHostClusterApplyCapabilities(state v1alpha1.State) (map[string][]Ca
 	}
 	out := map[string][]CapabilityRef{}
 	for _, cluster := range state.ContainerClusters {
-		for _, node := range cluster.Spec.Nodes {
+		for _, node := range cluster.Spec.Hosts {
 			machine, ok := machines[node.MachineRef.Name]
 			if !ok {
 				continue

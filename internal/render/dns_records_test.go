@@ -92,7 +92,7 @@ func dnsRecordsState() v1alpha1.State {
 					v1alpha1.EndpointAPIInt:  {Address: "192.168.130.10"},
 					v1alpha1.EndpointIngress: {Address: "192.168.130.11"},
 				}},
-				Nodes: []v1alpha1.OCPNodeSpec{{
+				Hosts: []v1alpha1.OCPHostSpec{{
 					Hostname:   "master-a",
 					MachineRef: v1alpha1.LocalObjectReference{Name: "master-a"},
 				}},

@@ -55,8 +55,10 @@ type StorageCephadmSpec struct {
 }
 
 type StorageCephadmBootstrap struct {
-	SeedNode string           `yaml:"seedNode" json:"seedNode"`
-	MonIP    StorageNodeIPRef `yaml:"monIP" json:"monIP"`
+	// Host names the topology host cephadm bootstraps on; the rendered
+	// cephadm --mon-ip is derived from this host's addresses.
+	Host  string           `yaml:"host" json:"host"`
+	MonIP StorageNodeIPRef `yaml:"monIP" json:"monIP"`
 }
 
 type StorageNodeIPRef struct {
@@ -71,7 +73,7 @@ type StorageCephNetworks struct {
 
 type StorageCephTopology struct {
 	Stretch *StorageCephStretch `yaml:"stretch,omitempty" json:"stretch,omitempty"`
-	Nodes   []StorageCephNode   `yaml:"nodes" json:"nodes"`
+	Hosts   []StorageCephHost   `yaml:"hosts" json:"hosts"`
 }
 
 type StorageCephStretch struct {
@@ -85,7 +87,7 @@ type StorageCephStretch struct {
 
 type StorageCephTiebreaker struct {
 	Site string `yaml:"site,omitempty" json:"site,omitempty"`
-	Node string `yaml:"node,omitempty" json:"node,omitempty"`
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 }
 
 type StorageCephPoolReplicas struct {
@@ -93,8 +95,10 @@ type StorageCephPoolReplicas struct {
 	MinSize int `yaml:"minSize,omitempty" json:"minSize,omitempty"`
 }
 
-type StorageCephNode struct {
-	Name       string               `yaml:"name" json:"name"`
+type StorageCephHost struct {
+	// Hostname is the cephadm host-spec hostname, rendered verbatim; it must
+	// equal the host's actual hostname.
+	Hostname   string               `yaml:"hostname" json:"hostname"`
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 	Site       string               `yaml:"site" json:"site"`
 	Roles      []string             `yaml:"roles" json:"roles"`
@@ -238,7 +242,7 @@ type StorageExportSpec struct {
 
 type StorageExportDataFoundationSpec struct {
 	RBDPoolRef       LocalObjectReference `yaml:"rbdPoolRef" json:"rbdPoolRef"`
-	CephFSRef        LocalObjectReference `yaml:"cephFSRef" json:"cephFSRef"`
+	FilesystemRef    LocalObjectReference `yaml:"filesystemRef" json:"filesystemRef"`
 	ObjectGatewayRef LocalObjectReference `yaml:"objectGatewayRef,omitempty" json:"objectGatewayRef,omitempty"`
 }
 

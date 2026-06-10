@@ -27,8 +27,8 @@ func TestStorageAccessSummariesDeriveSeedAndCommands(t *testing.T) {
 	if summary.Type != "ceph" || summary.Management != "managed" {
 		t.Fatalf("type/management = %q/%q", summary.Type, summary.Management)
 	}
-	if summary.SeedNode != "ceph-0" {
-		t.Fatalf("seed node = %q", summary.SeedNode)
+	if summary.SeedHost != "ceph-0" {
+		t.Fatalf("seed node = %q", summary.SeedHost)
 	}
 	if summary.SeedAddress == "" {
 		t.Fatal("seed address not resolved from machine")

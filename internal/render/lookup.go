@@ -94,8 +94,8 @@ func primaryEnvironment(state v1alpha1.State) *v1alpha1.Environment {
 	return stateview.Environment(state)
 }
 
-func sortedNodes(nodes []v1alpha1.OCPNodeSpec) []v1alpha1.OCPNodeSpec {
-	out := append([]v1alpha1.OCPNodeSpec(nil), nodes...)
+func sortedNodes(nodes []v1alpha1.OCPHostSpec) []v1alpha1.OCPHostSpec {
+	out := append([]v1alpha1.OCPHostSpec(nil), nodes...)
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Hostname < out[j].Hostname
 	})
@@ -105,6 +105,6 @@ func sortedNodes(nodes []v1alpha1.OCPNodeSpec) []v1alpha1.OCPNodeSpec {
 // clusterNodesForCI returns the ContainerCluster.spec.nodes map for the
 // ContainerCluster bound to this ClusterInstall, or nil when no binding
 // exists.
-func clusterNodesForCI(state v1alpha1.State, ci v1alpha1.ClusterInstall) map[string]v1alpha1.OCPNodeSpec {
+func clusterNodesForCI(state v1alpha1.State, ci v1alpha1.ClusterInstall) map[string]v1alpha1.OCPHostSpec {
 	return stateview.ClusterNodesForInstall(state, ci)
 }

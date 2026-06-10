@@ -558,7 +558,7 @@ func clusterHostNeedsSubstratePrepare(state v1alpha1.State, clusterName, host st
 	if !ok {
 		return false
 	}
-	for _, node := range cluster.Spec.Nodes {
+	for _, node := range cluster.Spec.Hosts {
 		if node.MachineRef.Name == "" || applyMachineHost(state, node.MachineRef.Name) != host {
 			continue
 		}
@@ -676,7 +676,7 @@ func applyClusterMachineNames(state v1alpha1.State, clusterName string) []string
 			continue
 		}
 		seen := map[string]bool{}
-		for _, node := range cluster.Spec.Nodes {
+		for _, node := range cluster.Spec.Hosts {
 			if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 				continue
 			}

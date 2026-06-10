@@ -389,7 +389,7 @@ func platformDerivationState(providerTypes ...string) v1alpha1.State {
 				OS: v1alpha1.MachineOSSpec{Provided: v1alpha1.BoolPtr(false)},
 			},
 		})
-		cluster.Spec.Nodes = append(cluster.Spec.Nodes, v1alpha1.OCPNodeSpec{
+		cluster.Spec.Hosts = append(cluster.Spec.Hosts, v1alpha1.OCPHostSpec{
 			Hostname:   fmt.Sprintf("master-%d", i),
 			Role:       "master",
 			MachineRef: v1alpha1.LocalObjectReference{Name: machineName},
@@ -565,7 +565,7 @@ func containerClusterWithMachine(name, machine string) v1alpha1.ContainerCluster
 	return v1alpha1.ContainerCluster{
 		Metadata: v1alpha1.Metadata{Name: name},
 		Spec: v1alpha1.ContainerClusterSpec{
-			Nodes: []v1alpha1.OCPNodeSpec{{
+			Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				Role:       "master",
 				MachineRef: v1alpha1.LocalObjectReference{Name: machine},

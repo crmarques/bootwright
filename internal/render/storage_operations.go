@@ -23,11 +23,11 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 		// Stretch mode requires the connectivity election strategy before
 		// enable_stretch_mode; `ceph mon set` reconciles in place.
 		ops = append(ops, operationInPhase("topology", "set-election-strategy", "ceph", "mon", "set", "election_strategy", "connectivity"))
-		for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 			if !topology.NodeHasRole(node, v1alpha1.StorageCephRoleMON) {
 				continue
 			}
-			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Name, "ceph", "mon", "set_location", node.Name, stretch.FailureDomain+"="+node.Site))
+			ops = append(ops, operationInPhase("topology", "set-mon-location-"+node.Hostname, "ceph", "mon", "set_location", node.Hostname, stretch.FailureDomain+"="+node.Site))
 		}
 		// The stretch rule must place two replicas per data site
 		// (choose firstn 0 type <failureDomain> + chooseleaf firstn 2 type
@@ -40,7 +40,7 @@ func cephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			"replicasPerFailureDomain": 2,
 		}
 		ops = append(ops, stretchRule)
-		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Node, stretch.RuleName, stretch.FailureDomain))
+		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Host, stretch.RuleName, stretch.FailureDomain))
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		if policy.Spec.StorageClusterRef.Name != cluster.Metadata.Name {

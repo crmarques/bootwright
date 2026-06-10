@@ -1089,8 +1089,8 @@ func TestPlanApplyStorageTaskStateRendersWithoutConsumerClusterInstall(t *testin
 func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 	state := storageAttachmentPlanningState()
 	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
-		RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
-		CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+		RBDPoolRef:    v1alpha1.LocalObjectReference{Name: "rbd"},
+		FilesystemRef: v1alpha1.LocalObjectReference{Name: "cephfs"},
 	}
 	tasks, err := PlanApplyTasksChecked(ApplyTarget{Name: "storage", PhaseNames: []string{ApplyPhaseBase}, ClusterKind: ApplyClusterKindStorage}, state)
 	if err != nil {
@@ -1154,8 +1154,8 @@ func TestStorageTaskRunsThroughAnsibleAndPersistsResult(t *testing.T) {
 func TestWriteStorageAttachmentExternalDetailsUsesRuntimeCredentials(t *testing.T) {
 	state := storageAttachmentPlanningState()
 	state.StorageExports[0].Spec.DataFoundation = &v1alpha1.StorageExportDataFoundationSpec{
-		RBDPoolRef: v1alpha1.LocalObjectReference{Name: "rbd"},
-		CephFSRef:  v1alpha1.LocalObjectReference{Name: "cephfs"},
+		RBDPoolRef:    v1alpha1.LocalObjectReference{Name: "rbd"},
+		FilesystemRef: v1alpha1.LocalObjectReference{Name: "cephfs"},
 	}
 	clustersDir := t.TempDir()
 	runtimeDetailsJSON := `[{"name":"rook-csi-rbd-node","kind":"Secret","data":{"userKey":"rbd-node-key"}}]`
@@ -1630,13 +1630,13 @@ func storageAttachmentPlanningState() v1alpha1.State {
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"},
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							SeedNode: "ceph-0",
-							MonIP:    v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
+							Host:  "ceph-0",
+							MonIP: v1alpha1.StorageNodeIPRef{NodeRef: v1alpha1.LocalObjectReference{Name: "ceph-0"}},
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
-						Nodes: []v1alpha1.StorageCephNode{{
-							Name:       "ceph-0",
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 							Site:       "dc1",
 							Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},
@@ -1729,7 +1729,7 @@ func dataFoundationValues(export string) map[string]any {
 func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 	clusters := []v1alpha1.ContainerCluster{{
 		Metadata: v1alpha1.Metadata{Name: "child-ocp"},
-		Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+		Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{
 			Hostname:   "master-0",
 			MachineRef: v1alpha1.LocalObjectReference{Name: "child-master-0"},
 		}}},
@@ -1812,8 +1812,8 @@ func kubeVirtCephPlanningState(includeParent bool) v1alpha1.State {
 			Type: v1alpha1.StorageClusterTypeCeph,
 			Ceph: &v1alpha1.StorageClusterCephSpec{
 				Topology: v1alpha1.StorageCephTopology{
-					Nodes: []v1alpha1.StorageCephNode{{
-						Name:       "ceph-0",
+					Hosts: []v1alpha1.StorageCephHost{{
+						Hostname:   "ceph-0",
 						MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 						Site:       "dc1",
 						Roles:      []string{v1alpha1.StorageCephRoleMON, v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleOSD},

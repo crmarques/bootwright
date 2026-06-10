@@ -96,7 +96,7 @@ func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster
 	}
 	seen := map[string]bool{}
 	var names []string
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		if node.MachineRef.Name == "" || seen[node.MachineRef.Name] {
 			continue
 		}
@@ -114,7 +114,7 @@ func storageClusterNodeCount(cluster v1alpha1.StorageCluster) int {
 	if cluster.Spec.Ceph == nil {
 		return 1
 	}
-	if count := len(cluster.Spec.Ceph.Topology.Nodes); count > 0 {
+	if count := len(cluster.Spec.Ceph.Topology.Hosts); count > 0 {
 		return count
 	}
 	return 1

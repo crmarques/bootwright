@@ -221,7 +221,7 @@ func distributionVars(ocp v1alpha1.ContainerCluster) map[string]any {
 }
 
 func nodesVars(ocp v1alpha1.ContainerCluster) map[string]any {
-	nodes := sortedNodes(ocp.Spec.Nodes)
+	nodes := sortedNodes(ocp.Spec.Hosts)
 	out := map[string]any{}
 	for _, node := range nodes {
 		name := node.Hostname

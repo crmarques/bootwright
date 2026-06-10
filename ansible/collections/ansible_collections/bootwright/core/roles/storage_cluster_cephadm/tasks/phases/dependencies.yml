@@ -14,4 +14,4 @@
     enabled: true
   loop: "{{ bootwright_ceph_node_services }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"

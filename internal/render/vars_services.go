@@ -33,7 +33,7 @@ func loadBalancerComponentVars(state v1alpha1.State, component v1alpha1.InfraCom
 // loadBalancerFrontends projects per-cluster HAProxy frontends from
 // the cluster's endpoints + machine IPs. Each frontend also carries a
 // substrate-blind attachment block consumed by network_vips.
-func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInstall, componentName, clusterName string, machines []v1alpha1.InstallMachine, nodes map[string]v1alpha1.OCPNodeSpec) []any {
+func loadBalancerFrontends(state v1alpha1.State, ci v1alpha1.ClusterInstall, componentName, clusterName string, machines []v1alpha1.InstallMachine, nodes map[string]v1alpha1.OCPHostSpec) []any {
 	out := []any{}
 	ocp, ok := findContainerCluster(state, clusterName)
 	if !ok {
@@ -120,7 +120,7 @@ func cidrPrefix(cidr string) int {
 	return n
 }
 
-func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPNodeSpec) string {
+func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPHostSpec) string {
 	for _, node := range nodes {
 		ref := node.MachineRef.Name
 		if ref == machineName {

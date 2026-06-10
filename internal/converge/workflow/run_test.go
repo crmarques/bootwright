@@ -351,12 +351,12 @@ func storageSSHState() v1alpha1.State {
 				Ceph: &v1alpha1.StorageClusterCephSpec{
 					Cephadm: v1alpha1.StorageCephadmSpec{
 						Bootstrap: v1alpha1.StorageCephadmBootstrap{
-							SeedNode: "ceph-0",
+							Host: "ceph-0",
 						},
 					},
 					Topology: v1alpha1.StorageCephTopology{
-						Nodes: []v1alpha1.StorageCephNode{{
-							Name:       "ceph-0",
+						Hosts: []v1alpha1.StorageCephHost{{
+							Hostname:   "ceph-0",
 							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-0"},
 						}},
 					},
@@ -477,7 +477,7 @@ func stateWithInfraHost(hostName string) v1alpha1.State {
 		}},
 		ContainerClusters: []v1alpha1.ContainerCluster{{
 			Metadata: v1alpha1.Metadata{Name: "cluster"},
-			Spec: v1alpha1.ContainerClusterSpec{Nodes: []v1alpha1.OCPNodeSpec{{
+			Spec: v1alpha1.ContainerClusterSpec{Hosts: []v1alpha1.OCPHostSpec{{
 				Hostname:   "master-0",
 				MachineRef: v1alpha1.LocalObjectReference{Name: "master-0"},
 			}}},

@@ -24,7 +24,7 @@ spec:
       redfishVirtualMedia:
         endpointRef: bmc
 
-  nodes:
+  hosts:
 
   - hostname: master-0
     role: master

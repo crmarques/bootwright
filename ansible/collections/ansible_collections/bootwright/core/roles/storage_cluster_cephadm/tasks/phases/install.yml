@@ -48,7 +48,7 @@
     that:
       - bootwright_cephadm_version.rc == 0
     fail_msg: >-
-      cephadm CLI is required on storage node {{ bootwright_current_storage_node.name }} for Ceph
+      cephadm CLI is required on storage node {{ bootwright_current_storage_host.hostname }} for Ceph
       distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
       provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
       Package fallback result: {{ (bootwright_cephadm_package_install | default({})).msg | default('not attempted') }}
@@ -102,7 +102,7 @@
     that:
       - bootwright_ceph_cli_version.rc == 0
     fail_msg: >-
-      ceph CLI (ceph-common) is required on storage node {{ bootwright_current_storage_node.name }} for Ceph
+      ceph CLI (ceph-common) is required on storage node {{ bootwright_current_storage_host.hostname }} for Ceph
       distribution {{ bootwright_ceph_provider_name }}. Check the referenced Environment entitlement,
       provider repositories, managed OS MachineInstallProfile repositories, or preinstalled host packages.
       Package fallback result: {{ (bootwright_ceph_common_package_install | default({})).msg | default('not attempted') }}
@@ -136,14 +136,14 @@
   register: bootwright_ceph_osd_marker_probe
   changed_when: false
   failed_when: false
-  when: bootwright_current_storage_node.devices | default([]) | length > 0
+  when: bootwright_current_storage_host.devices | default([]) | length > 0
 
 - name: Resolve devices recorded as Bootwright OSDs for this cluster
   ansible.builtin.set_fact:
     bootwright_ceph_owned_osd_devices: >-
       {{ bootwright_ceph_osd_marker_doc.devices | default([])
          if (bootwright_ceph_osd_marker_doc.cluster | default('') == bootwright_selected_storage_cluster.name
-             and bootwright_ceph_osd_marker_doc.node | default('') == bootwright_current_storage_node.name)
+             and bootwright_ceph_osd_marker_doc.node | default('') == bootwright_current_storage_host.hostname)
          else [] }}
   vars:
     bootwright_ceph_osd_marker_doc: "{{ bootwright_ceph_osd_marker_probe.content | b64decode | from_json }}"
@@ -162,9 +162,9 @@
     bootwright_ceph_device_check.rc != 0
     or (bootwright_ceph_device_check.stdout | trim | length > 0
         and item not in bootwright_ceph_owned_osd_devices | default([]))
-  loop: "{{ bootwright_current_storage_node.devices | default([]) }}"
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
   loop_control:
-    label: "{{ bootwright_current_storage_node.name }} {{ item }}"
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
 # Record the empty devices Bootwright is claiming as OSDs on this node so destroy
 # can refuse to wipe a device later added to the declared list out of band. Stamped
@@ -177,7 +177,7 @@
     owner: root
     group: root
     mode: "0700"
-  when: bootwright_current_storage_node.devices | default([]) | length > 0
+  when: bootwright_current_storage_host.devices | default([]) | length > 0
 
 - name: Stamp Bootwright OSD device ownership marker
   ansible.builtin.copy:
@@ -187,11 +187,11 @@
         {
           'manager': 'bootwright',
           'cluster': bootwright_selected_storage_cluster.name,
-          'node': bootwright_current_storage_node.name,
-          'devices': bootwright_current_storage_node.devices | default([])
+          'node': bootwright_current_storage_host.hostname,
+          'devices': bootwright_current_storage_host.devices | default([])
         } | to_nice_json
       }}
     owner: root
     group: root
     mode: "0600"
-  when: bootwright_current_storage_node.devices | default([]) | length > 0
+  when: bootwright_current_storage_host.devices | default([]) | length > 0

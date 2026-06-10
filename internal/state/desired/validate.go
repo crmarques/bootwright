@@ -131,7 +131,7 @@ func validateKubeVirtHostClusterDependencies(state v1alpha1.State) []string {
 	deps := map[string][]string{}
 	var errs []string
 	for _, ocp := range state.ContainerClusters {
-		for _, node := range ocp.Spec.Nodes {
+		for _, node := range ocp.Spec.Hosts {
 			machine, ok := machines[node.MachineRef.Name]
 			if !ok {
 				continue

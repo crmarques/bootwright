@@ -20,7 +20,7 @@ spec:
         source:
           type: external
 
-  nodes:
+  hosts:
 
   - hostname: master-0
     role: master

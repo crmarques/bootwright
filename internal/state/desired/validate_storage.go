@@ -211,7 +211,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		return nil
 	}
 	var errs []string
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		machine, ok := machines[node.MachineRef.Name]
 		if !ok || machine.Spec.OS.InstallProfileRef.Name == "" {
 			continue
@@ -220,7 +220,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		if !ok {
 			continue
 		}
-		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Name, profile.Metadata.Name)
+		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Hostname, profile.Metadata.Name)
 		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
 			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
 			continue
@@ -247,10 +247,10 @@ func storageCephDistributionSupportsRHELVersion(distribution, version string) bo
 func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	adm := cluster.Spec.Ceph.Cephadm
-	if adm.Bootstrap.SeedNode == "" {
+	if adm.Bootstrap.Host == "" {
 		errs = append(errs, prefix+".bootstrap.seedNode is required")
-	} else if !storageCephNodeExists(cluster, adm.Bootstrap.SeedNode) {
-		errs = append(errs, fmt.Sprintf("%s.bootstrap.seedNode %q is not listed in spec.ceph.topology.nodes", prefix, adm.Bootstrap.SeedNode))
+	} else if !storageCephNodeExists(cluster, adm.Bootstrap.Host) {
+		errs = append(errs, fmt.Sprintf("%s.bootstrap.seedNode %q is not listed in spec.ceph.topology.nodes", prefix, adm.Bootstrap.Host))
 	}
 	mon := adm.Bootstrap.MonIP
 	if mon.NodeRef.Name == "" {
@@ -266,7 +266,7 @@ func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, mach
 
 func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
-	nodes := cluster.Spec.Ceph.Topology.Nodes
+	nodes := cluster.Spec.Ceph.Topology.Hosts
 	if len(nodes) == 0 {
 		return []string{prefix + " is required"}
 	}
@@ -276,13 +276,13 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 	sshSeen := false
 	for i, node := range nodes {
 		owner := fmt.Sprintf("%s[%d]", prefix, i)
-		if node.Name == "" {
+		if node.Hostname == "" {
 			errs = append(errs, owner+".name is required")
 		} else {
-			if seen[node.Name] {
-				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, node.Name))
+			if seen[node.Hostname] {
+				errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, node.Hostname))
 			}
-			seen[node.Name] = true
+			seen[node.Hostname] = true
 		}
 		if node.MachineRef.Name == "" {
 			errs = append(errs, owner+".machineRef is required")
@@ -307,7 +307,7 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 						errs = append(errs, fmt.Sprintf("%s.machineRef %q resolves to Machine/%s with ssh.keyRef %q; all storage node Machines in one StorageCluster must use %q", owner, node.MachineRef.Name, machine.Metadata.Name, machine.Spec.Access.SSH.KeyRef.Name, sshKeyRef))
 					}
 				}
-				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Name, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
+				errs = append(errs, validateStorageNodeMachineAddress(fmt.Sprintf("StorageCluster/%s spec.ceph.cephadm.addressRef", cluster.Metadata.Name), cluster, node.Hostname, cluster.Spec.Ceph.Cephadm.AddressRef.Name, machines, "")...)
 			}
 		}
 		if node.Site == "" {
@@ -451,19 +451,19 @@ func storageCephNodeExists(cluster v1alpha1.StorageCluster, name string) bool {
 	return ok
 }
 
-func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephNode, bool) {
+func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
 	if cluster.Spec.Ceph == nil {
-		return v1alpha1.StorageCephNode{}, false
+		return v1alpha1.StorageCephHost{}, false
 	}
-	for _, node := range cluster.Spec.Ceph.Topology.Nodes {
-		if node.Name == name {
+	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
+		if node.Hostname == name {
 			return node, true
 		}
 	}
-	return v1alpha1.StorageCephNode{}, false
+	return v1alpha1.StorageCephHost{}, false
 }
 
-func storageCephNodeRolesOnly(node v1alpha1.StorageCephNode, role string) bool {
+func storageCephNodeRolesOnly(node v1alpha1.StorageCephHost, role string) bool {
 	return len(node.Roles) == 1 && node.Roles[0] == role
 }
 

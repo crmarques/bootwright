@@ -58,12 +58,12 @@ func validateStorageExports(state v1alpha1.State, clusters map[string]v1alpha1.S
 		} else if pool.Spec.StorageClusterRef.Name != export.Spec.StorageClusterRef.Name {
 			errs = append(errs, fmt.Sprintf("%s.dataFoundation.rbdPoolRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, pool.Metadata.Name, pool.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
 		}
-		if df.CephFSRef.Name == "" {
-			errs = append(errs, prefix+".dataFoundation.cephFSRef is required")
-		} else if fs, ok := filesystems[df.CephFSRef.Name]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef %q does not match any StorageFilesystem", prefix, df.CephFSRef.Name))
+		if df.FilesystemRef.Name == "" {
+			errs = append(errs, prefix+".dataFoundation.filesystemRef is required")
+		} else if fs, ok := filesystems[df.FilesystemRef.Name]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.filesystemRef %q does not match any StorageFilesystem", prefix, df.FilesystemRef.Name))
 		} else if fs.Spec.StorageClusterRef.Name != export.Spec.StorageClusterRef.Name {
-			errs = append(errs, fmt.Sprintf("%s.dataFoundation.cephFSRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, fs.Metadata.Name, fs.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
+			errs = append(errs, fmt.Sprintf("%s.dataFoundation.filesystemRef %q belongs to StorageCluster/%s, want StorageCluster/%s", prefix, fs.Metadata.Name, fs.Spec.StorageClusterRef.Name, export.Spec.StorageClusterRef.Name))
 		}
 		if df.ObjectGatewayRef.Name != "" {
 			if gw, ok := gateways[df.ObjectGatewayRef.Name]; !ok {
