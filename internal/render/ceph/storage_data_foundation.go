@@ -90,7 +90,7 @@ func DataFoundationExternalDetailsRefPlaceholderManifest(attachment StorageAttac
 func DataFoundationExternalDetailsRawJSONManifest(attachment StorageAttachment, detailsJSON string, sourceRef string) map[string]any {
 	annotations := map[string]any{
 		"bootwright.io/generated-from":        "ClusterAddonBinding/" + attachment.Binding.Metadata.Name,
-		"bootwright.io/addon":                 attachment.Addon.Name,
+		"bootwright.io/addon":                 attachment.Addon.AddonRef.Name,
 		"bootwright.io/addon-input":           attachment.Input.Name,
 		"bootwright.io/storage-export":        AddonInputStorageExportRef(attachment).Name,
 		"bootwright.io/container-cluster-ref": attachment.Binding.Spec.ClusterRef.Name,

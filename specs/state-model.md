@@ -820,7 +820,7 @@ Rules:
   (requires `apiVersion`, `kind`, `name`, `condition.{type,status}`), or
   `resourceExists` (requires `apiVersion`, `kind`, `name`).
 - `spec.accepts.inputs[]` declare binding-scoped inputs; each schema property
-  sets exactly one of `refKind` (a known Bootwright kind) or `secretRef`. A
+  sets exactly one of `refKind` (a known Bootwright kind) or `secret`. A
   `dataFoundation` `storageExportAttachment` effect requires the schema to declare
   exactly one property, literally named `exportRef`, with
   `refKind: StorageExport` and listed in `required` — the attachment machinery
@@ -832,10 +832,11 @@ Rules:
 
 Rules:
 
-- A profile must include at least one of `spec.profiles[]` or `spec.addons[]`.
-- `spec.profiles[].name` must reference a `ClusterAddonProfile`; nesting must be
+- A profile must include at least one of `spec.profileRefs[]` or
+  `spec.addonRefs[]`.
+- `spec.profileRefs[]` must reference `ClusterAddonProfile`s; nesting must be
   acyclic.
-- `spec.addons[].name` must reference a `ClusterAddon`.
+- `spec.addonRefs[]` must reference `ClusterAddon`s.
 
 ## ClusterAddonBinding
 
@@ -845,15 +846,17 @@ input values.
 Rules:
 
 - `spec.clusterRef` is required and references a `ContainerCluster`.
-- A binding must include at least one of `spec.addonProfiles[]` or
+- A binding must include at least one of `spec.addonProfileRefs[]` or
   `spec.addons[]`.
+- `spec.addonProfileRefs[]` must reference `ClusterAddonProfile`s;
+  `spec.addons[].addonRef` must reference a `ClusterAddon`.
 - A given `ClusterAddon` may be applied to one `ContainerCluster` only once
   across all bindings.
 - `spec.addons[].inputs[]` must be declared by the add-on's
   `spec.accepts.inputs`, have unique names, and satisfy the input schema's
   required values.
 - Input values for `refKind` schema properties must name a loaded object of
-  that kind; values for `secretRef` properties must be declared in
+  that kind; values for `secret` properties must be declared in
   `Environment` `spec.secrets`.
 
 ## Rendering Contract

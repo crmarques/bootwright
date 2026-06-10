@@ -269,29 +269,29 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 		}
 	}
 	for _, set := range state.ClusterAddonProfiles {
-		for i, ref := range set.Spec.Profiles {
-			require(fmt.Sprintf("ClusterAddonProfile/%s spec.profiles[%d]", set.Metadata.Name, i),
+		for i, ref := range set.Spec.ProfileRefs {
+			require(fmt.Sprintf("ClusterAddonProfile/%s spec.profileRefs[%d]", set.Metadata.Name, i),
 				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
-		for i, ref := range set.Spec.Addons {
-			require(fmt.Sprintf("ClusterAddonProfile/%s spec.addons[%d]", set.Metadata.Name, i),
+		for i, ref := range set.Spec.AddonRefs {
+			require(fmt.Sprintf("ClusterAddonProfile/%s spec.addonRefs[%d]", set.Metadata.Name, i),
 				v1alpha1.KindClusterAddon, ref.Name)
 		}
 	}
 	for _, binding := range state.ClusterAddonBindings {
-		for i, ref := range binding.Spec.AddonProfiles {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfiles[%d]", binding.Metadata.Name, i),
+		for i, ref := range binding.Spec.AddonProfileRefs {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfileRefs[%d]", binding.Metadata.Name, i),
 				v1alpha1.KindClusterAddonProfile, ref.Name)
 		}
-		for i, ref := range binding.Spec.Addons {
-			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d]", binding.Metadata.Name, i),
-				v1alpha1.KindClusterAddon, ref.Name)
+		for i, addon := range binding.Spec.Addons {
+			require(fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].addonRef", binding.Metadata.Name, i),
+				v1alpha1.KindClusterAddon, addon.AddonRef.Name)
 		}
 		require(fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef", binding.Metadata.Name),
 			v1alpha1.KindContainerCluster, binding.Spec.ClusterRef.Name)
 	}
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name),
+		require(fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s].values.exportRef", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name),
 			v1alpha1.KindStorageExport, addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef").Name)
 	}
 	for _, export := range state.StorageExports {

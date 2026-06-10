@@ -23,15 +23,15 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 	var expanded []v1alpha1.ClusterAddonBindingAddon
 	positions := map[string]int{}
 	add := func(item v1alpha1.ClusterAddonBindingAddon) {
-		if item.Name == "" {
+		if item.AddonRef.Name == "" {
 			expanded = append(expanded, item)
 			return
 		}
-		if index, ok := positions[item.Name]; ok {
+		if index, ok := positions[item.AddonRef.Name]; ok {
 			expanded[index].Inputs = append(expanded[index].Inputs, item.Inputs...)
 			return
 		}
-		positions[item.Name] = len(expanded)
+		positions[item.AddonRef.Name] = len(expanded)
 		expanded = append(expanded, item)
 	}
 	var visitProfile func(string, map[string]bool)
@@ -48,14 +48,14 @@ func EffectiveBindingAddons(state v1alpha1.State, binding v1alpha1.ClusterAddonB
 			nextStack[key] = value
 		}
 		nextStack[name] = true
-		for _, ref := range profile.Spec.Profiles {
+		for _, ref := range profile.Spec.ProfileRefs {
 			visitProfile(ref.Name, nextStack)
 		}
-		for _, ref := range profile.Spec.Addons {
-			add(v1alpha1.ClusterAddonBindingAddon{Name: ref.Name})
+		for _, ref := range profile.Spec.AddonRefs {
+			add(v1alpha1.ClusterAddonBindingAddon{AddonRef: ref})
 		}
 	}
-	for _, ref := range binding.Spec.AddonProfiles {
+	for _, ref := range binding.Spec.AddonProfileRefs {
 		visitProfile(ref.Name, map[string]bool{})
 	}
 	for _, item := range binding.Spec.Addons {
@@ -69,7 +69,7 @@ func EffectiveAddons(state v1alpha1.State) []EffectiveAddon {
 	var out []EffectiveAddon
 	for _, binding := range state.ClusterAddonBindings {
 		for _, item := range EffectiveBindingAddons(state, binding) {
-			extension, ok := addons[item.Name]
+			extension, ok := addons[item.AddonRef.Name]
 			if !ok {
 				continue
 			}

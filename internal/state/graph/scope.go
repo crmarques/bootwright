@@ -316,11 +316,11 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 			continue
 		}
 		filteredBindings = append(filteredBindings, binding)
-		for _, ref := range binding.Spec.AddonProfiles {
+		for _, ref := range binding.Spec.AddonProfileRefs {
 			selectedSets[ref.Name] = true
 		}
-		for _, ref := range binding.Spec.Addons {
-			selectedAddons[ref.Name] = true
+		for _, addon := range binding.Spec.Addons {
+			selectedAddons[addon.AddonRef.Name] = true
 		}
 	}
 	setByName := map[string]v1alpha1.ClusterAddonProfile{}
@@ -333,13 +333,13 @@ func filterAddonsToClusters(state v1alpha1.State, selectedClusters map[string]bo
 		if !ok {
 			return
 		}
-		for _, ref := range set.Spec.Profiles {
+		for _, ref := range set.Spec.ProfileRefs {
 			if !selectedSets[ref.Name] {
 				selectedSets[ref.Name] = true
 				visitSet(ref.Name)
 			}
 		}
-		for _, ref := range set.Spec.Addons {
+		for _, ref := range set.Spec.AddonRefs {
 			selectedAddons[ref.Name] = true
 		}
 	}
@@ -360,8 +360,8 @@ func storageEffectBinding(effect addoninputs.EffectBinding) v1alpha1.ClusterAddo
 		Spec: v1alpha1.ClusterAddonBindingSpec{
 			ClusterRef: effect.Binding.Spec.ClusterRef,
 			Addons: []v1alpha1.ClusterAddonBindingAddon{{
-				Name:   effect.Addon.Name,
-				Inputs: []v1alpha1.ClusterAddonBindingInput{effect.Input},
+				AddonRef: effect.Addon.AddonRef,
+				Inputs:   []v1alpha1.ClusterAddonBindingInput{effect.Input},
 			}},
 		},
 		SourcePath: effect.Binding.SourcePath,

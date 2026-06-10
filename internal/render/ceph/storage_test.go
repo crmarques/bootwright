@@ -660,7 +660,7 @@ func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon
 		"exportRef": export,
 	}
 	return v1alpha1.ClusterAddonBindingAddon{
-		Name: "odf",
+		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
 		Inputs: []v1alpha1.ClusterAddonBindingInput{{
 			Name:   "external-storage",
 			Values: values,

@@ -66,9 +66,9 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 		}
 		for _, attachment := range attachmentsByCluster[cluster.Metadata.Name] {
 			containerCluster := attachment.Binding.Spec.ClusterRef.Name
-			inputDir := filepath.Join(asset.DataFoundationDir, containerCluster, attachment.Addon.Name, attachment.Input.Name)
+			inputDir := filepath.Join(asset.DataFoundationDir, containerCluster, attachment.Addon.AddonRef.Name, attachment.Input.Name)
 			asset.Attachments = append(asset.Attachments, StorageAttachmentAsset{
-				AddonName:                  attachment.Addon.Name,
+				AddonName:                  attachment.Addon.AddonRef.Name,
 				InputName:                  attachment.Input.Name,
 				ContainerClusterName:       containerCluster,
 				Dir:                        inputDir,

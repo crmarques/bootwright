@@ -66,8 +66,13 @@ func TestClusterAddonLoaderRejectsOldSchemaNames(t *testing.T) {
 		},
 		{
 			name: "old-profile-field",
-			body: strings.Replace(extensionSetYAML("set", "virt"), "addons:", "extensions:", 1),
+			body: strings.Replace(extensionSetYAML("set", "virt"), "addonRefs:", "extensions:", 1),
 			want: "field extensions not found",
+		},
+		{
+			name: "old-profile-addons-key",
+			body: strings.Replace(extensionSetYAML("set", "virt"), "addonRefs:", "addons:", 1),
+			want: "field addons not found",
 		},
 		{
 			name: "old-binding-selector",
@@ -76,8 +81,25 @@ func TestClusterAddonLoaderRejectsOldSchemaNames(t *testing.T) {
 		},
 		{
 			name: "old-binding-phase",
-			body: strings.Replace(extensionBindingYAML("binding", "set"), "  addonProfiles:", "  applyAfter:\n    phase: containerClusterInstalled\n  addonProfiles:", 1),
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "  addonProfileRefs:", "  applyAfter:\n    phase: containerClusterInstalled\n  addonProfileRefs:", 1),
 			want: "field applyAfter not found",
+		},
+		{
+			name: "old-binding-profiles-key",
+			body: strings.Replace(extensionBindingYAML("binding", "set"), "addonProfileRefs:", "addonProfiles:", 1),
+			want: "field addonProfiles not found",
+		},
+		{
+			name: "old-binding-addon-name-key",
+			body: `apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata: { name: bad-binding }
+spec:
+  clusterRef: sno
+  addons:
+    - name: virt
+`,
+			want: "field name not found",
 		},
 	}
 	for _, tc := range cases {
@@ -161,11 +183,11 @@ func TestClusterAddonValidationRejectsInvalidResources(t *testing.T) {
 kind: ClusterAddonProfile
 metadata: { name: set }
 spec:
-  addons:
+  addonRefs:
     - missing
 `,
 			},
-			wantSubstring: `ClusterAddonProfile/set spec.addons[0].name "missing" does not match any ClusterAddon`,
+			wantSubstring: `ClusterAddonProfile/set spec.addonRefs[0] "missing" does not match any ClusterAddon`,
 		},
 		{
 			name: "missing-set-reference",
@@ -174,7 +196,7 @@ spec:
 				"binding.yaml":   strings.Replace(extensionBindingYAML("binding", "missing"), "demo-ocp", "sno", 1),
 				"cluster.yaml":   newClusterYAML,
 			},
-			wantSubstring: `ClusterAddonBinding/binding spec.addonProfiles[0].name "missing" does not match any ClusterAddonProfile`,
+			wantSubstring: `ClusterAddonBinding/binding spec.addonProfileRefs[0] "missing" does not match any ClusterAddonProfile`,
 		},
 		{
 			name: "set-cycle",
@@ -184,21 +206,21 @@ spec:
 kind: ClusterAddonProfile
 metadata: { name: a }
 spec:
-  profiles:
+  profileRefs:
     - b
 `,
 				"b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata: { name: b }
 spec:
-  profiles:
+  profileRefs:
     - c
 `,
 				"c.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata: { name: c }
 spec:
-  profiles:
+  profileRefs:
     - a
 `,
 			},
@@ -315,7 +337,7 @@ metadata: { name: binding }
 spec:
   clusterRef: sno
   addons:
-    - name: virt
+    - addonRef: virt
 ` + inputYAML
 	}
 	validInput := `      - name: config
@@ -450,7 +472,7 @@ spec:
 			wantSubstring: `ClusterAddonBinding/binding ClusterAddon/virt inputs[0].values.otherRef is not declared by the input schema`,
 		},
 		{
-			name: "secret-ref-value-must-exist",
+			name: "secret-value-must-exist",
 			files: func() map[string]string {
 				files := newBaselineFiles()
 				files["extension.yaml"] = addonWithInputs(`      - name: config
@@ -458,7 +480,7 @@ spec:
           type: object
           properties:
             credentialsRef:
-              secretRef: true
+              secret: true
 `)
 				files["binding.yaml"] = bindingWithInputs(`      inputs:
         - name: config
@@ -587,10 +609,10 @@ kind: ClusterAddonBinding
 metadata: { name: binding }
 spec:
   clusterRef: sno
-  addonProfiles:
+  addonProfileRefs:
     - set
   addons:
-    - name: virt
+    - addonRef: virt
       inputs:
         - name: config
           values:
@@ -619,21 +641,21 @@ func TestEnvironmentResourcesRequireSelectedClusterAddonReferences(t *testing.T)
 			resources: []string{
 				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addons[0]; add "extension.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonBinding/demo-ocp-addons spec.addons[0].addonRef; add "extension.yaml"`,
 		},
 		{
 			name: "binding-requires-set",
 			resources: []string{
 				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "binding-set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.addonProfiles[0]; add "set.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddonProfile/virtualization-platform required by ClusterAddonBinding/demo-ocp-set spec.addonProfileRefs[0]; add "set.yaml"`,
 		},
 		{
 			name: "set-requires-extension",
 			resources: []string{
 				"service-machines.yaml", "network.yaml", "provider.yaml", "infra-component.yaml", "cluster.yaml", "set.yaml",
 			},
-			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonProfile/virtualization-platform spec.addons[0]; add "extension.yaml"`,
+			wantSubstring: `spec.resources excludes ClusterAddon/openshift-virtualization required by ClusterAddonProfile/virtualization-platform spec.addonRefs[0]; add "extension.yaml"`,
 		},
 	}
 	for _, tc := range cases {
@@ -649,7 +671,7 @@ metadata: { name: demo-ocp-addons }
 spec:
   clusterRef: sno
   addons:
-    - name: openshift-virtualization
+    - addonRef: openshift-virtualization
 `
 			files["binding-set.yaml"] = extensionBindingYAML("demo-ocp-set", "virtualization-platform")
 			writeFiles(t, dir, files)
@@ -709,7 +731,7 @@ kind: ClusterAddonProfile
 metadata:
   name: ` + name + `
 spec:
-  addons:
+  addonRefs:
     - ` + extension + `
 `
 }
@@ -721,7 +743,7 @@ metadata:
   name: ` + name + `
 spec:
   clusterRef: sno
-  addonProfiles:
+  addonProfileRefs:
     - ` + set + `
 `
 }

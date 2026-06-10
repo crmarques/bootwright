@@ -94,7 +94,7 @@ func dataFoundationBindingContexts(state v1alpha1.State, storageCluster string) 
 			continue
 		}
 		out = append(out, dataFoundationBindingContext{
-			Addon:   effect.Addon.Name,
+			Addon:   effect.Addon.AddonRef.Name,
 			Input:   effect.Input.Name,
 			Cluster: effect.Binding.Spec.ClusterRef.Name,
 			Export:  export,

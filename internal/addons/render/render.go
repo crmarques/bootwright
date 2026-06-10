@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -82,7 +83,7 @@ func OLMResources(extension v1alpha1.ClusterAddon) ([]ManifestResource, error) {
 	return out, nil
 }
 
-func DesiredHash(extension v1alpha1.ClusterAddon, policy v1alpha1.ClusterAddonPolicy) (string, error) {
+func DesiredHash(extension v1alpha1.ClusterAddon, policy addons.ClusterAddonPolicy) (string, error) {
 	type manifestFile struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`

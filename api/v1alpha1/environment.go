@@ -26,7 +26,8 @@ type EnvironmentSpec struct {
 	// ContainerClusters and StorageClusters, when either is set, are the
 	// effective fleet selection lists. Loaded clusters outside the selection
 	// are excluded before validation runs and apply never touches them;
-	// `bootwright validate` warns about each excluded cluster.
+	// `bootwright validate` warns about each excluded cluster. They are
+	// selection lists, not references, so they carry no Ref suffix.
 	ContainerClusters []string                                 `yaml:"containerClusters,omitempty" json:"containerClusters,omitempty"`
 	StorageClusters   []string                                 `yaml:"storageClusters,omitempty" json:"storageClusters,omitempty"`
 	Defaults          EnvironmentDefaultsSpec                  `yaml:"defaults,omitempty" json:"defaults,omitempty"`

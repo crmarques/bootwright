@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
 )
 
 type BindingPlan struct {
 	Binding string
 	Cluster string
-	Policy  v1alpha1.ClusterAddonPolicy
+	Policy  addons.ClusterAddonPolicy
 	Addons  []ExtensionPlan
 }
 
@@ -21,7 +22,7 @@ type ExtensionPlan struct {
 	Binding   string
 	Cluster   string
 	Extension v1alpha1.ClusterAddon
-	Policy    v1alpha1.ClusterAddonPolicy
+	Policy    addons.ClusterAddonPolicy
 }
 
 type ResourceSummary struct {
@@ -32,7 +33,7 @@ type ResourceSummary struct {
 }
 
 func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
-	addons := extensionIndex(state)
+	extensions := extensionIndex(state)
 	var out []BindingPlan
 	for _, binding := range state.ClusterAddonBindings {
 		names, err := expandBindingExtensionNames(state, binding)
@@ -43,10 +44,10 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 		plan := BindingPlan{
 			Binding: binding.Metadata.Name,
 			Cluster: cluster,
-			Policy:  DefaultPolicy(),
+			Policy:  addons.DefaultPolicy(),
 		}
 		for _, name := range names {
-			extension, ok := addons[name]
+			extension, ok := extensions[name]
 			if !ok {
 				return nil, fmt.Errorf("ClusterAddonBinding/%s references missing ClusterAddon/%s", binding.Metadata.Name, name)
 			}
@@ -55,7 +56,7 @@ func BindingPlans(state v1alpha1.State) ([]BindingPlan, error) {
 				Binding:   binding.Metadata.Name,
 				Cluster:   cluster,
 				Extension: extension,
-				Policy:    DefaultPolicy(),
+				Policy:    addons.DefaultPolicy(),
 			})
 		}
 		out = append(out, plan)
@@ -96,18 +97,18 @@ func ResourceSummaries(extension v1alpha1.ClusterAddon) []ResourceSummary {
 
 func expandBindingExtensionNames(state v1alpha1.State, binding v1alpha1.ClusterAddonBinding) ([]string, error) {
 	var expanded []string
-	for _, ref := range binding.Spec.AddonProfiles {
+	for _, ref := range binding.Spec.AddonProfileRefs {
 		names, err := ExpandSet(state, ref.Name)
 		if err != nil {
-			return nil, fmt.Errorf("ClusterAddonBinding/%s spec.addonProfiles[%s]: %w", binding.Metadata.Name, ref.Name, err)
+			return nil, fmt.Errorf("ClusterAddonBinding/%s spec.addonProfileRefs[%s]: %w", binding.Metadata.Name, ref.Name, err)
 		}
 		expanded = append(expanded, names...)
 	}
-	for _, ref := range binding.Spec.Addons {
-		if contains(expanded, ref.Name) {
+	for _, addon := range binding.Spec.Addons {
+		if contains(expanded, addon.AddonRef.Name) {
 			continue
 		}
-		expanded = append(expanded, ref.Name)
+		expanded = append(expanded, addon.AddonRef.Name)
 	}
 	return firstOccurrence(expanded), nil
 }
@@ -138,14 +139,14 @@ func expandSet(sets map[string]v1alpha1.ClusterAddonProfile, name string, stack 
 	}
 	stack = append(stack, name)
 	var out []string
-	for _, ref := range set.Spec.Profiles {
+	for _, ref := range set.Spec.ProfileRefs {
 		names, err := expandSet(sets, ref.Name, stack)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, names...)
 	}
-	for _, ref := range set.Spec.Addons {
+	for _, ref := range set.Spec.AddonRefs {
 		out = append(out, ref.Name)
 	}
 	return out, nil
@@ -162,13 +163,6 @@ func firstOccurrence(in []string) []string {
 		out = append(out, name)
 	}
 	return out
-}
-
-func DefaultPolicy() v1alpha1.ClusterAddonPolicy {
-	return v1alpha1.ClusterAddonPolicy{
-		ServerSideApply: v1alpha1.BoolPtr(true),
-		FieldManager:    v1alpha1.DefaultClusterAddonFieldManager,
-	}
 }
 
 func extensionIndex(state v1alpha1.State) map[string]v1alpha1.ClusterAddon {

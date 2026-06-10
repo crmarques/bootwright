@@ -3,9 +3,9 @@ kind: ClusterAddonProfile
 metadata:
   name: platform-bootstrap
 spec:
-  profiles:
+  profileRefs:
     - base-profile
 
-  addons:
+  addonRefs:
     - openshift-gitops
 

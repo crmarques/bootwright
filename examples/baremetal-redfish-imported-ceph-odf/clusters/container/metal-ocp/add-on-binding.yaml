@@ -6,7 +6,7 @@ spec:
   clusterRef: metal-ocp
 
   addons:
-    - name: openshift-data-foundation
+    - addonRef: openshift-data-foundation
       inputs:
         - name: external-storage
           values:

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
@@ -177,7 +178,7 @@ func applyFailureSummary(failedID string) string {
 	return fmt.Sprintf("oc apply failed at %s; see the apply log for details", failedID)
 }
 
-func applyArgs(policy v1alpha1.ClusterAddonPolicy, file string) []string {
+func applyArgs(policy addons.ClusterAddonPolicy, file string) []string {
 	args := []string{"apply", "-f", file}
 	if policy.UseServerSideApply() {
 		args = append(args, "--server-side")

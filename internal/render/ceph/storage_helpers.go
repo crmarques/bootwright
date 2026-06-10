@@ -37,7 +37,7 @@ func StorageAttachmentByName(state v1alpha1.State, clusterName, addonName, input
 		if effect.Binding.Spec.ClusterRef.Name != clusterName {
 			continue
 		}
-		if effect.Addon.Name == addonName && effect.Input.Name == inputName {
+		if effect.Addon.AddonRef.Name == addonName && effect.Input.Name == inputName {
 			return StorageAttachment{Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}, true
 		}
 	}

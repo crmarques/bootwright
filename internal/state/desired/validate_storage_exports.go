@@ -164,9 +164,9 @@ func validateStorageExportSSHExecution(prefix string, cluster v1alpha1.StorageCl
 func validateStorageExportAttachmentEffects(state v1alpha1.State, exports map[string]v1alpha1.StorageExport) []string {
 	var errs []string
 	for _, effect := range addoninputs.EffectBindings(state, v1alpha1.ClusterAddonInputEffectStorageExportAttachment, v1alpha1.ClusterAddonProvidesDataFoundation) {
-		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.Name, effect.Input.Name)
+		prefix := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s input[%s]", effect.Binding.Metadata.Name, effect.Addon.AddonRef.Name, effect.Input.Name)
 		if !addonProvides(effect.Extension, v1alpha1.ClusterAddonProvidesDataFoundation) {
-			errs = append(errs, fmt.Sprintf("%s effect %q with provider %q requires ClusterAddon/%s to provide %q", prefix, effect.Effect.Type, effect.Effect.Provider, effect.Addon.Name, v1alpha1.ClusterAddonProvidesDataFoundation))
+			errs = append(errs, fmt.Sprintf("%s effect %q with provider %q requires ClusterAddon/%s to provide %q", prefix, effect.Effect.Type, effect.Effect.Provider, effect.Addon.AddonRef.Name, v1alpha1.ClusterAddonProvidesDataFoundation))
 		}
 		exportRef := addoninputs.LocalObjectReferenceValue(effect.Input.Values, "exportRef")
 		if exportRef.Name == "" {

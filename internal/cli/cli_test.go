@@ -3849,7 +3849,7 @@ kind: ClusterAddonProfile
 metadata:
   name: virtualization-platform
 spec:
-  addons:
+  addonRefs:
     - openshift-virtualization
 `), 0o600); err != nil {
 		t.Fatalf("write addon profile: %v", err)
@@ -3860,7 +3860,7 @@ metadata:
   name: sno-libvirt-addons
 spec:
   clusterRef: sno-libvirt
-  addonProfiles:
+  addonProfileRefs:
     - virtualization-platform
 `), 0o600); err != nil {
 		t.Fatalf("write addon binding: %v", err)

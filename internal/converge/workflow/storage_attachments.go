@@ -46,9 +46,9 @@ func runOneStorageAttachmentTask(ctx context.Context, stdout io.Writer, stderr i
 	if err != nil {
 		return applyTaskResult{id: task.Entry.ID, err: err}
 	}
-	asset := storageAttachmentAssetFor(result.StorageAssets, task.StorageAttachment.Addon.Name, task.StorageAttachment.Input.Name, task.StorageAttachment.Cluster)
+	asset := storageAttachmentAssetFor(result.StorageAssets, task.StorageAttachment.Addon.AddonRef.Name, task.StorageAttachment.Input.Name, task.StorageAttachment.Cluster)
 	if asset.AddonName == "" {
-		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("storage attachment asset for %s/%s/%s not rendered", task.StorageAttachment.Cluster, task.StorageAttachment.Addon.Name, task.StorageAttachment.Input.Name)}
+		return applyTaskResult{id: task.Entry.ID, err: fmt.Errorf("storage attachment asset for %s/%s/%s not rendered", task.StorageAttachment.Cluster, task.StorageAttachment.Addon.AddonRef.Name, task.StorageAttachment.Input.Name)}
 	}
 	sshRunnerFactory := runnerFactory
 	if sshRunnerFactory == nil {
@@ -117,7 +117,7 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 	}
 	cluster, ok := topology.ClusterByName(state, export.Spec.StorageClusterRef.Name)
 	if !ok {
-		return fmt.Errorf("StorageCluster/%s not found for storage attachment %s/%s", export.Spec.StorageClusterRef.Name, plan.Addon.Name, input.Name)
+		return fmt.Errorf("StorageCluster/%s not found for storage attachment %s/%s", export.Spec.StorageClusterRef.Name, plan.Addon.AddonRef.Name, input.Name)
 	}
 	attachment := render.StorageAttachment{Binding: binding, Addon: plan.Addon, Input: input}
 	if fromSecret := datafoundation.ExternalDetailsSourceFromSecret(export); fromSecret != "" {
@@ -136,12 +136,12 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 		manifest := render.DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, "sshExecution")
 		return writeStorageAttachmentExternalDetailsManifest(path, manifest)
 	}
-	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(opts.ClustersDir, plan.Cluster, plan.Addon.Name, input.Name)
+	detailsJSON, found, err := storageapply.LoadDataFoundationAttachmentDetails(opts.ClustersDir, plan.Cluster, plan.Addon.AddonRef.Name, input.Name)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("data foundation external details for storage attachment %s/%s/%s not found; run bootwright apply --stage clusters --clusters %s --yes first", plan.Cluster, plan.Addon.Name, input.Name, cluster.Metadata.Name)
+		return fmt.Errorf("data foundation external details for storage attachment %s/%s/%s not found; run bootwright apply --stage clusters --clusters %s --yes first", plan.Cluster, plan.Addon.AddonRef.Name, input.Name, cluster.Metadata.Name)
 	}
 	manifest := render.DataFoundationExternalDetailsRawJSONManifest(attachment, detailsJSON, "")
 	return writeStorageAttachmentExternalDetailsManifest(path, manifest)

@@ -133,13 +133,13 @@ func validateClusterAddonInputSchema(prefix string, schema v1alpha1.ClusterAddon
 			if !knownResourceKind(property.RefKind) {
 				errs = append(errs, fmt.Sprintf("%s.refKind %q is not a known Bootwright kind", owner, property.RefKind))
 			}
-			if property.SecretRef {
-				errs = append(errs, owner+" must not set both refKind and secretRef")
+			if property.Secret {
+				errs = append(errs, owner+" must not set both refKind and secret")
 			}
 			continue
 		}
-		if !property.SecretRef {
-			errs = append(errs, owner+" must set refKind or secretRef")
+		if !property.Secret {
+			errs = append(errs, owner+" must set refKind or secret")
 		}
 	}
 	return errs
@@ -393,19 +393,19 @@ func validateClusterAddonProfiles(state v1alpha1.State) []string {
 			errs = append(errs, fmt.Sprintf("duplicate ClusterAddonProfile %q", set.Metadata.Name))
 		}
 		seen[set.Metadata.Name] = true
-		if len(set.Spec.Profiles) == 0 && len(set.Spec.Addons) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonProfile/%s spec must include at least one of profiles or addons", set.Metadata.Name))
+		if len(set.Spec.ProfileRefs) == 0 && len(set.Spec.AddonRefs) == 0 {
+			errs = append(errs, fmt.Sprintf("ClusterAddonProfile/%s spec must include at least one of profileRefs or addonRefs", set.Metadata.Name))
 		}
-		for i, ref := range set.Spec.Profiles {
-			owner := fmt.Sprintf("ClusterAddonProfile/%s spec.profiles[%d].name", set.Metadata.Name, i)
+		for i, ref := range set.Spec.ProfileRefs {
+			owner := fmt.Sprintf("ClusterAddonProfile/%s spec.profileRefs[%d]", set.Metadata.Name, i)
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := sets[ref.Name]; !ok {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddonProfile", owner, ref.Name))
 			}
 		}
-		for i, ref := range set.Spec.Addons {
-			owner := fmt.Sprintf("ClusterAddonProfile/%s spec.addons[%d].name", set.Metadata.Name, i)
+		for i, ref := range set.Spec.AddonRefs {
+			owner := fmt.Sprintf("ClusterAddonProfile/%s spec.addonRefs[%d]", set.Metadata.Name, i)
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := addons[ref.Name]; !ok {
@@ -432,7 +432,7 @@ func validateClusterAddonProfileCycles(sets []v1alpha1.ClusterAddonProfile) []st
 		}
 		if visiting[name] {
 			cycle := append(stack, name)
-			errs = append(errs, fmt.Sprintf("ClusterAddonProfile/%s spec.profiles creates cycle: %s", name, strings.Join(cycle, " -> ")))
+			errs = append(errs, fmt.Sprintf("ClusterAddonProfile/%s spec.profileRefs creates cycle: %s", name, strings.Join(cycle, " -> ")))
 			return
 		}
 		set, ok := byName[name]
@@ -441,7 +441,7 @@ func validateClusterAddonProfileCycles(sets []v1alpha1.ClusterAddonProfile) []st
 		}
 		visiting[name] = true
 		stack = append(stack, name)
-		for _, ref := range set.Spec.Profiles {
+		for _, ref := range set.Spec.ProfileRefs {
 			visit(ref.Name, stack)
 		}
 		visiting[name] = false
@@ -475,11 +475,11 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 		} else if _, ok := clusters[binding.Spec.ClusterRef.Name]; !ok {
 			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec.clusterRef %q does not match any ContainerCluster", binding.Metadata.Name, binding.Spec.ClusterRef.Name))
 		}
-		if len(binding.Spec.AddonProfiles) == 0 && len(binding.Spec.Addons) == 0 {
-			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfiles or addons", binding.Metadata.Name))
+		if len(binding.Spec.AddonProfileRefs) == 0 && len(binding.Spec.Addons) == 0 {
+			errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s spec must include at least one of addonProfileRefs or addons", binding.Metadata.Name))
 		}
-		for i, ref := range binding.Spec.AddonProfiles {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfiles[%d].name", binding.Metadata.Name, i)
+		for i, ref := range binding.Spec.AddonProfileRefs {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addonProfileRefs[%d]", binding.Metadata.Name, i)
 			if ref.Name == "" {
 				errs = append(errs, owner+" is required")
 			} else if _, ok := sets[ref.Name]; !ok {
@@ -487,11 +487,11 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 			}
 		}
 		for i, addon := range binding.Spec.Addons {
-			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].name", binding.Metadata.Name, i)
-			if addon.Name == "" {
+			owner := fmt.Sprintf("ClusterAddonBinding/%s spec.addons[%d].addonRef", binding.Metadata.Name, i)
+			if addon.AddonRef.Name == "" {
 				errs = append(errs, owner+" is required")
-			} else if _, ok := addons[addon.Name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, addon.Name))
+			} else if _, ok := addons[addon.AddonRef.Name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s %q does not match any ClusterAddon", owner, addon.AddonRef.Name))
 			}
 			inputNames := map[string]bool{}
 			for j, input := range addon.Inputs {
@@ -505,16 +505,16 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 			}
 		}
 		for _, addon := range addoninputs.EffectiveBindingAddons(state, binding) {
-			if addon.Name == "" {
+			if addon.AddonRef.Name == "" {
 				continue
 			}
-			applicationKey := binding.Spec.ClusterRef.Name + "/" + addon.Name
+			applicationKey := binding.Spec.ClusterRef.Name + "/" + addon.AddonRef.Name
 			if previous := effectiveApplications[applicationKey]; previous != "" {
-				errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s applies ClusterAddon/%s to ContainerCluster/%s, already applied by ClusterAddonBinding/%s", binding.Metadata.Name, addon.Name, binding.Spec.ClusterRef.Name, previous))
+				errs = append(errs, fmt.Sprintf("ClusterAddonBinding/%s applies ClusterAddon/%s to ContainerCluster/%s, already applied by ClusterAddonBinding/%s", binding.Metadata.Name, addon.AddonRef.Name, binding.Spec.ClusterRef.Name, previous))
 			} else {
 				effectiveApplications[applicationKey] = binding.Metadata.Name
 			}
-			extension, ok := addons[addon.Name]
+			extension, ok := addons[addon.AddonRef.Name]
 			if !ok {
 				continue
 			}
@@ -524,7 +524,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 			}
 			effectiveInputNames := map[string]bool{}
 			for i, input := range addon.Inputs {
-				owner := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s inputs[%d]", binding.Metadata.Name, addon.Name, i)
+				owner := fmt.Sprintf("ClusterAddonBinding/%s ClusterAddon/%s inputs[%d]", binding.Metadata.Name, addon.AddonRef.Name, i)
 				acceptedInput, ok := accepted[input.Name]
 				if input.Name == "" {
 					continue
@@ -535,7 +535,7 @@ func validateClusterAddonBindings(state v1alpha1.State) []string {
 				}
 				effectiveInputNames[input.Name] = true
 				if !ok {
-					errs = append(errs, fmt.Sprintf("%s.name %q is not declared by ClusterAddon/%s spec.accepts.inputs", owner, input.Name, addon.Name))
+					errs = append(errs, fmt.Sprintf("%s.name %q is not declared by ClusterAddon/%s spec.accepts.inputs", owner, input.Name, addon.AddonRef.Name))
 					continue
 				}
 				errs = append(errs, validateClusterAddonInputValues(owner+".values", input.Values, acceptedInput.Schema, loaded)...)
@@ -566,7 +566,7 @@ func validateClusterAddonInputValues(prefix string, values map[string]any, schem
 			continue
 		}
 		owner := prefix + "." + name
-		if property.RefKind != "" || property.SecretRef {
+		if property.RefKind != "" || property.Secret {
 			nameValue, ok := raw.(string)
 			if !ok {
 				errs = append(errs, owner+" must be a plain name string")
@@ -576,7 +576,7 @@ func validateClusterAddonInputValues(prefix string, values map[string]any, schem
 				errs = append(errs, owner+" is required")
 				continue
 			}
-			// secretRef values resolve against Environment spec.secrets in the
+			// secret values resolve against Environment spec.secrets in the
 			// comprehensive secret walk; refKind values resolve here.
 			if property.RefKind != "" && !loaded[resourceKey{kind: property.RefKind, name: nameValue}] {
 				errs = append(errs, fmt.Sprintf("%s %q does not match any %s", owner, nameValue, property.RefKind))
@@ -598,7 +598,7 @@ func providedClusterCapabilities(state v1alpha1.State) map[string]map[string]boo
 			out[cluster] = map[string]bool{}
 		}
 		for _, item := range addoninputs.EffectiveBindingAddons(state, binding) {
-			extension, ok := addons[item.Name]
+			extension, ok := addons[item.AddonRef.Name]
 			if !ok {
 				continue
 			}

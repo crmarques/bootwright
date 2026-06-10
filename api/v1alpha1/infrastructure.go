@@ -207,7 +207,6 @@ const (
 
 	ClusterAddonApplyPhaseContainerClusterInstalled = "containerClusterInstalled"
 	DefaultClusterAddonReadinessTimeout             = "30m"
-	DefaultClusterAddonFieldManager                 = "bootwright"
 	ClusterAddonProvidesKubeVirt                    = "kubevirt"
 	ClusterAddonProvidesDataFoundation              = "dataFoundation"
 	ClusterAddonInputSchemaTypeObject               = "object"
@@ -315,7 +314,10 @@ type Metadata struct {
 // LocalObjectReference names a single sibling object in the loaded state. It
 // is authored and rendered as a plain name string — the Ref suffix on the
 // field carries the "this is a reference" signal; the wrapper exists only so
-// Go keeps the resolution namespace distinct from ordinary strings.
+// Go keeps the resolution namespace distinct from ordinary strings. One
+// deliberate exception: Environment spec.containerClusters and
+// spec.storageClusters are fleet selection lists, not references, so they
+// stay plain strings without the Ref suffix.
 type LocalObjectReference struct {
 	Name string `yaml:"name" json:"name"`
 }

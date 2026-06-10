@@ -183,23 +183,23 @@ func TestFilterStateToClustersKeepsRelevantExtensionBindings(t *testing.T) {
 	state.ClusterAddonProfiles = []v1alpha1.ClusterAddonProfile{{
 		Metadata: v1alpha1.Metadata{Name: "base-platform"},
 		Spec: v1alpha1.ClusterAddonProfileSpec{
-			Addons: []v1alpha1.LocalObjectReference{{Name: "base"}},
+			AddonRefs: []v1alpha1.LocalObjectReference{{Name: "base"}},
 		},
 	}}
 	state.ClusterAddonBindings = []v1alpha1.ClusterAddonBinding{
 		{
 			Metadata: v1alpha1.Metadata{Name: "cluster-a-addons"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ClusterRef:    v1alpha1.LocalObjectReference{Name: "cluster-a"},
-				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
-				Addons:        []v1alpha1.ClusterAddonBindingAddon{{Name: "console"}},
+				ClusterRef:       v1alpha1.LocalObjectReference{Name: "cluster-a"},
+				AddonProfileRefs: []v1alpha1.LocalObjectReference{{Name: "base-platform"}},
+				Addons:           []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "console"}}},
 			},
 		},
 		{
 			Metadata: v1alpha1.Metadata{Name: "cluster-b-addons"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "cluster-b"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{{Name: "unused"}},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "unused"}}},
 			},
 		},
 	}

@@ -1586,15 +1586,15 @@ func extensionPlanningState() v1alpha1.State {
 		ClusterAddonProfiles: []v1alpha1.ClusterAddonProfile{{
 			Metadata: v1alpha1.Metadata{Name: "platform"},
 			Spec: v1alpha1.ClusterAddonProfileSpec{
-				Addons: []v1alpha1.LocalObjectReference{{Name: "a"}},
+				AddonRefs: []v1alpha1.LocalObjectReference{{Name: "a"}},
 			},
 		}},
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ClusterRef:    v1alpha1.LocalObjectReference{Name: "demo"},
-				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "platform"}},
-				Addons:        []v1alpha1.ClusterAddonBindingAddon{{Name: "b"}},
+				ClusterRef:       v1alpha1.LocalObjectReference{Name: "demo"},
+				AddonProfileRefs: []v1alpha1.LocalObjectReference{{Name: "platform"}},
+				Addons:           []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}}},
 			},
 		}},
 	}
@@ -1711,7 +1711,7 @@ func dataFoundationAccepts() v1alpha1.ClusterAddonAccepts {
 
 func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon {
 	return v1alpha1.ClusterAddonBindingAddon{
-		Name: "odf",
+		AddonRef: v1alpha1.LocalObjectReference{Name: "odf"},
 		Inputs: []v1alpha1.ClusterAddonBindingInput{{
 			Name:   "external-storage",
 			Values: dataFoundationValues(export),
@@ -1772,7 +1772,7 @@ func kubeVirtChildPlanningState(includeParent bool) v1alpha1.State {
 			Metadata: v1alpha1.Metadata{Name: "virt"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
 				ClusterRef: v1alpha1.LocalObjectReference{Name: "metal-ocp"},
-				Addons:     []v1alpha1.ClusterAddonBindingAddon{{Name: "openshift-virtualization"}},
+				Addons:     []v1alpha1.ClusterAddonBindingAddon{{AddonRef: v1alpha1.LocalObjectReference{Name: "openshift-virtualization"}}},
 			},
 		}},
 	}

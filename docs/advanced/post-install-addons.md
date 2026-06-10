@@ -26,7 +26,7 @@ after the target cluster is installed and reachable.
 - `manifestSet` for applying declared YAML manifests in order
 
 `ClusterAddonProfile` declares an ordered reusable group. It expands child
-`profiles` first, then direct `addons`; duplicate add-on names are
+`profileRefs` first, then direct `addonRefs`; duplicate add-on names are
 removed by first occurrence. Cycles are rejected.
 
 `ClusterAddonBinding` names exactly one container cluster with
@@ -44,9 +44,10 @@ add-on so storage-export input effects wait for external-mode components to be
 ready.
 
 `ClusterAddon.spec.accepts.inputs[]` declares input APIs that bindings may
-provide by name. An input schema can require Bootwright object refs and secret
-refs — binding values for `refKind` properties must name a loaded object of
-that kind — and `effects[]` can opt into built-in behavior. Data Foundation
+provide by name. An input schema property sets `refKind` (binding values must
+name a loaded object of that kind) or `secret: true` (binding values must name
+a declared `Environment` secret) — and `effects[]` can opt into built-in
+behavior. Data Foundation
 external storage uses a generic `storageExportAttachment` effect; no
 behavior depends on the add-on name, but the effect's input schema must
 declare a single required `exportRef` property with `refKind: StorageExport`.
@@ -109,7 +110,7 @@ kind: ClusterAddonProfile
 metadata:
   name: virtualization-platform
 spec:
-  addons:
+  addonRefs:
     - openshift-virtualization
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -117,8 +118,8 @@ metadata:
   name: demo-ocp-addons
 spec:
   clusterRef: demo-ocp
-  addonProfiles:
-    - name: virtualization-platform
+  addonProfileRefs:
+    - virtualization-platform
 ```
 
 An add-on that does not expose or consume inputs uses the same binding shape:
@@ -131,7 +132,7 @@ metadata:
 spec:
   clusterRef: demo-ocp
   addons:
-    - name: openshift-gitops
+    - addonRef: openshift-gitops
 ```
 
 ## CLI Flow

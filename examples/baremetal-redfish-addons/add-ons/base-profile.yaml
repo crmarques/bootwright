@@ -3,7 +3,7 @@ kind: ClusterAddonProfile
 metadata:
   name: base-profile
 spec:
-  addons:
+  addonRefs:
     - openshift-virtualization
     - cluster-observability
 

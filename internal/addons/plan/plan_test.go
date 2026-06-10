@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	extensionoc "github.com/crmarques/bootwright/internal/addons/oc"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
@@ -32,22 +33,25 @@ func TestBindingPlansExpandSetsBeforeDirectAddonsAndDeduplicate(t *testing.T) {
 			{
 				Metadata: v1alpha1.Metadata{Name: "base"},
 				Spec: v1alpha1.ClusterAddonProfileSpec{
-					Addons: []v1alpha1.LocalObjectReference{{Name: "a"}, {Name: "b"}},
+					AddonRefs: []v1alpha1.LocalObjectReference{{Name: "a"}, {Name: "b"}},
 				},
 			},
 			{
 				Metadata: v1alpha1.Metadata{Name: "observability"},
 				Spec: v1alpha1.ClusterAddonProfileSpec{
-					Addons: []v1alpha1.LocalObjectReference{{Name: "b"}, {Name: "c"}},
+					AddonRefs: []v1alpha1.LocalObjectReference{{Name: "b"}, {Name: "c"}},
 				},
 			},
 		},
 		ClusterAddonBindings: []v1alpha1.ClusterAddonBinding{{
 			Metadata: v1alpha1.Metadata{Name: "binding"},
 			Spec: v1alpha1.ClusterAddonBindingSpec{
-				ClusterRef:    v1alpha1.LocalObjectReference{Name: "demo"},
-				AddonProfiles: []v1alpha1.LocalObjectReference{{Name: "base"}, {Name: "observability"}},
-				Addons:        []v1alpha1.ClusterAddonBindingAddon{{Name: "b"}, {Name: "d"}},
+				ClusterRef:       v1alpha1.LocalObjectReference{Name: "demo"},
+				AddonProfileRefs: []v1alpha1.LocalObjectReference{{Name: "base"}, {Name: "observability"}},
+				Addons: []v1alpha1.ClusterAddonBindingAddon{
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "b"}},
+					{AddonRef: v1alpha1.LocalObjectReference{Name: "d"}},
+				},
 			},
 		}},
 	}
@@ -161,7 +165,7 @@ func TestDesiredHashTracksManifestContent(t *testing.T) {
 			},
 		},
 	}
-	policy := v1alpha1.ClusterAddonPolicy{FieldManager: v1alpha1.DefaultClusterAddonFieldManager}
+	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
 
 	first, err := extensionrender.DesiredHash(extension, policy)
 	if err != nil {
@@ -190,7 +194,7 @@ func TestDesiredHashTracksOLMCustomResourceChanges(t *testing.T) {
 	first := testExtension("virt")
 	second := testExtension("virt")
 	second.Spec.OLM.CustomResources[0]["spec"] = map[string]any{"featureGate": "enabled"}
-	policy := v1alpha1.ClusterAddonPolicy{FieldManager: v1alpha1.DefaultClusterAddonFieldManager}
+	policy := addons.ClusterAddonPolicy{FieldManager: addons.DefaultClusterAddonFieldManager}
 
 	firstHash, err := extensionrender.DesiredHash(first, policy)
 	if err != nil {

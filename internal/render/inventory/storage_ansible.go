@@ -178,7 +178,7 @@ func storageDataFoundationBindingsVars(state v1alpha1.State, storageCluster stri
 		}
 		entry := map[string]any{
 			"cluster": effect.Binding.Spec.ClusterRef.Name,
-			"addon":   effect.Addon.Name,
+			"addon":   effect.Addon.AddonRef.Name,
 			"input":   effect.Input.Name,
 			"export":  export.Metadata.Name,
 		}

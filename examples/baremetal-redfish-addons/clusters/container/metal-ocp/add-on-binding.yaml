@@ -5,5 +5,5 @@ metadata:
 spec:
   clusterRef: metal-ocp
 
-  addonProfiles:
+  addonProfileRefs:
     - platform-bootstrap

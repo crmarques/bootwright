@@ -6,10 +6,10 @@ spec:
   clusterRef: dc1-metal-ocp
 
   addons:
-    - name: openshift-virtualization
-    - name: openshift-data-foundation
+    - addonRef: openshift-virtualization
+    - addonRef: openshift-data-foundation
       inputs:
         - name: external-storage
           values:
             exportRef: odf-external-ceph
-    - name: child-network-dc1
+    - addonRef: child-network-dc1

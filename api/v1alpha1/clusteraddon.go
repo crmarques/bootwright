@@ -34,12 +34,12 @@ type ClusterAddonInputSchema struct {
 }
 
 // ClusterAddonInputProperty types one binding-supplied input value. Exactly
-// one of refKind or secretRef is set: refKind values are plain object names
-// resolved against the loaded objects of that kind, secretRef values resolve
-// against Environment spec.secrets.
+// one of refKind or secret is set: refKind values are plain object names
+// resolved against the loaded objects of that kind, secret marks values that
+// resolve against Environment spec.secrets.
 type ClusterAddonInputProperty struct {
-	RefKind   string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
-	SecretRef bool   `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
+	RefKind string `yaml:"refKind,omitempty" json:"refKind,omitempty"`
+	Secret  bool   `yaml:"secret,omitempty" json:"secret,omitempty"`
 }
 
 type ClusterAddonInputEffect struct {
@@ -112,8 +112,8 @@ type ClusterAddonProfile struct {
 }
 
 type ClusterAddonProfileSpec struct {
-	Addons   []LocalObjectReference `yaml:"addons,omitempty" json:"addons,omitempty"`
-	Profiles []LocalObjectReference `yaml:"profiles,omitempty" json:"profiles,omitempty"`
+	AddonRefs   []LocalObjectReference `yaml:"addonRefs,omitempty" json:"addonRefs,omitempty"`
+	ProfileRefs []LocalObjectReference `yaml:"profileRefs,omitempty" json:"profileRefs,omitempty"`
 }
 
 type ClusterAddonBinding struct {
@@ -125,28 +125,17 @@ type ClusterAddonBinding struct {
 }
 
 type ClusterAddonBindingSpec struct {
-	ClusterRef    LocalObjectReference       `yaml:"clusterRef" json:"clusterRef"`
-	AddonProfiles []LocalObjectReference     `yaml:"addonProfiles,omitempty" json:"addonProfiles,omitempty"`
-	Addons        []ClusterAddonBindingAddon `yaml:"addons,omitempty" json:"addons,omitempty"`
+	ClusterRef       LocalObjectReference       `yaml:"clusterRef" json:"clusterRef"`
+	AddonProfileRefs []LocalObjectReference     `yaml:"addonProfileRefs,omitempty" json:"addonProfileRefs,omitempty"`
+	Addons           []ClusterAddonBindingAddon `yaml:"addons,omitempty" json:"addons,omitempty"`
 }
 
 type ClusterAddonBindingAddon struct {
-	Name   string                     `yaml:"name" json:"name"`
-	Inputs []ClusterAddonBindingInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
+	AddonRef LocalObjectReference       `yaml:"addonRef" json:"addonRef"`
+	Inputs   []ClusterAddonBindingInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 }
 
 type ClusterAddonBindingInput struct {
 	Name   string         `yaml:"name" json:"name"`
 	Values map[string]any `yaml:"values,omitempty" json:"values,omitempty"`
-}
-
-type ClusterAddonPolicy struct {
-	Prune           bool   `yaml:"prune,omitempty" json:"prune,omitempty"`
-	ServerSideApply *bool  `yaml:"serverSideApply,omitempty" json:"serverSideApply,omitempty"`
-	FieldManager    string `yaml:"fieldManager,omitempty" json:"fieldManager,omitempty"`
-	ContinueOnError bool   `yaml:"continueOnError,omitempty" json:"continueOnError,omitempty"`
-}
-
-func (p ClusterAddonPolicy) UseServerSideApply() bool {
-	return p.ServerSideApply == nil || *p.ServerSideApply
 }

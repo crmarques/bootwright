@@ -36,8 +36,8 @@ func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State,
 			deps = append(deps, "wait."+cluster)
 		}
 		deps = append(deps, storageDepsByCluster[export.Spec.StorageClusterRef.Name]...)
-		deps = append(deps, "addon."+cluster+"."+effect.Addon.Name+".wait")
-		id := "storageattachment." + cluster + "." + effect.Addon.Name + "." + effect.Input.Name + ".apply"
+		deps = append(deps, "addon."+cluster+"."+effect.Addon.AddonRef.Name+".wait")
+		id := "storageattachment." + cluster + "." + effect.Addon.AddonRef.Name + "." + effect.Input.Name + ".apply"
 		attachmentPlan := StorageAttachmentPlan{Cluster: cluster, Binding: effect.Binding, Addon: effect.Addon, Input: effect.Input}
 		if err := graph.Add(Activity{
 			ID:                   id,
@@ -47,7 +47,7 @@ func planStorageAttachmentActivities(graph *ActivityGraph, state v1alpha1.State,
 				Entry: TaskLedgerEntry{
 					ID:          id,
 					Kind:        ApplyTaskKindStorageAttachmentApply,
-					Label:       "storage attachment " + cluster + " " + effect.Addon.Name + "/" + effect.Input.Name + " apply",
+					Label:       "storage attachment " + cluster + " " + effect.Addon.AddonRef.Name + "/" + effect.Input.Name + " apply",
 					Cluster:     cluster,
 					ClusterKind: ApplyClusterKindContainer,
 					Status:      TaskStatusPending,

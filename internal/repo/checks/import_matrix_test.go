@@ -76,11 +76,12 @@ var allowedImports = map[string][]string{
 	"internal/storage/cephprovider":   {"api/v1alpha1", "internal/entitlements"},
 	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/storage/topology"},
 	"internal/storage/topology":       {"api/v1alpha1"},
+	"internal/addons":                 {},
 	"internal/addons/inputs":          {"api/v1alpha1"},
-	"internal/addons/oc":              {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/addons/render"},
-	"internal/addons/plan":            {"api/v1alpha1", "internal/addons/render"},
+	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render"},
+	"internal/addons/plan":            {"api/v1alpha1", "internal/addons", "internal/addons/render"},
 	"internal/addons/records":         {"internal/host/safefs"},
-	"internal/addons/render":          {"api/v1alpha1"},
+	"internal/addons/render":          {"api/v1alpha1", "internal/addons"},
 
 	// Operator-facing application services. They return plain data; cli
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).

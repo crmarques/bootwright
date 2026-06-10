@@ -3261,7 +3261,7 @@ metadata: { name: virt-a }
 spec:
   clusterRef: cluster-a
   addons:
-    - name: openshift-virtualization
+    - addonRef: openshift-virtualization
 `,
 		"binding-b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3269,7 +3269,7 @@ metadata: { name: virt-b }
 spec:
   clusterRef: cluster-b
   addons:
-    - name: openshift-virtualization
+    - addonRef: openshift-virtualization
 `,
 		"manifests/placeholder.yaml": `apiVersion: v1
 kind: ConfigMap

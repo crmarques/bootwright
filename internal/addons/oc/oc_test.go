@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	extensionplan "github.com/crmarques/bootwright/internal/addons/plan"
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	extensionrender "github.com/crmarques/bootwright/internal/addons/render"
@@ -172,7 +173,7 @@ func readyExtensionPlan() extensionplan.ExtensionPlan {
 		Binding:   "binding",
 		Cluster:   "demo",
 		Extension: extension,
-		Policy:    v1alpha1.ClusterAddonPolicy{FieldManager: "bootwright"},
+		Policy:    addons.ClusterAddonPolicy{FieldManager: "bootwright"},
 	}
 }
 
