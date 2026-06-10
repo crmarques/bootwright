@@ -738,7 +738,7 @@ spec:
 			name: "missing-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"machineRef: srv1", "machineRef: missing", 1)},
-			wantSubstring: `spec.nodes[0].machineRef "missing" does not match any Machine`,
+			wantSubstring: `spec.hosts[0].machineRef "missing" does not match any Machine`,
 		},
 		{
 			// machineRef is required: no default is derived from the
@@ -747,7 +747,7 @@ spec:
 			name: "omitted-machine-ref-rejected",
 			files: map[string]string{"cluster.yaml": strings.Replace(newClusterYAML,
 				"\n      machineRef: srv1", "", 1)},
-			wantSubstring: "spec.nodes[0].machineRef is required",
+			wantSubstring: "spec.hosts[0].machineRef is required",
 		},
 		{
 			name: "openshift-pull-secret-required",
@@ -945,7 +945,7 @@ spec:
 			mutate: func(files map[string]string) {
 				files["environment.yaml"] = strings.Replace(files["environment.yaml"], "    artifactServers:\n", "    nameResolution:\n      - name: dns\n        management: external\n        address: 192.168.132.53\n        endpointRef: cluster\n    artifactServers:\n", 1)
 			},
-			wantSubstring: "spec.infraComponents.nameResolution[0].endpoint is only valid for managed nameResolution entries",
+			wantSubstring: "spec.infraComponents.nameResolution[0].endpointRef is only valid for managed nameResolution entries",
 		},
 		{
 			name: "external-registry-component-ref",
@@ -1218,7 +1218,7 @@ func TestEnvironmentNTPRejectInvalidTypedEntries(t *testing.T) {
         endpointRef: missing
 `,
 			withComponent: true,
-			wantSubstring: `endpoint "missing" does not resolve on selected InfraComponent spec.ntp.endpoints`,
+			wantSubstring: `endpointRef "missing" does not resolve on selected InfraComponent spec.ntp.endpoints`,
 		},
 		{
 			name: "managed address",
@@ -2863,7 +2863,7 @@ func TestKubeVirtHostClusterValidation(t *testing.T) {
 			mutate: func(files map[string]string) {
 				files["child.yaml"] = strings.Replace(files["child.yaml"], "          namespace: bootwright-child-ocp\n", "", 1)
 			},
-			wantSubstring: `networkAttachments[child-machine-net].kubevirt.nadRefspace is required`,
+			wantSubstring: `networkAttachments[child-machine-net].kubevirt.nadRef.namespace is required`,
 		},
 		{
 			name: "missing-kubevirt-capability",

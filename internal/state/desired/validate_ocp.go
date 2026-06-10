@@ -64,7 +64,7 @@ func validateClusterPlatformWithDerivation(state v1alpha1.State, ocp v1alpha1.Co
 	owner := fmt.Sprintf("ContainerCluster/%s spec.install.platform", ocp.Metadata.Name)
 	if installPlatformOmitted(ocp.Spec.Install.Platform) && len(ocp.Spec.Hosts) > 0 {
 		if binding := clusterNodeProviderBinding(state, ocp); len(binding.types) > 1 {
-			return []string{fmt.Sprintf("%s cannot be derived: spec.nodes bind machines across multiple provider types (%s); set spec.install.platform.type explicitly",
+			return []string{fmt.Sprintf("%s cannot be derived: spec.hosts bind machines across multiple provider types (%s); set spec.install.platform.type explicitly",
 				owner, strings.Join(binding.providers, ", "))}
 		}
 	}
@@ -149,13 +149,13 @@ func validateDistribution(ocp v1alpha1.ContainerCluster) []string {
 func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.Machine) []string {
 	var errs []string
 	if len(ocp.Spec.Hosts) == 0 {
-		return []string{fmt.Sprintf("ContainerCluster/%s spec.nodes is required", ocp.Metadata.Name)}
+		return []string{fmt.Sprintf("ContainerCluster/%s spec.hosts is required", ocp.Metadata.Name)}
 	}
 	master := 0
 	worker := 0
 	seenHostnames := map[string]bool{}
 	for i, node := range ocp.Spec.Hosts {
-		prefix := fmt.Sprintf("ContainerCluster/%s spec.nodes[%d]", ocp.Metadata.Name, i)
+		prefix := fmt.Sprintf("ContainerCluster/%s spec.hosts[%d]", ocp.Metadata.Name, i)
 		if node.Hostname == "" {
 			errs = append(errs, fmt.Sprintf("%s.hostname is required", prefix))
 		} else if seenHostnames[node.Hostname] {
@@ -182,7 +182,7 @@ func validateNodes(ocp v1alpha1.ContainerCluster, machines map[string]v1alpha1.M
 		}
 	}
 	if master == 0 {
-		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.nodes requires at least one master", ocp.Metadata.Name))
+		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.hosts requires at least one master", ocp.Metadata.Name))
 	}
 	if ocp.Spec.ControlPlane != nil && ocp.Spec.ControlPlane.Replicas != 0 && ocp.Spec.ControlPlane.Replicas != master {
 		errs = append(errs, fmt.Sprintf("ContainerCluster/%s spec.controlPlane.replicas %d does not match master node count %d",

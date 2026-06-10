@@ -490,7 +490,7 @@ func TestNormalizeLeavesAmbiguousInstallPlatformForValidation(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("validation errors = %v, want exactly one conflict diagnostic", errs)
 	}
-	want := `ContainerCluster/cluster-a spec.install.platform cannot be derived: spec.nodes bind machines across multiple provider types (InfraProvider/provider-0 (libvirt), InfraProvider/provider-1 (baremetal)); set spec.install.platform.type explicitly`
+	want := `ContainerCluster/cluster-a spec.install.platform cannot be derived: spec.hosts bind machines across multiple provider types (InfraProvider/provider-0 (libvirt), InfraProvider/provider-1 (baremetal)); set spec.install.platform.type explicitly`
 	if errs[0] != want {
 		t.Fatalf("conflict diagnostic = %q, want %q", errs[0], want)
 	}

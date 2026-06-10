@@ -48,13 +48,13 @@ func validateStorageCephStretch(cluster v1alpha1.StorageCluster) []string {
 		}
 		if node.Hostname == stretch.Tiebreaker.Host {
 			if node.Site != stretch.Tiebreaker.Site {
-				errs = append(errs, fmt.Sprintf("%s.tiebreaker.node %q is in site %q, want %q", prefix, node.Hostname, node.Site, stretch.Tiebreaker.Site))
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q is in site %q, want %q", prefix, node.Hostname, node.Site, stretch.Tiebreaker.Site))
 			}
 			if !storageCephNodeRolesOnly(node, v1alpha1.StorageCephRoleMON) {
-				errs = append(errs, fmt.Sprintf("%s.tiebreaker.node %q must be mon-only", prefix, node.Hostname))
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must be mon-only", prefix, node.Hostname))
 			}
 			if len(node.Devices) > 0 {
-				errs = append(errs, fmt.Sprintf("%s.tiebreaker.node %q must not declare OSD devices", prefix, node.Hostname))
+				errs = append(errs, fmt.Sprintf("%s.tiebreaker.host %q must not declare OSD devices", prefix, node.Hostname))
 			}
 		}
 	}

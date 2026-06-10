@@ -310,9 +310,9 @@ func validateProviderNetworkAttachment(provider v1alpha1.InfraProvider, attachme
 			errs = append(errs, prefix+".kubevirt.nadRef is required")
 		}
 		if attachment.KubeVirt.NADRef.Namespace == "" {
-			errs = append(errs, prefix+".kubevirt.nadRefspace is required")
+			errs = append(errs, prefix+".kubevirt.nadRef.namespace is required")
 		} else if !IsDNSLabel(attachment.KubeVirt.NADRef.Namespace) {
-			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRefspace %q is not a DNS label", prefix, attachment.KubeVirt.NADRef.Namespace))
+			errs = append(errs, fmt.Sprintf("%s.kubevirt.nadRef.namespace %q is not a DNS label", prefix, attachment.KubeVirt.NADRef.Namespace))
 		}
 	}
 	if attachment.BareMetal != nil {

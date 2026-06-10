@@ -264,7 +264,7 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 	}
 	for _, ocp := range state.ContainerClusters {
 		for i, node := range ocp.Spec.Hosts {
-			require(fmt.Sprintf("ContainerCluster/%s spec.nodes[%d].machineRef", ocp.Metadata.Name, i),
+			require(fmt.Sprintf("ContainerCluster/%s spec.hosts[%d].machineRef", ocp.Metadata.Name, i),
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
 	}
@@ -308,7 +308,7 @@ func validateSelectedResourceReferences(state v1alpha1.State, discoveredFiles, s
 			continue
 		}
 		for i, node := range cluster.Spec.Ceph.Topology.Hosts {
-			require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%d].machineRef", cluster.Metadata.Name, i),
+			require(fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%d].machineRef", cluster.Metadata.Name, i),
 				v1alpha1.KindMachine, node.MachineRef.Name)
 		}
 	}

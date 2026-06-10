@@ -21,9 +21,9 @@ func validateLoadBalancerBindAddresses(prefix string, binds []v1alpha1.LoadBalan
 	for i, bind := range binds {
 		owner := fmt.Sprintf("%s.bindAddresses[%d]", prefix, i)
 		if bind.Address == "" {
-			errs = append(errs, fmt.Sprintf("%s.ip is required", owner))
+			errs = append(errs, fmt.Sprintf("%s.address is required", owner))
 		} else if net.ParseIP(bind.Address) == nil {
-			errs = append(errs, fmt.Sprintf("%s.ip %q is not a valid IP", owner, bind.Address))
+			errs = append(errs, fmt.Sprintf("%s.address %q is not a valid IP", owner, bind.Address))
 		}
 		if len(binds) > 1 && bind.Name == "" {
 			errs = append(errs, fmt.Sprintf("%s.name is required when a load balancer has multiple bindAddresses", owner))

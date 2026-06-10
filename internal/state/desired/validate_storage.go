@@ -225,7 +225,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 		if !ok {
 			continue
 		}
-		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.nodes[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Hostname, profile.Metadata.Name)
+		owner := fmt.Sprintf("StorageCluster/%s spec.ceph.topology.hosts[%s] MachineInstallProfile/%s spec.os", cluster.Metadata.Name, node.Hostname, profile.Metadata.Name)
 		if strings.ToLower(profile.Spec.OS.Family) != v1alpha1.MachineInstallOSFamilyRHEL {
 			errs = append(errs, fmt.Sprintf("%s.family %q is incompatible with Ceph distribution %q; use RHEL", owner, profile.Spec.OS.Family, distribution))
 			continue
@@ -582,7 +582,7 @@ func validateStoragePlacementHosts(prefix string, placement v1alpha1.StoragePlac
 		if clusterOK {
 			node, ok := storageCephNodeByName(cluster, host)
 			if !ok {
-				errs = append(errs, fmt.Sprintf("%s %q is not listed in StorageCluster/%s spec.ceph.topology.nodes", owner, host, cluster.Metadata.Name))
+				errs = append(errs, fmt.Sprintf("%s %q is not listed in StorageCluster/%s spec.ceph.topology.hosts", owner, host, cluster.Metadata.Name))
 			} else if role != "" && !topology.NodeHasRole(node, role) {
 				errs = append(errs, fmt.Sprintf("%s %q does not have role %q in StorageCluster/%s", owner, host, role, cluster.Metadata.Name))
 			}

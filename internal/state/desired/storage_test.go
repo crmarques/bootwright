@@ -422,7 +422,7 @@ func TestStorageStretchValidationRejectsInvalidRules(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles = append(state.StorageClusters[0].Spec.Ceph.Topology.Hosts[6].Roles, v1alpha1.StorageCephRoleMGR)
 			},
-			want: `tiebreaker.node "ceph-arbiter" must be mon-only`,
+			want: `tiebreaker.host "ceph-arbiter" must be mon-only`,
 		},
 		{
 			name: "bad-data-site-mon-count",
@@ -687,7 +687,7 @@ func TestStorageFilesystemMDSPlacementValidated(t *testing.T) {
 			edit: func(state *v1alpha1.State) {
 				state.StorageFilesystems[0].Spec.CephFS.MDS.Placement.Hosts = []string{"ceph-typo"}
 			},
-			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" is not listed in StorageCluster/ceph spec.ceph.topology.nodes`,
+			want: `spec.cephfs.mds.placement.hosts[0] "ceph-typo" is not listed in StorageCluster/ceph spec.ceph.topology.hosts`,
 		},
 		{
 			name: "no-mds-role-anywhere",
