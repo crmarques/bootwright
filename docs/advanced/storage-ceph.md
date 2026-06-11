@@ -1,6 +1,6 @@
 ---
 title: Ceph Storage Clusters
-description: Host identity, OSD device selection, stretch pool inheritance, additive-only convergence, and accessing a managed Ceph storage cluster.
+description: Host identity, OSD device selection, cluster config and mgr modules, the monitoring stack, cephadm service passthrough, pools and placement policies, stretch pool inheritance, additive-only convergence, and accessing a managed Ceph storage cluster.
 ---
 
 # Ceph storage clusters
@@ -52,6 +52,12 @@ hosts:
       all: true       # explicit opt-in: every available device becomes an OSD
 ```
 
+The drivegroup form mirrors the cephadm OSD service spec field for field:
+`dataDevices`, `dbDevices`, and `walDevices` each select by `paths` or
+`all: true`, optionally narrowed by `rotational`, `size`, and `limit`
+(upstream spellings), alongside `encrypted`, `osdsPerDevice`, and
+`crushDeviceClass`.
+
 ## Production best practices
 
 Bootwright accepts small and single-node Ceph clusters for labs, but
@@ -85,6 +91,158 @@ ceph:
 ```
 
 Omit `clusterCIDRs` to keep IBM's default of one network carrying everything.
+
+## Cluster configuration and mgr modules
+
+`spec.ceph.config` declares Ceph configuration database options as
+`<section>.<key>: <value>` — sections are `global`, `mon`, `mgr`, `osd`,
+`mds`, `client`, or a `<type>.<id>` daemon — rendered as idempotent
+`ceph config set` operations after bootstrap. `public_network` and
+`cluster_network` are owned by `spec.ceph.networks`
+(`publicCIDRs`/`clusterCIDRs`) and rejected here.
+
+`spec.ceph.mgrModules[]` declares mgr modules to enable, rendered as
+idempotent `ceph mgr module enable` operations. Module settings are plain
+config options under the `mgr` section (`mgr/<module>/<key>`):
+
+```yaml
+ceph:
+  config:
+    global:
+      osd_pool_default_pg_autoscale_mode: "on"
+    mgr:
+      mgr/balancer/mode: upmap
+  mgrModules:
+  - balancer
+```
+
+Both surfaces are additive set-operations (see
+[Convergence is additive-only](#convergence-is-additive-only)): a key
+removed from `config` is never unset on the cluster, and a module removed
+from `mgrModules` is never disabled.
+
+## Monitoring stack
+
+`spec.ceph.monitoring` declares the cephadm monitoring stack:
+
+- Absent means the cephadm default stack deploys, with cephadm's own
+  placement.
+- `enabled: false` renders `cephadm bootstrap --skip-monitoring-stack`; the
+  per-service blocks must then be empty.
+- An authored `prometheus`, `grafana`, or `alertmanager` block places by the
+  topology role of the same name, exactly like `mon`/`mgr`:
+  `placement.sites`/`hosts` narrow within the role holders, and the result
+  must resolve to at least one host.
+- `nodeExporter` deliberately has no role: cephadm deploys it on every host,
+  so an authored block narrows by explicit `placement` only.
+
+Service knobs render 1:1 into the cephadm service spec: `port` on any
+service, `retentionTime`/`retentionSize` (`retention_time`/`retention_size`)
+on `prometheus` only.
+
+```yaml
+ceph:
+  monitoring:
+    prometheus:
+      retentionTime: 30d
+    grafana:
+      port: 3001
+  topology:
+    hosts:
+    - machineRef: ceph-0
+      roles: [mon, mgr, osd, prometheus, grafana, alertmanager]
+      devices:
+      - /dev/vdb
+```
+
+## Cephadm service passthrough
+
+`spec.ceph.services[]` is the cephadm service-spec passthrough for service
+types Bootwright does not model first-class (`nfs`, `loki`, ...):
+`serviceType`, `serviceID`, `placement`, and `spec` render field for field
+into a `ceph orch apply` document.
+
+```yaml
+ceph:
+  services:
+  - serviceType: nfs
+    serviceID: shares
+    placement:
+      hosts: [ceph-0, ceph-1]
+    spec:
+      port: 2049
+```
+
+Every service type has exactly one owner. Types owned by a first-class
+surface — the topology roles (`mon`, `mgr`, `osd`, `mds`, `rgw`, `ingress`),
+`monitoring` (`prometheus`, `grafana`, `alertmanager`, `node-exporter`), and
+the gateway kinds — are rejected here; declare them on that surface. With no
+role to default from, a passthrough `placement` requires explicit `hosts` or
+`sites`.
+
+## Pools and placement policies
+
+`StoragePool` owns one Ceph pool on the cluster named by its
+`storageClusterRef`. `spec.ceph.type` is the pool's data-protection
+strategy, in the upstream `ceph osd pool create` words: `replicated`
+(default) or `erasure`, and the populated arm key equals the type value. An
+erasure pool authors `erasure.{dataChunks,codingChunks}` — rendered as the
+erasure-code profile `k=`/`m=` — must not set `replicated`, and is not
+allowed on stretch-mode clusters:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: rgw-data
+spec:
+  storageClusterRef: ceph-libvirt
+  ceph:
+    type: erasure
+    role: rgw
+    erasure:
+      dataChunks: 4
+      codingChunks: 2
+```
+
+The pool's structural identity is its `type` and erasure profile: changing
+it is the only desired-state change that rebuilds a live pool
+(data-destroying, `--override` only); replicas, CRUSH rule, and application
+reconcile in place. `role` (`rbd`, `cephfs-metadata`, `cephfs-data`, `rgw`)
+drives `StorageExport` wiring and infers the
+`ceph osd pool application enable` value; `application` overrides the
+inference.
+
+`StoragePlacementPolicy` owns reusable placement and replicated-pool
+defaults for the pools that select it via `placementPolicyRef`: a required
+CRUSH `ruleName`, plus `failureDomain` and `replicated.{size,minSize}`. The
+referenced policy owns the pool's replication, so a pool with a
+`placementPolicyRef` must not also set `ceph.replicated`:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: rack-spread
+spec:
+  storageClusterRef: ceph-libvirt
+  ceph:
+    ruleName: rack-spread
+    failureDomain: rack
+    replicated:
+      size: 3
+      minSize: 2
+```
+
+On stretch-mode clusters, policy-less pools inherit the stretch CRUSH rule
+and the fixed stretch replication automatically (next section); a
+`placementPolicyRef` is needed only for genuinely divergent placement.
+
+`StorageFilesystem` (CephFS pools and MDS placement) and
+`StorageObjectGateway` (the RGW service, its storage-owned public endpoint,
+and ingress VIPs with `virtualInterfaceNetworks`) complete the per-cluster
+surface; the gateway endpoints are covered in
+[Networking](networking.md#endpoints).
 
 ## Stretch mode re-rules policy-less pools
 
