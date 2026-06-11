@@ -38,7 +38,7 @@ bootwright_environment:
       - name: lab-ntp
         management: managed
         componentRef: ntp-server
-        endpoint: cluster
+        endpointRef: cluster
     artifactServers:
       - name: default
         management: managed

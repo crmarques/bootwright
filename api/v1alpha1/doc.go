@@ -10,7 +10,11 @@
 // carries a type field whose value is byte-identical to the populated arm
 // key (InfraProvider spec, install.platform, InfraComponent spec,
 // ClusterAddon spec, StorageExport spec, StoragePool spec.ceph, the
-// MachineInstallProfile installer). A presence union carries no
+// MachineInstallProfile installer). One carve-out: StorageExport type names
+// only the export flavor (dataFoundation); its externalDetails arm is
+// selected by the referenced StorageCluster's spec.management, so against an
+// external cluster externalDetails is the populated arm and dataFoundation
+// stays empty. A presence union carries no
 // discriminator — authoring exactly one arm selects the kind — and is used
 // only where the surrounding document already fixes which arm is legal:
 // InfraProvider spec.networkAttachments, where the provider's spec.type is
