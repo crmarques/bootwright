@@ -1,4 +1,200 @@
 ---
-- name: boot_vsphere is a scaffold
-  ansible.builtin.fail:
-    msg: "boot_vsphere is a scaffold; pair with substrate_vsphere when adding vSphere support."
+- name: Select vSphere boot action
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot_action: "{{ bootwright_redfish_action | default('boot') }}"
+  changed_when: false
+
+- name: Validate selected vSphere boot action
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot_action in ['boot', 'cleanup_media']
+    fail_msg: "Unsupported boot_vsphere action {{ bootwright_vsphere_boot_action }}"
+
+- name: Resolve vSphere boot inputs
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_boot_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_boot_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
+  changed_when: false
+
+- name: Validate vSphere boot inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot is mapping
+      - bootwright_vsphere_boot.server | default('') | length > 0
+      - bootwright_vsphere_boot.credentialsPath | default('') | length > 0
+      - bootwright_component.boot.agentIso is mapping
+      - bootwright_vsphere_boot_stage_path | length > 0
+      - (bootwright_component.mediaPrepareRole | default('') | length) > 0
+    fail_msg: >-
+      vSphere boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter connection details, the agent ISO contract, or a media role.
+
+- name: Clean vSphere virtual media
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.mediaPrepareRole }}"
+  vars:
+    bootwright_redfish_action_effective: cleanup
+  when: bootwright_vsphere_boot_action == 'cleanup_media'
+
+- name: Boot machine from vSphere virtual media
+  when: bootwright_vsphere_boot_action == 'boot'
+  block:
+    - name: Probe staged vSphere boot media
+      ansible.builtin.stat:
+        path: "{{ bootwright_vsphere_boot_stage_path }}"
+      register: bootwright_vsphere_boot_stage_stat
+
+    # The cluster flow generates one agent ISO per cluster in the local
+    # install work dir; stage it at the rendered per-provider vmedia path so
+    # the media role and ownership cleanup see one uniform layout. The
+    # managed-OS flow arrives with the install ISO already staged there.
+    - name: Stage generated agent ISO for vSphere upload
+      when: not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
+      block:
+        - name: Read generated agent ISO path
+          ansible.builtin.slurp:
+            src: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+          register: bootwright_vsphere_boot_agent_iso_path_file
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Resolve generated agent ISO path
+          ansible.builtin.set_fact:
+            bootwright_vsphere_boot_agent_iso_path: "{{ bootwright_vsphere_boot_agent_iso_path_file.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Create vSphere media staging directory
+          ansible.builtin.file:
+            path: "{{ bootwright_vsphere_boot_stage_path | dirname }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+
+        - name: Stage generated agent ISO
+          ansible.builtin.copy:
+            src: "{{ bootwright_vsphere_boot_agent_iso_path }}"
+            dest: "{{ bootwright_vsphere_boot_stage_path }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0600"
+
+    - name: Prepare vSphere virtual media
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.mediaPrepareRole }}"
+
+    - name: Load vCenter credentials
+      ansible.builtin.include_role:
+        name: bootwright.core.helper_credentials
+        tasks_from: load.yml
+      vars:
+        bootwright_creds_path: "{{ bootwright_vsphere_boot.credentialsPath }}"
+        bootwright_creds_var: bootwright_vsphere_boot_credentials
+        bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere_boot.server }}"
+
+    - name: Power on vSphere machine
+      community.vmware.vmware_guest_powerstate:
+        hostname: "{{ bootwright_vsphere_boot.server }}"
+        port: "{{ bootwright_vsphere_boot.port | default(443) }}"
+        username: "{{ bootwright_vsphere_boot_credentials.username }}"
+        password: "{{ bootwright_vsphere_boot_credentials.password }}"
+        validate_certs: "{{ not (bootwright_vsphere_boot.disableCertificateVerification | default(false) | bool) }}"
+        name: "{{ bootwright_vsphere_boot_vm_name }}"
+        state: powered-on
+      vars:
+        ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+      no_log: true
+
+    - name: Resolve post-boot readiness behavior
+      ansible.builtin.set_fact:
+        bootwright_vsphere_boot_readiness_type: "{{ (bootwright_component.boot.readiness | default({})).type | default('ssh') }}"
+      changed_when: false
+
+    - name: Validate post-boot readiness behavior
+      ansible.builtin.assert:
+        that:
+          - bootwright_vsphere_boot_readiness_type in ['none', 'ssh']
+        fail_msg: "Unsupported boot readiness type {{ bootwright_vsphere_boot_readiness_type }}"
+
+    - name: Probe vSphere node readiness over SSH
+      when: bootwright_vsphere_boot_readiness_type == 'ssh'
+      block:
+        - name: Resolve node readiness probe inputs
+          ansible.builtin.set_fact:
+            bootwright_vsphere_node_probe_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
+            bootwright_vsphere_node_ready_port: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).port | default(bootwright_vsphere_node_ready_probe_port) }}"
+            bootwright_vsphere_node_ready_user: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).user | default('core') }}"
+            bootwright_vsphere_node_ready_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
+            bootwright_vsphere_node_ready_known_hosts_path: >-
+              /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
+          changed_when: false
+
+        - name: Wait for node SSH to confirm live ISO boot complete
+          ansible.builtin.wait_for:
+            host: "{{ bootwright_vsphere_node_probe_address }}"
+            port: "{{ bootwright_vsphere_node_ready_port | int }}"
+            timeout: "{{ bootwright_vsphere_node_ready_timeout_seconds | int }}"
+          when: (bootwright_vsphere_node_probe_address | length) > 0
+
+        - name: Check node SSH auth probe key
+          ansible.builtin.command:
+            argv:
+              - test
+              - -f
+              - "{{ bootwright_vsphere_node_ready_key_path }}"
+          register: bootwright_vsphere_node_ready_key_check
+          changed_when: false
+          failed_when: false
+          when:
+            - (bootwright_vsphere_node_probe_address | length) > 0
+            - (bootwright_vsphere_node_ready_key_path | length) > 0
+
+        - name: Wait for node SSH to accept configured key
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ bootwright_vsphere_node_ready_key_path }}"
+              - -o
+              - BatchMode=yes
+              - -o
+              - StrictHostKeyChecking=accept-new
+              - -o
+              - "UserKnownHostsFile={{ bootwright_vsphere_node_ready_known_hosts_path }}"
+              - -o
+              - "ConnectTimeout={{ bootwright_vsphere_node_ready_ssh_connect_timeout_seconds | int }}"
+              - -o
+              - ConnectionAttempts=1
+              - -p
+              - "{{ bootwright_vsphere_node_ready_port | string }}"
+              - "{{ bootwright_vsphere_node_ready_user }}@{{ bootwright_vsphere_node_probe_address }}"
+              - "true"
+          register: bootwright_vsphere_node_ready_ssh_auth
+          changed_when: false
+          failed_when: false
+          until: (bootwright_vsphere_node_ready_ssh_auth.rc | default(1) | int) == 0
+          retries: "{{ bootwright_vsphere_node_ready_ssh_auth_retries | int }}"
+          delay: "{{ bootwright_vsphere_node_ready_ssh_auth_delay_seconds | int }}"
+          when:
+            - (bootwright_vsphere_node_probe_address | length) > 0
+            - (bootwright_vsphere_node_ready_key_check.rc | default(1) | int) == 0
+
+        - name: Confirm node SSH accepted configured key
+          ansible.builtin.assert:
+            that:
+              - (bootwright_vsphere_node_ready_ssh_auth.rc | default(1) | int) == 0
+            fail_msg: >-
+              Node {{ bootwright_component.name }} at {{ bootwright_vsphere_node_probe_address }}
+              answered TCP/{{ bootwright_vsphere_node_ready_port | int }} but rejected the
+              {{ bootwright_vsphere_node_ready_user }} SSH key
+              {{ bootwright_vsphere_node_ready_key_path }}. This usually means the VM
+              booted something other than the generated agent ISO or the declared
+              MAC/IP mapping points at another host. Check the attached datastore
+              media, the VM boot order, and the machine's static addressing.
+          when:
+            - (bootwright_vsphere_node_probe_address | length) > 0
+            - (bootwright_vsphere_node_ready_key_check.rc | default(1) | int) == 0

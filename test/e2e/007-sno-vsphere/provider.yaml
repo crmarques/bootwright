@@ -1,0 +1,39 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-vsphere-provider
+spec:
+  type: vsphere
+
+  vsphere:
+    vcenters:
+      - server: vcenter.bootwright.test
+        datacenters:
+          - dc1
+        credentialsRef: vcenter-credentials
+        disableCertificateVerification: true
+    failureDomains:
+      - name: dc1-zone-a
+        region: dc1
+        zone: zone-a
+        server: vcenter.bootwright.test
+        topology:
+          datacenter: dc1
+          computeCluster: /dc1/host/cluster1
+          datastore: /dc1/datastore/datastore1
+          folder: /dc1/vm/bootwright
+          resourcePool: /dc1/host/cluster1/Resources/bootwright
+          networks:
+            - lab-portgroup
+    isoStaging:
+      folder: bootwright-vmedia
+    machineProfiles:
+      - name: sno
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
+
+  networkAttachments:
+    - name: machine-net
+      vsphere:
+        portgroup: lab-portgroup

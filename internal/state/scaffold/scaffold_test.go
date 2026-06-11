@@ -30,19 +30,11 @@ func TestApplySupportClassifiesScaffoldProviders(t *testing.T) {
 		scaffold.ProviderEmulatedBareMetal,
 		scaffold.ProviderBareMetal,
 		scaffold.ProviderKubeVirt,
+		scaffold.ProviderVSphere,
 	}
 	for _, provider := range supported {
 		if got := scaffold.ApplySupport(provider); !got.ApplySupported() {
 			t.Fatalf("%s should be apply-supported, got %s: %s", provider, got.Status, got.Summary)
-		}
-	}
-
-	scaffoldOnly := []scaffold.Provider{
-		scaffold.ProviderVSphere,
-	}
-	for _, provider := range scaffoldOnly {
-		if got := scaffold.ApplySupport(provider); got.ApplySupported() {
-			t.Fatalf("%s should be schema/scaffold-only, got %s", provider, got.Status)
 		}
 	}
 }

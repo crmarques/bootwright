@@ -136,6 +136,10 @@
   register: bootwright_vsphere_apply
   no_log: true
 
+# Disk-first ordering is the libvirt disk-first analogue: a blank disk has
+# no bootable EFI entry so firmware falls through to the install CD, and the
+# first boot after the install comes from disk even while the media is still
+# attached — no mid-install eject is ever needed.
 - name: Enforce vSphere boot order
   community.vmware.vmware_guest_boot_manager:
     hostname: "{{ bootwright_vsphere.server }}"
@@ -147,8 +151,8 @@
     boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
     secure_boot_enabled: "{{ bootwright_vsphere_secure_boot }}"
     boot_order:
-      - cdrom
       - disk
+      - cdrom
   vars:
     ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
   no_log: true

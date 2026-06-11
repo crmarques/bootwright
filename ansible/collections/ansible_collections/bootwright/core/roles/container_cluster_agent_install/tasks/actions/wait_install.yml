@@ -116,6 +116,18 @@
         label: "{{ bootwright_cleanup_redfish_component.name }}"
       when: bootwright_install_wait.rc == 0
 
+    - name: Clean vSphere virtual media after successful install
+      ansible.builtin.include_role:
+        name: bootwright.core.container_cluster_boot_vsphere
+      vars:
+        bootwright_component: "{{ bootwright_cleanup_vsphere_component }}"
+        bootwright_redfish_action: cleanup_media
+      loop: "{{ bootwright_current_cluster.components | default([]) | selectattr('bootApplyRole', 'defined') | selectattr('bootApplyRole', 'equalto', 'bootwright.core.container_cluster_boot_vsphere') | list }}"
+      loop_control:
+        loop_var: bootwright_cleanup_vsphere_component
+        label: "{{ bootwright_cleanup_vsphere_component.name }}"
+      when: bootwright_install_wait.rc == 0
+
     - name: Find remote generated agent ISO files
       ansible.builtin.find:
         paths: "{{ bootwright_install_work_dir }}"

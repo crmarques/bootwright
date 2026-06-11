@@ -94,9 +94,10 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 			BMCApplyRole:         "bootwright.core.provider_service_bmc_none",
 			BMCDestroyRole:       "bootwright.core.provider_service_bmc_none",
 			BootApplyRole:        "bootwright.core.container_cluster_boot_vsphere",
+			MediaPrepareRole:     "bootwright.core.container_cluster_media_vsphere",
 		},
-		Status:  StatusScaffold,
-		Summary: "vSphere schema and scaffold are present, but apply roles are not converged",
+		Status:  StatusSupported,
+		Summary: "vCenter-managed vSphere VMs",
 	},
 	{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"}: {
 		Dispatch: Dispatch{SubstrateRole: "kubevirt", BMCRole: "none", BootRole: "kubevirt"},

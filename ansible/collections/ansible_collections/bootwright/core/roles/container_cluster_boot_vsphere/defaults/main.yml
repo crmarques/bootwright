@@ -1,0 +1,10 @@
+---
+# Readiness probing matches the substrate-blind boot contract: agent ISOs
+# carry no VMware Tools, so install progress is observed over SSH exactly
+# like the redfish driver does.
+bootwright_vsphere_node_ready_probe_port: 22
+bootwright_vsphere_node_ready_timeout_seconds: 1800
+bootwright_vsphere_node_ready_ssh_connect_timeout_seconds: 10
+bootwright_vsphere_node_ready_ssh_auth_retries: 60
+bootwright_vsphere_node_ready_ssh_auth_delay_seconds: 10
+bootwright_vsphere_python: "{{ ansible_playbook_python }}"

@@ -1,0 +1,30 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: master-0
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: lab-vsphere-provider
+    profileRef: sno
+
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef: machine-net
+      attachmentRef: machine-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.140.20

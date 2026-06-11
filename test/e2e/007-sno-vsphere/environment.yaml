@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: sno-vsphere
+spec:
+  baseDomain: bootwright.test
+
+  secrets:
+    - openshift-pull-secret
+    - sno-vsphere-cluster-admin-ssh-key:
+        generated:
+          sshKeyPair:
+            type: ed25519
+            comment: bootwright-sno-vsphere-cluster-admin
+    - bastion-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - vcenter-credentials:
+        generated:
+          credentials:
+            username: administrator@vsphere.local
+
+  infraComponents:
+    nameResolution:
+      - name: default
+        management: managed
+        componentRef: name-resolution

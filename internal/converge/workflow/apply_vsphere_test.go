@@ -55,6 +55,21 @@ func vspherePlanningState() v1alpha1.State {
 	}
 }
 
+// TestPlanApplyOrdersVSphereMachineTasks pins the planned task graph for a
+// vCenter-managed cluster: machine infra and boot tasks serialize on the
+// per-vCenter resource key and the machine-infra task targets the
+// controller-local machine task host.
+func TestPlanApplyOrdersVSphereMachineTasks(t *testing.T) {
+	state := loadWorkflowFixtureState(t, "007-sno-vsphere")
+
+	tasks, err := PlanApplyTasksChecked(applyAllTarget(), state)
+	if err != nil {
+		t.Fatalf("PlanApplyTasksChecked: %v", err)
+	}
+	assertTaskResourceKeys(t, tasks, "infra.sno-vsphere.master-0", "vsphere:vcenter.bootwright.test")
+	assertTaskResourceKeys(t, tasks, "boot.sno-vsphere", "vsphere:vcenter.bootwright.test")
+}
+
 // TestVSphereMachineTasksRunOnControllerWithPerVCenterKeys pins the planning
 // inputs for vCenter-managed machines: tasks run on localhost (the vCenter
 // API is driven from the controller) and mutating tasks serialize per
