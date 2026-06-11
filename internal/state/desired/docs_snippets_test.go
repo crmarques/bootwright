@@ -11,45 +11,53 @@ import (
 )
 
 // TestDocsSnippetsStrictDecode guards every YAML snippet shipped under
-// docs/ the way examples are guarded: each fenced yaml block that authors
-// a full document (a top-level apiVersion key) must decode through the
-// same strict loader that reads user input, so a renamed field or a
-// rejected ref form in a snippet fails CI instead of failing the reader's
-// copy-paste. Fragments without apiVersion are illustrative and skipped.
+// docs/, specs/, and test/e2e/ the way examples are guarded: each fenced
+// yaml block that authors a full document (a top-level apiVersion key)
+// must decode through the same strict loader that reads user input, so a
+// renamed field or a rejected ref form in a snippet fails CI instead of
+// failing the reader's copy-paste. Fragments without apiVersion are
+// illustrative and skipped.
 func TestDocsSnippetsStrictDecode(t *testing.T) {
-	docsRoot := filepath.Join("..", "..", "..", "docs")
+	repoRoot := filepath.Join("..", "..", "..")
+	roots := []string{
+		filepath.Join(repoRoot, "docs"),
+		filepath.Join(repoRoot, "specs"),
+		filepath.Join(repoRoot, "test", "e2e"),
+	}
 	tempDir := t.TempDir()
 
 	checked := 0
-	walkErr := filepath.WalkDir(docsRoot, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-		for _, snippet := range yamlSnippets(t, path) {
-			if !snippet.fullDocument() {
-				continue
-			}
-			checked++
-			file := filepath.Join(tempDir, "snippet.yaml")
-			if err := os.WriteFile(file, []byte(snippet.body), 0o644); err != nil {
+	for _, root := range roots {
+		walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
 				return err
 			}
-			var state v1alpha1.State
-			if err := loadFile(file, &state); err != nil {
-				t.Errorf("%s:%d: snippet does not decode: %v",
-					path, snippet.line, strings.ReplaceAll(err.Error(), file, "snippet"))
+			if entry.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
 			}
+			for _, snippet := range yamlSnippets(t, path) {
+				if !snippet.fullDocument() {
+					continue
+				}
+				checked++
+				file := filepath.Join(tempDir, "snippet.yaml")
+				if err := os.WriteFile(file, []byte(snippet.body), 0o644); err != nil {
+					return err
+				}
+				var state v1alpha1.State
+				if err := loadFile(file, &state); err != nil {
+					t.Errorf("%s:%d: snippet does not decode: %v",
+						path, snippet.line, strings.ReplaceAll(err.Error(), file, "snippet"))
+				}
+			}
+			return nil
+		})
+		if walkErr != nil {
+			t.Fatalf("walk %s: %v", root, walkErr)
 		}
-		return nil
-	})
-	if walkErr != nil {
-		t.Fatalf("walk %s: %v", docsRoot, walkErr)
 	}
 	if checked == 0 {
-		t.Fatal("no full-document yaml snippets found under docs/; the extractor is broken")
+		t.Fatal("no full-document yaml snippets found under docs/, specs/, or test/e2e/; the extractor is broken")
 	}
 }
 

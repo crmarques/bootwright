@@ -12,12 +12,17 @@ endpoints:
       type: infraComponent
       componentRef: control-plane
       bindAddressRef: control-plane-ip
----
+```
+
+backed by the referenced component:
+
+```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: InfraComponent
 metadata:
   name: control-plane
 spec:
+  type: loadBalancer
   loadBalancer:
     implementation: haproxy
     machineRef: services-host

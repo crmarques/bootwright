@@ -22,6 +22,9 @@ func TestDiagnosticsSpeakAuthoredFieldVocabulary(t *testing.T) {
 		".ip is only valid": "bind and resolver entries spell the field address",
 		".endpoint is only": "environment component references spell the field endpointRef",
 		".endpoint %q":      "environment component references spell the field endpointRef",
+		"endpointRefs":      "cluster install endpoints live under spec.install.endpoints; consumers bind by endpointRef",
+		"machineAddress":    "authored machine address references spell the field addressRef",
+		"credentialRef":     "secret references spell the field credentialsRef",
 	}
 	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
