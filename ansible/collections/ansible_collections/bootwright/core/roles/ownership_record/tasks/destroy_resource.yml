@@ -83,7 +83,10 @@
   failed_when: false
   loop:
     - "{{ bootwright_ownership_destroy_attrs.redfishUnit | default('') }}"
-    - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default('') }}"
+    # Records persisted before the vMedia attr rename carry lowercase
+    # vmediaUnit/vmediaPort; read both spellings so destroy still cleans up
+    # services recorded by earlier applies.
+    - "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
   loop_control:
     label: "{{ item }}"
   when: item | length > 0
@@ -105,7 +108,9 @@
   loop:
     - "{{ bootwright_ownership_destroy_attrs.port | default('') }}"
     - "{{ (bootwright_ownership_destroy_attrs.redfishPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.redfishPort | default('') | string | length) > 0 else '' }}"
-    - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default('') | string | length) > 0 else '' }}"
+    # Records persisted before the vMedia attr rename carry lowercase
+    # vmediaPort; read both spellings so the recorded firewall port closes.
+    - "{{ (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string) ~ '/tcp' if (bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort) | default('') | string | length) > 0 else '' }}"
   loop_control:
     label: "{{ item }}"
   when: item | length > 0

@@ -3135,6 +3135,26 @@ func TestEmulatedBMCVMediaUsesLibvirtStorageRoot(t *testing.T) {
 	}
 }
 
+func TestOwnershipDestroyReadsPreRenameVMediaAttrs(t *testing.T) {
+	// Ownership records are persisted JSON written by previous applies, so the
+	// vMediaUnit/vMediaPort attr rename must keep read compatibility with the
+	// lowercase vmediaUnit/vmediaPort keys recorded by earlier versions;
+	// otherwise destroy silently leaves the recorded vmedia unit running and
+	// its firewall port open.
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/ownership_record/tasks/destroy_resource.yml")
+
+	stopIdx := findAnsibleTask(t, tasks, "Stop recorded systemd units")
+	unitItem := "{{ bootwright_ownership_destroy_attrs.vMediaUnit | default(bootwright_ownership_destroy_attrs.vmediaUnit) | default('') }}"
+	if !stringListContains(tasks[stopIdx]["loop"], unitItem) {
+		t.Fatalf("%s must read both vMediaUnit and the pre-rename vmediaUnit, got %v", tasks[stopIdx]["name"], tasks[stopIdx]["loop"])
+	}
+
+	closeIdx := findAnsibleTask(t, tasks, "Close recorded firewalld ports")
+	if !stringListItemContains(tasks[closeIdx]["loop"], "bootwright_ownership_destroy_attrs.vMediaPort | default(bootwright_ownership_destroy_attrs.vmediaPort)") {
+		t.Fatalf("%s must read both vMediaPort and the pre-rename vmediaPort, got %v", tasks[closeIdx]["name"], tasks[closeIdx]["loop"])
+	}
+}
+
 func TestAnsibleCorePinsStayAligned(t *testing.T) {
 	pin := ""
 	for _, component := range render.ComponentPins(v1alpha1.State{}) {
