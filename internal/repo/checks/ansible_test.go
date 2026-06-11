@@ -290,6 +290,52 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 	}
 }
 
+func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
+	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/check_preflight.yml"
+	var play map[string]any
+	for _, candidate := range readAnsiblePlays(t, path) {
+		if candidate["name"] == "Check host prerequisites" {
+			play = candidate
+		}
+	}
+	if play == nil {
+		t.Fatalf("%s has no Check host prerequisites play", path)
+	}
+
+	// The storage-node gate selects this host's entries from the rendered
+	// storage cluster `hosts` list; the retired `nodes` spelling silently
+	// selects nothing and turns every storage check into a no-op.
+	vars := fmt.Sprint(play["vars"])
+	if !strings.Contains(vars, "map(attribute='hosts')") || strings.Contains(vars, "map(attribute='nodes')") {
+		t.Fatalf("storage node selection must map the rendered hosts attribute, got vars %s", vars)
+	}
+
+	tasks := nestedAnsibleTasks(t, play, "tasks")
+	task := tasks[findAnsibleTask(t, tasks, "Assert storage node hostname matches the declared topology")]
+	body, ok := task["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage hostname verification must be an assert, got %v", task)
+	}
+	that := fmt.Sprint(body["that"])
+	for _, want := range []string{"ansible_facts['hostname'] == item.hostname", "ansible_facts['nodename'] == item.hostname"} {
+		if !strings.Contains(that, want) {
+			t.Fatalf("hostname assert must compare gathered hostname facts with the declared topology hostname, got %v", body["that"])
+		}
+	}
+	failMsg := fmt.Sprint(body["fail_msg"])
+	for _, want := range []string{"{{ ansible_facts['nodename'] }}", "{{ item.hostname }}"} {
+		if !strings.Contains(failMsg, want) {
+			t.Fatalf("hostname assert fail_msg must name both the real and the declared hostname, got %s", failMsg)
+		}
+	}
+	if got := fmt.Sprint(task["loop"]); !strings.Contains(got, "bootwright_host_storage_nodes") {
+		t.Fatalf("hostname assert must loop this host's declared storage nodes, got %v", task["loop"])
+	}
+	if got := fmt.Sprint(task["when"]); !strings.Contains(got, "bootwright_host_storage_nodes | length > 0") {
+		t.Fatalf("hostname assert must be gated on storage nodes, got when=%v", task["when"])
+	}
+}
+
 func TestManagedOSPlaybookUsesLinearTaskGrouping(t *testing.T) {
 	var plays []map[string]any
 	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/task_managed_machine_os_apply.yml"

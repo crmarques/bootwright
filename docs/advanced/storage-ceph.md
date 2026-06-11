@@ -21,8 +21,10 @@ hostname:
   construction: the installer sets the OS hostname to the `Machine` name.
 - For `os.provided: true` machines, the operator guarantees it. If a
   machine's real hostname differs from its `Machine` name, author
-  `hostname:` explicitly — a mismatch passes `validate` and surfaces only at
-  apply, as a cephadm host-add failure.
+  `hostname:` explicitly — a mismatch passes `validate` (which never reaches
+  the host) but fails `bootwright preflight`, which compares each storage
+  node's real hostname against the declared topology hostname before cephadm
+  ever sees the host spec.
 
 Because the default follows the `Machine` name, renaming a `Machine` also
 renames the Ceph host identity of every host entry that left `hostname`

@@ -693,7 +693,9 @@ Rules:
   verbatim as the cephadm host identity and must equal the host's real OS
   hostname — self-fulfilling for Bootwright-installed machines (the installer
   sets the OS hostname to the `Machine` name), operator-guaranteed for
-  `os.provided` machines; a mismatch surfaces only at apply. Hostnames must be
+  `os.provided` machines; a mismatch passes `validate` but fails the storage
+  node preflight, which asserts each node's real hostname against the declared
+  topology hostname. Hostnames must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
