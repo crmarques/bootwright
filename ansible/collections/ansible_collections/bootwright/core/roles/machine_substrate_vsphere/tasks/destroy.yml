@@ -1,6 +1,168 @@
 ---
-- name: Fail until vSphere substrate teardown is implemented
-  ansible.builtin.fail:
-    msg: |
-      substrate_vsphere destroy is a scaffold; pair with substrate_vsphere
-      apply when adding vSphere support (vCenter VM power-off + delete).
+- name: Resolve vSphere destroy identifiers
+  ansible.builtin.set_fact:
+    bootwright_vsphere: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_ownership_record_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+  changed_when: false
+
+- name: Validate vSphere destroy inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere is mapping
+      - bootwright_vsphere.server | default('') | length > 0
+      - bootwright_vsphere.credentialsPath | default('') | length > 0
+      - bootwright_vsphere.topology.datacenter | default('') | length > 0
+    fail_msg: >-
+      vSphere destroy for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter placement or credentials.
+
+- name: Load vCenter credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_credentials
+    tasks_from: load.yml
+  vars:
+    bootwright_creds_path: "{{ bootwright_vsphere.credentialsPath }}"
+    bootwright_creds_var: bootwright_vsphere_credentials
+    bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere.server }}"
+
+# A foreign VM that happens to match the <cluster>-<machine> naming on this
+# vCenter must not be deleted. Read the VM annotation and require the
+# Bootwright ownership marker for this context, cluster, and machine before
+# touching it (mirrors the libvirt domain-XML marker check). A missing VM
+# keeps destroy idempotent.
+- name: Read vSphere VM ownership annotation
+  community.vmware.vmware_guest_info:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_destroy_info
+  failed_when: false
+  no_log: true
+
+- name: Resolve vSphere VM presence
+  ansible.builtin.set_fact:
+    bootwright_vsphere_vm_present: "{{ not (bootwright_vsphere_destroy_info.failed | default(false)) }}"
+    bootwright_vsphere_vm_annotation: "{{ bootwright_vsphere_destroy_info.instance.annotation | default('') }}"
+  changed_when: false
+
+- name: Refuse to delete a non-Bootwright vSphere VM
+  ansible.builtin.assert:
+    that:
+      - ('bootwright:context=' ~ (bootwright_clusters_dir | dirname | basename)) in bootwright_vsphere_vm_annotation
+      - ('bootwright:cluster=' ~ bootwright_current_cluster.name) in bootwright_vsphere_vm_annotation
+      - ('bootwright:machine=' ~ bootwright_component.name) in bootwright_vsphere_vm_annotation
+    fail_msg: >-
+      Refusing to delete vSphere VM {{ bootwright_vsphere_vm_name }} on
+      {{ bootwright_vsphere.server }}: it carries no Bootwright ownership
+      marker for this context/cluster/machine, so it may be a foreign VM
+      that happens to match the naming. Verify the VM before removing it
+      manually, then retry.
+  when: bootwright_vsphere_vm_present | bool
+
+- name: Power off vSphere VM
+  community.vmware.vmware_guest_powerstate:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: powered-off
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  failed_when: false
+  no_log: true
+  when: bootwright_vsphere_vm_present | bool
+
+- name: Delete vSphere VM
+  community.vmware.vmware_guest:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: absent
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: true
+  when: bootwright_vsphere_vm_present | bool
+
+# The vsphere media role records every uploaded ISO under a vsphere-vmedia
+# ownership record before attach; destroy reads those attributes back so
+# datastore media never outlives the machine.
+- name: Select recorded vSphere virtual media for this machine
+  ansible.builtin.set_fact:
+    bootwright_vsphere_vmedia_records: >-
+      {{
+        bootwright_ownership_records | default([])
+        | selectattr('kind', 'equalto', 'vsphere-vmedia')
+        | selectattr('name', 'equalto', bootwright_vsphere_ownership_record_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Delete recorded vSphere virtual media from the datastore
+  community.vmware.vsphere_file:
+    host: "{{ bootwright_vsphere.server }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ item.attributes.datacenter | default(bootwright_vsphere.topology.datacenter) }}"
+    datastore: "{{ item.attributes.datastore | default('') }}"
+    path: "{{ item.attributes.path | default('') }}"
+    state: absent
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  loop: "{{ bootwright_vsphere_vmedia_records }}"
+  loop_control:
+    label: "{{ item.attributes.path | default('') }}"
+  failed_when: false
+  no_log: true
+  when:
+    - item.attributes.datastore | default('') | length > 0
+    - item.attributes.path | default('') | length > 0
+
+- name: Remove recorded vSphere virtual media staging paths and records
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_ownership_record: "{{ bootwright_vsphere_vmedia_record }}"
+  loop: "{{ bootwright_vsphere_vmedia_records }}"
+  loop_control:
+    loop_var: bootwright_vsphere_vmedia_record
+    label: "{{ bootwright_vsphere_vmedia_record.name }}"
+
+- name: Remove vSphere machine ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: vsphere-machine
+    bootwright_ownership_name: "{{ bootwright_vsphere_ownership_record_name }}"
+
+- name: Remove managed OS install artifacts
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: destroy_resource.yml
+  vars:
+    bootwright_ownership_record:
+      kind: managed-os-install
+      name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+      paths:
+        - "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}"
+      attributes: {}
+  when: bootwright_component.osManaged | default(false) | bool

@@ -34,7 +34,7 @@ func ownershipInventory(records []ownership.ResourceRecord) ownershipInventoryFa
 			out.InfraComponentHosts[record.Host] = true
 		case "storage-cluster":
 			out.StorageHosts[record.Host] = true
-		case "libvirt-domain", "libvirt-network", "kubevirt-machine", "managed-os-install":
+		case "libvirt-domain", "libvirt-network", "kubevirt-machine", "vsphere-machine", "vsphere-vmedia", "managed-os-install":
 			out.InfraHosts[record.Host] = true
 		}
 	}

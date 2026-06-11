@@ -1,0 +1,13 @@
+---
+# vCenter-managed machine defaults. RHCOS and RHEL 9 guests boot EFI
+# without secure boot; disks stay thin-provisioned on paravirtual SCSI
+# and NICs are vmxnet3. community.vmware modules import pyvmomi from the
+# interpreter that runs ansible-playbook (the managed venv), not the
+# discovered system python.
+bootwright_vsphere_guest_id: rhel9_64Guest
+bootwright_vsphere_boot_firmware: efi
+bootwright_vsphere_secure_boot: false
+bootwright_vsphere_disk_type: thin
+bootwright_vsphere_scsi_controller: paravirtual
+bootwright_vsphere_nic_device: vmxnet3
+bootwright_vsphere_python: "{{ ansible_playbook_python }}"

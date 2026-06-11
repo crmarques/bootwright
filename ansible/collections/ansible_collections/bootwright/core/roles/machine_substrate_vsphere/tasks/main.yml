@@ -1,12 +1,178 @@
 ---
-- name: Fail until vSphere substrate support is implemented
-  ansible.builtin.fail:
-    msg: |
-      substrate_vsphere is a scaffold. Inputs available on
-      `bootwright_component`:
-        from.profile  → bootwright_component.vsphere.{vcenters,
-                          failureDomains,nodeNetworking,template}
-        networkConfig → bootwright_component.networkConfig.ref
-        networkAttachment → bootwright_component.networkAttachment.vsphere.portgroup
-      Implement vCenter session + clone tasks here when adding vSphere
-      runtime support.
+- name: Resolve vSphere substrate inputs
+  ansible.builtin.set_fact:
+    bootwright_vsphere: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_portgroup: "{{ bootwright_component.networkAttachment.vsphere.portgroup | default('') }}"
+    bootwright_vsphere_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_ownership_marker: >-
+      bootwright:context={{ bootwright_clusters_dir | dirname | basename }}
+      bootwright:cluster={{ bootwright_current_cluster.name }}
+      bootwright:machine={{ bootwright_component.name }}
+  changed_when: false
+
+- name: Validate vSphere substrate inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere is mapping
+      - bootwright_vsphere.server | default('') | length > 0
+      - bootwright_vsphere.credentialsPath | default('') | length > 0
+      - bootwright_vsphere.topology.datacenter | default('') | length > 0
+      - bootwright_vsphere.topology.computeCluster | default('') | length > 0
+      - bootwright_vsphere.topology.datastore | default('') | length > 0
+      - bootwright_vsphere_portgroup | length > 0
+      - bootwright_component.interfaces | default([]) | length > 0
+      - bootwright_component.profile is mapping
+    fail_msg: >-
+      vSphere machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter placement, credentials, a portgroup attachment, or rendered interfaces.
+
+- name: Load vCenter credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.helper_credentials
+    tasks_from: load.yml
+  vars:
+    bootwright_creds_path: "{{ bootwright_vsphere.credentialsPath }}"
+    bootwright_creds_var: bootwright_vsphere_credentials
+    bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere.server }}"
+
+- name: Resolve vSphere VM layout
+  ansible.builtin.set_fact:
+    bootwright_vsphere_managed_os_reset: "{{ (bootwright_component.osManaged | default(false) | bool) and ((bootwright_apply_mode | default('continue')) == 'override') }}"
+    bootwright_vsphere_disks: >-
+      {{
+        [{'size_gb': bootwright_component.profile.diskGiB,
+          'type': bootwright_vsphere_disk_type,
+          'datastore': bootwright_vsphere.topology.datastore}]
+        + (
+          bootwright_component.profile.dataDisks | default([])
+          | map(attribute='sizeGiB')
+          | map('community.general.dict_kv', 'size_gb')
+          | map('combine', {'type': bootwright_vsphere_disk_type,
+                            'datastore': bootwright_vsphere.topology.datastore})
+          | list
+        )
+      }}
+    bootwright_vsphere_networks: >-
+      {{
+        bootwright_component.interfaces
+        | map(attribute='macAddress')
+        | map('community.general.dict_kv', 'mac')
+        | map('combine', {'name': bootwright_vsphere_portgroup,
+                          'device_type': bootwright_vsphere_nic_device,
+                          'start_connected': true})
+        | list
+      }}
+  changed_when: false
+
+- name: Stop managed OS vSphere VM for override reinstall
+  community.vmware.vmware_guest_powerstate:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: powered-off
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  failed_when: false
+  no_log: true
+  when: bootwright_vsphere_managed_os_reset | bool
+
+- name: Remove managed OS vSphere VM for override reinstall
+  community.vmware.vmware_guest:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: absent
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: true
+  when: bootwright_vsphere_managed_os_reset | bool
+
+# The empty SATA CD-ROM is pre-created here so the vsphere media role only
+# reconfigures iso_path on the existing device — vmware_guest CD device
+# add/remove on live VMs is the historically fragile path. An empty
+# template clones nothing: the VM is created blank and boots install media.
+- name: Apply vSphere virtual machine
+  community.vmware.vmware_guest:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    cluster: "{{ bootwright_vsphere.topology.computeCluster }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    resource_pool: "{{ bootwright_vsphere.topology.resourcePool | default(omit, true) }}"
+    datastore: "{{ bootwright_vsphere.topology.datastore }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    template: "{{ bootwright_vsphere.template | default(omit, true) }}"
+    guest_id: "{{ omit if (bootwright_vsphere.template | default('') | length > 0) else bootwright_vsphere_guest_id }}"
+    annotation: "{{ bootwright_vsphere_ownership_marker }}"
+    hardware:
+      num_cpus: "{{ bootwright_component.profile.cpu }}"
+      memory_mb: "{{ bootwright_component.profile.memoryMiB }}"
+      boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
+      scsi: "{{ bootwright_vsphere_scsi_controller }}"
+    disk: "{{ bootwright_vsphere_disks }}"
+    cdrom:
+      - controller_type: sata
+        controller_number: 0
+        unit_number: 0
+        type: none
+    networks: "{{ bootwright_vsphere_networks }}"
+    state: present
+    wait_for_ip_address: false
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_apply
+  no_log: true
+
+- name: Enforce vSphere boot order
+  community.vmware.vmware_guest_boot_manager:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
+    secure_boot_enabled: "{{ bootwright_vsphere_secure_boot }}"
+    boot_order:
+      - cdrom
+      - disk
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: true
+
+# Identity attributes are recorded at create time, before any later rename
+# or move, so destroy can still address the VM and its uploaded media when
+# live lookups drift.
+- name: Record vSphere machine ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: vsphere-machine
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      cluster: "{{ bootwright_current_cluster.name }}"
+      machine: "{{ bootwright_component.name }}"
+      attributes:
+        server: "{{ bootwright_vsphere.server }}"
+        datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+        folder: "{{ bootwright_vsphere.topology.folder | default('') }}"
+        vmName: "{{ bootwright_vsphere_vm_name }}"
+        moid: "{{ bootwright_vsphere_apply.instance.moid | default('') }}"
+        uuid: "{{ bootwright_vsphere_apply.instance.hw_product_uuid | default('') }}"
+        isoDatastore: "{{ bootwright_vsphere.isoStaging.datastore | default('') }}"
+        isoFolder: "{{ bootwright_vsphere.isoStaging.folder | default('') }}"
