@@ -60,6 +60,10 @@ func FilterStateToStorageClusters(state v1alpha1.State, names []string) v1alpha1
 	for _, cluster := range state.StorageClusters {
 		addStorageClusterMachines(selectedMachines, cluster)
 	}
+	// Service machines (DNS, BMC, ...) consumed by the selected storage
+	// clusters must survive the filter even when no provider machineRef
+	// pulls them in — API-native substrates (vsphere, kubevirt) have none.
+	addSelectedServiceMachines(selectedMachines, state, selected)
 	selectedContainerClusters := storageAttachmentContainerClusters(state)
 	var containerClusters []v1alpha1.ContainerCluster
 	for _, cluster := range state.ContainerClusters {
@@ -81,6 +85,7 @@ func filterStateToStorageClustersForApply(state v1alpha1.State, names []string) 
 	for _, cluster := range state.StorageClusters {
 		addStorageClusterMachines(selectedMachines, cluster)
 	}
+	addSelectedServiceMachines(selectedMachines, state, selected)
 	selectedBindingClusters := storageAttachmentContainerClusters(state)
 	state.ContainerClusters = nil
 	state = filterMachinesAndProviders(state, selectedMachines)

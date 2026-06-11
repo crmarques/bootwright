@@ -1,0 +1,28 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: ceph-3nodes-vsphere-managed-os
+spec:
+  baseDomain: bootwright.test
+
+  storageClusters:
+    - ceph-vsphere
+
+  infraComponents:
+    nameResolution:
+      - name: lab-dns
+        management: managed
+        componentRef: lab-dns
+
+  secrets:
+    - bastion-host-ssh:
+        file: ~/.ssh/bootwright-ssh-key
+    - vcenter-credentials:
+        generated:
+          credentials:
+            username: administrator@vsphere.local
+    - ceph-node-ssh:
+        generated:
+          sshKeyPair:
+            type: ed25519
+            comment: bootwright-ceph-vsphere

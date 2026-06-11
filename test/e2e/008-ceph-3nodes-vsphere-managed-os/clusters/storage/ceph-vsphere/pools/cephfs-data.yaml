@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-data
+spec:
+  storageClusterRef: ceph-vsphere
+
+  placementPolicyRef: lab-replicated
+
+  ceph:
+    type: replicated
+    role: cephfs-data
+    application: cephfs

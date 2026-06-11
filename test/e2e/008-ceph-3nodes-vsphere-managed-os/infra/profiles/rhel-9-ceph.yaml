@@ -1,0 +1,54 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-ceph-node
+spec:
+  os:
+    family: rhel
+    version: "9"
+    architecture: x86_64
+
+  installer:
+    type: anaconda
+    anaconda:
+      imageRef: rhel-9-x86-64-dvd
+
+  customizations:
+    hostname:
+      source: machineName
+    ssh:
+      authorizeMachineSSHKey: true
+      passwordAuthentication: false
+    storage:
+      rootDevice:
+        source: machineRootDeviceHints
+      wipe: true
+    packages:
+      environment: minimal
+      installWeakDeps: false
+      excludeDocs: true
+      languages:
+        - en_US.UTF-8
+      install:
+        # cephadm is not on the RHEL DVD; the storage_cluster_cephadm role
+        # installs it post-provision after configuring the Ceph repo.
+        - podman
+        - lvm2
+        - chrony
+        - firewalld
+    services:
+      enabled:
+        - sshd
+        - chronyd
+        - firewalld
+      disabled:
+        - avahi-daemon
+        - cockpit.socket
+        - cups
+        - kdump
+        - postfix
+    security:
+      selinux:
+        mode: enforcing
+      firewall:
+        enabled: true

@@ -151,7 +151,7 @@ func collectSecretRefRequirementsWithLocalityPolicy(state v1alpha1.State, localP
 				out = append(out, secretRefRequirement{
 					refName: vc.CredentialsRef.Name,
 					label:   fmt.Sprintf("provider %s vsphere vcenters[%d] credentialsRef", p.Metadata.Name, i),
-					phases:  []string{"fabric"},
+					phases:  []string{"fabric", "machines", "deps", "base"},
 				})
 			}
 		}
