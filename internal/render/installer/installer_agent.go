@@ -89,7 +89,13 @@ func MachineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, cl
 	if _, ok := stateview.MachineProfile(provider, machine.Source.ProfileRef.Name); !ok {
 		return nil
 	}
-	if provider.Spec.Type != v1alpha1.ProvisionerLibvirt && provider.Spec.Type != v1alpha1.ProvisionerKubeVirt {
+	var generate func(clusterName, machineName, interfaceName string) string
+	switch provider.Spec.Type {
+	case v1alpha1.ProvisionerLibvirt, v1alpha1.ProvisionerKubeVirt:
+		generate = libvirtMACAddress
+	case v1alpha1.ProvisionerVSphere:
+		generate = vsphereMACAddress
+	default:
 		return nil
 	}
 	names := clusterMachineInterfaceNames(state, machine)
@@ -97,7 +103,7 @@ func MachineInterfaces(state v1alpha1.State, machine v1alpha1.InstallMachine, cl
 	for _, name := range names {
 		out = append(out, v1alpha1.MachineNIC{
 			Name:       name,
-			MACAddress: libvirtMACAddress(clusterName, machine.Name, name),
+			MACAddress: generate(clusterName, machine.Name, name),
 		})
 	}
 	return out

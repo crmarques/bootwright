@@ -194,7 +194,9 @@ func machineOSInstallImageSourceOnTarget(state v1alpha1.State, m v1alpha1.Instal
 	}
 	machine, ok := stateview.Machine(state, machineRef)
 	if !ok {
-		return false
+		// API-native substrates run machine tasks on the controller, so a
+		// file-sourced install image is already on the task host.
+		return machineRef == "localhost"
 	}
 	return locality.IsControllerLocalMachine(machine, locality.DefaultPolicy)
 }

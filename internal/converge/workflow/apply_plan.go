@@ -583,7 +583,7 @@ func applyMachineHost(state v1alpha1.State, machineName string) string {
 		if provider.Spec.Libvirt != nil {
 			return provider.Spec.Libvirt.MachineRef.Name
 		}
-	case v1alpha1.ProvisionerKubeVirt:
+	case v1alpha1.ProvisionerKubeVirt, v1alpha1.ProvisionerVSphere:
 		return "localhost"
 	}
 	return ""
@@ -614,6 +614,9 @@ func applyMachineExclusiveResourceKeys(state v1alpha1.State, clusterName, machin
 	provider, ok := stateview.Provider(state, machine.Spec.Substrate.ProviderRef.Name)
 	if ok && provider.Spec.Type == v1alpha1.ProvisionerKubeVirt && provider.Spec.KubeVirt != nil {
 		return []string{kubeVirtResourceKey(provider.Spec.KubeVirt)}
+	}
+	if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
+		return []string{vsphereResourceKey(provider, machine)}
 	}
 	if machine.Spec.Hardware.Management.BMC.Address != "" {
 		return []string{applyNodeRedfishResource(state, clusterName, machineName)}

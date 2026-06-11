@@ -1,0 +1,80 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: master-0
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: lab-vsphere-provider
+    profileRef: sno
+
+  os:
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+    provided: false
+
+  network:
+    config:
+      networkConfigRef: machine-net
+      attachmentRef: machine-net
+      interfaceAddresses:
+        - interface: primary
+          addressRef: ip
+          prefixLength: 24
+
+  addresses:
+    - name: ip
+      address: 192.168.140.20
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: sno-vsphere
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+
+  install:
+    endpoints:
+      api:
+        source:
+          type: infraComponent
+          componentRef: load-balancer
+          bindAddressRef: control-plane
+      api-int:
+        source:
+          type: infraComponent
+          componentRef: load-balancer
+          bindAddressRef: control-plane
+      ingress:
+        source:
+          type: infraComponent
+          componentRef: load-balancer
+          bindAddressRef: apps
+    method: agent
+    mode: connected
+    nodeSSH:
+      keyPairRef: sno-vsphere-cluster-admin-ssh-key
+
+  controlPlane:
+    replicas: 1
+
+  compute:
+    - replicas: 0
+
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+
+  hosts:
+    - hostname: master-0
+      role: master
+      machineRef: master-0

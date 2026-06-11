@@ -71,17 +71,6 @@ func machineProfileDisksVars(disks []v1alpha1.MachineProfileDisk) []any {
 	return out
 }
 
-func machineProfileProvisionerVars(provider v1alpha1.InfraProvider, profile v1alpha1.MachineProfile) map[string]any {
-	out := map[string]any{"kind": provider.Spec.Type}
-	if profile.Template != "" {
-		out["template"] = profile.Template
-	}
-	if profile.FailureDomainRef.Name != "" {
-		out["failureDomainRef"] = profile.FailureDomainRef.Name
-	}
-	return out
-}
-
 func libvirtProviderVars(l *v1alpha1.InfraProviderLibvirt) map[string]any {
 	out := map[string]any{
 		"machineRef": l.MachineRef.Name,
@@ -118,6 +107,16 @@ func vSphereProviderVars(v *v1alpha1.InfraProviderVSphere) map[string]any {
 	if v.NodeNetworking != nil {
 		out["nodeNetworking"] = installer.VSphereNodeNetworkingConfig(v.NodeNetworking)
 	}
+	if v.ISOStaging != nil {
+		staging := map[string]any{}
+		if v.ISOStaging.Datastore != "" {
+			staging["datastore"] = v.ISOStaging.Datastore
+		}
+		if v.ISOStaging.Folder != "" {
+			staging["folder"] = v.ISOStaging.Folder
+		}
+		out["isoStaging"] = staging
+	}
 	return out
 }
 
@@ -139,9 +138,10 @@ func vSphereVCentersVars(items []v1alpha1.VSphereVCenter) []any {
 	out := make([]any, 0, len(items))
 	for _, vc := range items {
 		entry := map[string]any{
-			"server":         vc.Server,
-			"datacenters":    stringSliceAny(vc.Datacenters),
-			"credentialsRef": vc.CredentialsRef.Name,
+			"server":                         vc.Server,
+			"datacenters":                    stringSliceAny(vc.Datacenters),
+			"credentialsRef":                 vc.CredentialsRef.Name,
+			"disableCertificateVerification": vc.DisableCertificateVerification,
 		}
 		if vc.Port != 0 {
 			entry["port"] = vc.Port

@@ -79,6 +79,41 @@ func ProviderMachineProfiles(provider v1alpha1.InfraProvider) []v1alpha1.Machine
 	return nil
 }
 
+// VSphereProfileFailureDomain resolves the failure domain a vSphere profile
+// places machines on: the named one, or the sole declared domain when the
+// ref is empty (validation requires the ref on multi-domain providers).
+func VSphereProfileFailureDomain(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile) (v1alpha1.VSphereFailureDomain, bool) {
+	if spec == nil {
+		return v1alpha1.VSphereFailureDomain{}, false
+	}
+	if profile.FailureDomainRef.Name == "" {
+		if len(spec.FailureDomains) == 1 {
+			return spec.FailureDomains[0], true
+		}
+		return v1alpha1.VSphereFailureDomain{}, false
+	}
+	for _, fd := range spec.FailureDomains {
+		if fd.Name == profile.FailureDomainRef.Name {
+			return fd, true
+		}
+	}
+	return v1alpha1.VSphereFailureDomain{}, false
+}
+
+// VSphereVCenterForServer selects the declared vCenter a failure domain's
+// server names (validation requires the match).
+func VSphereVCenterForServer(spec *v1alpha1.InfraProviderVSphere, server string) (v1alpha1.VSphereVCenter, bool) {
+	if spec == nil {
+		return v1alpha1.VSphereVCenter{}, false
+	}
+	for _, vc := range spec.VCenters {
+		if vc.Server == server {
+			return vc, true
+		}
+	}
+	return v1alpha1.VSphereVCenter{}, false
+}
+
 func MachineHasCapability(machine v1alpha1.Machine, want string) bool {
 	return v1alpha1.MachineHasCapability(machine, want)
 }

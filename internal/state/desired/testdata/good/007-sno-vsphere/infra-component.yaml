@@ -1,0 +1,62 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: load-balancer
+spec:
+  type: loadBalancer
+
+  loadBalancer:
+    implementation: haproxy
+    machineRef: bastion
+    bindAddresses:
+      - name: control-plane
+        address: 192.168.140.10
+      - name: apps
+        address: 192.168.140.11
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: proxy
+spec:
+  type: proxy
+
+  proxy:
+    implementation: squid
+    machineRef: bastion
+    bindAddress: 0.0.0.0
+    port: 3128
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: name-resolution
+spec:
+  type: nameResolution
+
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: bastion
+    bindAddress: 192.168.140.1
+    port: 53
+    additionalIngressHosts:
+      - console-openshift-console.apps.sno-vsphere.bootwright.test
+      - oauth-openshift.apps.sno-vsphere.bootwright.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: ntp-server
+spec:
+  type: ntp
+
+  ntp:
+    implementation: chrony
+    machineRef: bastion
+    bindAddress: 192.168.140.1
+    port: 123
+    endpoints:
+      - name: cluster
+        addressRef: cluster-lan
+    upstreamSources:
+      - time.bootwright.test

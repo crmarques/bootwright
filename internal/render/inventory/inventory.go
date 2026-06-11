@@ -15,9 +15,9 @@ import (
 
 // Inventory builds the Ansible inventory tree per ADR-0002 § role
 // taxonomy. Hosts that back a profile-based machine substrate land in
-// `bootwright_infra_hosts`: libvirt uses its provider host, and KubeVirt uses
-// localhost because VM operations run through a kubeconfig. Bare-metal machines
-// are reached through BMCs, and vSphere guests remain remote by design. Hosts
+// `bootwright_infra_hosts`: libvirt uses its provider host, while KubeVirt
+// and vSphere use localhost because VM operations run through a kubeconfig
+// or the vCenter API. Bare-metal machines are reached through BMCs. Hosts
 // that back provider setup or BMC services land in `bootwright_provider_hosts`.
 // Hosts that back managed InfraComponent services (LB, DNS, proxy, registry,
 // artifacts, NTP) land in `bootwright_infra_component_hosts`. A host can live
@@ -288,11 +288,19 @@ func machineTaskHostEntries(state v1alpha1.State, env *v1alpha1.Environment, pat
 		if providerHost == "" {
 			return
 		}
-		providerMachine, ok := stateview.Machine(state, providerHost)
-		if !ok || providerMachine.Spec.Access.SSH == nil {
+		var entry map[string]any
+		if providerMachine, ok := stateview.Machine(state, providerHost); ok {
+			if providerMachine.Spec.Access.SSH == nil {
+				return
+			}
+			entry = machineInventoryEntry(providerMachine, env, paths, localPolicy)
+		} else if providerHost == "localhost" {
+			// API-native substrates (kubevirt, vsphere) run machine tasks
+			// on the controller; no Machine object backs the localhost ref.
+			entry = localmachineInventoryEntry()
+		} else {
 			return
 		}
-		entry := machineInventoryEntry(providerMachine, env, paths, localPolicy)
 		entry["bootwright_machine_task_cluster_name"] = clusterName
 		entry["bootwright_machine_task_machine_name"] = machineName
 		entry["bootwright_machine_task_provider_host_name"] = providerHost

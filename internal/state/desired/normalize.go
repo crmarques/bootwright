@@ -417,9 +417,10 @@ func normalizeContainerCluster(ocp *v1alpha1.ContainerCluster, env *v1alpha1.Env
 // provider type behind a cluster's node machines when the platform block is
 // fully omitted. The mapping mirrors what every shipped example authors:
 // libvirt and baremetal providers install with platform bareMetal and the
-// provisioning network disabled; kubevirt-hosted clusters install with
-// platform none. Ambiguous bindings (multiple provider types) are left for
-// Validate to diagnose; authored platforms always win.
+// provisioning network disabled; vsphere providers install with platform
+// vsphere; kubevirt-hosted clusters install with platform none. Ambiguous
+// bindings (multiple provider types) are left for Validate to diagnose;
+// authored platforms always win.
 func applyClusterPlatformDefaults(state *v1alpha1.State) {
 	for i := range state.ContainerClusters {
 		cluster := &state.ContainerClusters[i]
@@ -437,6 +438,8 @@ func applyClusterPlatformDefaults(state *v1alpha1.State) {
 			platform.BareMetal = &v1alpha1.BareMetalInstallPlatform{
 				ProvisioningNetwork: v1alpha1.ProvisioningNetworkDisabled,
 			}
+		case v1alpha1.ProvisionerVSphere:
+			platform.Type = v1alpha1.PlatformTypeVSphere
 		case v1alpha1.ProvisionerKubeVirt:
 			platform.Type = v1alpha1.PlatformTypeNone
 		}

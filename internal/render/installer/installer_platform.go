@@ -25,7 +25,7 @@ func isSingleNodeCluster(ocp v1alpha1.ContainerCluster) bool {
 	return len(ocp.Spec.Hosts) == 1 && ocp.Spec.Hosts[0].Role == v1alpha1.NodeRoleMaster
 }
 
-func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster) map[string]any {
+func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstall, ocp v1alpha1.ContainerCluster, secrets InstallerSecrets) map[string]any {
 	apiVIPs, ingressVIPs := vipsFromEndpoints(state, ci, ocp)
 	userManaged := !allContainerEndpointsOpenShift(ci, ocp)
 	switch kind {
@@ -34,7 +34,7 @@ func platformConfig(state v1alpha1.State, kind string, ci v1alpha1.ClusterInstal
 			"apiVIPs":     apiVIPs,
 			"ingressVIPs": ingressVIPs,
 		}
-		for key, value := range vSphereProviderPlatformConfig(state, ci) {
+		for key, value := range vSphereProviderPlatformConfig(state, ci, secrets) {
 			out[key] = value
 		}
 		if ci.Platform.VSphere != nil && ci.Platform.VSphere.NodeNetworking != nil {
@@ -76,7 +76,7 @@ func installerProvisioningNetwork(value string) string {
 	}
 }
 
-func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall) map[string]any {
+func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, secrets InstallerSecrets) map[string]any {
 	vcenters := []any{}
 	failureDomains := []any{}
 	seenVCenters := map[string]bool{}
@@ -98,7 +98,7 @@ func vSphereProviderPlatformConfig(state v1alpha1.State, ci v1alpha1.ClusterInst
 				continue
 			}
 			seenVCenters[key] = true
-			vcenters = append(vcenters, vSphereVCenterConfig(vc))
+			vcenters = append(vcenters, vSphereVCenterConfig(vc, secrets))
 		}
 		for _, fd := range provider.Spec.VSphere.FailureDomains {
 			key := fd.Name
@@ -143,7 +143,7 @@ func firstVSphereProfileNodeNetworking(state v1alpha1.State, ci v1alpha1.Cluster
 	return nil
 }
 
-func vSphereVCenterConfig(vc v1alpha1.VSphereVCenter) map[string]any {
+func vSphereVCenterConfig(vc v1alpha1.VSphereVCenter, secrets InstallerSecrets) map[string]any {
 	out := map[string]any{"server": vc.Server}
 	if vc.Port > 0 {
 		out["port"] = vc.Port
@@ -156,8 +156,13 @@ func vSphereVCenterConfig(vc v1alpha1.VSphereVCenter) map[string]any {
 		out["datacenters"] = items
 	}
 	if vc.CredentialsRef.Name != "" {
-		out["user"] = secretRefPlaceholder("vsphere-user", vc.CredentialsRef.Name)
-		out["password"] = secretRefPlaceholder("vsphere-password", vc.CredentialsRef.Name)
+		if creds, ok := secrets.VSphereCredentials[vc.CredentialsRef.Name]; ok {
+			out["user"] = creds.Username
+			out["password"] = creds.Password
+		} else {
+			out["user"] = secretRefPlaceholder("vsphere-user", vc.CredentialsRef.Name)
+			out["password"] = secretRefPlaceholder("vsphere-password", vc.CredentialsRef.Name)
+		}
 	}
 	return out
 }

@@ -172,6 +172,10 @@ func applyNodeBootResourceKeys(state v1alpha1.State, clusterName string, machine
 			out = appendUniqueString(out, kubeVirtResourceKey(provider.Spec.KubeVirt))
 			continue
 		}
+		if ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil {
+			out = appendUniqueString(out, vsphereResourceKey(provider, machine))
+			continue
+		}
 		out = appendUniqueString(out, applyNodeRedfishResource(state, clusterName, machineName))
 	}
 	return out

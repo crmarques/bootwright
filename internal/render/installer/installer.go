@@ -113,7 +113,7 @@ func InstallerConfigWithSecrets(state v1alpha1.State, ocp v1alpha1.ContainerClus
 			"replicas": nodeRoleCount(ocp, v1alpha1.NodeRoleMaster),
 		},
 		"networking": networkingConfig(state, ci, ocp),
-		"platform":   platformConfig(state, platformKind, ci, ocp),
+		"platform":   platformConfig(state, platformKind, ci, ocp, secrets),
 		"pullSecret": secrets.PullSecret,
 		"sshKey":     secrets.SSHKey,
 	}

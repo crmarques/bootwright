@@ -236,7 +236,9 @@ func machineComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 						out["bmcEmulated"] = be
 					}
 				case v1alpha1.ProvisionerVSphere:
-					out["vsphere"] = machineProfileProvisionerVars(provider, profile)
+					if vsphere := vSphereMachineVars(state, provider, profile, secretsDir); vsphere != nil {
+						out["vsphere"] = vsphere
+					}
 				case v1alpha1.ProvisionerKubeVirt:
 					k := provider.Spec.KubeVirt
 					if k == nil {
@@ -354,7 +356,9 @@ func machineHostRef(state v1alpha1.State, m v1alpha1.InstallMachine) string {
 	if provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil {
 		return provider.Spec.Libvirt.MachineRef.Name
 	}
-	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt {
+	// API-native substrates run machine operations from the controller:
+	// KubeVirt through a kubeconfig, vSphere through the vCenter API.
+	if provider.Spec.Type == v1alpha1.ProvisionerKubeVirt || provider.Spec.Type == v1alpha1.ProvisionerVSphere {
 		return "localhost"
 	}
 	return ""

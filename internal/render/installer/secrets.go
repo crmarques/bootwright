@@ -23,11 +23,19 @@ type InstallerSecrets struct {
 	ProxyHTTP   string
 	ProxyHTTPS  string
 	TLSPairs    map[string]InstallerTLSSecret
+	// VSphereCredentials carries vCenter user/password material keyed by
+	// credentialsRef name; an absent entry keeps the placeholder render.
+	VSphereCredentials map[string]InstallerUserPass
 }
 
 type InstallerTLSSecret struct {
 	Cert string
 	Key  string
+}
+
+type InstallerUserPass struct {
+	Username string
+	Password string
 }
 
 // PlaceholderInstallerSecrets returns sentinel strings for placeholder
@@ -137,6 +145,13 @@ func LoadInstallerSecretsForContext(contextName string, state v1alpha1.State, oc
 	ci, err := ClusterInstallForOCP(state, ocp)
 	if err != nil {
 		return out, err
+	}
+	if clusterPlatformKind(ci, ocp) == v1alpha1.PlatformTypeVSphere {
+		creds, err := loadVSphereCredentials(state, ci, resolver)
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", ocp.Metadata.Name, err)
+		}
+		out.VSphereCredentials = creds
 	}
 	if v1alpha1.InstallMode(ocp) == v1alpha1.InstallModeDisconnected {
 		if reg := env.Spec.Registries; reg != nil && reg.Mirror != nil && reg.Mirror.CredentialsRef.Name != "" {

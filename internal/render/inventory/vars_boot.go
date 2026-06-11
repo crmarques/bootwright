@@ -43,13 +43,17 @@ func machineBootVarsWithISO(state v1alpha1.State, ci v1alpha1.ClusterInstall, m 
 	}
 
 	if m.Source.ProfileRef.Name != "" {
-		if _, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name); !ok {
+		profile, ok := stateview.MachineProfile(provider, m.Source.ProfileRef.Name)
+		if !ok {
 			return nil
 		}
-		if provider.Spec.Type != v1alpha1.ProvisionerLibvirt || provider.Spec.Libvirt == nil {
-			return nil
+		switch {
+		case provider.Spec.Type == v1alpha1.ProvisionerLibvirt && provider.Spec.Libvirt != nil:
+			return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
+		case provider.Spec.Type == v1alpha1.ProvisionerVSphere && provider.Spec.VSphere != nil:
+			return vsphereBootVars(provider.Spec.VSphere, profile, m, isoBasename)
 		}
-		return emulatedBootVars(state, ci, m, provider.Spec.Libvirt, clusterName, isoBasename)
+		return nil
 	}
 	if provider.Spec.Type == v1alpha1.ProvisionerBareMetal && m.Source.MachineRef.Name != "" {
 		server, ok := stateview.Machine(state, m.Source.MachineRef.Name)
@@ -133,6 +137,34 @@ func emulatedBootVars(state v1alpha1.State, _ v1alpha1.ClusterInstall, m v1alpha
 	}
 }
 
+// vsphereBootVars renders the boot block for vCenter-managed machines. The
+// ISO is staged on the controller and uploaded to the staging datastore by
+// the vsphere media role, so stageHost is localhost and fetchUrl is the
+// datastore attach path ("[datastore] folder/<token>/<iso>") rather than an
+// HTTP location — vsphere machines never join agentIsoPublishTargets.
+func vsphereBootVars(spec *v1alpha1.InfraProviderVSphere, profile v1alpha1.MachineProfile, m v1alpha1.InstallMachine, isoBasename string) map[string]any {
+	fd, ok := stateview.VSphereProfileFailureDomain(spec, profile)
+	if !ok {
+		return nil
+	}
+	staging := vSphereISOStagingVars(spec, fd)
+	stageDir := fmt.Sprintf("{{ bootwright_provider_state_dir }}/vsphere/%s/vmedia", m.Source.ProviderRef.Name)
+	return map[string]any{
+		"readiness": map[string]any{
+			"type": "ssh",
+			"ssh": map[string]any{
+				"user": "core",
+				"port": 22,
+			},
+		},
+		"agentIso": map[string]any{
+			"stageHost": "localhost",
+			"stagePath": fmt.Sprintf("%s/%s/%s", stageDir, agentISOPublishTokenExpr, isoBasename),
+			"fetchUrl":  fmt.Sprintf("[%s] %s/%s/%s", staging["datastore"], staging["folder"], agentISOPublishTokenExpr, isoBasename),
+		},
+	}
+}
+
 func baremetalBootVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server v1alpha1.Machine, isoBasename string) map[string]any {
 	bmc := server.Spec.Hardware.Management.BMC
 	baseURL, systemID := normalizeRedfishURL(bmc.Address)
@@ -180,6 +212,12 @@ func agentISOPublishTargets(state v1alpha1.State, ci v1alpha1.ClusterInstall, oc
 	targets := map[string]map[string]any{}
 	var keys []string
 	for _, m := range ci.Machines {
+		// vSphere agent ISOs reach machines through a datastore upload by
+		// the vsphere media role; their fetchUrl is a datastore path, not
+		// the HTTP location this publish/probe contract requires.
+		if provider, ok := stateview.Provider(state, m.Source.ProviderRef.Name); ok && provider.Spec.Type == v1alpha1.ProvisionerVSphere {
+			continue
+		}
 		boot := machineBootVars(state, ci, m, clusterName)
 		if boot == nil {
 			continue
