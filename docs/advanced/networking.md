@@ -183,6 +183,8 @@ cephadm which site-local subnet can host that VIP:
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: StorageObjectGateway
+metadata:
+  name: odf-rgw
 spec:
   public:
     dnsName: rgw-ceph.bootwright.test

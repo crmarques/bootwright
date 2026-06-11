@@ -12,12 +12,14 @@ spec:
     namespace:
       name: openshift-cnv
       create: true
+      labels:
+        openshift.io/cluster-monitoring: "true"
     operatorGroup:
-      name: openshift-cnv
+      name: kubevirt-hyperconverged-group
       targetNamespaces:
         - openshift-cnv
     subscription:
-      name: kubevirt-hyperconverged
+      name: hco-operatorhub
       package: kubevirt-hyperconverged
       channel: stable
       source: redhat-operators
@@ -32,5 +34,13 @@ spec:
     checks:
       - type: csvSucceeded
         namespace: openshift-cnv
-        subscription: kubevirt-hyperconverged
+        subscription: hco-operatorhub
+      - type: condition
+        apiVersion: hco.kubevirt.io/v1beta1
+        kind: HyperConverged
+        name: kubevirt-hyperconverged
+        namespace: openshift-cnv
+        condition:
+          type: Available
+          status: "True"
 

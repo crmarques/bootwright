@@ -230,6 +230,8 @@ spec:
 ```yaml
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
+metadata:
+  name: lab
 spec:
   infraComponents:
     artifactServers:

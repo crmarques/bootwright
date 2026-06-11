@@ -9,7 +9,7 @@ This reference example shows the full canonical layout with:
 - OpenShift Virtualization bound only to the two parent clusters;
 - child cluster namespace and NAD manifests delivered as a cluster add-on.
 
-Defaulted fields are intentionally present with short comments so authors can see the available surface and omit those values in smaller input sets.
+Like the smaller examples, the YAML is lean and relies on documented defaults; references such as `attachmentRef` are authored only where validation requires an explicit choice (the bare-metal provider declares one attachment per data center).
 
 ## Edit First
 
@@ -22,7 +22,7 @@ Defaulted fields are intentionally present with short comments so authors can se
 - `clusters/container/*/cluster.yaml`: OpenShift release, networking, and node
   bindings for parent and child clusters.
 - `clusters/storage/ceph-storage/*.yaml`: Ceph topology, pools, filesystems,
-  RGW, exports, and placement policy.
+  RGW, and exports.
 - `add-ons/*.yaml` and `clusters/container/*/add-on-binding.yaml`: bootstrap
   add-ons, capability providers, storage inputs, and profile bindings.
 
