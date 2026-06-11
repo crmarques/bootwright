@@ -69,7 +69,7 @@ func newScopeCheckCmd(scope converge.Scope, stdin io.Reader, stdout io.Writer, s
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.SecretsDir, clustersDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, scope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)

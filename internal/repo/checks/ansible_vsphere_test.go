@@ -66,6 +66,25 @@ func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	}
 }
 
+// TestMachineInfraDestroyDispatchesManagedOSSubstrates pins the managed-OS
+// teardown path: managed-OS machines live in the managed OS install groups,
+// not in bootwright_clusters, and API-native substrates (vsphere) are
+// unreachable through the recorded-resource sweep — the destroy playbook
+// must dispatch their substrate destroy role per machine.
+func TestMachineInfraDestroyDispatchesManagedOSSubstrates(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/task_machine_infra_destroy.yml")
+	for _, want := range []string{
+		"bootwright_managed_os_install_groups",
+		"bootwright_managed_os_component.substrateDestroyRole",
+		"tasks_from: destroy.yml",
+		"bootwright_destroy_cluster_scope",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("machine infra destroy playbook missing managed-OS substrate dispatch marker %q", want)
+		}
+	}
+}
+
 func flattenAnsibleTasks(tasks []map[string]any) []map[string]any {
 	var out []map[string]any
 	for _, task := range tasks {

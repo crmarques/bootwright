@@ -65,7 +65,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 				return failErr(1, err)
 			}
 		}
-		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.SecretsDir, clustersDir); err != nil {
+		if err := runScopeHostCheck(stdout, stderr, state, converge.AllScope.Phases(), ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
 			return err
 		}
 		reporter := newWorkflowReporter(stdout)

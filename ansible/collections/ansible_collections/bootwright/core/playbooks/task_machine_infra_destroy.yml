@@ -45,6 +45,41 @@
         loop_var: bootwright_cluster_name
       when: bootwright_host_clusters | length > 0
 
+    # Managed-OS machines live in the managed OS install groups, not in
+    # bootwright_clusters; substrates whose teardown needs live API calls
+    # (vsphere) are unreachable through the recorded-resource sweep below,
+    # so dispatch their substrate destroy role per machine here. The role
+    # destroys are idempotent, so substrates also covered by recorded
+    # resources (libvirt) tolerate the double pass.
+    - name: Resolve managed OS machine components on this host
+      ansible.builtin.set_fact:
+        bootwright_host_managed_os_components: >-
+          {{
+            bootwright_managed_os_install_groups | default([])
+            | map(attribute='components') | flatten
+            | selectattr('kind', 'equalto', 'machines')
+            | selectattr('machineRef', 'defined')
+            | selectattr('machineRef', 'equalto', bootwright_host_name)
+            | list
+          }}
+      changed_when: false
+
+    - name: Destroy managed OS substrate per machine
+      ansible.builtin.include_role:
+        name: "{{ bootwright_managed_os_component.substrateDestroyRole }}"
+        tasks_from: destroy.yml
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_component }}"
+        bootwright_current_cluster:
+          name: "{{ bootwright_managed_os_component.clusterName }}"
+      loop: "{{ bootwright_host_managed_os_components }}"
+      loop_control:
+        loop_var: bootwright_managed_os_component
+        label: "{{ bootwright_managed_os_component.clusterName }}/{{ bootwright_managed_os_component.name }}"
+      when: >-
+        bootwright_destroy_cluster_scope is not defined
+        or bootwright_managed_os_component.clusterName | default('') in bootwright_destroy_cluster_scope.split(',')
+
     - name: Destroy recorded machine infrastructure resources
       ansible.builtin.include_role:
         name: bootwright.core.ownership_record

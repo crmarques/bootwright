@@ -153,6 +153,10 @@ func validateProviderVSphere(prefix string, spec *v1alpha1.InfraProviderVSphere)
 		owner := fmt.Sprintf("%s.failureDomains[%d]", prefix, i)
 		if fd.Name == "" {
 			errs = append(errs, owner+".name is required")
+		} else if failureDomains[fd.Name] {
+			// A duplicate name would also break the single-domain implicit
+			// failureDomainRef resolution, which counts declared entries.
+			errs = append(errs, fmt.Sprintf("%s.name %q is duplicated", owner, fd.Name))
 		} else {
 			failureDomains[fd.Name] = true
 		}

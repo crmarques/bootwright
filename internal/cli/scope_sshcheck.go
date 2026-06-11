@@ -10,12 +10,12 @@ import (
 	"github.com/crmarques/bootwright/internal/preflight"
 )
 
-func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []converge.Phase, secretsDir, clustersDir string) error {
-	return runApplyHostCheck(stdout, stderr, state, selected, secretsDir, clustersDir)
+func runScopeHostCheck(stdout io.Writer, stderr io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string) error {
+	return runApplyHostCheck(stdout, stderr, state, selected, contextName, secretsDir, clustersDir)
 }
 
-func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, secretsDir, clustersDir string) error {
-	checks := preflight.CollectChecks(state, preflightPhases(selected), true, secretsDir, clustersDir, preflight.DefaultDeps)
+func runApplyHostCheck(stdout io.Writer, _ io.Writer, state v1alpha1.State, selected []converge.Phase, contextName, secretsDir, clustersDir string) error {
+	checks := preflight.CollectChecks(state, preflightPhases(selected), true, contextName, secretsDir, clustersDir, preflight.DefaultDeps)
 	return renderCheckResults(stdout, "host check", preflightChecksToOutput(checks))
 }
 

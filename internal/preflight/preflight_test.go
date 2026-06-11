@@ -81,7 +81,7 @@ func TestClusterPreflightDoesNotRequireLocalInstallerTools(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps)
 	var tools []string
 	for _, check := range checks {
 		if check.Group == checkGroupInstallerTools {
@@ -129,7 +129,7 @@ func TestKubeVirtHostClusterPreflightChecksKubeconfigAndAPI(t *testing.T) {
 		UID: func() int { return 1000 },
 	}
 
-	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "/context/secrets", clustersDir, deps)
+	checks := CollectChecks(state, []Phase{{Name: "machines"}}, true, "test", "/context/secrets", clustersDir, deps)
 	assertPreflightCheckStatus(t, checks, "metal-ocp kubeconfig", "OK")
 	assertPreflightCheckStatus(t, checks, "metal-ocp KubeVirt API", "OK")
 }
@@ -344,7 +344,7 @@ func TestStoragePreflightChecksManagedCephRuntimeAndRegistrySecret(t *testing.T)
 			},
 		}},
 	}
-	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", Deps{
+	checks := CollectChecks(state, []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},
@@ -389,7 +389,7 @@ func TestPreflightChecksAddonsSSHExecutionNeedsAnsible(t *testing.T) {
 			Config: v1alpha1.StorageExportExternalDetailsExporterConfig{RBDDataPoolName: "rbdpool"},
 		},
 	}
-	checks := CollectChecks(state, []Phase{{Name: "addons"}}, true, "/context/secrets", "/host-state", Deps{
+	checks := CollectChecks(state, []Phase{{Name: "addons"}}, true, "test", "/context/secrets", "/host-state", Deps{
 		LookPath: func(name string, _ []string) (string, error) {
 			return "/bin/" + name, nil
 		},
@@ -620,7 +620,7 @@ func TestClusterPreflightDoesNotCheckLocalOCPCLIRelease(t *testing.T) {
 		},
 		UID: func() int { return 1000 },
 	}
-	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "/context/secrets", "/host-state", deps)
+	checks := CollectChecks(loadFixtureState(t, "001-sno-libvirt"), []Phase{{Name: "base"}}, true, "test", "/context/secrets", "/host-state", deps)
 
 	for _, name := range []string{"oc", "openshift-install"} {
 		for _, check := range checks {

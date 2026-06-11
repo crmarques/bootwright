@@ -73,6 +73,72 @@
           missing; the boot driver or OS installer must stage it before the
           vSphere media role uploads it.
 
+    # A retried install rotates the publish token, so the new upload lands
+    # at a new datastore path while the per-machine record still references
+    # the previous one. Retire the superseded upload before the record is
+    # overwritten — recorded media must never become unreachable.
+    - name: Probe previously recorded vSphere virtual media
+      ansible.builtin.stat:
+        path: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
+      register: bootwright_vsphere_media_previous_record_stat
+
+    - name: Read previously recorded vSphere virtual media
+      ansible.builtin.slurp:
+        src: "{{ bootwright_ownership_dir }}/resources/vsphere-vmedia/{{ bootwright_vsphere_media_record_name }}.json"
+      register: bootwright_vsphere_media_previous_record_raw
+      when: bootwright_vsphere_media_previous_record_stat.stat.exists | default(false)
+
+    - name: Parse previously recorded vSphere virtual media
+      ansible.builtin.set_fact:
+        bootwright_vsphere_media_previous_record: "{{ bootwright_vsphere_media_previous_record_raw.content | b64decode | from_json }}"
+      changed_when: false
+      when: bootwright_vsphere_media_previous_record_stat.stat.exists | default(false)
+
+    - name: Resolve superseded vSphere virtual media
+      ansible.builtin.set_fact:
+        bootwright_vsphere_media_superseded: >-
+          {{
+            (bootwright_vsphere_media_previous_record_stat.stat.exists | default(false))
+            and ((bootwright_vsphere_media_previous_record.attributes.path | default('')) | length > 0)
+            and ((bootwright_vsphere_media_previous_record.attributes.path | default('')) != bootwright_vsphere_media_datastore_path)
+          }}
+      changed_when: false
+
+    - name: Delete superseded vSphere virtual media from the datastore
+      community.vmware.vsphere_file:
+        hostname: "{{ bootwright_vsphere_media.server }}"
+        username: "{{ bootwright_vsphere_media_credentials.username }}"
+        password: "{{ bootwright_vsphere_media_credentials.password }}"
+        validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
+        datacenter: "{{ bootwright_vsphere_media_previous_record.attributes.datacenter | default(bootwright_vsphere_media.topology.datacenter) }}"
+        datastore: "{{ bootwright_vsphere_media_previous_record.attributes.datastore | default('') }}"
+        path: "{{ bootwright_vsphere_media_previous_record.attributes.path | default('') }}"
+        state: absent
+      vars:
+        ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+      failed_when: false
+      no_log: true
+      when:
+        - bootwright_vsphere_media_superseded | bool
+        - bootwright_vsphere_media_previous_record.attributes.datastore | default('') | length > 0
+
+    - name: Remove superseded vSphere virtual media staging paths and record
+      ansible.builtin.include_role:
+        name: bootwright.core.ownership_record
+        tasks_from: destroy_resource.yml
+      vars:
+        bootwright_ownership_record: "{{ bootwright_vsphere_media_previous_record }}"
+      when: bootwright_vsphere_media_superseded | bool
+
+    # All machines of a cluster share one agent ISO and one datastore
+    # target; the marker dedupes the upload across the per-machine attach
+    # passes and the throttle keeps any residual uploads from racing the
+    # same datastore file. A rebuilt ISO (newer than the marker) re-uploads.
+    - name: Probe uploaded vSphere virtual media marker
+      ansible.builtin.stat:
+        path: "{{ bootwright_vsphere_media_stage_path }}.uploaded"
+      register: bootwright_vsphere_media_uploaded_marker
+
     - name: Upload vSphere virtual media to the datastore
       community.vmware.vsphere_copy:
         hostname: "{{ bootwright_vsphere_media.server }}"
@@ -87,7 +153,22 @@
         timeout: "{{ bootwright_vsphere_media_upload_timeout }}"
       vars:
         ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+      throttle: 1
       no_log: true
+      when: >-
+        not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
+        or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
+
+    - name: Mark vSphere virtual media uploaded
+      ansible.builtin.copy:
+        dest: "{{ bootwright_vsphere_media_stage_path }}.uploaded"
+        content: "[{{ bootwright_vsphere_media_datastore }}] {{ bootwright_vsphere_media_datastore_path }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+      when: >-
+        not (bootwright_vsphere_media_uploaded_marker.stat.exists | default(false))
+        or ((bootwright_vsphere_media_stage_stat.stat.mtime | default(0)) > (bootwright_vsphere_media_uploaded_marker.stat.mtime | default(0)))
 
     # The uploaded path is recorded before the attach so cleanup and machine
     # destroy can always read it back — datastore media must never outlive

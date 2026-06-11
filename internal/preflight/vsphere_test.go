@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secretstore "github.com/crmarques/bootwright/internal/secrets"
 )
 
 func vsphereCheckTestState(t *testing.T) (v1alpha1.State, string) {
@@ -76,14 +77,41 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 		}
 	}
 
-	checks := vsphereVCenterChecks(state, nil, secretsDir, Deps{HTTPDo: respond(http.StatusCreated)})
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusCreated)})
 	if len(checks) != 1 || checks[0].Status != StatusOK {
 		t.Fatalf("session check with 201 = %+v, want one OK check", checks)
 	}
 
-	checks = vsphereVCenterChecks(state, nil, secretsDir, Deps{HTTPDo: respond(http.StatusUnauthorized)})
+	checks = vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: respond(http.StatusUnauthorized)})
 	if len(checks) != 1 || checks[0].Status != StatusFail || !strings.Contains(checks[0].Impact, "rejected the declared credentials") {
 		t.Fatalf("session check with 401 = %+v, want a credentials failure", checks)
+	}
+}
+
+// TestVSphereVCenterSessionCheckReadsContextStoreMaterial pins the probe's
+// credential source: generated credentials live encrypted in the context
+// store, so the probe must resolve them like the install-config loader
+// does instead of raw-reading the envelope file.
+func TestVSphereVCenterSessionCheckReadsContextStoreMaterial(t *testing.T) {
+	state, secretsDir := vsphereCheckTestState(t)
+	state.Environments[0].Spec.Secrets["vcenter-credentials"] = v1alpha1.EnvironmentSecretSpec{
+		Generated: &v1alpha1.EnvironmentSecretGenerated{
+			Credentials: &v1alpha1.GeneratedCredentialsSpec{Username: "administrator@vsphere.local"},
+		},
+	}
+	store := secretstore.NewContextStore("test", secretsDir)
+	if err := store.Write(secretstore.MaterialKey{Name: "vcenter-credentials", Role: secretstore.MaterialPrimary}, []byte("administrator@vsphere.local:vc-password\n")); err != nil {
+		t.Fatalf("write context secret: %v", err)
+	}
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
+		user, pass, ok := req.BasicAuth()
+		if !ok || user != "administrator@vsphere.local" || pass != "vc-password" {
+			t.Fatalf("probe basic auth = %q/%q", user, pass)
+		}
+		return &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}})
+	if len(checks) != 1 || checks[0].Status != StatusOK {
+		t.Fatalf("context-store session check = %+v, want one OK check", checks)
 	}
 }
 
@@ -93,7 +121,7 @@ func TestVSphereVCenterSessionCheck(t *testing.T) {
 func TestVSphereVCenterSessionCheckWarnsWithoutMaterial(t *testing.T) {
 	state, secretsDir := vsphereCheckTestState(t)
 	state.Environments[0].Spec.Secrets["vcenter-credentials"] = v1alpha1.EnvironmentSecretSpec{File: "missing-file"}
-	checks := vsphereVCenterChecks(state, nil, secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
+	checks := vsphereVCenterChecks(state, nil, "test", secretsDir, Deps{HTTPDo: func(req *http.Request, insecure bool) (*http.Response, error) {
 		t.Fatal("probe must not run without credential material")
 		return nil, nil
 	}})

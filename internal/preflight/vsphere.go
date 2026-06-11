@@ -51,11 +51,12 @@ func vspherePyvmomiCheck(deps Deps) Check {
 // login using the resolved credentials, so unreachable endpoints and bad
 // credentials surface before apply instead of mid-convergence. Missing
 // credential material is left to the secret-material checks.
-func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, secretsDir string, deps Deps) []Check {
+func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, contextName, secretsDir string, deps Deps) []Check {
 	if !anyPhaseInScope([]string{"machines", "base"}, selected) || !stateNeedsVSphere(state) {
 		return nil
 	}
 	env := stateview.Environment(state)
+	resolver := secret.NewResolver(contextName, secretsDir, env)
 	seen := map[string]bool{}
 	var checks []Check
 	for _, p := range state.InfraProviders {
@@ -67,16 +68,18 @@ func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, secretsDir str
 				continue
 			}
 			seen[vc.Server] = true
-			checks = append(checks, vsphereSessionCheck(vc, env, secretsDir, deps))
+			checks = append(checks, vsphereSessionCheck(vc, resolver, deps))
 		}
 	}
 	return checks
 }
 
-func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, env *v1alpha1.Environment, secretsDir string, deps Deps) Check {
+func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, resolver secret.Resolver, deps Deps) Check {
 	name := vc.Server + " vCenter session"
-	credsPath := secret.ResolvePath(vc.CredentialsRef.Name, env, secretsDir)
-	creds, err := secret.ReadUserPasswordFile(credsPath, "vCenter credentials")
+	// The resolver decrypts context-store material (generated credentials
+	// live there) and reads file-sourced material in place — the same path
+	// the install-config secret loading uses.
+	creds, err := resolver.ReadUserPasswordMaterial(vc.CredentialsRef.Name, secret.MaterialPrimary, "vCenter credentials")
 	if err != nil {
 		// The secret-material checks already fail loudly on missing or
 		// malformed material; warn that the live probe could not run.

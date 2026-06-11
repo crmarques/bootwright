@@ -119,7 +119,7 @@ func (d Deps) statSecretPath(path string, externalSource bool) (os.FileInfo, err
 	return d.StatPath(path)
 }
 
-func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, secretsDir string, clustersDir string, deps Deps) []Check {
+func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, contextName, secretsDir string, clustersDir string, deps Deps) []Check {
 	var checks []Check
 	addonsNeedAnsible := phaseInScope("addons", selected, hasState) && stateNeedsStorageExternalDetailsSSH(state)
 	if selectedNeedsAnsible(selected) || addonsNeedAnsible {
@@ -153,7 +153,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, secret
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
-		checks = append(checks, vsphereVCenterChecks(state, selected, secretsDir, deps)...)
+		checks = append(checks, vsphereVCenterChecks(state, selected, contextName, secretsDir, deps)...)
 	}
 	return checks
 }

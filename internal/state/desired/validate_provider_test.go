@@ -157,4 +157,14 @@ func TestVSphereISOStagingValidation(t *testing.T) {
 			t.Fatalf("isoStaging %+v should be accepted, got %v", staging, errs)
 		}
 	}
+
+	// A duplicate failure-domain name would break the single-domain
+	// implicit failureDomainRef resolution, which counts declared entries.
+	duplicated := base
+	duplicated.FailureDomains = append(append([]v1alpha1.VSphereFailureDomain(nil), base.FailureDomains...), base.FailureDomains[0])
+	errs = validateProviderVSphere("spec.vsphere", &duplicated)
+	want = `.failureDomains[1].name "dc1-zone-a" is duplicated`
+	if !strings.Contains(strings.Join(errs, "\n"), want) {
+		t.Fatalf("missing %q in %v", want, errs)
+	}
 }

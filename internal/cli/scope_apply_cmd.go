@@ -238,7 +238,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 					return failErr(1, err)
 				}
 			}
-			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.SecretsDir, clustersDir); err != nil {
+			if err := runApplyHostCheck(stdout, stderr, plan.State, plan.Selected, ctx.Name, ctx.SecretsDir, clustersDir); err != nil {
 				return err
 			}
 		}
