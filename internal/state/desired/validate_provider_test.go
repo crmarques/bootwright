@@ -9,9 +9,9 @@ import (
 
 // TestMachineProfilesRejectForeignProviderFields covers F64: template and
 // failureDomainRef drive only the vSphere adapter, and dataDisks are
-// provisioned only by the libvirt adapter. Authoring them on another provider
-// must be rejected at validation rather than silently ignored (the
-// MachinePoolSpec precedent).
+// provisioned only by the libvirt and vsphere adapters. Authoring them on
+// another provider must be rejected at validation rather than silently
+// ignored (the MachinePoolSpec precedent).
 func TestMachineProfilesRejectForeignProviderFields(t *testing.T) {
 	profile := v1alpha1.MachineProfile{
 		Name:             "p",
@@ -37,7 +37,7 @@ func TestMachineProfilesRejectForeignProviderFields(t *testing.T) {
 			want: []string{
 				".template is not supported when type=kubevirt",
 				".failureDomainRef is not supported when type=kubevirt",
-				".dataDisks is not supported when type=kubevirt; only the libvirt adapter provisions data disks",
+				".dataDisks is not supported when type=kubevirt; only the libvirt and vsphere adapters provision data disks",
 			},
 		},
 	}
@@ -62,8 +62,10 @@ func TestMachineProfilesRejectForeignProviderFields(t *testing.T) {
 
 // TestVSphereMachineProfileFields covers F24/F18/F34/F64 on the vSphere arm:
 // template plus a resolving failureDomainRef are accepted, a dangling
-// failureDomainRef gets the standard dangling-reference error, and dataDisks
-// are rejected because the vSphere adapter does not provision them.
+// failureDomainRef gets the standard dangling-reference error, dataDisks are
+// accepted because the vSphere adapter provisions them, and an empty
+// failureDomainRef is rejected only when several failure domains are
+// declared (a single one resolves implicitly).
 func TestVSphereMachineProfileFields(t *testing.T) {
 	prefix := "InfraProvider/v spec.vsphere.machineProfiles"
 	failureDomains := map[string]bool{"dc1-zone-a": true}
@@ -86,9 +88,73 @@ func TestVSphereMachineProfileFields(t *testing.T) {
 
 	withDisks := valid
 	withDisks.DataDisks = []v1alpha1.MachineProfileDisk{{Name: "data", SizeGiB: 10}}
-	errs = validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{withDisks}, failureDomains)
-	want = ".dataDisks is not supported when type=vsphere"
+	if errs := validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{withDisks}, failureDomains); len(errs) != 0 {
+		t.Fatalf("vSphere profile with dataDisks should be accepted, got %v", errs)
+	}
+
+	badDisk := valid
+	badDisk.DataDisks = []v1alpha1.MachineProfileDisk{{Name: "", SizeGiB: 0}}
+	errs = validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{badDisk}, failureDomains)
+	joined := strings.Join(errs, "\n")
+	for _, want := range []string{".dataDisks[0].name is required", ".dataDisks[0].sizeGiB must be greater than zero"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in %v", want, errs)
+		}
+	}
+
+	noRef := valid
+	noRef.FailureDomainRef = v1alpha1.LocalObjectReference{}
+	if errs := validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{noRef}, failureDomains); len(errs) != 0 {
+		t.Fatalf("empty failureDomainRef with a single failure domain should be accepted, got %v", errs)
+	}
+	multiFD := map[string]bool{"dc1-zone-a": true, "dc1-zone-b": true}
+	errs = validateMachineProfiles(prefix, v1alpha1.ProvisionerVSphere, []v1alpha1.MachineProfile{noRef}, multiFD)
+	want = ".failureDomainRef is required when the provider declares multiple failureDomains"
 	if !strings.Contains(strings.Join(errs, "\n"), want) {
 		t.Fatalf("missing %q in %v", want, errs)
+	}
+}
+
+// TestVSphereISOStagingValidation covers the isoStaging override block: an
+// authored block must carry at least one override, and either field alone is
+// enough because the other keeps its default.
+func TestVSphereISOStagingValidation(t *testing.T) {
+	base := v1alpha1.InfraProviderVSphere{
+		VCenters: []v1alpha1.VSphereVCenter{{
+			Server:         "vc.example.com",
+			Datacenters:    []string{"dc1"},
+			CredentialsRef: v1alpha1.SecretRef{Name: "vcenter-credentials"},
+		}},
+		FailureDomains: []v1alpha1.VSphereFailureDomain{{
+			Name:   "dc1-zone-a",
+			Region: "dc1",
+			Zone:   "a",
+			Server: "vc.example.com",
+			Topology: v1alpha1.VSphereFailureTopology{
+				Datacenter:     "dc1",
+				ComputeCluster: "compute",
+				Datastore:      "datastore1",
+				Networks:       []string{"lab-portgroup"},
+			},
+		}},
+	}
+	if errs := validateProviderVSphere("spec.vsphere", &base); len(errs) != 0 {
+		t.Fatalf("baseline vSphere spec should be accepted, got %v", errs)
+	}
+
+	empty := base
+	empty.ISOStaging = &v1alpha1.VSphereISOStaging{}
+	errs := validateProviderVSphere("spec.vsphere", &empty)
+	want := "spec.vsphere.isoStaging must set at least one of {datastore, folder}"
+	if !strings.Contains(strings.Join(errs, "\n"), want) {
+		t.Fatalf("missing %q in %v", want, errs)
+	}
+
+	for _, staging := range []v1alpha1.VSphereISOStaging{{Datastore: "iso-datastore"}, {Folder: "isos"}} {
+		withStaging := base
+		withStaging.ISOStaging = &staging
+		if errs := validateProviderVSphere("spec.vsphere", &withStaging); len(errs) != 0 {
+			t.Fatalf("isoStaging %+v should be accepted, got %v", staging, errs)
+		}
 	}
 }

@@ -399,10 +399,16 @@ Rules:
   Machines select a profile through `Machine.spec.substrate.profileRef`.
 - Profile fields the selected provider's adapter does not consume are
   rejected: `template` and `failureDomainRef` are vSphere-only, and
-  `dataDisks` are libvirt-only.
+  `dataDisks` are consumed by the libvirt and vSphere adapters only.
 - vSphere `machineProfiles[].failureDomainRef` must name a
   `spec.vsphere.failureDomains[]` entry, and every
   `failureDomains[].server` must equal a declared `vcenters[].server`.
+  With several declared failure domains every profile must set
+  `failureDomainRef`; with exactly one, an empty ref resolves to it.
+- vSphere `spec.vsphere.isoStaging` overrides where boot and install ISOs
+  are uploaded; when authored it must set at least one of
+  `{datastore, folder}`. Absent fields default to the machine's
+  failure-domain `topology.datastore` and the stock vmedia folder.
 - `networkAttachments[]` names provider-specific attachment targets. Machines
   bind to them through `spec.network.config.attachmentRef`.
 - KubeVirt providers set exactly one of `hostClusterRef` or `kubeconfigRef`.

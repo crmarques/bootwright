@@ -54,7 +54,17 @@ type InfraProviderVSphere struct {
 	VCenters        []VSphereVCenter       `yaml:"vcenters,omitempty" json:"vcenters,omitempty"`
 	FailureDomains  []VSphereFailureDomain `yaml:"failureDomains,omitempty" json:"failureDomains,omitempty"`
 	NodeNetworking  *VSphereNodeNetworking `yaml:"nodeNetworking,omitempty" json:"nodeNetworking,omitempty"`
+	ISOStaging      *VSphereISOStaging     `yaml:"isoStaging,omitempty" json:"isoStaging,omitempty"`
 	MachineProfiles []MachineProfile       `yaml:"machineProfiles,omitempty" json:"machineProfiles,omitempty"`
+}
+
+// VSphereISOStaging names the datastore location boot and install ISOs are
+// uploaded to. An absent block stages ISOs on the machine's failure-domain
+// topology.datastore under the stock folder; either field overrides its
+// default independently.
+type VSphereISOStaging struct {
+	Datastore string `yaml:"datastore,omitempty" json:"datastore,omitempty"`
+	Folder    string `yaml:"folder,omitempty" json:"folder,omitempty"`
 }
 
 type InfraProviderKubeVirt struct {
@@ -106,8 +116,9 @@ type NetworkAttachmentBareMetal struct {
 // MachineProfile is the shared VM shape across libvirt, vSphere, and KubeVirt
 // providers. Fields a provider's adapter does not consume are rejected at
 // validation: template and failureDomainRef are vSphere-only (failureDomainRef
-// must resolve against spec.vsphere.failureDomains[].name), and dataDisks are
-// libvirt-only.
+// must resolve against spec.vsphere.failureDomains[].name; an empty template
+// creates a blank machine and a set template clones from it), and dataDisks
+// are consumed by the libvirt and vsphere adapters.
 type MachineProfile struct {
 	Name             string               `yaml:"name" json:"name"`
 	CPU              int                  `yaml:"cpu,omitempty" json:"cpu,omitempty"`
@@ -124,10 +135,11 @@ type MachineProfileDisk struct {
 }
 
 type VSphereVCenter struct {
-	Server         string    `yaml:"server" json:"server"`
-	Port           int       `yaml:"port,omitempty" json:"port,omitempty"`
-	Datacenters    []string  `yaml:"datacenters" json:"datacenters"`
-	CredentialsRef SecretRef `yaml:"credentialsRef" json:"credentialsRef"`
+	Server                         string    `yaml:"server" json:"server"`
+	Port                           int       `yaml:"port,omitempty" json:"port,omitempty"`
+	Datacenters                    []string  `yaml:"datacenters" json:"datacenters"`
+	CredentialsRef                 SecretRef `yaml:"credentialsRef" json:"credentialsRef"`
+	DisableCertificateVerification bool      `yaml:"disableCertificateVerification,omitempty" json:"disableCertificateVerification,omitempty"`
 }
 
 // VSphereFailureDomain places machines on one declared vCenter: server must

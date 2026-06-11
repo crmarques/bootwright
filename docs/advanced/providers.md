@@ -117,8 +117,10 @@ spec:
 
 `machineProfiles[].failureDomainRef` must name a `failureDomains[]` entry, and
 every `failureDomains[].server` must equal a declared `vcenters[].server`.
-`template` and `failureDomainRef` are vSphere-only profile fields; profile
-`dataDisks` are libvirt-only.
+When several failure domains are declared every profile must set
+`failureDomainRef`; with exactly one, an empty ref resolves to it. `template`
+and `failureDomainRef` are vSphere-only profile fields; profile `dataDisks`
+are consumed by the libvirt and vSphere adapters only.
 
 The vSphere desired-state shape is present so the schema can stabilize ahead
 of the apply adapter. The shipped apply workflows do not converge vSphere
