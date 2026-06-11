@@ -64,6 +64,15 @@ func okCheck(group, name, evidence string) preflightCheck {
 	}
 }
 
+func infoCheck(group, name, evidence string) preflightCheck {
+	return preflightCheck{
+		Group:    group,
+		Name:     name,
+		Status:   output.StatusInfo,
+		Evidence: evidence,
+	}
+}
+
 func warnCheck(group, name, evidence, impact, remediation string) preflightCheck {
 	return preflightCheck{
 		Group:       group,

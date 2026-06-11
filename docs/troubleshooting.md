@@ -126,3 +126,8 @@ in `--output json`). `bootwright destroy --dry-run` shows the same. To resolve o
 re-declare the object and re-apply, or run a full `bootwright destroy` to reclaim it.
 Bootwright deliberately does not prune on `apply`: a stray desired-state edit must never
 silently tear down running infrastructure.
+
+Orphan tracking is object-level: a Ceph sub-object (a `StoragePool`, `StorageFilesystem`,
+`StorageObjectGateway`, or `services[]` entry) deleted from a still-declared
+`StorageCluster` is not listed — the live pool or service simply keeps running. Remove it
+on the cluster with the `ceph`/`cephadm` CLI (see the Ceph storage clusters page).

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -80,6 +81,7 @@ func newSyntaxValidationCmd(stdout io.Writer, spec syntaxValidationCommand) *cob
 		checks := []preflightCheck{okCheck("Desired state", "context input", "loads, normalizes, and validates")}
 		checks = append(checks, environmentSelectionChecks(exclusions)...)
 		checks = append(checks, storageBestPracticeChecks(state)...)
+		checks = append(checks, stretchPoolInheritanceChecks(state)...)
 		if err := renderCheckResults(stdout, spec.label, checks); err != nil {
 			return err
 		}
@@ -138,6 +140,36 @@ func storageBestPracticeChecks(state v1alpha1.State) []preflightCheck {
 			advisory.Finding,
 			advisory.Impact,
 			advisory.Remediation,
+		))
+	}
+	return checks
+}
+
+// stretchPoolInheritanceChecks notices stretch pool inheritance: every
+// policy-less pool on a stretch-mode cluster renders with the stretch CRUSH
+// rule and size 4 / minSize 2 regardless of its own YAML, so authoring
+// topology.stretch on an existing cluster re-rules and resizes those pools
+// on the next apply. The pool author reading only the StoragePool file would
+// predict the global 3/2 default, hence the one-line notice.
+func stretchPoolInheritanceChecks(state v1alpha1.State) []preflightCheck {
+	var checks []preflightCheck
+	for _, cluster := range state.StorageClusters {
+		if cluster.Spec.Ceph == nil || cluster.Spec.Ceph.Topology.Stretch == nil {
+			continue
+		}
+		var pools []string
+		for _, pool := range state.StoragePools {
+			if pool.Spec.StorageClusterRef.Name == cluster.Metadata.Name && pool.Spec.PlacementPolicyRef.Name == "" {
+				pools = append(pools, pool.Metadata.Name)
+			}
+		}
+		if len(pools) == 0 {
+			continue
+		}
+		checks = append(checks, infoCheck(
+			"Stretch pools",
+			v1alpha1.KindStorageCluster+"/"+cluster.Metadata.Name,
+			"policy-less pools inherit the stretch rule and size 4/minSize 2: "+strings.Join(pools, ", "),
 		))
 	}
 	return checks

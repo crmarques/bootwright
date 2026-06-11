@@ -591,6 +591,15 @@ Rules:
 - Managed storage nodes reference `Machine` objects with `ceph-node`
   capability.
 - Managed storage seed/admin operations use `Machine.spec.access.ssh`.
+- Storage convergence is additive-only across the whole domain —
+  `spec.ceph.config` keys, `mgrModules[]`, `monitoring`, the `services[]`
+  passthrough, and the `StoragePool`/`StorageFilesystem`/
+  `StorageObjectGateway` kinds: `apply` creates and converges what desired
+  state declares and never removes a live Ceph object whose declaration was
+  deleted; it keeps running until removed on the cluster out of band.
+  `--override` does not prune undeclared objects either — it rebuilds only
+  still-declared pools whose structural identity changed. Removal semantics
+  belong to the open override/reconcile design.
 - Managed Ceph `spec.ceph.distribution` accepts `oss`, `redhat`, or `ibm`;
   omitted means `oss`.
 - `spec.ceph.release` selects which Ceph release to install for the chosen
@@ -637,13 +646,13 @@ Rules:
 - `spec.ceph.config` declares Ceph configuration database options as
   `config.<section>.<key>: <value>`, rendered as idempotent `ceph config set`
   operations. Sections are `global`, `mon`, `mgr`, `osd`, `mds`, `client`, or
-  `<type>.<id>`. Convergence is additive-only: keys removed from the spec are
-  not unset on the cluster (removal semantics belong to the open
-  override/reconcile design). `public_network` and `cluster_network` are owned
-  by `spec.ceph.networks` and rejected here.
+  `<type>.<id>`. Keys removed from the spec are not unset on the cluster (the
+  storage-wide additive-only rule above). `public_network` and
+  `cluster_network` are owned by `spec.ceph.networks` and rejected here.
 - `spec.ceph.mgrModules[]` declares mgr modules, rendered as idempotent
-  `ceph mgr module enable` operations. Additive-only, like `config`; module
-  settings are declared under `config.mgr` (`mgr/<module>/<key>`).
+  `ceph mgr module enable` operations. Modules removed from the spec are not
+  disabled (additive-only); module settings are declared under `config.mgr`
+  (`mgr/<module>/<key>`).
 - `spec.ceph.monitoring` declares the cephadm monitoring stack. Absent means
   the cephadm default stack with cephadm's own placement; `enabled: false`
   renders `cephadm bootstrap --skip-monitoring-stack` and forbids per-service
@@ -680,7 +689,11 @@ Rules:
   omission default.
   `hostname` is the rendered cephadm host-spec
   hostname; it defaults to the `machineRef` name and is authored only when the
-  Ceph hostname genuinely differs from the Machine name. Hostnames must be
+  Ceph hostname genuinely differs from the Machine name. It is rendered
+  verbatim as the cephadm host identity and must equal the host's real OS
+  hostname — self-fulfilling for Bootwright-installed machines (the installer
+  sets the OS hostname to the `Machine` name), operator-guaranteed for
+  `os.provided` machines; a mismatch surfaces only at apply. Hostnames must be
   unique. All host `Machine`s in one `StorageCluster` must share one SSH user
   and `keyRef`. A host `Machine` is node-bound by at most one cluster (and at
   most one host entry) across every `ContainerCluster` and `StorageCluster`.
@@ -695,7 +708,11 @@ Rules:
   additional OSD-only sites the derivation would wrongly include. Stretch
   replication is not authorable: policy-less replicated pools always render
   with `size: 4` / `minSize: 2` (the Ceph requirement for two-site stretch);
-  non-4/2 stretch is unsupported today. Validation runs post-normalize:
+  non-4/2 stretch is unsupported today. Authoring `stretch` on an existing
+  cluster therefore re-rules and resizes every policy-less pool on the next
+  apply with no change to any `StoragePool` file; `bootwright validate`
+  prints a one-line notice naming the inheriting pools. Validation runs
+  post-normalize:
   `dataSites` must contain exactly two sites; `tiebreaker.site` must be
   distinct from the data sites; each data site must hold exactly two `mon`
   hosts and the tiebreaker site exactly one; the tiebreaker host must be

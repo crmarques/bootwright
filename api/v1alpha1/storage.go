@@ -7,6 +7,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// StorageCluster owns managed or imported (external) storage intent.
+// Storage convergence is additive-only across the whole domain — config
+// keys, mgrModules,
+// monitoring, the services passthrough, and the StoragePool,
+// StorageFilesystem, and StorageObjectGateway kinds: apply creates and
+// converges what desired state declares and never removes a live Ceph
+// object whose declaration was deleted; it keeps running until removed on
+// the cluster out of band. --override does not prune undeclared objects
+// either — it rebuilds only still-declared pools whose structural identity
+// changed. Removal semantics belong to the open override/reconcile design.
 type StorageCluster struct {
 	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string             `yaml:"kind" json:"kind"`
@@ -45,14 +55,14 @@ type StorageClusterCephSpec struct {
 	Networks       StorageCephNetworks       `yaml:"networks,omitempty" json:"networks,omitempty"`
 	// Config declares Ceph configuration database options as
 	// section -> key -> value, rendered as idempotent `ceph config set`
-	// operations after bootstrap. Convergence is additive-only: keys removed
-	// from the spec are not unset on the cluster (removal semantics belong to
-	// the override/reconcile design). public_network and cluster_network are
-	// owned by spec.ceph.networks and are rejected here.
+	// operations after bootstrap. Keys removed from the spec are not unset
+	// (the storage-wide additive-only rule on StorageCluster). public_network
+	// and cluster_network are owned by spec.ceph.networks and are rejected
+	// here.
 	Config map[string]map[string]string `yaml:"config,omitempty" json:"config,omitempty"`
 	// MgrModules declares mgr modules to enable, rendered as idempotent
-	// `ceph mgr module enable` operations. Additive-only, like config: modules
-	// removed from the spec are not disabled. Module settings are declared in
+	// `ceph mgr module enable` operations. Modules removed from the spec are
+	// not disabled (additive-only). Module settings are declared in
 	// spec.ceph.config under the mgr section (mgr/<module>/<key>).
 	MgrModules []string `yaml:"mgrModules,omitempty" json:"mgrModules,omitempty"`
 	// Monitoring declares the cephadm monitoring stack. Absent means the
@@ -66,6 +76,8 @@ type StorageClusterCephSpec struct {
 	// Services is the cephadm service-spec passthrough for service types
 	// Bootwright does not model first-class (nfs, loki, ...): serviceType,
 	// serviceID, placement, and spec render 1:1 into a cephadm service spec.
+	// Entries removed from the spec keep running on the cluster
+	// (additive-only).
 	Services []StorageCephService `yaml:"services,omitempty" json:"services,omitempty"`
 	Topology StorageCephTopology  `yaml:"topology" json:"topology"`
 }
@@ -235,6 +247,9 @@ type StoragePlacementCephSpec struct {
 	Replicated    StorageCephPoolReplicas `yaml:"replicated,omitempty" json:"replicated,omitempty"`
 }
 
+// StoragePool owns one Ceph pool. Deleting the object from desired state
+// leaves the live pool running (the storage-wide additive-only rule on
+// StorageCluster).
 type StoragePool struct {
 	APIVersion string          `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string          `yaml:"kind" json:"kind"`
@@ -272,6 +287,9 @@ type StoragePoolErasureCode struct {
 	CodingChunks int `yaml:"codingChunks,omitempty" json:"codingChunks,omitempty"`
 }
 
+// StorageFilesystem owns one CephFS filesystem and its MDS placement.
+// Deleting the object from desired state leaves the live filesystem
+// running (the storage-wide additive-only rule on StorageCluster).
 type StorageFilesystem struct {
 	APIVersion string                `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string                `yaml:"kind" json:"kind"`
@@ -353,6 +371,9 @@ type StoragePlacement struct {
 	CountPerHost int      `yaml:"countPerHost,omitempty" json:"countPerHost,omitempty"`
 }
 
+// StorageObjectGateway owns one RGW service and its ingress endpoints.
+// Deleting the object from desired state leaves the live service running
+// (the storage-wide additive-only rule on StorageCluster).
 type StorageObjectGateway struct {
 	APIVersion string                   `yaml:"apiVersion" json:"apiVersion"`
 	Kind       string                   `yaml:"kind" json:"kind"`

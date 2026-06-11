@@ -321,6 +321,41 @@ func TestValidateReportsEnvironmentExcludedClusters(t *testing.T) {
 	}
 }
 
+func TestValidateNoticesStretchPoolInheritance(t *testing.T) {
+	setTestHomeAndRoot(t)
+
+	// No stretch cluster, no notice.
+	stdout, stderr, code := runCLI(t, "validate", "-f", fixturePath("001-sno-libvirt"))
+	if code != 0 {
+		t.Fatalf("validate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if strings.Contains(stdout, "Stretch pools") {
+		t.Fatalf("stretch-less input still notices stretch pools:\n%s", stdout)
+	}
+
+	// The multidc example authors topology.stretch plus policy-less pools,
+	// which inherit the stretch rule and replication invisibly to their own
+	// YAML — validate must say so in one line.
+	example := filepath.Join("..", "..", "examples", "baremetal-redfish-multidc-virtualized-odf-ceph")
+	stdout, stderr, code = runCLI(t, "validate", "-f", example)
+	if code != 0 {
+		t.Fatalf("validate exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, want := range []string{
+		"Stretch pools",
+		"[INFO] StorageCluster/ceph-storage: policy-less pools inherit the stretch rule and size 4/minSize 2: ",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("validate output missing %q:\n%s", want, stdout)
+		}
+	}
+	for _, pool := range []string{"odf-rbd", "odf-cephfs-metadata", "odf-cephfs-data", "odf-rgw"} {
+		if !strings.Contains(stdout, pool) {
+			t.Fatalf("stretch pool notice missing pool %q:\n%s", pool, stdout)
+		}
+	}
+}
+
 func TestValidateJSONFailureIncludesDiagnostics(t *testing.T) {
 	setTestHomeAndRoot(t)
 	inputDir := t.TempDir()

@@ -1,6 +1,6 @@
 ---
 title: Ceph Storage Clusters
-description: OSD device selection, accessing a managed Ceph storage cluster, and recovering its dashboard credentials.
+description: Host identity, OSD device selection, stretch pool inheritance, additive-only convergence, and accessing a managed Ceph storage cluster.
 ---
 
 # Ceph storage clusters
@@ -9,6 +9,25 @@ A `StorageCluster` of `type: ceph` with `management: managed` is bootstrapped by
 Bootwright with `cephadm`. Ceph keeps no kubeconfig-style admin file on the
 controller — the admin keyring and `ceph.conf` live on the seed node — so
 day-to-day access is by SSH to the seed node plus `cephadm shell`.
+
+## Host identity
+
+cephadm registers every `spec.ceph.topology.hosts[]` entry under its
+`hostname`, which defaults to the `machineRef` name. The name is rendered
+verbatim into the cephadm host spec and must equal the host's real OS
+hostname:
+
+- For machines whose OS Bootwright installs, the contract holds by
+  construction: the installer sets the OS hostname to the `Machine` name.
+- For `os.provided: true` machines, the operator guarantees it. If a
+  machine's real hostname differs from its `Machine` name, author
+  `hostname:` explicitly — a mismatch passes `validate` and surfaces only at
+  apply, as a cephadm host-add failure.
+
+Because the default follows the `Machine` name, renaming a `Machine` also
+renames the Ceph host identity of every host entry that left `hostname`
+unauthored. On a live cluster that makes the rendered topology name a host
+cephadm has never seen; pin `hostname:` to the original name before renaming.
 
 ## OSD device selection
 
@@ -66,6 +85,42 @@ ceph:
 ```
 
 Omit `clusterCIDRs` to keep IBM's default of one network carrying everything.
+
+## Stretch mode re-rules policy-less pools
+
+`spec.ceph.topology.stretch` is enabled by presence, and two-site stretch
+comes with fixed pool replication: Ceph requires `size: 4` / `minSize: 2`.
+Every `StoragePool` without a `placementPolicyRef` inherits the stretch CRUSH
+rule and that replication — including pools that pre-date the stretch block.
+
+Authoring `stretch` on an existing cluster therefore re-rules and resizes
+every policy-less pool on the next apply, with no change to any `StoragePool`
+file, and Ceph rebalances the data accordingly. `bootwright validate` prints
+a one-line notice naming the inheriting pools, and the resulting
+`ceph osd pool set` commands are visible in the rendered
+`ceph/operations.yaml`.
+
+## Convergence is additive-only
+
+`apply` creates and converges what desired state declares and never removes a
+live Ceph object whose declaration was deleted. The rule is storage-wide,
+covering every surface: `spec.ceph.config` keys, `mgrModules[]`, `monitoring`
+services, `services[]` passthrough entries, and the `StoragePool`,
+`StorageFilesystem`, and `StorageObjectGateway` kinds. Deleting one from git
+and running `bootwright apply` reconciles cleanly while the live pool,
+filesystem, or service keeps running — remove it on the cluster with the
+`ceph`/`cephadm` CLI when you mean it.
+
+`--override` does not prune undeclared objects either: it rebuilds only
+still-declared pools whose structural identity (pool `type` and erasure
+profile) changed. Removal semantics under `--override` are an open design
+item; until they land, treat removal as out of band.
+
+!!! note "Storage sub-objects are not orphan-tracked"
+    `bootwright state-check` correlates whole clusters, machines, and
+    providers, so a deleted pool, filesystem, gateway, or passthrough service
+    inside a still-declared `StorageCluster` does not appear under
+    **"Owned but no longer declared"**.
 
 ## Access details
 
