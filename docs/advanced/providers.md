@@ -135,7 +135,14 @@ Boot and install ISOs upload to a datastore folder before attach.
 `isoStaging` overrides the location: `datastore` defaults to the machine's
 failure-domain `topology.datastore`, `folder` defaults to
 `bootwright-vmedia`. When authored, `isoStaging` must set at least one of
-the two fields.
+the two fields. Cleanup removes the uploaded ISO files but the vSphere file
+API cannot remove folders, so empty per-upload directories can accumulate
+under the staging folder — delete the staging folder itself to reclaim
+them.
+
+Topology and staging values authored in openshift-install inventory-path
+form (for example `/dc1/host/cluster1`) are reduced to their object names
+for the vCenter operations; `folder` keeps its path form.
 
 `vcenters[].credentialsRef` names a `user:password` secret (one line, like
 BMC credentials). `vcenters[].disableCertificateVerification: true` opts a

@@ -49,12 +49,23 @@ func TestVSphereFixtureRendersMachineComponentAndBootVars(t *testing.T) {
 		t.Fatalf("vsphere failureDomain = %v", got)
 	}
 	topology := vsphere["topology"].(map[string]any)
-	if got := topology["datastore"]; got != "/dc1/datastore/datastore1" {
-		t.Fatalf("vsphere topology datastore = %v", got)
+	// Authored inventory paths reduce to object names for the
+	// name-resolving community.vmware parameters; folders stay paths.
+	if got := topology["datastore"]; got != "datastore1" {
+		t.Fatalf("vsphere topology datastore = %v, want the object name", got)
+	}
+	if got := topology["computeCluster"]; got != "cluster1" {
+		t.Fatalf("vsphere topology computeCluster = %v, want the object name", got)
+	}
+	if got := topology["resourcePool"]; got != "bootwright" {
+		t.Fatalf("vsphere topology resourcePool = %v, want the object name", got)
+	}
+	if got := topology["folder"]; got != "/dc1/vm/bootwright" {
+		t.Fatalf("vsphere topology folder = %v, want the authored path", got)
 	}
 	staging := vsphere["isoStaging"].(map[string]any)
-	if got := staging["datastore"]; got != "/dc1/datastore/datastore1" {
-		t.Fatalf("isoStaging datastore = %v, want the failure-domain default", got)
+	if got := staging["datastore"]; got != "datastore1" {
+		t.Fatalf("isoStaging datastore = %v, want the failure-domain datastore name", got)
 	}
 	if got := staging["folder"]; got != "bootwright-vmedia" {
 		t.Fatalf("isoStaging folder = %v", got)
@@ -78,7 +89,7 @@ func TestVSphereFixtureRendersMachineComponentAndBootVars(t *testing.T) {
 		t.Fatalf("agentIso stagePath = %q, want %q", stagePath, wantStage)
 	}
 	fetchURL, _ := agentISO["fetchUrl"].(string)
-	wantFetch := "[/dc1/datastore/datastore1] bootwright-vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-vsphere.iso"
+	wantFetch := "[datastore1] bootwright-vmedia/__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__/agent-sno-vsphere.iso"
 	if fetchURL != wantFetch {
 		t.Fatalf("agentIso fetchUrl = %q, want %q", fetchURL, wantFetch)
 	}

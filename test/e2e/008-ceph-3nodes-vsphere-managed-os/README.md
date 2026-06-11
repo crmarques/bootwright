@@ -107,8 +107,8 @@ spec:
 ## Run
 
 ```bash
-bootwright context init 006-ceph-3nodes-vsphere-managed-os \
-  -f test/e2e/006-ceph-3nodes-vsphere-managed-os --yes
+bootwright context init 008-ceph-3nodes-vsphere-managed-os \
+  -f test/e2e/008-ceph-3nodes-vsphere-managed-os --yes
 bootwright secret sync
 bootwright host trust --hosts bastion --yes
 bootwright bastion setup --yes
@@ -116,11 +116,11 @@ bootwright apply --stage infra --clusters ceph-vsphere --yes
 bootwright apply --stage clusters --clusters ceph-vsphere --yes
 ```
 
-The infra stage prepares the bastion/provider host, starts the emulated BMC,
-creates the three VMs with a root disk and two small OSD data disks, installs
-RHEL through virtual media, waits for SSH, and records managed SSH trust. The
-clusters stage runs the existing Ceph prerequisites and cephadm flow against the
-three installed nodes.
+The infra stage prepares the bastion, creates the three VMs through the
+vCenter API with a root disk and two small OSD data disks, installs RHEL
+through datastore-staged virtual media, waits for SSH, and records managed
+SSH trust. The clusters stage runs the existing Ceph prerequisites and
+cephadm flow against the three installed nodes.
 
 ## Laptop DNS
 

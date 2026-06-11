@@ -151,10 +151,9 @@ an ODF external-cluster-details secret and managed Ceph where Ansible installs
 cephadm prerequisites on ready or Bootwright-installed storage nodes.
 
 Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
-bare metal with Redfish virtual media, and KubeVirt VMs hosted by OpenShift
-Virtualization are converged by the shipped Ansible workflows. vSphere remains
-a schema path until its provider role is converged; IPMI is not apply-supported
-today.
+bare metal with Redfish virtual media, KubeVirt VMs hosted by OpenShift
+Virtualization, and vCenter-managed vSphere VMs are converged by the shipped
+Ansible workflows. IPMI is not apply-supported today.
 
 ## CLI
 

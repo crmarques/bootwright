@@ -47,9 +47,12 @@
   failed_when: false
   no_log: true
 
+# failed_when: false rewrites the registered .failed to false, so presence
+# must come from the success-only `instance` return instead — a missing VM
+# keeps destroy idempotent.
 - name: Resolve vSphere VM presence
   ansible.builtin.set_fact:
-    bootwright_vsphere_vm_present: "{{ not (bootwright_vsphere_destroy_info.failed | default(false)) }}"
+    bootwright_vsphere_vm_present: "{{ bootwright_vsphere_destroy_info.instance is defined }}"
     bootwright_vsphere_vm_annotation: "{{ bootwright_vsphere_destroy_info.instance.annotation | default('') }}"
   changed_when: false
 
@@ -74,6 +77,8 @@
     username: "{{ bootwright_vsphere_credentials.username }}"
     password: "{{ bootwright_vsphere_credentials.password }}"
     validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
     name: "{{ bootwright_vsphere_vm_name }}"
     state: powered-off
     force: true
@@ -116,7 +121,7 @@
 
 - name: Delete recorded vSphere virtual media from the datastore
   community.vmware.vsphere_file:
-    host: "{{ bootwright_vsphere.server }}"
+    hostname: "{{ bootwright_vsphere.server }}"
     username: "{{ bootwright_vsphere_credentials.username }}"
     password: "{{ bootwright_vsphere_credentials.password }}"
     validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"

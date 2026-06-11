@@ -185,7 +185,7 @@
 
     - name: Delete uploaded vSphere virtual media from the datastore
       community.vmware.vsphere_file:
-        host: "{{ bootwright_vsphere_media.server }}"
+        hostname: "{{ bootwright_vsphere_media.server }}"
         username: "{{ bootwright_vsphere_media_credentials.username }}"
         password: "{{ bootwright_vsphere_media_credentials.password }}"
         validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"

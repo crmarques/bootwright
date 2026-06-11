@@ -52,8 +52,8 @@ func TestManagedOSInstallVarsFromCephVSphereFixture(t *testing.T) {
 		t.Fatalf("vsphere credentialsPath = %v", got)
 	}
 	staging := vsphere["isoStaging"].(map[string]any)
-	if got := staging["datastore"]; got != "/dc1/datastore/datastore1" {
-		t.Fatalf("isoStaging datastore = %v", got)
+	if got := staging["datastore"]; got != "datastore1" {
+		t.Fatalf("isoStaging datastore = %v, want the object name", got)
 	}
 	osInstall := first["osInstall"].(map[string]any)
 	image := osInstall["image"].(map[string]any)
@@ -77,8 +77,8 @@ func TestManagedOSInstallVarsFromCephVSphereFixture(t *testing.T) {
 		t.Fatalf("managed OS stagePath = %v", stagePath)
 	}
 	fetchURL, _ := iso["fetchUrl"].(string)
-	if !strings.HasPrefix(fetchURL, "[/dc1/datastore/datastore1] bootwright-vmedia/") {
-		t.Fatalf("managed OS fetchUrl = %v, want a datastore attach path", fetchURL)
+	if !strings.HasPrefix(fetchURL, "[datastore1] bootwright-vmedia/") {
+		t.Fatalf("managed OS fetchUrl = %v, want a datastore-name attach path", fetchURL)
 	}
 	readiness := boot["readiness"].(map[string]any)
 	if readiness["type"] != "none" {

@@ -83,9 +83,13 @@
             group: root
             mode: "0600"
 
+    # The managed-OS flow includes the media role itself before this boot
+    # driver runs, and vsphere_copy re-uploads the full ISO on every call;
+    # the attachment fact set by the media role skips the duplicate upload.
     - name: Prepare vSphere virtual media
       ansible.builtin.include_role:
         name: "{{ bootwright_component.mediaPrepareRole }}"
+      when: not (bootwright_redfish_vmedia_backend_attached | default(false) | bool)
 
     - name: Load vCenter credentials
       ansible.builtin.include_role:
@@ -103,6 +107,8 @@
         username: "{{ bootwright_vsphere_boot_credentials.username }}"
         password: "{{ bootwright_vsphere_boot_credentials.password }}"
         validate_certs: "{{ not (bootwright_vsphere_boot.disableCertificateVerification | default(false) | bool) }}"
+        datacenter: "{{ bootwright_vsphere_boot.topology.datacenter }}"
+        folder: "{{ bootwright_vsphere_boot.topology.folder | default(omit, true) }}"
         name: "{{ bootwright_vsphere_boot_vm_name }}"
         state: powered-on
       vars:
@@ -133,6 +139,33 @@
               /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
           changed_when: false
 
+        # During internal local-root runs the key probe must execute as the
+        # invoking user — file-backed keys live in the caller's home, which
+        # root may not read on every filesystem (the redfish driver carries
+        # the same handling).
+        - name: Resolve node SSH auth probe key execution context
+          ansible.builtin.set_fact:
+            bootwright_vsphere_node_ready_ssh_key_exec_user: >-
+              {{
+                ('#' ~ lookup('env', 'SUDO_UID'))
+                if ((lookup('env', 'BOOTWRIGHT_INTERNAL_LOCAL_ROOT') | default('', true)) == '1'
+                    and ((lookup('env', 'SUDO_UID') | default('', true)) | length) > 0)
+                else ''
+              }}
+            bootwright_vsphere_node_ready_ssh_key_command_prefix: []
+          changed_when: false
+
+        - name: Resolve node SSH auth probe key caller command prefix
+          ansible.builtin.set_fact:
+            bootwright_vsphere_node_ready_ssh_key_command_prefix:
+              - sudo
+              - -n
+              - -u
+              - "{{ bootwright_vsphere_node_ready_ssh_key_exec_user }}"
+              - --
+          changed_when: false
+          when: (bootwright_vsphere_node_ready_ssh_key_exec_user | length) > 0
+
         - name: Wait for node SSH to confirm live ISO boot complete
           ansible.builtin.wait_for:
             host: "{{ bootwright_vsphere_node_probe_address }}"
@@ -142,10 +175,7 @@
 
         - name: Check node SSH auth probe key
           ansible.builtin.command:
-            argv:
-              - test
-              - -f
-              - "{{ bootwright_vsphere_node_ready_key_path }}"
+            argv: "{{ bootwright_vsphere_node_ready_ssh_key_command_prefix + ['test', '-f', bootwright_vsphere_node_ready_key_path] }}"
           register: bootwright_vsphere_node_ready_key_check
           changed_when: false
           failed_when: false
@@ -155,24 +185,29 @@
 
         - name: Wait for node SSH to accept configured key
           ansible.builtin.command:
-            argv:
-              - ssh
-              - -i
-              - "{{ bootwright_vsphere_node_ready_key_path }}"
-              - -o
-              - BatchMode=yes
-              - -o
-              - StrictHostKeyChecking=accept-new
-              - -o
-              - "UserKnownHostsFile={{ bootwright_vsphere_node_ready_known_hosts_path }}"
-              - -o
-              - "ConnectTimeout={{ bootwright_vsphere_node_ready_ssh_connect_timeout_seconds | int }}"
-              - -o
-              - ConnectionAttempts=1
-              - -p
-              - "{{ bootwright_vsphere_node_ready_port | string }}"
-              - "{{ bootwright_vsphere_node_ready_user }}@{{ bootwright_vsphere_node_probe_address }}"
-              - "true"
+            argv: >-
+              {{
+                bootwright_vsphere_node_ready_ssh_key_command_prefix
+                + [
+                  'ssh',
+                  '-i',
+                  bootwright_vsphere_node_ready_key_path,
+                  '-o',
+                  'BatchMode=yes',
+                  '-o',
+                  'StrictHostKeyChecking=accept-new',
+                  '-o',
+                  'UserKnownHostsFile=' ~ bootwright_vsphere_node_ready_known_hosts_path,
+                  '-o',
+                  'ConnectTimeout=' ~ (bootwright_vsphere_node_ready_ssh_connect_timeout_seconds | int),
+                  '-o',
+                  'ConnectionAttempts=1',
+                  '-p',
+                  bootwright_vsphere_node_ready_port | string,
+                  bootwright_vsphere_node_ready_user ~ '@' ~ bootwright_vsphere_node_probe_address,
+                  'true'
+                ]
+              }}
           register: bootwright_vsphere_node_ready_ssh_auth
           changed_when: false
           failed_when: false
