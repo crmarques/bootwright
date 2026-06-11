@@ -9,9 +9,8 @@ description: InfraProvider capability shapes and cluster machine selection.
 which cluster consumes the capability.
 
 Current apply support covers libvirt machines with emulated Redfish BMCs,
-bare-metal machines with Redfish virtual media, and KubeVirt VMs hosted on an
-OpenShift Virtualization cluster. vSphere is a valid schema shape, but its
-apply adapter is not converged yet.
+bare-metal machines with Redfish virtual media, KubeVirt VMs hosted on an
+OpenShift Virtualization cluster, and vCenter-managed vSphere VMs.
 
 ## Bare Metal
 
@@ -106,12 +105,13 @@ spec:
           resourcePool: /dc1/host/cluster1/Resources/bootwright
           networks:
             - VM_Network_1
+    isoStaging:
+      folder: bootwright-vmedia
     machineProfiles:
       - name: vsphere-control-plane
         cpu: 8
         memoryMiB: 22528
         diskGiB: 120
-        template: rhcos
         failureDomainRef: dc1-zone-a
 ```
 
@@ -122,9 +122,25 @@ When several failure domains are declared every profile must set
 and `failureDomainRef` are vSphere-only profile fields; profile `dataDisks`
 are consumed by the libvirt and vSphere adapters only.
 
-The vSphere desired-state shape is present so the schema can stabilize ahead
-of the apply adapter. The shipped apply workflows do not converge vSphere
-clusters yet.
+The vSphere adapter creates VMs through the vCenter API from the controller:
+no provider host machine is involved. An empty `template` creates a blank VM
+(the normal path — both the OpenShift agent ISO and managed RHEL installs
+boot from virtual media); a set `template` clones from that vCenter
+template. VMs are created with EFI firmware, thin-provisioned disks on a
+paravirtual SCSI controller, vmxnet3 NICs with deterministic
+manually-assigned MACs, and disk-first boot order so an attached install CD
+cannot re-enter the installer once the disk is bootable.
+
+Boot and install ISOs upload to a datastore folder before attach.
+`isoStaging` overrides the location: `datastore` defaults to the machine's
+failure-domain `topology.datastore`, `folder` defaults to
+`bootwright-vmedia`. When authored, `isoStaging` must set at least one of
+the two fields.
+
+`vcenters[].credentialsRef` names a `user:password` secret (one line, like
+BMC credentials). `vcenters[].disableCertificateVerification: true` opts a
+self-signed lab vCenter out of TLS verification — a lab posture, not a
+production default; verification stays on unless each vCenter opts out.
 
 ## KubeVirt
 

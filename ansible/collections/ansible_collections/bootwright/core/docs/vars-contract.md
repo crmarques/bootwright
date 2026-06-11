@@ -121,9 +121,21 @@ bootwright_clusters:
           kubeconfig: "{{ bootwright_clusters_dir }}/metal-ocp/secrets/kubeconfig"
           namespace: bootwright-child-ocp
           storageClassRef: lvms-vg1
+        vsphere:                # vCenter-managed machines; consumed by
+          server: vcenter.example.test  # machine_substrate_vsphere and the
+          port: 443                     # vsphere boot/media roles
+          credentialsRef: vcenter-credentials
+          credentialsPath: /context/secrets/vcenter-credentials  # user:password file
+          disableCertificateVerification: true
+          failureDomain: dc1-zone-a     # resolved placement
+          topology: { datacenter, computeCluster, datastore, folder, resourcePool, networks }
+          isoStaging: { datastore, folder }  # defaults applied by the renderer
+          template: rhcos-template      # optional clone source; absent = blank create
         boot:
           redfish: {}
-          agentIso: {}
+          agentIso: {}        # vsphere machines: stageHost is localhost and
+                              # fetchUrl is the "[datastore] path" attach target
+          readiness: {}       # ssh (cluster flow) or none (managed OS)
           media:
             libvirt: {}         # consumed only by bootwright.core.container_cluster_media_libvirt
         bmcEmulated:

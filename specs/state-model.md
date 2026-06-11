@@ -522,8 +522,8 @@ Rules:
   type behind `spec.hosts[].machineRef` →
   `Machine.spec.substrate.providerRef`: `libvirt` and `baremetal` providers
   derive `type: baremetal` with `baremetal.provisioningNetwork: disabled`;
-  `kubevirt` providers derive `type: none`. `render effective` materializes
-  the derived platform. When the bound machines span multiple provider types
+  `vsphere` providers derive `type: vsphere`; `kubevirt` providers derive
+  `type: none`. `render effective` materializes the derived platform. When the bound machines span multiple provider types
   and the platform is omitted, validation rejects the cluster naming the
   conflicting providers. An authored platform always wins.
 - `spec.install.endpoints` keys are the closed slot vocabulary `api`,

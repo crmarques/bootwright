@@ -56,12 +56,13 @@ spec:
           resourcePool: /dc1/host/cluster1/Resources/bootwright
           networks:
             - ocp-install
+    isoStaging:
+      folder: bootwright-vmedia
     machineProfiles:
       - name: sno
         cpu: 8
         memoryMiB: 22528
         diskGiB: 120
-        template: rhcos
         failureDomainRef: dc1-zone-a
   networkAttachments:
     - name: {{.NetworkID}}
