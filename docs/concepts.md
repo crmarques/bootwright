@@ -21,6 +21,8 @@ instead of compact inline maps.
 | --- | --- |
 | `Environment` | Fleet-wide defaults, selected resource files, cluster selection, service access catalog, secret sources, mirrors, component images |
 | `Machine` | SSH access to a machine that can run substrate or service actions |
+| `MachineImage` | Bootable install media for managed OS installs: ISO location and package install source |
+| `MachineInstallProfile` | Reusable managed OS install settings: OS family, installer, customizations |
 | `InfraProvider` | Capability inventory: bare-metal machines and virtual machine profiles |
 | `InfraComponent` | Machine-bound shared infra services and routable endpoints |
 | `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
@@ -29,7 +31,7 @@ instead of compact inline maps.
 | `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
 | `StoragePool` | Ceph pool role, placement, and replication settings |
 | `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
-| `StorageObjectGateway` | RGW service and refs to public and cephadm ingress endpoints |
+| `StorageObjectGateway` | RGW service with its owned public endpoint and cephadm ingress VIPs |
 | `StorageExport` | Storage services prepared for downstream consumers |
 | `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
 | `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
@@ -38,7 +40,7 @@ instead of compact inline maps.
 ## Reference Flow
 
 ```text
-ContainerCluster.spec.nodes[*].machineRef
+ContainerCluster.spec.hosts[*].machineRef
   -> Machine
   -> InfraProvider (Machine.spec.substrate.providerRef / profileRef)
 
@@ -169,10 +171,10 @@ Provider MAC inventory, or deterministic generated MACs for Bootwright-created
 virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and
 matching NMState interfaces.
 
-Endpoint definitions stay on `ContainerCluster.spec.install.endpoints`. Consumers bind to
-endpoint names explicitly, such as `ContainerCluster.spec.install.endpointRefs`
-or `StorageObjectGateway` endpoint refs. Effective VIPs must land inside one
-selected machine-network CIDR.
+Endpoint definitions stay on `ContainerCluster.spec.install.endpoints` under
+the closed `api`, `api-int`, and `ingress` keys; `StorageObjectGateway` owns
+its RGW public and ingress endpoints directly. Effective VIPs must land inside
+one selected machine-network CIDR.
 
 DNS resolver intent is intentionally outside raw NMState when it selects a
 managed or external Bootwright name-resolution entry. Put the service reference

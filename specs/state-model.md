@@ -426,7 +426,7 @@ Rules:
 - Component arms use `machineRef` for placement.
 - Artifact server, proxy, name-resolution, NTP, registry, and load-balancer
   arms require compatible machine capabilities.
-- Endpoint entries use `machineAddress` to select a named
+- Endpoint entries use `addressRef` to select a named
   `Machine.spec.addresses[]` value on the placement machine.
 - A `nameResolution` arm authoritatively answers its rendered records and
   forwards every other query to `forwarders[]` (IP resolvers); with no
@@ -897,7 +897,7 @@ Rules:
 
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
   selected machines, selected providers, endpoints, and platform render mode.
-- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
+- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.hosts`,
   each referenced `Machine`, selected `NetworkConfig` templates, per-machine
   network overrides, and substrate MAC inventory.
 - Machine boot variables are rendered from `Machine` substrate facts,

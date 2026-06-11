@@ -55,8 +55,8 @@ or an object item with an omitted/null value, resolves to
 read that file and `<name>.key`, unless `file:` and `keyFile:` point at
 operator-owned files. Generated SSH key pairs write the private key to
 `<name>` and the public key to `<name>.pub`. Each kind
-references the secret by name: `keyRef`, `credentialRef`,
-`trustBundleRef`, `installTrust.caBundleRefs[].name`,
+references the secret by name: `keyRef`, `credentialsRef`,
+`trustBundleRef`, `installTrust.caBundleRefs[]`,
 `proxyAuthRef`, `secretRef`, `defaultCertificateRef`, or
 `nodeSSH.keyPairRef`. Durable SSH targets normally use context-managed
 host trust recorded by `bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef`

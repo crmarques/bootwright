@@ -45,5 +45,5 @@ endpoints:
     address: 192.168.133.10
 ```
 
-The omitted `source.type` defaults to `openshift` when a
-`ContainerCluster.spec.install.endpointRefs` role uses the endpoint.
+The omitted `source.type` defaults to `openshift` for the role-keyed
+`ContainerCluster.spec.install.endpoints` entries.

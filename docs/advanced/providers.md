@@ -194,8 +194,9 @@ kind: InfraComponent
 metadata:
   name: proxy
 spec:
+  type: proxy
   proxy:
-    type: squid
+    implementation: squid
     machineRef: services-host
     port: 3128
 ```
@@ -210,6 +211,7 @@ kind: InfraComponent
 metadata:
   name: artifact-server
 spec:
+  type: artifactServer
   artifactServer:
     machineRef: services-host
     listeners:
@@ -245,7 +247,7 @@ spec:
         endpointRef: bmc
 ```
 
-Endpoint names are endpoint selectors; `machineAddress` values resolve against the
+Endpoint names are endpoint selectors; `addressRef` values resolve against the
 named addresses on the selected `machineRef`. For `redfishVirtualMedia`, use a
 BMC-routable IP address entry in most environments; many BMCs do not reliably
 resolve DNS aliases, and Bootwright uses the matched address value directly in

@@ -150,6 +150,7 @@ kind: InfraComponent
 metadata:
   name: apps
 spec:
+  type: loadBalancer
   loadBalancer:
     implementation: haproxy
     machineRef: bastion
@@ -176,8 +177,8 @@ the VIP to the load-balancer host.
 Storage RGW endpoints are owned by the `StorageObjectGateway`, not by a cluster.
 `spec.public` is the public S3 endpoint, and each `spec.ceph.ingresses[]` entry
 is a concrete ingress VIP. `prefixLength` provides the `/24` style suffix cephadm
-expects for the keepalived virtual IP, and `interfaceNetworks[]` tells cephadm
-which site-local subnet can host that VIP:
+expects for the keepalived virtual IP, and `virtualInterfaceNetworks[]` tells
+cephadm which site-local subnet can host that VIP:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1

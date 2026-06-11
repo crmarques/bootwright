@@ -16,7 +16,7 @@ The render step merges the provisioning kinds into concrete outputs:
 
 - `install-config.yaml` from `ContainerCluster`, `Environment`,
   `NetworkConfig`, and `ContainerCluster.spec.install.platform`
-- `agent-config.yaml` from `ContainerCluster.nodes`,
+- `agent-config.yaml` from `ContainerCluster.spec.hosts`,
   `Machine`, `NetworkConfig` templates, and provider
   MAC inventory
 - provider variables from `InfraProvider`, `InfraComponent`, `Machine`, and

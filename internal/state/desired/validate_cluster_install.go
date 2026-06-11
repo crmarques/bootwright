@@ -220,7 +220,7 @@ func validateClusterArtifactAccess(owner string, access v1alpha1.ClusterArtifact
 	if access.ServerRef.Name == "" {
 		msg := prefix + ".serverRef is required when artifactAccess endpoints are set"
 		if env != nil && (defaulted.ArtifactAccessRedfishVirtualMedia || defaulted.ArtifactAccessContainerClusterInstall) {
-			msg += fmt.Sprintf(" (endpointRefs defaulted from Environment/%s spec.defaults.artifactAccess)", env.Metadata.Name)
+			msg += fmt.Sprintf(" (endpoint refs defaulted from Environment/%s spec.defaults.artifactAccess)", env.Metadata.Name)
 		}
 		return []string{msg}
 	}

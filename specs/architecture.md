@@ -110,7 +110,7 @@ These boundaries are reflected in rendering:
 - `install-config.yaml` is rendered from `ContainerCluster`, `Environment`,
   selected machines, machine `NetworkConfig` references, endpoints, and
   platform render mode.
-- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.nodes`,
+- `agent-config.yaml` hosts are rendered from `ContainerCluster.spec.hosts`,
   referenced `Machine` objects, `NetworkConfig` templates, and provider or
   generated substrate MAC inventory.
 - Machine and endpoint provider variables resolve substrate network

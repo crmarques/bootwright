@@ -10,7 +10,7 @@ bastion-hosted artifact server so Redfish virtual media can fetch the
 generated agent ISO from the bastion.
 
 The case uses external proxy and DNS services. It does not declare managed
-proxy, DNS, or load-balancer components. API and ingress endpoints omit
-`source.type`, so `ContainerCluster.spec.install.endpointRefs` treats them as
-OpenShift-managed and the installer uses the default keepalived and HAProxy
-behavior.
+proxy, DNS, or load-balancer components. The
+`ContainerCluster.spec.install.endpoints` entries omit `source.type`, so they
+default to OpenShift-managed and the installer uses the default keepalived and
+HAProxy behavior.

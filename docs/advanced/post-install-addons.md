@@ -112,6 +112,7 @@ metadata:
 spec:
   addonRefs:
     - openshift-virtualization
+---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata:
