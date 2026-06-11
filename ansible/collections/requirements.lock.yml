@@ -24,3 +24,11 @@ collections:
     version: 6.0.2
     source: https://galaxy.ansible.com/download/ansible-utils-6.0.2.tar.gz
     filesManifestSha256: 19dcf67b45414d5687c1e9811735ab46014a9a7fd8b1f04fbfd1ea26e2baf98f
+  - name: community.vmware
+    version: 6.2.0
+    source: https://galaxy.ansible.com/download/community-vmware-6.2.0.tar.gz
+    filesManifestSha256: 0279b7e41378c3418d42037c9f411ab086faab807f5381cc02b325335bfaead4
+  - name: vmware.vmware
+    version: 2.8.0
+    source: https://galaxy.ansible.com/download/vmware-vmware-2.8.0.tar.gz
+    filesManifestSha256: d69b3260acc378fc29bec07ad1777b637612177df52d52dc6ab116ae4abe3f55

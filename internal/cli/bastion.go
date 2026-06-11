@@ -92,7 +92,7 @@ func newBastionSetupCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *co
 		if err != nil {
 			return failErr(1, err)
 		}
-		plan, err := controllerBootstrapPlan(len(proxyEnv) > 0)
+		plan, err := controllerBootstrapPlan(len(proxyEnv) > 0, bastion.StatePyvmomiPin(state))
 		if err != nil {
 			return failErr(1, err)
 		}

@@ -15,9 +15,11 @@ import (
 const versionLookupDate = "2026-05-21"
 const currentVersionLookupDate = "2026-05-21"
 const ansibleCoreLookupDate = "2026-05-31"
+const pyvmomiLookupDate = "2026-06-11"
 
 const (
 	defaultSushyToolsVersion = "2.2.0"
+	defaultPyvmomiVersion    = "9.1.0.0"
 )
 
 // OpenShiftClientsMirrorBase is the canonical upstream base URL for downloading
@@ -45,6 +47,9 @@ func ComponentPins(state v1alpha1.State) []ComponentPin {
 	}
 	if usesSushyTools(state) {
 		pins = append(pins, ComponentPin{Name: "sushy-tools", Version: defaultSushyToolsVersion, Source: "https://pypi.org/project/sushy-tools/", LookupDate: versionLookupDate})
+	}
+	if usesVSphere(state) {
+		pins = append(pins, ComponentPin{Name: "pyvmomi", Version: defaultPyvmomiVersion, Source: "https://pypi.org/project/pyvmomi/", LookupDate: pyvmomiLookupDate})
 	}
 	for _, gate := range servicePinGates {
 		if gate.uses(state) {
@@ -135,6 +140,21 @@ func usesSushyTools(state v1alpha1.State) bool {
 		}
 		enabled := d.Enabled == nil || *d.Enabled
 		if enabled && (d.Emulator == "" || d.Emulator == v1alpha1.DefaultBMCEmulator) {
+			return true
+		}
+	}
+	return false
+}
+
+// usesVSphere reports whether any vSphere provider declares machine
+// profiles, implying community.vmware modules (and so pyvmomi in the
+// controller venv) will run during apply.
+func usesVSphere(state v1alpha1.State) bool {
+	for _, p := range state.InfraProviders {
+		if p.Spec.Type != v1alpha1.ProvisionerVSphere || p.Spec.VSphere == nil {
+			continue
+		}
+		if len(stateview.ProviderMachineProfiles(p)) > 0 {
 			return true
 		}
 	}

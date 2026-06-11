@@ -14,3 +14,7 @@ collections:
     type: url
   - name: https://galaxy.ansible.com/download/ansible-utils-6.0.2.tar.gz
     type: url
+  - name: https://galaxy.ansible.com/download/community-vmware-6.2.0.tar.gz
+    type: url
+  - name: https://galaxy.ansible.com/download/vmware-vmware-2.8.0.tar.gz
+    type: url

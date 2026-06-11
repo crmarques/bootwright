@@ -325,7 +325,7 @@ func TestBootstrapPlanWithDepsAddsPythonInstallWhenMissing(t *testing.T) {
 	got, err := BootstrapPlanWith(fakeProcessDeps{
 		paths: map[string]bool{"dnf": true},
 		uid:   0,
-	}.deps(), "/venv", func(name string) string { return "/venv/bin/" + name }, false, false)
+	}.deps(), "/venv", func(name string) string { return "/venv/bin/" + name }, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestBootstrapPlanWithDepsUsesExistingPython(t *testing.T) {
 		paths:   map[string]bool{"python3.12": true},
 		outputs: map[string][]byte{"python3.12": []byte("Python 3.12.4")},
 		uid:     1000,
-	}.deps(), "/venv", func(name string) string { return "/venv/bin/" + name }, false, false)
+	}.deps(), "/venv", func(name string) string { return "/venv/bin/" + name }, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenv(t *testing.T) {
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
-	}.deps(), "/venv", venvBin, false, false)
+	}.deps(), "/venv", venvBin, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestBootstrapPlanWithDepsSkipsPinnedVenvWithoutSystemPython(t *testing.T) {
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
 		},
-	}.deps(), "/venv", venvBin, false, false)
+	}.deps(), "/venv", venvBin, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestBootstrapPlanWithDepsRecreatesOutdatedPinnedVenv(t *testing.T) {
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.19.0\n"),
 		},
-	}.deps(), "/venv", venvBin, false, false)
+	}.deps(), "/venv", venvBin, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +427,7 @@ func TestBootstrapPlanWithDepsRepairsUsableVenvWithoutSystemPython(t *testing.T)
 			commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 25.0.0 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
 			commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.19.0\n"),
 		},
-	}.deps(), "/venv", venvBin, false, false)
+	}.deps(), "/venv", venvBin, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func TestBootstrapPlanWithDepsWrapsRootManagedVenvSteps(t *testing.T) {
 		uid:     1000,
 	}.deps(), "/var/lib/bootwright/ansible-venv", func(name string) string {
 		return "/var/lib/bootwright/ansible-venv/bin/" + name
-	}, true, true)
+	}, true, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,6 +466,37 @@ func TestBootstrapPlanWithDepsWrapsRootManagedVenvSteps(t *testing.T) {
 		if !strings.Contains(step.Label, "(requires sudo)") {
 			t.Fatalf("step label does not mention sudo: %q", step.Label)
 		}
+	}
+}
+
+func TestBootstrapPlanWithDepsInstallsPyvmomiForVSphereStates(t *testing.T) {
+	venvBin := func(name string) string { return "/venv/bin/" + name }
+	pinnedOutputs := map[string][]byte{
+		venvBin("python"): []byte("Python 3.12.4"),
+		commandOutputKey(venvBin("python"), "-m", "pip", "--version"):            []byte("pip 26.1.1 from /venv/lib/python3.12/site-packages/pip (python 3.12)"),
+		commandOutputKey(venvBin("python"), "-m", "pip", "show", "ansible-core"): []byte("Name: ansible-core\nVersion: 2.21.0\n"),
+	}
+
+	got, err := BootstrapPlanWith(fakeProcessDeps{outputs: pinnedOutputs}.deps(), "/venv", venvBin, false, false, "9.1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"/venv/bin/python", "-m", "pip", "install", "pyvmomi==9.1.0.0"}}
+	if len(got) != len(want) || !reflect.DeepEqual(got[0].Cmd, want[0]) {
+		t.Fatalf("pinned venv without pyvmomi: got %+v, want only the pyvmomi install", got)
+	}
+
+	withPyvmomi := map[string][]byte{}
+	for k, v := range pinnedOutputs {
+		withPyvmomi[k] = v
+	}
+	withPyvmomi[commandOutputKey(venvBin("python"), "-m", "pip", "show", "pyvmomi")] = []byte("Name: pyvmomi\nVersion: 9.1.0.0\n")
+	got, err = BootstrapPlanWith(fakeProcessDeps{outputs: withPyvmomi}.deps(), "/venv", venvBin, false, false, "9.1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("fully pinned venv: got %d steps, want 0: %+v", len(got), got)
 	}
 }
 

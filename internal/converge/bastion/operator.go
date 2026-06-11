@@ -64,6 +64,19 @@ func AnsibleCorePinnedVersion() (string, error) {
 	return ComponentPinnedVersion("ansible-core")
 }
 
+// StatePyvmomiPin returns the pinned pyvmomi version when the loaded
+// state declares vSphere machine profiles, and empty otherwise — the
+// pin is state-gated in render.ComponentPins so non-vSphere bastions
+// stay lean.
+func StatePyvmomiPin(state v1alpha1.State) string {
+	for _, pin := range render.ComponentPins(state) {
+		if pin.Name == "pyvmomi" {
+			return pin.Version
+		}
+	}
+	return ""
+}
+
 // StateOpenShiftReleaseVersion returns the first non-empty OpenShift
 // release version declared on any ContainerCluster. Empty when no
 // fixture pins a release (controller CLI install becomes a no-op then).

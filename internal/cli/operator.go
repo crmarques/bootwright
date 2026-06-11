@@ -26,8 +26,8 @@ import (
 // CLI's path helpers. Pure logic lives in internal/converge/bastion; this is a
 // thin adapter so the CLI doesn't have to know venv layout when
 // computing or running the plan.
-func controllerBootstrapPlan(preserveProxyEnv bool) ([]bastion.BootstrapStep, error) {
-	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), workspace.AnsibleVenvDir(), workspace.AnsibleVenvBin, preserveProxyEnv, true)
+func controllerBootstrapPlan(preserveProxyEnv bool, pyvmomiPin string) ([]bastion.BootstrapStep, error) {
+	return bastion.BootstrapPlanWith(controllerBootstrapProcessDeps(), workspace.AnsibleVenvDir(), workspace.AnsibleVenvBin, preserveProxyEnv, true, pyvmomiPin)
 }
 
 func controllerBootstrapProcessDeps() bastion.ProcessDeps {

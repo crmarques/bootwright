@@ -151,13 +151,15 @@ const SudoPreservedProxyVars = "HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https
 
 // BootstrapPlan computes the controller bootstrap sequence: optionally
 // install python3.12, recreate the venv when it is not pinned, then
-// install pinned pip and ansible-core. venvBin returns the absolute path
-// of a venv binary so the plan stays free of cli-package path helpers.
-func BootstrapPlan(venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool) ([]BootstrapStep, error) {
-	return BootstrapPlanWith(DefaultProcessDeps, venvDir, venvBin, preserveProxyEnv, rootManagedVenv)
+// install pinned pip and ansible-core (and pyvmomi when pyvmomiPin is
+// set — vSphere states drive vCenter through community.vmware modules
+// running on the controller). venvBin returns the absolute path of a
+// venv binary so the plan stays free of cli-package path helpers.
+func BootstrapPlan(venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool, pyvmomiPin string) ([]BootstrapStep, error) {
+	return BootstrapPlanWith(DefaultProcessDeps, venvDir, venvBin, preserveProxyEnv, rootManagedVenv, pyvmomiPin)
 }
 
-func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool) ([]BootstrapStep, error) {
+func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name string) string, preserveProxyEnv bool, rootManagedVenv bool, pyvmomiPin string) ([]BootstrapStep, error) {
 	pin, err := AnsibleCorePinnedVersion()
 	if err != nil {
 		return nil, err
@@ -171,11 +173,23 @@ func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name strin
 	venvUsable := pythonAtLeast312(deps, venvPython)
 	venvPipVersion := ""
 	venvAnsibleVersion := ""
+	venvPyvmomiVersion := ""
 	if venvUsable {
 		venvPipVersion = pythonPipVersion(deps, venvPython)
 		venvAnsibleVersion = pythonPackageVersion(deps, venvPython, "ansible-core")
+		if pyvmomiPin != "" {
+			venvPyvmomiVersion = pythonPackageVersion(deps, venvPython, "pyvmomi")
+		}
 	}
-	if venvUsable && venvPipVersion == pipPin && venvAnsibleVersion == pin {
+	pyvmomiPinned := pyvmomiPin == "" || venvPyvmomiVersion == pyvmomiPin
+	pyvmomiStep := func() BootstrapStep {
+		cmd := []string{venvPython, "-m", "pip", "install", "pyvmomi==" + pyvmomiPin}
+		if rootManagedVenv {
+			cmd = rootManagedCmdWith(deps, cmd, preserveProxyEnv)
+		}
+		return bootstrapStep("install pyvmomi=="+pyvmomiPin+" into venv", cmd)
+	}
+	if venvUsable && venvPipVersion == pipPin && venvAnsibleVersion == pin && pyvmomiPinned {
 		return steps, nil
 	}
 	python, found := ResolvePython312With(deps)
@@ -193,6 +207,9 @@ func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name strin
 				ansibleCmd = rootManagedCmdWith(deps, ansibleCmd, preserveProxyEnv)
 			}
 			steps = append(steps, bootstrapStep("install ansible-core=="+pin+" into venv", ansibleCmd))
+		}
+		if !pyvmomiPinned {
+			steps = append(steps, pyvmomiStep())
 		}
 		return steps, nil
 	}
@@ -226,6 +243,9 @@ func BootstrapPlanWith(deps ProcessDeps, venvDir string, venvBin func(name strin
 		ansibleCmd = rootManagedCmdWith(deps, ansibleCmd, preserveProxyEnv)
 	}
 	steps = append(steps, bootstrapStep("install ansible-core=="+pin+" into venv", ansibleCmd))
+	if pyvmomiPin != "" {
+		steps = append(steps, pyvmomiStep())
+	}
 	return steps, nil
 }
 
