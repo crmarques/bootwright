@@ -1,12 +1,20 @@
 package preflight
 
 import (
+	"crypto/tls"
+	"fmt"
+	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	secret "github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
+
+const vsphereSessionProbeTimeout = 15 * time.Second
 
 func stateNeedsVSphere(state v1alpha1.State) bool {
 	providers := map[string]v1alpha1.InfraProvider{}
@@ -37,4 +45,81 @@ func vspherePyvmomiCheck(deps Deps) Check {
 		return failCheck(checkGroupInstallerTools, name, evidence, "vSphere machine creation drives vCenter through pyvmomi-backed Ansible modules", "bootwright bastion setup")
 	}
 	return okCheck(checkGroupInstallerTools, name, venvPython+" imports pyVmomi")
+}
+
+// vsphereVCenterChecks probes every declared vCenter with a REST session
+// login using the resolved credentials, so unreachable endpoints and bad
+// credentials surface before apply instead of mid-convergence. Missing
+// credential material is left to the secret-material checks.
+func vsphereVCenterChecks(state v1alpha1.State, selected []Phase, secretsDir string, deps Deps) []Check {
+	if !anyPhaseInScope([]string{"machines", "base"}, selected) || !stateNeedsVSphere(state) {
+		return nil
+	}
+	env := stateview.Environment(state)
+	seen := map[string]bool{}
+	var checks []Check
+	for _, p := range state.InfraProviders {
+		if p.Spec.Type != v1alpha1.ProvisionerVSphere || p.Spec.VSphere == nil {
+			continue
+		}
+		for _, vc := range p.Spec.VSphere.VCenters {
+			if vc.Server == "" || seen[vc.Server] {
+				continue
+			}
+			seen[vc.Server] = true
+			checks = append(checks, vsphereSessionCheck(vc, env, secretsDir, deps))
+		}
+	}
+	return checks
+}
+
+func vsphereSessionCheck(vc v1alpha1.VSphereVCenter, env *v1alpha1.Environment, secretsDir string, deps Deps) Check {
+	name := vc.Server + " vCenter session"
+	credsPath := secret.ResolvePath(vc.CredentialsRef.Name, env, secretsDir)
+	creds, err := secret.ReadUserPasswordFile(credsPath, "vCenter credentials")
+	if err != nil {
+		// The secret-material checks already fail loudly on missing or
+		// malformed material; warn that the live probe could not run.
+		return Check{
+			Group:    checkGroupInstallerTools,
+			Name:     name,
+			Status:   StatusWarn,
+			Evidence: "session probe skipped: " + err.Error(),
+			Impact:   "vCenter reachability and credentials were not verified",
+		}
+	}
+	port := vc.Port
+	if port == 0 {
+		port = 443
+	}
+	url := fmt.Sprintf("https://%s:%d/api/session", vc.Server, port)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return failCheck(checkGroupInstallerTools, name, err.Error(), "vSphere machine creation needs a reachable vCenter API", "check the declared vcenters[].server and port")
+	}
+	req.SetBasicAuth(creds.Username, creds.Password)
+	resp, err := vsphereHTTPDo(deps, req, vc.DisableCertificateVerification)
+	if err != nil {
+		return failCheck(checkGroupInstallerTools, name, err.Error(), "vSphere machine creation needs a reachable vCenter API", "check network reachability, DNS, and TLS trust for "+vc.Server+" (disableCertificateVerification opts out of verification for self-signed labs)")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		return okCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode))
+	case resp.StatusCode == http.StatusUnauthorized:
+		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP 401", url), "vCenter rejected the declared credentials", "update the "+vc.CredentialsRef.Name+" secret (user:password) with bootwright secret set")
+	default:
+		return failCheck(checkGroupInstallerTools, name, fmt.Sprintf("%s answered HTTP %d", url, resp.StatusCode), "vSphere machine creation needs a working vCenter session API", "check the vCenter endpoint health for "+vc.Server)
+	}
+}
+
+func vsphereHTTPDo(deps Deps, req *http.Request, insecureSkipVerify bool) (*http.Response, error) {
+	if deps.HTTPDo != nil {
+		return deps.HTTPDo(req, insecureSkipVerify)
+	}
+	client := &http.Client{Timeout: vsphereSessionProbeTimeout}
+	if insecureSkipVerify {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	}
+	return client.Do(req)
 }

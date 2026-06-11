@@ -6,6 +6,7 @@ package preflight
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,6 +93,10 @@ type Deps struct {
 	StatExternalPath func(path string) (os.FileInfo, error)
 	CommandOutput    func(name string, args ...string) ([]byte, error)
 	UID              func() int
+	// HTTPDo issues API-endpoint probes (vCenter session auth). A nil
+	// value makes each check build a real client honoring the endpoint's
+	// certificate-verification setting.
+	HTTPDo func(req *http.Request, insecureSkipVerify bool) (*http.Response, error)
 }
 
 var DefaultDeps = Deps{
@@ -148,6 +153,7 @@ func CollectChecks(state v1alpha1.State, selected []Phase, hasState bool, secret
 		checks = append(checks, hostTrustChecks(state, secretsDir, selected, deps)...)
 		checks = append(checks, generatedSelfSignedDriftChecks(state, secretsDir)...)
 		checks = append(checks, kubeVirtHostClusterChecks(state, selected, clustersDir, deps)...)
+		checks = append(checks, vsphereVCenterChecks(state, selected, secretsDir, deps)...)
 	}
 	return checks
 }
