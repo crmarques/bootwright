@@ -995,6 +995,11 @@ func TestExamplesLoadValidateRenderAndPlanApplyAll(t *testing.T) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
+		// _wip holds intentionally-incomplete scratch examples (gitignored);
+		// they are not canonical and are not validated here.
+		if name == "_wip" {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join(examplesRoot, name)})
 			if err != nil {
