@@ -176,6 +176,7 @@ check: check-fast
 	$(MAKE) go-test-clean-checkout
 
 check-fast: cli-file-size-check check-go-source-visibility check-gofmt stale-term-check containerfile-pin-check check-e2e-deps
+	$(GO) test $(GO_TEST_PACKAGES)
 
 check-go-source-visibility:
 	@ignored=$$(find api cmd internal -type f -name '*.go' -print | git check-ignore --stdin 2>/dev/null || true); \
@@ -336,7 +337,7 @@ help:
 		'  container-build  Build the bootwright CLI image with a host-backed BuildKit cache' \
 		'  sync-bundle      Generate internal/converge/bundle/ansible_bundle.zip' \
 		'  check            Run fast guardrails first, then Go, Python, and Ansible checks' \
-		'  check-fast       Run cheap local guardrails without Go, Python, or Ansible tests' \
+		'  check-fast       Run cheap local guardrails plus Go unit tests (no Python, Ansible, race, or clean-checkout)' \
 		'  test             Run Go tests' \
 		'  validate         Validate test/e2e/001-sno-libvirt' \
 		'  plan             Render installer assets for test/e2e/001-sno-libvirt into .state' \
