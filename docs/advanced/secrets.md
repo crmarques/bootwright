@@ -11,11 +11,17 @@ live outside the repo. Three sources are supported per name:
 - Scalar list item, or a single-key list item with an omitted/null value -
   context-local bytes written with `bootwright secret set` into the encrypted
   current context secret store.
-- `file:` — operator-supplied bytes that already exist at a declared
-  path. The path is local to the bastion.
-- `generated:` — bytes Bootwright produces via `bootwright secret
-  sync`. Operators may also pre-populate generated credentials with
-  `bootwright secret set`.
+- `file:` — operator-owned local material that already exists at a declared
+  path. The path is resolved on the machine running Bootwright (the control
+  node); with the default `secretStorage.mode: source` it is read in place.
+- `generated:` — bytes Bootwright produces during `bootwright secret sync`
+  (context-local credentials, self-signed certificates, and SSH key pairs).
+
+!!! note "`secret set --generate` is for test fixtures only"
+    `bootwright secret set --generate` mints a random password (default
+    username `admin`) and is intended for test fixtures, not production
+    credential provisioning. Production generated material comes from
+    `bootwright secret sync` materializing the `generated:` declarations.
 
 By default, file-sourced secrets stay at their declared source paths. Set
 `secretStorage.mode: context` and run `bootwright secret sync` when
@@ -58,9 +64,9 @@ operator-owned files. Generated SSH key pairs write the private key to
 references the secret by name: `keyRef`, `credentialsRef`,
 `trustBundleRef`, `installTrust.caBundleRefs[]`,
 `proxyAuthRef`, `secretRef`, `defaultCertificateRef`, or
-`nodeSSH.keyPairRef`. Durable SSH targets normally use context-managed
-host trust recorded by `bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef`
-is available when an operator needs to point at explicit known_hosts material.
+`nodeSSH.keyPairRef`.
+
+### Node SSH keys
 
 For node SSH, use `install.nodeSSH.keyPairRef` when one
 secret owns both halves. Use `publicKeyRef` plus optional `privateKeyRef` when
@@ -68,29 +74,42 @@ the public key authorized in `install-config.yaml` and the private key used for
 local post-install probes are stored under different secret names. When
 `install.nodeSSH` is omitted, Bootwright uses
 `<cluster-name>-cluster-admin-ssh-key`; examples still declare and reference
-that name explicitly. Because that name derives from the cluster name,
-renaming a `ContainerCluster` that relies on the omission default re-derives
-it: validation reports the new name as a defaulted, undeclared secret, and
-generated key bytes are keyed by secret name, so declaring the new name
-produces a fresh key pair instead of reusing the one nodes were installed
-with. When renaming a cluster, keep `install.nodeSSH.keyPairRef` pinned to
-the existing secret name (or migrate the key material deliberately).
+that name explicitly.
+
+!!! warning "Renaming a cluster re-derives the default node-SSH secret"
+    Because `<cluster-name>-cluster-admin-ssh-key` derives from the cluster
+    name, renaming a `ContainerCluster` that relies on the omission default
+    re-derives it: validation reports the new name as a defaulted, undeclared
+    secret, and generated key bytes are keyed by secret name, so declaring the
+    new name produces a fresh key pair instead of reusing the one nodes were
+    installed with. When renaming a cluster, keep `install.nodeSSH.keyPairRef`
+    pinned to the existing secret name (or migrate the key material
+    deliberately).
 
 For durable machines Bootwright or managed tools SSH into, put SSH connection
-material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key material;
-managed Ceph node Hosts also require the public half at `<name>.pub` so
-Bootwright can pass it to cephadm. Bootwright records each non-local Machine
-server key under `/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses
-that known_hosts file with strict host-key checking. For interactive runs,
-recording trust up front is optional: `preflight` and `apply` show each
-unknown host's key fingerprint and ask before recording it, for hosts with no
-existing record only (opt out with `--trust-on-first-use=false`). Automation
-must still pre-record trust by running `bootwright host trust` after importing
-or updating a context — non-interactive runs (`--yes`, `--output json`,
-`--dry-run`) never prompt and fail closed on missing trust. Verify the
-displayed fingerprints out of band before accepting first-use trust; a
-*changed* server key is never accepted interactively and requires
-`bootwright host trust --replace` after you verify the new fingerprint.
+material on `Machine.spec.access.ssh`. `keyRef` supplies private SSH key
+material; managed Ceph node hosts also require the public half at `<name>.pub`
+so Bootwright can pass it to cephadm.
+
+### SSH host trust
+
+Durable SSH targets normally use context-managed host trust recorded by
+`bootwright host trust`; `Machine.spec.access.ssh.knownHostsRef` is available
+when an operator needs to point at explicit known_hosts material. Bootwright
+records each non-local Machine server key under
+`/var/lib/bootwright/contexts/<context>/trust/ssh/` and uses that known_hosts
+file with strict host-key checking.
+
+For interactive runs, recording trust up front is optional: `preflight` and
+`apply` show each unknown host's key fingerprint and ask before recording it,
+for hosts with no existing record only (opt out with
+`--trust-on-first-use=false`). Automation must still pre-record trust by
+running `bootwright host trust` after importing or updating a context —
+non-interactive runs (`--yes`, `--output json`, `--dry-run`) never prompt and
+fail closed on missing trust. Verify the displayed fingerprints out of band
+before accepting first-use trust; a *changed* server key is never accepted
+interactively and requires `bootwright host trust --replace` after you verify
+the new fingerprint.
 
 ## Local secrets directory
 
@@ -107,6 +126,12 @@ individual files mode `0600`. Context-local material is encrypted at rest with
 AES-256-GCM envelopes. Bootwright auto-initializes a `root-owned-file` keyring
 under `secrets/.bootwright/` on the first context-local write; the key files
 are host-local, unversioned, non-symlink regular files with mode `0600`.
+
+!!! note "Enforcing the mode requirement"
+    `bootwright apply` and `bootwright bastion setup` warn on secrets-dir or
+    secret-file mode violations by default. Pass `--strict-secrets` to either
+    command to abort instead when the secrets directory is not `0700` or any
+    secret file is not `0600`.
 
 ## Writing secrets
 
@@ -125,6 +150,13 @@ are host-local, unversioned, non-symlink regular files with mode `0600`.
 | Inspect encryption status | `bootwright secret encryption status` |
 | Migrate old plaintext context files | `bootwright secret encryption migrate --yes` |
 | Rotate the active context key | `bootwright secret encryption rotate --yes` |
+
+!!! note "Privilege behavior"
+    `bootwright secret set` writes via the local user and does **not** re-exec
+    as local root; you must have write access to the context secrets
+    directory. The other secret subcommands (`secret sync`, `secret delete`,
+    and the `secret encryption` family) operate on the root-managed context
+    store.
 
 After a successful cluster install, Bootwright stores the kubeadmin password at
 `clusters/<cluster>/secrets/kubeadmin-password`.
@@ -154,7 +186,9 @@ read external `file:` sources. It decrypts only the requested material.
 
 `bootwright print-env` exports `BOOTWRIGHT_CONTEXT` and proxy environment variables.
 When proxy credentials would be embedded in those exports, rerun it as
-`bootwright print-env --sensitive` and avoid recording the shell output.
+`bootwright print-env --sensitive` and avoid recording the shell output. See
+[Proxy and Disconnected Installs](proxy-and-disconnected.md) for how proxy
+credentials (`proxyAuthRef`) and mirror trust bundles are declared.
 
 ## Logical Material
 

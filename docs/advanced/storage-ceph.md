@@ -1,6 +1,6 @@
 ---
 title: Ceph Storage Clusters
-description: Host identity, OSD device selection, cluster config and mgr modules, the monitoring stack, cephadm service passthrough, pools and placement policies, stretch pool inheritance, additive-only convergence, and accessing a managed Ceph storage cluster.
+description: Distribution and bootstrap source, host identity and sites, OSD device selection, cluster config and mgr modules, the monitoring stack, cephadm service passthrough, pools and placement policies, stretch pool inheritance, additive-only convergence, and accessing a managed Ceph storage cluster.
 ---
 
 # Ceph storage clusters
@@ -9,6 +9,57 @@ A `StorageCluster` of `type: ceph` with `management: managed` is bootstrapped by
 Bootwright with `cephadm`. Ceph keeps no kubeconfig-style admin file on the
 controller — the admin keyring and `ceph.conf` live on the seed node — so
 day-to-day access is by SSH to the seed node plus `cephadm shell`.
+
+!!! note "Scope: managed Ceph only"
+    This page covers `management: managed` clusters — the ones Bootwright stands
+    up and converges with `cephadm`. A `StorageCluster` can also be imported with
+    `management: external`, in which case Bootwright runs no storage task at all
+    and only references the cluster (typically consumed through a `StorageExport`
+    and Data Foundation external mode). For the imported path, see the
+    [`StorageCluster` reference](../api/storage.md#storagecluster) and the
+    `baremetal-redfish-imported-ceph-odf`
+    [reference example](examples.md). The fields below apply only when
+    `management` is `managed`.
+
+## Distribution and bootstrap
+
+`spec.ceph.distribution` selects where Ceph comes from: `oss` (the default, the
+upstream community packages and images), `redhat` (Red Hat Ceph Storage), or
+`ibm` (IBM Storage Ceph). The subscription distributions install from
+entitlement-backed repositories, so `spec.ceph.entitlementRef` must name an
+`Environment.spec.entitlements[]` entry that resolves a Red Hat or IBM Ceph
+entitlement; `oss` takes no entitlement.
+
+`spec.ceph.release` selects which release to install for the chosen
+distribution. For `oss` it is an upstream release name (`squid`, `reef`,
+`quincy`) or a full `x.y.z` version, which pins the package repository
+reproducibly and — when `image` is unset — derives the matching
+`quay.io/ceph/ceph:vX.Y.Z` daemon image. For `redhat` and `ibm` it is the
+product stream (for example `9`). It defaults to the community default release
+for `oss` and to stream `9` for `redhat`/`ibm`. To mirror upstream packages for
+a disconnected `oss` install, set `spec.ceph.community.mirror` (it must stay
+empty for `redhat`/`ibm`).
+
+```yaml
+ceph:
+  distribution: redhat
+  release: "9"
+  entitlementRef: rhcs           # Environment.spec.entitlements[] name
+  cephadm:
+    bootstrap:
+      host: ceph-0               # topology host cephadm bootstraps on
+```
+
+`spec.ceph.cephadm.bootstrap.host` names the topology host cephadm bootstraps on
+(the seed node). The rendered `cephadm bootstrap --mon-ip` is always an address
+of that host: the address named by `cephadm.bootstrap.addressRef`, falling back
+to `cephadm.addressRef`, and finally the host machine's SSH address. See
+[Production best practices](#production-best-practices) for `spec.ceph.image`
+pinning, and the field-by-field tables and distribution rules in the
+[`StorageCluster` reference](../api/storage.md#ceph). The
+`ceph-distribution-oss`, `ceph-distribution-redhat`, and
+`ceph-distribution-ibm` [reference examples](examples.md) show each source end
+to end, including the entitlement and license-acceptance workflow.
 
 ## Host identity
 
@@ -30,6 +81,15 @@ Because the default follows the `Machine` name, renaming a `Machine` also
 renames the Ceph host identity of every host entry that left `hostname`
 unauthored. On a live cluster that makes the rendered topology name a host
 cephadm has never seen; pin `hostname:` to the original name before renaming.
+
+`spec.ceph.topology.hosts[].site` is each host's failure-domain bucket. Outside
+stretch mode the failure domain is `host` and `site` renders nothing; under
+[stretch mode](#stretch-mode-re-rules-policy-less-pools) it becomes the host's
+cephadm CRUSH location, and `placement.sites` (on monitoring, passthrough
+services, and the gateway/filesystem surfaces) selects against it. Because it is
+inert otherwise, `site` is required *exactly where it has effect* — when
+`spec.ceph.topology.stretch` is set or any `placement` narrows by `sites` — and
+may be omitted everywhere else.
 
 ## OSD device selection
 
@@ -55,10 +115,10 @@ hosts:
 ```
 
 The drivegroup form mirrors the cephadm OSD service spec field for field:
-`dataDevices`, `dbDevices`, and `walDevices` each select by `paths` or
-`all: true`, optionally narrowed by `rotational`, `size`, and `limit`
-(upstream spellings), alongside `encrypted`, `osdsPerDevice`, and
-`crushDeviceClass`.
+`dataDevices`, `dbDevices`, and `walDevices` each take **exactly one** of
+`paths` (literal device paths) or `all: true`, optionally narrowed by
+`rotational`, `size`, and `limit` (upstream spellings), alongside `encrypted`,
+`osdsPerDevice`, and `crushDeviceClass`.
 
 ## Production best practices
 
@@ -337,35 +397,11 @@ sudo cat /var/lib/bootwright/contexts/<ctx>/clusters/ceph-libvirt/secrets/dashbo
 ## Recovering the dashboard password
 
 If the `dashboard-password` file is lost, or the in-cluster password was changed
-and no longer matches the stored copy, reset it directly on the cluster. The
-`ceph` CLI is on the seed node's PATH after bootstrap, so no `cephadm shell` is
-needed:
-
-```bash
-# SSH to the seed node (the SSH line from cluster access)
-ssh root@192.168.134.20
-
-# Set a new admin password. Modern Ceph requires the password to be supplied
-# from a file via -i (a positional password argument is rejected), and enforces
-# a policy: at least 8 characters and not a common word.
-umask 077
-printf 'NewStr0ngPassw0rd' > /tmp/dash-pass
-sudo ceph dashboard ac-user-set-password admin -i /tmp/dash-pass
-rm -f /tmp/dash-pass
-
-# confirm the dashboard URL the active mgr is serving
-sudo ceph mgr services
-```
-
-To keep `bootwright cluster access` accurate, write the same value back to
-the stored file on the controller:
-
-```bash
-P=/var/lib/bootwright/contexts/<ctx>/clusters/ceph-libvirt/secrets/dashboard-password
-printf 'NewStr0ngPassw0rd' | sudo tee "$P" >/dev/null
-sudo chmod 0600 "$P"
-```
-
-A clean reinstall (`bootwright apply ... --override`, which clears `/etc/ceph` and
+and no longer matches the stored copy, reset it directly on the cluster and write
+the same value back to the stored file so `cluster access` stays accurate. A
+clean reinstall (`bootwright apply ... --override`, which clears `/etc/ceph` and
 re-bootstraps) re-captures a fresh dashboard password into the stored file
 automatically.
+
+See [Recovering the Ceph dashboard password](../troubleshooting.md#recovering-the-ceph-dashboard-password)
+in Troubleshooting for the step-by-step runbook.

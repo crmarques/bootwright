@@ -6,17 +6,144 @@ description: InfraProvider capability shapes and cluster machine selection.
 # Providers
 
 `InfraProvider` declares what a substrate can provide. It does not decide
-which cluster consumes the capability.
+which cluster consumes the capability — selected machines and clusters bind
+to a provider, and references always flow upward from cluster to provider to
+host.
 
 Current apply support covers libvirt machines with emulated Redfish BMCs,
 bare-metal machines with Redfish virtual media, KubeVirt VMs hosted on an
-OpenShift Virtualization cluster, and vCenter-managed vSphere VMs. Those
-substrates can back a complete cloud platform graph or a selected
-`ContainerCluster` or `StorageCluster` convergence.
+OpenShift Virtualization cluster, and vCenter-managed vSphere VMs. (IPMI is
+not apply-supported today.) Those substrates can back a complete cloud
+platform graph or a selected `ContainerCluster` or `StorageCluster`
+convergence.
+
+## The provider spec at a glance
+
+Every `InfraProvider` sets `spec.type` and the one matching arm:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: <provider-name>
+spec:
+  type: libvirt        # one of: libvirt | baremetal | vsphere | kubevirt
+  libvirt: { ... }     # the arm whose key equals spec.type
+```
+
+`spec.type` is required and must be one of `libvirt`, `baremetal`, `vsphere`,
+or `kubevirt`; any other value (for example `ipmi`) fails validation. The arm
+that matches `spec.type` is required, and every other arm must be empty.
+
+!!! note "`artifactAccess` is not authored on `InfraProvider`"
+    A `spec.artifactAccess` field exists on the struct but is **rejected** by
+    validation on `InfraProvider`. Artifact publication is wired at the
+    environment or cluster level instead — see
+    [`Environment.spec.defaults.artifactAccess`](../api/environment.md) and
+    [`ContainerCluster.spec.install.artifactAccess`](../api/container-cluster.md),
+    and the [Artifact publication](#artifact-publication) section below.
+
+## Libvirt
+
+Libvirt is the primary apply-supported substrate and the one used by the
+[Getting Started](../getting-started.md) walkthrough. The provider runs VMs on
+a libvirt host machine and serves an emulated Redfish BMC so the agent ISO can
+be attached as virtual media exactly as on real hardware.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt-provider
+spec:
+  type: libvirt
+  libvirt:
+    machineRef: bastion
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      auth:
+        credentialsRef: bmc-credentials
+    machineProfiles:
+      - name: sno
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
+  networkAttachments:
+    - name: sno-bridge
+      libvirt:
+        bridge: vbr-cb-sno
+```
+
+| Field | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `machineRef` | Yes | — | Names a `Machine` that must declare the `libvirt` capability. |
+| `uri` | Yes | — | libvirt connection URI, e.g. `qemu:///system`. |
+| `bmcEmulationDefaults` | Yes | — | Required for current libvirt apply support (see below). |
+| `machineProfiles[]` | No | — | Shared VM shapes; machines select one by `profileRef`. |
+
+### `bmcEmulationDefaults`
+
+The emulated BMC block is **required** for current libvirt apply support. It
+tunes the Redfish BMC emulation the provider runs for its machines:
+
+| Field | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `enabled` | No | `true` | `false` is rejected today; current apply requires an emulated Redfish BMC. |
+| `protocol` | No | `redfish` | Only `redfish` is implemented; any other value is rejected. |
+| `emulator` | No | `sushy-tools` | Emulator implementation. |
+| `bindAddress` | No | `0.0.0.0` | Listen address for the emulated BMC. |
+| `port` | No | derived | Redfish API port; must differ from `vMediaPort`. |
+| `vMediaPort` | No | derived | Virtual-media port; must differ from `port`. |
+| `auth.credentialsRef` | Yes (when enabled) | — | Names the BMC `user:password` secret. |
+| `disableCertificateVerification` | No | — | Lab-only TLS opt-out; not a production default. |
+
+`auth.credentialsRef` is required whenever emulation is enabled. `port` and
+`vMediaPort` must resolve to different values in `1..65535`.
 
 ## Bare Metal
 
-Bare-metal inventory keeps physical server facts on the installing `Machine`:
+For bare metal, the `InfraProvider` carries the substrate-level boot method
+and default BMC settings; the per-server hardware facts live on each
+`Machine`. The `spec.baremetal` arm is **required** when `type: baremetal`.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: rack1-baremetal-provider
+spec:
+  type: baremetal
+  baremetal:
+    boot:
+      method: external
+    defaults:
+      bmc:
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+  networkAttachments:
+    - name: rack1-vlan140-machine
+      baremetal:
+        vlan: 0
+```
+
+| Field | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `boot.method` | No | — | How declared nodes boot, e.g. `external` for Redfish virtual media. |
+| `defaults.bmc.credentialsRef` | No | — | Default BMC `user:password` secret for machines on this provider. |
+| `defaults.bmc.disableCertificateVerification` | No | — | Default lab-only TLS opt-out for BMCs without trusted TLS. |
+
+`defaults.bmc` supplies provider-wide BMC defaults; an individual server can
+override them through its own `Machine.spec.hardware.management.bmc`.
+
+`disableCertificateVerification: true` is a lab posture for BMCs without
+trusted TLS. Do not treat it as the production default.
+
+### The Machine inventory companion
+
+The provider is the substrate; the physical-server facts (NICs, BMC address,
+boot device) live on each installing `Machine`, which selects the provider and
+its network attachment:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -27,58 +154,48 @@ spec:
   capabilities:
     - openshift-node
   substrate:
-    providerRef: rack1-baremetal
-  hardware:
-    nics:
-      - name: nic1
-        macAddress: 52:54:00:33:11:10
-      - name: nic2
-        macAddress: 52:54:00:33:11:20
-    boot:
-      nicRef: nic1
-    management:
-      bmc:
-        address: redfish-virtualmedia+https://bmc.example.test/redfish/v1/Systems/1
-        credentialsRef: bmc-credentials
-        disableCertificateVerification: true
+    providerRef: rack1-baremetal-provider
   os:
     provided: false
     install:
       rootDeviceHints:
         deviceName: /dev/sda
+  network:
+    config:
+      networkConfigRef: rack1-vlan140-machine
+      interfaceAddresses:
+        - interface: eno1
+          addressRef: ip
+          prefixLength: 24
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 00:25:90:5a:10:01
+      - name: eno2
+        macAddress: 00:25:90:5a:10:02
+    boot:
+      nicRef: eno1
+    management:
+      bmc:
+        address: redfish-virtualmedia+https://bmc-rack1-srv1.bootwright.test/redfish/v1/Systems/1
+        credentialsRef: bmc-credentials
+        disableCertificateVerification: true
+  addresses:
+    - name: ip
+      address: 192.168.140.20
 ```
 
-`disableCertificateVerification: true` is a lab posture for BMCs without
-trusted TLS. Do not treat it as the production default.
-
-The Machine selects its provider attachment and adds IP overrides:
-
-```yaml
-network:
-  config:
-    networkConfigRef: rack1-bonded-machine
-    attachmentRef: rack1-machine-net
-    overrides:
-      interfaces:
-        - name: bond0
-          ipv4:
-            address:
-              - ip: 192.168.133.20
-                prefix-length: 24
-  interfaceBinding:
-    - nicRef: nic1
-      interfaceName: eno1
-    - nicRef: nic2
-      interfaceName: eno2
-addresses:
-  - name: ip
-    address: 192.168.133.20
-```
+The per-`Machine` `hardware.management.bmc` block overrides the provider's
+`defaults.bmc` for that server. See [Machines and OS](../api/machines.md) for
+the full `Machine` reference.
 
 ## vSphere
 
-vSphere profiles keep vCenter, datacenter, failure-domain, and topology facts
-inside the provider:
+vSphere keeps vCenter, datacenter, failure-domain, and topology facts inside
+the provider:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -117,6 +234,22 @@ spec:
         failureDomainRef: dc1-zone-a
 ```
 
+| Field | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `vcenters[]` | Yes | — | At least one vCenter. |
+| `vcenters[].server` | Yes | — | vCenter hostname. |
+| `vcenters[].port` | No | — | Range-checked `0..65535` when set. |
+| `vcenters[].datacenters` | Yes | — | At least one datacenter. |
+| `vcenters[].credentialsRef` | Yes | — | `user:password` secret name. |
+| `vcenters[].disableCertificateVerification` | No | — | Lab-only TLS opt-out, per vCenter. |
+| `failureDomains[]` | Yes | — | At least one failure domain. |
+| `failureDomains[].name`/`.region`/`.zone`/`.server` | Yes | — | `server` must equal a declared `vcenters[].server`. |
+| `topology.datacenter`/`.computeCluster`/`.datastore`/`.networks` | Yes | — | Placement facts. |
+| `topology.folder`/`.resourcePool` | No | — | Optional placement overrides. |
+| `nodeNetworking` | Conditional | — | Required when any failure domain declares more than one topology network. |
+| `isoStaging` | No | — | When authored, must set at least one of `{datastore, folder}`. |
+| `machineProfiles[]` | No | — | Shared VM shapes. |
+
 `machineProfiles[].failureDomainRef` must name a `failureDomains[]` entry, and
 every `failureDomains[].server` must equal a declared `vcenters[].server`.
 When several failure domains are declared every profile must set
@@ -132,6 +265,29 @@ template. VMs are created with EFI firmware, thin-provisioned disks on a
 paravirtual SCSI controller, vmxnet3 NICs with deterministic
 manually-assigned MACs, and disk-first boot order so an attached install CD
 cannot re-enter the installer once the disk is bootable.
+
+### `nodeNetworking`
+
+When a failure domain declares more than one entry in `topology.networks`,
+`spec.vsphere.nodeNetworking` becomes **required** so the installer knows
+which subnet backs node addresses:
+
+```yaml
+vsphere:
+  nodeNetworking:
+    external:
+      networkSubnetCidr:
+        - 192.168.140.0/24
+    internal:
+      networkSubnetCidr:
+        - 192.168.140.0/24
+```
+
+`networkSubnetCidr` is the upstream openshift-install `nodeNetworking` key
+verbatim — note the lowercase `Cidr`, which deviates from the house CIDR
+casing — and renders into `install-config.yaml` unchanged.
+
+### ISO staging
 
 Boot and install ISOs upload to a datastore folder before attach.
 `isoStaging` overrides the location: `datastore` defaults to the machine's
@@ -178,9 +334,9 @@ Machines select one of those profiles through
 `Machine.spec.substrate.profileRef`.
 
 Use `hostClusterRef` when the virtualization host is another Bootwright
-`ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that host
-cluster; do not put kubeconfig bytes in desired state. Use `kubeconfigRef`
-when the host cluster is external:
+`ContainerCluster`. Bootwright uses the cluster secrets kubeconfig from that
+host cluster; do not put kubeconfig bytes in desired state. Use
+`kubeconfigRef` when the host cluster is external:
 
 ```yaml
 kubevirt:
@@ -188,13 +344,48 @@ kubevirt:
   namespace: bootwright-child-ocp
 ```
 
-Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace is
-required and the storage class is optional. KubeVirt machines must bind their
-selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
+| Field | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `hostClusterRef` | Conditional | — | Exactly one of `hostClusterRef`/`kubeconfigRef`; names a Bootwright `ContainerCluster`. |
+| `kubeconfigRef` | Conditional | — | Exactly one of `hostClusterRef`/`kubeconfigRef`; names a kubeconfig secret for an external host. |
+| `namespace` | Yes | — | Target namespace; must be a DNS label. |
+| `storageClassRef` | No | — | Storage class for child VM disks. |
+| `machineProfiles[]` | No | — | Shared VM shapes. |
+
+Exactly one of `hostClusterRef` or `kubeconfigRef` is required. The namespace
+is required and the storage class is optional. KubeVirt machines must bind
+their selected `NetworkConfig` to a provider `networkAttachments[].kubevirt.nadRef`,
 and the full apply graph waits for the host cluster add-on that advertises
 `provides: [kubevirt]` before creating child VMs. Focused applies must either
-name both parent and child in `--clusters`, or run after the parent install and
-KubeVirt add-on are ready.
+name both parent and child in `--clusters`, or run after the parent install
+and KubeVirt add-on are ready.
+
+## Network attachments
+
+`spec.networkAttachments[]` declares the named substrate networks that a
+machine's `NetworkConfig` binds to (a `Machine` selects one with
+`network.config.attachmentRef`). Each entry has a unique `name` and **exactly
+one** arm, and that arm must match the provider's `spec.type` — the parent
+type already fixes the kind, so there is no separate discriminator.
+
+```yaml
+spec:
+  type: libvirt
+  networkAttachments:
+    - name: sno-bridge
+      libvirt:
+        bridge: vbr-cb-sno
+```
+
+| Arm | Authored under | Field | Notes |
+| --- | --- | --- | --- |
+| libvirt | `libvirt` | `bridge` | Required; host bridge name. |
+| vSphere | `vsphere` | `portgroup` | Required; vCenter portgroup. |
+| KubeVirt | `kubevirt` | `nadRef` | Object-form `{name, namespace}` reference (see below). |
+| bare metal | `baremetal` | `vlan` | Optional integer `0..4094`. |
+
+For KubeVirt, the attachment names a NetworkAttachmentDefinition on the host
+cluster:
 
 ```yaml
 spec:
@@ -209,7 +400,36 @@ spec:
 `nadRef` is the API's sole object-form reference: the
 NetworkAttachmentDefinition lives on the host cluster, outside the loaded
 state, so it is identified by the external two-part `{name, namespace}`
-identity. Every other reference is a plain name string.
+identity. Every other reference in the API is a plain name string.
+
+## Machine profiles
+
+`machineProfiles[]` (on the libvirt, vSphere, and KubeVirt arms) are the
+shared VM shapes that virtual machines select by name. Each profile sets
+`name` and optional `cpu`, `memoryMiB`, and `diskGiB` (all non-negative).
+Fields a provider's adapter does not consume are rejected:
+
+- `template` and `failureDomainRef` are **vSphere-only**; a set `template`
+  clones from a vCenter template, and `failureDomainRef` must resolve against
+  `spec.vsphere.failureDomains[].name`.
+- `dataDisks` are provisioned only by the **libvirt and vSphere** adapters and
+  are rejected on KubeVirt and bare-metal profiles.
+
+```yaml
+machineProfiles:
+  - name: storage-node
+    cpu: 16
+    memoryMiB: 32768
+    diskGiB: 120
+    dataDisks:
+      - name: osd-0
+        sizeGiB: 200
+      - name: osd-1
+        sizeGiB: 200
+```
+
+Each `dataDisks[]` entry requires `name`, and `sizeGiB` must be greater than
+zero.
 
 ## Services
 
@@ -227,6 +447,14 @@ spec:
     machineRef: services-host
     port: 3128
 ```
+
+Supported authored `InfraComponent` arms are `artifactServer`,
+`loadBalancer`, `proxy`, `nameResolution`, `ntp`, and `registry`. See
+[Infrastructure](../api/infrastructure.md) for the full `InfraComponent`
+reference and [Networking and Load Balancing](networking.md) for endpoint and
+load-balancer wiring.
+
+### Artifact publication
 
 Artifact publication is different: generated ISO and boot-artifact publication
 is derived from install requirements and uses an environment-bound
@@ -280,63 +508,20 @@ Endpoint names are endpoint selectors; `addressRef` values resolve against the
 named addresses on the selected `machineRef`. For `redfishVirtualMedia`, use a
 BMC-routable IP address entry in most environments; many BMCs do not reliably
 resolve DNS aliases, and Bootwright uses the matched address value directly in
-the ISO URL sent to Redfish. `ContainerCluster.spec.install.artifactAccess` may override
-the default when one cluster needs a different artifact server or endpoint.
-Bootwright serves HTTPS listeners with a self-signed certificate generated on
-the host. Omit `listeners` to use the default HTTPS listener on port `8443`.
+the ISO URL sent to Redfish. `ContainerCluster.spec.install.artifactAccess`
+may override the default when one cluster needs a different artifact server or
+endpoint. Bootwright serves HTTPS listeners with a self-signed certificate
+generated on the host. Omit `listeners` to use the default HTTPS listener on
+port `8443`.
 
-Supported authored `InfraComponent` arms are `artifactServer`,
-`loadBalancer`, `proxy`, `nameResolution`, `ntp`, and `registry`.
+!!! warning "BMC reachability for virtual media"
+    For real BMCs, the artifact server endpoint selected by
+    `artifactAccess.redfishVirtualMedia.endpointRef` should usually resolve to
+    an IP address that the BMC network can reach. Controller reachability
+    alone is not enough for virtual-media ISO fetches.
 
-When adding another managed service, keep the service path orthogonal: add a
-typed `InfraComponent`/`Environment` arm, register its role/image/defaults in
-`internal/roles`, add its consumer discovery to the service graph, project
-that resolved graph into Ansible vars, and place the converging role under
-`ansible/collections/ansible_collections/bootwright/core/roles/infra_component_*`.
-
-For real BMCs, the artifact server endpoint selected by
-`artifactAccess.redfishVirtualMedia.endpointRef` should usually resolve
-to an IP address that the BMC network can reach. Controller reachability alone
-is not enough for virtual-media ISO fetches.
-
-## Adding a Substrate
-
-A substrate is a `Machine` backend such as libvirt, bare metal, vSphere, or
-KubeVirt. Unlike a managed service it is not its own kind; it is dispatched by a
-Go registry, so adding one is a registry plus role operation:
-
-1. Add the capability arm and validation in `api/v1alpha1` and the desired-state
-   validators — a machine profile arm for virtual substrates, or explicit
-   `Machine.spec.hardware` inventory for physical ones.
-2. Add the dispatch triplet (`substrateRole`, `bmcRole`, `bootRole`) and its
-   `RoleContract` to the registry in `internal/roles`. Real backends use
-   status `supported`, schema-only backends use `scaffold`, and no-op arms
-   resolve to the explicit `*_none` roles so dispatch stays visible.
-3. Add the converging roles under the matching families in
-   `ansible/collections/ansible_collections/bootwright/core/roles/` —
-   `machine_substrate_*`, `provider_service_bmc_*`, `container_cluster_boot_*`,
-   and the optional media hook. The renderer projects their exact names; roles
-   never branch on the dispatch discriminators.
-4. Map the installer platform render mode where it applies. It is the installer
-   platform, not the substrate type; substrate ownership stays on the machine and
-   provider.
-
-The normative contract is in `specs/architecture.md` (Providers and Platform
-Rendering) and `specs/adr/0002-ansible-provider-dispatch.md`; the registry in
-`internal/roles` is the single source of truth for role names.
-
-## Adding a CLI Verb
-
-CLI commands live in `internal/cli` and are wired in `cli.go`. Each should be a
-thin adapter that translates flags into options and calls into
-`internal/converge/workflow`; orchestration logic stays in the workflow package,
-not the command. Human output goes through `internal/cli/output`.
-
-Before shipping a verb, decide whether it is read-only. Read-only verbs —
-`status`, `state-check`, `render`, `plan`, `apply --dry-run`, `validate`,
-help, and discovery — must not write runtime records, acquire a
-mutating run lease, or mutate provider, BMC, cluster, or storage state, and most
-must not contact hosts at all. `render` does write generated outputs (rendered
-tool inputs, `effective-state.yaml`) into context state — those are outputs,
-not runtime records — and still never contacts hosts. The binding rules for
-that contract are in `specs/state-model.md` (CLI Contract).
+!!! note "Extending Bootwright with a new substrate or service"
+    Adding a new substrate adapter or shared-service type is a contributor
+    task that touches the Go registry, `internal/roles`, and the Ansible role
+    families. See [Contributing](../contributing/extending.md) for the
+    extension contract; it is not part of operator authoring.

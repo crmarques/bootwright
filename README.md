@@ -14,7 +14,8 @@ Bootwright validates that intent, renders deterministic inputs for the official
 installer, provider, storage, and cluster CLIs, and applies the dependency graph
 idempotently so those pieces become one coherent cloud platform.
 
-**Supported cluster families:** OpenShift, OKD, and Ceph.
+**Supported cluster families:** OpenShift, OKD, and Ceph — across bare metal,
+vSphere, KubeVirt, and libvirt.
 
 ## The problem it solves
 

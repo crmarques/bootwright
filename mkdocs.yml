@@ -1,5 +1,5 @@
 site_name: Bootwright
-site_description: Desired-state orchestration for whole cloud platforms or selected OpenShift, OKD, and Ceph components
+site_description: Desired-state orchestrator that provisions OpenShift, OKD, and Ceph clusters across bare metal, vSphere, KubeVirt, and libvirt — the whole platform from scratch or a single component
 site_url: https://crmarques.github.io/bootwright/
 repo_url: https://github.com/crmarques/bootwright
 repo_name: crmarques/bootwright
@@ -97,17 +97,19 @@ extra:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Concepts: concepts.md
+  - Concepts:
+      - concepts.md
+      - Architecture: concepts/architecture.md
   - Advanced:
       - advanced/index.md
-      - Advanced Examples: advanced/examples.md
       - Providers: advanced/providers.md
       - Networking and Load Balancing: advanced/networking.md
       - Proxy and Disconnected Installs: advanced/proxy-and-disconnected.md
       - Post-Install Add-ons: advanced/post-install-addons.md
       - Ceph Storage Clusters: advanced/storage-ceph.md
       - Secrets: advanced/secrets.md
-      - Architecture: advanced/architecture.md
+      - Operations and Recovery: advanced/operations.md
+      - Reference Examples: advanced/examples.md
   - API Reference:
       - api/index.md
       - Environment: api/environment.md
@@ -117,6 +119,7 @@ nav:
       - Storage: api/storage.md
       - Add-ons: api/addons.md
   - Troubleshooting: troubleshooting.md
+  - Contributing: contributing/extending.md
 
 copyright: >-
   Bootwright is an open-source desired-state cloud-platform orchestrator.
