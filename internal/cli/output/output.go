@@ -1,11 +1,13 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
@@ -182,6 +184,13 @@ func (p *Printer) ProgressBar(label string, done int, total int, fields []Progre
 	if p == nil || p.w == nil {
 		return
 	}
+	fmt.Fprintf(p.w, "%s\n", progressBarLine(label, done, total, fields))
+	p.wrote = true
+}
+
+// progressBarLine renders the bar line shared by ProgressBar and RenderFrame,
+// without a trailing newline or leading indent.
+func progressBarLine(label string, done int, total int, fields []ProgressField) string {
 	if total < 0 {
 		total = 0
 	}
@@ -206,8 +215,7 @@ func (p *Printer) ProgressBar(label string, done int, total int, fields []Progre
 	if len(parts) == 0 {
 		parts = append(parts, "0 tasks")
 	}
-	fmt.Fprintf(p.w, "%s  [%s] %d/%d %s\n", label, bar, done, total, strings.Join(parts, "  "))
-	p.wrote = true
+	return fmt.Sprintf("%s  [%s] %d/%d %s", label, bar, done, total, strings.Join(parts, "  "))
 }
 
 func (p *Printer) Tasks(items []TaskLine) {
@@ -465,4 +473,119 @@ func ShellQuote(args []string) string {
 		quoted = append(quoted, arg)
 	}
 	return strings.Join(quoted, " ")
+}
+
+// Step is one unit of work shown in a RunFrame.
+type Step struct {
+	ID     string
+	Label  string
+	Status Status
+	Detail string
+}
+
+// StepGroup is a titled set of steps, e.g. one cluster or the "infra" group.
+type StepGroup struct {
+	Title string
+	Steps []Step
+}
+
+// RunFrame is one progress snapshot: a header progress bar plus grouped steps.
+// It is source-agnostic so apply, destroy, preflight, and `status --watch` can
+// all feed the same RunView. Done/Total/Counts drive the bar; Groups drive the
+// step list.
+type RunFrame struct {
+	BarLabel string
+	Done     int
+	Total    int
+	Counts   []ProgressField
+	Groups   []StepGroup
+}
+
+// RenderFrame writes a RunFrame (header progress bar + grouped step list) and
+// returns the number of physical terminal rows it occupied. width<=0 disables
+// wrap accounting (one row per logical line). Callers that redraw in place clear
+// the returned row count before writing the next frame. RenderFrame is the only
+// frame writer, so all frame byte output stays in this allowlisted file.
+func (p *Printer) RenderFrame(frame RunFrame, width int) int {
+	if p == nil || p.w == nil {
+		return 0
+	}
+	rows := 0
+	emit := func(line string) {
+		fmt.Fprintln(p.w, line)
+		rows += physicalRows(line, width)
+	}
+	emit("  " + progressBarLine(frame.BarLabel, frame.Done, frame.Total, frame.Counts))
+	for _, group := range frame.Groups {
+		if group.Title != "" {
+			emit("  " + p.style(group.Title, color.Bold))
+		}
+		for _, step := range group.Steps {
+			emit(p.stepLine(step))
+		}
+	}
+	p.wrote = true
+	return rows
+}
+
+func (p *Printer) stepLine(step Step) string {
+	label := step.Label
+	if step.Detail != "" {
+		label += ": " + step.Detail
+	}
+	return "    " + p.statusLabel(step.Status) + " " + label
+}
+
+// newBufferPrinter returns a Printer that writes to an in-memory buffer with the
+// given color setting, so a caller (RunView) can render a frame once, measure
+// and compare it, then write the result to the real terminal with color intact.
+func newBufferPrinter(colored bool) (*Printer, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+	return &Printer{w: buf, color: colored, wrote: true}, buf
+}
+
+// physicalRows reports how many terminal rows a logical line occupies once
+// wrapped to width columns. width<=0 means width is unknown (no wrap
+// accounting), so the line counts as one row.
+func physicalRows(line string, width int) int {
+	if width <= 0 {
+		return 1
+	}
+	w := visibleWidth(line)
+	if w <= width {
+		return 1
+	}
+	rows := (w + width - 1) / width
+	const maxRows = 200
+	if rows > maxRows {
+		rows = maxRows
+	}
+	return rows
+}
+
+// visibleWidth counts the rune width of a line, skipping ANSI CSI escape
+// sequences (ESC[ ... letter) so colored lines measure the same as plain ones.
+func visibleWidth(s string) int {
+	n := 0
+	i := 0
+	for i < len(s) {
+		if s[i] == 0x1b { // ESC
+			i++
+			if i < len(s) && s[i] == '[' {
+				i++
+				for i < len(s) {
+					c := s[i]
+					i++
+					if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+						break
+					}
+				}
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		n++
+	}
+	return n
 }

@@ -71,9 +71,16 @@ func LoadContextOwnershipRecords(ownershipDir, contextName string) ([]ownership.
 // The become password file is captured by the CLI's credential prompt and
 // passed in; the reporter is the CLI's progress surface behind the
 // workflow.Reporter interface.
-func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, playbook string, plan WorkflowPlan, artifactsBaseName string, check bool, becomePasswordFile string, dryRun bool, label string, reporter workflow.Reporter) (workflow.RunResult, error) {
-	runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
-	return workflow.Run(cmdCtx, workflow.RunOptions{
+func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, playbook string, plan WorkflowPlan, artifactsBaseName string, check bool, becomePasswordFile string, dryRun bool, streamAnsible bool, label string, reporter workflow.Reporter) (workflow.RunResult, string, error) {
+	logPath := workflow.DestroyLogPath(ctx.RunsDir, artifactsBaseName)
+	// Route ansible output to the log only so the terminal shows the progress
+	// view, not a raw teardown stream; --stream-ansible tees it back to the
+	// terminal. On failure the runner reads this log to summarize the failure.
+	runner := ansible.CommandRunner{}
+	if streamAnsible {
+		runner = ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
+	}
+	result, err := workflow.Run(cmdCtx, workflow.RunOptions{
 		State:              plan.State,
 		RenderedDir:        ctx.RenderedDir,
 		ClustersDir:        clustersDir,
@@ -89,6 +96,7 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 		Limit:              plan.Limit,
 		ExtraVarPairs:      plan.ExtraVarPairs,
 		ArtifactsBaseName:  artifactsBaseName,
+		OutputLogPath:      logPath,
 		Check:              check,
 		AskBecomePass:      plan.AskBecomePass && becomePasswordFile == "",
 		BecomePasswordFile: becomePasswordFile,
@@ -99,6 +107,7 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 		// the teardown so it is mutually exclusive with a concurrent apply.
 		AcquireRunLease: true,
 	}, runner, reporter)
+	return result, logPath, err
 }
 
 // ResetConvergeRecordsAfterDestroy resets convergence records for what a

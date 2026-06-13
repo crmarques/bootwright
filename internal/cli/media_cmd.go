@@ -147,6 +147,7 @@ func newMediaRemoveCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the remove confirmation prompt")
 	cmd.RunE = func(_ *cobra.Command, args []string) error {
+		output.New(stdout).Command("media remove")
 		key := args[0]
 		if !yes && !confirm(stdin, stdout, fmt.Sprintf("Remove media %s from %s? [y/N] (default: no): ", key, media.StoreDir())) {
 			return failErr(1, errors.New("media remove aborted"))
@@ -158,7 +159,7 @@ func newMediaRemoveCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 			}
 			return failErr(1, err)
 		}
-		output.New(stdout).Summary(output.StatusOK, entry.Name, "removed "+entry.Path)
+		output.NewContinuation(stdout).Summary(output.StatusOK, entry.Name, "removed "+entry.Path)
 		return nil
 	}
 	return cmd

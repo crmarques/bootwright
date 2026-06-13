@@ -80,6 +80,10 @@ type RunOptions struct {
 	// Empty is treated as continue (the safe reconcile) by consumers.
 	ApplyMode                  ApplyMode
 	ClusterAvailabilityChecker ClusterAvailabilityChecker
+	// StreamAnsible, when true, tees raw ansible-playbook output to the run's
+	// terminal writers in addition to the per-task log files (the default routes
+	// ansible output to the log only). Set by --stream-ansible.
+	StreamAnsible bool
 }
 
 // RunResult is what callers need to keep printing after the run completes

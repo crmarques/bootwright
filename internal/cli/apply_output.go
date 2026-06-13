@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -10,25 +9,32 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
+// applyReporter drives the live apply progress surface. It owns a single
+// output.RunView fed from the run ledger (see applyRunFrame): the view redraws
+// the step list in place on a TTY and emits append-only transition lines
+// otherwise. The scheduler calls these methods from one goroutine, so the view
+// needs no locking.
 type applyReporter struct {
 	stdout      io.Writer
 	stderr      io.Writer
 	contextName string
 	runsDir     string
 	clustersDir string
-	dynamic     bool
-	lines       int
-	last        string
+	view        *output.RunView
 }
 
-func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir string, clustersDir string) *applyReporter {
+func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir string, clustersDir string, streamAnsible bool) *applyReporter {
+	view := output.NewRunView(stdout)
+	if streamAnsible {
+		view.Streaming()
+	}
 	return &applyReporter{
 		stdout:      stdout,
 		stderr:      stderr,
 		contextName: contextName,
 		runsDir:     runsDir,
 		clustersDir: clustersDir,
-		dynamic:     output.Interactive(stdout),
+		view:        view,
 	}
 }
 
@@ -37,25 +43,11 @@ func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
 }
 
 func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
-	var buf bytes.Buffer
-	printApplyDashboard(&buf, r.clustersDir, ledger)
-	text := buf.String()
-	if text == r.last {
-		return
-	}
-	if r.dynamic && r.lines > 0 {
-		output.ClearLines(r.stdout, r.lines)
-	}
-	output.Write(r.stdout, text)
-	r.lines = strings.Count(text, "\n")
-	r.last = text
+	r.view.Render(applyRunFrame(ledger))
 }
 
 func (r *applyReporter) RunSummary(ledger workflow.RunLedger) {
-	if r.dynamic && r.lines > 0 {
-		output.ClearLines(r.stdout, r.lines)
-		r.lines = 0
-	}
+	r.view.Finish(applyRunFrame(ledger))
 	printApplyRunSummary(r.stdout, r.clustersDir, ledger)
 }
 
@@ -63,9 +55,11 @@ func (r *applyReporter) PromptGap() {
 	output.NewContinuation(r.stderr).BlankLine()
 }
 
+// printApplyRunStart writes the run-identity fields under the already-open
+// "Run" section (opened by the workflow reporter); it no longer opens its own
+// section, so the run shows a single "Run" heading.
 func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
-	p.Section("Run")
 	fields := []output.Field{
 		{Key: "ID", Value: ledger.RunID},
 		{Key: "Target", Value: ledger.Target},
@@ -84,31 +78,6 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 		fields = append(fields, output.Field{Key: "Scope", Value: ledger.Scope})
 	}
 	p.Fields(fields)
-}
-
-func printApplyDashboard(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
-	p := output.NewContinuation(stdout)
-	p.ProgressBar("Fleet progress", applyProgressDone(ledger), len(ledger.Tasks), applyProgressFields(ledger))
-	p.ClusterPhases(applyClusterPhaseLines(clustersDir, ledger))
-	printApplyRunning(stdout, clustersDir, ledger)
-}
-
-func printApplyRunning(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
-	running := ledger.RunningTasks()
-	if len(running) == 0 {
-		return
-	}
-	p := output.NewContinuation(stdout)
-	p.Section("Running")
-	lines := make([]output.TaskLine, 0, len(running))
-	for _, task := range running {
-		lines = append(lines, output.TaskLine{
-			Status: output.StatusRunning,
-			Label:  applyTaskDisplayLabel(task.Label),
-			Detail: applyTaskRunDetail(clustersDir, task),
-		})
-	}
-	p.Tasks(lines)
 }
 
 func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
@@ -138,7 +107,23 @@ func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.
 		})
 	}
 	p.Tasks(lines)
+	p.Fields(applyClusterLogFields(clustersDir, ledger))
 	printApplyFailureDetails(stdout, clustersDir, ledger)
+}
+
+// applyClusterLogFields lists, per cluster, the bootwright run log (and the
+// OpenShift installer log for container clusters) so the Summary always points
+// the operator at the on-disk logs — ansible output never reaches the terminal.
+func applyClusterLogFields(clustersDir string, ledger workflow.RunLedger) []output.Field {
+	var fields []output.Field
+	for _, cluster := range ledger.ClusterNames() {
+		tasks := ledger.TasksForCluster(cluster)
+		fields = append(fields, output.Field{Key: cluster + " log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, cluster)})
+		if applyClusterKind(tasks) == "ContainerCluster" {
+			fields = append(fields, output.Field{Key: cluster + " installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, cluster)})
+		}
+	}
+	return fields
 }
 
 func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {

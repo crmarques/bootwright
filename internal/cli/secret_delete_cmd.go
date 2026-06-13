@@ -28,6 +28,7 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 		if err != nil {
 			return failErr(1, err)
 		}
+		output.New(stdout).Command("secret delete")
 		name := args[0]
 		if !desiredstate.IsDNSLabel(name) {
 			return failf(2, "<name> must be a lowercase DNS label")
@@ -50,7 +51,7 @@ func newSecretDeleteCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 			}
 			paths = append(paths, material.Path)
 		}
-		output.New(stdout).Summary(output.StatusOK, name, "deleted "+strings.Join(paths, ", "))
+		output.NewContinuation(stdout).Summary(output.StatusOK, name, "deleted "+strings.Join(paths, ", "))
 		return nil
 	}
 	return cmd

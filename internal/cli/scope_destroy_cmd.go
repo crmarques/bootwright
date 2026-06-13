@@ -33,6 +33,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		yes           bool
 		override      bool
 		stage         string
+		streamAnsible bool
 	)
 	use := "destroy"
 	if options.use != "" {
@@ -59,6 +60,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the destroy confirmation prompt")
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
+	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible teardown output to the terminal as well as the destroy log (default: log only)")
 	if options.stageSelector {
 		flags.output = outputText
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
@@ -208,7 +210,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err := converge.SnapshotMutatingRunInput(workflow.LastDestroyInputSnapshotDir(ctx.RunsDir), ctx); err != nil {
 				return failErr(1, err)
 			}
-			printWorkflowStart(stdout, workflowLabel, plan.Selected, plan.AskBecomePass)
 		}
 		become := becomeCredential{}
 		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
@@ -236,7 +237,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleReady(bundle)
 		}
-		runResult, err := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, workflowLabel, reporter)
+		runResult, destroyLogPath, err := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}
@@ -245,6 +246,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		}
 		if !dryRun && !plan.NoRemoteWork {
 			printWorkflowEnd(stdout, workflowLabel)
+			cliout.NewContinuation(stdout).Fields([]cliout.Field{{Key: "Destroy log", Value: destroyLogPath}})
 		}
 		printRenderResult(stdout, runResult.Render)
 		printBundlePath(stdout, bundle.Dir)

@@ -43,6 +43,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 		perHost         int
 		redfish         int
 		stage           string
+		streamAnsible   bool
 	)
 	use := "apply"
 	if options.use != "" {
@@ -78,6 +79,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 	if usesAnsible {
 		cmd.Flags().BoolVar(&check, "check", false, "pass --check to ansible-playbook")
 		cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
+		cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible-playbook output to the terminal as well as the run log (default: log only); the progress view falls back to plain transition lines")
 	}
 	if !options.hideApproval {
 		cmd.Flags().BoolVar(&yes, "yes", false, "skip the apply confirmation prompt")
@@ -248,9 +250,9 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, errors.New("apply aborted"))
 			}
 		}
-		if !dryRun && !plan.NoRemoteWork {
-			printWorkflowStart(stdout, runScope.Name, plan.Selected, plan.AskBecomePass)
-		}
+		// The single "Run" section is opened by the workflow reporter as it
+		// reports render/bundle prep, then printApplyRunStart adds the run
+		// identity fields under it — no separate workflow-start banner.
 		become := becomeCredential{}
 		if !dryRun && !plan.NoRemoteWork && willPromptForBecomePassword(plan.AskBecomePass) {
 			cliout.NewContinuation(stderr).BlankLine()
@@ -275,7 +277,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 				return failErr(1, err)
 			}
 		}
-		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, check, become.PasswordFile, dryRun, runCommandLabel, mode)
+		runOpts := converge.BuildApplyRunOptions(ctx, clustersDir, flags.executable, runScope, plan, check, become.PasswordFile, dryRun, runCommandLabel, mode, streamAnsible)
 		if dryRun {
 			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight "+runScope.Name+" to validate secrets, tools, and remote readiness")
 			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(dryRunTasks), limits)
@@ -290,7 +292,7 @@ func newScopeApplyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout i
 			}
 			return nil
 		}
-		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir))
+		renderResult, bundleResult, ledger, err := converge.ExecuteApply(c.Context(), stdout, stderr, ctx, clustersDir, runOpts, applyTarget, flags.clusterScope, plan, tasks, limits, usesAnsible, bundleResult, bundleVersionMarker(), reporter, newApplyReporter(stdout, stderr, ctx.Name, ctx.RunsDir, clustersDir, streamAnsible))
 		if err != nil {
 			if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
 				return silentExit(1)

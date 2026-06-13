@@ -53,7 +53,7 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	return RunPreparedApplyTaskGraph(ctx, stdout, stderr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory)
 }
 
-func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+func RunPreparedApplyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return RunLedger{}, fmt.Errorf("clusters dir is required")
 	}
@@ -176,7 +176,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, _ io.Writer, _ io.Writer, ru
 					reporter.PromptGap()
 				}
 			}
-			stdoutWriter, stderrWriter := applyTaskWriters(task, logs)
+			stdoutWriter, stderrWriter := applyTaskWriters(task, logs, streamOut, streamErr, opts.StreamAnsible)
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
 				events <- runOneApplyTask(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
@@ -432,9 +432,24 @@ func releaseTaskHostSlots(task ApplyTask, running map[string]int) {
 	}
 }
 
-func applyTaskWriters(task ApplyTask, logs *applyLogSet) (io.Writer, io.Writer) {
+// applyTaskWriters returns the stdout/stderr writers for one task's ansible
+// run. By default both go to the per-run/per-cluster log files only, keeping the
+// terminal clean for the progress view. When stream is true (--stream-ansible),
+// each is tee'd to the run's terminal writer as well.
+func applyTaskWriters(task ApplyTask, logs *applyLogSet, streamOut, streamErr io.Writer, stream bool) (io.Writer, io.Writer) {
 	writer := logs.Writer(task.Entry.Cluster)
-	return writer, writer
+	if !stream {
+		return writer, writer
+	}
+	out := writer
+	if streamOut != nil {
+		out = io.MultiWriter(streamOut, writer)
+	}
+	err := writer
+	if streamErr != nil {
+		err = io.MultiWriter(streamErr, writer)
+	}
+	return out, err
 }
 
 func initiallyCompletedApplyTasks(tasks []ApplyTask) int {

@@ -89,6 +89,7 @@ func newVersionCmd(stdout io.Writer) *cobra.Command {
 				{Key: "git commit", Value: metadata.gitCommit},
 				{Key: "go", Value: runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH},
 			})
+			p.Summary(output.StatusOK, "bootwright", metadata.version)
 		},
 	}
 }

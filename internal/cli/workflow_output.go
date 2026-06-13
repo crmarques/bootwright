@@ -93,6 +93,6 @@ func (r *workflowReporter) ensure() {
 	if r.opened {
 		return
 	}
-	r.printer.Section("Bootwright prerequisites")
+	r.printer.Section("Run")
 	r.opened = true
 }

@@ -190,23 +190,6 @@ func applyProgressFields(ledger workflow.RunLedger) []output.ProgressField {
 	return fields
 }
 
-func applyTaskRunDetail(clustersDir string, task workflow.TaskLedgerEntry) string {
-	var parts []string
-	if task.LogPath != "" {
-		parts = append(parts, "task log "+task.LogPath)
-	}
-	if task.ClusterLogPath != "" {
-		parts = append(parts, "cluster log "+task.ClusterLogPath)
-	}
-	if task.Kind == workflow.ApplyTaskKindInstallWait && task.Cluster != "" {
-		parts = append(parts, "installer log "+workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster))
-	}
-	if len(parts) == 0 {
-		return task.Kind
-	}
-	return strings.Join(parts, "; ")
-}
-
 func applyFailureReason(failure string) string {
 	lines := strings.Split(failure, "\n")
 	for _, line := range lines {

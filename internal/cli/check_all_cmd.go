@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -19,6 +20,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		dryRun          bool
 		output          string
 		trustOnFirstUse bool
+		streamAnsible   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "all",
@@ -35,6 +37,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "render artifacts and print the Ansible preflight command without executing it")
 	cmd.Flags().StringVar(&output, "output", outputText, "output format: text or json (json requires --dry-run)")
 	cmd.Flags().BoolVar(&trustOnFirstUse, "trust-on-first-use", true, "prompt to record an unknown SSH host key after showing its fingerprint (interactive text runs only); automation must pre-record trust with bootwright host trust")
+	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible preflight output to the terminal as well as the log (default: log only)")
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		if err := validateOutputFormat(output); err != nil {
 			return failErr(2, err)
@@ -79,7 +82,11 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		runner := ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
+		logPath := workflow.PreflightLogPath(ctx.RunsDir, converge.AllScope.Name)
+		runner := ansible.CommandRunner{}
+		if streamAnsible {
+			runner = ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
+		}
 		_, err = workflow.Run(c.Context(), workflow.RunOptions{
 			State:              state,
 			RenderedDir:        ctx.RenderedDir,
@@ -94,11 +101,18 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 			BundleDir:          bundle.Dir,
 			Playbook:           roles.PlaybookCheckPreflight,
 			ArtifactsBaseName:  "preflight-all",
+			OutputLogPath:      logPath,
 			DryRun:             dryRun,
 			Label:              "all preflight",
 		}, runner, reporter)
 		if err != nil {
 			return failErr(1, err)
+		}
+		if !dryRun {
+			p := cliout.NewContinuation(stdout)
+			p.Section("Summary")
+			p.Status(cliout.StatusDone, "all preflight", "complete")
+			p.Fields([]cliout.Field{{Key: "Preflight log", Value: logPath}})
 		}
 		return nil
 	}

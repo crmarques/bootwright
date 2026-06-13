@@ -160,7 +160,9 @@ func newContextUseCmd(stdout io.Writer) *cobra.Command {
 		if err := workspace.Save(registry, store); err != nil {
 			return failErr(1, err)
 		}
-		output.New(stdout).Status(output.StatusOK, "current context", name)
+		p := output.New(stdout)
+		p.Command("context use")
+		p.Summary(output.StatusOK, "current context", name)
 		return nil
 	}
 	return cmd
@@ -208,6 +210,7 @@ func newContextListCmd(stdout io.Writer) *cobra.Command {
 			}
 			p.Status(output.StatusWarn, "current context", current+" not found under "+contextsDir)
 		}
+		p.Summary(output.StatusOK, "contexts", fmt.Sprintf("%d registered", len(items)))
 		return nil
 	}
 	return cmd
@@ -233,6 +236,7 @@ func newContextCurrentCmd(stdout io.Writer) *cobra.Command {
 		p := output.New(stdout)
 		p.Command("context current")
 		p.Fields(contextFields(ctx))
+		p.Summary(output.StatusOK, ctx.Name, "current context")
 		return nil
 	}
 	return cmd
@@ -293,7 +297,9 @@ func newContextDeleteCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 				return failErr(1, err)
 			}
 		}
-		output.New(stdout).Status(output.StatusOK, "context "+name, "base directory removed")
+		p := output.New(stdout)
+		p.Command("context delete")
+		p.Summary(output.StatusOK, "context "+name, "base directory removed")
 		return nil
 	}
 	return cmd

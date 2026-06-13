@@ -124,3 +124,18 @@ func ApplyClusterLogPath(clustersDir, runID, cluster string) string {
 func OpenShiftInstallerLogPath(clustersDir, cluster string) string {
 	return filepath.Join(clustersDir, cluster, "runtime", render.RuntimeRelativeDir, ".openshift_install.log")
 }
+
+// PreflightLogPath is the file the read-only ansible preflight writes its output
+// to. Preflight has no per-run history dir, so it is a stable per-scope path the
+// CLI surfaces instead of streaming ansible to the terminal.
+func PreflightLogPath(runsDir, scopeName string) string {
+	return filepath.Join(runsDir, "preflight", scopeName, ansible.OutputLogName)
+}
+
+// DestroyLogPath is the file a destroy run writes its ansible output to. Destroy
+// runs a single workflow playbook and mints its run ID internally, so this is a
+// stable per-base-name path (e.g. "infra-destroy") the CLI surfaces instead of
+// streaming ansible to the terminal.
+func DestroyLogPath(runsDir, baseName string) string {
+	return filepath.Join(runsDir, "destroy", baseName, ansible.OutputLogName)
+}

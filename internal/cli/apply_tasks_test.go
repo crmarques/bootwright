@@ -225,7 +225,7 @@ func requireApplyPhase(t *testing.T, line output.ClusterPhaseLine, label string,
 	t.Fatalf("%s missing phase %s in %+v", line.Name, label, line.Phases)
 }
 
-func TestApplyDashboardPrintsRunningInstallerLogPath(t *testing.T) {
+func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
 		ID:          "wait.sno-libvirt",
@@ -238,15 +238,15 @@ func TestApplyDashboardPrintsRunningInstallerLogPath(t *testing.T) {
 	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(clustersDir, "ansible-output.log"), time.Now())
 
 	var stdout bytes.Buffer
-	printApplyDashboard(&stdout, clustersDir, ledger)
+	printApplyRunSummary(&stdout, clustersDir, ledger)
 
 	want := workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt")
 	if !strings.Contains(stdout.String(), want) {
-		t.Fatalf("wait task output missing installer log path %q:\n%s", want, stdout.String())
+		t.Fatalf("summary missing installer log path %q:\n%s", want, stdout.String())
 	}
 }
 
-func TestApplyDashboardPrintsClusterLogPaths(t *testing.T) {
+func TestApplySummaryPrintsClusterLogPaths(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	clusterLogPath := workflow.ApplyClusterLogPath(clustersDir, "apply-test", "sno-libvirt")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
@@ -260,14 +260,14 @@ func TestApplyDashboardPrintsClusterLogPaths(t *testing.T) {
 	}}, time.Now())
 
 	var stdout bytes.Buffer
-	printApplyDashboard(&stdout, clustersDir, ledger)
+	printApplyRunSummary(&stdout, clustersDir, ledger)
 
 	for _, want := range []string{
 		clusterLogPath,
 		workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt"),
 	} {
 		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("cluster log output missing %q:\n%s", want, stdout.String())
+			t.Fatalf("summary missing %q:\n%s", want, stdout.String())
 		}
 	}
 }
@@ -391,7 +391,7 @@ exit 2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
+	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, false), nil)
 	if err == nil {
 		t.Fatalf("workflow.RunApplyTaskGraph succeeded unexpectedly\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
@@ -482,14 +482,14 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "clusters",
-	}, converge.ClustersScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir), nil)
+	}, converge.ClustersScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, false), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "ansible stdout") || strings.Contains(stderr.String(), "ansible stderr") {
 		t.Fatalf("multi-cluster output streamed ansible to terminal\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
-	for _, want := range []string{"Run", "Fleet progress", "cluster-a (ContainerCluster)", "cluster-b (ContainerCluster)", "Bootwright log", "[OK] Prepare"} {
+	for _, want := range []string{"Run", "cluster-a (ContainerCluster)", "cluster-b (ContainerCluster)", "cluster-a log", "[DONE]"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 		}

@@ -81,7 +81,7 @@ func ApplyModePreflight(mode workflow.ApplyMode, tasks []workflow.ApplyTask, run
 // BuildApplyRunOptions assembles the workflow run options for a scoped apply.
 // The become password file is captured by the CLI's credential prompt and
 // passed in.
-func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode) workflow.RunOptions {
+func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable string, runScope Scope, plan WorkflowPlan, check bool, becomePasswordFile string, dryRun bool, label string, mode workflow.ApplyMode, streamAnsible bool) workflow.RunOptions {
 	return workflow.RunOptions{
 		State:              plan.State,
 		RenderedDir:        ctx.RenderedDir,
@@ -106,6 +106,7 @@ func BuildApplyRunOptions(ctx workspace.Context, clustersDir string, executable 
 		ResolveInstaller:   plan.TargetsClusters,
 		Label:              label,
 		ApplyMode:          mode,
+		StreamAnsible:      streamAnsible,
 	}
 }
 

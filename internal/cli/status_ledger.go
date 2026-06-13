@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func printApplyLedgerStatus(p *cliout.Printer, runsDir string, clustersDir string, ledger workflow.RunLedger, found bool, loadErr error) {
+func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.RunLedger, found bool, loadErr error) {
 	p.Section("Current apply")
 	if loadErr != nil {
 		p.Status(cliout.StatusWarn, "Apply ledger", loadErr.Error())
@@ -35,11 +35,12 @@ func printApplyLedgerStatus(p *cliout.Printer, runsDir string, clustersDir strin
 	if ledger.Active() {
 		printApplyRunActivity(p, runsDir, ledger)
 	}
+	// Render the same step frame the live apply view uses, so `status` /
+	// `status --watch` and a running apply can never disagree about a run's
+	// shape. RenderFrame width 0 disables wrap accounting: status reprints the
+	// whole page each poll rather than redrawing the frame in place.
 	p.Section("Progress")
-	p.ProgressBar("Tasks", applyProgressDone(ledger), len(ledger.Tasks), applyProgressFields(ledger))
-	printApplyLedgerRunning(p, clustersDir, ledger)
-	printApplyLedgerClusters(p, clustersDir, ledger)
-	printApplyLedgerBlocked(p, ledger)
+	p.RenderFrame(applyRunFrame(ledger), 0)
 	printApplyLedgerFailures(p, ledger)
 }
 
@@ -59,41 +60,6 @@ func printApplyRunActivity(p *cliout.Printer, runsDir string, ledger workflow.Ru
 	case workflow.RunActivityStale:
 		p.Status(cliout.StatusWarn, "Lease", activity.Detail+"; next apply or destroy will mark it cancelled")
 	}
-}
-
-func printApplyLedgerRunning(p *cliout.Printer, clustersDir string, ledger workflow.RunLedger) {
-	running := ledger.RunningTasks()
-	if len(running) == 0 {
-		return
-	}
-	p.Section("Running work")
-	lines := make([]cliout.TaskLine, 0, len(running))
-	for _, task := range running {
-		lines = append(lines, cliout.TaskLine{Status: cliout.StatusRunning, Label: applyTaskDisplayLabel(task.Label), Detail: applyTaskRunDetail(clustersDir, task)})
-	}
-	p.Tasks(lines)
-}
-
-func printApplyLedgerClusters(p *cliout.Printer, clustersDir string, ledger workflow.RunLedger) {
-	names := ledger.ClusterNames()
-	if len(names) == 0 {
-		return
-	}
-	p.Section("Apply clusters")
-	p.ClusterPhases(applyClusterPhaseLines(clustersDir, ledger))
-}
-
-func printApplyLedgerBlocked(p *cliout.Printer, ledger workflow.RunLedger) {
-	blocked := ledger.BlockedTasks()
-	if len(blocked) == 0 {
-		return
-	}
-	p.Section("Blocked work")
-	lines := make([]cliout.TaskLine, 0, len(blocked))
-	for _, task := range blocked {
-		lines = append(lines, cliout.TaskLine{Status: cliout.StatusBlocked, Label: applyTaskDisplayLabel(task.Label), Detail: task.SkippedReason})
-	}
-	p.Tasks(lines)
 }
 
 func printApplyLedgerFailures(p *cliout.Printer, ledger workflow.RunLedger) {

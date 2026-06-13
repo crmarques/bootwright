@@ -52,47 +52,11 @@ func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, 
 	}
 }
 
-func printWorkflowStart(w io.Writer, workflowName string, selected []converge.Phase, askBecomePass bool) {
-	if len(selected) == 1 {
-		printPhaseStart(w, selected[0], askBecomePass)
-		return
-	}
-	p := output.NewContinuation(w)
-	p.Section("Run")
-	if converge.RootPhaseCount(selected) > 0 {
-		p.List([]output.Item{{Label: workflowName + " [root]", Detail: "phases: " + phaseList(selected)}})
-		if askBecomePass {
-			p.Warning("Sudo", becomePasswordSummary("workflow"))
-		}
-		return
-	}
-	p.List([]output.Item{{Label: workflowName, Detail: "phases: " + phaseList(selected)}})
-}
-
-func printPhaseStart(w io.Writer, phase converge.Phase, askBecomePass bool) {
-	p := output.NewContinuation(w)
-	p.Section("Run")
-	if phase.NeedsRoot && askBecomePass {
-		p.List([]output.Item{{Label: phase.Name + " [root]", Detail: phase.Description}})
-		p.Warning("Sudo", becomePasswordSummary("phase"))
-		return
-	}
-	p.List([]output.Item{{Label: phase.Name, Detail: phase.Description}})
-}
-
 // printWorkflowEnd writes a single-line completion banner after a successful
 // workflow run. Failure details are reported by the caller that owns the
 // command's output mode.
 func printWorkflowEnd(w io.Writer, workflowName string) {
 	output.NewContinuation(w).Summary(output.StatusOK, workflowName, "complete")
-}
-
-func phaseList(selected []converge.Phase) string {
-	names := make([]string, 0, len(selected))
-	for _, p := range selected {
-		names = append(names, p.Name)
-	}
-	return strings.Join(names, ", ")
 }
 
 func clusterUsesLoadBalancerComponent(ci v1alpha1.ClusterInstall) bool {

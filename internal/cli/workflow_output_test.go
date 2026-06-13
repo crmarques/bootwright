@@ -23,7 +23,7 @@ func TestWorkflowReporterGroupsBundlePreparation(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{
-		"\n\nBootwright prerequisites\n",
+		"\n\nRun\n",
 		"  - Prepare Ansible bundle: check cache and extract embedded roles/playbooks if needed\n",
 		"  [OK] Ansible bundle: extracted 1425 file(s) to /var/lib/bootwright/cache/ansible-bundles/version=dev\n",
 		"  - Render inputs: effective state, inventory, vars, and installer placeholders\n",
