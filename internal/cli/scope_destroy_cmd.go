@@ -64,7 +64,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
 		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
-		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
+		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
 	}
@@ -76,10 +76,20 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		runCommandLabel := commandLabel
 		if options.stageSelector {
 			if strings.TrimSpace(stage) == "" {
-				if !destroyTopLevelFlagChanged(c) {
+				switch {
+				case strings.TrimSpace(flags.clusterScope) != "":
+					// --clusters names ContainerCluster/StorageCluster objects,
+					// which only the clusters stage tears down. Infer it so
+					// `destroy --clusters <names>` works without repeating
+					// `--stage clusters`. The infra-scoped uses of --clusters
+					// (the artifact-server literal, scoping the infra sweep)
+					// still require an explicit --stage infra.
+					stage = "clusters"
+				case !destroyTopLevelFlagChanged(c):
 					return c.Help()
+				default:
+					return failErr(2, fmt.Errorf("--stage must be one of infra, clusters"))
 				}
-				return failErr(2, fmt.Errorf("--stage must be one of infra, clusters"))
 			}
 			var err error
 			runScope, err = converge.DestroyStageScope(stage)

@@ -155,7 +155,8 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   bootwright destroy --stage infra --clusters artifact-server --yes
 
   # Remove selected cluster-stage runtime and managed storage state
-  bootwright destroy --stage clusters --clusters dc1-ocp,ceph-storage --yes`,
+  # (--clusters implies --stage clusters)
+  bootwright destroy --clusters dc1-ocp,ceph-storage --yes`,
 	})
 	return cmd
 }

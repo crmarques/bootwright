@@ -666,6 +666,33 @@ func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	}
 }
 
+// TestDestroyClustersInfersStageFromClusterScope locks in that `destroy
+// --clusters <names>` (no --stage) targets the clusters stage instead of
+// failing with "--stage must be one of infra, clusters".
+func TestDestroyClustersInfersStageFromClusterScope(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--clusters", "sno-libvirt",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --clusters dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "clusters" || report.Action != "destroy" || !report.DryRun {
+		t.Fatalf("unexpected dry-run report header: %+v", report)
+	}
+	if report.Playbook != clustersScope.destroyPlaybook {
+		t.Fatalf("playbook = %q, want %q", report.Playbook, clustersScope.destroyPlaybook)
+	}
+}
+
 func TestProtectedDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	initProtectedTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
