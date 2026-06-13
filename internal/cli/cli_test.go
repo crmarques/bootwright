@@ -1881,15 +1881,18 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"preflight", "--help"}, want: false},
 		{args: []string{"apply"}, want: true},
 		{args: []string{"apply", "--stage", "infra"}, want: true},
-		{args: []string{"destroy"}, want: false},
+		// An omitted --stage is a whole-context full destroy (clusters then infra),
+		// which is rootful and must read the root-owned context before teardown.
+		{args: []string{"destroy"}, want: true},
 		{args: []string{"destroy", "--stage", "infra"}, want: true},
 		{args: []string{"destroy", "--stage", "clusters"}, want: true},
+		// A bogus explicit --stage fails stage validation before any context read.
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
-		{args: []string{"destroy", "cluster"}, want: false},
-		// --clusters without --stage infers --stage clusters, which needs root.
+		// An invalid positional escalates then fails NoArgs, matching `apply`.
+		{args: []string{"destroy", "cluster"}, want: true},
 		{args: []string{"destroy", "--clusters", "ceph-ibm"}, want: true},
 		{args: []string{"destroy", "--clusters=ceph-ibm"}, want: true},
-		{args: []string{"destroy", "--clusters", ""}, want: false},
+		{args: []string{"destroy", "--clusters", ""}, want: true},
 		{args: []string{"destroy", "--stage", "infra", "--clusters", "artifact-server"}, want: true},
 		{args: []string{"render"}, want: false},
 		{args: []string{"render", "--clusters", "managed-01"}, want: false},
@@ -1928,7 +1931,6 @@ func TestLocalRootGateSkipsRootlessHelpAndCompletion(t *testing.T) {
 
 	cases := [][]string{
 		{"preflight"},
-		{"destroy"},
 		{"secret"},
 		{"render"},
 		{"completion", "bash"},

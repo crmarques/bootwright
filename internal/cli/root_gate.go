@@ -297,29 +297,23 @@ func destroyArgsNeedLocalRoot(args []string) bool {
 }
 
 func destroyArgsSelectRootfulTarget(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
 	stage := ""
-	hasClusters := false
 	for i, arg := range args {
 		switch {
 		case arg == "--stage" && i+1 < len(args):
 			stage = args[i+1]
 		case strings.HasPrefix(arg, "--stage="):
 			stage = strings.TrimPrefix(arg, "--stage=")
-		case arg == "--clusters" && i+1 < len(args):
-			hasClusters = strings.TrimSpace(args[i+1]) != ""
-		case strings.HasPrefix(arg, "--clusters="):
-			hasClusters = strings.TrimSpace(strings.TrimPrefix(arg, "--clusters=")) != ""
 		}
 	}
 	if stage != "" {
 		return stage == "infra" || stage == "clusters"
 	}
-	// No explicit --stage: `destroy` infers --stage clusters when --clusters
-	// names objects, which needs local root just like an explicit stage. Mirror
-	// that inference here so escalation happens before context resolution
-	// (otherwise a non-root run fails to lstat the root-owned context).
-	return hasClusters
+	// An omitted --stage is a whole-context full destroy (the clusters stage, then
+	// the infra they ran on) — or, with a --clusters filter, the inferred clusters
+	// stage. Both are rootful and must read the root-owned context, so escalate
+	// before context resolution; otherwise a non-root run fails to lstat the
+	// root-owned context directory. (A bogus explicit --stage stays rootless: it
+	// fails stage validation fast, before any context read.)
+	return true
 }
