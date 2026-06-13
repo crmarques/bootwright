@@ -30,7 +30,6 @@ func PrepareApplyTaskGraph(ctx context.Context, runsDir string, opts RunOptions,
 	if strings.TrimSpace(runsDir) == "" {
 		return PreparedApplyTaskGraph{}, fmt.Errorf("runs dir is required")
 	}
-	opts.RunsDir = runsDir
 	limits = ResolveApplyConcurrencyLimits(limits, tasks)
 	tasks = AnnotateApplyTaskClusterLogPaths(opts.ClustersDir, runID, tasks)
 	var err error

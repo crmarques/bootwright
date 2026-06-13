@@ -167,7 +167,7 @@ func executeStorageExportSSHExternalDetails(ctx context.Context, state v1alpha1.
 	}
 	var failures []string
 	for i, target := range targets {
-		outputPath, err := runStorageExportSSHAnsible(ctx, state, export, containerCluster, opts, target, timeout, i, ssh)
+		outputPath, err := runStorageExportSSHAnsible(ctx, containerCluster, opts, target, timeout, i, ssh)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", target.label, err))
 			continue
@@ -272,7 +272,7 @@ func storageExportSeedNode(cluster v1alpha1.StorageCluster, name string) (v1alph
 	return v1alpha1.StorageCephHost{}, false
 }
 
-func runStorageExportSSHAnsible(ctx context.Context, state v1alpha1.State, export v1alpha1.StorageExport, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
+func runStorageExportSSHAnsible(ctx context.Context, containerCluster string, opts storageAttachmentExternalDetailsOptions, target externalDetailsSSHTarget, timeout time.Duration, index int, ssh *v1alpha1.StorageExportExternalDetailsSSHExecution) (string, error) {
 	runner := opts.Runner
 	if runner == nil {
 		runner = ansible.CommandRunner{}
