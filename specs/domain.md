@@ -1,13 +1,19 @@
 # Domain
 
-Bootwright automates declarative provisioning of fleets of OpenShift and OKD
-clusters from bare hardware or virtualized substrates to installed clusters.
-The initial scope is direct `openshift-install agent` execution against
-single-node and multi-node cluster machines.
+Bootwright automates provisioning of OpenShift and OKD platform environments
+from declarative desired state. A platform environment includes
+the fleet context, substrate capabilities, machines and managed machine OS
+installs, shared infrastructure services, OpenShift or OKD managed clusters,
+Ceph storage clusters, exported storage surfaces, and cluster-bound bootstrap
+add-ons.
 
+The initial container-cluster install scope is direct `openshift-install agent`
+execution against single-node and multi-node cluster machines.
+
+Managed and imported Ceph storage are in scope as peer storage-cluster phases.
 Initial post-install bootstrap of early platform components is in scope when
-declared as cluster-bound add-ons. Day-2 GitOps publication of fleet content is
-out of scope for this repository.
+declared as cluster-bound add-ons. Day-2 GitOps publication of fleet content
+is out of scope for this repository.
 
 ## Operating Model
 

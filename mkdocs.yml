@@ -1,5 +1,5 @@
 site_name: Bootwright
-site_description: Desired-state orchestration for OpenShift cluster fleets
+site_description: Desired-state orchestration for OpenShift, OKD, storage, and supporting infrastructure
 site_url: https://crmarques.github.io/bootwright/
 repo_url: https://github.com/crmarques/bootwright
 repo_name: crmarques/bootwright
@@ -119,6 +119,6 @@ nav:
   - Troubleshooting: troubleshooting.md
 
 copyright: >-
-  Bootwright is an open-source desired-state orchestrator.
+  Bootwright is an open-source desired-state platform orchestrator.
   Binding contracts live under
   <a href="https://github.com/crmarques/bootwright/tree/main/specs"><code>/specs/</code></a>.

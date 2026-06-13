@@ -16,12 +16,14 @@ the task before editing. Do not start from partial context.
 These hold for every change; verify their current form in `/specs/` when a task
 depends on them.
 
-- **Scope.** Automated declarative provisioning of fleets of OpenShift and OKD
-  clusters from bare or virtualized substrates to installed clusters, plus
-  cluster-bound bootstrap add-ons. Day-2 GitOps publication of fleet content
-  (package catalogs, KRC/SRC bootstrap) is a separate project; do not reintroduce
-  it. Initial execution scope is direct `openshift-install agent` runs against
-  single-node and multi-node machines.
+- **Scope.** Automated declarative provisioning of OpenShift and OKD platform
+  environments from bare or virtualized substrates through machines, managed
+  machine OS installs, shared infrastructure services, managed clusters, Ceph
+  storage clusters, exported storage surfaces, and cluster-bound bootstrap
+  add-ons. Day-2 GitOps publication of fleet content (package catalogs, KRC/SRC
+  bootstrap) is a separate project; do not reintroduce it. Initial
+  container-cluster install scope is direct `openshift-install agent` runs
+  against single-node and multi-node machines.
 - **Provider neutrality.** Keep substrate abstractions open for libvirt, bare
   metal, vSphere, OpenShift Virtualization, and future providers. Handle provider
   and BMC variation through capability discovery, advertised metadata, and

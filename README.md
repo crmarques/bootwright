@@ -4,20 +4,29 @@
 
 # Bootwright
 
-Bootwright is a desired-state orchestrator for provisioning fleets of OpenShift
-and OKD clusters from bare hardware or virtualized substrates. You describe the
-environment, providers, shared components, infrastructure, networks, clusters,
-storage clusters, and bootstrap add-ons with declarative YAML kinds. Bootwright validates
-that intent, renders the deterministic input files expected by installer and
-provider CLIs, and converges the workflow idempotently.
+Bootwright is a desired-state orchestrator for building OpenShift and OKD
+platform environments. You describe the fleet environment, substrates,
+machines, managed machine OS installs, networks, shared infrastructure
+services, OpenShift or OKD managed clusters, Ceph storage clusters, storage
+exports, and bootstrap add-ons with declarative YAML kinds. Bootwright validates
+that intent, renders deterministic inputs for the official installer, provider,
+storage, and cluster CLIs, and converges the graph idempotently.
 
-**Supported distributions:** OpenShift and OKD.
+**Supported container-cluster distributions:** OpenShift and OKD.
 
 ## The problem it solves
 
-Standing up one cluster is a runbook. Standing up *many* clusters — across mixed substrates, with shared services like load balancers, DNS, mirror registries, and proxies — is a coordination problem that handwritten scripts and ad-hoc installer runs cannot keep consistent. Bootwright replaces that with a few versioned objects and an idempotent apply pipeline: declare the fleet once, converge it as many times as you need, and get the same result every time.
+Standing up one cluster is a runbook. Standing up a platform environment is a
+coordination problem: machines may need substrate preparation or OS install,
+clusters need shared services such as load balancers, DNS, mirror registries,
+proxies, and artifact servers, storage may be imported or built as Ceph, and
+early add-ons need to wait for installed clusters and exported storage.
+Handwritten scripts and ad-hoc installer runs do not keep those relationships
+consistent. Bootwright replaces them with versioned objects and an idempotent
+apply graph: declare the environment once, converge it as many times as you
+need, and get the same result every time.
 
-The CLI covers the provisioning pipeline:
+The CLI covers the normal convergence path:
 
 ```text
 bootwright example init lab --output ./lab-input
