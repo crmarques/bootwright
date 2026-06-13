@@ -24,6 +24,7 @@ func newContextCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 	}
 	cmd.AddCommand(
 		newContextInitCmd(stdin, stdout, stderr),
+		newContextUpdateCmd(stdin, stdout, stderr),
 		newContextUseCmd(stdout),
 		newContextListCmd(stdout),
 		newContextCurrentCmd(stdout),
@@ -38,26 +39,27 @@ func newContextInitCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cob
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "init <ctx-name>",
-		Short: "Create a context that records a workspace directory path",
-		Long: `Create a context that records the absolute path of a workspace directory.
+		Short: "Create a context by copying a source directory into it",
+		Long: `Create a context that owns a copy of a source directory.
 
-The workspace stays the single owner of the authored desired-state YAML:
-nothing is copied, every command reads the workspace directly, and edits are
-picked up by the next command with no extra step. Re-run init -f with --yes to
-re-point an existing context at a new (or moved) workspace directory.`,
+The contents of the source directory are copied into the context, so the
+context is self-contained: it keeps working even if the source is later moved
+or deleted, and editing the source has no effect until ` + "`context update`" + `. Init
+fails if the context already exists; rerun with --yes to drop the existing
+context entirely and recreate it from the source.`,
 		Args: cobra.ExactArgs(1),
 		Example: `  bootwright context init lab -f ./examples/sno-libvirt-redfish
   bootwright context init lab -f ~/lab-input --yes`,
 	}
-	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "workspace directory with Bootwright YAML; its absolute path is recorded and edits are picked up directly")
-	cmd.Flags().BoolVar(&yes, "yes", false, "replace an existing context by re-pointing its recorded workspace path")
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory with Bootwright YAML; its contents are copied into the context (required)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "drop an existing context and recreate it from the source directory")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if err := workspace.ValidateName(name); err != nil {
 			return failErr(2, err)
 		}
 		if len(files) != 1 {
-			return failf(2, "context init records exactly one workspace directory; pass a single -f <dir>")
+			return failf(2, "context init copies exactly one source directory; pass a single -f <dir>")
 		}
 		// Resolve before any sudo re-exec so relative paths and ~ expand
 		// against the caller's environment, not root's.
@@ -92,22 +94,28 @@ re-point an existing context at a new (or moved) workspace directory.`,
 			return failErr(1, err)
 		}
 		if exists && !yes {
-			return failf(1, "context %q already exists; rerun with --yes to re-point it at %s", name, source)
+			return failf(1, "context %q already exists; rerun with --yes to drop it and recreate it from %s", name, source)
 		}
+		// Validate the source before any destructive step so an invalid -f never
+		// drops an existing context.
 		state, err := desiredstate.LoadNormalizeValidateInputFiles([]string{source})
 		if err != nil {
-			return failErr(1, fmt.Errorf("validate workspace input files: %w", err))
+			return failErr(1, fmt.Errorf("validate source input files: %w", err))
 		}
 		if err := enforceControllerLocality(state); err != nil {
 			return failErr(1, err)
 		}
+		if exists && yes {
+			if err := workspace.SafePurgeBaseDir(ctx); err != nil {
+				return failErr(1, err)
+			}
+		}
 		if err := workspace.EnsureDirs(ctx); err != nil {
 			return failErr(1, err)
 		}
-		if err := workspace.WriteInputSource(ctx, source); err != nil {
+		if err := workspace.ReplaceInputDir(ctx, source); err != nil {
 			return failErr(1, err)
 		}
-		ctx = ctx.WithInputSource(source)
 		bundle, bundleSkipped, err := prepareInitialBundle()
 		if err != nil {
 			return failErr(1, err)
@@ -120,9 +128,9 @@ re-point an existing context at a new (or moved) workspace directory.`,
 		p.Command("context init")
 		p.Section("Context")
 		p.Fields(contextFields(ctx))
-		p.Section("Workspace")
-		p.Status(output.StatusOK, "recorded path", source)
-		p.Status(output.StatusOK, "live edits", "commands read the workspace directly; re-run `bootwright context init "+name+" -f <dir>` to re-point it")
+		p.Section("Input")
+		p.Status(output.StatusOK, "copied from", source)
+		p.Status(output.StatusOK, "input dir", ctx.InputDir+"; re-run `bootwright context update -f <dir>` to refresh it")
 		p.Section("Runtime")
 		if bundleSkipped {
 			p.Status(output.StatusSkip, "Ansible bundle", "embedded bundle not synced in this build")
@@ -132,6 +140,71 @@ re-point an existing context at a new (or moved) workspace directory.`,
 			p.Status(output.StatusOK, "Ansible bundle", fmt.Sprintf("extracted %d file(s) to %s", bundle.Files, bundle.Dir))
 		}
 		p.Summary(output.StatusOK, name, "current context")
+		printNextStatusHint(stdout)
+		return nil
+	}
+	return cmd
+}
+
+func newContextUpdateCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	var files []string
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Replace the current context's input from a source directory",
+		Long: `Replace the input of the current context by copying a source directory into
+it. The copied input fully replaces the previous input; the rest of the
+context — secrets, runs, rendered output, clusters, ownership, and provider
+state — is preserved.`,
+		Args:    cobra.NoArgs,
+		Example: `  bootwright context update -f ./examples/sno-libvirt-redfish`,
+	}
+	cmd.Flags().StringArrayVarP(&files, "file", "f", nil, "source directory whose contents replace the current context input (required)")
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if len(files) != 1 {
+			return failf(2, "context update copies exactly one source directory; pass a single -f <dir>")
+		}
+		// Resolve before any sudo re-exec so relative paths and ~ expand
+		// against the caller's environment, not root's.
+		source, err := workspace.ResolveWorkspaceDir(files[0])
+		if err != nil {
+			return failErr(2, err)
+		}
+		if shouldRunContextRootChild() {
+			// update keeps the current pointer, so the registry is not synced back.
+			code, err := runWithLocalRoot(cmd.Context(), []string{"context", "update", "-f", source}, stdin, stdout, stderr, false)
+			if err != nil {
+				return failErr(1, err)
+			}
+			if code != 0 {
+				return silentExit(code)
+			}
+			return nil
+		}
+		ctx, err := workspace.CurrentContext()
+		if err != nil {
+			return failErr(1, err)
+		}
+		state, err := desiredstate.LoadNormalizeValidateInputFiles([]string{source})
+		if err != nil {
+			return failErr(1, fmt.Errorf("validate source input files: %w", err))
+		}
+		if err := enforceControllerLocality(state); err != nil {
+			return failErr(1, err)
+		}
+		if err := workspace.EnsureDirs(ctx); err != nil {
+			return failErr(1, err)
+		}
+		if err := workspace.ReplaceInputDir(ctx, source); err != nil {
+			return failErr(1, err)
+		}
+		p := output.New(stdout)
+		p.Command("context update")
+		p.Section("Context")
+		p.Fields(contextFields(ctx))
+		p.Section("Input")
+		p.Status(output.StatusOK, "copied from", source)
+		p.Status(output.StatusOK, "state", "preserved (secrets, runs, rendered, clusters, ownership)")
+		p.Summary(output.StatusOK, ctx.Name, "input replaced")
 		printNextStatusHint(stdout)
 		return nil
 	}

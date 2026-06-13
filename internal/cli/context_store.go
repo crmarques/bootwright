@@ -9,7 +9,7 @@ func contextFields(ctx workspace.Context) []output.Field {
 	return []output.Field{
 		{Key: "name", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
-		{Key: "workspace", Value: ctx.InputDir},
+		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "secrets-dir", Value: ctx.SecretsDir},
 		{Key: "clusters-dir", Value: ctx.ClustersDir},

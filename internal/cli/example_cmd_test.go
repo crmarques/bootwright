@@ -95,7 +95,4 @@ func TestRootHelpShowsFirstRunWorkflow(t *testing.T) {
 			t.Fatalf("root help missing %q:\n%s", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "context update") {
-		t.Fatalf("root help still advertises removed context update:\n%s", stdout)
-	}
 }

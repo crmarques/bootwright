@@ -20,7 +20,7 @@ const (
 	InternalRegistryEnv = "BOOTWRIGHT_INTERNAL_REGISTRY"
 	DefaultRootDir      = "/var/lib/bootwright"
 	CacheDirName        = "cache"
-	InputSourceFileName = "input-source.yaml"
+	InputDirName        = "input"
 	RenderedDirName     = "rendered"
 	SecretsDirName      = "secrets"
 	RunsDirName         = "runs"
@@ -34,10 +34,11 @@ type Store struct {
 	Current string `yaml:"current,omitempty" json:"current,omitempty"`
 }
 
-// Context describes one shared context under the Bootwright root. InputDir
-// and InputPaths point at the operator's workspace directory recorded at
-// `context init` time (see InputSourceFileName); every other directory is
-// Bootwright-owned output/state under BaseDir.
+// Context describes one shared context under the Bootwright root. Every
+// directory, including InputDir, is Bootwright-owned under BaseDir: `context
+// init`/`context update` copy the operator's source directory into InputDir so
+// the context is self-contained and survives deletion of the source. InputPaths
+// is the load set the desired-state loader reads, always {InputDir}.
 type Context struct {
 	Name               string   `yaml:"-" json:"name"`
 	BaseDir            string   `yaml:"-" json:"baseDir"`
@@ -101,9 +102,12 @@ func NewContext(name string) (Context, error) {
 }
 
 func newContextAt(name, baseDir string) Context {
+	inputDir := filepath.Join(baseDir, InputDirName)
 	return Context{
 		Name:               name,
 		BaseDir:            baseDir,
+		InputDir:           inputDir,
+		InputPaths:         []string{inputDir},
 		RenderedDir:        filepath.Join(baseDir, RenderedDirName),
 		SecretsDir:         filepath.Join(baseDir, SecretsDirName),
 		RunsDir:            filepath.Join(baseDir, RunsDirName),
@@ -112,14 +116,6 @@ func newContextAt(name, baseDir string) Context {
 		ProviderStateDir:   filepath.Join(baseDir, ProviderStateName),
 		OwnershipDir:       filepath.Join(baseDir, OwnershipName),
 	}
-}
-
-// WithInputSource returns a copy of ctx whose InputDir and InputPaths point at
-// the given workspace directory.
-func (ctx Context) WithInputSource(sourceDir string) Context {
-	ctx.InputDir = sourceDir
-	ctx.InputPaths = []string{sourceDir}
-	return ctx
 }
 
 func (ctx Context) Cluster(name string) ClusterPaths {
@@ -284,20 +280,12 @@ func RequireExistingContext(name string) (Context, error) {
 	return ctx, nil
 }
 
-// ResolveExistingContext returns the context with its recorded workspace
-// directory loaded into InputDir/InputPaths. It is the resolution path every
-// command uses; a context without a recorded workspace path (for example one
-// created before workspace recording existed) fails with a named error.
+// ResolveExistingContext returns an existing, Bootwright-managed context. Its
+// InputDir/InputPaths are intrinsic (the owned input/ directory under BaseDir),
+// so resolution is just the managed-context check; readiness of the copied
+// input is validated separately by ValidateInputDir.
 func ResolveExistingContext(name string) (Context, error) {
-	ctx, err := RequireExistingContext(name)
-	if err != nil {
-		return Context{}, err
-	}
-	source, err := ReadInputSource(ctx)
-	if err != nil {
-		return Context{}, err
-	}
-	return ctx.WithInputSource(source), nil
+	return RequireExistingContext(name)
 }
 
 func isUsableContext(ctx Context) (bool, error) {
@@ -327,6 +315,7 @@ func EnsureDirs(ctx Context) error {
 	}
 	for _, dir := range []string{
 		ctx.BaseDir,
+		ctx.InputDir,
 		ctx.RenderedDir,
 		ctx.SecretsDir,
 		ctx.RunsDir,
@@ -397,6 +386,7 @@ func ValidateContext(ctx Context) error {
 		return err
 	}
 	want := map[string]string{
+		"inputDir":           filepath.Join(baseDir, InputDirName),
 		"renderedDir":        filepath.Join(baseDir, RenderedDirName),
 		"secretsDir":         filepath.Join(baseDir, SecretsDirName),
 		"runsDir":            filepath.Join(baseDir, RunsDirName),
@@ -406,6 +396,7 @@ func ValidateContext(ctx Context) error {
 		"ownershipDir":       filepath.Join(baseDir, OwnershipName),
 	}
 	got := map[string]string{
+		"inputDir":           ctx.InputDir,
 		"renderedDir":        ctx.RenderedDir,
 		"secretsDir":         ctx.SecretsDir,
 		"runsDir":            ctx.RunsDir,

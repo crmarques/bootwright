@@ -202,10 +202,11 @@ Fix any diagnostic by editing the named object and field, then validate again.
 
 ## 5. Create A Context
 
-A context binds a name to your input directory and stores generated state under
-`/var/lib/bootwright/contexts/<context>`. It records the **absolute path** of the
-workspace and copies nothing — commands read your files in place, so edits are
-picked up live.
+A context binds a name to a **copy** of your input directory and stores
+generated state under `/var/lib/bootwright/contexts/<context>`. `context init`
+copies the whole source tree into the context's `input/` directory, so the
+context is self-contained and keeps working even if the source is moved or
+deleted.
 
 ```bash
 bootwright context init lab -f ./my-sno-lab
@@ -214,8 +215,15 @@ bootwright status
 ```
 
 `bootwright status` reports context readiness and prints the suggested next
-command at every step; lean on it as you go. If you move the input directory,
-re-point the context with `bootwright context init lab -f <new-dir> --yes`.
+command at every step; lean on it as you go. Because the input is a copy,
+editing `./my-sno-lab` later has no effect until you refresh it:
+
+```bash
+bootwright context update -f ./my-sno-lab
+```
+
+`context init` fails if `lab` already exists; rerun with `--yes` to drop the
+existing context and recreate it from the source.
 
 ## 6. Set And Sync Secrets
 

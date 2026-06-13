@@ -54,8 +54,8 @@ Rules:
 - `resources[]`, when set, is a YAML file or directory allow-list relative to
   the `Environment` file directory. The `Environment` file itself is always
   loaded.
-- When `resources[]` is omitted, the current context's recorded workspace
-  directory loads every discovered YAML file.
+- When `resources[]` is omitted, the current context's input directory loads
+  every discovered YAML file.
 - A listed file is loaded as a complete YAML file. A listed directory is walked
   deterministically for YAML files.
 - Every referenced Bootwright resource must also be selected.
@@ -957,17 +957,23 @@ Rules:
 
 - Human CLI output goes through `internal/cli/output` except JSON output, shell
   exports, Cobra help, prompts, and external process passthrough.
-- `context init <name> -f <dir>` records the absolute, cleaned path of the
-  workspace directory in the shared context directory and copies nothing. The
-  workspace is the single owner of authored YAML: every command reads it
-  directly, so edits are visible to the next command with no extra step.
-  Re-running `context init -f` with `--yes` re-points the recorded path; there
-  is no `context update` command. The context directory under
-  `/var/lib/bootwright/contexts/<name>/` holds Bootwright outputs and state
-  only.
-- A recorded workspace path that is missing, unreadable, or not a directory is
-  a named failure at context resolution/readiness time that names the context
-  and the recorded path; there is no fallback copy and no silent degradation.
+- `context init <name> -f <dir>` (`-f` required, exactly one directory) creates
+  a context by copying the whole source directory tree into the context's input
+  directory at `/var/lib/bootwright/contexts/<name>/input/`. The context is
+  self-contained: every command reads the copy, so the context keeps working
+  even if the source is later moved or deleted, and editing the source has no
+  effect until the next `context update`. `init` fails if the context already
+  exists; `--yes` drops the existing context entirely and recreates it from the
+  source. The whole tree is copied (not only YAML) so `file:`-sourced secrets and
+  SSH keys, resolved relative to the loaded YAML, remain available.
+- `context update -f <dir>` (`-f` required, exactly one directory) replaces the
+  current context's input directory with a fresh copy of the source and
+  preserves all other context state (secrets, runs, rendered output, clusters,
+  ownership, provider state). It does not change the current-context selection.
+- An input directory that is missing, unreadable, or not a directory is a named
+  failure at context resolution/readiness time that names the context and the
+  input directory and points at `context update -f` (or `context init … --yes`)
+  to repopulate it; there is no silent degradation.
 - A mutating `apply` records the loaded input YAML files as a forensic output
   under the run's history directory (`runs/history/<run-id>/input/`); a
   mutating `destroy` records them under `runs/last-destroy-input/`. The

@@ -21,8 +21,12 @@ func TestNewContextDefaultsUnderHomeBootwright(t *testing.T) {
 	if ctx.BaseDir != wantBase {
 		t.Fatalf("BaseDir = %q, want %q", ctx.BaseDir, wantBase)
 	}
-	if ctx.InputDir != "" || len(ctx.InputPaths) != 0 {
-		t.Fatalf("InputDir/InputPaths should be unset before workspace resolution, got %q %v", ctx.InputDir, ctx.InputPaths)
+	wantInput := filepath.Join(wantBase, InputDirName)
+	if ctx.InputDir != wantInput {
+		t.Fatalf("InputDir = %q, want %q", ctx.InputDir, wantInput)
+	}
+	if len(ctx.InputPaths) != 1 || ctx.InputPaths[0] != wantInput {
+		t.Fatalf("InputPaths = %v, want [%q]", ctx.InputPaths, wantInput)
 	}
 	if ctx.RenderedDir != filepath.Join(wantBase, RenderedDirName) {
 		t.Fatalf("RenderedDir = %q", ctx.RenderedDir)
@@ -72,10 +76,6 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 	if err := EnsureDirs(ctx); err != nil {
 		t.Fatal(err)
 	}
-	workspace := t.TempDir()
-	if err := WriteInputSource(ctx, workspace); err != nil {
-		t.Fatal(err)
-	}
 	store := Store{Current: "lab"}
 	if err := Save(path, store); err != nil {
 		t.Fatal(err)
@@ -91,8 +91,8 @@ func TestStoreRoundTripCurrentContext(t *testing.T) {
 	if current.Name != "lab" || current.BaseDir != ctx.BaseDir {
 		t.Fatalf("current = %+v, want %+v", current, ctx)
 	}
-	if current.InputDir != workspace || len(current.InputPaths) != 1 || current.InputPaths[0] != workspace {
-		t.Fatalf("current workspace = %q %v, want %q", current.InputDir, current.InputPaths, workspace)
+	if current.InputDir != ctx.InputDir || len(current.InputPaths) != 1 || current.InputPaths[0] != ctx.InputDir {
+		t.Fatalf("current input = %q %v, want %q", current.InputDir, current.InputPaths, ctx.InputDir)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestLoadToleratesAndSaveStripsRetiredContextList(t *testing.T) {
 	}
 }
 
-func TestCurrentRequiresSharedContextStorage(t *testing.T) {
+func TestCurrentResolvesManagedContext(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))
 	if _, err := Current(Store{Current: "lab"}); err == nil {
@@ -155,24 +155,15 @@ func TestCurrentRequiresSharedContextStorage(t *testing.T) {
 	if err := EnsureDirs(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Current(Store{Current: "lab"}); err == nil {
-		t.Fatal("Current accepted a context without a recorded workspace path")
-	} else if !strings.Contains(err.Error(), "no recorded workspace path") || !strings.Contains(err.Error(), "context init lab") {
-		t.Fatalf("Current returned unclear missing-workspace error: %v", err)
-	}
-	workspace := t.TempDir()
-	if err := WriteInputSource(ctx, workspace); err != nil {
-		t.Fatal(err)
-	}
 	current, err := Current(Store{Current: "lab"})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Current failed for a managed context: %v", err)
 	}
 	if current.BaseDir != ctx.BaseDir {
 		t.Fatalf("BaseDir = %q, want %q", current.BaseDir, ctx.BaseDir)
 	}
-	if current.InputDir != workspace {
-		t.Fatalf("InputDir = %q, want %q", current.InputDir, workspace)
+	if current.InputDir != ctx.InputDir {
+		t.Fatalf("InputDir = %q, want %q", current.InputDir, ctx.InputDir)
 	}
 }
 
@@ -225,6 +216,7 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 		filepath.Join(root, CacheDirName),
 		filepath.Join(root, "contexts"),
 		ctx.BaseDir,
+		ctx.InputDir,
 		ctx.RenderedDir,
 		ctx.SecretsDir,
 		ctx.ClustersDir,
@@ -246,7 +238,7 @@ func TestEnsureDirsMarksContextBaseDir(t *testing.T) {
 	}
 }
 
-func TestInputSourceRoundTripAndRepoint(t *testing.T) {
+func TestReplaceInputDirCopiesTreeAndSurvivesSourceDeletion(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))
 	ctx, err := NewContext("lab")
@@ -256,32 +248,59 @@ func TestInputSourceRoundTripAndRepoint(t *testing.T) {
 	if err := EnsureDirs(ctx); err != nil {
 		t.Fatal(err)
 	}
-	first := t.TempDir()
-	if err := WriteInputSource(ctx, first); err != nil {
+
+	// A source tree with YAML, a referenced non-YAML file (e.g. a file:-sourced
+	// secret), a nested directory, and a VCS directory that must be skipped.
+	source := t.TempDir()
+	writeFile(t, filepath.Join(source, "environment.yaml"), "kind: Environment\n")
+	writeFile(t, filepath.Join(source, "pull-secret.txt"), "secret-bytes\n")
+	writeFile(t, filepath.Join(source, "nested", "machine.yaml"), "kind: Machine\n")
+	writeFile(t, filepath.Join(source, ".git", "config"), "[core]\n")
+
+	if err := ReplaceInputDir(ctx, source); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := ResolveExistingContext("lab")
-	if err != nil {
+	// The whole tree (not just YAML) is copied so referenced material survives.
+	mustExist(t, filepath.Join(ctx.InputDir, "environment.yaml"))
+	mustExist(t, filepath.Join(ctx.InputDir, "pull-secret.txt"))
+	mustExist(t, filepath.Join(ctx.InputDir, "nested", "machine.yaml"))
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("ReplaceInputDir copied the .git directory: %v", err)
+	}
+	if mode := statMode(t, filepath.Join(ctx.InputDir, "pull-secret.txt")); mode != 0o600 {
+		t.Fatalf("copied file mode = %#o, want 0600", mode)
+	}
+
+	// Deleting the source must not affect the self-contained context.
+	if err := os.RemoveAll(source); err != nil {
 		t.Fatal(err)
 	}
-	if resolved.InputDir != first || len(resolved.InputPaths) != 1 || resolved.InputPaths[0] != first {
-		t.Fatalf("resolved workspace = %q %v, want %q", resolved.InputDir, resolved.InputPaths, first)
-	}
-	// Re-writing the source is how `context init --yes` re-points a context.
+	mustExist(t, filepath.Join(ctx.InputDir, "environment.yaml"))
+	mustExist(t, filepath.Join(ctx.InputDir, "pull-secret.txt"))
+
+	// A second update fully replaces the input; stale files do not linger.
 	second := t.TempDir()
-	if err := WriteInputSource(ctx, second); err != nil {
+	writeFile(t, filepath.Join(second, "only.yaml"), "kind: Environment\n")
+	if err := ReplaceInputDir(ctx, second); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err = ResolveExistingContext("lab")
+	mustExist(t, filepath.Join(ctx.InputDir, "only.yaml"))
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "environment.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("ReplaceInputDir kept stale input from the previous source: %v", err)
+	}
+	// No staging directory is left behind under the context base directory.
+	entries, err := os.ReadDir(ctx.BaseDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.InputDir != second {
-		t.Fatalf("re-pointed workspace = %q, want %q", resolved.InputDir, second)
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".input.tmp-") {
+			t.Fatalf("ReplaceInputDir left a staging directory: %s", entry.Name())
+		}
 	}
 }
 
-func TestResolveExistingContextIgnoresLegacyInputCopy(t *testing.T) {
+func TestReplaceInputDirRejectsSymlinkInSource(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))
 	ctx, err := NewContext("lab")
@@ -291,52 +310,40 @@ func TestResolveExistingContextIgnoresLegacyInputCopy(t *testing.T) {
 	if err := EnsureDirs(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// A pre-redesign context has a copied input/ directory and no recorded
-	// workspace path. It must fail with the named error; the copy is never read.
-	legacyInput := filepath.Join(ctx.BaseDir, "input")
-	if err := os.MkdirAll(legacyInput, 0o700); err != nil {
+	source := t.TempDir()
+	writeFile(t, filepath.Join(source, "environment.yaml"), "kind: Environment\n")
+	if err := os.Symlink(filepath.Join(source, "environment.yaml"), filepath.Join(source, "link.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(legacyInput, "environment.yaml"), []byte("legacy\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err = ResolveExistingContext("lab")
-	if err == nil {
-		t.Fatal("ResolveExistingContext accepted a context without a recorded workspace path")
-	}
-	for _, want := range []string{"lab", "no recorded workspace path", "bootwright context init lab -f <workspace>"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q missing %q", err, want)
-		}
+	if err := ReplaceInputDir(ctx, source); err == nil || !strings.Contains(err.Error(), "must not contain symlinks") {
+		t.Fatalf("ReplaceInputDir on a tree with a symlink = %v, want symlink rejection", err)
 	}
 }
 
-func TestValidateInputSourceNamesContextPathAndRemediation(t *testing.T) {
-	ctx := Context{Name: "lab"}
-	missing := filepath.Join(t.TempDir(), "moved-away")
-	ctx = ctx.WithInputSource(missing)
-	err := ValidateInputSource(ctx)
-	if err == nil {
-		t.Fatal("ValidateInputSource accepted a missing workspace")
+func TestValidateInputDirNamesContextAndRemediation(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bootwright-root")
+	t.Cleanup(SetRootDirForTest(root))
+	ctx, err := NewContext("lab")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, want := range []string{`context "lab"`, missing, "does not exist", "must exist and be readable", "bootwright context init lab -f <dir>"} {
+	if err := EnsureDirs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateInputDir(ctx); err != nil {
+		t.Fatalf("ValidateInputDir on a populated context failed: %v", err)
+	}
+	if err := os.RemoveAll(ctx.InputDir); err != nil {
+		t.Fatal(err)
+	}
+	err = ValidateInputDir(ctx)
+	if err == nil {
+		t.Fatal("ValidateInputDir accepted a missing input directory")
+	}
+	for _, want := range []string{`context "lab"`, ctx.InputDir, "is missing", "context update -f", "context init lab -f <dir> --yes"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q missing %q", err, want)
 		}
-	}
-
-	file := filepath.Join(t.TempDir(), "workspace.yaml")
-	if err := os.WriteFile(file, []byte("data\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	err = ValidateInputSource(ctx.WithInputSource(file))
-	if err == nil || !strings.Contains(err.Error(), "is not a directory") {
-		t.Fatalf("ValidateInputSource on a file = %v, want not-a-directory error", err)
-	}
-
-	ok := t.TempDir()
-	if err := ValidateInputSource(ctx.WithInputSource(ok)); err != nil {
-		t.Fatalf("ValidateInputSource on a readable directory failed: %v", err)
 	}
 }
 
@@ -368,22 +375,17 @@ func TestResolveWorkspaceDirRejectsMissingSymlinkAndFile(t *testing.T) {
 	}
 }
 
-func TestWriteInputSourceRejectsWorkspaceInsideBootwrightRoot(t *testing.T) {
+func TestResolveWorkspaceDirRejectsSourceInsideBootwrightRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bootwright-root")
 	t.Cleanup(SetRootDirForTest(root))
-	ctx, err := NewContext("lab")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := EnsureDirs(ctx); err != nil {
-		t.Fatal(err)
-	}
 	inside := filepath.Join(root, "workspace")
 	if err := os.MkdirAll(inside, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteInputSource(ctx, inside); err == nil {
-		t.Fatal("WriteInputSource accepted a workspace inside the Bootwright state directory")
+	if _, err := ResolveWorkspaceDir(inside); err == nil {
+		t.Fatal("ResolveWorkspaceDir accepted a source inside the Bootwright state directory")
+	} else if !strings.Contains(err.Error(), "must live outside the Bootwright state directory") {
+		t.Fatalf("ResolveWorkspaceDir returned unclear inside-root error: %v", err)
 	}
 }
 
@@ -454,6 +456,7 @@ func TestSafePurgeBaseDirRejectsHome(t *testing.T) {
 	ctx := Context{
 		Name:               "lab",
 		BaseDir:            home,
+		InputDir:           filepath.Join(home, InputDirName),
 		RenderedDir:        filepath.Join(home, RenderedDirName),
 		SecretsDir:         filepath.Join(home, SecretsDirName),
 		ClustersDir:        filepath.Join(home, ClustersDirName),
@@ -472,6 +475,7 @@ func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 	ctx := Context{
 		Name:               "lab",
 		BaseDir:            baseDir,
+		InputDir:           filepath.Join(baseDir, InputDirName),
 		RenderedDir:        filepath.Join(baseDir, RenderedDirName),
 		SecretsDir:         filepath.Join(baseDir, SecretsDirName),
 		ClustersDir:        filepath.Join(baseDir, ClustersDirName),
@@ -486,4 +490,30 @@ func TestSafePurgeBaseDirRequiresMarker(t *testing.T) {
 	if err := SafePurgeBaseDir(ctx); err == nil {
 		t.Fatal("SafePurgeBaseDir removed an unmarked base directory")
 	}
+}
+
+func writeFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustExist(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected %s to exist: %v", path, err)
+	}
+}
+
+func statMode(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
 }

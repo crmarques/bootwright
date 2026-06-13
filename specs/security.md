@@ -126,12 +126,17 @@ Generated output boundaries are part of the safety contract:
 - The context registry is the only user-home state:
   `~/.bootwright/contexts.yaml`.
 - Context data is root-managed under
-  `/var/lib/bootwright/contexts/<context>/`. It holds Bootwright outputs and
-  state only; user-authored YAML stays in the operator-owned workspace
-  directory whose absolute path `context init` records in
-  `/var/lib/bootwright/contexts/<context>/input-source.yaml`. Mutating runs
-  copy the loaded input YAML into the context as a forensic snapshot under
-  `runs/`.
+  `/var/lib/bootwright/contexts/<context>/`. `context init`/`context update`
+  copy the operator's source directory tree into
+  `/var/lib/bootwright/contexts/<context>/input/`, so the context owns its
+  authored input and is self-contained. Mutating runs copy the loaded input YAML
+  into the context as a forensic snapshot under `runs/`.
+- The copied input tree at `input/` is root-owned with `0700` directories and
+  `0600` files. Because `file:`-sourced secret material and SSH keys are
+  resolved relative to the loaded YAML, any such operator-referenced files
+  copied into `input/` are part of the authored input and are exempt from the
+  ephemeral-only rule below — they live alongside the YAML under the same
+  root-managed permissions.
 - Context-local secrets live under
   `/var/lib/bootwright/contexts/<context>/secrets/` as encrypted envelopes.
   Short-lived plaintext copies for external tools may be materialized only

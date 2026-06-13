@@ -183,7 +183,7 @@ func argsNeedLocalRoot(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "init":
+		case "init", "update":
 			return false
 		case "list", "use", "current":
 			return true

@@ -109,22 +109,25 @@ directory:
 | Data | Location |
 | --- | --- |
 | Current context selection | `~/.bootwright/contexts.yaml` |
-| Authored YAML | The operator-owned directory passed to `context init -f` |
+| Authored YAML (copied in) | `/var/lib/bootwright/contexts/<context>/input` |
 | Context state | `/var/lib/bootwright/contexts/<context>` |
 | Secrets | `/var/lib/bootwright/contexts/<context>/secrets` |
 | Run logs and ledgers | `/var/lib/bootwright/contexts/<context>/runs` |
 | Cluster outputs | `/var/lib/bootwright/contexts/<context>/clusters/<cluster>` |
 
-`context init <name> -f <dir>` records the absolute, cleaned path of the
-workspace directory and copies nothing. The workspace stays the single owner of
-authored YAML, so every command reads it live and edits are picked up by the
-next command with no extra step.
+`context init <name> -f <dir>` copies the whole source directory into the
+context's `input/` directory, so the context is self-contained: every command
+reads the copy and it keeps working even if the source is moved or deleted.
+Because the input is a copy, editing the source has no effect until you refresh
+it with `context update`. Init fails if the context already exists; `--yes`
+drops the existing context and recreates it from the source.
 
-!!! note "There is no `context update` command"
-    Re-point a context at a different workspace by re-running
-    `context init -f --yes`. A recorded path that becomes missing, unreadable,
-    or not a directory is a named failure at context-resolution time — there is
-    no fallback copy and no silent degradation.
+!!! note "Refresh input with `context update`"
+    `context update -f <dir>` replaces the current context's `input/` with a
+    fresh copy of the source and preserves everything else (secrets, runs,
+    rendered output, clusters, ownership). An `input/` directory that becomes
+    missing or unreadable is a named failure at context-resolution time, with a
+    `context update -f` remediation.
 
 Run Bootwright as your user. The CLI re-executes through `sudo` when it needs
 protected state.

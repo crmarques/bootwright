@@ -90,7 +90,7 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	p.Fields([]cliout.Field{
 		{Key: "context", Value: ctx.Name},
 		{Key: "context-dir", Value: ctx.BaseDir},
-		{Key: "workspace", Value: ctx.InputDir},
+		{Key: "input-dir", Value: ctx.InputDir},
 		{Key: "rendered-dir", Value: ctx.RenderedDir},
 		{Key: "clusters-dir", Value: ctx.ClustersDir},
 		{Key: "runs-dir", Value: ctx.RunsDir},

@@ -74,10 +74,10 @@ func currentContextValidation() (workspace.Context, []output.Check) {
 }
 
 func ensureContextReady(ctx workspace.Context) error {
-	// The recorded workspace is the single owner of authored YAML; a missing,
-	// moved, or unreadable workspace is a hard, named failure with no
-	// fallback, so surface its own error instead of the generic one.
-	if err := workspace.ValidateInputSource(ctx); err != nil {
+	// The owned input directory holds the copied authored YAML; a missing or
+	// unreadable input directory means a corrupted/half-created context, so
+	// surface its own named error instead of the generic one.
+	if err := workspace.ValidateInputDir(ctx); err != nil {
 		return err
 	}
 	if missingCheckCount(contextReadinessChecks(ctx)) > 0 {
@@ -168,7 +168,7 @@ func contextReadinessChecks(ctx workspace.Context) []output.Check {
 	}
 	checks = append(checks,
 		dirContextCheck("context-dir", ctx.BaseDir),
-		workspaceContextCheck(ctx),
+		inputDirContextCheck(ctx),
 		dirContextCheck("rendered-dir", ctx.RenderedDir),
 		dirContextCheck("secrets-dir", ctx.SecretsDir),
 		dirContextCheck("clusters-dir", ctx.ClustersDir),
@@ -181,14 +181,14 @@ func contextReadinessChecks(ctx workspace.Context) []output.Check {
 	return checks
 }
 
-// workspaceContextCheck reports whether the workspace directory recorded at
-// `context init` still exists and is readable. Evidence names the recorded
-// path; remediation is re-running context init -f to re-point it.
-func workspaceContextCheck(ctx workspace.Context) output.Check {
-	if err := workspace.ValidateInputSource(ctx); err != nil {
-		return missingContextCheck("workspace", err.Error(), fmt.Sprintf("bootwright context init %s -f <dir>", ctx.Name))
+// inputDirContextCheck reports whether the owned input directory (the copy of
+// the operator's source) exists and is readable. Evidence names the input
+// directory; remediation is repopulating it with context update -f.
+func inputDirContextCheck(ctx workspace.Context) output.Check {
+	if err := workspace.ValidateInputDir(ctx); err != nil {
+		return missingContextCheck("input", err.Error(), fmt.Sprintf("bootwright context update -f <dir> (or bootwright context init %s -f <dir> --yes)", ctx.Name))
 	}
-	return okContextCheck("workspace", ctx.InputDir)
+	return okContextCheck("input", ctx.InputDir)
 }
 
 func fileContextCheck(name, path string) output.Check {

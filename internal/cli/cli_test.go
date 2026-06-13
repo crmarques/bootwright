@@ -1244,7 +1244,7 @@ func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 	if code == 0 {
 		t.Fatal("second context init without --yes unexpectedly succeeded")
 	}
-	if !strings.Contains(stderr, `context "test" already exists; rerun with --yes to re-point it`) {
+	if !strings.Contains(stderr, `context "test" already exists; rerun with --yes to drop it and recreate it from`) {
 		t.Fatalf("stderr missing --yes remediation: %q", stderr)
 	}
 	oldFlag := "--" + "force"
@@ -1253,7 +1253,7 @@ func TestContextInitRequiresYesForExistingContext(t *testing.T) {
 	}
 }
 
-func TestContextInitRecordsWorkspacePathWithoutCopying(t *testing.T) {
+func TestContextInitCopiesWorkspaceIntoContext(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
@@ -1264,21 +1264,64 @@ func TestContextInitRecordsWorkspacePathWithoutCopying(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ctx.InputDir != source || len(ctx.InputPaths) != 1 || ctx.InputPaths[0] != source {
-		t.Fatalf("recorded workspace = %q %v, want %q", ctx.InputDir, ctx.InputPaths, source)
+	// The context owns its input: InputDir is the copied input/ directory under
+	// the context base, never the source path.
+	wantInput := filepath.Join(ctx.BaseDir, workspace.InputDirName)
+	if ctx.InputDir != wantInput || len(ctx.InputPaths) != 1 || ctx.InputPaths[0] != wantInput {
+		t.Fatalf("input = %q %v, want %q", ctx.InputDir, ctx.InputPaths, wantInput)
 	}
-	if _, err := os.Stat(workspace.InputSourcePath(ctx.BaseDir)); err != nil {
-		t.Fatalf("recorded workspace path file missing: %v", err)
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "environment.yaml")); err != nil {
+		t.Fatalf("context init did not copy the source into input/: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(ctx.BaseDir, "input")); !os.IsNotExist(err) {
-		t.Fatalf("context init still created a copied input/ directory: %v", err)
+	if _, err := os.Stat(filepath.Join(ctx.BaseDir, "input-source.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("context init still wrote a recorded-path file: %v", err)
 	}
-	if !strings.Contains(stdout, source) {
-		t.Fatalf("context init stdout missing recorded workspace path:\n%s", stdout)
+	// The context is self-contained: deleting the source must not break it.
+	if err := os.RemoveAll(source); err != nil {
+		t.Fatal(err)
+	}
+	if _, vStderr, vCode := runCLI(t, "validate"); vCode != 0 {
+		t.Fatalf("validate after source deletion exited %d, stderr=%q", vCode, vStderr)
+	}
+	if !strings.Contains(stdout, ctx.InputDir) {
+		t.Fatalf("context init stdout missing input dir:\n%s", stdout)
 	}
 }
 
-func TestContextInitYesRepointsWorkspaceAndPreservesState(t *testing.T) {
+func TestContextInitYesDropsAndRecreates(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
+	setTestHomeAndRoot(t)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	droppedSecret := filepath.Join(ctx.SecretsDir, "dropped-secret")
+	if err := os.WriteFile(droppedSecret, []byte("dropped\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
+	if code != 0 {
+		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	// --yes drops the existing context entirely, so prior state does not survive.
+	if _, err := os.Stat(droppedSecret); !os.IsNotExist(err) {
+		t.Fatalf("context init --yes preserved dropped context state: %v", err)
+	}
+	ctx, err = workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "environment.yaml")); err != nil {
+		t.Fatalf("context init --yes did not recreate input from the source: %v", err)
+	}
+}
+
+func TestContextInitYesKeepsContextWhenReplacementInvalid(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
@@ -1293,31 +1336,6 @@ func TestContextInitYesRepointsWorkspaceAndPreservesState(t *testing.T) {
 	if err := os.WriteFile(keptSecret, []byte("kept\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	replacement := copyFixtureYAML(t, "001-sno-libvirt")
-	stdout, stderr, code = runCLI(t, "context", "init", "test", "-f", replacement, "--yes")
-	if code != 0 {
-		t.Fatalf("context init --yes exited %d, stdout=%q stderr=%q", code, stdout, stderr)
-	}
-	ctx, err = workspace.ResolveExistingContext("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ctx.InputDir != replacement {
-		t.Fatalf("re-pointed workspace = %q, want %q", ctx.InputDir, replacement)
-	}
-	// Re-pointing the workspace must not purge context outputs/state.
-	if body, err := os.ReadFile(keptSecret); err != nil || string(body) != "kept\n" {
-		t.Fatalf("context init --yes did not preserve context state: %q err=%v", body, err)
-	}
-}
-
-func TestContextInitYesKeepsRecordedWorkspaceWhenReplacementInvalid(t *testing.T) {
-	source := copyFixtureYAML(t, "001-sno-libvirt")
-	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
-	if code != 0 {
-		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
-	}
 
 	replacement := copyFixtureYAML(t, "001-sno-libvirt")
 	replaceInFile(t, filepath.Join(replacement, "environment.yaml"), "  secrets:\n", "  retiredField: true\n\n  secrets:\n")
@@ -1328,12 +1346,13 @@ func TestContextInitYesKeepsRecordedWorkspaceWhenReplacementInvalid(t *testing.T
 	if !strings.Contains(stderr, "field retiredField not found") {
 		t.Fatalf("stderr missing strict decode error: %q", stderr)
 	}
-	ctx, err := workspace.ResolveExistingContext("test")
-	if err != nil {
-		t.Fatal(err)
+	// Validation happens before any destructive step, so an invalid replacement
+	// leaves the existing context — its state and input — untouched.
+	if body, err := os.ReadFile(keptSecret); err != nil || string(body) != "kept\n" {
+		t.Fatalf("invalid replacement dropped context state: %q err=%v", body, err)
 	}
-	if ctx.InputDir != source {
-		t.Fatalf("invalid replacement re-pointed workspace to %q, want %q", ctx.InputDir, source)
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "environment.yaml")); err != nil {
+		t.Fatalf("invalid replacement dropped the existing input: %v", err)
 	}
 }
 
@@ -1364,8 +1383,8 @@ spec:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ctx.InputDir != replacement {
-		t.Fatalf("workspace = %q, want %q", ctx.InputDir, replacement)
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "unselected.yaml")); err != nil {
+		t.Fatalf("context init --yes did not copy the replacement into input/: %v", err)
 	}
 }
 
@@ -1393,10 +1412,10 @@ func TestContextInitRequiresSingleWorkspaceDirectory(t *testing.T) {
 	setTestHomeAndRoot(t)
 	_, stderr, code := runCLI(t, "context", "init", "test", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
 	if code == 0 {
-		t.Fatal("context init accepted multiple -f workspace paths")
+		t.Fatal("context init accepted multiple -f source paths")
 	}
-	if !strings.Contains(stderr, "exactly one workspace directory") {
-		t.Fatalf("stderr missing single-workspace error: %q", stderr)
+	if !strings.Contains(stderr, "exactly one source directory") {
+		t.Fatalf("stderr missing single-source error: %q", stderr)
 	}
 	file := filepath.Join(t.TempDir(), "environment.yaml")
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\n"), 0o600); err != nil {
@@ -1411,39 +1430,86 @@ func TestContextInitRequiresSingleWorkspaceDirectory(t *testing.T) {
 	}
 }
 
-func TestWorkspaceEditsAreVisibleWithoutExtraStep(t *testing.T) {
+func TestSourceEditsRequireContextUpdate(t *testing.T) {
 	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
 	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
 	if code != 0 {
 		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if _, stderr, code := runCLI(t, "validate"); code != 0 {
-		t.Fatalf("validate before edit exited %d, stderr=%q", code, stderr)
-	}
-	// Commands read the workspace directly: an edit is visible to the next
-	// command with no refresh step (there is no `context update`).
-	envPath := filepath.Join(source, "environment.yaml")
-	if err := os.WriteFile(envPath, []byte("not: [valid\n"), 0o600); err != nil {
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code = runCLI(t, "validate")
-	if code == 0 {
-		t.Fatal("validate did not see the workspace edit")
+	const marker = "# context-update marker\n"
+	srcEnv := filepath.Join(source, "environment.yaml")
+	data, err := os.ReadFile(srcEnv)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(stderr, "environment.yaml") {
-		t.Fatalf("stderr does not reference the edited workspace file: %q", stderr)
+	if err := os.WriteFile(srcEnv, append(data, []byte(marker)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The context owns a copy, so editing the source has no effect until update.
+	inputEnv := filepath.Join(ctx.InputDir, "environment.yaml")
+	if before, err := os.ReadFile(inputEnv); err != nil || strings.Contains(string(before), marker) {
+		t.Fatalf("source edit leaked into the context input before update (err=%v)", err)
+	}
+	// context update copies the edited source in; the next read sees it.
+	if _, stderr, code := runCLI(t, "context", "update", "-f", source); code != 0 {
+		t.Fatalf("context update exited %d, stderr=%q", code, stderr)
+	}
+	after, err := os.ReadFile(inputEnv)
+	if err != nil || !strings.Contains(string(after), marker) {
+		t.Fatalf("context update did not refresh the context input (err=%v)", err)
 	}
 }
 
-func TestContextUpdateCommandRemoved(t *testing.T) {
+func TestContextUpdateReplacesInputKeepingState(t *testing.T) {
+	source := copyFixtureYAML(t, "001-sno-libvirt")
 	setTestHomeAndRoot(t)
-	stdout, stderr, code := runCLI(t, "context", "update", "test", "-f", fixturePath("001-sno-libvirt"))
-	if code == 0 {
-		t.Fatalf("removed context update unexpectedly succeeded:\n%s", stdout)
+	stdout, stderr, code := runCLI(t, "context", "init", "test", "-f", source)
+	if code != 0 {
+		t.Fatalf("context init exited %d, stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, `invalid argument "update"`) {
-		t.Fatalf("stderr does not reject removed context update: %q", stderr)
+	ctx, err := workspace.ResolveExistingContext("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keptSecret := filepath.Join(ctx.SecretsDir, "kept-secret")
+	if err := os.WriteFile(keptSecret, []byte("kept\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A new source carrying an extra file; update replaces the input wholesale.
+	replacement := copyFixtureYAML(t, "001-sno-libvirt")
+	if err := os.WriteFile(filepath.Join(replacement, "extra-note.txt"), []byte("note\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = runCLI(t, "context", "update", "-f", replacement)
+	if code != 0 {
+		t.Fatalf("context update exited %d, stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(ctx.InputDir, "extra-note.txt")); err != nil {
+		t.Fatalf("context update did not copy the new source into input/: %v", err)
+	}
+	// update preserves the rest of the context (secrets, runs, ...).
+	if body, err := os.ReadFile(keptSecret); err != nil || string(body) != "kept\n" {
+		t.Fatalf("context update dropped context state: %q err=%v", body, err)
+	}
+	// update keeps the current-context selection.
+	if out, _, _ := runCLI(t, "context", "current", "--short"); out != "test\n" {
+		t.Fatalf("context update changed current context: %q", out)
+	}
+}
+
+func TestContextUpdateRequiresSingleSourceDirectory(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	_, stderr, code := runCLI(t, "context", "update", "-f", fixturePath("001-sno-libvirt"), "-f", fixturePath("001-sno-libvirt"))
+	if code == 0 {
+		t.Fatal("context update accepted multiple -f source paths")
+	}
+	if !strings.Contains(stderr, "exactly one source directory") {
+		t.Fatalf("stderr missing single-source error: %q", stderr)
 	}
 }
 
@@ -1812,22 +1878,22 @@ func TestStatusReportsReadyAndMissingSetupChecks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status exited %d, stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "[OK] workspace") {
-		t.Fatalf("stdout missing workspace OK setup check:\n%s", stdout)
+	if !strings.Contains(stdout, "[OK] input") {
+		t.Fatalf("stdout missing input OK setup check:\n%s", stdout)
 	}
 	if err := os.RemoveAll(ctx.InputDir); err != nil {
 		t.Fatal(err)
 	}
 	stdout, stderr, code = runCLI(t, "status")
 	if code != 1 {
-		t.Fatalf("status with missing workspace exited %d, want 1", code)
+		t.Fatalf("status with missing input dir exited %d, want 1", code)
 	}
-	if !strings.Contains(stdout, "[MISSING] workspace") {
-		t.Fatalf("stdout missing workspace MISSING:\n%s", stdout)
+	if !strings.Contains(stdout, "[MISSING] input") {
+		t.Fatalf("stdout missing input MISSING:\n%s", stdout)
 	}
-	// The named workspace error must identify the context, the recorded path,
-	// and the context init remediation.
-	for _, want := range []string{`context "test"`, ctx.InputDir, "does not exist", "must exist and be readable", "bootwright context init test -f <dir>"} {
+	// The named input-dir error must identify the context, the input directory,
+	// and the repopulate remediation.
+	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update -f", "context init test -f <dir> --yes"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
 		}
@@ -1883,14 +1949,14 @@ func TestStatusJSONReportsSetupChecksWithoutBlocking(t *testing.T) {
 	if report.Error == "" || len(report.NextSteps) == 0 {
 		t.Fatalf("unready status report missing error or next steps: %+v", report)
 	}
-	foundWorkspaceMissing := false
+	foundInputMissing := false
 	for _, check := range report.SetupChecks {
-		if check.Name == "workspace" && check.Status == string(output.StatusMissing) {
-			foundWorkspaceMissing = true
+		if check.Name == "input" && check.Status == string(output.StatusMissing) {
+			foundInputMissing = true
 		}
 	}
-	if !foundWorkspaceMissing {
-		t.Fatalf("unready status report missing workspace setup check: %+v", report.SetupChecks)
+	if !foundInputMissing {
+		t.Fatalf("unready status report missing input setup check: %+v", report.SetupChecks)
 	}
 }
 
@@ -1915,9 +1981,9 @@ func TestContextBackedCommandRequiresReadyContext(t *testing.T) {
 	if code == 0 {
 		t.Fatal("validate unexpectedly ran with a missing workspace")
 	}
-	// A missing/moved workspace is a hard, named error: it names the context,
-	// the recorded path, and the context init re-point remediation.
-	for _, want := range []string{`context "test"`, ctx.InputDir, "must exist and be readable", "bootwright context init test -f <dir>"} {
+	// A missing input directory is a hard, named error: it names the context,
+	// the input directory, and the repopulate remediation.
+	for _, want := range []string{`context "test"`, ctx.InputDir, "is missing", "context update -f"} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("stderr %q missing %q", stderr, want)
 		}
@@ -1933,9 +1999,9 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"context", "current"}, want: true},
 		{args: []string{"context", "use", "lab"}, want: true},
 		{args: []string{"context", "init", "lab", "-f", "."}, want: false},
-		// context update was removed; like any unknown context subcommand it
-		// falls through to the default arm before Cobra rejects it.
-		{args: []string{"context", "update", "lab", "-f", "."}, want: true},
+		// context update self-escalates inside the command, like init, so the
+		// generic gate must not double-escalate.
+		{args: []string{"context", "update", "-f", "."}, want: false},
 		{args: []string{"context", "delete", "lab"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge"}, want: false},
 		{args: []string{"context", "delete", "lab", "--purge=true"}, want: false},
@@ -4199,10 +4265,11 @@ func localRootEnvValue(args []string, key string) string {
 	return ""
 }
 
-// initTestContext copies the fixture into a temp workspace and records that
-// workspace for context "test". The returned context's InputDir/InputPaths
-// point at the workspace, so tests can edit input files there and the next
-// command picks the edits up directly.
+// initTestContext copies the fixture into a temp source directory and runs
+// `context init` for context "test", which copies it into the context's owned
+// input/ directory. The returned context's InputDir/InputPaths point at that
+// copy, so tests editing files under InputDir mutate the input the next command
+// reads.
 func initTestContext(t *testing.T, fixtureName string) workspace.Context {
 	t.Helper()
 	workspaceDir := copyFixtureYAML(t, fixtureName)
