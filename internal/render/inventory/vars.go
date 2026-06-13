@@ -54,6 +54,9 @@ func VarsWithPathOptionsAndOwnership(state v1alpha1.State, paths PathOptions, ow
 		if keyPath := nodeSSHPrivateKeyPath(env, ocp, paths.SecretsDir); keyPath != "" {
 			entry["nodeSSHPrivateKeyPath"] = keyPath
 		}
+		if resolvers := ClusterControllerNameResolvers(state, ci); len(resolvers) > 0 {
+			entry["controllerNameResolvers"] = resolvers
+		}
 		if ocp.Spec.Distribution.Type != "" || ocp.Spec.Distribution.Release.Version != "" || ocp.Spec.Distribution.Release.Image != "" {
 			entry["distribution"] = distributionVars(ocp)
 		}

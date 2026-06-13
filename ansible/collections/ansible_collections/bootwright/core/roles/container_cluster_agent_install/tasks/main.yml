@@ -19,6 +19,10 @@
 - name: Validate installer inputs
   ansible.builtin.import_tasks: stage/validate.yml
 
+- name: Wire controller resolver to managed name resolution
+  ansible.builtin.import_tasks: stage/controller_resolver.yml
+  when: bootwright_install_agent_action_effective in ['run', 'create_iso']
+
 - name: Prepare controller endpoint DNS
   ansible.builtin.import_tasks: stage/controller_dns.yml
   when: bootwright_install_agent_action_effective in ['run', 'create_iso']

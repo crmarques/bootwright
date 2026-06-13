@@ -1,0 +1,5 @@
+---
+# Kept in step with container_cluster_agent_install so destroy removes exactly
+# the controller resolver drop-in that install wrote (a runtime override of this
+# var applies to both, since extra-vars are global).
+bootwright_controller_resolver_dropin_path: "/etc/systemd/resolved.conf.d/bootwright-{{ bootwright_current_cluster.name }}.conf"

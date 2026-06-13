@@ -8,6 +8,14 @@ spec:
   nameResolution:
     implementation: dnsmasq
     bindAddress: 192.168.132.1
+    # The node's only resolver is this dnsmasq (networkconfig.yaml points DNS at
+    # 192.168.132.1), and dnsmasq runs `no-resolv`, so it must forward non-lab
+    # names upstream for the node to reach the release registry. The controller
+    # is wired to this resolver automatically during apply (see README
+    # "Controller DNS Is Wired Automatically").
+    forwarders:
+      - 1.1.1.1
+      - 9.9.9.9
     additionalIngressHosts:
     - console-openshift-console.apps.sno-libvirt.bootwright.test
     - oauth-openshift.apps.sno-libvirt.bootwright.test

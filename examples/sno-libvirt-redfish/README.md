@@ -13,6 +13,8 @@ emulated Redfish BMC.
 - `provider.yaml`: libvirt URI, VM sizing, BMC emulation credentials, and
   bridge name.
 - `networkconfig.yaml`: machine CIDR, resolver, route, and NMState interface.
+- `infra-component.yaml`: managed dnsmasq — bind address, upstream forwarders,
+  and the ingress hostnames it publishes.
 - `cluster-machines.yaml`: API/app VIPs, per-machine IP, and platform render mode.
 - `cluster.yaml`: OpenShift release, install endpoints, networking, and node
   binding.
@@ -36,4 +38,33 @@ bootwright preflight all
 bootwright plan
 bootwright apply --yes
 bootwright status --watch
+```
+
+## Controller DNS Is Wired Automatically
+
+`openshift-install` polls the cluster API from the **controller** (this host),
+so the controller must resolve the cluster endpoints (`api`, `api-int`,
+`*.apps`) under `bootwright.test`. Because `networkconfig.yaml` points the node
+network at the managed dnsmasq (`name-resolution`, bound to `192.168.132.1`),
+bootwright wires the controller to it during `apply`: before the agent install
+runs it installs a systemd-resolved drop-in routing `~bootwright.test` to
+`192.168.132.1`, a controller-side gate verifies resolution before booting the
+node, and `destroy` removes the drop-in again. The managed dnsmasq also forwards
+non-lab names (`infra-component.yaml` `forwarders`), so the SNO node can reach
+the release registry.
+
+Nothing to configure — this follows from declaring a managed `nameResolution`
+component that the cluster's network uses.
+
+### If the controller does not run systemd-resolved
+
+Auto-wiring goes through systemd-resolved. On a controller that uses something
+else, the gate will fail listing the missing names; point the host resolver at
+`192.168.132.1` for `bootwright.test` yourself — simplest is `/etc/hosts`:
+
+```bash
+sudo tee -a /etc/hosts >/dev/null <<'EOF'
+192.168.132.10 api.sno-libvirt.bootwright.test api-int.sno-libvirt.bootwright.test
+192.168.132.11 console-openshift-console.apps.sno-libvirt.bootwright.test oauth-openshift.apps.sno-libvirt.bootwright.test
+EOF
 ```

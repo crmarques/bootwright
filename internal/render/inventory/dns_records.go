@@ -136,6 +136,55 @@ func clusterUsesNameResolution(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	return false
 }
 
+// ClusterControllerNameResolvers projects the managed dnsmasq resolvers a
+// cluster's node networks reference, as {bindAddress, domain} pairs. The
+// controller wires its own resolver to these before the agent-install gate so
+// `openshift-install` (which polls the API from the controller) resolves the
+// cluster endpoints. Only managed entries with a usable bind address are
+// returned; external/operator-owned name resolution stays the operator's job.
+func ClusterControllerNameResolvers(state v1alpha1.State, ci v1alpha1.ClusterInstall) []any {
+	env := stateview.Environment(state)
+	if env == nil {
+		return nil
+	}
+	baseDomain := env.Spec.BaseDomain
+	if baseDomain == "" {
+		return nil
+	}
+	refs := map[string]bool{}
+	for _, network := range stateview.ClusterNetworkConfigs(state, ci) {
+		for _, ref := range network.Spec.NameResolutionRefs {
+			if ref.Name != "" {
+				refs[ref.Name] = true
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []any
+	for _, entry := range env.Spec.InfraComponents.NameResolution {
+		if entry.Management != v1alpha1.EnvironmentComponentManaged || !refs[entry.Name] {
+			continue
+		}
+		component, ok := stateview.InfraComponent(state, entry.ComponentRef.Name)
+		if !ok || component.Spec.NameResolution == nil {
+			continue
+		}
+		bind := component.Spec.NameResolution.BindAddress
+		if bind == "" || bind == "0.0.0.0" || seen[bind] {
+			continue
+		}
+		seen[bind] = true
+		out = append(out, map[string]any{
+			"bindAddress": bind,
+			"domain":      baseDomain,
+		})
+	}
+	return out
+}
+
 // machineUsesNameResolution reports whether a machine's network config — named
 // or inline — references the named resolver.
 func machineUsesNameResolution(state v1alpha1.State, machine v1alpha1.Machine, entryName string) bool {

@@ -1,11 +1,13 @@
 package inventory
 
 import (
+	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/render/installer"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -121,6 +123,62 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	}
 	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hostRecords = %v, want %v", got, want)
+	}
+}
+
+// A cluster whose node network references a managed dnsmasq projects that
+// resolver's bind address + the env base domain, so the agent-install layer can
+// wire the controller's own resolver to it before the DNS gate.
+func TestClusterControllerNameResolversFromManagedDnsmasq(t *testing.T) {
+	state := dnsRecordsState()
+	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
+	ci, err := installer.ClusterInstallForOCP(state, state.ContainerClusters[0])
+	if err != nil {
+		t.Fatalf("ClusterInstallForOCP: %v", err)
+	}
+
+	got := ClusterControllerNameResolvers(state, ci)
+	want := []any{map[string]any{"bindAddress": "192.168.130.1", "domain": "example.test"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ClusterControllerNameResolvers = %v, want %v", got, want)
+	}
+}
+
+// The shipped sno-libvirt-redfish example must render its managed dnsmasq as a
+// controller resolver so a from-scratch apply wires controller DNS automatically.
+func TestSNOLibvirtRedfishExampleWiresControllerResolver(t *testing.T) {
+	state, err := desiredstate.LoadNormalizeValidate([]string{filepath.Join("..", "..", "..", "examples", "sno-libvirt-redfish")})
+	if err != nil {
+		t.Fatalf("LoadNormalizeValidate: %v", err)
+	}
+
+	clusters, ok := Vars(state)["bootwright_clusters"].([]any)
+	if !ok || len(clusters) == 0 {
+		t.Fatal("no bootwright_clusters rendered")
+	}
+	entry := clusters[0].(map[string]any)
+	resolvers, ok := entry["controllerNameResolvers"].([]any)
+	if !ok || len(resolvers) != 1 {
+		t.Fatalf("controllerNameResolvers = %v, want exactly one entry", entry["controllerNameResolvers"])
+	}
+	if got := resolvers[0].(map[string]any); got["bindAddress"] != "192.168.132.1" || got["domain"] != "bootwright.test" {
+		t.Fatalf("controllerNameResolvers[0] = %v, want {192.168.132.1, bootwright.test}", got)
+	}
+}
+
+// An external (operator-owned) name resolution entry must NOT be auto-wired:
+// the controller resolver stays the operator's responsibility.
+func TestClusterControllerNameResolversSkipsExternal(t *testing.T) {
+	state := dnsRecordsState()
+	state.InfraComponents[0].Spec.NameResolution.BindAddress = "192.168.130.1"
+	state.Environments[0].Spec.InfraComponents.NameResolution[0].Management = v1alpha1.EnvironmentComponentExternal
+	ci, err := installer.ClusterInstallForOCP(state, state.ContainerClusters[0])
+	if err != nil {
+		t.Fatalf("ClusterInstallForOCP: %v", err)
+	}
+
+	if got := ClusterControllerNameResolvers(state, ci); got != nil {
+		t.Fatalf("ClusterControllerNameResolvers = %v, want nil for external entry", got)
 	}
 }
 

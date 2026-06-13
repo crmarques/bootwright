@@ -1,0 +1,10 @@
+# Managed by bootwright — controller DNS for cluster {{ bootwright_current_cluster.name }}.
+# Routes the cluster domain(s) to the managed name resolution service so
+# openshift-install resolves api/api-int/*.apps from this controller. Only the
+# listed routing domains go to these servers; all other names use the host's
+# normal upstreams. Removed by `bootwright destroy`.
+[Resolve]
+{% for resolver in bootwright_current_cluster.controllerNameResolvers %}
+DNS={{ resolver.bindAddress }}
+Domains=~{{ resolver.domain }}
+{% endfor %}
