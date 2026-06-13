@@ -45,6 +45,23 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+# sgdisk lives in the gdisk package, which the Ceph install never pulls in (the
+# install-time device check uses wipefs only, and cephadm runs ceph-volume's own
+# sgdisk inside its container). Without it the zap below dies with "No such file
+# or directory: sgdisk". Ensure the host tool here, recorded as required-by this
+# cluster so the package-ownership removal at the end of destroy uninstalls it
+# again (unless it predated Bootwright). Gated on the same present-device set the
+# zap loops over, so mon-only or device-less nodes never install it.
+- name: Ensure gdisk is present for the Ceph device zap
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: package_apply.yml
+  vars:
+    bootwright_ownership_packages:
+      - gdisk
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"
+  when: bootwright_ceph_present_devices | default([]) | length > 0
+
 - name: Zap declared Ceph device partition tables
   ansible.builtin.command:
     argv:

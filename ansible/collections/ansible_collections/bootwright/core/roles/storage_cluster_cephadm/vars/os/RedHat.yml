@@ -13,6 +13,9 @@ bootwright_ceph_managed_packages:
   - lvm2
   - podman
   - chrony
+  # Installed on demand by the destroy device zap (sgdisk); listed here so its
+  # ownership record is removed and the package uninstalled at teardown.
+  - gdisk
 bootwright_ceph_ca_trust_anchor_path: /etc/pki/ca-trust/source/anchors/bootwright-cephadm-registry.pem
 bootwright_ceph_ca_trust_update_argv:
   - update-ca-trust
