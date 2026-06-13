@@ -2600,9 +2600,9 @@ func TestLibvirtStorageStaysOutOfPrivateBootwrightState(t *testing.T) {
 	selectIdx := findAnsibleTask(t, tasks, "Select libvirt runtime user")
 	assertIdx := findAnsibleTask(t, tasks, "Assert libvirt runtime user")
 	migrateDiskIdx := findAnsibleTask(t, tasks, "Migrate machine disk to libvirt storage")
-	migrateDataIdx := findAnsibleTask(t, tasks, "Migrate machine data disks to libvirt storage")
+	migrateDataIdx := findAnsibleTaskByPrefix(t, tasks, "Migrate machine data disks to libvirt storage")
 	createDiskIdx := findAnsibleTask(t, tasks, "Create machine disk")
-	createDataDiskIdx := findAnsibleTask(t, tasks, "Create machine data disks")
+	createDataDiskIdx := findAnsibleTaskByPrefix(t, tasks, "Create machine data disks")
 	ownDiskIdx := findAnsibleTask(t, tasks, "Align libvirt disk image ownership")
 	renderDomainIdx := findAnsibleTask(t, tasks, "Render libvirt domain XML")
 
@@ -4452,6 +4452,20 @@ func findAnsibleTaskIndex(tasks []map[string]any, name string) int {
 			return i
 		}
 	}
+	return -1
+}
+
+// findAnsibleTaskByPrefix matches tasks whose name begins with prefix, for
+// tasks that append a dynamic suffix (e.g. a "({{ ... }} configured)" count)
+// to their name.
+func findAnsibleTaskByPrefix(t *testing.T, tasks []map[string]any, prefix string) int {
+	t.Helper()
+	for i, task := range tasks {
+		if got, _ := task["name"].(string); strings.HasPrefix(got, prefix) {
+			return i
+		}
+	}
+	t.Fatalf("missing Ansible task with prefix %q", prefix)
 	return -1
 }
 

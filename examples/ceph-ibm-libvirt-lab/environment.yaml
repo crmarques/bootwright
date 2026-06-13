@@ -9,6 +9,7 @@ spec:
   # Refuse any `destroy` touching this environment unless --override is passed,
   # so a routine `destroy --yes` (or a scripted run) cannot tear it down by
   # accident. Decommission/rebuild must pass --override deliberately.
+
   safety:
     destroyProtection: requiredOverride
 

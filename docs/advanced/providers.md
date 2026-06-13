@@ -28,7 +28,7 @@ metadata:
   name: <provider-name>
 spec:
   type: libvirt        # one of: libvirt | baremetal | vsphere | kubevirt
-  libvirt: { ... }     # the arm whose key equals spec.type
+  libvirt: {}          # the matching arm; its fields are shown below
 ```
 
 `spec.type` is required and must be one of `libvirt`, `baremetal`, `vsphere`,
