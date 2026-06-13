@@ -49,6 +49,8 @@
     bootwright_libvirt_runtime_users: "{{ bootwright_libvirt_runtime_user_probe.results | default([]) | selectattr('rc', 'eq', 0) | map(attribute='item') | list }}"
     bootwright_libvirt_domain_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
     bootwright_libvirt_managed_os_reset: "{{ (bootwright_component.osManaged | default(false) | bool) and ((bootwright_apply_mode | default('continue')) == 'override') }}"
+    bootwright_libvirt_data_disks: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+    bootwright_libvirt_data_disk_names: "{{ bootwright_component.profile.dataDisks | default([]) | map(attribute='name') | list }}"
     bootwright_libvirt_disk_paths: >-
       {{
         [bootwright_libvirt_storage_root ~ '/disk.qcow2']
@@ -155,29 +157,66 @@
     - bootwright_libvirt_machine_disk_locations.results[0].stat.exists | default(false)
     - not (bootwright_libvirt_machine_disk_locations.results[1].stat.exists | default(false))
 
-- name: Check existing machine data disk source locations
+- name: Find existing machine data disks
+  ansible.builtin.find:
+    paths:
+      - "{{ bootwright_libvirt_machine_root }}"
+      - "{{ bootwright_libvirt_storage_root }}"
+    patterns: "data-*.qcow2"
+    file_type: file
+  register: bootwright_libvirt_existing_data_disks
+  changed_when: false
+
+- name: Resolve undeclared machine data disks
+  ansible.builtin.set_fact:
+    bootwright_libvirt_undeclared_data_disks: >-
+      {{
+        (
+          bootwright_libvirt_existing_data_disks.files | default([])
+          | map(attribute='path')
+          | map('basename')
+          | map('regex_replace', '^data-', '')
+          | map('regex_replace', '\\.qcow2$', '')
+          | list
+        )
+        | difference(bootwright_libvirt_data_disk_names)
+        | sort
+      }}
+  changed_when: false
+
+- name: Refuse undeclared machine data disks
+  ansible.builtin.fail:
+    msg: >-
+      Libvirt storage for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      contains undeclared data disk(s) {{ bootwright_libvirt_undeclared_data_disks | join(', ') }}.
+      Run `bootwright destroy --stage infra --clusters {{ bootwright_current_cluster.name }} --yes`
+      before changing or removing machine data disks, or remove the Bootwright-owned
+      stale files after verifying ownership.
+  when: bootwright_libvirt_undeclared_data_disks | length > 0
+
+- name: Check existing machine data disk source locations ({{ bootwright_libvirt_data_disks | length }} configured)
   ansible.builtin.stat:
     path: "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
   register: bootwright_libvirt_machine_data_disk_source_locations
-  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop: "{{ bootwright_libvirt_data_disks }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Check existing machine data disk storage locations
+- name: Check existing machine data disk storage locations ({{ bootwright_libvirt_data_disks | length }} configured)
   ansible.builtin.stat:
     path: "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
   register: bootwright_libvirt_machine_data_disk_storage_locations
-  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop: "{{ bootwright_libvirt_data_disks }}"
   loop_control:
     label: "{{ item.name }}"
 
-- name: Migrate machine data disks to libvirt storage
+- name: Migrate machine data disks to libvirt storage ({{ bootwright_libvirt_data_disks | length }} configured)
   ansible.builtin.command:
     argv:
       - mv
       - "{{ bootwright_libvirt_machine_root }}/data-{{ item.name }}.qcow2"
       - "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
-  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop: "{{ bootwright_libvirt_data_disks }}"
   loop_control:
     label: "{{ item.name }}"
     extended: true
@@ -198,7 +237,7 @@
   args:
     creates: "{{ bootwright_libvirt_storage_root }}/disk.qcow2"
 
-- name: Create machine data disks
+- name: Create machine data disks ({{ bootwright_libvirt_data_disks | length }} configured)
   ansible.builtin.command:
     argv:
       - qemu-img
@@ -209,7 +248,7 @@
       - "{{ item.sizeGiB }}G"
   args:
     creates: "{{ bootwright_libvirt_storage_root }}/data-{{ item.name }}.qcow2"
-  loop: "{{ bootwright_component.profile.dataDisks | default([]) }}"
+  loop: "{{ bootwright_libvirt_data_disks }}"
   loop_control:
     label: "{{ item.name }}"
 
