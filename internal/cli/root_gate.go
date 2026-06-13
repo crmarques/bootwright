@@ -275,15 +275,14 @@ func argsMayUseBecome(args []string) bool {
 	if len(args) >= 1 && args[0] == "apply" {
 		return true
 	}
+	if len(args) >= 1 && args[0] == "destroy" {
+		return destroyArgsMayUseBecome(args[1:])
+	}
 	if len(args) >= 2 && args[0] == "bastion" && args[1] == "setup" {
 		return true
 	}
 	if len(args) < 2 {
 		return false
-	}
-	switch args[0] {
-	case "destroy":
-		return destroyArgsMayUseBecome(args[1:])
 	}
 	return false
 }
@@ -298,15 +297,18 @@ func destroyArgsNeedLocalRoot(args []string) bool {
 
 func destroyArgsSelectRootfulTarget(args []string) bool {
 	stage := ""
+	hasStage := false
 	for i, arg := range args {
 		switch {
 		case arg == "--stage" && i+1 < len(args):
+			hasStage = true
 			stage = args[i+1]
 		case strings.HasPrefix(arg, "--stage="):
+			hasStage = true
 			stage = strings.TrimPrefix(arg, "--stage=")
 		}
 	}
-	if stage != "" {
+	if hasStage {
 		return stage == "infra" || stage == "clusters"
 	}
 	// An omitted --stage is a whole-context full destroy (the clusters stage, then

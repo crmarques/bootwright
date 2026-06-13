@@ -780,6 +780,29 @@ func TestProtectedDestroyRequiresOverrideBeyondYes(t *testing.T) {
 	}
 }
 
+func TestProtectedFullDestroyRequiresOverrideBeyondYes(t *testing.T) {
+	initProtectedTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--yes",
+		"--ask-become-pass=false",
+	)
+	if code == 0 {
+		t.Fatalf("protected full destroy unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	for _, want := range []string{"destroyProtection=requiredOverride", "requires --override"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("protected full destroy stderr missing %q:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "--stage must be one of") {
+		t.Fatalf("full destroy must not demand a stage:\n%s", stderr)
+	}
+	if strings.Contains(stdout, "Start") || strings.Contains(stdout, "Bundle") {
+		t.Fatalf("protected full destroy progressed to workflow setup\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
 func TestProtectedDestroyDryRunReportsProtection(t *testing.T) {
 	initProtectedTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,
@@ -1884,6 +1907,7 @@ func TestLocalRootGateArgs(t *testing.T) {
 		// An omitted --stage is a whole-context full destroy (clusters then infra),
 		// which is rootful and must read the root-owned context before teardown.
 		{args: []string{"destroy"}, want: true},
+		{args: []string{"destroy", "--yes"}, want: true},
 		{args: []string{"destroy", "--stage", "infra"}, want: true},
 		{args: []string{"destroy", "--stage", "clusters"}, want: true},
 		// A bogus explicit --stage fails stage validation before any context read.
@@ -1960,6 +1984,8 @@ func TestLocalRootGateBecomeArgs(t *testing.T) {
 		{args: []string{"apply", "--stage", "infra"}, want: true},
 		{args: []string{"apply", "--stage", "clusters"}, want: true},
 		{args: []string{"apply"}, want: true},
+		{args: []string{"destroy"}, want: true},
+		{args: []string{"destroy", "--yes"}, want: true},
 		{args: []string{"destroy", "--stage", "infra"}, want: true},
 		{args: []string{"destroy", "--stage=clusters"}, want: true},
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
