@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"sort"
-
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
@@ -26,7 +24,7 @@ func applyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 		groups = append(groups, output.StepGroup{Title: title, Steps: applyStepsForTasks(tasks)})
 	}
 	return output.RunFrame{
-		BarLabel: "Fleet",
+		BarLabel: "Provisioning Progress",
 		Done:     applyProgressDone(ledger),
 		Total:    len(ledger.Tasks),
 		Counts:   applyProgressFields(ledger),
@@ -41,11 +39,11 @@ func applyNonClusterSteps(ledger workflow.RunLedger) []output.Step {
 			tasks = append(tasks, task)
 		}
 	}
-	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
 	return applyStepsForTasks(tasks)
 }
 
 func applyStepsForTasks(tasks []workflow.TaskLedgerEntry) []output.Step {
+	tasks = applyTasksInDisplayOrder(tasks)
 	steps := make([]output.Step, 0, len(tasks))
 	for _, task := range tasks {
 		steps = append(steps, output.Step{
@@ -56,6 +54,52 @@ func applyStepsForTasks(tasks []workflow.TaskLedgerEntry) []output.Step {
 		})
 	}
 	return steps
+}
+
+func applyTasksInDisplayOrder(tasks []workflow.TaskLedgerEntry) []workflow.TaskLedgerEntry {
+	if len(tasks) < 2 {
+		return tasks
+	}
+	byID := map[string]workflow.TaskLedgerEntry{}
+	indegree := map[string]int{}
+	dependents := map[string][]string{}
+	for _, task := range tasks {
+		byID[task.ID] = task
+		indegree[task.ID] = 0
+	}
+	for _, task := range tasks {
+		seen := map[string]bool{}
+		for _, dep := range task.Dependencies {
+			if _, ok := byID[dep]; !ok || seen[dep] {
+				continue
+			}
+			seen[dep] = true
+			indegree[task.ID]++
+			dependents[dep] = append(dependents[dep], task.ID)
+		}
+	}
+	ready := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if indegree[task.ID] == 0 {
+			ready = append(ready, task.ID)
+		}
+	}
+	ordered := make([]workflow.TaskLedgerEntry, 0, len(tasks))
+	for len(ready) > 0 {
+		id := ready[0]
+		ready = ready[1:]
+		ordered = append(ordered, byID[id])
+		for _, dependent := range dependents[id] {
+			indegree[dependent]--
+			if indegree[dependent] == 0 {
+				ready = append(ready, dependent)
+			}
+		}
+	}
+	if len(ordered) != len(tasks) {
+		return tasks
+	}
+	return ordered
 }
 
 func applyStepStatus(status workflow.TaskStatus) output.Status {

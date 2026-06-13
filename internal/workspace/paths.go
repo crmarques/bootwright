@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -46,10 +47,19 @@ func ResolveAnsiblePlaybook() string {
 	return "ansible-playbook"
 }
 
-// BundleDir is the cache directory for one extracted embedded Ansible
-// bundle, keyed by the binary's version marker.
+// BundleDir is the cache directory for one extracted embedded Ansible bundle.
 func BundleDir(versionMarker string) (string, error) {
-	return filepath.Abs(filepath.Join(CacheDir(), ansibleBundlesDirName, versionMarker))
+	return filepath.Abs(filepath.Join(CacheDir(), ansibleBundlesDirName, bundleCacheKey(versionMarker)))
+}
+
+func bundleCacheKey(versionMarker string) string {
+	for _, line := range strings.Split(versionMarker, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return "version=unknown"
 }
 
 // CurrentContext loads the default registry and returns the selected

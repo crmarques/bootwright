@@ -18,8 +18,8 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 
 	frame := applyRunFrame(ledger)
 
-	if frame.BarLabel != "Fleet" || frame.Total != 4 {
-		t.Fatalf("bar label/total = %q/%d, want Fleet/4", frame.BarLabel, frame.Total)
+	if frame.BarLabel != "Provisioning Progress" || frame.Total != 4 {
+		t.Fatalf("bar label/total = %q/%d, want Provisioning Progress/4", frame.BarLabel, frame.Total)
 	}
 	if len(frame.Groups) != 3 {
 		t.Fatalf("groups = %d, want 3 (infra, foo, bar): %+v", len(frame.Groups), frame.Groups)
@@ -41,6 +41,24 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 	}
 	if got := frame.Groups[1].Steps[0]; got.Status != output.StatusPending {
 		t.Fatalf("storage step status = %q, want PENDING", got.Status)
+	}
+}
+
+func TestApplyRunFrameOrdersClusterStepsByDependencies(t *testing.T) {
+	ledger := workflow.NewRunLedger("apply-test", "all", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "storage.ceph", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusRunning, Dependencies: []string{"storageinfra.ceph"}},
+		{ID: "storageinfra.ceph", Kind: workflow.ApplyTaskKindStorageInfra, Label: "storage infra ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
+	}, time.Now())
+
+	frame := applyRunFrame(ledger)
+
+	if len(frame.Groups) != 1 || len(frame.Groups[0].Steps) != 2 {
+		t.Fatalf("groups = %+v, want one group with two steps", frame.Groups)
+	}
+	got := []string{frame.Groups[0].Steps[0].Label, frame.Groups[0].Steps[1].Label}
+	want := []string{"Provision infra ceph", "Provision ceph"}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("step order = %v, want %v", got, want)
 	}
 }
 

@@ -47,7 +47,7 @@ func TestRunViewInPlaceClearsPreviousHeight(t *testing.T) {
 	v.width = 80 // no wrapping
 	v.p.color = false
 
-	// 1 bar + 1 group title + 2 steps = 4 rows.
+	// 1 leading gap + 1 bar + 1 gap + 1 group title + 2 steps = 6 rows.
 	v.Render(frame(0, 2,
 		Step{ID: "a", Label: "Provider services", Status: StatusRunning},
 		Step{ID: "b", Label: "Machine infra", Status: StatusPending},
@@ -61,8 +61,8 @@ func TestRunViewInPlaceClearsPreviousHeight(t *testing.T) {
 		Step{ID: "a", Label: "Provider services", Status: StatusDone},
 		Step{ID: "b", Label: "Machine infra", Status: StatusRunning},
 	))
-	if !strings.HasPrefix(buf.String(), "\x1b[4A\x1b[J") {
-		t.Fatalf("redraw must clear the 4 previous rows first, got %q", buf.String())
+	if !strings.HasPrefix(buf.String(), "\x1b[6A\x1b[J") {
+		t.Fatalf("redraw must clear the 6 previous rows first, got %q", buf.String())
 	}
 
 	buf.Reset()
@@ -70,7 +70,7 @@ func TestRunViewInPlaceClearsPreviousHeight(t *testing.T) {
 		Step{ID: "a", Label: "Provider services", Status: StatusDone},
 		Step{ID: "b", Label: "Machine infra", Status: StatusDone},
 	))
-	if !strings.HasPrefix(buf.String(), "\x1b[4A\x1b[J") {
+	if !strings.HasPrefix(buf.String(), "\x1b[6A\x1b[J") {
 		t.Fatalf("finish must clear the previous frame, got %q", buf.String())
 	}
 	if v.open {
@@ -95,15 +95,17 @@ func TestRenderFrameFormat(t *testing.T) {
 	}, 0)
 
 	want := "" +
+		"\n" +
 		"  Fleet  [##########----------] 1/2 1 OK  1 RUNNING\n" +
+		"\n" +
 		"  infra\n" +
 		"    [DONE] Provider services\n" +
 		"    [RUNNING] Machine infra: 0m12s\n"
 	if buf.String() != want {
 		t.Fatalf("frame format:\n%q\nwant:\n%q", buf.String(), want)
 	}
-	if rows != 4 {
-		t.Fatalf("rows = %d, want 4", rows)
+	if rows != 6 {
+		t.Fatalf("rows = %d, want 6", rows)
 	}
 }
 

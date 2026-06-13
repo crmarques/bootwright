@@ -515,8 +515,13 @@ func (p *Printer) RenderFrame(frame RunFrame, width int) int {
 		fmt.Fprintln(p.w, line)
 		rows += physicalRows(line, width)
 	}
+	emit("")
 	emit("  " + progressBarLine(frame.BarLabel, frame.Done, frame.Total, frame.Counts))
-	for _, group := range frame.Groups {
+	emit("")
+	for i, group := range frame.Groups {
+		if i > 0 {
+			emit("")
+		}
 		if group.Title != "" {
 			emit("  " + p.style(group.Title, color.Bold))
 		}

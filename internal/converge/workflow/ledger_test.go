@@ -226,3 +226,18 @@ func TestRunLedgerProgressCounts(t *testing.T) {
 		t.Fatalf("counts = %#v", got)
 	}
 }
+
+func TestRunLedgerTasksForClusterPreservesLedgerOrder(t *testing.T) {
+	ledger := RunLedger{Tasks: []TaskLedgerEntry{
+		{ID: "storage.ceph", Cluster: "ceph"},
+		{ID: "provider"},
+		{ID: "storageinfra.ceph", Cluster: "ceph"},
+	}}
+
+	tasks := ledger.TasksForCluster("ceph")
+	got := []string{tasks[0].ID, tasks[1].ID}
+	want := []string{"storage.ceph", "storageinfra.ceph"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("cluster task order = %v, want %v", got, want)
+	}
+}
