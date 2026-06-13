@@ -25,11 +25,16 @@
 
 - name: Resolve libvirt domain ownership for destroy
   ansible.builtin.set_fact:
+    # Match the marker regardless of the XML namespace prefix: the managed-OS
+    # media insert round-trips the domain through ElementTree, which re-emits the
+    # bootwright namespace with a generated prefix (e.g. ns0:). The marker stays
+    # semantically intact, so key on the element's local name, not the literal
+    # prefix, otherwise a genuinely Bootwright-owned VM fails the ownership check.
     bootwright_libvirt_destroy_owned: >-
       {{
-        ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
-        and ('<bootwright:cluster>' ~ bootwright_current_cluster.name ~ '</bootwright:cluster>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
-        and ('<bootwright:machine>' ~ bootwright_component.name ~ '</bootwright:machine>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+        (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
+        and (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?cluster>' ~ (bootwright_current_cluster.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?cluster>')
+        and (bootwright_libvirt_destroy_domain_xml.stdout | default('')) is search('<([A-Za-z0-9_]+:)?machine>' ~ (bootwright_component.name | regex_escape) ~ '</([A-Za-z0-9_]+:)?machine>')
       }}
   changed_when: false
   when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0

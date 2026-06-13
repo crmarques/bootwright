@@ -95,6 +95,10 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 		"add_cdrom(devices, source_iso",
 		"set_boot_order(root, boot_order)",
 		"devices = [\"cdrom\", \"hd\"] if boot_order == \"cdrom-first\" else [\"hd\", \"cdrom\"]",
+		// The parse/serialize round-trip must keep the bootwright metadata prefix,
+		// or it re-emits as ns0: and the destroy ownership guard stops recognizing
+		// the marker it just round-tripped.
+		"ET.register_namespace(\"bootwright\", \"https://bootwright.io/libvirt/metadata/1.0\")",
 	} {
 		if !strings.Contains(insertScript, want) {
 			t.Fatalf("libvirt media insert helper missing %q", want)
@@ -2739,7 +2743,9 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		// disk-path match, so a foreign VM parked under the context root is not
 		// undefined.
 		"dumpxml",
-		"<bootwright:context>",
+		// Prefix-agnostic: a managed-OS install rewrites the namespace prefix
+		// (ns0:), so the sweep keys on the element local name, not <bootwright:...>.
+		"([A-Za-z0-9_]+:)?context>",
 		"bootwright_libvirt_context_owned_domains",
 		"item.bootwright_libvirt_domain_name in bootwright_libvirt_context_owned_domains",
 	} {
@@ -3098,10 +3104,17 @@ func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 		t.Fatalf("libvirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
 	}
 	owned := fmt.Sprint(decide["bootwright_libvirt_destroy_owned"])
-	for _, want := range []string{"<bootwright:context>", "<bootwright:cluster>", "<bootwright:machine>"} {
+	// The marker must be matched prefix-agnostically: the managed-OS media insert
+	// round-trips the domain XML through ElementTree, which rewrites the bootwright
+	// namespace prefix (ns0:), so a literal <bootwright:...> match would reject a
+	// genuinely Bootwright-owned VM.
+	for _, want := range []string{"([A-Za-z0-9_]+:)?context>", "([A-Za-z0-9_]+:)?cluster>", "([A-Za-z0-9_]+:)?machine>"} {
 		if !strings.Contains(owned, want) {
 			t.Fatalf("libvirt destroy ownership decision must require the Bootwright ownership marker %q, got %v", want, decide["bootwright_libvirt_destroy_owned"])
 		}
+	}
+	if !strings.Contains(owned, "is search(") {
+		t.Fatalf("libvirt destroy ownership decision must match the marker via the search test (prefix-agnostic), got %v", decide["bootwright_libvirt_destroy_owned"])
 	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {

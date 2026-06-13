@@ -67,7 +67,10 @@
     label: "{{ item.bootwright_libvirt_domain_name | default('') }}"
   when:
     - item.rc | default(1) == 0
-    - ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (item.stdout | default(''))
+    # Prefix-agnostic match: a managed-OS install round-trips the domain through
+    # ElementTree, which rewrites the bootwright namespace prefix (e.g. ns0:), so
+    # key on the element's local name rather than the literal <bootwright:context>.
+    - (item.stdout | default('')) is search('<([A-Za-z0-9_]+:)?context>' ~ (bootwright_clusters_dir | dirname | basename | regex_escape) ~ '</([A-Za-z0-9_]+:)?context>')
   changed_when: false
 
 - name: Initialize current-context libvirt domains

@@ -5,6 +5,13 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
+# Preserve Bootwright's libvirt metadata namespace prefix across the
+# parse/serialize round-trip below. Without this, ElementTree re-emits the
+# foreign namespace with a generated prefix (ns0:), mangling the
+# <bootwright:...> ownership marker that the destroy guard matches. Registering
+# the prefix keeps the marker byte-for-byte intact after `virsh define`.
+ET.register_namespace("bootwright", "https://bootwright.io/libvirt/metadata/1.0")
+
 
 def run(args, input_text=None, check=True):
     result = subprocess.run(
