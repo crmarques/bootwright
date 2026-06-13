@@ -9,9 +9,9 @@
   delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"
   become: true
 
-- name: Eject source-backed virtual media from {{ bootwright_libvirt_media_scope }} domain
+- name: Clean libvirt virtual media from {{ bootwright_libvirt_media_scope }} domain
   ansible.builtin.command:
-    argv: "{{ ['/bin/bash', '/var/tmp/bootwright-libvirt-media-eject.sh', bootwright_component.boot.media.libvirt.uri, bootwright_component.boot.media.libvirt.domain, bootwright_libvirt_media_change_media_arg, (bootwright_libvirt_media_eject_retries | string), (bootwright_libvirt_media_eject_delay_seconds | string), bootwright_libvirt_media_scope] + bootwright_libvirt_media_domblklist_args }}"
+    argv: "{{ ['/bin/bash', '/var/tmp/bootwright-libvirt-media-eject.sh', bootwright_component.boot.media.libvirt.uri, bootwright_component.boot.media.libvirt.domain, bootwright_libvirt_media_change_media_arg, (bootwright_libvirt_media_eject_retries | string), (bootwright_libvirt_media_eject_delay_seconds | string), bootwright_libvirt_media_scope, ((bootwright_libvirt_media_detach_drive | default(false) | bool) | ternary('all', 'source'))] + bootwright_libvirt_media_domblklist_args }}"
   register: bootwright_libvirt_media_eject
   changed_when: bootwright_libvirt_media_eject.stdout is search('(?m)^changed=true$')
   delegate_to: "{{ bootwright_component.boot.media.libvirt.machineRef }}"

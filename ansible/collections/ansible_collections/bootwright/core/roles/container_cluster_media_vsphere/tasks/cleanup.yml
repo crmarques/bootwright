@@ -2,28 +2,54 @@
 # vSphere device config has no separate persistent layer and the substrate
 # enforces disk-first boot order, so an attached ISO cannot re-enter the
 # installer after the disk becomes bootable: cleanup_persistent is a no-op
-# and full cleanup ejects the CD and removes the uploaded media.
+# and full cleanup removes the CD device and the uploaded media.
 - name: Clean up vSphere virtual media
   when: bootwright_vsphere_media_action == 'cleanup'
   block:
-    - name: Eject vSphere virtual media
-      community.vmware.vmware_guest:
-        hostname: "{{ bootwright_vsphere_media.server }}"
-        port: "{{ bootwright_vsphere_media.port | default(443) }}"
-        username: "{{ bootwright_vsphere_media_credentials.username }}"
-        password: "{{ bootwright_vsphere_media_credentials.password }}"
-        validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
-        datacenter: "{{ bootwright_vsphere_media.topology.datacenter }}"
-        folder: "{{ bootwright_vsphere_media.topology.folder | default(omit, true) }}"
-        name: "{{ bootwright_vsphere_media_vm_name }}"
-        cdrom:
-          - controller_type: sata
-            controller_number: 0
-            unit_number: 0
-            type: none
-      vars:
-        ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
-      no_log: true
+    # Remove the whole CD/DVD device so the provisioned guest is left with no
+    # leftover optical drive (no /dev/sr0). Live CD device removal via
+    # vmware_guest is historically fragile and can be rejected on a powered-on
+    # VM; the rescue then at least disconnects the medium so the drive clears on
+    # a later powered-off reconcile.
+    - name: Remove vSphere virtual media drive
+      block:
+        - name: Remove vSphere virtual media drive
+          community.vmware.vmware_guest:
+            hostname: "{{ bootwright_vsphere_media.server }}"
+            port: "{{ bootwright_vsphere_media.port | default(443) }}"
+            username: "{{ bootwright_vsphere_media_credentials.username }}"
+            password: "{{ bootwright_vsphere_media_credentials.password }}"
+            validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
+            datacenter: "{{ bootwright_vsphere_media.topology.datacenter }}"
+            folder: "{{ bootwright_vsphere_media.topology.folder | default(omit, true) }}"
+            name: "{{ bootwright_vsphere_media_vm_name }}"
+            cdrom:
+              - controller_type: sata
+                controller_number: 0
+                unit_number: 0
+                state: absent
+          vars:
+            ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+          no_log: true
+      rescue:
+        - name: Disconnect vSphere virtual media when drive removal is unsupported
+          community.vmware.vmware_guest:
+            hostname: "{{ bootwright_vsphere_media.server }}"
+            port: "{{ bootwright_vsphere_media.port | default(443) }}"
+            username: "{{ bootwright_vsphere_media_credentials.username }}"
+            password: "{{ bootwright_vsphere_media_credentials.password }}"
+            validate_certs: "{{ not (bootwright_vsphere_media.disableCertificateVerification | default(false) | bool) }}"
+            datacenter: "{{ bootwright_vsphere_media.topology.datacenter }}"
+            folder: "{{ bootwright_vsphere_media.topology.folder | default(omit, true) }}"
+            name: "{{ bootwright_vsphere_media_vm_name }}"
+            cdrom:
+              - controller_type: sata
+                controller_number: 0
+                unit_number: 0
+                type: none
+          vars:
+            ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+          no_log: true
 
     - name: Probe recorded vSphere virtual media
       ansible.builtin.stat:

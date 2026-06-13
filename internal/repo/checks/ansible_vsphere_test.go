@@ -159,3 +159,22 @@ func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 		}
 	}
 }
+
+// TestVSphereCleanupRemovesVirtualMediaDrive pins that full cleanup removes the
+// CD/DVD device entirely (state: absent) rather than only disconnecting the
+// medium (type: none) — a disconnect-only cleanup leaves the drive on the VM,
+// which surfaces as a lingering /dev/sr0 in the guest. The fragile live removal
+// falls back to a disconnect so the medium is at least detached.
+func TestVSphereCleanupRemovesVirtualMediaDrive(t *testing.T) {
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/cleanup.yml")
+	if !strings.Contains(body, "state: absent") {
+		t.Fatal("vsphere cleanup must remove the CD/DVD device (state: absent), not only disconnect the medium")
+	}
+	if !strings.Contains(body, "type: none") {
+		t.Fatal("vsphere cleanup must keep a disconnect (type: none) fallback for when live device removal is rejected")
+	}
+	absentIdx, noneIdx := strings.Index(body, "state: absent"), strings.LastIndex(body, "type: none")
+	if absentIdx < 0 || noneIdx < 0 || absentIdx > noneIdx {
+		t.Fatal("vsphere cleanup must attempt device removal before falling back to a disconnect")
+	}
+}

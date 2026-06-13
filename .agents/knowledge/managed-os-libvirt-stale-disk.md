@@ -21,7 +21,12 @@ already-running VM (see `openshift-agent-iso-reboot-loop.md`); a CD-first order
 therefore boots the install ISO again after the disk is written, and clearing
 only the *persistent* CD-ROM config cannot redirect that live reboot. Disk-first
 boots the empty disk through to the attached ISO on the install pass, then the
-post-install reboot boots the freshly written disk. Force reinstall over a stale
+post-install reboot boots the freshly written disk. The domain template
+(`domain.xml.j2`) defines no static optical drive — the install path attaches its
+own source-backed cdrom and the post-install cleanup detaches it — so do not
+re-add a static `<disk device='cdrom'>`; the `<boot dev='cdrom'/>` OS-block
+fallback must stay (the install ISO is inserted as a cdrom that this fallback
+boots). Force reinstall over a stale
 disk by wiping it, not by booting CD-first: when `bootwright apply --override` is
 supplied for managed OS, the libvirt substrate path must stop and undefine the
 Bootwright-owned machine domain, remove only that machine's Bootwright-owned

@@ -7,7 +7,16 @@ state_arg=$3
 retries=$4
 delay=$5
 scope=$6
-shift 6
+# mode selects which cdrom devices the cleanup acts on:
+#   source - only cdroms that currently hold media (eject the medium, keep the
+#            drive). Used by the pre-insert clean and the post-installer-boot
+#            persistent clean so they never tear down the drive the installer
+#            still needs.
+#   all    - every cdrom device, with or without media: eject any medium and
+#            then detach the drive itself so the provisioned guest is left with
+#            no leftover optical drive (no /dev/sr0). Used by the final cleanup.
+mode=$7
+shift 7
 domblklist_args=("$@")
 changed=0
 absent_checks=0
@@ -28,7 +37,11 @@ fi
 read_targets() {
   local out rc
   if out=$(virsh -c "$uri" domblklist "$domain" "${domblklist_args[@]}" --details 2>&1); then
-    printf '%s\n' "$out" | awk '$2 == "cdrom" && $4 != "-" && $4 != "" { print $3 }'
+    if [ "$mode" = "all" ]; then
+      printf '%s\n' "$out" | awk '$2 == "cdrom" { print $3 }'
+    else
+      printf '%s\n' "$out" | awk '$2 == "cdrom" && $4 != "-" && $4 != "" { print $3 }'
+    fi
     return 0
   fi
   rc=$?
@@ -101,16 +114,19 @@ for ((attempt = 1; attempt <= retries; attempt++)); do
   load_targets || exit 2
   if [ "$target_count" -gt 0 ]; then
     absent_checks=0
-    printf 'attempt %d/%d source-backed targets: %s\n' "$attempt" "$retries" "${targets[*]}"
+    printf 'attempt %d/%d cdrom targets to eject: %s\n' "$attempt" "$retries" "${targets[*]}"
     for target in "${targets[@]}"; do
       eject_target "$target"
     done
   fi
 
+  # In "all" mode the drained drive is still listed (source no longer required),
+  # so this second pass detaches the empty drive too; in "source" mode only a
+  # drive whose medium survived the eject is still listed and gets detached.
   load_targets || exit 2
   if [ "$target_count" -gt 0 ]; then
     absent_checks=0
-    printf 'attempt %d/%d remaining targets after eject: %s\n' "$attempt" "$retries" "${targets[*]}"
+    printf 'attempt %d/%d remaining cdrom targets to detach: %s\n' "$attempt" "$retries" "${targets[*]}"
     for target in "${targets[@]}"; do
       detach_target "$target" || true
     done
@@ -136,6 +152,20 @@ for ((attempt = 1; attempt <= retries; attempt++)); do
   fi
 done
 
-printf 'source-backed libvirt cdrom targets still present after %s attempts: %s\n' "$retries" "${targets[*]}" >&2
+# A running guest may refuse to hot-unplug a SATA optical drive. The persistent
+# (--config) definition is authoritative and must end with no cdrom, so a
+# residual there is fatal; a residual live drive is left to clear on the next
+# reboot rather than failing the install.
+if [ "$mode" = "all" ] && [ "$state_arg" = "--live" ]; then
+  if [ "$changed" -eq 1 ]; then
+    echo "changed=true"
+  else
+    echo "changed=false"
+  fi
+  printf 'live libvirt cdrom drive(s) not hot-removed, left to clear on reboot: %s\n' "${targets[*]}" >&2
+  exit 0
+fi
+
+printf 'libvirt cdrom targets still present after %s attempts: %s\n' "$retries" "${targets[*]}" >&2
 virsh -c "$uri" domblklist "$domain" "${domblklist_args[@]}" --details >&2 || true
 exit 1

@@ -10,12 +10,16 @@
       - bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']
     fail_msg: "Unsupported direct libvirt virtual media action {{ bootwright_libvirt_media_action }}"
 
+# The final cleanup detaches the whole optical drive so the provisioned guest
+# is left with no leftover /dev/sr0; boot (pre-insert) and cleanup_persistent
+# only eject the medium and keep the drive the installer still needs.
 - name: Clean stale running virtual media before insert
   ansible.builtin.include_tasks: eject.yml
   vars:
     bootwright_libvirt_media_scope: running
     bootwright_libvirt_media_domblklist_args: []
     bootwright_libvirt_media_change_media_arg: --live
+    bootwright_libvirt_media_detach_drive: "{{ bootwright_libvirt_media_action == 'cleanup' }}"
   when: bootwright_libvirt_media_action in ['boot', 'cleanup']
 
 - name: Clean stale persistent virtual media before insert
@@ -25,6 +29,7 @@
     bootwright_libvirt_media_domblklist_args:
       - --inactive
     bootwright_libvirt_media_change_media_arg: --config
+    bootwright_libvirt_media_detach_drive: "{{ bootwright_libvirt_media_action == 'cleanup' }}"
   when: bootwright_libvirt_media_action in ['boot', 'cleanup', 'cleanup_persistent']
 
 - name: Resolve direct libvirt virtual media insert state

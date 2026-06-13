@@ -20,7 +20,7 @@ const bootwrightCollectionRoleRoot = "ansible/collections/ansible_collections/bo
 func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/eject.yml")
 	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
-	task := ejectTasks[findAnsibleTask(t, ejectTasks, "Eject source-backed virtual media from {{ bootwright_libvirt_media_scope }} domain")]
+	task := ejectTasks[findAnsibleTask(t, ejectTasks, "Clean libvirt virtual media from {{ bootwright_libvirt_media_scope }} domain")]
 	script := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/files/eject_libvirt_media.sh")
 	insertScript := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/files/insert_libvirt_media.py")
 
@@ -37,6 +37,39 @@ func TestBootRedfishLibvirtVirtualMediaDetachFallback(t *testing.T) {
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("libvirt media cleanup script missing %q", want)
+		}
+	}
+
+	// The final cleanup must detach the whole optical drive, not just eject the
+	// medium, so the provisioned guest is left with no leftover /dev/sr0. The
+	// "all" mode drops the source requirement so the now-empty drive is also
+	// detached; live hot-unplug stays non-fatal while the persistent config is
+	// authoritative.
+	for _, want := range []string{
+		"mode=$7",
+		"if [ \"$mode\" = \"all\" ]; then",
+		"awk '$2 == \"cdrom\" { print $3 }'",
+		"if [ \"$mode\" = \"all\" ] && [ \"$state_arg\" = \"--live\" ]; then",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("libvirt media cleanup script missing detach-drive mode marker %q", want)
+		}
+	}
+	if argv, ok := task["ansible.builtin.command"].(map[string]any); ok {
+		if got := fmt.Sprint(argv["argv"]); !strings.Contains(got, "ternary('all', 'source')") {
+			t.Fatalf("libvirt media cleanup must pass the detach-drive mode arg, got %v", argv["argv"])
+		}
+	}
+	for _, name := range []string{
+		"Clean stale running virtual media before insert",
+		"Clean stale persistent virtual media before insert",
+	} {
+		cleanVars, ok := mainTasks[findAnsibleTask(t, mainTasks, name)]["vars"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must pass eject vars", name)
+		}
+		if got := cleanVars["bootwright_libvirt_media_detach_drive"]; got != "{{ bootwright_libvirt_media_action == 'cleanup' }}" {
+			t.Fatalf("%s must detach the drive only on the final cleanup, got %v", name, got)
 		}
 	}
 
@@ -648,6 +681,7 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	installBlockIdx := findAnsibleTask(t, topTasks, "Install managed OS from virtual media")
 	waitSSHIdx := findAnsibleTask(t, topTasks, "Wait for managed OS SSH port")
 	cleanupMediaIdx := findAnsibleTask(t, topTasks, "Clean managed OS virtual media after SSH is ready")
+	baremetalEjectIdx := findAnsibleTask(t, topTasks, "Eject Redfish virtual media after SSH is ready")
 	recordHostKeyIdx := findAnsibleTask(t, topTasks, "Record managed OS SSH host key")
 	verifySSHIdx := findAnsibleTask(t, topTasks, "Verify managed OS SSH authentication")
 	writeMarkerIdx := findAnsibleTask(t, topTasks, "Write managed OS install marker")
@@ -667,8 +701,8 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	if !(readMarkerIdx < refuseMarkerIdx && refuseMarkerIdx < installBlockIdx) {
 		t.Fatalf("Anaconda role must check the managed OS marker before the install block")
 	}
-	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < recordHostKeyIdx) {
-		t.Fatalf("Anaconda role must let Kickstart reboot, wait for SSH, and then clean managed OS virtual media")
+	if !(installBlockIdx < waitSSHIdx && waitSSHIdx < cleanupMediaIdx && cleanupMediaIdx < baremetalEjectIdx && baremetalEjectIdx < recordHostKeyIdx) {
+		t.Fatalf("Anaconda role must let Kickstart reboot, wait for SSH, then clean media and eject Redfish virtual media before recording the host key")
 	}
 	if !(recordHostKeyIdx < verifySSHIdx && verifySSHIdx < writeMarkerIdx) {
 		t.Fatalf("Anaconda role must write the managed OS marker after SSH verification")
@@ -680,6 +714,20 @@ func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
 	}
 	if cleanupVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || cleanupVars["bootwright_redfish_action_effective"] != "cleanup" {
 		t.Fatalf("%s must clean resolved managed OS media, got vars=%v", topTasks[cleanupMediaIdx]["name"], cleanupVars)
+	}
+	// Bare metal has no mediaPrepareRole, so the cleanup above is skipped; the
+	// install role must still eject the BMC virtual media via the boot role's
+	// cleanup_media action or it lingers as a /dev/sr0.
+	assertIncludeRoleName(t, topTasks[baremetalEjectIdx], "{{ bootwright_component.bootApplyRole }}")
+	baremetalVars, ok := topTasks[baremetalEjectIdx]["vars"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s must pass cleanup vars, got %v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx])
+	}
+	if baremetalVars["bootwright_component"] != "{{ bootwright_managed_os_boot_component }}" || baremetalVars["bootwright_redfish_action"] != "cleanup_media" {
+		t.Fatalf("%s must eject resolved managed OS media via cleanup_media, got vars=%v", topTasks[baremetalEjectIdx]["name"], baremetalVars)
+	}
+	if got := fmt.Sprint(topTasks[baremetalEjectIdx]["when"]); !strings.Contains(got, "bootwright_managed_os_boot_component is defined") || !strings.Contains(got, "container_cluster_boot_redfish") || !strings.Contains(got, "mediaPrepareRole") {
+		t.Fatalf("%s must run only for boot_redfish machines without a mediaPrepareRole on the install run, got when=%v", topTasks[baremetalEjectIdx]["name"], topTasks[baremetalEjectIdx]["when"])
 	}
 	validateSource, ok := topTasks[validateSourceIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
