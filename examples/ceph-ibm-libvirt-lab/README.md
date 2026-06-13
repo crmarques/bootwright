@@ -165,7 +165,7 @@ cd /path/to/bootwright/examples/ceph-ibm-libvirt-lab
 bootwright validate -f .
 bootwright context init ceph-ibm-lab -f .
 bootwright context current
-bootwright context validate
+bootwright validate             # re-validate the imported context
 bootwright secret list          # shows which secrets still need bytes
 ```
 
@@ -189,14 +189,14 @@ shred -u /tmp/rhel-org.txt /tmp/rhel-activation-key.txt
 printf '%s\n' 'YOUR_IBM_ENTITLEMENT_KEY' | \
   bootwright secret set ibm-ceph-registry --username cp --password-stdin
 
-# Generate the auto-managed secrets (ceph-node-ssh keypair, bmc-credentials).
-bootwright secret generate
-bootwright secret materialize
+# Converge the auto-managed secrets: generates the ceph-node-ssh keypair and
+# bmc-credentials, and copies the bastion-host-ssh file: source into the context.
+bootwright secret sync
 
 # Record SSH host-key trust for the libvirt host, then re-check.
 bootwright host trust
 bootwright secret list
-bootwright context validate
+bootwright validate
 ```
 
 `bastion-host-ssh` is the operator-owned key at `~/.ssh/bootwright-ssh-key` from
@@ -208,7 +208,7 @@ step 0c — declared `file:`, so you do not "set" it.
 
 ```bash
 bootwright bastion setup --yes      # installs host prerequisites
-bootwright check all
+bootwright preflight all
 bootwright plan                     # preview the task graph (no changes)
 bootwright apply --yes
 bootwright status --watch
@@ -314,9 +314,13 @@ dnsmasq and you maintain it by hand.
 
 ## 7. Tear down
 
+This environment sets `safety.destroyProtection: requiredOverride`, so `destroy`
+refuses to run without `--override` — a routine `destroy --yes` cannot tear it
+down by accident.
+
 ```bash
-bootwright destroy --stage clusters --yes      # remove Ceph services/records
-bootwright destroy --stage infra --yes         # remove VMs, network, services
+bootwright destroy --stage clusters --override --yes   # remove Ceph services/records
+bootwright destroy --stage infra --override --yes      # remove VMs, network, services
 ```
 
 ---
