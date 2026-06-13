@@ -65,9 +65,12 @@ func applyClusterPhases(ledger workflow.RunLedger, cluster string, kind string, 
 	switch kind {
 	case "StorageCluster":
 		storageTasks := filterApplyTasksByKind(tasks, workflow.ApplyTaskKindStorageCluster)
+		// One "Infrastructure" phase covers host standup and storage prep. The
+		// previous "Prepare" phase was computed from the identical task filter, so
+		// it could never differ — drop it rather than show two columns that always
+		// move in lockstep.
 		return []output.PhaseStatus{
 			{Label: "Infrastructure", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra), output.StatusPending)},
-			{Label: "Prepare", Status: applyPhaseStatus(filterApplyTasksByKind(tasks, workflow.ApplyTaskKindMachineInfraPrepare, workflow.ApplyTaskKindManagedMachineOS, workflow.ApplyTaskKindStorageInfra), output.StatusPending)},
 			{Label: "Provision", Status: applyPhaseStatus(storageTasks, output.StatusPending)},
 			{Label: "Publish", Status: applyPhaseStatus(applyStoragePublishTasks(ledger, cluster), output.StatusPending)},
 		}
@@ -225,9 +228,55 @@ func applyFailedPhase(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) 
 	return "Work"
 }
 
-func applyBlockedReason(task workflow.TaskLedgerEntry) string {
+// applyBlockedReason explains why a task is blocked in fleet terms. It walks the
+// dependency chain to the actual failed root and, when that root lives in
+// another cluster (the KubeVirt host parent), names that cluster — so a blocked
+// child reads "host cluster dc1-metal-ocp not ready" instead of leaking a raw
+// internal task ID or blaming a sibling task one hop up.
+func applyBlockedReason(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) string {
+	if dep, ok := applyBlockingRoot(ledger, task); ok {
+		label := applyTaskDisplayLabel(dep.Label)
+		if dep.Cluster != "" && dep.Cluster != task.Cluster {
+			return fmt.Sprintf("host cluster %s not ready (blocked by %s)", dep.Cluster, label)
+		}
+		return "blocked by " + label
+	}
 	if task.SkippedReason != "" {
 		return task.SkippedReason
 	}
 	return fmt.Sprintf("%s %s", task.Kind, task.Status)
+}
+
+// applyBlockingRoot walks a blocked task's dependencies breadth-first to the
+// first failed ancestor (the true root cause), falling back to the nearest
+// blocked/cancelled ancestor. This lets a transitively-blocked child task point
+// at the host parent's failed install rather than at its own sibling.
+func applyBlockingRoot(ledger workflow.RunLedger, task workflow.TaskLedgerEntry) (workflow.TaskLedgerEntry, bool) {
+	visited := map[string]bool{}
+	queue := append([]string(nil), task.Dependencies...)
+	var fallback workflow.TaskLedgerEntry
+	haveFallback := false
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if visited[id] {
+			continue
+		}
+		visited[id] = true
+		dep, ok := ledger.Task(id)
+		if !ok {
+			continue
+		}
+		switch dep.Status {
+		case workflow.TaskStatusFailed:
+			return dep, true
+		case workflow.TaskStatusBlocked, workflow.TaskStatusCancelled:
+			if !haveFallback {
+				fallback = dep
+				haveFallback = true
+			}
+			queue = append(queue, dep.Dependencies...)
+		}
+	}
+	return fallback, haveFallback
 }

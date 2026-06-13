@@ -10,18 +10,21 @@ import (
 // that own no cluster lead in a non-cluster "infra" group so an infra-only run
 // (apply --stage infra) still lists its steps. This single mapper feeds both the
 // live apply reporter and `status --watch`, so the two views cannot diverge.
-func applyRunFrame(ledger workflow.RunLedger) output.RunFrame {
+//
+// displays carries the desired-state descriptor/ordering metadata so the group
+// headings distinguish a bare-metal cluster from a KubeVirt-hosted one and a
+// child is ordered after its host parent. It may be nil (no state loaded), in
+// which case headings fall back to the ledger-derived kind word and ordering
+// falls back to alphabetical.
+func applyRunFrame(ledger workflow.RunLedger, displays map[string]clusterDisplay) output.RunFrame {
 	groups := make([]output.StepGroup, 0)
 	if infra := applyNonClusterSteps(ledger); len(infra) > 0 {
 		groups = append(groups, output.StepGroup{Title: "infra", Steps: infra})
 	}
-	for _, name := range ledger.ClusterNames() {
+	for _, name := range orderClusterNames(ledger.ClusterNames(), displays) {
 		tasks := ledger.TasksForCluster(name)
-		title := name
-		if kind := applyClusterKind(tasks); kind != "" {
-			title = name + " (" + kind + ")"
-		}
-		groups = append(groups, output.StepGroup{Title: title, Steps: applyStepsForTasks(tasks)})
+		title := clusterGroupTitle(name, displays, applyClusterKind(tasks))
+		groups = append(groups, output.StepGroup{Title: title, Steps: applyStepsForTasks(tasks, ledger)})
 	}
 	return output.RunFrame{
 		BarLabel: "Provisioning Progress",
@@ -39,10 +42,10 @@ func applyNonClusterSteps(ledger workflow.RunLedger) []output.Step {
 			tasks = append(tasks, task)
 		}
 	}
-	return applyStepsForTasks(tasks)
+	return applyStepsForTasks(tasks, ledger)
 }
 
-func applyStepsForTasks(tasks []workflow.TaskLedgerEntry) []output.Step {
+func applyStepsForTasks(tasks []workflow.TaskLedgerEntry, ledger workflow.RunLedger) []output.Step {
 	tasks = applyTasksInDisplayOrder(tasks)
 	steps := make([]output.Step, 0, len(tasks))
 	for _, task := range tasks {
@@ -50,7 +53,7 @@ func applyStepsForTasks(tasks []workflow.TaskLedgerEntry) []output.Step {
 			ID:     task.ID,
 			Label:  applyTaskDisplayLabel(task.Label),
 			Status: applyStepStatus(task.Status),
-			Detail: applyStepDetail(task),
+			Detail: applyStepDetail(task, ledger),
 		})
 	}
 	return steps
@@ -125,12 +128,12 @@ func applyStepStatus(status workflow.TaskStatus) output.Status {
 
 // applyStepDetail gives a short inline reason for a step that did not simply
 // succeed; the full failure tail lives in the task log, surfaced by the Summary.
-func applyStepDetail(task workflow.TaskLedgerEntry) string {
+func applyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
 	switch task.Status {
 	case workflow.TaskStatusFailed:
 		return applyFailureReason(task.Failure)
 	case workflow.TaskStatusBlocked:
-		return applyBlockedReason(task)
+		return applyBlockedReason(ledger, task)
 	case workflow.TaskStatusSkipped:
 		if task.SkippedReason != "" {
 			return task.SkippedReason

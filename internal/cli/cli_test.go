@@ -2189,8 +2189,10 @@ func TestEnsureLocalRootForArgsPromptsOnceAndUsesNonInteractiveSudo(t *testing.T
 	if !handled || code != 0 {
 		t.Fatalf("ensureLocalRootForArgs handled=%v code=%d, want handled success", handled, code)
 	}
-	if got := stderr.String(); got != "SUDO password: " {
-		t.Fatalf("stderr prompt = %q, want SUDO password prompt", got)
+	if got := stderr.String(); !strings.Contains(got, "sudo required") {
+		t.Fatalf("stderr missing sudo justification before prompt = %q", got)
+	} else if !strings.HasSuffix(got, "SUDO password: ") {
+		t.Fatalf("stderr prompt = %q, want SUDO password prompt last", got)
 	}
 	if len(calls) != 4 {
 		t.Fatalf("sudo calls = %v, want validate, refresh, timeout lookup, command", calls)

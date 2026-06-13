@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -47,7 +48,10 @@ func (r *destroyReporter) PromptGap() {
 // destroyRunFrame projects the destroy ledger into a single ordered group of
 // teardown steps. Destroy tasks are scope-level (host-group teardown), not
 // per-cluster, so they share one group rather than the per-cluster grouping
-// apply uses.
+// apply uses. The cluster-stage steps cover several clusters at once, so each
+// step names the clusters it tears down (from the persisted ResourceKeys) —
+// otherwise a failed "Container clusters" step would not say which of the fleet
+// it covered.
 func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 	steps := make([]output.Step, 0, len(ledger.Tasks))
 	for _, task := range ledger.Tasks {
@@ -55,7 +59,7 @@ func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 			ID:     task.ID,
 			Label:  task.Label,
 			Status: applyStepStatus(task.Status),
-			Detail: applyStepDetail(task),
+			Detail: destroyStepDetail(task, ledger),
 		})
 	}
 	return output.RunFrame{
@@ -64,6 +68,22 @@ func destroyRunFrame(ledger workflow.RunLedger) output.RunFrame {
 		Total:    len(ledger.Tasks),
 		Counts:   applyProgressFields(ledger),
 		Groups:   []output.StepGroup{{Steps: steps}},
+	}
+}
+
+// destroyStepDetail names the clusters a teardown step covers, appending the
+// failure/blocked reason when the step did not simply succeed so identity is
+// kept even on failure.
+func destroyStepDetail(task workflow.TaskLedgerEntry, ledger workflow.RunLedger) string {
+	covered := strings.Join(task.ResourceKeys, ", ")
+	reason := applyStepDetail(task, ledger)
+	switch {
+	case covered != "" && reason != "":
+		return covered + " — " + reason
+	case covered != "":
+		return covered
+	default:
+		return reason
 	}
 }
 
@@ -96,17 +116,22 @@ func printDestroyRunSummary(stdout io.Writer, runsDir string, ledger workflow.Ru
 	for _, task := range ledger.FailedTasks() {
 		fields := []output.Field{
 			{Key: "failed task", Value: task.Label},
-			{Key: "reason", Value: applyFailureReason(task.Failure)},
 		}
+		if covered := strings.Join(task.ResourceKeys, ", "); covered != "" {
+			fields = append(fields, output.Field{Key: "clusters", Value: covered})
+		}
+		fields = append(fields, output.Field{Key: "reason", Value: applyFailureReason(task.Failure)})
 		if task.LogPath != "" {
 			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
 		}
 		p.Details(fields)
 	}
 	for _, task := range ledger.BlockedTasks() {
-		p.Details([]output.Field{
-			{Key: "blocked task", Value: task.Label},
-			{Key: "reason", Value: applyBlockedReason(task)},
-		})
+		fields := []output.Field{{Key: "blocked task", Value: task.Label}}
+		if covered := strings.Join(task.ResourceKeys, ", "); covered != "" {
+			fields = append(fields, output.Field{Key: "clusters", Value: covered})
+		}
+		fields = append(fields, output.Field{Key: "reason", Value: applyBlockedReason(ledger, task)})
+		p.Details(fields)
 	}
 }

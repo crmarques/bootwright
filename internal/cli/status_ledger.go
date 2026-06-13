@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
-func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.RunLedger, found bool, loadErr error) {
+func printApplyLedgerStatus(p *cliout.Printer, runsDir string, displays map[string]clusterDisplay, ledger workflow.RunLedger, found bool, loadErr error) {
 	p.Section("Current apply")
 	if loadErr != nil {
 		p.Status(cliout.StatusWarn, "Apply ledger", loadErr.Error())
@@ -40,7 +40,9 @@ func printApplyLedgerStatus(p *cliout.Printer, runsDir string, ledger workflow.R
 	// shape. RenderFrame width 0 disables wrap accounting: status reprints the
 	// whole page each poll rather than redrawing the frame in place.
 	p.Section("Progress")
-	p.RenderFrame(applyRunFrame(ledger), 0)
+	// collapse=false: a one-shot status report prints the full record, including
+	// finished groups, rather than summarizing them like the live redraw does.
+	p.RenderFrame(applyRunFrame(ledger, displays), 0, false)
 	printApplyLedgerFailures(p, ledger)
 }
 

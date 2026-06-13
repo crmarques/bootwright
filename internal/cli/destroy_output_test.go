@@ -29,6 +29,26 @@ func TestDestroyRunFrameListsTeardownSteps(t *testing.T) {
 	}
 }
 
+func TestDestroyOutputNamesCoveredClusters(t *testing.T) {
+	now := time.Now()
+	ledger := workflow.NewRunLedger("destroy-test", "clusters destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{
+		{ID: "destroy.storage-clusters", Kind: workflow.DestroyTaskKindStorageCluster, Label: "Storage clusters", ResourceKeys: []string{"ceph-storage"}, Status: workflow.TaskStatusOK},
+		{ID: "destroy.container-clusters", Kind: workflow.DestroyTaskKindContainerCluster, Label: "Container clusters", ResourceKeys: []string{"dc1-metal-ocp", "dc1-child-ocp"}, Status: workflow.TaskStatusFailed, Dependencies: []string{"destroy.storage-clusters"}, Failure: "failure: agent removal failed"},
+	}, now)
+
+	// The frame names the clusters each step covers, even on the failed step.
+	frame := destroyRunFrame(ledger)
+	if got := frame.Groups[0].Steps[1].Detail; !strings.Contains(got, "dc1-metal-ocp, dc1-child-ocp") {
+		t.Fatalf("failed step detail = %q, want covered cluster names", got)
+	}
+
+	var buf bytes.Buffer
+	printDestroyRunSummary(&buf, "/runs", ledger)
+	if !strings.Contains(buf.String(), "clusters: dc1-metal-ocp, dc1-child-ocp") {
+		t.Fatalf("summary missing covered clusters:\n%s", buf.String())
+	}
+}
+
 func TestDestroyRunSummaryPrintsRunLogAndFailure(t *testing.T) {
 	now := time.Now()
 	ledger := workflow.NewRunLedger("destroy-test", "infra destroy", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{

@@ -187,9 +187,11 @@ func TestApplyClusterPhaseLinesAggregateContainerAndStorageStates(t *testing.T) 
 		t.Fatalf("ceph-a kind = %q, want StorageCluster", storage.Kind)
 	}
 	requireApplyPhase(t, storage, "Infrastructure", output.StatusOK)
-	requireApplyPhase(t, storage, "Prepare", output.StatusOK)
 	requireApplyPhase(t, storage, "Provision", output.StatusOK)
 	requireApplyPhase(t, storage, "Publish", output.StatusBlocked)
+	if phasePresent(storage, "Prepare") {
+		t.Fatalf("storage cluster should not expose a duplicate Prepare phase: %+v", storage.Phases)
+	}
 }
 
 func TestApplyPhaseStatusTerminalStates(t *testing.T) {
@@ -225,6 +227,15 @@ func requireApplyPhase(t *testing.T, line output.ClusterPhaseLine, label string,
 	t.Fatalf("%s missing phase %s in %+v", line.Name, label, line.Phases)
 }
 
+func phasePresent(line output.ClusterPhaseLine, label string) bool {
+	for _, phase := range line.Phases {
+		if phase.Label == label {
+			return true
+		}
+	}
+	return false
+}
+
 func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	clustersDir := filepath.Join(t.TempDir(), "clusters")
 	ledger := workflow.NewRunLedger("apply-test", "clusters", "", workflow.ConcurrencyLimits{}, []workflow.TaskLedgerEntry{{
@@ -238,7 +249,7 @@ func TestApplySummaryPrintsInstallerLogPath(t *testing.T) {
 	ledger.MarkRunning("wait.sno-libvirt", filepath.Join(clustersDir, "ansible-output.log"), time.Now())
 
 	var stdout bytes.Buffer
-	printApplyRunSummary(&stdout, clustersDir, ledger)
+	printApplyRunSummary(&stdout, clustersDir, nil, ledger)
 
 	want := workflow.OpenShiftInstallerLogPath(clustersDir, "sno-libvirt")
 	if !strings.Contains(stdout.String(), want) {
@@ -260,7 +271,7 @@ func TestApplySummaryPrintsClusterLogPaths(t *testing.T) {
 	}}, time.Now())
 
 	var stdout bytes.Buffer
-	printApplyRunSummary(&stdout, clustersDir, ledger)
+	printApplyRunSummary(&stdout, clustersDir, nil, ledger)
 
 	for _, want := range []string{
 		clusterLogPath,
@@ -391,7 +402,7 @@ exit 2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "provider",
-	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, false), nil)
+	}, converge.InfraScope.ApplyTarget(), "", []workflow.ApplyTask{task}, workflow.ConcurrencyLimits{Parallelism: 1}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, nil, false), nil)
 	if err == nil {
 		t.Fatalf("workflow.RunApplyTaskGraph succeeded unexpectedly\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
@@ -482,7 +493,7 @@ echo "ansible stderr ${cluster}" >&2
 		Executable:         executable,
 		BundleDir:          filepath.Join(dir, "bundle"),
 		ArtifactsBaseName:  "clusters",
-	}, converge.ClustersScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, false), nil)
+	}, converge.ClustersScope.ApplyTarget(), "", tasks, workflow.ConcurrencyLimits{}, newApplyReporter(&stdout, &stderr, "test", runsDir, clustersDir, nil, false), nil)
 	if err != nil {
 		t.Fatalf("workflow.RunApplyTaskGraph: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}

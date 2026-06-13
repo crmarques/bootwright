@@ -43,11 +43,12 @@ func buildStatusReport(cf *commonFlags) (status.Report, bool, error) {
 				ProviderStateDir:   vctx.ProviderStateDir,
 				SecretsDir:         vctx.SecretsDir,
 			},
-			Error:       err.Error(),
-			SetupChecks: contextValidateChecks(checks),
-			Clusters:    []status.Cluster{},
-			Shared:      []status.Shared{},
-			NextSteps:   contextValidateNextSteps(checks),
+			Error:           err.Error(),
+			SetupChecks:     contextValidateChecks(checks),
+			Clusters:        []status.Cluster{},
+			StorageClusters: []status.StorageCluster{},
+			Shared:          []status.Shared{},
+			NextSteps:       contextValidateNextSteps(checks),
 		}
 		return report, true, nil
 	}
@@ -70,9 +71,10 @@ func buildStatusReport(cf *commonFlags) (status.Report, bool, error) {
 			Source: stateSource(cf),
 			Loaded: stateLoaded,
 		},
-		Clusters:  []status.Cluster{},
-		Shared:    []status.Shared{},
-		NextSteps: nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir),
+		Clusters:        []status.Cluster{},
+		StorageClusters: []status.StorageCluster{},
+		Shared:          []status.Shared{},
+		NextSteps:       nextStepHints(stateLoaded, state, ctx.RenderedDir, ctx.ClustersDir, ctx.Name, ctx.SecretsDir),
 	}
 	setupChecks := contextReadinessChecks(ctx)
 	if loadErr != nil {
@@ -93,6 +95,7 @@ func buildStatusReport(cf *commonFlags) (status.Report, bool, error) {
 		report.Desired.ClusterAddonProfiles = len(state.ClusterAddonProfiles)
 		report.Desired.ClusterAddonBindings = len(state.ClusterAddonBindings)
 		report.Clusters = status.BuildClusters(state, ctx.RenderedDir, ctx.ClustersDir)
+		report.StorageClusters = status.BuildStorageClusters(state)
 		report.Shared = status.BuildShared(state)
 		report.Secrets, _ = declaredSecretEntriesForContext(ctx.Name, ctx.SecretsDir, state)
 	}

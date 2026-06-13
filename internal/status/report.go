@@ -13,6 +13,7 @@ import (
 	extensionrecords "github.com/crmarques/bootwright/internal/addons/records"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 type Report struct {
@@ -21,11 +22,21 @@ type Report struct {
 	SetupChecks      []SetupCheck        `json:"setupChecks,omitempty"`
 	Desired          Desired             `json:"desired"`
 	Clusters         []Cluster           `json:"clusters"`
+	StorageClusters  []StorageCluster    `json:"storageClusters"`
 	Shared           []Shared            `json:"shared"`
 	Secrets          []SecretEntry       `json:"secrets"`
 	NextSteps        []string            `json:"nextSteps"`
 	ApplyRun         *workflow.RunLedger `json:"applyRun,omitempty"`
 	ApplyRunActivity *ApplyRunActivity   `json:"applyRunActivity,omitempty"`
+}
+
+// StorageCluster is the JSON shape of a declared storage cluster in the status
+// report, so a managed Ceph cluster is reported alongside the container
+// clusters instead of only as a desired-state count.
+type StorageCluster struct {
+	Name       string `json:"name"`
+	Type       string `json:"type,omitempty"`
+	Management string `json:"management,omitempty"`
 }
 
 // SetupCheck is the JSON shape of a context readiness check in the status
@@ -94,6 +105,8 @@ type Cluster struct {
 	Name               string      `json:"name"`
 	InstallMode        string      `json:"installMode,omitempty"`
 	InstallMethod      string      `json:"installMethod,omitempty"`
+	Substrate          string      `json:"substrate,omitempty"`
+	HostCluster        string      `json:"hostCluster,omitempty"`
 	InstallerFreshness string      `json:"installerFreshness"`
 	InstallerPath      string      `json:"installerPath,omitempty"`
 	EffectiveStatePath string      `json:"effectiveStatePath,omitempty"`
@@ -139,10 +152,13 @@ func BuildClusters(state v1alpha1.State, renderedDir, clustersDir string) []Clus
 		ocp := byName[name]
 		installer := InstallerInstallConfigPath(clustersDir, name)
 		result := FreshnessForInstaller(freshness, installer)
+		sub := stateview.ContainerClusterSubstrate(state, ocp)
 		entry := Cluster{
 			Name:               name,
 			InstallMode:        v1alpha1.InstallMode(ocp),
 			InstallMethod:      ocp.Spec.Install.Method,
+			Substrate:          sub.Provider,
+			HostCluster:        sub.Host,
 			InstallerFreshness: result.State,
 			Addons:             extensionStatus[name],
 		}
@@ -155,6 +171,25 @@ func BuildClusters(state v1alpha1.State, renderedDir, clustersDir string) []Clus
 		}
 		out = append(out, entry)
 	}
+	return out
+}
+
+// BuildStorageClusters lists declared storage clusters (name, type, management)
+// for the status report, sorted by name.
+func BuildStorageClusters(state v1alpha1.State) []StorageCluster {
+	out := make([]StorageCluster, 0, len(state.StorageClusters))
+	for _, cluster := range state.StorageClusters {
+		management := cluster.Spec.Management
+		if management == "" {
+			management = v1alpha1.StorageClusterManagementManaged
+		}
+		out = append(out, StorageCluster{
+			Name:       cluster.Metadata.Name,
+			Type:       cluster.Spec.Type,
+			Management: management,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 

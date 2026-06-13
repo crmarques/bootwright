@@ -20,10 +20,11 @@ type applyReporter struct {
 	contextName string
 	runsDir     string
 	clustersDir string
+	displays    map[string]clusterDisplay
 	view        *output.RunView
 }
 
-func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir string, clustersDir string, streamAnsible bool) *applyReporter {
+func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir string, clustersDir string, displays map[string]clusterDisplay, streamAnsible bool) *applyReporter {
 	view := output.NewRunView(stdout)
 	if streamAnsible {
 		view.Streaming()
@@ -34,6 +35,7 @@ func newApplyReporter(stdout, stderr io.Writer, contextName string, runsDir stri
 		contextName: contextName,
 		runsDir:     runsDir,
 		clustersDir: clustersDir,
+		displays:    displays,
 		view:        view,
 	}
 }
@@ -43,12 +45,12 @@ func (r *applyReporter) RunStart(ledger workflow.RunLedger) {
 }
 
 func (r *applyReporter) StageSnapshot(ledger workflow.RunLedger) {
-	r.view.Render(applyRunFrame(ledger))
+	r.view.Render(applyRunFrame(ledger, r.displays))
 }
 
 func (r *applyReporter) RunSummary(ledger workflow.RunLedger) {
-	r.view.Finish(applyRunFrame(ledger))
-	printApplyRunSummary(r.stdout, r.clustersDir, ledger)
+	r.view.Finish(applyRunFrame(ledger, r.displays))
+	printApplyRunSummary(r.stdout, r.clustersDir, r.displays, ledger)
 }
 
 func (r *applyReporter) PromptGap() {
@@ -80,7 +82,7 @@ func printApplyRunStart(stdout io.Writer, contextName string, runsDir string, le
 	p.Fields(fields)
 }
 
-func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
+func printApplyRunSummary(stdout io.Writer, clustersDir string, displays map[string]clusterDisplay, ledger workflow.RunLedger) {
 	p := output.NewContinuation(stdout)
 	p.Section("Summary")
 	status := output.StatusOK
@@ -97,12 +99,13 @@ func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.
 		detail = "cancelled"
 	}
 	p.Status(status, ledger.Target+" apply", detail)
-	lines := make([]output.TaskLine, 0, len(ledger.ClusterNames()))
-	for _, cluster := range ledger.ClusterNames() {
+	names := orderClusterNames(ledger.ClusterNames(), displays)
+	lines := make([]output.TaskLine, 0, len(names))
+	for _, cluster := range names {
 		clusterStatus, clusterDetail := applyClusterLifecycleSummary(ledger, cluster)
 		lines = append(lines, output.TaskLine{
 			Status: clusterStatus,
-			Label:  cluster,
+			Label:  clusterGroupTitle(cluster, displays, ""),
 			Detail: clusterDetail,
 		})
 	}
@@ -111,19 +114,37 @@ func printApplyRunSummary(stdout io.Writer, clustersDir string, ledger workflow.
 	printApplyFailureDetails(stdout, clustersDir, ledger)
 }
 
-// applyClusterLogFields lists, per cluster, the bootwright run log (and the
-// OpenShift installer log for container clusters) so the Summary always points
-// the operator at the on-disk logs — ansible output never reaches the terminal.
+// applyClusterLogFields points the operator at the on-disk logs, ordered by
+// topology. ansible output never reaches the terminal, so each cluster keeps a
+// concise bootwright-log pointer. The verbose OpenShift installer log is added
+// only for a container cluster that did not finish cleanly — that is the only
+// time its detail is wanted — so a green fleet is not buried under an installer
+// path for every healthy cluster.
 func applyClusterLogFields(clustersDir string, ledger workflow.RunLedger) []output.Field {
 	var fields []output.Field
-	for _, cluster := range ledger.ClusterNames() {
+	for _, cluster := range orderClusterNames(ledger.ClusterNames(), nil) {
 		tasks := ledger.TasksForCluster(cluster)
 		fields = append(fields, output.Field{Key: cluster + " log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, cluster)})
-		if applyClusterKind(tasks) == "ContainerCluster" {
+		if applyClusterKind(tasks) == "ContainerCluster" && !applyClusterFullyDone(tasks) {
 			fields = append(fields, output.Field{Key: cluster + " installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, cluster)})
 		}
 	}
 	return fields
+}
+
+// applyClusterFullyDone reports whether every task of a cluster reached a clean
+// terminal state (OK or skipped), so a green cluster's logs can be omitted from
+// a Summary that is otherwise drawing attention to the clusters needing work.
+func applyClusterFullyDone(tasks []workflow.TaskLedgerEntry) bool {
+	for _, task := range tasks {
+		switch task.Status {
+		case workflow.TaskStatusOK, workflow.TaskStatusSkipped:
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workflow.RunLedger) {
@@ -135,7 +156,13 @@ func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workf
 			{Key: "reason", Value: applyFailureReason(task.Failure)},
 		}
 		if task.LogPath != "" {
-			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
+			fields = append(fields, output.Field{Key: "task log", Value: task.LogPath})
+		}
+		// An install-wait failure's root cause is in the OpenShift installer log,
+		// not the ansible task log — point straight at it so the operator does not
+		// have to know the runtime path by heart.
+		if task.Kind == workflow.ApplyTaskKindInstallWait && task.ClusterKind == workflow.ApplyClusterKindContainer && task.Cluster != "" {
+			fields = append(fields, output.Field{Key: "installer log", Value: workflow.OpenShiftInstallerLogPath(clustersDir, task.Cluster)})
 		}
 		p.Details(fields)
 	}
@@ -143,14 +170,14 @@ func printApplyFailureDetails(stdout io.Writer, clustersDir string, ledger workf
 		fields := []output.Field{
 			{Key: "blocked task", Value: applyTaskDisplayLabel(task.Label)},
 			{Key: "phase", Value: applyFailedPhase(ledger, task)},
-			{Key: "reason", Value: applyBlockedReason(task)},
+			{Key: "reason", Value: applyBlockedReason(ledger, task)},
 		}
 		if task.ClusterLogPath != "" {
-			fields = append(fields, output.Field{Key: "log", Value: task.ClusterLogPath})
+			fields = append(fields, output.Field{Key: "cluster log", Value: task.ClusterLogPath})
 		} else if task.LogPath != "" {
-			fields = append(fields, output.Field{Key: "log", Value: task.LogPath})
+			fields = append(fields, output.Field{Key: "cluster log", Value: task.LogPath})
 		} else if task.Cluster != "" {
-			fields = append(fields, output.Field{Key: "log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, task.Cluster)})
+			fields = append(fields, output.Field{Key: "cluster log", Value: workflow.ApplyClusterLogPath(clustersDir, ledger.RunID, task.Cluster)})
 		}
 		p.Details(fields)
 	}

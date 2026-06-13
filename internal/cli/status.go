@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/preflight"
 	"github.com/crmarques/bootwright/internal/state/graph"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/status"
 )
 
@@ -128,7 +128,11 @@ func runStatus(stdout io.Writer, cf *commonFlags) error {
 	}
 
 	ledger, ledgerFound, ledgerErr := workflow.LoadRunLedger(ctx.RunsDir)
-	printApplyLedgerStatus(p, ctx.RunsDir, ledger, ledgerFound, ledgerErr)
+	var displays map[string]clusterDisplay
+	if stateLoaded {
+		displays = buildClusterDisplays(state)
+	}
+	printApplyLedgerStatus(p, ctx.RunsDir, displays, ledger, ledgerFound, ledgerErr)
 
 	p.Section("Next steps")
 	var items []cliout.Item
@@ -178,23 +182,39 @@ func runStatusWatch(ctx context.Context, stdout io.Writer, cf *commonFlags, inte
 }
 
 func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, clustersDir string) {
-	if len(state.ContainerClusters) == 0 {
+	if len(state.ContainerClusters) == 0 && len(state.StorageClusters) == 0 {
 		return
 	}
 	p.Section("Clusters")
+	displays := buildClusterDisplays(state)
 	freshness := status.LoadEffectiveStateFreshness(state, renderedDir)
-	names := make([]string, 0, len(state.ContainerClusters))
-	byName := map[string]v1alpha1.ContainerCluster{}
-	for _, ocp := range state.ContainerClusters {
-		names = append(names, ocp.Metadata.Name)
-		byName[ocp.Metadata.Name] = ocp
-	}
-	sort.Strings(names)
 	addons := status.BuildAddons(state, clustersDir)
-	for _, name := range names {
-		ocp := byName[name]
-		detail := fmt.Sprintf("installMode=%s install=%s", v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
-		p.Status(cliout.StatusOK, name, detail)
+	containers := map[string]v1alpha1.ContainerCluster{}
+	storages := map[string]v1alpha1.StorageCluster{}
+	allNames := make([]string, 0, len(state.ContainerClusters)+len(state.StorageClusters))
+	for _, ocp := range state.ContainerClusters {
+		containers[ocp.Metadata.Name] = ocp
+		allNames = append(allNames, ocp.Metadata.Name)
+	}
+	for _, sc := range state.StorageClusters {
+		storages[sc.Metadata.Name] = sc
+		allNames = append(allNames, sc.Metadata.Name)
+	}
+	for _, name := range orderClusterNames(allNames, displays) {
+		if sc, ok := storages[name]; ok {
+			// Storage clusters get a row of their own so a managed Ceph cluster is
+			// not invisible next to the container clusters. The name badge is
+			// neutral INFO, not a green OK that would read as "installed".
+			p.Status(cliout.StatusInfo, name, storageStatusDetail(sc))
+			continue
+		}
+		ocp := containers[name]
+		sub := stateview.ContainerClusterSubstrate(state, ocp)
+		detail := fmt.Sprintf("%s  installMode=%s install=%s",
+			containerDescriptor(v1alpha1.DistributionType(ocp), sub), v1alpha1.InstallMode(ocp), ocp.Spec.Install.Method)
+		// INFO (neutral), not OK: the name line is identity, not health — the
+		// installer-freshness line below is the real readiness signal.
+		p.Status(cliout.StatusInfo, name, detail)
 		installer := status.InstallerInstallConfigPath(clustersDir, name)
 		result := status.FreshnessForInstaller(freshness, installer)
 		switch result.State {
@@ -223,6 +243,14 @@ func printClusterStatus(p *cliout.Printer, state v1alpha1.State, renderedDir, cl
 			p.Status(status, "addon "+extension.Name, detail)
 		}
 	}
+}
+
+func storageStatusDetail(sc v1alpha1.StorageCluster) string {
+	management := sc.Spec.Management
+	if management == "" {
+		management = v1alpha1.StorageClusterManagementManaged
+	}
+	return fmt.Sprintf("%s  management=%s", storageDescriptor(sc), management)
 }
 
 func printSharedStatus(p *cliout.Printer, state v1alpha1.State) {

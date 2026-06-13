@@ -67,7 +67,7 @@ func (v *RunView) Render(frame RunFrame) {
 		return
 	}
 	bp, buf := newBufferPrinter(v.p.color)
-	rows := bp.RenderFrame(frame, v.width)
+	rows := bp.RenderFrame(frame, v.width, true)
 	text := buf.String()
 	if v.open && text == v.last {
 		return
@@ -92,7 +92,7 @@ func (v *RunView) Finish(frame RunFrame) {
 		return
 	}
 	bp, buf := newBufferPrinter(v.p.color)
-	_ = bp.RenderFrame(frame, v.width)
+	_ = bp.RenderFrame(frame, v.width, true)
 	text := buf.String()
 	if v.open && v.lastHeight > 0 {
 		ClearLines(v.w, v.lastHeight)

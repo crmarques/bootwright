@@ -503,10 +503,14 @@ type RunFrame struct {
 
 // RenderFrame writes a RunFrame (header progress bar + grouped step list) and
 // returns the number of physical terminal rows it occupied. width<=0 disables
-// wrap accounting (one row per logical line). Callers that redraw in place clear
-// the returned row count before writing the next frame. RenderFrame is the only
-// frame writer, so all frame byte output stays in this allowlisted file.
-func (p *Printer) RenderFrame(frame RunFrame, width int) int {
+// wrap accounting (one row per logical line). collapse summarizes titled groups
+// whose every step finished cleanly to a single line — wanted for the live
+// in-place redraw (so the operator's eye lands on the groups still working)
+// but not for a one-shot `status` report, which prints the full record.
+// Callers that redraw in place clear the returned row count before writing the
+// next frame. RenderFrame is the only frame writer, so all frame byte output
+// stays in this allowlisted file.
+func (p *Printer) RenderFrame(frame RunFrame, width int, collapse bool) int {
 	if p == nil || p.w == nil {
 		return 0
 	}
@@ -522,6 +526,15 @@ func (p *Printer) RenderFrame(frame RunFrame, width int) int {
 		if i > 0 {
 			emit("")
 		}
+		if summary, done := finishedGroupSummary(group); collapse && done {
+			// Every step of a titled group reached a clean terminal state: collapse
+			// it to its heading plus a one-line summary so the operator's eye lands
+			// on the groups still doing work instead of scanning a wall of DONE
+			// steps. Groups with a failed/blocked/pending/running step (or no
+			// title, e.g. the destroy group) stay fully expanded.
+			emit("  " + p.style(group.Title+"  "+summary, color.Bold))
+			continue
+		}
 		if group.Title != "" {
 			emit("  " + p.style(group.Title, color.Bold))
 		}
@@ -531,6 +544,40 @@ func (p *Printer) RenderFrame(frame RunFrame, width int) int {
 	}
 	p.wrote = true
 	return rows
+}
+
+// finishedGroupSummary reports a collapsed one-line summary for a titled group
+// whose every step finished cleanly (DONE/SKIPPED/CANCELLED, none failed,
+// blocked, pending, or running). It returns ("", false) when the group must
+// stay expanded.
+func finishedGroupSummary(group StepGroup) (string, bool) {
+	if group.Title == "" || len(group.Steps) == 0 {
+		return "", false
+	}
+	done, skipped, cancelled := 0, 0, 0
+	for _, step := range group.Steps {
+		switch step.Status {
+		case StatusOK, StatusDone:
+			done++
+		case StatusSkip, StatusSkipped:
+			skipped++
+		case StatusCancel:
+			cancelled++
+		default:
+			return "", false
+		}
+	}
+	parts := make([]string, 0, 3)
+	if done > 0 {
+		parts = append(parts, fmt.Sprintf("%d done", done))
+	}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", skipped))
+	}
+	if cancelled > 0 {
+		parts = append(parts, fmt.Sprintf("%d cancelled", cancelled))
+	}
+	return "(" + strings.Join(parts, ", ") + ")", true
 }
 
 func (p *Printer) stepLine(step Step) string {

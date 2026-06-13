@@ -27,6 +27,8 @@ type ClusterSummary struct {
 	Name                     string   `json:"name"`
 	InstallMode              string   `json:"installMode"`
 	InstallMethod            string   `json:"installMethod"`
+	Substrate                string   `json:"substrate,omitempty"`
+	HostCluster              string   `json:"hostCluster,omitempty"`
 	KubeconfigPath           string   `json:"kubeconfigPath"`
 	KubeContextCommand       string   `json:"kubeContextCommand"`
 	APIURL                   string   `json:"apiURL"`
@@ -90,10 +92,13 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 		passwordPath := filepath.Join(clusterSecretsDir, "kubeadmin-password")
 		kubeconfig := FileStatus(kubeconfigPath)
 		password := FileStatus(passwordPath)
+		sub := stateview.ContainerClusterSubstrate(state, cluster)
 		out = append(out, ClusterSummary{
 			Name:                     name,
 			InstallMode:              v1alpha1.InstallMode(cluster),
 			InstallMethod:            cluster.Spec.Install.Method,
+			Substrate:                sub.Provider,
+			HostCluster:              sub.Host,
 			KubeconfigPath:           kubeconfigPath,
 			KubeContextCommand:       "KUBECONFIG=" + workflow.ShellQuote([]string{kubeconfigPath}),
 			APIURL:                   clusterAPIURL(name, baseDomain),

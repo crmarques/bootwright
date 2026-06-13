@@ -32,6 +32,8 @@ type clusterListEntry struct {
 	Management        string                 `json:"management,omitempty"`
 	InstallMode       string                 `json:"installMode,omitempty"`
 	InstallMethod     string                 `json:"installMethod,omitempty"`
+	Substrate         string                 `json:"substrate,omitempty"`
+	HostCluster       string                 `json:"hostCluster,omitempty"`
 	APIURL            string                 `json:"apiURL,omitempty"`
 	ConsoleURL        string                 `json:"consoleURL,omitempty"`
 	Kubeconfig        clusteraccess.Artifact `json:"kubeconfig,omitempty"`
@@ -202,7 +204,11 @@ func printClusterList(stdout io.Writer, summaries []clusteraccess.ClusterSummary
 		p.Section("Container clusters")
 	}
 	for _, summary := range summaries {
-		p.Status(clusterAccessStatus(summary), summary.Name, summary.InstallMode+" "+summary.InstallMethod)
+		detail := summary.InstallMode + " " + summary.InstallMethod
+		if sd := substrateDescriptor(summary.Substrate, summary.HostCluster); sd != "" {
+			detail += " · " + sd
+		}
+		p.Status(clusterAccessStatus(summary), summary.Name, detail)
 		p.Fields([]cliout.Field{
 			{Key: "API", Value: emptyAccessValue(summary.APIURL)},
 			{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
@@ -236,15 +242,21 @@ func printClusterAccessSummaries(stdout io.Writer, command string, summaries []c
 	}
 	for _, summary := range summaries {
 		p.Section("Cluster " + summary.Name)
-		p.Fields([]cliout.Field{
+		fields := []cliout.Field{
 			{Key: "API", Value: emptyAccessValue(summary.APIURL)},
 			{Key: "Console", Value: emptyAccessValue(summary.ConsoleURL)},
-			{Key: "Kubeconfig", Value: summary.KubeconfigPath},
-			{Key: "Kube context", Value: summary.KubeContextCommand},
-			{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
-			{Key: "Password file", Value: summary.KubeadminPasswordPath},
-			{Key: "Show password", Value: summary.KubeadminPasswordCommand},
-		})
+		}
+		if sd := substrateDescriptor(summary.Substrate, summary.HostCluster); sd != "" {
+			fields = append(fields, cliout.Field{Key: "Substrate", Value: sd})
+		}
+		fields = append(fields,
+			cliout.Field{Key: "Kubeconfig", Value: summary.KubeconfigPath},
+			cliout.Field{Key: "Kube context", Value: summary.KubeContextCommand},
+			cliout.Field{Key: "Kubeadmin user", Value: summary.KubeadminUsername},
+			cliout.Field{Key: "Password file", Value: summary.KubeadminPasswordPath},
+			cliout.Field{Key: "Show password", Value: summary.KubeadminPasswordCommand},
+		)
+		p.Fields(fields)
 		p.Status(accessArtifactStatus(summary.Kubeconfig), "kubeconfig", accessArtifactDetail(summary.Kubeconfig))
 		p.Status(accessArtifactStatus(summary.KubeadminPassword), "kubeadmin password", accessArtifactDetail(summary.KubeadminPassword))
 	}
@@ -259,6 +271,8 @@ func clusterListEntries(summaries []clusteraccess.ClusterSummary) []clusterListE
 			Name:              summary.Name,
 			InstallMode:       summary.InstallMode,
 			InstallMethod:     summary.InstallMethod,
+			Substrate:         summary.Substrate,
+			HostCluster:       summary.HostCluster,
 			APIURL:            summary.APIURL,
 			ConsoleURL:        summary.ConsoleURL,
 			Kubeconfig:        summary.Kubeconfig,

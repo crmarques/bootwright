@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -78,10 +79,11 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 	prev := ""
 	for _, step := range steps {
 		entry := TaskLedgerEntry{
-			ID:     step.id,
-			Kind:   step.kind,
-			Label:  step.label,
-			Status: TaskStatusPending,
+			ID:           step.id,
+			Kind:         step.kind,
+			Label:        step.label,
+			ResourceKeys: destroyStepClusters(state, step.kind),
+			Status:       TaskStatusPending,
 		}
 		if prev != "" {
 			entry.Dependencies = []string{prev}
@@ -96,6 +98,27 @@ func destroyChain(state v1alpha1.State, limit string, extraVars []string, steps 
 		prev = step.id
 	}
 	return tasks
+}
+
+// destroyStepClusters lists the clusters a cluster-stage teardown step covers,
+// so the ledger entry (and the progress frame/summary built from it) can name
+// them. The host-group infra steps are not per-cluster, so they carry none.
+func destroyStepClusters(state v1alpha1.State, kind string) []string {
+	var names []string
+	switch kind {
+	case DestroyTaskKindStorageCluster:
+		for _, cluster := range state.StorageClusters {
+			names = append(names, cluster.Metadata.Name)
+		}
+	case DestroyTaskKindContainerCluster:
+		for _, cluster := range state.ContainerClusters {
+			names = append(names, cluster.Metadata.Name)
+		}
+	default:
+		return nil
+	}
+	sort.Strings(names)
+	return names
 }
 
 // PrepareDestroyTaskGraph mints the destroy run ID and resolves concurrency

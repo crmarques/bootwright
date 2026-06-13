@@ -92,7 +92,7 @@ func TestRenderFrameFormat(t *testing.T) {
 				{ID: "b", Label: "Machine infra", Status: StatusRunning, Detail: "0m12s"},
 			},
 		}},
-	}, 0)
+	}, 0, false)
 
 	want := "" +
 		"\n" +
@@ -106,6 +106,43 @@ func TestRenderFrameFormat(t *testing.T) {
 	}
 	if rows != 6 {
 		t.Fatalf("rows = %d, want 6", rows)
+	}
+}
+
+func TestRenderFrameCollapsesFinishedGroups(t *testing.T) {
+	frame := RunFrame{
+		BarLabel: "Fleet", Done: 2, Total: 3,
+		Groups: []StepGroup{
+			{Title: "done-cluster", Steps: []Step{
+				{ID: "a", Label: "Install", Status: StatusDone},
+				{ID: "b", Label: "Addon", Status: StatusSkipped},
+			}},
+			{Title: "busy-cluster", Steps: []Step{
+				{ID: "c", Label: "Install", Status: StatusRunning},
+			}},
+		},
+	}
+
+	// collapse=true: the all-terminal group becomes a one-liner; the active group
+	// keeps its steps.
+	p, buf := newBufferPrinter(false)
+	p.RenderFrame(frame, 0, true)
+	got := buf.String()
+	if !strings.Contains(got, "done-cluster  (1 done, 1 skipped)") {
+		t.Fatalf("finished group not collapsed:\n%s", got)
+	}
+	if strings.Contains(got, "[DONE] Install") {
+		t.Fatalf("collapsed group should not list steps:\n%s", got)
+	}
+	if !strings.Contains(got, "[RUNNING] Install") {
+		t.Fatalf("active group must stay expanded:\n%s", got)
+	}
+
+	// collapse=false: every group is fully listed (the one-shot status record).
+	p2, buf2 := newBufferPrinter(false)
+	p2.RenderFrame(frame, 0, false)
+	if !strings.Contains(buf2.String(), "[DONE] Install") {
+		t.Fatalf("collapse=false must list finished steps:\n%s", buf2.String())
 	}
 }
 

@@ -16,7 +16,7 @@ func TestApplyRunFrameGroupsInfraAndClusters(t *testing.T) {
 		{ID: "storage.bar", Kind: workflow.ApplyTaskKindStorageCluster, Label: "storage bar", Cluster: "bar", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusPending},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger)
+	frame := applyRunFrame(ledger, nil)
 
 	if frame.BarLabel != "Provisioning Progress" || frame.Total != 4 {
 		t.Fatalf("bar label/total = %q/%d, want Provisioning Progress/4", frame.BarLabel, frame.Total)
@@ -50,7 +50,7 @@ func TestApplyRunFrameOrdersClusterStepsByDependencies(t *testing.T) {
 		{ID: "storageinfra.ceph", Kind: workflow.ApplyTaskKindStorageInfra, Label: "storage infra ceph", Cluster: "ceph", ClusterKind: workflow.ApplyClusterKindStorage, Status: workflow.TaskStatusOK},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger)
+	frame := applyRunFrame(ledger, nil)
 
 	if len(frame.Groups) != 1 || len(frame.Groups[0].Steps) != 2 {
 		t.Fatalf("groups = %+v, want one group with two steps", frame.Groups)
@@ -69,7 +69,7 @@ func TestApplyRunFrameInfraOnlyHasNonClusterGroup(t *testing.T) {
 		{ID: "provider", Kind: workflow.ApplyTaskKindProvider, Label: "provider services", Status: workflow.TaskStatusRunning},
 	}, time.Now())
 
-	frame := applyRunFrame(ledger)
+	frame := applyRunFrame(ledger, nil)
 	if len(frame.Groups) != 1 || frame.Groups[0].Title != "infra" {
 		t.Fatalf("groups = %+v, want a single infra group", frame.Groups)
 	}
@@ -98,11 +98,11 @@ func TestApplyStepStatusMapping(t *testing.T) {
 
 func TestApplyStepDetailSurfacesFailureReason(t *testing.T) {
 	task := workflow.TaskLedgerEntry{Status: workflow.TaskStatusFailed, Failure: "failure: bootstrap timed out"}
-	if got := applyStepDetail(task); got != "bootstrap timed out" {
+	if got := applyStepDetail(task, workflow.RunLedger{}); got != "bootstrap timed out" {
 		t.Fatalf("failure detail = %q, want bootstrap timed out", got)
 	}
 	blocked := workflow.TaskLedgerEntry{Status: workflow.TaskStatusBlocked, SkippedReason: "dependency install.foo failed"}
-	if got := applyStepDetail(blocked); got != "dependency install.foo failed" {
+	if got := applyStepDetail(blocked, workflow.RunLedger{}); got != "dependency install.foo failed" {
 		t.Fatalf("blocked detail = %q", got)
 	}
 }
