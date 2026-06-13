@@ -1821,6 +1821,11 @@ func TestLocalRootGateArgs(t *testing.T) {
 		{args: []string{"destroy", "--stage", "clusters"}, want: true},
 		{args: []string{"destroy", "--stage", "bogus"}, want: false},
 		{args: []string{"destroy", "cluster"}, want: false},
+		// --clusters without --stage infers --stage clusters, which needs root.
+		{args: []string{"destroy", "--clusters", "ceph-ibm"}, want: true},
+		{args: []string{"destroy", "--clusters=ceph-ibm"}, want: true},
+		{args: []string{"destroy", "--clusters", ""}, want: false},
+		{args: []string{"destroy", "--stage", "infra", "--clusters", "artifact-server"}, want: true},
 		{args: []string{"render"}, want: false},
 		{args: []string{"render", "--clusters", "managed-01"}, want: false},
 		{args: []string{"render", "installer"}, want: true},

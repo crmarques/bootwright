@@ -300,14 +300,26 @@ func destroyArgsSelectRootfulTarget(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
+	stage := ""
+	hasClusters := false
 	for i, arg := range args {
-		if arg == "--stage" && i+1 < len(args) {
-			return args[i+1] == "infra" || args[i+1] == "clusters"
-		}
-		if strings.HasPrefix(arg, "--stage=") {
-			stage := strings.TrimPrefix(arg, "--stage=")
-			return stage == "infra" || stage == "clusters"
+		switch {
+		case arg == "--stage" && i+1 < len(args):
+			stage = args[i+1]
+		case strings.HasPrefix(arg, "--stage="):
+			stage = strings.TrimPrefix(arg, "--stage=")
+		case arg == "--clusters" && i+1 < len(args):
+			hasClusters = strings.TrimSpace(args[i+1]) != ""
+		case strings.HasPrefix(arg, "--clusters="):
+			hasClusters = strings.TrimSpace(strings.TrimPrefix(arg, "--clusters=")) != ""
 		}
 	}
-	return false
+	if stage != "" {
+		return stage == "infra" || stage == "clusters"
+	}
+	// No explicit --stage: `destroy` infers --stage clusters when --clusters
+	// names objects, which needs local root just like an explicit stage. Mirror
+	// that inference here so escalation happens before context resolution
+	// (otherwise a non-root run fails to lstat the root-owned context).
+	return hasClusters
 }
