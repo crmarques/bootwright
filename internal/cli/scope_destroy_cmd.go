@@ -33,6 +33,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		askBecomePass bool
 		yes           bool
 		override      bool
+		forceUnowned  bool
 		stage         string
 		streamAnsible bool
 	)
@@ -61,6 +62,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 	cmd.Flags().BoolVar(&askBecomePass, "ask-become-pass", askBecomePassDefault(), "prompt for the Ansible become password; defaults to false when bootwright runs as root, true otherwise")
 	cmd.Flags().BoolVar(&yes, "yes", false, "skip the destroy confirmation prompt")
 	cmd.Flags().BoolVar(&override, "override", false, "authorize protected destroy or otherwise unsafe Bootwright-owned destroy operations; does not imply --yes")
+	cmd.Flags().BoolVar(&forceUnowned, "force-unowned", false, "tear down machine VMs (libvirt/KubeVirt/vSphere) that match the Bootwright naming but carry no confirming ownership marker; use after the desired-state names changed post-apply. Does not relax the Ceph ownership gates or device data-safety checks, and does not imply --yes")
 	cmd.Flags().BoolVar(&streamAnsible, "stream-ansible", false, "stream raw ansible teardown output to the terminal as well as the destroy log (default: log only)")
 	if options.stageSelector {
 		flags.output = outputText
@@ -168,6 +170,16 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_destroy_cluster_scope="+strings.Join(scope, ","))
 				}
 			}
+		}
+		if forceUnowned {
+			// Relax the per-VM ownership-marker refusals in the machine substrate
+			// destroy roles (libvirt/KubeVirt/vSphere) so a domain/VM that matches
+			// the Bootwright naming but carries a missing or mismatched marker —
+			// e.g. after the desired-state names changed post-apply — is still torn
+			// down. The Ceph ownership gates and the device data-safety checks are
+			// independent and stay closed; this is orthogonal to --override
+			// (protected-environment authorization), which never reaches Ansible.
+			plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_destroy_force_unowned=true")
 		}
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate

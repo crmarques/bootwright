@@ -3082,46 +3082,70 @@ func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
 func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read libvirt domain ownership metadata")
+	decideIdx := findAnsibleTask(t, tasks, "Resolve libvirt domain ownership for destroy")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to destroy a non-Bootwright libvirt domain")
 	stopIdx := findAnsibleTask(t, tasks, "Stop libvirt domain")
 	undefineIdx := findAnsibleTask(t, tasks, "Undefine libvirt domain")
-	if !(readIdx < refuseIdx && refuseIdx < stopIdx && stopIdx < undefineIdx) {
-		t.Fatalf("libvirt destroy must read and verify domain ownership before stop/undefine (read=%d refuse=%d stop=%d undefine=%d)", readIdx, refuseIdx, stopIdx, undefineIdx)
+	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < stopIdx && stopIdx < undefineIdx) {
+		t.Fatalf("libvirt destroy must read, decide, and verify domain ownership before stop/undefine (read=%d decide=%d refuse=%d stop=%d undefine=%d)", readIdx, decideIdx, refuseIdx, stopIdx, undefineIdx)
 	}
 	read, ok := tasks[readIdx]["ansible.builtin.command"].(map[string]any)
 	if !ok || !strings.Contains(fmt.Sprint(read["argv"]), "dumpxml") {
 		t.Fatalf("libvirt destroy ownership probe must run virsh dumpxml, got %v", tasks[readIdx])
 	}
+	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("libvirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
+	}
+	owned := fmt.Sprint(decide["bootwright_libvirt_destroy_owned"])
+	for _, want := range []string{"<bootwright:context>", "<bootwright:cluster>", "<bootwright:machine>"} {
+		if !strings.Contains(owned, want) {
+			t.Fatalf("libvirt destroy ownership decision must require the Bootwright ownership marker %q, got %v", want, decide["bootwright_libvirt_destroy_owned"])
+		}
+	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("libvirt destroy ownership guard must be an assert, got %v", tasks[refuseIdx])
 	}
-	that := fmt.Sprint(refuse["that"])
-	for _, want := range []string{"<bootwright:context>", "<bootwright:cluster>", "<bootwright:machine>"} {
-		if !strings.Contains(that, want) {
-			t.Fatalf("libvirt destroy guard must require the Bootwright ownership marker %q, got %v", want, refuse["that"])
-		}
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_libvirt_destroy_owned") {
+		t.Fatalf("libvirt destroy guard must require the decided ownership fact, got %v", refuse["that"])
+	}
+	// --force-unowned relaxes the refusal so a renamed/unmarked domain is still
+	// torn down; the marker mismatch must otherwise stay fail-closed.
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
+		t.Fatalf("libvirt destroy guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 }
 
 func TestKubeVirtDestroyVerifiesOwnershipLabel(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_kubevirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read KubeVirt VirtualMachine ownership label")
+	decideIdx := findAnsibleTask(t, tasks, "Resolve KubeVirt VirtualMachine ownership for destroy")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to delete a non-Bootwright KubeVirt VirtualMachine")
 	deleteIdx := findAnsibleTask(t, tasks, "Delete KubeVirt VirtualMachine")
-	if !(readIdx < refuseIdx && refuseIdx < deleteIdx) {
-		t.Fatalf("kubevirt destroy must read and verify the ownership label before deleting (read=%d refuse=%d delete=%d)", readIdx, refuseIdx, deleteIdx)
+	if !(readIdx < decideIdx && decideIdx < refuseIdx && refuseIdx < deleteIdx) {
+		t.Fatalf("kubevirt destroy must read, decide, and verify the ownership label before deleting (read=%d decide=%d refuse=%d delete=%d)", readIdx, decideIdx, refuseIdx, deleteIdx)
+	}
+	decide, ok := tasks[decideIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("kubevirt destroy ownership decision must be a set_fact, got %v", tasks[decideIdx])
+	}
+	owned := fmt.Sprint(decide["bootwright_kubevirt_destroy_owned"])
+	if !strings.Contains(owned, "bootwright_kubevirt_vm_owner") || !strings.Contains(owned, "'bootwright'") {
+		t.Fatalf("kubevirt destroy ownership decision must require the live owner label to equal bootwright, got %v", decide["bootwright_kubevirt_destroy_owned"])
 	}
 	refuse, ok := tasks[refuseIdx]["ansible.builtin.assert"].(map[string]any)
 	if !ok {
 		t.Fatalf("kubevirt delete guard must be an assert, got %v", tasks[refuseIdx])
 	}
-	that := fmt.Sprint(refuse["that"])
-	if !strings.Contains(that, "bootwright_kubevirt_vm_owner") || !strings.Contains(that, "'bootwright'") {
-		t.Fatalf("kubevirt delete guard must require the live owner label to equal bootwright, got %v", refuse["that"])
+	if got := fmt.Sprint(refuse["that"]); !strings.Contains(got, "bootwright_kubevirt_destroy_owned") {
+		t.Fatalf("kubevirt delete guard must require the decided ownership fact, got %v", refuse["that"])
 	}
 	if !strings.Contains(fmt.Sprint(refuse["fail_msg"]), "managed-by") {
 		t.Fatalf("kubevirt delete guard message must name the managed-by ownership label, got %v", refuse["fail_msg"])
+	}
+	if got := fmt.Sprint(tasks[refuseIdx]["when"]); !strings.Contains(got, "not (bootwright_destroy_force_unowned") {
+		t.Fatalf("kubevirt delete guard must be skipped under --force-unowned, got when=%v", tasks[refuseIdx]["when"])
 	}
 }
 

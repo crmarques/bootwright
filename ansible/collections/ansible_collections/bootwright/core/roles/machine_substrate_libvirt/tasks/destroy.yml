@@ -23,19 +23,47 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve libvirt domain ownership for destroy
+  ansible.builtin.set_fact:
+    bootwright_libvirt_destroy_owned: >-
+      {{
+        ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+        and ('<bootwright:cluster>' ~ bootwright_current_cluster.name ~ '</bootwright:cluster>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+        and ('<bootwright:machine>' ~ bootwright_component.name ~ '</bootwright:machine>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+      }}
+  changed_when: false
+  when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+
+# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
+# domain that matches the <cluster>-<machine> naming but carries a missing or
+# mismatched marker — e.g. after the desired-state names changed post-apply — is
+# still torn down. Without it, the marker mismatch fails closed as before.
 - name: Refuse to destroy a non-Bootwright libvirt domain
   ansible.builtin.assert:
     that:
-      - ('<bootwright:context>' ~ (bootwright_clusters_dir | dirname | basename) ~ '</bootwright:context>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
-      - ('<bootwright:cluster>' ~ bootwright_current_cluster.name ~ '</bootwright:cluster>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
-      - ('<bootwright:machine>' ~ bootwright_component.name ~ '</bootwright:machine>') in (bootwright_libvirt_destroy_domain_xml.stdout | default(''))
+      - bootwright_libvirt_destroy_owned | default(false) | bool
     fail_msg: >-
       Refusing to destroy libvirt domain
       {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}:
       it carries no Bootwright ownership marker for this context/cluster/machine,
       so it may be a foreign domain that happens to match the naming. Verify the
-      domain before removing it manually, then retry.
-  when: bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+      domain before removing it manually, then retry, or pass --force-unowned to
+      tear it down anyway.
+  when:
+    - bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+    - not (bootwright_destroy_force_unowned | default(false) | bool)
+
+- name: Warn before force-destroying an unowned libvirt domain
+  ansible.builtin.debug:
+    msg: >-
+      --force-unowned: destroying libvirt domain
+      {{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}
+      despite a missing or mismatched Bootwright ownership marker for this
+      context/cluster/machine.
+  when:
+    - bootwright_libvirt_destroy_domain_xml.rc | default(1) == 0
+    - bootwright_destroy_force_unowned | default(false) | bool
+    - not (bootwright_libvirt_destroy_owned | default(false) | bool)
 
 - name: Stop libvirt domain
   community.libvirt.virt:

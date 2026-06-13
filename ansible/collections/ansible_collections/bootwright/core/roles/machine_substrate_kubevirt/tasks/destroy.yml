@@ -38,14 +38,37 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve KubeVirt VirtualMachine ownership for destroy
+  ansible.builtin.set_fact:
+    bootwright_kubevirt_destroy_owned: >-
+      {{ (bootwright_kubevirt_vm_owner.rc | default(1)) != 0
+         or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright' }}
+  changed_when: false
+
+# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a
+# VirtualMachine that matches the computed name but carries a missing or
+# mismatched managed-by label — e.g. after the desired-state names changed
+# post-apply — is still deleted. Without it, the mismatch fails closed as before.
 - name: Refuse to delete a non-Bootwright KubeVirt VirtualMachine
   ansible.builtin.assert:
     that:
-      - (bootwright_kubevirt_vm_owner.rc | default(1)) != 0 or (bootwright_kubevirt_vm_owner.stdout | default('') | trim) == 'bootwright'
+      - bootwright_kubevirt_destroy_owned | default(false) | bool
     fail_msg: >-
       Refusing to delete VirtualMachine {{ bootwright_kubevirt_vm_name }} in namespace
       {{ bootwright_kubevirt_namespace }}: it exists but is not labelled
       bootwright.io/managed-by=bootwright, so it is not a Bootwright-owned resource.
+      Pass --force-unowned to delete it anyway.
+  when: not (bootwright_destroy_force_unowned | default(false) | bool)
+
+- name: Warn before force-deleting an unowned KubeVirt VirtualMachine
+  ansible.builtin.debug:
+    msg: >-
+      --force-unowned: deleting VirtualMachine {{ bootwright_kubevirt_vm_name }} in
+      namespace {{ bootwright_kubevirt_namespace }} despite a missing or mismatched
+      bootwright.io/managed-by=bootwright ownership label.
+  when:
+    - bootwright_destroy_force_unowned | default(false) | bool
+    - not (bootwright_kubevirt_destroy_owned | default(false) | bool)
 
 - name: Stop KubeVirt VirtualMachine
   ansible.builtin.command:

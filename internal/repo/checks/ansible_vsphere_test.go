@@ -1,6 +1,7 @@
 package repocheck
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,16 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("vsphere destroy ownership assertion missing marker %q", marker)
 		}
+	}
+	// --force-unowned relaxes the refusal so a renamed/unmarked VM is still
+	// deleted; without it the marker mismatch stays fail-closed and gated on
+	// VM presence for idempotency.
+	assertWhen := fmt.Sprint(tasks[assertIdx]["when"])
+	if !strings.Contains(assertWhen, "bootwright_vsphere_vm_present") {
+		t.Fatalf("vsphere destroy guard must stay gated on VM presence, got when=%v", tasks[assertIdx]["when"])
+	}
+	if !strings.Contains(assertWhen, "not (bootwright_destroy_force_unowned") {
+		t.Fatalf("vsphere destroy guard must be skipped under --force-unowned, got when=%v", tasks[assertIdx]["when"])
 	}
 	deleteTask := tasks[deleteIdx]
 	when, _ := deleteTask["when"].(string)

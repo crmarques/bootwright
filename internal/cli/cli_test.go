@@ -638,6 +638,60 @@ func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testi
 	}
 }
 
+// TestDestroyForceUnownedEmitsExtraVar pins that --force-unowned (and only that
+// flag) feeds the bootwright_destroy_force_unowned extra-var the machine
+// substrate destroy roles read to relax their per-VM ownership-marker refusals.
+func TestDestroyForceUnownedEmitsExtraVar(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+
+	help, stderr, code := runCLI(t, "destroy", "--help")
+	if code != 0 {
+		t.Fatalf("destroy --help exited %d, stderr=%q", code, stderr)
+	}
+	if !strings.Contains(help, "--force-unowned") {
+		t.Fatalf("destroy help must document --force-unowned:\n%s", help)
+	}
+
+	// Without the flag the destroy carries no force-unowned extra-var.
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --stage infra dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
+		t.Fatalf("destroy without --force-unowned must not emit the force extra-var: %#v", report.ExtraVars)
+	}
+
+	// With --force-unowned the machine-substrate ownership-bypass var is set.
+	stdout, stderr, code = runCLI(t,
+		"destroy",
+		"--stage", "infra",
+		"--force-unowned",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy --stage infra --force-unowned dry-run exited %d, stderr=%q", code, stderr)
+	}
+	report = scopeDryRunReport{}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_destroy_force_unowned=true") {
+		t.Fatalf("destroy --force-unowned must emit the force extra-var: %#v", report.ExtraVars)
+	}
+}
+
 // TestDestroyFullDryRunJSONPlansClustersThenInfra locks in that `destroy`
 // without --stage tears down the whole context: the JSON dry-run reports the
 // ordered task chain (clusters then infra) and enables the orphan-reclaim

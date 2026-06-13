@@ -1023,6 +1023,15 @@ Rules:
 - `destroy --stage infra|clusters --override` is required when selected state
   contains `Environment.spec.safety.destroyProtection: requiredOverride`.
   `--yes` only skips the confirmation prompt and never implies `--override`.
+- `destroy --force-unowned` relaxes the machine-substrate teardown ownership
+  gates only: it tears down a libvirt domain, KubeVirt VirtualMachine, or vSphere
+  VM that matches the Bootwright `<cluster>-<machine>` naming but carries a
+  missing or mismatched ownership marker — the recovery path when the
+  desired-state names changed after the resources were applied. It is orthogonal
+  to `--override` (it neither authorizes protected-environment teardown nor is
+  authorized by it), does not relax the Ceph cluster or OSD-device ownership
+  gates, never relaxes the device data-safety checks (a mounted, in-use, or
+  unprobeable device still fails closed), and does not imply `--yes`.
 - `apply` reconciles by default: it creates missing objects, skips objects
   whose recorded desired state matches the current desired state, and fails
   closed on drift or foreign ownership before any mutation. `apply

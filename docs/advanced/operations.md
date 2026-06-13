@@ -103,6 +103,32 @@ bootwright destroy --stage clusters --override
     On a protected context a `destroy` without `--override` fails closed,
     regardless of `--yes`.
 
+## Force-destroying renamed or unmarked machines
+
+Each machine substrate (libvirt, KubeVirt, vSphere) refuses to tear down a
+VM that matches the Bootwright `<cluster>-<machine>` naming but carries no
+ownership marker for **this** context, cluster, and machine — a foreign VM that
+merely shares the name must never be destroyed. The same guard fires when you
+rename a machine or cluster after applying: the live VM still carries the *old*
+marker, so the teardown no longer recognizes it as its own and stops with
+"it carries no Bootwright ownership marker for this context/cluster/machine".
+
+`--force-unowned` is the recovery path: it tells the machine-substrate teardown
+to remove a matching VM despite a missing or mismatched marker.
+
+```text
+bootwright destroy --clusters ceph-storage --force-unowned --yes
+```
+
+!!! warning "`--force-unowned` is scoped to machine VMs"
+    It relaxes only the libvirt/KubeVirt/vSphere per-VM ownership-marker
+    refusals. It does **not** relax the Ceph cluster or OSD-device ownership
+    gates, and it never relaxes the device data-safety checks (a mounted,
+    in-use, or unprobeable device still fails closed). It is independent of
+    `--override` (protected-environment teardown) and does not imply `--yes`.
+    Because it removes a VM Bootwright cannot positively confirm it owns,
+    confirm the target VM is yours before using it.
+
 ## The fail-closed `apply --override` pattern
 
 `apply --override` authorizes Bootwright-owned destructive *rebuilds* — drifted

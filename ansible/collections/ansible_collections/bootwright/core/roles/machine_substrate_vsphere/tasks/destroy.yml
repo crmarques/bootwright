@@ -56,19 +56,43 @@
     bootwright_vsphere_vm_annotation: "{{ bootwright_vsphere_destroy_info.instance.annotation | default('') }}"
   changed_when: false
 
+- name: Resolve vSphere VM ownership for destroy
+  ansible.builtin.set_fact:
+    bootwright_vsphere_destroy_owned: >-
+      {{ ('bootwright:context=' ~ (bootwright_clusters_dir | dirname | basename)) in bootwright_vsphere_vm_annotation
+         and ('bootwright:cluster=' ~ bootwright_current_cluster.name) in bootwright_vsphere_vm_annotation
+         and ('bootwright:machine=' ~ bootwright_component.name) in bootwright_vsphere_vm_annotation }}
+  changed_when: false
+  when: bootwright_vsphere_vm_present | bool
+
+# --force-unowned (bootwright_destroy_force_unowned) relaxes this refusal so a VM
+# that matches the <cluster>-<machine> naming but carries a missing or mismatched
+# annotation marker — e.g. after the desired-state names changed post-apply — is
+# still deleted. Without it, the marker mismatch fails closed as before.
 - name: Refuse to delete a non-Bootwright vSphere VM
   ansible.builtin.assert:
     that:
-      - ('bootwright:context=' ~ (bootwright_clusters_dir | dirname | basename)) in bootwright_vsphere_vm_annotation
-      - ('bootwright:cluster=' ~ bootwright_current_cluster.name) in bootwright_vsphere_vm_annotation
-      - ('bootwright:machine=' ~ bootwright_component.name) in bootwright_vsphere_vm_annotation
+      - bootwright_vsphere_destroy_owned | default(false) | bool
     fail_msg: >-
       Refusing to delete vSphere VM {{ bootwright_vsphere_vm_name }} on
       {{ bootwright_vsphere.server }}: it carries no Bootwright ownership
       marker for this context/cluster/machine, so it may be a foreign VM
       that happens to match the naming. Verify the VM before removing it
-      manually, then retry.
-  when: bootwright_vsphere_vm_present | bool
+      manually, then retry, or pass --force-unowned to delete it anyway.
+  when:
+    - bootwright_vsphere_vm_present | bool
+    - not (bootwright_destroy_force_unowned | default(false) | bool)
+
+- name: Warn before force-deleting an unowned vSphere VM
+  ansible.builtin.debug:
+    msg: >-
+      --force-unowned: deleting vSphere VM {{ bootwright_vsphere_vm_name }} on
+      {{ bootwright_vsphere.server }} despite a missing or mismatched Bootwright
+      ownership marker for this context/cluster/machine.
+  when:
+    - bootwright_vsphere_vm_present | bool
+    - bootwright_destroy_force_unowned | default(false) | bool
+    - not (bootwright_vsphere_destroy_owned | default(false) | bool)
 
 - name: Power off vSphere VM
   community.vmware.vmware_guest_powerstate:

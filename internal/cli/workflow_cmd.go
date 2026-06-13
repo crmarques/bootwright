@@ -157,6 +157,10 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
   # Destroy a protected environment
   bootwright destroy --stage infra --override --yes
 
+  # Tear down VMs that match the naming but lost their ownership marker
+  # (e.g. machine or cluster names changed after the last apply)
+  bootwright destroy --clusters ceph-storage --force-unowned --yes
+
   # Remove only the generated artifact publication service
   bootwright destroy --stage infra --clusters artifact-server --yes
 
