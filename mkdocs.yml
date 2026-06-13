@@ -100,12 +100,22 @@ nav:
   - Concepts: concepts.md
   - Advanced:
       - advanced/index.md
+      - Advanced Examples: advanced/examples.md
       - Providers: advanced/providers.md
       - Networking and Load Balancing: advanced/networking.md
       - Proxy and Disconnected Installs: advanced/proxy-and-disconnected.md
       - Post-Install Add-ons: advanced/post-install-addons.md
+      - Ceph Storage Clusters: advanced/storage-ceph.md
       - Secrets: advanced/secrets.md
       - Architecture: advanced/architecture.md
+  - API Reference:
+      - api/index.md
+      - Environment: api/environment.md
+      - Machines and OS: api/machines.md
+      - Infrastructure: api/infrastructure.md
+      - ContainerCluster: api/container-cluster.md
+      - Storage: api/storage.md
+      - Add-ons: api/addons.md
   - Troubleshooting: troubleshooting.md
 
 copyright: >-

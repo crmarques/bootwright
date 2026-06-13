@@ -55,9 +55,10 @@ The user-facing docs are published from [`docs/`](docs/) as this [link](https://
 
 | Audience | Start |
 | --- | --- |
-| Newcomers | [Home](docs/index.md) and [Concepts](docs/concepts.md) |
-| First context and apply flow | [Getting Started](docs/getting-started.md) |
-| Authoring real environments | [Advanced](docs/advanced/) — providers, networking, proxy/disconnected, secrets |
+| Newcomers | [Home](docs/index.md) and [Getting Started](docs/getting-started.md) |
+| Understanding the model | [Concepts](docs/concepts.md) |
+| Authoring real environments | [Advanced](docs/advanced/) — examples, providers, networking, proxy/disconnected, storage, add-ons, secrets |
+| Field-level schema lookup | [API Reference](docs/api/index.md) |
 | Contributors and coding agents | [Specs](specs/index.md) |
 | Architecture decisions | [ADRs](specs/adr/README.md) |
 

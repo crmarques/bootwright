@@ -1,246 +1,228 @@
 ---
 title: Concepts
-description: How Bootwright distributes installer input across desired-state objects.
+description: Desired-state ownership, references, contexts, apply stages, and extensions.
 ---
 
 # Concepts
 
-Bootwright keeps installer-compatible fields close to the object that owns the
-operational fact. The renderer then merges those objects into the input files
-that installer and provider CLIs consume, including `install-config.yaml`,
-`agent-config.yaml`, provider variables, cephadm specs, and add-on input effect
-manifests.
+Bootwright is built around one rule: every operational fact has one owning
+object. Rendering then combines those objects into the concrete inputs consumed
+by `openshift-install`, provider adapters, cephadm, and add-on apply tasks.
 
-Authored desired-state YAML uses block-style mappings in examples, e2e inputs,
-fixtures, and scaffold output. Keep each object field on its own indented line
-instead of compact inline maps.
+## Desired State
+
+Desired state is the user-facing API. It is plain YAML using
+`apiVersion: bootwright.io/v1alpha1`. Generated installer files, inventories,
+runtime locks, logs, kubeconfigs, and secret-inlined files are outputs. Do not
+edit generated output as source of truth.
+
+Desired state is loaded, normalized, validated, rendered, and applied:
+
+```text
+YAML -> strict decode -> normalize defaults -> validate -> render -> apply/status
+```
+
+Strict decode means unknown fields fail. There are no migrations or aliases for
+retired `v1alpha1` shapes.
 
 ## Object Ownership
 
-| Kind | Ownership boundary |
+| Kind | Owns |
 | --- | --- |
-| `Environment` | Fleet-wide defaults, selected resource files, cluster selection, service access catalog, secret sources, mirrors, component images |
-| `Machine` | SSH access to a machine that can run substrate or service actions |
-| `MachineImage` | Bootable install media for managed OS installs: ISO location and package install source |
-| `MachineInstallProfile` | Reusable managed OS install settings: OS family, installer, customizations |
-| `InfraProvider` | Capability inventory: bare-metal machines and virtual machine profiles |
-| `InfraComponent` | Machine-bound shared infra services and routable endpoints |
-| `NetworkConfig` | Reusable machine-network CIDRs and NMState templates |
-| `ContainerCluster` | Distribution, release, install mode, platform render mode, endpoints, cluster networking, machine pools, and node-to-machine bindings |
-| `StorageCluster` | External storage intent, either Bootwright-managed Ceph through cephadm or imported Ceph |
-| `StoragePlacementPolicy` | Ceph placement and replicated-pool policy |
-| `StoragePool` | Ceph pool role, placement, and replication settings |
-| `StorageFilesystem` | CephFS metadata/data pool mapping and MDS placement |
-| `StorageObjectGateway` | RGW service with its owned public endpoint and cephadm ingress VIPs |
-| `StorageExport` | Storage services prepared for downstream consumers |
-| `ClusterAddon` | Reusable post-install component applied inside an installed cluster |
-| `ClusterAddonProfile` | Ordered group of add-ons and nested profiles |
-| `ClusterAddonBinding` | One cluster's post-install bootstrap set: add-ons, profiles, and binding-scoped add-on inputs |
+| `Environment` | Fleet defaults, selected resources, selected clusters, secret declarations, service catalog, proxy and registry defaults, install trust, entitlements, and component image pins. |
+| `Machine` | A raw, managed-OS, or OS-ready machine: capabilities, substrate binding, hardware inventory, OS mode, install network, named addresses, and durable SSH access. |
+| `MachineImage` | Bootable OS install media for managed machine OS installs. |
+| `MachineInstallProfile` | Reusable managed OS installer settings and customizations. |
+| `InfraProvider` | Substrate capability: libvirt, bare metal, vSphere, KubeVirt, machine profiles, provider facts, and network attachments. |
+| `InfraComponent` | Machine-bound shared services such as load balancers, artifact servers, DNS, NTP, proxies, and registries. |
+| `NetworkConfig` | Reusable machine-network CIDRs, name-resolution selections, and NMState templates. |
+| `ContainerCluster` | OpenShift or OKD install intent: distribution, release, install mode, platform render mode, endpoints, networking, pools, and node binding. |
+| `StorageCluster` | Imported or Bootwright-managed Ceph storage intent. |
+| `StoragePlacementPolicy` | Reusable Ceph placement and replicated-pool defaults. |
+| `StoragePool` | Ceph pool role, protection type, placement, replication, and application. |
+| `StorageFilesystem` | CephFS filesystem and metadata/data pool mapping. |
+| `StorageObjectGateway` | RGW public endpoint and cephadm ingress placement. |
+| `StorageExport` | Storage services exported for downstream consumers such as Data Foundation. |
+| `ClusterAddon` | A reusable post-install component applied to an installed cluster. |
+| `ClusterAddonProfile` | An ordered reusable add-on set. |
+| `ClusterAddonBinding` | One cluster's selected profiles, add-ons, and binding-scoped input values. |
 
-## Reference Flow
+## References
+
+References are local names. Most reference fields end in `Ref` or `Refs` and are
+authored as plain strings:
+
+```yaml
+machineRef: my-sno-lab-master-0
+networkConfigRef: my-sno-lab-bridge
+componentRef: load-balancer
+credentialsRef: bmc-credentials
+```
+
+The main flows are:
 
 ```text
-ContainerCluster.spec.hosts[*].machineRef
+ContainerCluster.spec.hosts[].machineRef
   -> Machine
-  -> InfraProvider (Machine.spec.substrate.providerRef / profileRef)
+  -> InfraProvider through Machine.spec.substrate.providerRef
 
 Machine.spec.network.config.networkConfigRef
   -> NetworkConfig
 
-Environment.infraComponents.*.componentRef
-  -> InfraComponent service
-  -> Machine
+Machine.spec.network.config.attachmentRef
+  -> InfraProvider.spec.networkAttachments[].name
+
+Environment.spec.infraComponents.*[].componentRef
+  -> InfraComponent
+  -> Machine through InfraComponent service placement
 
 ClusterAddonBinding
   -> ClusterAddonProfile
   -> ClusterAddon
 
-KubeVirt child InfraProvider
-  -> host ContainerCluster
-  -> ClusterAddon providing kubevirt
-
 ClusterAddonBinding.addons[].inputs[]
   -> StorageExport
   -> StorageCluster
-  -> Machine (managed storage only)
-  -> Machine
-  -> ClusterAddon providing dataFoundation
 ```
 
-`ContainerCluster` has no top-level infrastructure pointer. Each node selects
-the exact `Machine` that backs it through `spec.hosts[].machineRef`; each
-`Machine` owns its own substrate binding and install network. A `Machine` is
-node-bound by at most one cluster: `machineRef` entries must be disjoint
-across every `ContainerCluster` and `StorageCluster`.
+`Environment.spec.containerClusters[]` and `storageClusters[]` are selection
+lists, not references. When set, they decide which loaded clusters are active
+for validation, render, apply, status, and destroy.
 
-Bootwright and OpenShift installer actions run on the bastion host where the
-CLI is invoked. Desired state only selects substrate and service hosts.
+## Contexts
 
-Storage actions also run from the bastion. For managed storage, Bootwright can
-first install managed RHEL machines from `MachineImage` and
-`MachineInstallProfile` through the provider/BMC virtual-media path. It then
-schedules an Ansible storage task that SSHes to the RHEL Ceph seed node,
-prepares every declared storage node, runs cephadm there, and applies generated
-core services, storage operations, late RGW/MDS services, and Data Foundation
-credential operations from the rendered storage tree. The managed Ceph
-declaration selects `spec.ceph.distribution`. Upstream/community installs use
-`distribution: oss`, where Bootwright configures the upstream community Ceph
-repository on each node with cephadm; `spec.ceph.community.mirror` points at a
-download.ceph.com mirror for disconnected sites. `spec.ceph.release` picks the
-Ceph release — an upstream name like `squid` (the floating latest stable) or a
-reproducible `x.y.z` such as `19.2.1` — and `spec.ceph.image` pins the exact
-cephadm container image (a version tag or digest), the lever that makes the
-running cluster version reproducible; an `x.y.z` release derives
-`quay.io/ceph/ceph:vX.Y.Z` automatically. Because cephadm's `add-repo`
-enables EPEL unconditionally on EL nodes, the OSS path also installs
-`epel-release` from Fedora so the step succeeds on unregistered RHEL. Red Hat and IBM installs
-reference named `Environment.spec.entitlements[]` entries for RHSM, registry
-entitlement, and license material; `spec.ceph.release` selects their product
-stream and `spec.ceph.image` pins their (non-`x.y.z`) registry image explicitly. Secret bytes never appear in desired state. For imported storage,
-`StorageCluster.spec.management: external` skips storage provisioning; the
-Data Foundation add-on declares an `external-storage` input with a
-`storageExportAttachment` effect, bindings provide `exportRef`, and
-`StorageExport.spec.externalDetails.fromSecretRef` points to the
-operator-provided external-cluster details secret. The attachment applies later
-in the add-ons phase after the target
-cluster and Data Foundation add-on are ready. Managed Ceph generates those
-details during storage apply and saves them as restrictive runtime secret
-material.
+A context gives Bootwright a current input directory and a protected local state
+directory:
 
-## KubeVirt Child Clusters
+| Data | Location |
+| --- | --- |
+| Current context selection | `~/.bootwright/contexts.yaml` |
+| Authored YAML | The operator-owned directory passed to `context init -f` |
+| Context state | `/var/lib/bootwright/contexts/<context>` |
+| Secrets | `/var/lib/bootwright/contexts/<context>/secrets` |
+| Run logs and ledgers | `/var/lib/bootwright/contexts/<context>/runs` |
+| Cluster outputs | `/var/lib/bootwright/contexts/<context>/clusters/<cluster>` |
 
-A virtualized child OpenShift cluster is still declared as its own
-`ContainerCluster`. The child cluster's `Machine` objects select a KubeVirt
-`InfraProvider` machine profile, and that profile points either at a
-Bootwright-managed host cluster with `hostClusterRef` or at an external
-virtualization cluster kubeconfig with `kubeconfigRef`.
+Run Bootwright as your user. The CLI re-executes through `sudo` when it needs
+protected state.
 
-When `hostClusterRef` is used, the host cluster must be installed and bound to
-a `ClusterAddon` with `provides: [kubevirt]`. `bootwright apply --yes`
-orders child VM infrastructure after the host install wait and the KubeVirt
-add-on readiness wait. Scoped child applies do not install the host
-implicitly; apply the host first or include it in `--clusters`.
+## Providers, Machines, And Platform Mode
+
+Substrate facts stay on `Machine` and `InfraProvider`; cluster install intent
+stays on `ContainerCluster`.
+
+`ContainerCluster.spec.install.platform.type` is the installer platform render
+mode, not the provider type:
+
+| Topology | Platform mode |
+| --- | --- |
+| Redfish virtual media on real bare metal | `baremetal` |
+| Libvirt VM with emulated Redfish | `baremetal` |
+| vSphere agent install | `vsphere` |
+| KubeVirt-hosted child machines | `none` |
+| Operator-owned external platform | `external` |
+
+Single-node topologies render `platform.none` unless `external` is explicitly
+selected, because the OpenShift agent installer rejects several platform blocks
+for one-control-plane clusters.
+
+## Networks And Endpoints
+
+`NetworkConfig` owns installer machine networks and reusable NMState templates.
+A machine selects a template with `Machine.spec.network.config.networkConfigRef`
+and a provider attachment with `attachmentRef`.
+
+Static install IPs should be authored once in `Machine.spec.addresses[]` and
+referenced from `Machine.spec.network.config.interfaceAddresses[]`. Use
+`overrides` for extra NMState such as routes, bonds, or non-address attributes.
+
+Cluster endpoints live in `ContainerCluster.spec.install.endpoints` under the
+closed slots `api`, `api-int`, and `ingress`. Endpoint sources are:
+
+| Source | Meaning |
+| --- | --- |
+| `openshift` | The installer or cluster owns the endpoint; an address is required. |
+| `external` | Operator-owned load balancer or DNS; an address is required. |
+| `infraComponent` | Bootwright-managed load balancer selected by `componentRef`. |
+
+## Secrets
+
+Desired state declares secret names, never bytes. `Environment.spec.secrets`
+can declare context-local secrets, file-sourced secrets, or generated material.
+Consumers reference those names through fields such as `pullSecretRef`,
+`credentialsRef`, `trustBundleRef`, `keyRef`, and `nodeSSH.keyPairRef`.
+
+Context-local secret material is encrypted at rest. Generated installer files
+that inline secret material are runtime outputs and must stay unversioned.
+
+## Apply Stages
+
+The normal command is:
+
+```text
+bootwright apply --yes
+```
+
+It runs the full graph: infrastructure first, then cluster and storage work,
+then add-ons and integrations.
+
+Advanced recovery can select stages:
+
+| Stage | Includes |
+| --- | --- |
+| `infra` | Provider hosts, substrate state, shared infra components, and selected machines. |
+| `clusters` | Cluster prerequisites, OpenShift or OKD install, managed storage, add-ons, and storage attachments. |
+| `fabric` | Provider and shared-service preparation. |
+| `machines` | Machine infrastructure and managed OS work. |
+| `deps` | Cluster-stage prerequisites. |
+| `base` | Container and storage cluster base install. |
+| `addons` | Post-install add-ons and declared integrations. |
+
+`--clusters` accepts a comma-separated list of `ContainerCluster` and
+`StorageCluster` names. Those two kinds share one cluster selection namespace.
+
+## Convergence And Drift
+
+Bootwright records non-secret desired hashes and ownership evidence while it
+mutates resources. Re-running `apply` creates what is missing, skips completed
+matching work when a concrete probe supports it, and fails closed when recorded
+state is foreign or unsafe to resume.
+
+Use `bootwright state-check` to compare selected desired state with the last
+recorded apply. It is read-only and reports `missing`, `match`, `drift`, and
+`foreign` without contacting hosts.
+
+`apply --expect-new` asserts a greenfield run. `apply --override` is
+break-glass recovery for owned drift that Bootwright knows how to rebuild.
+
+## Storage
+
+Storage is separate from `ContainerCluster`. Imported storage references
+operator-supplied details. Managed storage uses `StorageCluster` plus
+storage sub-objects to render cephadm inputs, bootstrap Ceph on selected
+machines, apply pools, filesystems, RGW, and prepare downstream export data.
+
+Storage declarations can then be consumed by add-on inputs. For example, a Data
+Foundation add-on can declare a `storageExportAttachment` input effect, and a
+`ClusterAddonBinding` can provide the `StorageExport` name for one installed
+cluster.
+
+Detailed Ceph behavior is covered in [Ceph Storage Clusters](advanced/storage-ceph.md).
 
 ## Post-Install Add-Ons
 
-Post-install bootstrap components are separate from cluster provisioning.
-`ContainerCluster.spec.install` remains focused on producing an installed
-OpenShift or OKD cluster. Early platform components such as OpenShift
-Virtualization are declared as `ClusterAddon` resources, grouped with
-`ClusterAddonProfile`, and attached to installed clusters with
-`ClusterAddonBinding`.
+Post-install bootstrap components do not live under
+`ContainerCluster.spec.install`. They are separate `ClusterAddon` resources,
+optionally grouped in `ClusterAddonProfile`, and attached to installed clusters
+with `ClusterAddonBinding`.
 
-MVP add-on types are `olm` and `manifestSet`. Profile expansion is
-deterministic: referenced `profiles` expand in declared order, then direct
-`addons` append in declared order, and duplicate add-ons are removed by
-first occurrence. Each `ClusterAddonBinding` names exactly one cluster with
-`clusterRef`; use multiple binding resources for multiple clusters.
+Add-ons can advertise capabilities such as `kubevirt` and `dataFoundation`.
+Other resources can wait for those capabilities before applying dependent work,
+such as KubeVirt child clusters or Data Foundation external-mode attachments.
 
-`bootwright apply --yes` is the end-to-end converge path and includes
-infrastructure, storage, cluster install, and bound post-install components.
-The same command re-runs a partial or completed apply: it creates what is
-missing, skips what already matches, and fails on drift. Add `--expect-new` to
-refuse pre-existing objects on a first run; use `--override` only to rebuild
-drifted owned objects. Use `bootwright apply --stage infra --yes` or
-`bootwright apply --stage clusters --yes` for advanced recovery or maintenance
-when you intentionally want one slice of the graph.
+## Where To Go Next
 
-## NMState Templates
-
-`NetworkConfig` carries two installer-facing pieces:
-
-- `machineNetwork[]` renders to `install-config.yaml` when selected by a
-  machine.
-- `template.networkConfig` renders to each agent host after overrides.
-
-Substrate network surfaces, such as libvirt bridges, vSphere portgroups,
-KubeVirt NADs, and bare-metal VLANs, live in
-`InfraProvider.spec.networkAttachments[]`. A cluster selects them with
-`Machine.spec.network.config.attachmentRef`. On a provider-backed machine an
-omitted `attachmentRef` defaults to the `networkConfigRef` name — accepted
-only while the provider declares a single attachment; with several,
-validation requires an authored `attachmentRef`.
-
-Most provider-sourced nodes reuse the same NMState template and set their static
-install IP through `Machine.spec.network.config.interfaceAddresses[]`, which
-references a named `Machine.spec.addresses[]` entry; `overrides` carries other
-NMState (bonds, routes) but not the install IP. Advanced provider-sourced nodes
-may instead provide a full inline `Machine.spec.network.config.spec`.
-
-Provider MAC inventory, or deterministic generated MACs for Bootwright-created
-virtual machines, is merged into `agent-config.yaml hosts[].interfaces[]` and
-matching NMState interfaces.
-
-Endpoint definitions stay on `ContainerCluster.spec.install.endpoints` under
-the closed `api`, `api-int`, and `ingress` keys; `StorageObjectGateway` owns
-its RGW public and ingress endpoints directly. Effective VIPs must land inside
-one selected machine-network CIDR.
-
-DNS resolver intent is intentionally outside raw NMState when it selects a
-managed or external Bootwright name-resolution entry. Put the service reference
-in `NetworkConfig.spec.nameResolutionRefs[]`; leave `template.networkConfig.dns-resolver`
-for literal resolver IPs that are not modeled as Bootwright services.
-
-## Distribution And Release
-
-`ContainerCluster.spec.distribution` supports:
-
-- OpenShift by default, with exact OCP version, optional channel, or explicit
-  release image
-- `type: okd`, preferably with an explicit OKD release image
-
-OpenShift channel derivation is only applied to OpenShift exact versions.
-OKD does not require a Red Hat pull secret by default.
-
-## Platform Mode
-
-`ContainerCluster.spec.install.platform.type` decides installer platform rendering. It is
-not the substrate type; `InfraProvider` owns whether the backing machines come
-from libvirt, bare metal, vSphere, or another substrate.
-
-- `baremetal`
-- `vsphere`
-- `none`
-- `external`
-
-Because it is the render mode and not the substrate, the value follows the
-install path rather than the provider:
-
-| Install path / topology | `platform.type` |
-| --- | --- |
-| Redfish virtual-media agent install (real bare metal, or libvirt with emulated Redfish) | `baremetal` |
-| vSphere agent install | `vsphere` |
-| KubeVirt-hosted machines (Bootwright only prepares the VMs) | `none` |
-| Externally-managed platform | `external` |
-| Single-node (any of the above) | rendered `none` automatically; the authored value is overridden unless `external` is set |
-
-Bare-metal provisioning network values are lowercase: `disabled`, `managed`,
-or `unmanaged`. `disabled` uses the existing machine network, which is the
-normal Redfish virtual-media agent-install mode.
-
-For single-node clusters, Bootwright renders installer `platform.none` unless
-`platform.type: external` is selected. The authored `ContainerCluster` still owns
-the selected machines, endpoints, and managed components.
-
-## Managed Components
-
-Machine-bound shared services live in `InfraComponent` objects. `ContainerCluster`
-references load balancers from endpoints, `Environment` selects proxy,
-artifact, and registry access, and `NetworkConfig.spec.nameResolutionRefs[]`
-selects environment name-resolution entries.
-
-| Service intent | Selector | Implementation owner |
-| --- | --- | --- |
-| Proxy for Bootwright and cluster install traffic | `Environment.spec.infraComponents.proxies[]` plus `proxyFor` | External connection in `Environment`, or managed `InfraComponent.spec.proxy` |
-| Name resolution for installer host networking | `NetworkConfig.spec.nameResolutionRefs[]` selecting `Environment.spec.infraComponents.nameResolution[]` | External IPs in `Environment`, or managed `InfraComponent.spec.nameResolution` |
-| NTP sources for agent installs | `Environment.spec.infraComponents.ntp[]` | External IPs or hostnames in `Environment`, or managed `InfraComponent.spec.ntp` |
-| Artifact publication for Redfish media and disconnected install files | `ContainerCluster.spec.install.artifactAccess` selecting `Environment.spec.infraComponents.artifactServers[]` | Managed `InfraComponent.spec.artifactServer` endpoints and listeners |
-| Mirror registry for disconnected installs | `Environment.spec.registries.mirror` and managed registry catalog entries | External mirror URL in `Environment`, or managed `InfraComponent.spec.registry` |
-| Load balancer VIPs | `ContainerCluster.spec.install.endpoints.*.source` | Managed `InfraComponent.spec.loadBalancer`, OpenShift, or operator-owned external addresses |
-
-Generated artifact publication is derived from install requirements and uses
-an `InfraComponent` with `spec.artifactServer`. The artifact server selects a
-host, listeners, and named endpoints.
-`ContainerCluster.spec.install.artifactAccess` binds each consumer path, such as Redfish
-virtual media or disconnected cluster install, to the endpoint that component
-can reach.
+- Use [Getting Started](getting-started.md) for the first complete apply path.
+- Use [Advanced](advanced/index.md) for provider, networking, storage, and
+  recovery scenarios.
+- Use [API Reference](api/index.md) for field-level options.
