@@ -1,0 +1,37 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph-bridge
+spec:
+  machineNetwork:
+    - cidr: 192.168.140.0/24
+
+  # Resolve internal names (node hostnames, the RGW S3 endpoint) via the
+  # dnsmasq InfraComponent running on the bastion at 192.168.140.1.
+
+  nameResolutionRefs:
+    - lab-dns
+
+  template:
+    networkConfig:
+      interfaces:
+        - name: primary
+          type: ethernet
+          state: up
+          ipv4:
+            enabled: true
+            dhcp: false
+          ipv6:
+            enabled: false
+      dns-resolver:
+        config:
+          server:
+            - 192.168.140.1
+      routes:
+        config:
+          # Default route via the bastion/bridge gateway. This must NAT to the
+          # internet so nodes can reach RHSM, cp.icr.io, and IBM's repo host.
+          - destination: 0.0.0.0/0
+            next-hop-address: 192.168.140.1
+            next-hop-interface: primary
+            table-id: 254

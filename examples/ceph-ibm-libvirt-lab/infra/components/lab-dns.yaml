@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraComponent
+metadata:
+  name: lab-dns
+spec:
+  type: nameResolution
+
+  nameResolution:
+    implementation: dnsmasq
+    machineRef: bastion
+    bindAddress: 192.168.140.1
+    port: 53
+    # Authoritatively serve lab records and forward everything else (e.g.
+    # cp.icr.io, public.dhe.ibm.com, subscription.rhsm.redhat.com, NTP pools)
+    # to public resolvers, so the IBM Storage Ceph flow can pull packages,
+    # register with RHSM, and reach the container registry.
+    forwarders:
+      - 1.1.1.1
+      - 9.9.9.9
+    # Resolve the RGW S3 endpoint to the ingress VIP (192.168.140.80).
+    additionalIngressHosts:
+      - rgw.ceph.bootwright.test
