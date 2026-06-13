@@ -145,6 +145,61 @@ func TestSelectSubscriptionProviderResolvesStreamAndImage(t *testing.T) {
 	}
 }
 
+func TestSelectResolvesContainerImageBase(t *testing.T) {
+	cluster := func(distribution, release, image string) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{Spec: v1alpha1.StorageClusterSpec{Ceph: &v1alpha1.StorageClusterCephSpec{
+			Distribution: distribution,
+			Release:      release,
+			Image:        image,
+		}}}
+	}
+	cases := []struct {
+		name         string
+		distribution string
+		release      string
+		image        string
+		want         string
+	}{
+		// Unset image derives the vendor/upstream repository from the stream.
+		{"ibm default stream", v1alpha1.StorageCephDistributionIBM, "", "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
+		{"ibm explicit stream", v1alpha1.StorageCephDistributionIBM, "10", "", "cp.icr.io/cp/ibm-ceph/ceph-10-rhel9"},
+		{"redhat default stream", v1alpha1.StorageCephDistributionRedHat, "", "", "registry.redhat.io/rhceph/rhceph-9-rhel9"},
+		{"oss release name", v1alpha1.StorageCephDistributionOSS, "squid", "", "quay.io/ceph/ceph"},
+		{"oss version", v1alpha1.StorageCephDistributionOSS, "19.2.1", "", "quay.io/ceph/ceph"},
+		// An explicit image pins the base to its repository, tag or digest stripped.
+		{"ibm pinned digest", v1alpha1.StorageCephDistributionIBM, "", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc", "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"},
+		{"redhat pinned tag", v1alpha1.StorageCephDistributionRedHat, "10.1", "registry.redhat.io/rhceph/rhceph-10-rhel9:10", "registry.redhat.io/rhceph/rhceph-10-rhel9"},
+		{"oss pinned tag", v1alpha1.StorageCephDistributionOSS, "19.2.1", "quay.io/ceph/ceph:v19.2.1", "quay.io/ceph/ceph"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := Select(cluster(tc.distribution, tc.release, tc.image), nil, "/context/secrets")
+			if provider.ImageBase != tc.want {
+				t.Fatalf("ImageBase = %q, want %q", provider.ImageBase, tc.want)
+			}
+			if got := Vars(provider)["imageBase"]; got != tc.want {
+				t.Fatalf("imageBase var = %v, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestImageRepositoryStripsTagAndDigest(t *testing.T) {
+	cases := map[string]string{
+		"cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:abc": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+		"registry.redhat.io/rhceph/rhceph-10-rhel9:10":  "registry.redhat.io/rhceph/rhceph-10-rhel9",
+		"quay.io/ceph/ceph:v19.2.1":                     "quay.io/ceph/ceph",
+		"quay.io/ceph/ceph":                             "quay.io/ceph/ceph",
+		// A registry host:port is preserved; only the final segment's tag is cut.
+		"registry.example.test:5000/ceph/ceph:v1": "registry.example.test:5000/ceph/ceph",
+	}
+	for in, want := range cases {
+		if got := imageRepository(in); got != want {
+			t.Fatalf("imageRepository(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestSelectRedHatProviderProjectsEntitlement(t *testing.T) {
 	env := &v1alpha1.Environment{Spec: v1alpha1.EnvironmentSpec{Entitlements: []v1alpha1.EnvironmentEntitlement{{
 		Name:     "rhcs",

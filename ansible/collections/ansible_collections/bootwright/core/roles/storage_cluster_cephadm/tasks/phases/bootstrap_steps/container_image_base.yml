@@ -1,0 +1,38 @@
+---
+# cephadm resolves `ceph orch upgrade ls` and the dashboard "Upgrade" page from
+# mgr/cephadm/container_image_base, not from the running daemon image. Its
+# compiled-in default is the Red Hat Ceph Storage image even on IBM Storage Ceph
+# (which is built from Red Hat Ceph Storage), so an IBM cluster — entitled only
+# to cp.icr.io — gets a 401 from registry.redhat.io on every upgrade check. Pin
+# the base to the distribution's own image repository (cp.icr.io for ibm,
+# registry.redhat.io for redhat, quay.io for oss) so upgrade discovery queries a
+# registry the cluster can authenticate to. Read-then-set keeps it idempotent and
+# re-asserts drift on every apply; runs only on the seed, where the admin keyring
+# lives. Skipped when no base is known (an oss release-name image that floats).
+- name: Read current cephadm container image base
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - config
+      - get
+      - mgr
+      - mgr/cephadm/container_image_base
+  register: bootwright_ceph_image_base_current
+  changed_when: false
+  failed_when: false
+  when: bootwright_ceph_image_base | default('') | length > 0
+
+- name: Pin cephadm container image base to the distribution registry
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - config
+      - set
+      - mgr
+      - mgr/cephadm/container_image_base
+      - "{{ bootwright_ceph_image_base }}"
+  register: bootwright_ceph_image_base_set
+  changed_when: true
+  when:
+    - bootwright_ceph_image_base | default('') | length > 0
+    - (bootwright_ceph_image_base_current.stdout | default('') | trim) != bootwright_ceph_image_base

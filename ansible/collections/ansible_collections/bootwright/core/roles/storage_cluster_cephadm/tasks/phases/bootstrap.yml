@@ -13,6 +13,9 @@
     - name: Stamp Ceph ownership marker
       ansible.builtin.include_tasks: bootstrap_steps/ownership_marker.yml
 
+    - name: Pin cephadm container image base
+      ansible.builtin.include_tasks: bootstrap_steps/container_image_base.yml
+
     - name: Capture dashboard bootstrap secret
       ansible.builtin.include_tasks: bootstrap_steps/dashboard_secret.yml
 

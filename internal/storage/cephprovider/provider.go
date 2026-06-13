@@ -23,6 +23,19 @@ const (
 	// IBM's release stream (cephadm-ansible's ceph_ibm_version), selected by
 	// spec.ceph.release; the "-rhel-9" suffix carries the RHEL track separately.
 	ibmStorageCephRepoTemplate = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/ibm-storage-ceph-%s-rhel-9.repo"
+
+	// ibmImageBaseTemplate and rhcephImageBaseTemplate are the vendor container
+	// image repositories cephadm lists upgrade targets from: the dashboard
+	// "Upgrade" page and `ceph orch upgrade ls` resolve against
+	// mgr/cephadm/container_image_base, NOT the running daemon image. The "%s"
+	// segment is the product stream major selected by spec.ceph.release; the
+	// "-rhel9" suffix matches the RHEL track the images are built for. cephadm's
+	// compiled-in default base is the Red Hat image even on IBM Storage Ceph
+	// (which is built from Red Hat Ceph Storage), so for IBM the base must be
+	// pinned to cp.icr.io — where the cluster is entitled — or upgrade discovery
+	// 401s against registry.redhat.io.
+	ibmImageBaseTemplate    = "cp.icr.io/cp/ibm-ceph/ceph-%s-rhel9"
+	rhcephImageBaseTemplate = "registry.redhat.io/rhceph/rhceph-%s-rhel9"
 )
 
 const (
@@ -56,6 +69,7 @@ type distributionDef struct {
 	baseRepos           []string // stream-independent subscription-manager repositories
 	usesRHCephToolsRepo bool     // append rhceph-<stream>-tools (Red Hat Ceph Storage)
 	ibmRepoTemplate     string   // vendor .repo template taking the stream major, when set
+	imageBaseTemplate   string   // container image repository template (stream major), when set
 	runtimeOS           RuntimeOS
 }
 
@@ -81,16 +95,18 @@ var distributions = map[string]distributionDef{
 		registryURL:         RedHatRegistryURL,
 		baseRepos:           []string{rhelBaseOSRepo, rhelAppStreamRepo},
 		usesRHCephToolsRepo: true,
+		imageBaseTemplate:   rhcephImageBaseTemplate,
 		runtimeOS:           rhelCephRuntimeOS("Red Hat Ceph Storage requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
 	},
 	v1alpha1.StorageCephDistributionIBM: {
-		requiresRHSM:     true,
-		requiresRegistry: true,
-		requiresLicense:  true,
-		registryURL:      IBMRegistryURL,
-		baseRepos:        []string{rhelBaseOSRepo, rhelAppStreamRepo},
-		ibmRepoTemplate:  ibmStorageCephRepoTemplate,
-		runtimeOS:        rhelCephRuntimeOS("IBM Storage Ceph requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
+		requiresRHSM:      true,
+		requiresRegistry:  true,
+		requiresLicense:   true,
+		registryURL:       IBMRegistryURL,
+		baseRepos:         []string{rhelBaseOSRepo, rhelAppStreamRepo},
+		ibmRepoTemplate:   ibmStorageCephRepoTemplate,
+		imageBaseTemplate: ibmImageBaseTemplate,
+		runtimeOS:         rhelCephRuntimeOS("IBM Storage Ceph requires RHEL 9.6, 9.7, 10, or 10.1 on storage nodes"),
 	},
 }
 
@@ -106,7 +122,14 @@ type Provider struct {
 	// Image, when set, is the fully-qualified cephadm bootstrap container image
 	// that pins every Ceph daemon. It is explicit for redhat and ibm and either
 	// explicit or derived from an oss x.y.z release.
-	Image      string
+	Image string
+	// ImageBase is the bare container image repository (no tag or digest) that
+	// cephadm lists upgrade targets from via mgr/cephadm/container_image_base. It
+	// is the repository of an explicit Image when one is pinned, otherwise the
+	// distribution's vendor repository derived from the release stream. Pinned on
+	// the cluster at apply time so upgrade discovery queries the registry the
+	// cluster is entitled to rather than cephadm's compiled-in default.
+	ImageBase  string
 	Community  Community
 	Repository Repository
 	RuntimeOS  RuntimeOS
@@ -189,6 +212,39 @@ func ossImage(cluster v1alpha1.StorageCluster, community Community) string {
 	return ""
 }
 
+// imageRepository strips the tag or digest from a fully-qualified container
+// image reference, yielding the bare repository cephadm lists upgrade tags from
+// (mgr/cephadm/container_image_base). A registry host:port is preserved; only a
+// trailing :tag or @digest on the final path segment is removed.
+func imageRepository(image string) string {
+	if at := strings.IndexByte(image, '@'); at >= 0 {
+		image = image[:at]
+	}
+	segStart := strings.LastIndexByte(image, '/') + 1
+	if colon := strings.IndexByte(image[segStart:], ':'); colon >= 0 {
+		return image[:segStart+colon]
+	}
+	return image
+}
+
+// imageBase resolves the container image repository cephadm pins into
+// mgr/cephadm/container_image_base. An explicit image wins (its repository); for
+// an unset image it is the upstream repository (oss) or the vendor repository
+// derived from the release stream (redhat, ibm). Empty only for a distribution
+// that declares no image repository, which leaves the base to cephadm's default.
+func imageBase(distribution string, def distributionDef, stream, image string) string {
+	if image != "" {
+		return imageRepository(image)
+	}
+	if distribution == v1alpha1.StorageCephDistributionOSS {
+		return ossImageRepository
+	}
+	if def.imageBaseTemplate != "" {
+		return fmt.Sprintf(def.imageBaseTemplate, stream)
+	}
+	return ""
+}
+
 // subscriptionStream resolves the product stream major (for example 9) for the
 // redhat and ibm distributions from spec.ceph.release, defaulting when unset.
 func subscriptionStream(cluster v1alpha1.StorageCluster) string {
@@ -238,6 +294,7 @@ func Select(cluster v1alpha1.StorageCluster, env *v1alpha1.Environment, secretsD
 		provider.Repository = subscriptionRepository(def, subscriptionStream(cluster))
 		provider.Image = cephImage(cluster)
 	}
+	provider.ImageBase = imageBase(distribution, def, subscriptionStream(cluster), provider.Image)
 	if def.requiresEntitlement() && cluster.Spec.Ceph != nil {
 		provider.Entitlement, _ = entitlements.Resolve(env, cluster.Spec.Ceph.EntitlementRef.Name, def.registryURL, secretsDir)
 	}
@@ -269,6 +326,9 @@ func Vars(provider Provider) map[string]any {
 	}
 	if provider.Image != "" {
 		out["image"] = provider.Image
+	}
+	if provider.ImageBase != "" {
+		out["imageBase"] = provider.ImageBase
 	}
 	if provider.Entitlement.Name != "" {
 		out["entitlement"] = map[string]any{
