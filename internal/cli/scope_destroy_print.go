@@ -43,10 +43,16 @@ func printDestroyOrphans(w io.Writer, orphans []workflow.UndeclaredResource) {
 // managed storage state; infra destroy tears down VMs, networks, provider
 // services, infra component services, and provider-owned machine disks.
 func printDestroyPreview(w io.Writer, scope converge.Scope, clustersDir string, state v1alpha1.State) {
-	switch scope.Name {
-	case "clusters", "container-cluster":
+	switch {
+	case converge.DestroyIsFullScope(scope):
+		// Whole-context destroy runs both stages in teardown order: clusters
+		// first, then the infra they ran on. Preview both so the operator sees
+		// the full blast radius before the confirmation prompt.
 		printDestroyClustersPreview(w, clustersDir, state)
-	case "infra":
+		printDestroyInfraPreview(w, state)
+	case scope.Name == "clusters" || scope.Name == "container-cluster":
+		printDestroyClustersPreview(w, clustersDir, state)
+	case scope.Name == "infra":
 		printDestroyInfraPreview(w, state)
 	}
 }

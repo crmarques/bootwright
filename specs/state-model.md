@@ -1011,6 +1011,12 @@ Rules:
   `ContainerCluster` and `StorageCluster` names: OpenShift install runtime,
   add-on records, generated storage attachment records, and managed storage
   cluster services/runtime. It does not destroy provider infrastructure.
+- `destroy` with `--stage` omitted tears down the whole context: it runs the
+  clusters teardown then the infra teardown as one ordered task graph (the
+  reverse of the apply order), and sweeps context-owned VM artifacts and orphan
+  ownership records exactly as unscoped `destroy --stage infra` does. `--clusters`
+  with no `--stage` still narrows to `destroy --stage clusters`; the full
+  teardown is the no-selector form.
 - Destroy must remove host packages only when ownership records prove
   Bootwright installed them and no remaining ownership record on that host
   still requires the package.

@@ -16,6 +16,12 @@ import (
 
 func DestroyStageScope(stage string) (Scope, error) {
 	switch strings.TrimSpace(stage) {
+	case "":
+		// No stage selected: tear down the whole context. The full destroy
+		// runs the clusters teardown then the infra teardown as one task
+		// graph; AllScope has no single DestroyPlaybook, so the granular task
+		// chain (PlanDestroyTasks "all") is the only execution path for it.
+		return AllScope, nil
 	case "infra":
 		return InfraScope, nil
 	case "clusters":
@@ -23,6 +29,14 @@ func DestroyStageScope(stage string) (Scope, error) {
 	default:
 		return Scope{}, fmt.Errorf("--stage must be one of infra, clusters")
 	}
+}
+
+// DestroyIsFullScope reports whether a resolved destroy scope is the
+// whole-context teardown (stage omitted). Full destroy has no single playbook
+// and always runs through the granular task graph, so the CLI special-cases it
+// for execution and dry-run rendering.
+func DestroyIsFullScope(scope Scope) bool {
+	return scope.Name == AllScope.Name
 }
 
 func DestroyStageCommandLabel(stage, defaultLabel string) string {

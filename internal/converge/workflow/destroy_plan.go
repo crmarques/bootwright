@@ -35,18 +35,32 @@ const (
 func PlanDestroyTasks(scopeName string, state v1alpha1.State, limit string, extraVars []string) ([]ApplyTask, error) {
 	switch strings.TrimSpace(scopeName) {
 	case "infra":
-		return destroyChain(state, limit, extraVars, []destroyStep{
-			{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
-			{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
-			{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
-		}), nil
+		return destroyChain(state, limit, extraVars, infraDestroySteps()), nil
 	case "clusters":
-		return destroyChain(state, limit, extraVars, []destroyStep{
-			{id: "destroy.storage-clusters", kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
-			{id: "destroy.container-clusters", kind: DestroyTaskKindContainerCluster, label: "Container clusters", playbook: roles.PlaybookTaskContainerClusterAgentDestroy},
-		}), nil
+		return destroyChain(state, limit, extraVars, clusterDestroySteps()), nil
+	case "all":
+		// Whole-context teardown: tear the clusters down before the infra they
+		// run on (the reverse of the apply order, infra then clusters). One
+		// sequential chain so each step waits for the previous, exactly as the
+		// stage chains do, with the clusters steps ahead of the infra steps.
+		return destroyChain(state, limit, extraVars, append(clusterDestroySteps(), infraDestroySteps()...)), nil
 	default:
-		return nil, fmt.Errorf("granular destroy is only supported for the infra and clusters stages, not %q", scopeName)
+		return nil, fmt.Errorf("granular destroy is only supported for the infra, clusters, and all stages, not %q", scopeName)
+	}
+}
+
+func infraDestroySteps() []destroyStep {
+	return []destroyStep{
+		{id: "destroy.machine-infra", kind: DestroyTaskKindMachineInfra, label: "Machine infrastructure", playbook: roles.PlaybookTaskMachineInfraDestroy},
+		{id: "destroy.infra-components", kind: DestroyTaskKindInfraComponents, label: "Infra component services", playbook: roles.PlaybookTaskInfraComponentServicesDestroy},
+		{id: "destroy.provider-services", kind: DestroyTaskKindProviderServices, label: "Provider services", playbook: roles.PlaybookTaskProviderServicesDestroy},
+	}
+}
+
+func clusterDestroySteps() []destroyStep {
+	return []destroyStep{
+		{id: "destroy.storage-clusters", kind: DestroyTaskKindStorageCluster, label: "Storage clusters", playbook: roles.PlaybookTaskStorageClusterDestroy},
+		{id: "destroy.container-clusters", kind: DestroyTaskKindContainerCluster, label: "Container clusters", playbook: roles.PlaybookTaskContainerClusterAgentDestroy},
 	}
 }
 

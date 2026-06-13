@@ -66,7 +66,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		flags.output = outputText
 		cmd.Flags().StringVar(&flags.executable, "ansible-playbook", workspace.ResolveAnsiblePlaybook(), "ansible-playbook executable to run (defaults to the bootwright-managed venv when present)")
 		cmd.Flags().StringVar(&flags.output, "output", flags.output, "output format: text|json (json is supported for --dry-run)")
-		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters")
+		cmd.Flags().StringVar(&stage, "stage", "", "stage to destroy: infra|clusters (default: full teardown of clusters then infra)")
 		cmd.Flags().StringVar(&flags.clusterScope, "clusters", "", "comma-separated ContainerCluster or StorageCluster names to destroy; implies --stage clusters when --stage is omitted; with --stage infra, the literal artifact-server removes only the generated artifact publication service")
 	} else {
 		registerScopeCommonFlags(cmd, &flags, scopeAllowsClusterScope(scope, true), "destroy")
@@ -78,29 +78,24 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		runScope := scope
 		runCommandLabel := commandLabel
 		if options.stageSelector {
-			if strings.TrimSpace(stage) == "" {
-				switch {
-				case strings.TrimSpace(flags.clusterScope) != "":
-					// --clusters names ContainerCluster/StorageCluster objects,
-					// which only the clusters stage tears down. Infer it so
-					// `destroy --clusters <names>` works without repeating
-					// `--stage clusters`. The infra-scoped uses of --clusters
-					// (the artifact-server literal, scoping the infra sweep)
-					// still require an explicit --stage infra.
-					stage = "clusters"
-				case !destroyTopLevelFlagChanged(c):
-					return c.Help()
-				default:
-					return failErr(2, fmt.Errorf("--stage must be one of infra, clusters"))
-				}
+			if strings.TrimSpace(stage) == "" && strings.TrimSpace(flags.clusterScope) != "" {
+				// --clusters names ContainerCluster/StorageCluster objects, which
+				// only the clusters stage tears down. Infer it so `destroy
+				// --clusters <names>` works without repeating `--stage clusters`.
+				// The infra-scoped uses of --clusters (the artifact-server literal,
+				// scoping the infra sweep) still require an explicit --stage infra.
+				stage = "clusters"
 			}
 			var err error
+			// An omitted --stage resolves to the whole-context full destroy
+			// (AllScope): tear the clusters down, then the infra they ran on.
 			runScope, err = converge.DestroyStageScope(stage)
 			if err != nil {
 				return failErr(2, err)
 			}
 			runCommandLabel = converge.DestroyStageCommandLabel(stage, commandLabel)
 		}
+		fullDestroy := converge.DestroyIsFullScope(runScope)
 		ctx, err := cf.resolve()
 		if err != nil {
 			return failErr(1, err)
@@ -152,8 +147,11 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err != nil {
 				return failErr(1, err)
 			}
-			if runScope.Name == "infra" {
+			if runScope.Name == "infra" || fullDestroy {
 				if strings.TrimSpace(flags.clusterScope) == "" {
+					// Whole-context destroy (full or unscoped infra): sweep the
+					// ownership store so the infra teardown reclaims recorded
+					// orphans, not just objects still in desired state.
 					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_infra_destroy_context_sweep=true")
 				} else {
 					// Scope the recorded-resource cleanup to the selected roots.
@@ -179,6 +177,15 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if flags.output == outputJSON {
 			if !dryRun {
 				return failErr(2, errors.New("--output json is supported with --dry-run for scoped destroy commands"))
+			}
+			if fullDestroy {
+				// Full destroy has no single playbook; report the ordered task
+				// chain the teardown would run instead of a single ansible command.
+				tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs)
+				if terr != nil {
+					return failErr(1, terr)
+				}
+				return runFullDestroyDryRunJSON(stdout, cf, runScope, plan, tasks, converge.DestroyDryRunSafetyReport(destroySafety, override))
 			}
 			return runScopeDryRunJSON(c, stdout, cf, flags, converge.DestroyDryRunReportScope(runScope, stage, options.stageSelector), "destroy", plan.State, plan.Selected, playbook, plan.Limit, plan.ExtraVarPairs, artifactsBaseName, check, plan.AskBecomePass, false, workflow.ConcurrencyLimits{}, nil, converge.DestroyDryRunSafetyReport(destroySafety, override), 0)
 		}
@@ -241,10 +248,24 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		// Normal infra/clusters teardown runs as an apply-style task graph so it
 		// shows granular per-step progress and routes ansible to per-task logs.
 		// Dry-run, no-remote-work, and the narrow artifact-server destroy keep
-		// the single-playbook path.
+		// the single-playbook path; full destroy has no single playbook, so its
+		// dry-run previews the ordered task chain instead.
 		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
 		var renderResult render.Result
-		if useGraph {
+		switch {
+		case fullDestroy && dryRun:
+			tasks, terr := workflow.PlanDestroyTasks(runScope.Name, plan.State, plan.Limit, plan.ExtraVarPairs)
+			if terr != nil {
+				return failErr(1, terr)
+			}
+			cliout.NewContinuation(stdout).Warning("dry-run", "plan only; run bootwright preflight to validate secrets, tools, and remote readiness")
+			reporter.DryRunTasks(runCommandLabel, workflow.TaskLedgerEntries(tasks), workflow.ResolveApplyConcurrencyLimits(workflow.ConcurrencyLimits{}, tasks))
+			result, rerr := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
+			if rerr != nil {
+				return failErr(1, rerr)
+			}
+			renderResult = result
+		case useGraph:
 			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, streamAnsible)
 			result, ledger, _, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
 			if gerr != nil {
@@ -255,7 +276,7 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			}
 			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
 			renderResult = result
-		} else {
+		default:
 			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
 			if derr != nil {
 				return failErr(1, derr)
@@ -274,15 +295,6 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		return nil
 	}
 	return cmd
-}
-
-func destroyTopLevelFlagChanged(cmd *cobra.Command) bool {
-	for _, name := range []string{"ansible-playbook", "ask-become-pass", "check", "clusters", "dry-run", "output", "override", "stage", "yes"} {
-		if cmd.Flags().Changed(name) {
-			return true
-		}
-	}
-	return false
 }
 
 func printDestroySafety(stdout io.Writer, decision workflow.DestroySafetyDecision, override bool, dryRun bool) {

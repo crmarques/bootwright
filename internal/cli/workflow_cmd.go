@@ -142,7 +142,13 @@ func newDestroyCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.C
 		short:         "Tear down a previously applied target",
 		stageSelector: true,
 		commandLabel:  "destroy",
-		example: `  # Preview infrastructure teardown for the full current context
+		example: `  # Tear down the whole context: clusters first, then the infra they ran on
+  bootwright destroy --yes
+
+  # Preview that full teardown without executing it
+  bootwright destroy --dry-run
+
+  # Preview infrastructure teardown for the full current context
   bootwright destroy --stage infra --dry-run
 
   # Destroy infrastructure for selected clusters only

@@ -35,7 +35,15 @@ type DryRunReport struct {
 	Render             DryRunRender         `json:"render"`
 	ExtraVars          []string             `json:"extraVars,omitempty"`
 	ApplyPlan          *DryRunApply         `json:"applyPlan,omitempty"`
+	DestroyPlan        *DryRunDestroyPlan   `json:"destroyPlan,omitempty"`
 	DestroySafety      *DryRunDestroySafety `json:"destroySafety,omitempty"`
+}
+
+// DryRunDestroyPlan reports the ordered task chain a full (whole-context)
+// destroy would run. Full destroy has no single playbook, so its dry-run report
+// carries the chain here instead of a single Playbook/Command.
+type DryRunDestroyPlan struct {
+	Tasks []workflow.TaskLedgerEntry `json:"tasks"`
 }
 
 type DryRunRender struct {
@@ -148,6 +156,46 @@ func BuildScopeDryRunReport(cmdCtx context.Context, ctx workspace.Context, execu
 		}
 	}
 	return report, nil
+}
+
+// BuildFullDestroyDryRunReport assembles the machine-readable plan for a
+// whole-context destroy. Unlike the scoped destroy report it has no single
+// playbook/command: it renders once for the artifact paths and reports the
+// ordered destroy task chain (clusters then infra) the teardown would run.
+func BuildFullDestroyDryRunReport(ctx workspace.Context, bundleDir string, scope Scope, state v1alpha1.State, selected []Phase, tasks []workflow.ApplyTask, extraVarPairs []string, destroySafety *DryRunDestroySafety) (DryRunReport, error) {
+	clustersDir := workspace.ControllerClustersDir(ctx.Name)
+	result, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, state)
+	if err != nil {
+		return DryRunReport{}, err
+	}
+	return DryRunReport{
+		Target:             scope.Name,
+		Action:             "destroy",
+		DryRun:             true,
+		PlanOnly:           true,
+		ReadinessChecked:   false,
+		ReadinessChecks:    "not run; run bootwright preflight",
+		Phases:             selectedPhaseNames(selected),
+		RenderedDir:        ctx.RenderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            ctx.RunsDir,
+		SecretsDir:         ctx.SecretsDir,
+		ManagedServicesDir: ctx.ManagedServicesDir,
+		ProviderStateDir:   ctx.ProviderStateDir,
+		ContextDir:         ctx.BaseDir,
+		BundleDir:          bundleDir,
+		ExtraVars:          extraVarPairs,
+		DestroySafety:      destroySafety,
+		Render: DryRunRender{
+			EffectiveStatePath: result.EffectiveStatePath,
+			LockPath:           result.LockPath,
+			InventoryPath:      result.InventoryPath,
+			VarsPath:           result.VarsPath,
+			ArtifactsDir:       result.ArtifactsDir,
+			InstallerAssets:    []DryRunInstallerArtifact{},
+		},
+		DestroyPlan: &DryRunDestroyPlan{Tasks: workflow.TaskLedgerEntries(tasks)},
+	}, nil
 }
 
 func dryRunExtensionPlans(tasks []workflow.ApplyTask) []DryRunAddonPlan {

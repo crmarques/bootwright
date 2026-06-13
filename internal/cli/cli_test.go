@@ -638,6 +638,71 @@ func TestDestroyStageInfraDryRunJSONEnablesContextSweepOnlyWhenUnscoped(t *testi
 	}
 }
 
+// TestDestroyFullDryRunJSONPlansClustersThenInfra locks in that `destroy`
+// without --stage tears down the whole context: the JSON dry-run reports the
+// ordered task chain (clusters then infra) and enables the orphan-reclaim
+// context sweep, instead of failing with "--stage must be one of infra,
+// clusters".
+func TestDestroyFullDryRunJSONPlansClustersThenInfra(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--dry-run",
+		"--output", "json",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy full dry-run exited %d, stderr=%q", code, stderr)
+	}
+	var report scopeDryRunReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, stdout)
+	}
+	if report.Target != "all" || report.Action != "destroy" || !report.DryRun {
+		t.Fatalf("unexpected dry-run report header: %+v", report)
+	}
+	if report.Playbook != "" {
+		t.Fatalf("full destroy has no single playbook, got %q", report.Playbook)
+	}
+	if report.DestroyPlan == nil {
+		t.Fatalf("full destroy dry-run report missing destroy plan: %+v", report)
+	}
+	wantIDs := []string{
+		"destroy.storage-clusters",
+		"destroy.container-clusters",
+		"destroy.machine-infra",
+		"destroy.infra-components",
+		"destroy.provider-services",
+	}
+	gotIDs := make([]string, 0, len(report.DestroyPlan.Tasks))
+	for _, task := range report.DestroyPlan.Tasks {
+		gotIDs = append(gotIDs, task.ID)
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("destroy plan task order = %v, want %v", gotIDs, wantIDs)
+	}
+	if !slices.Contains(report.ExtraVars, "bootwright_infra_destroy_context_sweep=true") {
+		t.Fatalf("full destroy must enable the context sweep: %#v", report.ExtraVars)
+	}
+}
+
+// TestDestroyFullDryRunTextSucceeds confirms the text full-destroy dry-run runs
+// the task-graph preview path (no single playbook) and exits cleanly.
+func TestDestroyFullDryRunTextSucceeds(t *testing.T) {
+	initTestContext(t, "001-sno-libvirt")
+	stdout, stderr, code := runCLI(t,
+		"destroy",
+		"--dry-run",
+		"--ask-become-pass=false",
+	)
+	if code != 0 {
+		t.Fatalf("destroy full dry-run (text) exited %d, stderr=%q", code, stderr)
+	}
+	if strings.Contains(stdout+stderr, "--stage must be one of") {
+		t.Fatalf("full destroy must not demand a stage:\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
 func TestDestroyStageClustersDryRunJSON(t *testing.T) {
 	initTestContext(t, "001-sno-libvirt")
 	stdout, stderr, code := runCLI(t,

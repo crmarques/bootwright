@@ -57,8 +57,45 @@ func TestPlanDestroyTasksClustersChain(t *testing.T) {
 	}
 }
 
+// TestPlanDestroyTasksAllChain locks in the whole-context (stage omitted)
+// teardown order: the clusters chain first, then the infra they ran on, as one
+// sequential dependency chain — the reverse of the apply order.
+func TestPlanDestroyTasksAllChain(t *testing.T) {
+	limit := ""
+	extra := []string{"bootwright_infra_destroy_context_sweep=true"}
+	tasks, err := PlanDestroyTasks("all", v1alpha1.State{}, limit, extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{
+		"destroy.storage-clusters",
+		"destroy.container-clusters",
+		"destroy.machine-infra",
+		"destroy.infra-components",
+		"destroy.provider-services",
+	}
+	if len(tasks) != len(wantIDs) {
+		t.Fatalf("planned %d tasks, want %d: %+v", len(tasks), len(wantIDs), tasks)
+	}
+	for i, task := range tasks {
+		if task.Entry.ID != wantIDs[i] {
+			t.Fatalf("task[%d] = %s, want %s", i, task.Entry.ID, wantIDs[i])
+		}
+		if len(task.ExtraVarPairs) != 1 || task.ExtraVarPairs[0] != extra[0] {
+			t.Fatalf("task[%d] extra-vars = %v, want %v", i, task.ExtraVarPairs, extra)
+		}
+		if i == 0 {
+			if len(task.Entry.Dependencies) != 0 {
+				t.Fatalf("first task deps = %v, want none", task.Entry.Dependencies)
+			}
+		} else if len(task.Entry.Dependencies) != 1 || task.Entry.Dependencies[0] != wantIDs[i-1] {
+			t.Fatalf("task[%d] deps = %v, want [%s]", i, task.Entry.Dependencies, wantIDs[i-1])
+		}
+	}
+}
+
 func TestPlanDestroyTasksRejectsUnknownScope(t *testing.T) {
-	if _, err := PlanDestroyTasks("all", v1alpha1.State{}, "", nil); err == nil {
+	if _, err := PlanDestroyTasks("bogus", v1alpha1.State{}, "", nil); err == nil {
 		t.Fatal("expected an error for an unsupported destroy scope")
 	}
 }

@@ -51,8 +51,9 @@ install selected container and storage clusters, add-ons, and integrations.
 require it, while interactive `preflight`/`apply` runs can instead confirm
 each unknown host's fingerprint on first use.)
 Use `--clusters <name>[,<name>...]` for focused recovery. `destroy` uses the
-same `--stage infra|clusters` and `--clusters` selector shape. Unscoped
-`destroy --stage infra` performs current-context VM cleanup.
+same `--stage infra|clusters` and `--clusters` selector shape; omitting `--stage`
+tears down the whole context (clusters first, then the infra they ran on).
+Unscoped `destroy --stage infra` performs current-context VM cleanup.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -199,6 +200,7 @@ bootwright apply --stage clusters --clusters ceph-stretch --yes
 bootwright apply --stage clusters --yes
 bootwright preflight addons
 bootwright status
+bootwright destroy --yes
 bootwright destroy --stage clusters --yes
 bootwright destroy --stage infra --yes
 bootwright destroy --stage infra --clusters artifact-server --yes
@@ -206,8 +208,9 @@ bootwright destroy --stage infra --clusters artifact-server --yes
 
 The CLI is organized around workflow command groups. `bastion setup` remains a
 separate prerequisite command. Graph apply and destroy use
-`--stage infra|clusters`; omitting `--stage` applies the full graph for
-`apply`, while `destroy` requires a stage. Top-level groups are `validate`,
+`--stage infra|clusters`; omitting `--stage` applies the full graph for `apply`
+and tears down the whole context for `destroy` (clusters then infra). Top-level
+groups are `validate`,
 `context`, `host`, `bastion`, `cluster`, `container-cluster`, `example`,
 `print-env`, `media`, `secret`, `preflight`, `status`, `plan`, `render`, `apply`,
 `destroy`, and `version`. The formal CLI contract lives in
