@@ -159,7 +159,11 @@ func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx w
 // already scoped to the selected roots, so the planned tasks cover exactly
 // what was destroyed.
 func ResetConvergeRecordsAfterDestroy(runsDir, clustersDir string, runScope Scope, state v1alpha1.State) {
-	if tasks, perr := workflow.PlanApplyTasksChecked(runScope.ApplyTarget(), state); perr == nil {
+	resetScope := runScope
+	if runScope.Name == InfraScope.Name {
+		resetScope = AllScope
+	}
+	if tasks, perr := workflow.PlanApplyTasksChecked(resetScope.ApplyTarget(), state); perr == nil {
 		for _, task := range tasks {
 			_ = workflow.RemoveApplyTaskConvergeSafety(runsDir, task)
 		}
