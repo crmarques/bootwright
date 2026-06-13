@@ -123,12 +123,16 @@ type ContainerClusterNetworkCIDR struct {
 }
 
 type OCPHostSpec struct {
-	Hostname string `yaml:"hostname" json:"hostname"`
+	// Hostname is the node's hostname. It defaults to the fully-qualified
+	// <machineRef>.<cluster>.<baseDomain>, the OpenShift node convention; set
+	// it explicitly to pin a different name (kept verbatim). A node opts out to
+	// the bare machine name with hostname.source: machineName on its install
+	// profile.
+	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
 	Role     string `yaml:"role" json:"role"`
-	// MachineRef selects the Machine that backs this node. It is required:
-	// hostnames are cluster-local while Machine names are global, so no
-	// default is derived. A Machine is node-bound by at most one cluster
-	// (and at most one host entry) across every ContainerCluster and
-	// StorageCluster.
+	// MachineRef selects the Machine that backs this node. It is required: it
+	// seeds the default hostname's left-most label and a Machine is node-bound
+	// by at most one cluster (and at most one host entry) across every
+	// ContainerCluster and StorageCluster.
 	MachineRef LocalObjectReference `yaml:"machineRef" json:"machineRef"`
 }

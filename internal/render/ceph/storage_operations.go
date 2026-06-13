@@ -57,7 +57,9 @@ func CephOperations(state v1alpha1.State, cluster v1alpha1.StorageCluster) map[s
 			"replicasPerFailureDomain": 2,
 		}
 		ops = append(ops, stretchRule)
-		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", stretch.Tiebreaker.Host, stretch.RuleName, stretch.FailureDomain))
+		// The tiebreaker is authored as a machine name; enable_stretch_mode wants
+		// the mon name, which is the registered (fully-qualified) hostname.
+		ops = append(ops, operationWithIdempotency("topology", "enable-stretch-mode", "stretch-mode", "enabled", "ceph", "mon", "enable_stretch_mode", topology.CanonicalHostname(cluster, stretch.Tiebreaker.Host), stretch.RuleName, stretch.FailureDomain))
 	}
 	for _, policy := range state.StoragePlacementPolicies {
 		if policy.Spec.StorageClusterRef.Name != cluster.Metadata.Name {

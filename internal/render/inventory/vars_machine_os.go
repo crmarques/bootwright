@@ -137,7 +137,7 @@ func machineOSInstallVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1
 		"installer": installer,
 		"image":     machineOSInstallImageVars(resolved, image.Spec.MediaType, image.Spec.Checksum, machineOSInstallImageSourceOnTarget(state, m)),
 		"kickstart": map[string]any{
-			"hostname":               machineInstallHostname(profile, machine),
+			"hostname":               machineInstallHostname(state, machine),
 			"sshUser":                machine.Spec.Access.SSH.User,
 			"sshPublicKeyPath":       secret.ResolveSSHPublicKeyPath(machine.Spec.Access.SSH.KeyRef.Name, env, paths.SecretsDir),
 			"passwordAuthentication": profile.Spec.Customizations.SSH.PasswordAuthentication,
@@ -231,13 +231,16 @@ func machineInstallRepositoryVars(repos []v1alpha1.MachineInstallRepository) []a
 	return out
 }
 
-func machineInstallHostname(profile v1alpha1.MachineInstallProfile, machine v1alpha1.Machine) string {
-	switch profile.Spec.Customizations.Hostname.Source {
-	case "", "machineName":
-		return machine.Metadata.Name
-	default:
-		return machine.Metadata.Name
+// machineInstallHostname is the OS hostname written at install. For a cluster
+// node it mirrors the hostname its cluster topology registers (normalize
+// already resolved that to the FQDN, an explicit pin, or the bare name), so the
+// installed hostname can never drift from the name cephadm/the installer
+// expects. A machine no cluster node-binds keeps its bare name.
+func machineInstallHostname(state v1alpha1.State, machine v1alpha1.Machine) string {
+	if hostname, ok := stateview.NodeHostname(state, machine.Metadata.Name); ok {
+		return hostname
 	}
+	return machine.Metadata.Name
 }
 
 func machineInstallStorageVars(profile v1alpha1.MachineInstallProfile, state v1alpha1.State, m v1alpha1.InstallMachine) map[string]any {

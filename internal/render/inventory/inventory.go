@@ -83,7 +83,7 @@ func InventoryWithLocalityPolicyAndOwnershipRecordsAndPathOptions(state v1alpha1
 	}
 	for _, cluster := range ManagedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-			hosts[storageInventoryHostName(cluster, node.Hostname)] = storageNodeInventoryEntry(state, cluster, node, env, paths, localPolicy)
+			hosts[storageInventoryHostName(cluster, node.MachineRef.Name)] = storageNodeInventoryEntry(state, cluster, node, env, paths, localPolicy)
 		}
 	}
 	for name, entry := range recorded.Hosts {

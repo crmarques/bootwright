@@ -63,14 +63,26 @@ func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
 	return hosts
 }
 
-// HostByName returns the topology host with the given cephadm hostname.
-func HostByName(cluster v1alpha1.StorageCluster, hostname string) (v1alpha1.StorageCephHost, bool) {
+// HostByName returns the topology host identified by an authored token: its
+// registered cephadm hostname (the FQDN) or its backing machine name. The two
+// diverge once hostnames are fully qualified, so both spellings resolve.
+func HostByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.StorageCephHost, bool) {
 	for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-		if host.Hostname == hostname {
+		if host.Hostname == name || host.MachineRef.Name == name {
 			return host, true
 		}
 	}
 	return v1alpha1.StorageCephHost{}, false
+}
+
+// CanonicalHostname maps an authored host token — a topology host's machine
+// name or its registered hostname — to the registered hostname cephadm uses.
+// An unmatched token passes through unchanged.
+func CanonicalHostname(cluster v1alpha1.StorageCluster, token string) string {
+	if host, ok := HostByName(cluster, token); ok && host.Hostname != "" {
+		return host.Hostname
+	}
+	return token
 }
 
 // ResolvePlacement resolves a placement to concrete topology hostnames: the
@@ -78,10 +90,17 @@ func HostByName(cluster v1alpha1.StorageCluster, hostname string) (v1alpha1.Stor
 // (every topology host when role is empty — passthrough services have no
 // role), optionally narrowed to the named sites.
 func ResolvePlacement(cluster v1alpha1.StorageCluster, placement v1alpha1.StoragePlacement, role string) []string {
-	base := placement.Hosts
-	if len(base) == 0 && role != "" {
+	var base []string
+	switch {
+	case len(placement.Hosts) > 0:
+		// Authored tokens may be machine names; canonicalize to the registered
+		// hostname so cephadm matches them against the host spec.
+		for _, token := range placement.Hosts {
+			base = append(base, CanonicalHostname(cluster, token))
+		}
+	case role != "":
 		base = CephHostsWithRole(cluster, role)
-	} else if len(base) == 0 {
+	default:
 		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
 			base = append(base, host.Hostname)
 		}
@@ -198,7 +217,7 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name {
+		if node.Hostname == name || node.MachineRef.Name == name {
 			return node, true
 		}
 	}

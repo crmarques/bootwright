@@ -56,7 +56,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	if len(bootstrapDocs) != 7 {
 		t.Fatalf("bootstrap docs got %d, want 7", len(bootstrapDocs))
 	}
-	host := docByField(t, bootstrapDocs, "hostname", "ceph-dc1-0")
+	host := docByField(t, bootstrapDocs, "hostname", "ceph-dc1-0.ceph-storage.bootwright.test")
 	if got := host["service_type"]; got != "host" {
 		t.Fatalf("bootstrap service_type = %v, want host", got)
 	}
@@ -72,13 +72,13 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	lateServices := readYAMLDocs(t, asset.LateServicesSpecPath)
 	mon := serviceDoc(t, coreServices, "mon", "")
 	monHosts := stringSlice(t, mon["placement"].(map[string]any)["hosts"])
-	wantMons := []string{"ceph-arbiter", "ceph-dc1-0", "ceph-dc1-1", "ceph-dc2-0", "ceph-dc2-1"}
+	wantMons := []string{"ceph-arbiter.ceph-storage.bootwright.test", "ceph-dc1-0.ceph-storage.bootwright.test", "ceph-dc1-1.ceph-storage.bootwright.test", "ceph-dc2-0.ceph-storage.bootwright.test", "ceph-dc2-1.ceph-storage.bootwright.test"}
 	if !reflect.DeepEqual(monHosts, wantMons) {
 		t.Fatalf("mon hosts = %v, want %v", monHosts, wantMons)
 	}
 	// Placement defaults resolve from topology roles (and sites narrowing);
 	// these must match the previously explicit host lists byte for byte.
-	allServiceHosts := []string{"ceph-dc1-0", "ceph-dc1-1", "ceph-dc1-2", "ceph-dc2-0", "ceph-dc2-1", "ceph-dc2-2"}
+	allServiceHosts := []string{"ceph-dc1-0.ceph-storage.bootwright.test", "ceph-dc1-1.ceph-storage.bootwright.test", "ceph-dc1-2.ceph-storage.bootwright.test", "ceph-dc2-0.ceph-storage.bootwright.test", "ceph-dc2-1.ceph-storage.bootwright.test", "ceph-dc2-2.ceph-storage.bootwright.test"}
 	mds := serviceDoc(t, lateServices, "mds", "odf-cephfs")
 	if got := stringSlice(t, mds["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, allServiceHosts) {
 		t.Fatalf("mds hosts = %v, want %v", got, allServiceHosts)
@@ -88,7 +88,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 		t.Fatalf("rgw hosts = %v, want %v", got, allServiceHosts)
 	}
 	ingress := serviceDoc(t, lateServices, "ingress", "rgw.odf.dc1")
-	if got := stringSlice(t, ingress["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, []string{"ceph-dc1-0", "ceph-dc1-1", "ceph-dc1-2"}) {
+	if got := stringSlice(t, ingress["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, []string{"ceph-dc1-0.ceph-storage.bootwright.test", "ceph-dc1-1.ceph-storage.bootwright.test", "ceph-dc1-2.ceph-storage.bootwright.test"}) {
 		t.Fatalf("ingress dc1 hosts = %v", got)
 	}
 	spec := ingress["spec"].(map[string]any)
@@ -115,7 +115,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	assertOperationCommand(t, ops, "set-public-network", []string{"ceph", "config", "set", "global", "public_network", "192.168.141.0/24,192.168.142.0/24,192.168.143.0/24"})
 	assertOperationCommand(t, ops, "set-cluster-network", []string{"ceph", "config", "set", "global", "cluster_network", "172.21.141.0/24,172.21.142.0/24"})
 	assertOperationIdempotency(t, ops, "enable-stretch-mode", "stretch-mode", "enabled")
-	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter", "stretch-rule", "datacenter"})
+	assertOperationCommand(t, ops, "enable-stretch-mode", []string{"ceph", "mon", "enable_stretch_mode", "ceph-arbiter.ceph-storage.bootwright.test", "stretch-rule", "datacenter"})
 	assertOperationPhase(t, ops, "create-cephfs-odf-cephfs", "storage")
 	assertOperationIdempotency(t, ops, "create-pool-odf-rbd", "ceph-pool", "odf-rbd")
 	assertOperationIdempotency(t, ops, "create-cephfs-odf-cephfs", "cephfs", "odf-cephfs")
@@ -150,7 +150,7 @@ func TestStorageExampleRendersCephAndDataFoundationInputs(t *testing.T) {
 	if !externalDetailContains(details, "rook-csi-rbd-node", "userID", "bootwright.dc1-metal-ocp.csi-rbd-node") {
 		t.Fatalf("external_cluster_details missing per-cluster rbd userID: %#v", details)
 	}
-	if !strings.Contains(detailsJSON, "ceph-dc1-0=192.168.141.30:6789") {
+	if !strings.Contains(detailsJSON, "ceph-dc1-0.ceph-storage.bootwright.test=192.168.141.30:6789") {
 		t.Fatalf("external_cluster_details missing mon endpoint: %s", detailsJSON)
 	}
 }

@@ -153,7 +153,10 @@ func cephadmOSDServices(cluster v1alpha1.StorageCluster) []any {
 				},
 			}
 		}
-		docs = append(docs, cephadmPlacementService("osd", "data-"+node.Hostname, []string{node.Hostname}, 0, spec))
+		// The OSD service id stays on the bare machine name: it becomes part of
+		// daemon/systemd unit names, where a dotted FQDN is fragile. Placement
+		// still targets node.Hostname so cephadm matches the registered host.
+		docs = append(docs, cephadmPlacementService("osd", "data-"+node.MachineRef.Name, []string{node.Hostname}, 0, spec))
 	}
 	return docs
 }

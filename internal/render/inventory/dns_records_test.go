@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
 
 func TestNameResolutionRecordsIncludeDNSRefConsumers(t *testing.T) {
@@ -26,6 +27,94 @@ func TestNameResolutionRecordsIncludeDNSRefConsumers(t *testing.T) {
 	wantDomains := []string{"apps.cluster-a.example.test=192.168.130.11"}
 	if got := recordPairs(vars["domainRecords"]); !reflect.DeepEqual(got, wantDomains) {
 		t.Fatalf("domainRecords = %v, want %v", got, wantDomains)
+	}
+}
+
+// TestNameResolutionRecordsPublishStorageNodesAndGateway covers the storage-only
+// path: the resolver publishes each served node by its normalized FQDN and bare
+// name (so the cephadm dashboard can dial e.g. an alertmanager host), plus the
+// object gateway's public dnsName at its ingress VIP.
+func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
+	state := v1alpha1.State{
+		Environments: []v1alpha1.Environment{{
+			Spec: v1alpha1.EnvironmentSpec{
+				BaseDomain: "example.test",
+				InfraComponents: v1alpha1.EnvironmentInfraComponentsSpec{
+					NameResolution: []v1alpha1.EnvironmentNameResolutionComponent{{
+						Name:         "lab-dns",
+						Management:   v1alpha1.EnvironmentComponentManaged,
+						ComponentRef: v1alpha1.LocalObjectReference{Name: "dns"},
+					}},
+				},
+			},
+		}},
+		InfraComponents: []v1alpha1.InfraComponent{{
+			Metadata: v1alpha1.Metadata{Name: "dns"},
+			Spec: v1alpha1.InfraComponentSpec{
+				Type: v1alpha1.ComponentSlotNameResolution,
+				NameResolution: &v1alpha1.NameResolutionComponent{
+					Implementation: v1alpha1.InfraComponentTypeDnsmasq,
+					MachineRef:     v1alpha1.LocalObjectReference{Name: "bastion"},
+				},
+			},
+		}},
+		NetworkConfigs: []v1alpha1.NetworkConfig{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-net"},
+			Spec: v1alpha1.NetworkConfigSpec{
+				NameResolutionRefs: []v1alpha1.LocalObjectReference{{Name: "lab-dns"}},
+			},
+		}},
+		Machines: []v1alpha1.Machine{{
+			Metadata: v1alpha1.Metadata{Name: "ceph-1"},
+			Spec: v1alpha1.MachineSpec{
+				Network: v1alpha1.MachineNetwork{
+					Config: v1alpha1.MachineNetworkConfig{
+						NetworkConfigRef: v1alpha1.LocalObjectReference{Name: "ceph-net"},
+					},
+				},
+				Addresses: []v1alpha1.MachineAddress{{Name: "ssh", Address: "192.168.140.21"}},
+				Access: v1alpha1.MachineAccess{
+					SSH: &v1alpha1.MachineSSHSpec{AddressRef: v1alpha1.LocalObjectReference{Name: "ssh"}},
+				},
+			},
+		}},
+		StorageClusters: []v1alpha1.StorageCluster{{
+			Metadata: v1alpha1.Metadata{Name: "ceph"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Topology: v1alpha1.StorageCephTopology{
+						Hosts: []v1alpha1.StorageCephHost{{
+							MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"},
+							Roles:      []string{v1alpha1.StorageCephRoleMON},
+						}},
+					},
+				},
+			},
+		}},
+		StorageObjectGateways: []v1alpha1.StorageObjectGateway{{
+			Metadata: v1alpha1.Metadata{Name: "rgw"},
+			Spec: v1alpha1.StorageObjectGatewaySpec{
+				StorageClusterRef: v1alpha1.LocalObjectReference{Name: "ceph"},
+				Public:            v1alpha1.StorageObjectGatewayPublic{DNSName: "rgw.example.test"},
+				Ceph: v1alpha1.StorageObjectGatewayCephSpec{
+					Ingresses: []v1alpha1.StorageObjectGatewayIngress{{Name: "lab", Address: "192.168.140.80"}},
+				},
+			},
+		}},
+	}
+	desiredstate.Normalize(&state)
+
+	entry := state.Environments[0].Spec.InfraComponents.NameResolution[0]
+	component := state.InfraComponents[0]
+	vars := nameResolutionComponentVars(state, entry, component)
+
+	want := []string{
+		"ceph-1.ceph.example.test=192.168.140.21",
+		"ceph-1=192.168.140.21",
+		"rgw.example.test=192.168.140.80",
+	}
+	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hostRecords = %v, want %v", got, want)
 	}
 }
 

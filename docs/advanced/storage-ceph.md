@@ -64,23 +64,53 @@ to end, including the entitlement and license-acceptance workflow.
 ## Host identity
 
 cephadm registers every `spec.ceph.topology.hosts[]` entry under its
-`hostname`, which defaults to the `machineRef` name. The name is rendered
-verbatim into the cephadm host spec and must equal the host's real OS
-hostname:
+`hostname`, which defaults to the fully-qualified
+`<machineRef>.<storageClusterName>.<baseDomain>` — the OpenShift node-naming
+convention generalized to Ceph nodes (e.g. `ceph-3.ceph-ibm.bootwright.test`).
+The name is rendered verbatim into the cephadm host spec, is the name the mgr
+dashboard uses to reach monitoring services (Prometheus, Grafana,
+Alertmanager), and must equal the host's real OS hostname **and resolve**
+cluster-wide:
 
 - For machines whose OS Bootwright installs, the contract holds by
-  construction: the installer sets the OS hostname to the `Machine` name.
-- For `os.provided: true` machines, the operator guarantees it. If a
-  machine's real hostname differs from its `Machine` name, author
-  `hostname:` explicitly — a mismatch passes `validate` (which never reaches
-  the host) but fails `bootwright preflight`, which compares each storage
-  node's real hostname against the declared topology hostname before cephadm
-  ever sees the host spec.
+  construction: the installer writes the same fully-qualified name as the OS
+  hostname, and a `nameResolution` component the node's `NetworkConfig`
+  references publishes an A record for it (see [Name resolution](#name-resolution)).
+- For `os.provided: true` machines, the operator guarantees it. If a machine's
+  real hostname differs, author `hostname:` explicitly — it is taken verbatim.
+  A mismatch passes `validate` (which never reaches the host) but fails
+  `bootwright preflight`, which compares each storage node's real hostname
+  against the declared topology hostname before cephadm ever sees the host spec.
 
-Because the default follows the `Machine` name, renaming a `Machine` also
-renames the Ceph host identity of every host entry that left `hostname`
-unauthored. On a live cluster that makes the rendered topology name a host
-cephadm has never seen; pin `hostname:` to the original name before renaming.
+To opt a node out of fully-qualified naming and keep the bare `Machine` name as
+the hostname (the pre-FQDN behavior), set `hostname.source: machineName` on its
+`MachineInstallProfile`; this drives both the OS hostname and the cephadm host
+identity. An explicit `hostname:` on the topology host always wins over either
+default.
+
+Authored host references — `cephadm.bootstrap.host`, `placement.hosts[]`, and
+`topology.stretch.tiebreaker.host` — may name a node by its `Machine` name or
+its registered hostname; both resolve, and Bootwright canonicalizes them to the
+registered hostname cephadm expects.
+
+> **Migration (existing clusters).** Adopting FQDN naming renames the Ceph host
+> identity of every host that left `hostname` unauthored. On a live cluster that
+> makes the rendered topology name a host cephadm has never seen — cephadm would
+> re-add it and move data. FQDN naming is therefore safe for greenfield
+> bootstraps; on an already-bootstrapped cluster either pin `hostname:` to the
+> original name on each host, or set `hostname.source: machineName`, before the
+> next apply.
+
+### Name resolution
+
+The registered hostname must resolve from the mgr (and every node), or the
+dashboard's monitoring integration logs errors such as *"Could not reach
+Alertmanager's API on http://&lt;host&gt;:9093 … Name or service not known"*. A
+managed `nameResolution` (dnsmasq) component referenced by the nodes'
+`NetworkConfig.nameResolutionRefs` publishes, for every machine it serves, an A
+record for both the fully-qualified hostname and the bare `Machine` name, and
+publishes each object gateway's `public.dnsName` at its ingress VIP. Point each
+storage node's `NetworkConfig.dns-resolver` at that component.
 
 `spec.ceph.topology.hosts[].site` is each host's failure-domain bucket. Outside
 stretch mode the failure domain is `host` and `site` renders nothing; under

@@ -337,6 +337,9 @@ func validateStorageCephNodes(prefix string, cluster v1alpha1.StorageCluster, ma
 				errs = append(errs, fmt.Sprintf("%s.hostname %q is duplicated", owner, node.Hostname))
 			}
 			seen[node.Hostname] = true
+			if len(node.Hostname) > 253 || !dnsSubdomain.MatchString(node.Hostname) {
+				errs = append(errs, fmt.Sprintf("%s.hostname %q is not a valid DNS name (<=253 chars, lowercase labels); the default <machine>.<cluster>.<baseDomain> would be too long, or an explicit hostname is malformed", owner, node.Hostname))
+			}
 		}
 		if node.MachineRef.Name == "" {
 			errs = append(errs, owner+".machineRef is required")
@@ -699,7 +702,9 @@ func storageCephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alph
 		return v1alpha1.StorageCephHost{}, false
 	}
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-		if node.Hostname == name {
+		// Authored host references (bootstrap.host, placements, tiebreaker) name
+		// a node by its machine name or its registered hostname; both resolve.
+		if node.Hostname == name || node.MachineRef.Name == name {
 			return node, true
 		}
 	}

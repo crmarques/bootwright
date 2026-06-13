@@ -45,7 +45,7 @@ func storageReferencedHosts(state v1alpha1.State) map[string]bool {
 	out := map[string]bool{}
 	for _, cluster := range ManagedStorageClusters(state) {
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-			out[storageInventoryHostName(cluster, node.Hostname)] = true
+			out[storageInventoryHostName(cluster, node.MachineRef.Name)] = true
 		}
 	}
 	return out
@@ -56,7 +56,7 @@ func storageClusterHostSets(state v1alpha1.State) map[string]map[string]bool {
 	for _, cluster := range ManagedStorageClusters(state) {
 		set := map[string]bool{}
 		for _, node := range cluster.Spec.Ceph.Topology.Hosts {
-			set[storageInventoryHostName(cluster, node.Hostname)] = true
+			set[storageInventoryHostName(cluster, node.MachineRef.Name)] = true
 		}
 		out[StorageClusterGroupName(cluster.Metadata.Name)] = set
 	}
@@ -68,7 +68,10 @@ func storageInventoryHostName(cluster v1alpha1.StorageCluster, nodeName string) 
 }
 
 func storageNodeInventoryEntry(state v1alpha1.State, cluster v1alpha1.StorageCluster, node v1alpha1.StorageCephHost, env *v1alpha1.Environment, paths PathOptions, localPolicy locality.Policy) map[string]any {
-	nodeName := node.Hostname
+	// The Ansible inventory identifies nodes by machine name (stable, and the
+	// token the bootstrap seedHost is authored with); cephadm's fully-qualified
+	// hostname lives only in the rendered cephadm specs.
+	nodeName := node.MachineRef.Name
 	entry := map[string]any{}
 	if machine, ok := topology.NodeMachine(state, cluster, nodeName); ok && machine.Spec.Access.SSH != nil {
 		entry = machineInventoryEntry(machine, env, paths, localPolicy)
@@ -150,9 +153,9 @@ func storageHostsVars(state v1alpha1.State, cluster v1alpha1.StorageCluster) []a
 	var out []any
 	for _, node := range cluster.Spec.Ceph.Topology.Hosts {
 		out = append(out, map[string]any{
-			"hostname":      node.Hostname,
-			"inventoryHost": storageInventoryHostName(cluster, node.Hostname),
-			"address":       topology.NodeAddress(state, cluster, node.Hostname),
+			"hostname":      node.MachineRef.Name,
+			"inventoryHost": storageInventoryHostName(cluster, node.MachineRef.Name),
+			"address":       topology.NodeAddress(state, cluster, node.MachineRef.Name),
 			"devices":       append([]string(nil), node.Devices...),
 		})
 	}

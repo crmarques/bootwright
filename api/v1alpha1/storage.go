@@ -176,7 +176,11 @@ type StorageCephPoolReplicas struct {
 
 type StorageCephHost struct {
 	// Hostname is the cephadm host-spec hostname, rendered verbatim; it must
-	// equal the host's actual hostname. It defaults to the machineRef name.
+	// equal the host's actual hostname. It defaults to the fully-qualified
+	// <machineRef>.<cluster>.<baseDomain>, which the Bootwright-managed OS
+	// installer also writes so the two always match. Set it explicitly to pin a
+	// different name; a node opts out to the bare machine name with
+	// hostname.source: machineName on its install profile.
 	Hostname string `yaml:"hostname,omitempty" json:"hostname,omitempty"`
 	// MachineRef selects the ceph-node Machine that backs this host. A
 	// Machine is node-bound by at most one cluster (and at most one host

@@ -39,6 +39,7 @@ func Normalize(state *v1alpha1.State) {
 	for i := range state.StorageClusters {
 		normalizeStorageCluster(&state.StorageClusters[i])
 	}
+	normalizeNodeHostnames(state)
 	for i := range state.StoragePools {
 		normalizeStoragePool(&state.StoragePools[i])
 	}
@@ -291,14 +292,72 @@ func normalizeStorageCluster(cluster *v1alpha1.StorageCluster) {
 	if adm.Bootstrap.AddressRef.Name == "" {
 		adm.Bootstrap.AddressRef = adm.AddressRef
 	}
-	// A topology host's cephadm hostname defaults to its Machine name; the
-	// explicit field is a signal that the Ceph hostname genuinely differs.
-	for i := range cluster.Spec.Ceph.Topology.Hosts {
-		if host := &cluster.Spec.Ceph.Topology.Hosts[i]; host.Hostname == "" {
-			host.Hostname = host.MachineRef.Name
+	// A topology host's cephadm hostname defaults to the fully-qualified node
+	// name; normalizeNodeHostnames fills it once baseDomain and the backing
+	// machine's install profile are in scope. The explicit field is a signal
+	// that the Ceph hostname genuinely differs and is kept verbatim.
+	normalizeStorageStretch(cluster)
+}
+
+// normalizeNodeHostnames defaults every cluster node's hostname to the
+// fully-qualified <machine>.<cluster>.<baseDomain> form — the OpenShift node
+// convention, applied uniformly to Ceph and OpenShift nodes so the name
+// cephadm/the installer registers always resolves. An explicit hostname is kept
+// verbatim. A node opts back out to the bare machine name with
+// hostname.source: machineName on its install profile, and every node falls
+// back to the bare name when no baseDomain is declared.
+func normalizeNodeHostnames(state *v1alpha1.State) {
+	baseDomain := ""
+	if env := primaryEnvironment(state); env != nil {
+		baseDomain = env.Spec.BaseDomain
+	}
+	for i := range state.ContainerClusters {
+		cluster := &state.ContainerClusters[i]
+		for j := range cluster.Spec.Hosts {
+			if host := &cluster.Spec.Hosts[j]; host.Hostname == "" {
+				host.Hostname = defaultNodeHostname(state, host.MachineRef.Name, cluster.Metadata.Name, baseDomain)
+			}
 		}
 	}
-	normalizeStorageStretch(cluster)
+	for i := range state.StorageClusters {
+		cluster := &state.StorageClusters[i]
+		if cluster.Spec.Ceph == nil {
+			continue
+		}
+		for j := range cluster.Spec.Ceph.Topology.Hosts {
+			if host := &cluster.Spec.Ceph.Topology.Hosts[j]; host.Hostname == "" {
+				host.Hostname = defaultNodeHostname(state, host.MachineRef.Name, cluster.Metadata.Name, baseDomain)
+			}
+		}
+	}
+}
+
+// defaultNodeHostname derives a node's default hostname: the fully-qualified
+// <machine>.<cluster>.<baseDomain>, or the bare machine name when the node's
+// install profile opts out or no baseDomain qualifies it.
+func defaultNodeHostname(state *v1alpha1.State, machineName, clusterName, baseDomain string) string {
+	if machineName == "" {
+		return ""
+	}
+	if baseDomain == "" || nodeOptsOutOfFQDN(state, machineName) {
+		return machineName
+	}
+	return stateview.ComposeFQDN(machineName, clusterName, baseDomain)
+}
+
+// nodeOptsOutOfFQDN reports whether a machine's install profile pins the OS
+// hostname to the bare machine name (hostname.source: machineName), opting the
+// node out of FQDN naming.
+func nodeOptsOutOfFQDN(state *v1alpha1.State, machineName string) bool {
+	machine, ok := stateview.Machine(*state, machineName)
+	if !ok {
+		return false
+	}
+	profile, ok := stateview.MachineInstallProfile(*state, machine.Spec.OS.InstallProfileRef.Name)
+	if !ok {
+		return false
+	}
+	return profile.Spec.Customizations.Hostname.Source == v1alpha1.MachineInstallHostnameMachineName
 }
 
 // normalizeStorageStretch fills the derivable stretch fields: presence of the
@@ -316,8 +375,11 @@ func normalizeStorageStretch(cluster *v1alpha1.StorageCluster) {
 		stretch.RuleName = "stretch-rule"
 	}
 	if stretch.Tiebreaker.Site == "" && stretch.Tiebreaker.Host != "" {
+		// The tiebreaker host is authored as a machine name or a hostname; match
+		// either. This runs before hostnames are qualified, so the machine name
+		// is the reliable key.
 		for _, host := range cluster.Spec.Ceph.Topology.Hosts {
-			if host.Hostname == stretch.Tiebreaker.Host {
+			if host.Hostname == stretch.Tiebreaker.Host || host.MachineRef.Name == stretch.Tiebreaker.Host {
 				stretch.Tiebreaker.Site = host.Site
 				break
 			}
