@@ -107,6 +107,7 @@ func validateStorageClusterCeph(state v1alpha1.State, cluster v1alpha1.StorageCl
 	errs = append(errs, validateStorageCephConfig(prefix+".config", ceph.Config)...)
 	errs = append(errs, validateStorageCephMgrModules(prefix+".mgrModules", ceph.MgrModules)...)
 	errs = append(errs, validateStorageCephMonitoring(prefix+".monitoring", cluster)...)
+	errs = append(errs, validateStorageCephManagement(prefix+".management", cluster)...)
 	errs = append(errs, validateStorageCephServices(prefix+".services", cluster)...)
 	errs = append(errs, validateStorageCephNodes(prefix+".topology.hosts", cluster, machines, storageSiteRequirement(state, cluster))...)
 	if ceph.Topology.Stretch != nil {
@@ -516,6 +517,35 @@ func validateStorageCephMonitoring(prefix string, cluster v1alpha1.StorageCluste
 			errs = append(errs, owner+" retentionTime/retentionSize apply to prometheus only")
 		}
 	}
+	return errs
+}
+
+// validateStorageCephManagement checks the management HA surface: a dnsName to
+// publish and report, a valid frontend port, and a complete VIP ingress whose
+// placement resolves to ingress-role hosts (the same rules as the RGW ingress).
+func validateStorageCephManagement(prefix string, cluster v1alpha1.StorageCluster) []string {
+	mgmt := cluster.Spec.Ceph.Management
+	if mgmt == nil {
+		return nil
+	}
+	var errs []string
+	if mgmt.DNSName == "" {
+		errs = append(errs, prefix+".dnsName is required")
+	}
+	if mgmt.Port < 0 || mgmt.Port > 65535 {
+		errs = append(errs, fmt.Sprintf("%s.port %d out of range", prefix, mgmt.Port))
+	}
+	ingress := mgmt.Ingress
+	if ingress.Name == "" {
+		errs = append(errs, prefix+".ingress.name is required")
+	}
+	if ingress.Address == "" {
+		errs = append(errs, prefix+".ingress.address is required")
+	}
+	if ingress.PrefixLength == 0 {
+		errs = append(errs, prefix+".ingress.prefixLength is required")
+	}
+	errs = append(errs, validateStoragePlacementHosts(prefix+".ingress.placement", ingress.Placement, cluster, true, v1alpha1.StorageCephRoleIngress)...)
 	return errs
 }
 

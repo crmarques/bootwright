@@ -3,6 +3,7 @@ package clusteraccess
 import (
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
@@ -93,6 +94,12 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		summary.ShellCommand = summary.SSHCommand + " sudo cephadm shell"
 		summary.DashboardURL = "https://" + summary.SeedAddress + ":" + cephDashboardPort
 	}
+	// A configured management VIP supersedes the per-node dashboard address: the
+	// mgmt-gateway VIP is the HA, user-facing entry, resolvable at its FQDN and
+	// independent of which mgr is active, so it does not depend on the seed node.
+	if mgmt := cluster.Spec.Ceph.Management; mgmt != nil && mgmt.DNSName != "" {
+		summary.DashboardURL = "https://" + mgmt.DNSName + ":" + cephManagementPort(mgmt.Port)
+	}
 	// Bootwright captures the dashboard admin password at install for managed Ceph
 	// clusters and persists it like kubeadmin-password. The summary only reports
 	// the file's location and presence — never its bytes (see FileStatus,
@@ -106,6 +113,16 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		}
 	}
 	return summary
+}
+
+// cephManagementPort renders the management dashboard port, defaulting to the
+// Ceph dashboard's own port when spec.ceph.management.port is unset (the same
+// default the renderer applies to the mgmt-gateway frontend).
+func cephManagementPort(port int) string {
+	if port == 0 {
+		return cephDashboardPort
+	}
+	return strconv.Itoa(port)
 }
 
 func storageSeedSSHTarget(state v1alpha1.State, cluster v1alpha1.StorageCluster, node, address string) string {

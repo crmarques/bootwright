@@ -198,6 +198,15 @@ func GatewayIngressEndpoint(ingress v1alpha1.StorageObjectGatewayIngress) (v1alp
 	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.VirtualInterfaceNetworks}, true
 }
 
+// ManagementIngressEndpoint returns the storage-owned management VIP fronting
+// the mgmt-gateway.
+func ManagementIngressEndpoint(ingress v1alpha1.StorageCephManagementIngress) (v1alpha1.Endpoint, bool) {
+	if ingress.Address == "" {
+		return v1alpha1.Endpoint{}, false
+	}
+	return v1alpha1.Endpoint{Address: ingress.Address, PrefixLength: ingress.PrefixLength, InterfaceNetworks: ingress.VirtualInterfaceNetworks}, true
+}
+
 func CephadmVirtualIP(endpoint v1alpha1.Endpoint) string {
 	if endpoint.PrefixLength > 0 {
 		return fmt.Sprintf("%s/%d", endpoint.Address, endpoint.PrefixLength)

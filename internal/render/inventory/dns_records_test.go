@@ -33,7 +33,8 @@ func TestNameResolutionRecordsIncludeDNSRefConsumers(t *testing.T) {
 // TestNameResolutionRecordsPublishStorageNodesAndGateway covers the storage-only
 // path: the resolver publishes each served node by its normalized FQDN and bare
 // name (so the cephadm dashboard can dial e.g. an alertmanager host), plus the
-// object gateway's public dnsName at its ingress VIP.
+// object gateway's public dnsName at its ingress VIP and the management dnsName
+// at its mgmt-gateway VIP.
 func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	state := v1alpha1.State{
 		Environments: []v1alpha1.Environment{{
@@ -88,6 +89,10 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 							Roles:      []string{v1alpha1.StorageCephRoleMON},
 						}},
 					},
+					Management: &v1alpha1.StorageCephManagement{
+						DNSName: "dashboard.ceph.example.test",
+						Ingress: v1alpha1.StorageCephManagementIngress{Name: "lab", Address: "192.168.140.81"},
+					},
 				},
 			},
 		}},
@@ -111,6 +116,7 @@ func TestNameResolutionRecordsPublishStorageNodesAndGateway(t *testing.T) {
 	want := []string{
 		"ceph-1.ceph.example.test=192.168.140.21",
 		"ceph-1=192.168.140.21",
+		"dashboard.ceph.example.test=192.168.140.81",
 		"rgw.example.test=192.168.140.80",
 	}
 	if got := recordPairs(vars["hostRecords"]); !reflect.DeepEqual(got, want) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render"
+	"github.com/crmarques/bootwright/internal/render/ceph"
 	inventoryrender "github.com/crmarques/bootwright/internal/render/inventory"
 	desiredstate "github.com/crmarques/bootwright/internal/state/desired"
 )
@@ -666,4 +667,98 @@ func dataFoundationBindingAddon(export string) v1alpha1.ClusterAddonBindingAddon
 			Values: values,
 		}},
 	}
+}
+
+// TestCephadmLateServicesRendersManagementHA covers the native HA management
+// surface: spec.ceph.management renders a mgmt-gateway (reverse-proxy, bare VIP)
+// and an ingress in keepalive_only mode (CIDR VIP, mgmt-gateway backend) on the
+// resolved ingress hosts. This is the IBM Storage Ceph supported pattern.
+func TestCephadmLateServicesRendersManagementHA(t *testing.T) {
+	cluster := v1alpha1.StorageCluster{
+		Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
+		Spec: v1alpha1.StorageClusterSpec{
+			Type: v1alpha1.StorageClusterTypeCeph,
+			Ceph: &v1alpha1.StorageClusterCephSpec{
+				Topology: v1alpha1.StorageCephTopology{
+					Hosts: []v1alpha1.StorageCephHost{
+						{Hostname: "ceph-1.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-1"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
+						{Hostname: "ceph-2.ceph-ibm.bootwright.test", MachineRef: v1alpha1.LocalObjectReference{Name: "ceph-2"}, Roles: []string{v1alpha1.StorageCephRoleMGR, v1alpha1.StorageCephRoleIngress}},
+					},
+				},
+				Management: &v1alpha1.StorageCephManagement{
+					DNSName: "dashboard.ceph.bootwright.test",
+					Ingress: v1alpha1.StorageCephManagementIngress{
+						Name:                     "lab",
+						Address:                  "192.168.140.81",
+						PrefixLength:             24,
+						VirtualInterfaceNetworks: []string{"192.168.140.0/24"},
+						Placement:                v1alpha1.StoragePlacement{Hosts: []string{"ceph-1", "ceph-2"}},
+					},
+				},
+			},
+		},
+	}
+	docs := docsFromSpecs(t, ceph.CephadmLateServicesSpec(v1alpha1.State{}, cluster))
+	wantHosts := []string{"ceph-1.ceph-ibm.bootwright.test", "ceph-2.ceph-ibm.bootwright.test"}
+
+	gw := serviceDoc(t, docs, "mgmt-gateway", "")
+	if _, ok := gw["service_id"]; ok {
+		t.Fatalf("mgmt-gateway is a singleton and must carry no service_id: %#v", gw)
+	}
+	if got := stringSlice(t, gw["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, wantHosts) {
+		t.Fatalf("mgmt-gateway hosts = %v, want %v", got, wantHosts)
+	}
+	gwSpec := gw["spec"].(map[string]any)
+	if got := gwSpec["virtual_ip"]; got != "192.168.140.81" {
+		t.Fatalf("mgmt-gateway virtual_ip = %v, want bare 192.168.140.81", got)
+	}
+	if got := gwSpec["port"]; got != 8443 {
+		t.Fatalf("mgmt-gateway port = %v, want 8443", got)
+	}
+	if _, ok := gwSpec["enable_auth"]; ok {
+		t.Fatalf("unset enableAuth must keep cephadm's default (omitted): %#v", gwSpec)
+	}
+
+	ing := serviceDoc(t, docs, "ingress", "mgmt-gateway.lab")
+	if got := stringSlice(t, ing["placement"].(map[string]any)["hosts"]); !reflect.DeepEqual(got, wantHosts) {
+		t.Fatalf("mgmt ingress hosts = %v, want %v", got, wantHosts)
+	}
+	ingSpec := ing["spec"].(map[string]any)
+	if got := ingSpec["backend_service"]; got != "mgmt-gateway" {
+		t.Fatalf("mgmt ingress backend_service = %v, want mgmt-gateway", got)
+	}
+	if got := ingSpec["virtual_ip"]; got != "192.168.140.81/24" {
+		t.Fatalf("mgmt ingress virtual_ip = %v, want 192.168.140.81/24", got)
+	}
+	if got := ingSpec["keepalive_only"]; got != true {
+		t.Fatalf("mgmt ingress keepalive_only = %v, want true", got)
+	}
+	if got := stringSlice(t, ingSpec["virtual_interface_networks"]); !reflect.DeepEqual(got, []string{"192.168.140.0/24"}) {
+		t.Fatalf("mgmt ingress virtual_interface_networks = %v", got)
+	}
+}
+
+// docsFromSpecs round-trips rendered service specs through YAML so the in-memory
+// []any/[]string values become the []any/map[string]any shapes the doc helpers
+// expect — and so the assertions exercise the actual serialized output.
+func docsFromSpecs(t *testing.T, specs []any) []map[string]any {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "specs.yaml")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create spec file: %v", err)
+	}
+	enc := yaml.NewEncoder(f)
+	for _, doc := range specs {
+		if err := enc.Encode(doc); err != nil {
+			t.Fatalf("encode spec doc: %v", err)
+		}
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatalf("close encoder: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close spec file: %v", err)
+	}
+	return readYAMLDocs(t, path)
 }

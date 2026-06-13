@@ -73,6 +73,14 @@ type StorageClusterCephSpec struct {
 	// host, so an authored nodeExporter block narrows by explicit placement
 	// only.
 	Monitoring *StorageCephMonitoring `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
+	// Management exposes the Ceph manager UI (the Dashboard, and through the
+	// same gateway the Grafana/Prometheus/Alertmanager UIs) behind a native
+	// cephadm HA VIP. cephadm renders a mgmt-gateway that reverse-proxies the
+	// management endpoints plus an ingress in keepalive_only mode that owns the
+	// floating VIP — the supported IBM Storage Ceph pattern for HA management
+	// access, distinct from the RGW data-path ingress (HAProxy backend_service).
+	// Absent leaves the dashboard reachable only on each mgr host's own address.
+	Management *StorageCephManagement `yaml:"management,omitempty" json:"management,omitempty"`
 	// Services is the cephadm service-spec passthrough for service types
 	// Bootwright does not model first-class (nfs, loki, ...): serviceType,
 	// serviceID, placement, and spec render 1:1 into a cephadm service spec.
@@ -411,6 +419,40 @@ type StorageObjectGatewayCephSpec struct {
 // StorageObjectGatewayIngress is one storage-owned RGW ingress VIP. Address and
 // prefixLength are owned here, not borrowed from a ContainerCluster endpoint.
 type StorageObjectGatewayIngress struct {
+	Name         string `yaml:"name" json:"name"`
+	Address      string `yaml:"address" json:"address"`
+	PrefixLength int    `yaml:"prefixLength" json:"prefixLength"`
+	// VirtualInterfaceNetworks renders verbatim to the cephadm ingress spec
+	// virtual_interface_networks field.
+	VirtualInterfaceNetworks []string         `yaml:"virtualInterfaceNetworks,omitempty" json:"virtualInterfaceNetworks,omitempty"`
+	Placement                StoragePlacement `yaml:"placement,omitempty" json:"placement,omitempty"`
+}
+
+// StorageCephManagement declares native HA access to the Ceph management
+// surface. cephadm renders two services from it: a mgmt-gateway that
+// reverse-proxies the management UIs and an ingress in keepalive_only mode that
+// floats the VIP in front of it. See StorageClusterCephSpec.Management.
+type StorageCephManagement struct {
+	// DNSName is the FQDN published at the management VIP; `bootwright cluster
+	// access` reports the dashboard at https://<dnsName>:<port>. The resolver
+	// serving the cluster's nodes publishes it at the ingress VIP.
+	DNSName string `yaml:"dnsName" json:"dnsName"`
+	// Port is the mgmt-gateway frontend (https) port. Defaults to 8443.
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+	// EnableAuth turns on the mgmt-gateway SSO/oauth2 front door. Unset keeps
+	// cephadm's own default (off); a lab typically leaves it off and reaches the
+	// dashboard directly through the VIP.
+	EnableAuth *bool `yaml:"enableAuth,omitempty" json:"enableAuth,omitempty"`
+	// Ingress owns the floating VIP. It runs in keepalive_only mode: the
+	// mgmt-gateway does the reverse-proxying; keepalived only floats the VIP.
+	Ingress StorageCephManagementIngress `yaml:"ingress" json:"ingress"`
+}
+
+// StorageCephManagementIngress is the storage-owned management VIP. It mirrors
+// the RGW ingress shape (address/prefixLength/virtualInterfaceNetworks/
+// placement) but fronts the mgmt-gateway, not an RGW service. Placement
+// defaults to the cluster's ingress-role hosts, exactly like the RGW ingress.
+type StorageCephManagementIngress struct {
 	Name         string `yaml:"name" json:"name"`
 	Address      string `yaml:"address" json:"address"`
 	PrefixLength int    `yaml:"prefixLength" json:"prefixLength"`

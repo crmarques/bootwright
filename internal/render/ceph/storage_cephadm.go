@@ -79,6 +79,7 @@ func CephadmLateServicesSpec(state v1alpha1.State, cluster v1alpha1.StorageClust
 		}
 	}
 	docs = append(docs, cephadmMonitoringSpecs(cluster)...)
+	docs = append(docs, cephadmManagementSpecs(cluster)...)
 	for _, service := range cluster.Spec.Ceph.Services {
 		hosts := topology.ResolvePlacement(cluster, service.Placement, "")
 		spec := map[string]any{}
@@ -272,5 +273,61 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 		}
 		docs = append(docs, cephadmPlacementService(service.serviceType, "", hosts, placement.CountPerHost, spec))
 	}
+	return docs
+}
+
+// cephManagementDefaultPort is the mgmt-gateway frontend (https) port Bootwright
+// renders when spec.ceph.management.port is unset. It matches the Ceph
+// dashboard's own default port so the access URL is unsurprising.
+const cephManagementDefaultPort = 8443
+
+// cephadmManagementSpecs renders native HA access to the Ceph management surface
+// from spec.ceph.management: a mgmt-gateway that reverse-proxies the dashboard
+// and monitoring UIs, plus an ingress in keepalive_only mode that floats the VIP
+// in front of it. This is the IBM Storage Ceph supported pattern for HA
+// management access — the RGW ingress (HAProxy backend_service) is the
+// data-path equivalent. Absent management renders nothing.
+func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
+	mgmt := cluster.Spec.Ceph.Management
+	if mgmt == nil {
+		return nil
+	}
+	endpoint, ok := topology.ManagementIngressEndpoint(mgmt.Ingress)
+	if !ok {
+		return nil
+	}
+	// Both services land on the resolved ingress hosts: the local mgmt-gateway is
+	// the one the keepalived VIP fronts when it floats to that host.
+	hosts := topology.ResolvePlacement(cluster, mgmt.Ingress.Placement, v1alpha1.StorageCephRoleIngress)
+	if len(hosts) == 0 {
+		return nil
+	}
+	port := mgmt.Port
+	if port == 0 {
+		port = cephManagementDefaultPort
+	}
+	// The mgmt-gateway is a cephadm singleton (no service_id): it terminates the
+	// management UIs and advertises them at virtual_ip. enable_auth renders only
+	// when authored so an unset spec keeps cephadm's own default (off).
+	gatewaySpec := map[string]any{
+		"port":       port,
+		"virtual_ip": endpoint.Address,
+	}
+	if mgmt.EnableAuth != nil {
+		gatewaySpec["enable_auth"] = *mgmt.EnableAuth
+	}
+	docs := []any{cephadmPlacementService("mgmt-gateway", "", hosts, 0, gatewaySpec)}
+	// keepalive_only: the ingress contributes only the keepalived VIP/failover —
+	// the mgmt-gateway (not HAProxy) does the reverse-proxying, so backend_service
+	// points at the gateway and no HAProxy frontend is rendered.
+	ingressSpec := map[string]any{
+		"backend_service": "mgmt-gateway",
+		"virtual_ip":      topology.CephadmVirtualIP(endpoint),
+		"keepalive_only":  true,
+	}
+	if len(endpoint.InterfaceNetworks) > 0 {
+		ingressSpec["virtual_interface_networks"] = endpoint.InterfaceNetworks
+	}
+	docs = append(docs, cephadmPlacementService("ingress", "mgmt-gateway."+mgmt.Ingress.Name, hosts, 0, ingressSpec))
 	return docs
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 )
 
@@ -87,5 +88,50 @@ func TestStorageAccessSummaryReportsDashboardPasswordPath(t *testing.T) {
 	}
 	if summary.DashboardPassword.Present {
 		t.Fatalf("dashboard password reported present before install: %+v", summary.DashboardPassword)
+	}
+}
+
+// TestStorageAccessSummaryUsesManagementVIPDashboardURL covers the access URL
+// for a cluster fronted by a mgmt-gateway VIP: the dashboard URL is the
+// management FQDN (resolvable at the VIP), not a per-node address, and the port
+// defaults to 8443 but follows an explicit management.port.
+func TestStorageAccessSummaryUsesManagementVIPDashboardURL(t *testing.T) {
+	managementCluster := func(port int) v1alpha1.StorageCluster {
+		return v1alpha1.StorageCluster{
+			Metadata: v1alpha1.Metadata{Name: "ceph-ibm"},
+			Spec: v1alpha1.StorageClusterSpec{
+				Type:       v1alpha1.StorageClusterTypeCeph,
+				Management: v1alpha1.StorageClusterManagementManaged,
+				Ceph: &v1alpha1.StorageClusterCephSpec{
+					Management: &v1alpha1.StorageCephManagement{
+						DNSName: "dashboard.ceph.bootwright.test",
+						Port:    port,
+						Ingress: v1alpha1.StorageCephManagementIngress{
+							Name: "lab", Address: "192.168.140.81", PrefixLength: 24,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		port int
+		want string
+	}{
+		{"default port", 0, "https://dashboard.ceph.bootwright.test:8443"},
+		{"explicit port", 9443, "https://dashboard.ceph.bootwright.test:9443"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := v1alpha1.State{StorageClusters: []v1alpha1.StorageCluster{managementCluster(tc.port)}}
+			summaries := StorageSummaries(state, "")
+			if len(summaries) != 1 {
+				t.Fatalf("summaries = %+v, want one storage cluster", summaries)
+			}
+			if got := summaries[0].DashboardURL; got != tc.want {
+				t.Fatalf("dashboard url = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

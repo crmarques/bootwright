@@ -60,6 +60,9 @@ func nameResolutionRecordsVars(state v1alpha1.State, entryName string, additiona
 	// Object-gateway S3 endpoints: the gateway owns both its public dnsName and
 	// its ingress VIP, so publish that mapping for resolvers its cluster uses.
 	hostRecords = append(hostRecords, gatewayHostRecords(state, entryName)...)
+	// Ceph management VIP: the storage cluster owns its management dnsName and
+	// the mgmt-gateway ingress VIP, so publish that mapping the same way.
+	hostRecords = append(hostRecords, managementHostRecords(state, entryName)...)
 	return dnsmasqRecordVars(hostRecords), dnsmasqRecordVars(domainRecords)
 }
 
@@ -97,6 +100,26 @@ func gatewayHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord 
 			continue
 		}
 		records = append(records, dnsmasqRecord{name: dnsName, address: vip})
+	}
+	return records
+}
+
+// managementHostRecords publishes each storage cluster's management dnsName at
+// its mgmt-gateway ingress VIP, for resolvers the cluster's nodes use.
+func managementHostRecords(state v1alpha1.State, entryName string) []dnsmasqRecord {
+	var records []dnsmasqRecord
+	for _, sc := range state.StorageClusters {
+		if sc.Spec.Ceph == nil || sc.Spec.Ceph.Management == nil {
+			continue
+		}
+		mgmt := sc.Spec.Ceph.Management
+		if mgmt.DNSName == "" || mgmt.Ingress.Address == "" {
+			continue
+		}
+		if !storageClusterUsesNameResolution(state, sc.Metadata.Name, entryName) {
+			continue
+		}
+		records = append(records, dnsmasqRecord{name: mgmt.DNSName, address: mgmt.Ingress.Address})
 	}
 	return records
 }
