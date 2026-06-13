@@ -6,9 +6,10 @@ description: Desired-state ownership, references, contexts, apply stages, and ex
 # Concepts
 
 Bootwright is built around one rule: every operational fact has one owning
-object. Rendering then combines those objects into the concrete inputs consumed
-by `openshift-install`, provider adapters, managed OS installers, cephadm,
-storage export flows, and add-on apply tasks.
+object. That lets one desired-state tree describe an entire cloud platform or a
+focused component slice. Rendering combines those objects into the concrete
+inputs consumed by `openshift-install`, provider adapters, managed OS
+installers, cephadm, storage export flows, and add-on apply tasks.
 
 ## Desired State
 

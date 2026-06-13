@@ -16,11 +16,12 @@ the task before editing. Do not start from partial context.
 These hold for every change; verify their current form in `/specs/` when a task
 depends on them.
 
-- **Scope.** Automated declarative provisioning of OpenShift and OKD platform
-  environments from bare or virtualized substrates through machines, managed
-  machine OS installs, shared infrastructure services, managed clusters, Ceph
-  storage clusters, exported storage surfaces, and cluster-bound bootstrap
-  add-ons. Day-2 GitOps publication of fleet content (package catalogs, KRC/SRC
+- **Scope.** Desired-state orchestration of cloud platforms from bare or
+  virtualized substrates through machines, managed machine OS installs, shared
+  infrastructure services, OpenShift or OKD managed clusters, Ceph storage
+  clusters, exported storage surfaces, and cluster-bound bootstrap add-ons.
+  Bootwright may converge the whole graph or selected platform components.
+  Day-2 GitOps publication of fleet content (package catalogs, KRC/SRC
   bootstrap) is a separate project; do not reintroduce it. Initial
   container-cluster install scope is direct `openshift-install agent` runs
   against single-node and multi-node machines.

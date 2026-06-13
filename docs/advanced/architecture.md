@@ -5,8 +5,8 @@ description: How Bootwright turns desired state into installer and provider inpu
 
 # Architecture
 
-Bootwright orchestrates external tool-driven provisioning through a simple
-pipeline:
+Bootwright turns desired state into real platform components by orchestrating
+external tool-driven provisioning through a simple pipeline:
 
 ```text
 load YAML -> normalize -> validate -> render -> apply/status

@@ -5,27 +5,28 @@ description: Objective, scope, and documentation map for Bootwright.
 
 # Bootwright
 
-Bootwright builds OpenShift and OKD platform environments from declarative
-desired-state YAML. You describe the fleet once - environment defaults,
+Bootwright turns cloud platform intent into reality from declarative
+desired-state YAML. It can provision the whole platform from scratch or converge
+an isolated component for build-out, recovery, or maintenance. You describe
 substrates, machines, managed machine OS installs, networks, shared services,
 OpenShift or OKD managed clusters, Ceph storage clusters, storage exports, and
 bootstrap add-ons - and Bootwright validates that intent, renders the inputs
-expected by official tools, and converges the graph idempotently from the
-bastion host.
+expected by official tools, and applies the dependency graph idempotently from
+the bastion host.
 
 [Get Started](getting-started.md){ .md-button .md-button--primary }
 [API Reference](api/index.md){ .md-button }
 
 ## Objective
 
-Bootwright is for operators who need repeatable platform provisioning across
-bare-metal and virtualized environments without splitting machines, services,
-clusters, storage, and early add-ons across separate hand-maintained runbooks.
+Bootwright is for operators who need repeatable cloud-platform provisioning
+across bare-metal and virtualized environments without splitting machines,
+services, clusters, storage, and early add-ons across separate hand-maintained
+runbooks.
 
 The objective is simple:
 
-1. Author safe-to-commit YAML as the source of truth for the platform
-   environment.
+1. Author safe-to-commit YAML as the source of truth for the cloud platform.
 2. Validate ownership, references, and runtime requirements before mutation.
 3. Render deterministic `openshift-install`, provider, machine OS, storage,
    and add-on inputs.
@@ -39,7 +40,9 @@ managed clusters, managed or imported Ceph storage, storage export attachments,
 and early cluster-bound bootstrap components. Current apply support covers
 OpenShift and OKD agent installs on libvirt with emulated Redfish, real bare
 metal with Redfish virtual media, vSphere VMs, KubeVirt-hosted child VMs, and
-Ceph storage through cephadm.
+Ceph storage through cephadm. The same desired state can converge the complete
+cloud platform or target selected `ContainerCluster` and `StorageCluster`
+components.
 
 Bootwright does not own long-term day-2 GitOps publication. It can install early
 platform add-ons and apply initial manifests, but ongoing fleet content

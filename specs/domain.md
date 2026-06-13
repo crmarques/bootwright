@@ -1,19 +1,21 @@
 # Domain
 
-Bootwright automates provisioning of OpenShift and OKD platform environments
-from declarative desired state. A platform environment includes
-the fleet context, substrate capabilities, machines and managed machine OS
-installs, shared infrastructure services, OpenShift or OKD managed clusters,
-Ceph storage clusters, exported storage surfaces, and cluster-bound bootstrap
-add-ons.
+Bootwright orchestrates desired state into reality for cloud platforms. It can
+provision a complete platform from scratch or converge selected components for
+build-out, recovery, or maintenance. A Bootwright-managed cloud platform
+includes the fleet context, substrate capabilities, machines and managed
+machine OS installs, shared infrastructure services, OpenShift or OKD managed
+clusters, Ceph storage clusters, exported storage surfaces, and cluster-bound
+bootstrap add-ons.
 
 The initial container-cluster install scope is direct `openshift-install agent`
 execution against single-node and multi-node cluster machines.
 
 Managed and imported Ceph storage are in scope as peer storage-cluster phases.
-Initial post-install bootstrap of early platform components is in scope when
-declared as cluster-bound add-ons. Day-2 GitOps publication of fleet content
-is out of scope for this repository.
+Apply and destroy can target the whole graph or selected `ContainerCluster` and
+`StorageCluster` components. Initial post-install bootstrap of early platform
+components is in scope when declared as cluster-bound add-ons. Day-2 GitOps
+publication of fleet content is out of scope for this repository.
 
 ## Operating Model
 

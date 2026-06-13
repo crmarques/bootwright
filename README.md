@@ -4,27 +4,29 @@
 
 # Bootwright
 
-Bootwright is a desired-state orchestrator for building OpenShift and OKD
-platform environments. You describe the fleet environment, substrates,
-machines, managed machine OS installs, networks, shared infrastructure
-services, OpenShift or OKD managed clusters, Ceph storage clusters, storage
-exports, and bootstrap add-ons with declarative YAML kinds. Bootwright validates
-that intent, renders deterministic inputs for the official installer, provider,
-storage, and cluster CLIs, and converges the graph idempotently.
+Bootwright is a desired-state orchestrator for turning cloud platform intent
+into reality. It can provision a complete platform from scratch or converge an
+isolated component for build-out, recovery, or maintenance. You describe
+substrates, machines, managed machine OS installs, networks, shared
+infrastructure services, OpenShift or OKD managed clusters, Ceph storage
+clusters, storage exports, and bootstrap add-ons with declarative YAML kinds.
+Bootwright validates that intent, renders deterministic inputs for the official
+installer, provider, storage, and cluster CLIs, and applies the dependency graph
+idempotently so those pieces become one coherent cloud platform.
 
-**Supported container-cluster distributions:** OpenShift and OKD.
+**Supported cluster families:** OpenShift, OKD, and Ceph.
 
 ## The problem it solves
 
-Standing up one cluster is a runbook. Standing up a platform environment is a
+Standing up one cluster is a runbook. Standing up a cloud platform is a
 coordination problem: machines may need substrate preparation or OS install,
 clusters need shared services such as load balancers, DNS, mirror registries,
 proxies, and artifact servers, storage may be imported or built as Ceph, and
 early add-ons need to wait for installed clusters and exported storage.
 Handwritten scripts and ad-hoc installer runs do not keep those relationships
 consistent. Bootwright replaces them with versioned objects and an idempotent
-apply graph: declare the environment once, converge it as many times as you
-need, and get the same result every time.
+apply graph: declare the platform once, converge the whole graph or a selected
+component, and get the same result every time.
 
 The CLI covers the normal convergence path:
 
@@ -50,10 +52,12 @@ install selected container and storage clusters, add-ons, and integrations.
 (`host trust` pre-records SSH host-key trust; scripted runs like `apply --yes`
 require it, while interactive `preflight`/`apply` runs can instead confirm
 each unknown host's fingerprint on first use.)
-Use `--clusters <name>[,<name>...]` for focused recovery. `destroy` uses the
-same `--stage infra|clusters` and `--clusters` selector shape; omitting `--stage`
-tears down the whole context (clusters first, then the infra they ran on).
-Unscoped `destroy --stage infra` performs current-context VM cleanup.
+Use `--clusters <name>[,<name>...]` to converge or recover isolated
+`ContainerCluster` and `StorageCluster` components without applying the whole
+platform. `destroy` uses the same `--stage infra|clusters` and `--clusters`
+selector shape; omitting `--stage` tears down the whole context (clusters first,
+then the infra they ran on). Unscoped `destroy --stage infra` performs
+current-context VM cleanup.
 
 <p align="center">
   <img src="images/high-level-overview.png" alt="Bootwright overview" width="800">
@@ -161,10 +165,12 @@ that provides `dataFoundation`. Bootwright supports imported external Ceph via
 an ODF external-cluster-details secret and managed Ceph where Ansible installs
 cephadm prerequisites on ready or Bootwright-installed storage nodes.
 
-Current `apply` support is explicit: libvirt with emulated Redfish BMCs,
-bare metal with Redfish virtual media, KubeVirt VMs hosted by OpenShift
-Virtualization, and vCenter-managed vSphere VMs are converged by the shipped
-Ansible workflows. IPMI is not apply-supported today.
+Current `apply` support is explicit: Bootwright converges OpenShift and OKD
+agent clusters on libvirt with emulated Redfish BMCs, bare metal with Redfish
+virtual media, KubeVirt VMs hosted by OpenShift Virtualization, and
+vCenter-managed vSphere VMs. It also converges managed or imported Ceph storage
+clusters through cephadm and binds storage exports to installed clusters through
+add-on inputs. IPMI is not apply-supported today.
 
 ## CLI
 

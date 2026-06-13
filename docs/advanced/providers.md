@@ -10,7 +10,9 @@ which cluster consumes the capability.
 
 Current apply support covers libvirt machines with emulated Redfish BMCs,
 bare-metal machines with Redfish virtual media, KubeVirt VMs hosted on an
-OpenShift Virtualization cluster, and vCenter-managed vSphere VMs.
+OpenShift Virtualization cluster, and vCenter-managed vSphere VMs. Those
+substrates can back a complete cloud platform graph or a selected
+`ContainerCluster` or `StorageCluster` convergence.
 
 ## Bare Metal
 

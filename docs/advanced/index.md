@@ -7,7 +7,8 @@ description: Advanced Bootwright usage, examples, and operational topics.
 
 Use this section after the first single-node apply path is clear. These pages
 cover provider-specific configuration, larger example trees, disconnected
-installs, add-ons, storage, and operational recovery.
+installs, add-ons, storage, and operational recovery for whole cloud platforms
+or selected platform components.
 
 | Topic | Use it for |
 | --- | --- |

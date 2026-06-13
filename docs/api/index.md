@@ -6,10 +6,11 @@ description: Field reference for bootwright.io/v1alpha1 desired-state objects.
 # API Reference
 
 Bootwright desired state uses `apiVersion: bootwright.io/v1alpha1` and seventeen
-authored kinds covering environment defaults, machines, provider substrates,
-shared services, OpenShift or OKD managed clusters, Ceph storage, storage
-exports, and cluster-bound add-ons. This section is the user-facing field
-reference. The normative contract remains
+authored kinds that can describe a whole cloud platform or selected platform
+components: environment defaults, machines, provider substrates, shared
+services, OpenShift or OKD managed clusters, Ceph storage, storage exports, and
+cluster-bound add-ons. This section is the user-facing field reference. The
+normative contract remains
 [`specs/state-model.md`](https://github.com/crmarques/bootwright/blob/main/specs/state-model.md),
 and the public Go types live under
 [`api/v1alpha1`](https://github.com/crmarques/bootwright/tree/main/api/v1alpha1).
