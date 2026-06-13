@@ -13,7 +13,7 @@
   register: bootwright_ceph_device_mounts_final
   changed_when: false
   failed_when: false
-  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
@@ -41,7 +41,7 @@
   register: bootwright_ceph_wipefs
   changed_when: true
   failed_when: bootwright_ceph_wipefs.rc != 0
-  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
@@ -56,7 +56,7 @@
   # A failed zap leaves a half-cleared partition table that can corrupt the next
   # provision or a later repurpose of the device. Fail closed instead of swallowing.
   failed_when: bootwright_ceph_sgdisk.rc != 0
-  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 

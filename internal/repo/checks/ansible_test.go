@@ -3032,6 +3032,53 @@ func TestStorageCephadmDestroyReprobesMountsBeforeWipe(t *testing.T) {
 	}
 }
 
+// TestStorageCephadmDestroySkipsAbsentDevices pins that a declared OSD device
+// which is not present on the host (lsblk "not a block device") is skipped
+// rather than blocking teardown, while a probe that fails for any other reason
+// still fails closed. This lets destroy tolerate config drift (e.g. the profile
+// declaring more OSD disks than were provisioned) without weakening the
+// mounted/in-use and unknown-error refusals.
+func TestStorageCephadmDestroySkipsAbsentDevices(t *testing.T) {
+	tasks := storageCephDestroyTasks(t)
+	classifyIdx := findAnsibleTask(t, tasks, "Classify declared Ceph destroy devices by presence")
+	unprobeableIdx := findAnsibleTask(t, tasks, "Refuse to wipe Ceph destroy devices that could not be probed")
+	mountRefuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe mounted or in-use Ceph destroy devices")
+	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
+	if !(classifyIdx < unprobeableIdx && unprobeableIdx < mountRefuseIdx && mountRefuseIdx < wipeIdx) {
+		t.Fatalf("destroy must classify devices, fail closed on unprobeable, then refuse mounted, then wipe (classify=%d unprobeable=%d mount=%d wipe=%d)", classifyIdx, unprobeableIdx, mountRefuseIdx, wipeIdx)
+	}
+
+	// Absent is recognized only from the "not a block device" probe failure, and
+	// the present set is the rc==0 probes; everything else stays unprobeable.
+	classify, ok := tasks[classifyIdx]["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("device classification must be a set_fact, got %v", tasks[classifyIdx])
+	}
+	if got := fmt.Sprint(classify["bootwright_ceph_absent_devices"]); !strings.Contains(got, "not a block device") {
+		t.Fatalf("absent devices must be recognized from the lsblk \"not a block device\" probe, got %v", classify["bootwright_ceph_absent_devices"])
+	}
+	if got := fmt.Sprint(classify["bootwright_ceph_present_devices"]); !strings.Contains(got, "selectattr('rc', 'equalto', 0)") {
+		t.Fatalf("present devices must be the rc==0 probes, got %v", classify["bootwright_ceph_present_devices"])
+	}
+
+	// A probe failure that is not "absent" must still fail closed.
+	unprobeable, ok := tasks[unprobeableIdx]["ansible.builtin.assert"].(map[string]any)
+	if !ok {
+		t.Fatalf("unprobeable guard must be an assert, got %v", tasks[unprobeableIdx])
+	}
+	if got := fmt.Sprint(unprobeable["that"]); !strings.Contains(got, "bootwright_ceph_unprobeable_devices") {
+		t.Fatalf("unprobeable guard must fail closed on devices that could not be probed, got %v", unprobeable["that"])
+	}
+
+	// The mounted/in-use refusal and the wipe must only ever touch present devices.
+	if got := fmt.Sprint(tasks[mountRefuseIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_present_probe") {
+		t.Fatalf("mounted-device refusal must loop over present probes only, got %v", tasks[mountRefuseIdx]["loop"])
+	}
+	if got := fmt.Sprint(tasks[wipeIdx]["loop"]); !strings.Contains(got, "bootwright_ceph_present_devices") {
+		t.Fatalf("device wipe must loop over present devices only, got %v", tasks[wipeIdx]["loop"])
+	}
+}
+
 func TestLibvirtMachineDestroyVerifiesOwnershipMarker(t *testing.T) {
 	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_substrate_libvirt/tasks/destroy.yml")
 	readIdx := findAnsibleTask(t, tasks, "Read libvirt domain ownership metadata")

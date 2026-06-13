@@ -19,17 +19,61 @@
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
 
+# A declared device that does not exist on this host (lsblk reports "not a block
+# device") has nothing to wipe — skip it so config drift (e.g. the profile now
+# declares more OSD disks than were provisioned) cannot block teardown. A probe
+# that fails for any other reason stays fatal: fail closed rather than risk
+# wiping the wrong device. Every later wipe gate runs over the present set only.
+- name: Classify declared Ceph destroy devices by presence
+  ansible.builtin.set_fact:
+    bootwright_ceph_present_probe: >-
+      {{ bootwright_ceph_device_mounts.results | default([]) | selectattr('rc', 'equalto', 0) | list }}
+    bootwright_ceph_present_devices: >-
+      {{ bootwright_ceph_device_mounts.results | default([]) | selectattr('rc', 'equalto', 0)
+         | map(attribute='item') | list }}
+    bootwright_ceph_absent_devices: >-
+      {{ bootwright_ceph_device_mounts.results | default([]) | rejectattr('rc', 'equalto', 0)
+         | selectattr('stderr', 'defined')
+         | selectattr('stderr', 'search', 'not a block device|No such file or directory')
+         | map(attribute='item') | list }}
+  changed_when: false
+
+- name: Resolve Ceph destroy devices that could not be probed
+  ansible.builtin.set_fact:
+    bootwright_ceph_unprobeable_devices: >-
+      {{ (bootwright_ceph_device_mounts.results | default([]) | rejectattr('rc', 'equalto', 0)
+          | map(attribute='item') | list)
+         | difference(bootwright_ceph_absent_devices | default([])) }}
+  changed_when: false
+
+- name: Refuse to wipe Ceph destroy devices that could not be probed
+  ansible.builtin.assert:
+    that:
+      - (bootwright_ceph_unprobeable_devices | default([])) | length == 0
+    fail_msg: >-
+      Refusing to destroy {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      declared device(s) {{ bootwright_ceph_unprobeable_devices | default([]) | join(', ') }}
+      could not be probed with lsblk (a non-zero exit other than "not a block device").
+      Failing closed rather than risk wiping the wrong device.
+
+- name: Skip absent declared Ceph destroy devices
+  ansible.builtin.debug:
+    msg: >-
+      Skipping declared device(s) {{ bootwright_ceph_absent_devices | default([]) | join(', ') }}
+      for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      not present on this host, nothing to wipe.
+  when: (bootwright_ceph_absent_devices | default([])) | length > 0
+
 - name: Refuse to wipe mounted or in-use Ceph destroy devices
   ansible.builtin.assert:
     that:
-      - item.rc | default(1) == 0
       - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
     fail_msg: >-
       Refusing to wipe storage device {{ item.item }} for
       {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
       it is mounted or in use ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}),
       so it is not a wipeable Bootwright OSD device. Correct the declared devices list before destroying.
-  loop: "{{ bootwright_ceph_device_mounts.results | default([]) }}"
+  loop: "{{ bootwright_ceph_present_probe | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
 
@@ -62,7 +106,7 @@
       ({{ bootwright_ceph_recorded_osd_devices | default([]) | join(', ') }}), so it was not
       provisioned by Bootwright as an OSD. It may have been added to the devices list after
       apply. Re-apply to re-record OSD devices, or verify and wipe it manually.
-  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop: "{{ bootwright_ceph_present_devices | default([]) }}"
   loop_control:
     label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
   when: (bootwright_ceph_osd_device_marker | default({})).content is defined
