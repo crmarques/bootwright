@@ -24,4 +24,14 @@ const (
 	PlaybookTaskContainerClusterBootAgentMachine = "bootwright.core.task_container_cluster_boot_agent_machine"
 	PlaybookTaskContainerClusterWaitAgentInstall = "bootwright.core.task_container_cluster_wait_agent_install"
 	PlaybookTaskStorageClusterApply              = "bootwright.core.task_storage_cluster_apply"
+
+	// Per-task destroy entry points. The workflow_*_destroy playbooks are thin
+	// import wrappers over these; the apply-style destroy scheduler runs them as
+	// individual graph tasks (in teardown order) so destroy shows granular
+	// progress, reusing the run's limit and extra-vars unchanged.
+	PlaybookTaskMachineInfraDestroy           = "bootwright.core.task_machine_infra_destroy"
+	PlaybookTaskInfraComponentServicesDestroy = "bootwright.core.task_infra_component_services_destroy"
+	PlaybookTaskProviderServicesDestroy       = "bootwright.core.task_provider_services_destroy"
+	PlaybookTaskStorageClusterDestroy         = "bootwright.core.task_storage_cluster_destroy"
+	PlaybookTaskContainerClusterAgentDestroy  = "bootwright.core.task_container_cluster_agent_destroy"
 )

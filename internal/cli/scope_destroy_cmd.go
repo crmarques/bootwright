@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/clusteraccess"
 	"github.com/crmarques/bootwright/internal/converge"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/graph"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
@@ -237,18 +238,38 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 		if !dryRun && !plan.NoRemoteWork {
 			reporter.BundleReady(bundle)
 		}
-		runResult, destroyLogPath, err := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
-		if err != nil {
-			return failErr(1, err)
-		}
-		if !dryRun && !artifactServerOnly {
+		// Normal infra/clusters teardown runs as an apply-style task graph so it
+		// shows granular per-step progress and routes ansible to per-task logs.
+		// Dry-run, no-remote-work, and the narrow artifact-server destroy keep
+		// the single-playbook path.
+		useGraph := !dryRun && !plan.NoRemoteWork && !artifactServerOnly
+		var renderResult render.Result
+		if useGraph {
+			dr := newDestroyReporter(stdout, stderr, ctx.RunsDir, streamAnsible)
+			result, ledger, _, gerr := converge.ExecuteDestroyGraph(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, runScope.Name, plan, check, become.PasswordFile, streamAnsible, workflowLabel, dr)
+			if gerr != nil {
+				if ledger.Status == workflow.RunStatusFailed && (len(ledger.FailedTasks()) > 0 || len(ledger.BlockedTasks()) > 0) {
+					return silentExit(1)
+				}
+				return failErr(1, gerr)
+			}
 			converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
+			renderResult = result
+		} else {
+			runResult, destroyLogPath, derr := converge.ExecuteDestroy(c.Context(), stdout, stderr, ctx, clustersDir, flags.executable, bundle.Dir, playbook, plan, artifactsBaseName, check, become.PasswordFile, dryRun, streamAnsible, workflowLabel, reporter)
+			if derr != nil {
+				return failErr(1, derr)
+			}
+			if !dryRun && !artifactServerOnly {
+				converge.ResetConvergeRecordsAfterDestroy(ctx.RunsDir, clustersDir, runScope, plan.State)
+			}
+			if !dryRun && !plan.NoRemoteWork {
+				printWorkflowEnd(stdout, workflowLabel)
+				cliout.NewContinuation(stdout).Fields([]cliout.Field{{Key: "Destroy log", Value: destroyLogPath}})
+			}
+			renderResult = runResult.Render
 		}
-		if !dryRun && !plan.NoRemoteWork {
-			printWorkflowEnd(stdout, workflowLabel)
-			cliout.NewContinuation(stdout).Fields([]cliout.Field{{Key: "Destroy log", Value: destroyLogPath}})
-		}
-		printRenderResult(stdout, runResult.Render)
+		printRenderResult(stdout, renderResult)
 		printBundlePath(stdout, bundle.Dir)
 		return nil
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/ownership"
+	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -108,6 +109,46 @@ func ExecuteDestroy(cmdCtx context.Context, stdout, stderr io.Writer, ctx worksp
 		AcquireRunLease: true,
 	}, runner, reporter)
 	return result, logPath, err
+}
+
+// ExecuteDestroyGraph runs a scoped destroy as an apply-style task graph so it
+// shows granular per-step progress and routes ansible output to per-task logs.
+// It renders once for the artifact paths, decomposes the scope into the destroy
+// task chain (reusing the run's limit and extra-vars), and runs it through the
+// shared scheduler. It returns the render result, the run ledger, and the run
+// log path. Post-destroy record resets remain the CLI's responsibility.
+func ExecuteDestroyGraph(cmdCtx context.Context, stdout, stderr io.Writer, ctx workspace.Context, clustersDir string, executable string, bundleDir string, scopeName string, plan WorkflowPlan, check bool, becomePasswordFile string, streamAnsible bool, label string, reporter workflow.ApplyReporter) (render.Result, workflow.RunLedger, string, error) {
+	renderResult, err := workflow.RenderOnly(ctx.RenderedDir, clustersDir, ctx.SecretsDir, plan.State)
+	if err != nil {
+		return render.Result{}, workflow.RunLedger{}, "", err
+	}
+	tasks, err := workflow.PlanDestroyTasks(scopeName, plan.State, plan.Limit, plan.ExtraVarPairs)
+	if err != nil {
+		return render.Result{}, workflow.RunLedger{}, "", err
+	}
+	runOpts := workflow.RunOptions{
+		State:              plan.State,
+		RenderedDir:        ctx.RenderedDir,
+		ClustersDir:        clustersDir,
+		RunsDir:            ctx.RunsDir,
+		ContextName:        ctx.Name,
+		SecretsDir:         ctx.SecretsDir,
+		ManagedServicesDir: ctx.ManagedServicesDir,
+		ProviderStateDir:   ctx.ProviderStateDir,
+		OwnershipDir:       ctx.OwnershipDir,
+		Executable:         executable,
+		BundleDir:          bundleDir,
+		Check:              check,
+		AskBecomePass:      plan.AskBecomePass && becomePasswordFile == "",
+		BecomePasswordFile: becomePasswordFile,
+		StreamAnsible:      streamAnsible,
+	}
+	prepared, err := workflow.PrepareDestroyTaskGraph(ctx.RunsDir, runOpts, tasks, workflow.ConcurrencyLimits{})
+	if err != nil {
+		return render.Result{}, workflow.RunLedger{}, "", err
+	}
+	ledger, err := workflow.RunPreparedDestroyTaskGraph(cmdCtx, stdout, stderr, ctx.RunsDir, runOpts, workflow.ApplyTarget{Name: label}, "", prepared, reporter, nil)
+	return renderResult, ledger, workflow.ApplyRunLogPath(ctx.RunsDir, prepared.RunID), err
 }
 
 // ResetConvergeRecordsAfterDestroy resets convergence records for what a

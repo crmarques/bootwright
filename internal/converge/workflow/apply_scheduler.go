@@ -53,7 +53,23 @@ func RunApplyTaskGraph(ctx context.Context, stdout io.Writer, stderr io.Writer, 
 	return RunPreparedApplyTaskGraph(ctx, stdout, stderr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory)
 }
 
+// applyTaskExecutor runs one task to completion. Apply and destroy share the
+// scheduler below and differ only in this callback: runOneApplyTask records
+// install/convergence state; runOneDestroyTask just renders and tears down.
+type applyTaskExecutor func(ctx context.Context, stdout, stderr io.Writer, runsDir, runID string, opts RunOptions, task ApplyTask, runnerFactory ApplyTaskRunnerFactory) applyTaskResult
+
+// RunPreparedApplyTaskGraph runs a prepared apply graph through the scheduler.
 func RunPreparedApplyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneApplyTask)
+}
+
+// RunPreparedDestroyTaskGraph runs a prepared destroy graph through the same
+// scheduler, using the destroy executor (no install-state recording).
+func RunPreparedDestroyTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory) (RunLedger, error) {
+	return runPreparedTaskGraph(ctx, streamOut, streamErr, runsDir, opts, target, clusterScope, prepared, reporter, runnerFactory, runOneDestroyTask)
+}
+
+func runPreparedTaskGraph(ctx context.Context, streamOut io.Writer, streamErr io.Writer, runsDir string, opts RunOptions, target ApplyTarget, clusterScope string, prepared PreparedApplyTaskGraph, reporter ApplyReporter, runnerFactory ApplyTaskRunnerFactory, executor applyTaskExecutor) (RunLedger, error) {
 	if strings.TrimSpace(opts.ClustersDir) == "" {
 		return RunLedger{}, fmt.Errorf("clusters dir is required")
 	}
@@ -178,7 +194,7 @@ func RunPreparedApplyTaskGraph(ctx context.Context, streamOut io.Writer, streamE
 			}
 			stdoutWriter, stderrWriter := applyTaskWriters(task, logs, streamOut, streamErr, opts.StreamAnsible)
 			go func(task ApplyTask, taskOut, taskErr io.Writer) {
-				events <- runOneApplyTask(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
+				events <- executor(ctx, taskOut, taskErr, runsDir, ledger.RunID, opts, task, runnerFactory)
 			}(taskToRun, stdoutWriter, stderrWriter)
 		}
 		if fatalErr != nil && running == 0 {
