@@ -1,0 +1,91 @@
+---
+- name: Resolve storage nodes on this host
+  ansible.builtin.set_fact:
+    bootwright_host_storage_nodes: >-
+      {{
+        bootwright_storage_clusters | default([])
+        | map(attribute='hosts') | flatten
+        | selectattr('inventoryHost', 'defined')
+        | selectattr('inventoryHost', 'equalto', bootwright_host_name)
+        | list
+      }}
+  changed_when: false
+
+- name: Assert storage node hostname matches the declared topology
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['hostname'] == item.hostname or ansible_facts['nodename'] == item.hostname
+    fail_msg: >-
+      Storage node {{ bootwright_host_name }} reports hostname
+      {{ ansible_facts['nodename'] }} but the declared topology hostname
+      is {{ item.hostname }}; cephadm registers hosts under their real OS
+      hostname, so set the machine's hostname or author
+      spec.ceph.topology.hosts[].hostname to match.
+  loop: "{{ bootwright_host_storage_nodes }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Assert storage nodes run Red Hat family Linux
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+    fail_msg: "Storage node {{ bootwright_host_name }} must already run RHEL or a Red Hat family OS before managed Ceph apply."
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Check storage node systemd
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - --version
+  register: bootwright_preflight_storage_systemd
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Check storage package repositories
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - "dnf -q repolist || yum -q repolist"
+  register: bootwright_preflight_storage_repos
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Check storage container state path
+  ansible.builtin.stat:
+    path: /var/lib/containers
+  register: bootwright_preflight_storage_containers
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Check storage container filesystem free space
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ '/var/lib/containers' if bootwright_preflight_storage_containers.stat.exists | default(false) else '/var/lib' }}"
+  register: bootwright_preflight_storage_container_df
+  changed_when: false
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Assert storage container filesystem free space
+  ansible.builtin.assert:
+    that:
+      - (bootwright_preflight_storage_container_df.stdout_lines[-1].split()[3] | int) >= 10485760
+    fail_msg: "Storage node {{ bootwright_host_name }} needs at least 10 GiB free for /var/lib/containers or /var/lib."
+  when: bootwright_host_storage_nodes | length > 0
+
+- name: Check declared storage OSD devices are empty
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --no-act
+      - --noheadings
+      - "{{ item.1 }}"
+  register: bootwright_preflight_storage_device
+  changed_when: false
+  failed_when: bootwright_preflight_storage_device.rc != 0 or (bootwright_preflight_storage_device.stdout | trim | length > 0)
+  loop: "{{ bootwright_host_storage_nodes | subelements('devices', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} {{ item.1 }}"
+  when: bootwright_host_storage_nodes | length > 0

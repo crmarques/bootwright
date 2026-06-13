@@ -6,7 +6,7 @@
 
 - name: Reap orphan dnsmasq from a leaked container instance
   ansible.builtin.include_role:
-    name: bootwright.core.helper_process_cleanup
+    name: bootwright.core.support_process_cleanup
   vars:
     bootwright_process_cleanup_podman_filters:
       - "label=bootwright.kind=nameResolution"

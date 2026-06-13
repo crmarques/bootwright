@@ -162,7 +162,10 @@ func TestContainerClusterApplyRunsPreflightBeforeInstall(t *testing.T) {
 }
 
 func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
+	body := strings.Join([]string{
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/classify.yml"),
+		readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/idempotency.yml"),
+	}, "\n")
 	for _, want := range []string{
 		"bootwright_ceph_op_idempotency_kind",
 		"bootwright_ceph_op_idempotency_name",
@@ -190,7 +193,7 @@ func TestStorageOperationsUseExplicitIdempotencyContract(t *testing.T) {
 // double-confirmation flag, toggle mon_allow_pool_delete back off even on failure,
 // and fail closed.
 func TestStorageCephadmOverrideRebuildsStructurallyDriftedSubObjects(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
+	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/override_rebuild.yml")
 
 	// The pool rebuild decision compares the live pool to the rendered desired
 	// structural identity, gated on the ceph-pool op under override.
@@ -291,26 +294,22 @@ func TestProxyEnvironmentPlaybooksResolveProxyFacts(t *testing.T) {
 }
 
 func TestPreflightVerifiesStorageNodeHostnames(t *testing.T) {
-	path := "ansible/collections/ansible_collections/bootwright/core/playbooks/check_preflight.yml"
-	var play map[string]any
-	for _, candidate := range readAnsiblePlays(t, path) {
-		if candidate["name"] == "Check host prerequisites" {
-			play = candidate
-		}
-	}
-	if play == nil {
-		t.Fatalf("%s has no Check host prerequisites play", path)
-	}
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/check_storage_preflight/tasks/main.yml"
+	tasks := readAnsibleTasks(t, path)
 
 	// The storage-node gate selects this host's entries from the rendered
 	// storage cluster `hosts` list; the retired `nodes` spelling silently
 	// selects nothing and turns every storage check into a no-op.
-	vars := fmt.Sprint(play["vars"])
-	if !strings.Contains(vars, "map(attribute='hosts')") || strings.Contains(vars, "map(attribute='nodes')") {
-		t.Fatalf("storage node selection must map the rendered hosts attribute, got vars %s", vars)
+	resolve := tasks[findAnsibleTask(t, tasks, "Resolve storage nodes on this host")]
+	facts, ok := resolve["ansible.builtin.set_fact"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage node selection must be a set_fact, got %v", resolve)
+	}
+	expr := fmt.Sprint(facts["bootwright_host_storage_nodes"])
+	if !strings.Contains(expr, "map(attribute='hosts')") || strings.Contains(expr, "map(attribute='nodes')") {
+		t.Fatalf("storage node selection must map the rendered hosts attribute, got %s", expr)
 	}
 
-	tasks := nestedAnsibleTasks(t, play, "tasks")
 	task := tasks[findAnsibleTask(t, tasks, "Assert storage node hostname matches the declared topology")]
 	body, ok := task["ansible.builtin.assert"].(map[string]any)
 	if !ok {
@@ -499,7 +498,8 @@ func TestRedfishURIRequestsDoNotOverrideProxyEnvironment(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/media_insert.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_override.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/provider_service_bmc_emulated/tasks/apply/sushy.yml",
@@ -574,8 +574,8 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 		t.Fatalf("%s file task = %v", restrict["name"], fileTask)
 	}
 
-	mainTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
-	pre := mainTasks[findAnsibleTask(t, mainTasks, "Record managed OS SSH host key before install when reachable")]
+	probeTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/probe_existing.yml")
+	pre := probeTasks[findAnsibleTask(t, probeTasks, "Record managed OS SSH host key before install when reachable")]
 	assertIncludeTasksFile(t, pre, "ssh_trust.yml")
 	preVars, ok := pre["vars"].(map[string]any)
 	if !ok {
@@ -585,7 +585,8 @@ func TestManagedOSSSHTrustKeyscanWaitsForHostKeys(t *testing.T) {
 		t.Fatalf("%s keyscan required = %s, want false", pre["name"], got)
 	}
 
-	post := mainTasks[findAnsibleTask(t, mainTasks, "Record managed OS SSH host key")]
+	waitTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/wait.yml")
+	post := waitTasks[findAnsibleTask(t, waitTasks, "Record managed OS SSH host key")]
 	assertIncludeTasksFile(t, post, "ssh_trust.yml")
 	postVars, ok := post["vars"].(map[string]any)
 	if !ok {
@@ -635,7 +636,7 @@ func TestMachineInfraPreparePreparesHostPackages(t *testing.T) {
 }
 
 func TestManagedOSAnacondaInstallsMkksisoPackage(t *testing.T) {
-	topTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/main.yml")
+	topTasks := managedOSAnacondaTasks(t)
 	validateInputsIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install inputs")
 	validateSourceIdx := findAnsibleTask(t, topTasks, "Validate managed Anaconda install source")
 	resolvePathsIdx := findAnsibleTask(t, topTasks, "Resolve managed OS install paths")
@@ -1158,7 +1159,7 @@ func TestBootRedfishDispatchesMediaBackendBeforeInsert(t *testing.T) {
 	prepareTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml")
 	systemTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/stage/system.yml")
 	mediaTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_libvirt/tasks/main.yml")
-	powerTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml")
+	powerTasks := redfishPowerTasks(t)
 	powerStateTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml")
 	insertAttemptTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/insert_attempt.yml")
 	ejectTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/eject.yml")
@@ -2185,7 +2186,8 @@ func TestAgentISOPublishTokenizedValuesAreRedactedFromMessages(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/cleanup_target.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/actions/create_iso.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_agent_install/tasks/iso/publish_target.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/media_insert.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_override.yml",
 	} {
 		tasks := readAnsibleTasks(t, rel)
 		var messages []string
@@ -2318,7 +2320,8 @@ func TestBootRedfishHasNoMediaBackendSpecificReferences(t *testing.T) {
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/main.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/media/prepare.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/validation/macs.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/media_insert.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_override.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/power_state_probe.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/post_boot.yml",
 		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/stage/validate.yml",
@@ -2675,7 +2678,7 @@ func TestInfraDestroySweepsCurrentContextLibvirtDomainsOnlyWhenUnscoped(t *testi
 		t.Fatalf("recorded-resource destroy must be scoped by bootwright_destroy_cluster_scope: %v", recorded["when"])
 	}
 
-	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/playbooks/tasks/machine_infra_destroy_libvirt_context.yml")
+	body := readRepoFile(t, "ansible/collections/ansible_collections/bootwright/core/roles/provider_host_libvirt/tasks/destroy_context.yml")
 	for _, want := range []string{
 		"/var/lib/libvirt/images/bootwright/{{ bootwright_clusters_dir | dirname | basename }}/clusters",
 		"virsh",
@@ -2712,7 +2715,7 @@ func TestKubeVirtResourcesCarryContextLabels(t *testing.T) {
 }
 
 func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	tasks := storageCephDestroyTasks(t)
 
 	// The device-name allowlist must accept stable /dev/disk/by-id, /dev/disk/by-path
 	// and /dev/mapper paths (with a trailing identifier), not just bare prefixes.
@@ -2740,11 +2743,7 @@ func TestStorageCephadmDestroyRefusesUnsafeDevices(t *testing.T) {
 }
 
 func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
-	top := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
-	if len(top) == 0 {
-		t.Fatalf("bootstrap.yml has no tasks")
-	}
-	tasks := nestedAnsibleTasks(t, top[0], "block")
+	tasks := storageCephBootstrapTasks(t)
 
 	// A --override clean rebuild must read the Bootwright ownership marker, decide
 	// 3-factor ownership, enforce the apply-mode gate (which fails closed for a
@@ -2827,8 +2826,7 @@ func TestStorageCephadmOverrideRebuildVerifiesOwnershipMarker(t *testing.T) {
 }
 
 func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
-	top := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
-	tasks := nestedAnsibleTasks(t, top[0], "block")
+	tasks := storageCephBootstrapTasks(t)
 	rm := tasks[findAnsibleTask(t, tasks, "Remove existing cephadm cluster for override rebuild")]
 	if got := fmt.Sprint(rm["failed_when"]); !strings.Contains(got, "!= 0") {
 		t.Fatalf("override rebuild rm-cluster must fail closed before clearing config and re-bootstrapping, got failed_when=%v", rm["failed_when"])
@@ -2836,7 +2834,7 @@ func TestStorageCephadmOverrideRebuildRmClusterFailsClosed(t *testing.T) {
 }
 
 func TestStorageCephadmDestroyVerifiesOwnershipAndFailsClosed(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	tasks := storageCephDestroyTasks(t)
 
 	// On the seed, prove 3-factor ownership (a Bootwright ownership record exists,
 	// this host is the declared seedHost, and the on-disk conf fsid is present, with
@@ -2951,7 +2949,7 @@ func TestStorageCephadmRecordsOSDDeviceMarkerOnApply(t *testing.T) {
 }
 
 func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	tasks := storageCephDestroyTasks(t)
 	readIdx := findAnsibleTask(t, tasks, "Read Bootwright OSD device ownership marker")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe declared devices not recorded as Bootwright OSDs")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
@@ -2972,7 +2970,7 @@ func TestStorageCephadmDestroyRefusesUnrecordedOSDDevices(t *testing.T) {
 }
 
 func TestStorageCephadmDestroyReprobesMountsBeforeWipe(t *testing.T) {
-	tasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy.yml")
+	tasks := storageCephDestroyTasks(t)
 	reprobeIdx := findAnsibleTask(t, tasks, "Re-probe declared Ceph destroy devices for active mounts before wipe")
 	refuseIdx := findAnsibleTask(t, tasks, "Refuse to wipe devices mounted since the first check")
 	wipeIdx := findAnsibleTask(t, tasks, "Wipe declared Ceph device signatures")
@@ -3398,9 +3396,7 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("ceph CLI unavailable assert must point to managed OS package ownership, got %v", failCeph)
 	}
 
-	bootstrapTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap.yml")
-	bootstrap := bootstrapTasks[findAnsibleTask(t, bootstrapTasks, "Apply managed Ceph cluster through cephadm")]
-	block := nestedAnsibleTasks(t, bootstrap, "block")
+	block := storageCephBootstrapTasks(t)
 	for _, name := range []string{
 		"Copy cephadm registry JSON",
 		"Copy cephadm cluster private SSH key",
@@ -3474,14 +3470,13 @@ func TestStorageCephadmRoleKeepsSecretsAndArtifactsBounded(t *testing.T) {
 		t.Fatalf("storage result must be written locally, got delegate_to=%v", got)
 	}
 
-	always := nestedAnsibleTasks(t, bootstrap, "always")
-	cleanup := always[findAnsibleTask(t, always, "Remove managed Ceph work directory")]
+	cleanup := block[findAnsibleTask(t, block, "Remove managed Ceph work directory")]
 	fileTask, ok := cleanup["ansible.builtin.file"].(map[string]any)
 	if !ok || fileTask["state"] != "absent" {
 		t.Fatalf("storage role must clean the remote work directory, got %v", cleanup)
 	}
 
-	operationTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/run.yml")
+	operationTasks := readAnsibleTasks(t, "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/operations/execute.yml")
 	run := operationTasks[findAnsibleTask(t, operationTasks, "Run Ceph operation")]
 	command, ok := run["ansible.builtin.command"].(map[string]any)
 	if !ok {
@@ -4141,6 +4136,68 @@ func readAnsibleTasks(t *testing.T, rel string) []map[string]any {
 	return tasks
 }
 
+func readAnsibleTasksFromFiles(t *testing.T, rels ...string) []map[string]any {
+	t.Helper()
+	var tasks []map[string]any
+	for _, rel := range rels {
+		tasks = append(tasks, readAnsibleTasks(t, rel)...)
+	}
+	return tasks
+}
+
+func managedOSAnacondaTasks(t *testing.T) []map[string]any {
+	t.Helper()
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/machine_os_install_anaconda/tasks/"
+	return readAnsibleTasksFromFiles(t,
+		base+"validate.yml",
+		base+"resolve.yml",
+		base+"probe_existing.yml",
+		base+"install_media.yml",
+		base+"wait.yml",
+		base+"marker.yml",
+		base+"ownership.yml",
+	)
+}
+
+func redfishPowerTasks(t *testing.T) []map[string]any {
+	t.Helper()
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_redfish/tasks/boot/"
+	return readAnsibleTasksFromFiles(t,
+		base+"media_insert.yml",
+		base+"power_override.yml",
+	)
+}
+
+func storageCephBootstrapTasks(t *testing.T) []map[string]any {
+	t.Helper()
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/phases/bootstrap_steps/"
+	return readAnsibleTasksFromFiles(t,
+		base+"stage_inputs.yml",
+		base+"apply_mode.yml",
+		base+"bootstrap_cluster.yml",
+		base+"ownership_marker.yml",
+		base+"dashboard_secret.yml",
+		base+"service_specs.yml",
+		base+"data_foundation_base.yml",
+		base+"topology_operations.yml",
+		base+"late_service_specs.yml",
+		base+"late_operations.yml",
+		base+"result_and_ownership.yml",
+		base+"cleanup.yml",
+	)
+}
+
+func storageCephDestroyTasks(t *testing.T) []map[string]any {
+	t.Helper()
+	base := "ansible/collections/ansible_collections/bootwright/core/roles/storage_cluster_cephadm/tasks/destroy_steps/"
+	return readAnsibleTasksFromFiles(t,
+		base+"context.yml",
+		base+"device_gates.yml",
+		base+"cluster_gate.yml",
+		base+"wipe_and_cleanup.yml",
+	)
+}
+
 func readAnsiblePlays(t *testing.T, rel string) []map[string]any {
 	t.Helper()
 	var plays []map[string]any
@@ -4457,7 +4514,7 @@ func ansibleAdapterRoleDirs(t *testing.T) []string {
 		prefixes []string
 	}
 	rules := []rule{
-		{base: bootwrightCollectionRoleRoot, prefixes: []string{"machine_setup_libvirt"}},
+		{base: bootwrightCollectionRoleRoot, prefixes: []string{"provider_host_libvirt"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"provider_service_bmc_"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"infra_component_"}},
 		{base: bootwrightCollectionRoleRoot, prefixes: []string{"machine_substrate_"}},

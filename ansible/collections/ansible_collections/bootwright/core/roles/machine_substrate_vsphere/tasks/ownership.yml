@@ -1,0 +1,24 @@
+---
+# Identity attributes are recorded at create time, before any later rename
+# or move, so destroy can still address the VM and its uploaded media when
+# live lookups drift.
+- name: Record vSphere machine ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: vsphere-machine
+    bootwright_ownership_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_ownership_fields:
+      provider: "{{ bootwright_component.providerName }}"
+      cluster: "{{ bootwright_current_cluster.name }}"
+      machine: "{{ bootwright_component.name }}"
+      attributes:
+        server: "{{ bootwright_vsphere.server }}"
+        datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+        folder: "{{ bootwright_vsphere.topology.folder | default('') }}"
+        vmName: "{{ bootwright_vsphere_vm_name }}"
+        moid: "{{ bootwright_vsphere_vm_moid }}"
+        uuid: "{{ bootwright_vsphere_vm_uuid }}"
+        isoDatastore: "{{ bootwright_vsphere.isoStaging.datastore | default('') }}"
+        isoFolder: "{{ bootwright_vsphere.isoStaging.folder | default('') }}"

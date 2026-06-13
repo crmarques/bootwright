@@ -26,16 +26,17 @@ ansible/collections/ansible_collections/bootwright/core/
     workflow_*.yml        public CLI target wrappers
     task_*.yml            focused task playbooks
     check_*.yml           read-only checks
-    tasks/                reusable playbook task files
+    tasks/<domain>/       reusable playbook task files scoped by domain
   roles/
+    check_*               check-specific preflight capabilities
     controller_*          controller-local setup
     machine_base          base packages for service-bearing machines
     machine_proxy         proxy facts and persisted proxy settings
-    machine_setup_*       substrate setup on provider machines
+    provider_host_*       provider-host substrate setup and host-scoped cleanup
     machine_os_install_*  Bootwright-managed OS installation (anaconda)
-    helper_*              context, credential, and cleanup helpers
+    support_*             cross-domain credentials, context secrets, and cleanup
     ownership_record      durable ownership and package records for destroy scoping
-    provider_service_*    provider services, including BMC services
+    provider_service_*    provider services, including explicit no-op BMC services
     infra_component_*     machine-bound InfraComponent services
     machine_substrate_*   per-cluster substrate state
     cluster_network_*     per-cluster networking state
@@ -53,6 +54,13 @@ Destroy runs machine infrastructure before InfraComponent services and
 provider services. `workflow_clusters_apply.yml` imports preflight, machine
 infrastructure, and container-cluster install. `workflow_container_cluster_apply.yml`
 remains the focused container-cluster wrapper.
+
+Task playbooks remain the stable Go dispatch surface. Reusable playbook task
+fragments live under `playbooks/tasks/<domain>/`, while provider-specific
+destructive host cleanup belongs to the owning provider-host role rather than
+generic playbook task fragments. Check playbooks select hosts and import
+check-specific roles; host and storage preflight logic lives in
+`check_host_preflight` and `check_storage_preflight`.
 
 Role dispatch is computed by the Go driver registry and projected as exact
 role names in the rendered vars. Diagnostic labels stay on each machine, but
@@ -94,6 +102,12 @@ guardrail tests. Every kind resolves to a real role where a role is meaningful;
 both `bootwright.core.provider_service_bmc_none` and
 `bootwright.core.container_cluster_boot_none` exist so no-op dispatch remains
 explicit.
+
+Role names are internal rendered contracts and may break cleanly within
+`v1alpha1` when the architecture improves. Provider-host setup uses
+`bootwright.core.provider_host_libvirt`, external Redfish BMC services use
+`bootwright.core.provider_service_bmc_external_redfish`, and shared mechanics
+use the `support_*` role family.
 
 The registry projects role names only for the provider-discriminated families
 where one kind has several substrate backends to choose between

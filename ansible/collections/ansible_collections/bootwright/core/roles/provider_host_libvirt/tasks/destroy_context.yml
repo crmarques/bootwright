@@ -131,5 +131,5 @@
 
 - name: Remove libvirt host packages introduced by Bootwright
   ansible.builtin.import_role:
-    name: bootwright.core.machine_setup_libvirt
+    name: bootwright.core.provider_host_libvirt
     tasks_from: destroy.yml

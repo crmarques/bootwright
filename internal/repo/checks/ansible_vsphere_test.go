@@ -44,7 +44,8 @@ func TestVSphereSubstrateDestroyRequiresOwnershipMarker(t *testing.T) {
 func TestVSphereFileTasksUseHostnameParameter(t *testing.T) {
 	for _, rel := range []string{
 		vsphereSubstrateTaskRoot + "/destroy.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/insert.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/cleanup.yml",
 	} {
 		tasks := flattenAnsibleTasks(readAnsibleTasks(t, rel))
 		for _, task := range tasks {
@@ -106,7 +107,7 @@ func flattenAnsibleTasks(tasks []map[string]any) []map[string]any {
 // recorded-before-rename contract: the apply path records the vCenter
 // identity and ISO staging attributes the destroy path reads back.
 func TestVSphereSubstrateRecordsOwnershipAttributesAtCreate(t *testing.T) {
-	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/main.yml")
+	body := readRepoFile(t, vsphereSubstrateTaskRoot+"/ownership.yml")
 	if !strings.Contains(body, "bootwright_ownership_kind: vsphere-machine") {
 		t.Fatal("vsphere apply must record a vsphere-machine ownership resource")
 	}
@@ -128,10 +129,12 @@ func TestVSphereSubstrateRecordsOwnershipAttributesAtCreate(t *testing.T) {
 // carry vCenter credentials must not log them.
 func TestVSphereTasksPinVenvInterpreterAndRedactCredentials(t *testing.T) {
 	for _, rel := range []string{
-		vsphereSubstrateTaskRoot + "/main.yml",
+		vsphereSubstrateTaskRoot + "/probe.yml",
+		vsphereSubstrateTaskRoot + "/apply.yml",
 		vsphereSubstrateTaskRoot + "/destroy.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/main.yml",
-		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_vsphere/tasks/main.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/insert.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_media_vsphere/tasks/cleanup.yml",
+		"ansible/collections/ansible_collections/bootwright/core/roles/container_cluster_boot_vsphere/tasks/power.yml",
 	} {
 		tasks := flattenAnsibleTasks(readAnsibleTasks(t, rel))
 		for _, task := range tasks {

@@ -1,0 +1,266 @@
+---
+- name: Install managed OS from virtual media
+  when: not (bootwright_managed_os_already_ready | bool)
+  block:
+    - name: Create managed OS install work directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Load Anaconda package list
+      ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+    - name: Install Anaconda ISO tooling packages
+      ansible.builtin.package:
+        name: "{{ bootwright_machine_os_install_anaconda_packages }}"
+        state: present
+      when: bootwright_machine_os_install_anaconda_packages | length > 0
+
+    - name: Verify mkksiso is available
+      ansible.builtin.command:
+        argv:
+          - mkksiso
+          - --help
+      register: bootwright_mkksiso_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Assert mkksiso is available
+      ansible.builtin.assert:
+        that:
+          - bootwright_mkksiso_probe.rc == 0
+        fail_msg: >-
+          mkksiso is required to build managed Anaconda install media on
+          {{ inventory_hostname }}. Install the package that provides mkksiso
+          (lorax on Red Hat and Fedora hosts) or run this provider on an OS
+          with mkksiso available.
+
+    - name: Copy managed ISO source to provider host
+      ansible.builtin.copy:
+        src: "{{ bootwright_component.osInstall.image.path }}"
+        dest: "{{ bootwright_os_source_iso }}"
+        remote_src: false
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_os_source_copy
+      when:
+        - bootwright_component.osInstall.image.kind in ['media', 'file']
+        - not (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)
+
+    - name: Download managed ISO source on provider host
+      ansible.builtin.get_url:
+        url: "{{ bootwright_component.osInstall.image.url }}"
+        dest: "{{ bootwright_os_source_iso }}"
+        checksum: "{{ ('sha256:' ~ bootwright_component.osInstall.image.checksum) if (bootwright_component.osInstall.image.checksum | default('') | length) > 0 else omit }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_os_source_download
+      when: bootwright_component.osInstall.image.kind == 'url'
+
+    - name: Stat managed ISO source
+      ansible.builtin.stat:
+        path: "{{ bootwright_os_source_iso_effective }}"
+        get_checksum: false
+      register: bootwright_os_source_stat
+
+    - name: Record managed ISO source identity
+      ansible.builtin.copy:
+        dest: "{{ bootwright_os_source_id_path }}"
+        content: |
+          kind={{ bootwright_component.osInstall.image.kind | default('') }}
+          original={{ bootwright_component.osInstall.image.original | default('') }}
+          path={{ bootwright_os_source_iso_effective }}
+          url={{ bootwright_component.osInstall.image.url | default('') }}
+          checksum={{ bootwright_component.osInstall.image.checksum | default('') | regex_replace('^sha256:', '') }}
+          kernelArgs={{ bootwright_component.osInstall.installer.kernelArgs | default([]) | join(' ') }}
+          exists={{ bootwright_os_source_stat.stat.exists | default(false) }}
+          size={{ bootwright_os_source_stat.stat.size | default('') }}
+          mtime={{ bootwright_os_source_stat.stat.mtime | default('') }}
+          inode={{ bootwright_os_source_stat.stat.inode | default('') }}
+          dev={{ bootwright_os_source_stat.stat.dev | default('') }}
+        owner: root
+        group: root
+        mode: "0644"
+      register: bootwright_os_source_identity
+
+    - name: Verify managed ISO checksum
+      ansible.builtin.command:
+        argv:
+          - sha256sum
+          - "{{ bootwright_os_source_iso_effective }}"
+      register: bootwright_os_source_sha256
+      changed_when: false
+      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+
+    - name: Assert managed ISO checksum
+      ansible.builtin.assert:
+        that:
+          - (bootwright_os_source_sha256.stdout.split()[0] | lower) == (bootwright_component.osInstall.image.checksum | lower | regex_replace('^sha256:', ''))
+        fail_msg: "managed ISO checksum mismatch for {{ bootwright_component.osInstall.image.original }}"
+      when: (bootwright_component.osInstall.image.checksum | default('') | length) > 0
+
+    - name: Render managed OS Kickstart
+      ansible.builtin.template:
+        src: ks.cfg.j2
+        dest: "{{ bootwright_os_kickstart_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      register: bootwright_os_kickstart
+      no_log: "{{ bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool }}"
+
+    - name: Create managed OS virtual media directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_iso | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove legacy private managed OS install ISO path
+      ansible.builtin.file:
+        path: "{{ bootwright_os_legacy_install_iso }}"
+        state: absent
+
+    - name: Stat managed OS install ISO
+      ansible.builtin.stat:
+        path: "{{ bootwright_os_install_iso }}"
+        get_checksum: false
+      register: bootwright_os_install_iso_stat
+
+    - name: Resolve managed OS install ISO rebuild state
+      ansible.builtin.set_fact:
+        bootwright_os_install_iso_rebuild_needed: >-
+          {{
+            bootwright_os_source_copy.changed | default(false)
+            or bootwright_os_source_download.changed | default(false)
+            or bootwright_os_source_identity.changed | default(false)
+            or bootwright_os_kickstart.changed | default(false)
+            or not (bootwright_os_install_iso_stat.stat.exists | default(false))
+          }}
+      changed_when: false
+
+    - name: Remove stale managed OS install ISO before rebuild
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_iso }}"
+        state: absent
+      when:
+        - bootwright_os_install_iso_rebuild_needed | bool
+        - bootwright_os_install_iso_stat.stat.exists | default(false)
+
+    - name: Reset managed OS install ISO temp directory before rebuild
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_tmpdir }}"
+        state: absent
+      when: bootwright_os_install_iso_rebuild_needed | bool
+
+    - name: Create managed OS install ISO temp directory
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_tmpdir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: bootwright_os_install_iso_rebuild_needed | bool
+
+    - name: Build managed OS install ISO
+      ansible.builtin.command:
+        argv:
+          - mkksiso
+          - --ks
+          - "{{ bootwright_os_kickstart_path }}"
+          - "{{ bootwright_os_source_iso_effective }}"
+          - "{{ bootwright_os_install_iso }}"
+      environment:
+        TMPDIR: "{{ bootwright_os_install_tmpdir }}"
+        TMP: "{{ bootwright_os_install_tmpdir }}"
+        TEMP: "{{ bootwright_os_install_tmpdir }}"
+      changed_when: true
+      when:
+        - bootwright_os_install_iso_rebuild_needed | bool
+        - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) == 0
+
+    - name: Build managed OS install ISO with kernel command line
+      ansible.builtin.command:
+        argv:
+          - mkksiso
+          - --ks
+          - "{{ bootwright_os_kickstart_path }}"
+          - --cmdline
+          - "{{ bootwright_component.osInstall.installer.kernelArgs | join(' ') }}"
+          - "{{ bootwright_os_source_iso_effective }}"
+          - "{{ bootwright_os_install_iso }}"
+      environment:
+        TMPDIR: "{{ bootwright_os_install_tmpdir }}"
+        TMP: "{{ bootwright_os_install_tmpdir }}"
+        TEMP: "{{ bootwright_os_install_tmpdir }}"
+      changed_when: true
+      when:
+        - bootwright_os_install_iso_rebuild_needed | bool
+        - (bootwright_component.osInstall.installer.kernelArgs | default([]) | length) > 0
+
+    - name: Set managed OS virtual media permissions
+      ansible.builtin.file:
+        path: "{{ bootwright_os_install_iso }}"
+        state: file
+        owner: root
+        group: root
+        mode: "{{ '0600' if (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool) else '0644' }}"
+
+    - name: Restore managed OS virtual media labels
+      ansible.builtin.command:
+        argv:
+          - restorecon
+          - -RFv
+          - "{{ bootwright_os_install_iso | dirname }}"
+      register: bootwright_os_install_iso_restorecon
+      changed_when: bootwright_os_install_iso_restorecon.stdout | length > 0
+      when: ansible_selinux.status | default('disabled') == 'enabled'
+
+    - name: Resolve managed OS Redfish boot component
+      ansible.builtin.set_fact:
+        bootwright_managed_os_boot_component: >-
+          {{
+            bootwright_component | combine({
+              'boot': bootwright_component.boot | combine({
+                'agentIso': bootwright_component.boot.agentIso | combine({
+                  'stagePath': bootwright_os_stage_path,
+                  'fetchUrl': bootwright_os_fetch_url
+                }),
+                'media': (bootwright_component.boot.media | default({})) | combine({
+                  'libvirt': ((bootwright_component.boot.media | default({})).libvirt | default({})) | combine({
+                    'bootOrder': 'disk-first'
+                  })
+                })
+              }, recursive=True)
+            }, recursive=True)
+          }}
+      changed_when: false
+
+    - name: Prepare provider virtual media before managed OS boot
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.mediaPrepareRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+      when: (bootwright_component.mediaPrepareRole | default('') | length) > 0
+
+    - name: Boot managed OS installer through Redfish virtual media
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.bootApplyRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+        bootwright_agent_iso_publish_token: "{{ bootwright_os_install_token }}"
+        bootwright_redfish_action: boot
+
+    - name: Clean managed OS persistent virtual media after installer boot
+      ansible.builtin.include_role:
+        name: "{{ bootwright_component.mediaPrepareRole }}"
+      vars:
+        bootwright_component: "{{ bootwright_managed_os_boot_component }}"
+        bootwright_redfish_action_effective: cleanup_persistent
+      when: (bootwright_component.mediaPrepareRole | default('') | length) > 0

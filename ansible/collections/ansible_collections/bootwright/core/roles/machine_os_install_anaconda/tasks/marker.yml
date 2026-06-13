@@ -1,0 +1,21 @@
+---
+- name: Write managed OS install marker
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ bootwright_component.osInstall.ssh.privateKeyPath }}"
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - UserKnownHostsFile={{ bootwright_component.osInstall.ssh.knownHostsPath }}
+      - "{{ bootwright_component.osInstall.ssh.user }}@{{ bootwright_component.osInstall.ssh.address }}"
+      - >-
+        sudo install -d -m 0755 {{ bootwright_os_marker_path | dirname | quote }}
+        && printf '%s\n' {{ bootwright_os_marker_payload | quote }}
+        | sudo tee {{ bootwright_os_marker_path | quote }} >/dev/null
+        && sudo chmod 0644 {{ bootwright_os_marker_path | quote }}
+  delegate_to: localhost
+  changed_when: false

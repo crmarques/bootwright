@@ -113,9 +113,9 @@ func TestProviderHtpasswdPackagesAreOSSpecific(t *testing.T) {
 }
 
 func TestLibvirtHostPackagesCoverCommandDependencies(t *testing.T) {
-	path := "ansible/collections/ansible_collections/bootwright/core/roles/machine_setup_libvirt"
-	debian := readAnsibleStringListVar(t, path+"/vars/os/Debian.yml", "bootwright_machine_setup_libvirt_packages")
-	redHat := readAnsibleStringListVar(t, path+"/vars/os/RedHat.yml", "bootwright_machine_setup_libvirt_packages")
+	path := "ansible/collections/ansible_collections/bootwright/core/roles/provider_host_libvirt"
+	debian := readAnsibleStringListVar(t, path+"/vars/os/Debian.yml", "bootwright_provider_host_libvirt_packages")
+	redHat := readAnsibleStringListVar(t, path+"/vars/os/RedHat.yml", "bootwright_provider_host_libvirt_packages")
 
 	assertContainsAll(t, debian, []string{"qemu-system-x86", "qemu-utils", "libvirt-daemon-system", "libvirt-clients", "virtinst", "python3-libvirt"})
 	assertContainsAll(t, redHat, []string{"qemu-kvm", "qemu-img", "libvirt", "libvirt-client", "virt-install", "python3-libvirt"})

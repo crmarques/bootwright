@@ -36,7 +36,7 @@
 
 - name: Load Squid auth credentials
   ansible.builtin.include_role:
-    name: bootwright.core.helper_credentials
+    name: bootwright.core.support_credentials
     tasks_from: load
   vars:
     bootwright_creds_path: "{{ bootwright_proxy_credentials_ref }}"

@@ -1,0 +1,89 @@
+---
+# The first mount probe runs before the cluster-ownership checks; re-probe each
+# device immediately before the irreversible wipe to shrink the window in which a
+# device could be mounted after that first check.
+- name: Re-probe declared Ceph destroy devices for active mounts before wipe
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - MOUNTPOINT
+      - "{{ item }}"
+  register: bootwright_ceph_device_mounts_final
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to wipe devices mounted since the first check
+  ansible.builtin.assert:
+    that:
+      - item.rc | default(1) == 0
+      - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
+    fail_msg: >-
+      Refusing to wipe storage device {{ item.item }} for
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      it became mounted or in use after the initial check
+      ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}).
+  loop: "{{ bootwright_ceph_device_mounts_final.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
+- name: Wipe declared Ceph device signatures
+  ansible.builtin.command:
+    argv:
+      - wipefs
+      - --all
+      - --force
+      - "{{ item }}"
+  register: bootwright_ceph_wipefs
+  changed_when: true
+  failed_when: bootwright_ceph_wipefs.rc != 0
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Zap declared Ceph device partition tables
+  ansible.builtin.command:
+    argv:
+      - sgdisk
+      - --zap-all
+      - "{{ item }}"
+  register: bootwright_ceph_sgdisk
+  changed_when: true
+  # A failed zap leaves a half-cleared partition table that can corrupt the next
+  # provision or a later repurpose of the device. Fail closed instead of swallowing.
+  failed_when: bootwright_ceph_sgdisk.rc != 0
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Remove managed Ceph local state
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ bootwright_ceph_remote_work_dir }}"
+    - /etc/ceph
+    - /var/lib/ceph
+    - /var/log/ceph
+    - "{{ bootwright_ceph_ca_trust_anchor_path }}"
+    - "{{ bootwright_ceph_osd_marker_path }}"
+
+- name: Remove storage cluster ownership record
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: remove_resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+
+- name: Remove Ceph package ownership records
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: package_remove.yml
+  vars:
+    bootwright_ownership_packages: "{{ bootwright_ceph_managed_packages }}"
+    bootwright_ownership_required_by: "storage-cluster:{{ bootwright_selected_storage_cluster.name }}"

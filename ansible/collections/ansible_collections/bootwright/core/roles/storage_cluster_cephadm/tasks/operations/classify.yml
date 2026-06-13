@@ -1,0 +1,21 @@
+---
+- name: Classify rendered Ceph operation
+  ansible.builtin.set_fact:
+    bootwright_ceph_op_name: "{{ bootwright_ceph_op.name | default('') }}"
+    bootwright_ceph_op_capture: "{{ bootwright_ceph_op.capture | default({}) }}"
+    bootwright_ceph_op_idempotency: "{{ bootwright_ceph_op.idempotency | default({}) }}"
+    bootwright_ceph_op_idempotency_kind: "{{ bootwright_ceph_op.idempotency.kind | default('none') }}"
+    bootwright_ceph_op_idempotency_name: "{{ bootwright_ceph_op.idempotency.name | default('') }}"
+    bootwright_ceph_op_command: "{{ bootwright_ceph_op.command | default([]) }}"
+    bootwright_ceph_op_skip: false
+    bootwright_ceph_op_output: ""
+    bootwright_ceph_op_capture_cluster: ""
+    bootwright_ceph_op_capture_field: ""
+    bootwright_ceph_op_key_line: ""
+    bootwright_ceph_op_capture_rgw: false
+    bootwright_ceph_op_rgw_payload: {}
+    bootwright_ceph_op_pool_live: {}
+    bootwright_ceph_op_pool_recreate: false
+    bootwright_ceph_op_fs_live: {}
+    bootwright_ceph_op_fs_recreate: false
+  no_log: "{{ bootwright_ceph_op.capture is defined }}"

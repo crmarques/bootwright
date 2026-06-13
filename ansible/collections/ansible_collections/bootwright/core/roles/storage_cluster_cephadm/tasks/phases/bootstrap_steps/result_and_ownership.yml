@@ -1,0 +1,38 @@
+---
+- name: Create storage task artifact directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ansible_artifacts_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
+
+- name: Write captured storage result
+  ansible.builtin.copy:
+    dest: "{{ bootwright_selected_storage_cluster.resultPath }}"
+    content: "{{ {'dataFoundation': bootwright_data_foundation_result | default({})} | to_nice_json }}\n"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: bootwright_selected_storage_cluster.dataFoundationBindings | default([]) | length > 0
+
+- name: Record storage cluster ownership
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+    bootwright_ownership_fields:
+      cluster: "{{ bootwright_selected_storage_cluster.name }}"
+      paths:
+        - /etc/ceph
+        - /var/lib/ceph
+        - /var/log/ceph
+      labels:
+        bootwright.kind: storage-cluster
+      attributes:
+        seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+        remoteWorkDir: "{{ bootwright_ceph_remote_work_dir }}"

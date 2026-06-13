@@ -1,0 +1,40 @@
+---
+- name: Resolve vSphere virtual media action
+  ansible.builtin.set_fact:
+    bootwright_vsphere_media_action: "{{ bootwright_redfish_action_effective | default('boot') }}"
+  changed_when: false
+
+- name: Validate vSphere virtual media action
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_media_action in ['boot', 'cleanup', 'cleanup_persistent']
+    fail_msg: "Unsupported vSphere virtual media action {{ bootwright_vsphere_media_action }}"
+
+- name: Resolve vSphere virtual media inputs
+  ansible.builtin.set_fact:
+    bootwright_vsphere_media: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_media_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_media_record_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_media_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
+    bootwright_vsphere_media_fetch: "{{ bootwright_component.boot.agentIso.fetchUrl | default('') }}"
+  changed_when: false
+
+- name: Validate vSphere virtual media inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_media is mapping
+      - bootwright_vsphere_media.server | default('') | length > 0
+      - bootwright_vsphere_media.credentialsPath | default('') | length > 0
+      - bootwright_vsphere_media.topology.datacenter | default('') | length > 0
+    fail_msg: >-
+      vSphere virtual media for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter placement or credentials on bootwright_component.vsphere.
+
+- name: Load vCenter credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.support_credentials
+    tasks_from: load.yml
+  vars:
+    bootwright_creds_path: "{{ bootwright_vsphere_media.credentialsPath }}"
+    bootwright_creds_var: bootwright_vsphere_media_credentials
+    bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere_media.server }}"

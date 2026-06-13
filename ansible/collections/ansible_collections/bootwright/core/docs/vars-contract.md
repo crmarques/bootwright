@@ -99,7 +99,7 @@ bootwright_clusters:
         bootApplyRole: bootwright.core.container_cluster_boot_redfish
         mediaPrepareRole: bootwright.core.container_cluster_media_libvirt
         machineSetupRoles:
-          - bootwright.core.machine_setup_libvirt
+          - bootwright.core.provider_host_libvirt
         networkAttachment:
           kind: libvirt | vsphere | kubevirt | baremetal
           libvirt: { bridge }
@@ -299,7 +299,7 @@ bootwright_infra_component_services:
 bootwright_provider_machine_setups:
   - machineRef: bastion
     machineAddress: 192.168.133.1
-    applyRole: bootwright.core.machine_setup_libvirt
+    applyRole: bootwright.core.provider_host_libvirt
 ```
 
 ## Managed OS Install Shape

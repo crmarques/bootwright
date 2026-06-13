@@ -1,0 +1,124 @@
+---
+# Before bootstrapping, classify any pre-existing cephadm cluster on the seed and
+# enforce the apply-mode contract: create refuses any existing cluster
+# (greenfield); continue and override act only on a Bootwright-owned cluster and
+# refuse a foreign/co-resident one. Ownership is 3-factor: the on-disk ceph.conf
+# carries an fsid AND a Bootwright storage-cluster ownership record exists on this
+# seed AND this host is the declared seedHost; a present marker's fsid must agree
+# with the conf fsid. The fsid is sourced from the on-disk conf (not live
+# `ceph fsid`) so a DOWN cluster stays classifiable and re-stampable. The record
+# is written right after bootstrap (below), so a half-provisioned cluster (conf
+# present, marker absent) is still classified as owned and is recoverable by
+# re-running `apply` instead of a manual /etc/ceph removal. Computed for every
+# mode; override then zaps+rebuilds an owned cluster, the default reconcile
+# leaves its bootstrap untouched (idempotent resume) and re-stamps it below.
+- name: Read existing Ceph configuration for override rebuild
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_override_conf
+  changed_when: false
+  failed_when: false
+
+- name: Read Bootwright Ceph ownership marker for override rebuild
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_ownership_marker_path }}"
+  register: bootwright_ceph_override_marker
+  changed_when: false
+  failed_when: false
+
+- name: Stat Bootwright storage cluster ownership record for override rebuild
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_dir }}/resources/storage-cluster/{{ bootwright_selected_storage_cluster.name }}.json"
+  register: bootwright_ceph_override_record
+  changed_when: false
+
+- name: Resolve existing Ceph cluster fsid for override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_override_fsid: >-
+      {{ (bootwright_ceph_override_conf.content | b64decode
+          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+          | default([], true) | first | default('')) | trim }}
+  when: (bootwright_ceph_override_conf | default({})).content is defined
+
+- name: Resolve Bootwright ownership marker fsid for override rebuild
+  ansible.builtin.set_fact:
+    bootwright_ceph_override_owned_fsid: >-
+      {{ (bootwright_ceph_override_marker.content | b64decode | from_json).fsid
+         | default('', true) | trim }}
+  when: (bootwright_ceph_override_marker | default({})).content is defined
+
+# Owned iff conf fsid present AND a Bootwright ownership record exists on this
+# seed AND this host is the declared seedHost AND any present marker fsid agrees
+# with the conf fsid. The record is the load-bearing proof Bootwright created this
+# cluster (a foreign/co-resident cluster has none); the marker fsid is a secondary
+# consistency check, tolerant of a markerless-but-recorded cluster so the deadlock
+# case is reclaimable.
+- name: Decide override rebuild ownership
+  ansible.builtin.set_fact:
+    bootwright_ceph_override_owned: >-
+      {{
+        (bootwright_ceph_override_fsid | default('') | length > 0)
+        and (bootwright_ceph_override_record.stat.exists | default(false) | bool)
+        and (bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname)
+        and (
+          (bootwright_ceph_override_owned_fsid | default('') | length == 0)
+          or (bootwright_ceph_override_owned_fsid | default('')
+              == bootwright_ceph_override_fsid | default(''))
+        )
+      }}
+
+# Host-side enforcement of the apply-mode contract, the live backstop to the Go
+# preflight: create fails if a cluster already exists; continue and override fail
+# if it exists but is not Bootwright-owned. An owned cluster proceeds — override
+# to the zap below, continue to the idempotent bootstrap skip.
+- name: Enforce apply mode for the Ceph cluster
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: apply_mode_gate.yml
+  vars:
+    bootwright_gate_object: "storage cluster {{ bootwright_selected_storage_cluster.name }} cephadm cluster"
+    bootwright_gate_exists: "{{ (bootwright_ceph_override_conf | default({})).content is defined }}"
+    bootwright_gate_owned: "{{ bootwright_ceph_override_owned | default(false) | bool }}"
+
+- name: Remove existing cephadm cluster for override rebuild
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --zap-osds
+      - --fsid
+      - "{{ bootwright_ceph_override_fsid }}"
+  register: bootwright_ceph_override_rm
+  changed_when: true
+  # A failed rm-cluster must not silently fall through to clearing config and
+  # re-bootstrapping: that would orphan the old cephadm daemons. Fail closed.
+  failed_when: bootwright_ceph_override_rm.rc != 0
+  when:
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_ceph_override_owned | default(false) | bool
+    - bootwright_ceph_override_fsid | default('') | length > 0
+
+- name: Clear residual Ceph configuration for override rebuild
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ceph/ceph.conf
+    - /etc/ceph/ceph.client.admin.keyring
+    - /etc/ceph/ceph.pub
+    - "{{ bootwright_ceph_ownership_marker_path }}"
+  when:
+    - (bootwright_apply_mode | default('continue')) == 'override'
+    - bootwright_ceph_override_owned | default(false) | bool
+    - (bootwright_ceph_override_conf | default({})).content is defined
+
+- name: Check existing Ceph configuration
+  ansible.builtin.command:
+    argv:
+      - test
+      - -f
+      - /etc/ceph/ceph.conf
+  register: bootwright_ceph_conf_check
+  changed_when: false
+  failed_when: false

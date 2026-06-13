@@ -1,0 +1,119 @@
+---
+- name: Resolve post-boot readiness behavior
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot_readiness_type: "{{ (bootwright_component.boot.readiness | default({})).type | default('ssh') }}"
+  changed_when: false
+
+- name: Validate post-boot readiness behavior
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot_readiness_type in ['none', 'ssh']
+    fail_msg: "Unsupported boot readiness type {{ bootwright_vsphere_boot_readiness_type }}"
+
+- name: Probe vSphere node readiness over SSH
+  when: bootwright_vsphere_boot_readiness_type == 'ssh'
+  block:
+    - name: Resolve node readiness probe inputs
+      ansible.builtin.set_fact:
+        bootwright_vsphere_node_probe_address: "{{ bootwright_component.primaryIPAddress | default('') }}"
+        bootwright_vsphere_node_ready_port: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).port | default(bootwright_vsphere_node_ready_probe_port) }}"
+        bootwright_vsphere_node_ready_user: "{{ ((bootwright_component.boot.readiness | default({})).ssh | default({})).user | default('core') }}"
+        bootwright_vsphere_node_ready_key_path: "{{ bootwright_current_cluster.nodeSSHPrivateKeyPath | default('') }}"
+        bootwright_vsphere_node_ready_known_hosts_path: >-
+          /tmp/bootwright-node-ready-{{ bootwright_current_cluster.name | default('cluster') }}-{{ bootwright_component.name | default('node') }}-known-hosts
+      changed_when: false
+
+    # During internal local-root runs the key probe must execute as the
+    # invoking user — file-backed keys live in the caller's home, which
+    # root may not read on every filesystem (the redfish driver carries
+    # the same handling).
+    - name: Resolve node SSH auth probe key execution context
+      ansible.builtin.set_fact:
+        bootwright_vsphere_node_ready_ssh_key_exec_user: >-
+          {{
+            ('#' ~ lookup('env', 'SUDO_UID'))
+            if ((lookup('env', 'BOOTWRIGHT_INTERNAL_LOCAL_ROOT') | default('', true)) == '1'
+                and ((lookup('env', 'SUDO_UID') | default('', true)) | length) > 0)
+            else ''
+          }}
+        bootwright_vsphere_node_ready_ssh_key_command_prefix: []
+      changed_when: false
+
+    - name: Resolve node SSH auth probe key caller command prefix
+      ansible.builtin.set_fact:
+        bootwright_vsphere_node_ready_ssh_key_command_prefix:
+          - sudo
+          - -n
+          - -u
+          - "{{ bootwright_vsphere_node_ready_ssh_key_exec_user }}"
+          - --
+      changed_when: false
+      when: (bootwright_vsphere_node_ready_ssh_key_exec_user | length) > 0
+
+    - name: Wait for node SSH to confirm live ISO boot complete
+      ansible.builtin.wait_for:
+        host: "{{ bootwright_vsphere_node_probe_address }}"
+        port: "{{ bootwright_vsphere_node_ready_port | int }}"
+        timeout: "{{ bootwright_vsphere_node_ready_timeout_seconds | int }}"
+      when: (bootwright_vsphere_node_probe_address | length) > 0
+
+    - name: Check node SSH auth probe key
+      ansible.builtin.command:
+        argv: "{{ bootwright_vsphere_node_ready_ssh_key_command_prefix + ['test', '-f', bootwright_vsphere_node_ready_key_path] }}"
+      register: bootwright_vsphere_node_ready_key_check
+      changed_when: false
+      failed_when: false
+      when:
+        - (bootwright_vsphere_node_probe_address | length) > 0
+        - (bootwright_vsphere_node_ready_key_path | length) > 0
+
+    - name: Wait for node SSH to accept configured key
+      ansible.builtin.command:
+        argv: >-
+          {{
+            bootwright_vsphere_node_ready_ssh_key_command_prefix
+            + [
+              'ssh',
+              '-i',
+              bootwright_vsphere_node_ready_key_path,
+              '-o',
+              'BatchMode=yes',
+              '-o',
+              'StrictHostKeyChecking=accept-new',
+              '-o',
+              'UserKnownHostsFile=' ~ bootwright_vsphere_node_ready_known_hosts_path,
+              '-o',
+              'ConnectTimeout=' ~ (bootwright_vsphere_node_ready_ssh_connect_timeout_seconds | int),
+              '-o',
+              'ConnectionAttempts=1',
+              '-p',
+              bootwright_vsphere_node_ready_port | string,
+              bootwright_vsphere_node_ready_user ~ '@' ~ bootwright_vsphere_node_probe_address,
+              'true'
+            ]
+          }}
+      register: bootwright_vsphere_node_ready_ssh_auth
+      changed_when: false
+      failed_when: false
+      until: (bootwright_vsphere_node_ready_ssh_auth.rc | default(1) | int) == 0
+      retries: "{{ bootwright_vsphere_node_ready_ssh_auth_retries | int }}"
+      delay: "{{ bootwright_vsphere_node_ready_ssh_auth_delay_seconds | int }}"
+      when:
+        - (bootwright_vsphere_node_probe_address | length) > 0
+        - (bootwright_vsphere_node_ready_key_check.rc | default(1) | int) == 0
+
+    - name: Confirm node SSH accepted configured key
+      ansible.builtin.assert:
+        that:
+          - (bootwright_vsphere_node_ready_ssh_auth.rc | default(1) | int) == 0
+        fail_msg: >-
+          Node {{ bootwright_component.name }} at {{ bootwright_vsphere_node_probe_address }}
+          answered TCP/{{ bootwright_vsphere_node_ready_port | int }} but rejected the
+          {{ bootwright_vsphere_node_ready_user }} SSH key
+          {{ bootwright_vsphere_node_ready_key_path }}. This usually means the VM
+          booted something other than the generated agent ISO or the declared
+          MAC/IP mapping points at another host. Check the attached datastore
+          media, the VM boot order, and the machine's static addressing.
+      when:
+        - (bootwright_vsphere_node_probe_address | length) > 0
+        - (bootwright_vsphere_node_ready_key_check.rc | default(1) | int) == 0

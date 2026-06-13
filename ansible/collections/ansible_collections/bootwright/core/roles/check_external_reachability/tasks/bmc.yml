@@ -22,7 +22,7 @@
 
 - name: "[bmc {{ bootwright_validate_machine.name }}] Load BMC credentials"
   ansible.builtin.include_role:
-    name: bootwright.core.helper_credentials
+    name: bootwright.core.support_credentials
     tasks_from: load
   vars:
     bootwright_creds_path: "{{ bootwright_validate_bmc_cred_path }}"

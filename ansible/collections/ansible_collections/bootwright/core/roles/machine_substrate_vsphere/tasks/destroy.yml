@@ -19,7 +19,7 @@
 
 - name: Load vCenter credentials
   ansible.builtin.include_role:
-    name: bootwright.core.helper_credentials
+    name: bootwright.core.support_credentials
     tasks_from: load.yml
   vars:
     bootwright_creds_path: "{{ bootwright_vsphere.credentialsPath }}"

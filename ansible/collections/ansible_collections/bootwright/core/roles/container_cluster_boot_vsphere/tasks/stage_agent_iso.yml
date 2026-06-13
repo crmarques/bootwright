@@ -1,0 +1,44 @@
+---
+- name: Probe staged vSphere boot media
+  ansible.builtin.stat:
+    path: "{{ bootwright_vsphere_boot_stage_path }}"
+  register: bootwright_vsphere_boot_stage_stat
+
+# The cluster flow generates one agent ISO per cluster in the local
+# install work dir; stage it at the rendered per-provider vmedia path so
+# the media role and ownership cleanup see one uniform layout. The
+# managed-OS flow arrives with the install ISO already staged there.
+- name: Stage generated agent ISO for vSphere upload
+  when: not (bootwright_vsphere_boot_stage_stat.stat.exists | default(false))
+  block:
+    - name: Read generated agent ISO path
+      ansible.builtin.slurp:
+        src: "{{ bootwright_install_local_work_dir }}/agent-iso.path"
+      register: bootwright_vsphere_boot_agent_iso_path_file
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Resolve generated agent ISO path
+      ansible.builtin.set_fact:
+        bootwright_vsphere_boot_agent_iso_path: "{{ bootwright_vsphere_boot_agent_iso_path_file.content | b64decode | trim }}"
+      changed_when: false
+      no_log: true
+
+    - name: Create vSphere media staging directory
+      ansible.builtin.file:
+        path: "{{ bootwright_vsphere_boot_stage_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Stage generated agent ISO
+      ansible.builtin.copy:
+        src: "{{ bootwright_vsphere_boot_agent_iso_path }}"
+        dest: "{{ bootwright_vsphere_boot_stage_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+

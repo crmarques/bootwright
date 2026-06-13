@@ -1,0 +1,10 @@
+---
+- name: Run rendered Ceph late operations
+  ansible.builtin.include_tasks: ../../operations/run.yml
+  loop: "{{ bootwright_ceph_operations }}"
+  loop_control:
+    loop_var: bootwright_ceph_op
+    label: "{{ bootwright_ceph_op.name | default('<unnamed>') }}"
+  when:
+    - bootwright_ceph_op.command | default([]) | length > 0
+    - bootwright_ceph_op.phase | default('storage') in ['object-gateway', 'data-foundation']

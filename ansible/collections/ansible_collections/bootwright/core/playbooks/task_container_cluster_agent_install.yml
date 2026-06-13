@@ -19,7 +19,7 @@
 
   tasks:
     - name: Install agent per cluster
-      ansible.builtin.include_tasks: tasks/container_cluster_agent_install_cluster.yml
+      ansible.builtin.include_tasks: tasks/container_cluster/agent_install_cluster.yml
       loop: "{{ bootwright_clusters | default([]) }}"
       loop_control:
         loop_var: bootwright_current_cluster

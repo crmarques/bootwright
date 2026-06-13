@@ -1,0 +1,74 @@
+---
+# --allow-fqdn-hostname is unconditional, matching IBM's recommended bootstrap
+# command (--ssh-user --mon-ip --allow-fqdn-hostname --registry-json). cephadm
+# bootstrap refuses a seed whose hostname is an FQDN unless this is set, and
+# RHEL/IBM storage nodes routinely use FQDN hostnames; the flag only relaxes
+# that check, so it is a no-op for short hostnames and a foot-gun removed for
+# FQDN ones. The host spec hostnames must still equal each node's real hostname.
+- name: Resolve cephadm bootstrap command
+  ansible.builtin.set_fact:
+    bootwright_ceph_bootstrap_argv: >-
+      {{
+        [
+          'cephadm',
+          'bootstrap',
+          '--mon-ip',
+          bootwright_selected_storage_cluster.bootstrap.monIP,
+          '--allow-fqdn-hostname'
+        ]
+        + (
+          ['--cluster-network', (bootwright_selected_storage_cluster.clusterNetworkCIDRs | join(','))]
+          if (bootwright_selected_storage_cluster.clusterNetworkCIDRs | default([]) | length) > 0
+          else []
+        )
+        + (
+          ['--ssh-private-key', bootwright_ceph_remote_private_key]
+          if bootwright_selected_storage_cluster.clusterSSH.privateKeyPath | default('') | length > 0
+          else []
+        )
+        + (
+          ['--ssh-public-key', bootwright_ceph_remote_public_key]
+          if bootwright_selected_storage_cluster.clusterSSH.publicKeyPath | default('') | length > 0
+          else []
+        )
+        + (
+          ['--ssh-user', bootwright_selected_storage_cluster.clusterSSH.user]
+          if bootwright_selected_storage_cluster.clusterSSH.user | default('') | length > 0
+          else []
+        )
+        + (
+          ['--registry-json', bootwright_ceph_remote_registry_json]
+          if bootwright_ceph_registry_credentials is defined
+          else []
+        )
+        + (
+          ['--image', bootwright_ceph_bootstrap_image]
+          if bootwright_ceph_bootstrap_image | default('') | length > 0
+          else []
+        )
+        + (
+          ['--config', bootwright_ceph_remote_bootstrap_conf]
+          if bootwright_selected_storage_cluster.ceph.bootstrapConfPath | default('') | length > 0
+          else []
+        )
+        + (
+          ['--skip-monitoring-stack']
+          if bootwright_selected_storage_cluster.skipMonitoringStack | default(false) | bool
+          else []
+        )
+      }}
+  no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
+
+- name: Bootstrap Ceph cluster when absent
+  ansible.builtin.command:
+    argv: "{{ bootwright_ceph_bootstrap_argv }}"
+  register: bootwright_ceph_bootstrap
+  changed_when: true
+  no_log: "{{ bootwright_ceph_registry_credentials is defined }}"
+  # cephadm bootstrap is a one-time, non-idempotent operation that refuses to
+  # run when /etc/ceph/ceph.conf already exists. Gate purely on that file, the
+  # same marker cephadm itself checks: an already-bootstrapped node must never
+  # be re-bootstrapped (a transiently unreachable cluster cannot be repaired by
+  # re-running bootstrap). A stale conf from a prior cluster is cleared by the
+  # destroy flow, which owns /etc/ceph, before a fresh apply re-bootstraps.
+  when: bootwright_ceph_conf_check.rc != 0

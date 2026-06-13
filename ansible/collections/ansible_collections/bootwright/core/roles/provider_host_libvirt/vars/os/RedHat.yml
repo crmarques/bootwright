@@ -1,0 +1,9 @@
+---
+bootwright_provider_host_libvirt_packages:
+  - qemu-kvm
+  - qemu-img
+  - libvirt
+  - libvirt-client
+  - virt-install
+  - python3-libvirt
+bootwright_provider_host_libvirt_libvirt_service: libvirtd

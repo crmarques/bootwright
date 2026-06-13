@@ -1,0 +1,29 @@
+---
+- name: Resolve vSphere VM layout
+  ansible.builtin.set_fact:
+    bootwright_vsphere_managed_os_reset: "{{ (bootwright_component.osManaged | default(false) | bool) and ((bootwright_apply_mode | default('continue')) == 'override') }}"
+    bootwright_vsphere_disks: >-
+      {{
+        [{'size_gb': bootwright_component.profile.diskGiB,
+          'type': bootwright_vsphere_disk_type,
+          'datastore': bootwright_vsphere.topology.datastore}]
+        + (
+          bootwright_component.profile.dataDisks | default([])
+          | map(attribute='sizeGiB')
+          | map('community.general.dict_kv', 'size_gb')
+          | map('combine', {'type': bootwright_vsphere_disk_type,
+                            'datastore': bootwright_vsphere.topology.datastore})
+          | list
+        )
+      }}
+    bootwright_vsphere_networks: >-
+      {{
+        bootwright_component.interfaces
+        | map(attribute='macAddress')
+        | map('community.general.dict_kv', 'mac')
+        | map('combine', {'name': bootwright_vsphere_portgroup,
+                          'device_type': bootwright_vsphere_nic_device,
+                          'start_connected': true})
+        | list
+      }}
+  changed_when: false

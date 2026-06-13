@@ -1,0 +1,134 @@
+---
+- name: Check Ceph fsid on seed host
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - fsid
+  register: bootwright_ceph_fsid
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+# Before removing the cephadm cluster and wiping /etc/ceph on the seed, prove the
+# cluster is one Bootwright created. Ownership is 3-factor: the on-disk ceph.conf
+# carries an fsid AND a Bootwright storage-cluster ownership record exists on this
+# seed AND this host is the declared seedHost; a present marker's fsid must agree
+# with the conf fsid. Refuse to --zap-osds and tear down a cluster that is not owned
+# (a foreign or co-resident cluster). The fsid is read from the on-disk conf, not
+# live `ceph fsid`, so a DOWN owned cluster stays classifiable and removable. The
+# destroy play runs any_errors_fatal, so a seed refusal aborts before any node wipes
+# its OSD devices. A seed with no ceph.conf at all has nothing to protect (owned).
+- name: Read Bootwright Ceph ownership marker on seed host
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_ownership_marker_path }}"
+  register: bootwright_ceph_destroy_marker
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Read existing Ceph configuration on seed host
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_destroy_conf
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Check existing Ceph configuration on seed host
+  ansible.builtin.command:
+    argv:
+      - test
+      - -f
+      - /etc/ceph/ceph.conf
+  register: bootwright_ceph_destroy_conf_check
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Stat Bootwright storage cluster ownership record on seed host
+  ansible.builtin.stat:
+    path: "{{ bootwright_ownership_dir }}/resources/storage-cluster/{{ bootwright_selected_storage_cluster.name }}.json"
+  register: bootwright_ceph_destroy_record
+  changed_when: false
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Resolve existing Ceph configuration fsid on seed host
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_conf_fsid: >-
+      {{ (bootwright_ceph_destroy_conf.content | b64decode
+          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+          | default([], true) | first | default('')) | trim }}
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - (bootwright_ceph_destroy_conf | default({})).content is defined
+
+- name: Resolve Bootwright ownership marker fsid on seed host
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_owned_fsid: >-
+      {{ (bootwright_ceph_destroy_marker.content | b64decode | from_json).fsid
+         | default('', true) | trim }}
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - (bootwright_ceph_destroy_marker | default({})).content is defined
+
+- name: Decide Ceph destroy ownership on seed host
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_owned: >-
+      {{
+        (bootwright_ceph_destroy_conf_check.rc | default(1) != 0)
+        or (
+          (bootwright_ceph_destroy_conf_fsid | default('') | length > 0)
+          and (bootwright_ceph_destroy_record.stat.exists | default(false) | bool)
+          and (bootwright_selected_storage_cluster.seedHost | default('') == inventory_hostname)
+          and (
+            (bootwright_ceph_destroy_owned_fsid | default('') | length == 0)
+            or (bootwright_ceph_destroy_owned_fsid | default('')
+                == bootwright_ceph_destroy_conf_fsid | default(''))
+          )
+        )
+      }}
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Refuse to destroy a non-Bootwright Ceph cluster on seed host
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_destroy_owned | default(false) | bool
+    fail_msg: >-
+      Refusing to tear down the cephadm cluster on {{ inventory_hostname }}
+      (fsid {{ bootwright_ceph_destroy_conf_fsid | default('<unreadable>') | trim }}):
+      /etc/ceph holds a Ceph cluster with no Bootwright ownership record for this
+      cluster on this seed, so it may be a foreign or co-resident cluster. Re-run a
+      normal apply to re-stamp ownership, or remove /etc/ceph manually after verifying
+      the cluster is safe to destroy, then retry.
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+# Tear down by the live fsid when the cluster answers, else the on-disk conf fsid so
+# a DOWN owned cluster is still removable (cephadm rm-cluster operates on local
+# daemons/state by fsid, not the live cluster).
+- name: Resolve Ceph cluster fsid for teardown on seed host
+  ansible.builtin.set_fact:
+    bootwright_ceph_destroy_fsid: >-
+      {{ bootwright_ceph_fsid.stdout | default('') | trim
+         if (bootwright_ceph_fsid.stdout | default('') | trim | length > 0)
+         else bootwright_ceph_destroy_conf_fsid | default('') }}
+  when: inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+
+- name: Remove cephadm cluster on seed host
+  ansible.builtin.command:
+    argv:
+      - cephadm
+      - rm-cluster
+      - --force
+      - --zap-osds
+      - --fsid
+      - "{{ bootwright_ceph_destroy_fsid }}"
+  register: bootwright_cephadm_rm_cluster
+  changed_when: bootwright_cephadm_rm_cluster.rc == 0
+  # Ownership is proven above; a real rm-cluster failure must not fall through to
+  # wiping OSD devices with the cephadm cluster still partly present. Fail closed.
+  failed_when: bootwright_cephadm_rm_cluster.rc != 0
+  when:
+    - inventory_hostname == bootwright_selected_storage_cluster.seedHost | default('')
+    - bootwright_ceph_destroy_owned | default(false) | bool
+    - bootwright_ceph_destroy_fsid | default('') | length > 0
+

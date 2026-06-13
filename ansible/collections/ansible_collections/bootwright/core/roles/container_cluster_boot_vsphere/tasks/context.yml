@@ -1,0 +1,31 @@
+---
+- name: Select vSphere boot action
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot_action: "{{ bootwright_redfish_action | default('boot') }}"
+  changed_when: false
+
+- name: Validate selected vSphere boot action
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot_action in ['boot', 'cleanup_media']
+    fail_msg: "Unsupported boot_vsphere action {{ bootwright_vsphere_boot_action }}"
+
+- name: Resolve vSphere boot inputs
+  ansible.builtin.set_fact:
+    bootwright_vsphere_boot: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_boot_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_boot_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | default('') }}"
+  changed_when: false
+
+- name: Validate vSphere boot inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere_boot is mapping
+      - bootwright_vsphere_boot.server | default('') | length > 0
+      - bootwright_vsphere_boot.credentialsPath | default('') | length > 0
+      - bootwright_component.boot.agentIso is mapping
+      - bootwright_vsphere_boot_stage_path | length > 0
+      - (bootwright_component.mediaPrepareRole | default('') | length) > 0
+    fail_msg: >-
+      vSphere boot for {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter connection details, the agent ISO contract, or a media role.

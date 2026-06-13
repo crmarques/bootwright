@@ -1,0 +1,11 @@
+---
+- name: Apply Ceph late service spec
+  ansible.builtin.command:
+    argv:
+      - ceph
+      - orch
+      - apply
+      - -i
+      - "{{ bootwright_ceph_remote_late_services_spec }}"
+  register: bootwright_ceph_late_services_apply
+  changed_when: true

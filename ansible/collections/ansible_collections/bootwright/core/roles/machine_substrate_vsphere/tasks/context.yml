@@ -1,0 +1,37 @@
+---
+- name: Resolve vSphere substrate inputs
+  ansible.builtin.set_fact:
+    bootwright_vsphere: "{{ bootwright_component.vsphere | default({}) }}"
+    bootwright_vsphere_portgroup: "{{ bootwright_component.networkAttachment.vsphere.portgroup | default('') }}"
+    bootwright_vsphere_vm_name: "{{ bootwright_current_cluster.name }}-{{ bootwright_component.name }}"
+    bootwright_vsphere_ownership_marker: >-
+      bootwright:context={{ bootwright_clusters_dir | dirname | basename }}
+      bootwright:cluster={{ bootwright_current_cluster.name }}
+      bootwright:machine={{ bootwright_component.name }}
+  changed_when: false
+
+- name: Validate vSphere substrate inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_vsphere is mapping
+      - bootwright_vsphere.server | default('') | length > 0
+      - bootwright_vsphere.credentialsPath | default('') | length > 0
+      - bootwright_vsphere.topology.datacenter | default('') | length > 0
+      - bootwright_vsphere.topology.computeCluster | default('') | length > 0
+      - bootwright_vsphere.topology.datastore | default('') | length > 0
+      - bootwright_vsphere_portgroup | length > 0
+      - bootwright_component.interfaces | default([]) | length > 0
+      - bootwright_component.profile is mapping
+    fail_msg: >-
+      vSphere machine {{ bootwright_current_cluster.name }}/{{ bootwright_component.name }}
+      is missing vCenter placement, credentials, a portgroup attachment, or rendered interfaces.
+
+- name: Load vCenter credentials
+  ansible.builtin.include_role:
+    name: bootwright.core.support_credentials
+    tasks_from: load.yml
+  vars:
+    bootwright_creds_path: "{{ bootwright_vsphere.credentialsPath }}"
+    bootwright_creds_var: bootwright_vsphere_credentials
+    bootwright_creds_label: "vCenter credentials for {{ bootwright_vsphere.server }}"
+

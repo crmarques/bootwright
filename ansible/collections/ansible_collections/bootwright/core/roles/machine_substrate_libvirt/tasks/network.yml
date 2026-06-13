@@ -1,7 +1,7 @@
 ---
 - name: Ensure libvirt host packages and service
   ansible.builtin.import_role:
-    name: bootwright.core.machine_setup_libvirt
+    name: bootwright.core.provider_host_libvirt
 
 - name: Resolve cluster libvirt network from the machine network config
   ansible.builtin.set_fact:

@@ -1,0 +1,38 @@
+---
+- name: Resolve managed OS install paths
+  ansible.builtin.set_fact:
+    bootwright_os_install_root: "{{ bootwright_provider_state_dir }}/os-install/{{ bootwright_current_os_group.name }}/{{ bootwright_component.name }}"
+    bootwright_os_install_token: "{{ (bootwright_current_os_group.name ~ '-' ~ bootwright_component.name ~ '-osinstall') | to_uuid }}"
+  changed_when: false
+
+- name: Resolve managed OS virtual media paths
+  ansible.builtin.set_fact:
+    bootwright_os_stage_path: "{{ bootwright_component.boot.agentIso.stagePath | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+    bootwright_os_fetch_url: "{{ bootwright_component.boot.agentIso.fetchUrl | replace('__BOOTWRIGHT_AGENT_ISO_PUBLISH_TOKEN__', bootwright_os_install_token) }}"
+  changed_when: false
+
+- name: Resolve managed OS install files
+  ansible.builtin.set_fact:
+    bootwright_os_source_iso: "{{ bootwright_os_install_root }}/source.iso"
+    bootwright_os_source_id_path: "{{ bootwright_os_install_root }}/source.id"
+    bootwright_os_kickstart_path: "{{ bootwright_os_install_root }}/ks.cfg"
+    bootwright_os_install_iso: "{{ bootwright_os_stage_path }}"
+    bootwright_os_legacy_install_iso: "{{ bootwright_os_install_root }}/install.iso"
+    bootwright_os_install_tmpdir: "{{ bootwright_os_install_root }}/tmp"
+    bootwright_os_marker_path: "{{ bootwright_component.osInstall.marker.path }}"
+    bootwright_os_marker_desired_hash: "{{ bootwright_component.osInstall.marker.desiredHash }}"
+    bootwright_os_marker_payload: "{{ bootwright_component.osInstall.marker | to_json }}"
+  changed_when: false
+
+- name: Resolve managed OS install source path
+  ansible.builtin.set_fact:
+    bootwright_os_source_iso_effective: >-
+      {{
+        bootwright_component.osInstall.image.path
+        if (
+          (bootwright_component.osInstall.image.kind in ['media', 'file'])
+          and (bootwright_component.osInstall.image.sourceOnTarget | default(false) | bool)
+        )
+        else bootwright_os_source_iso
+      }}
+  changed_when: false

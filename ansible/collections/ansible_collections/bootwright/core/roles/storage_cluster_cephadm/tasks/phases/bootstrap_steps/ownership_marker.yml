@@ -1,0 +1,58 @@
+---
+# Stamp a host-local ownership marker recording this cluster's fsid right after
+# bootstrap — before the host/service/operation steps that may fail — and write
+# the Bootwright ownership record at the same point, so a cephadm cluster
+# Bootwright created stays classified as owned (reclaimable by --override,
+# recoverable by re-apply) even if a subsequent step aborts the apply. The fsid
+# is read from the on-disk ceph.conf, not live `ceph fsid`, so a DOWN cluster is
+# still re-stampable. Both are refreshed on every apply (re-stamping clusters
+# bootstrapped before the marker/record existed). Removed by /etc/ceph teardown in
+# the destroy flow.
+- name: Read Ceph configuration for ownership marker
+  ansible.builtin.slurp:
+    src: /etc/ceph/ceph.conf
+  register: bootwright_ceph_ownership_conf
+  changed_when: false
+  failed_when: false
+
+- name: Resolve Ceph fsid for ownership marker
+  ansible.builtin.set_fact:
+    bootwright_ceph_ownership_fsid: >-
+      {{ (bootwright_ceph_ownership_conf.content | b64decode
+          | regex_search('fsid\s*=\s*([0-9a-fA-F-]+)', '\1')
+          | default([], true) | first | default('')) | trim }}
+  when: (bootwright_ceph_ownership_conf | default({})).content is defined
+
+- name: Stamp Bootwright Ceph ownership marker
+  ansible.builtin.copy:
+    dest: "{{ bootwright_ceph_ownership_marker_path }}"
+    content: >-
+      {{
+        {
+          'manager': 'bootwright',
+          'cluster': bootwright_selected_storage_cluster.name,
+          'fsid': bootwright_ceph_ownership_fsid | default('') | trim
+        } | to_nice_json
+      }}
+    owner: root
+    group: root
+    mode: "0600"
+  when: bootwright_ceph_ownership_fsid | default('') | trim | length > 0
+
+# Write the Bootwright ownership record immediately after bootstrap so a partial
+# apply (one that fails before the enriched record at the end of this play) is
+# still classified as owned by the 3-factor gate above — making it recoverable by
+# re-running `apply` rather than a manual /etc/ceph removal. The enriched write at
+# the end supersedes it with the full paths/labels/attributes.
+- name: Record storage cluster ownership early for recoverability
+  ansible.builtin.include_role:
+    name: bootwright.core.ownership_record
+    tasks_from: resource.yml
+  vars:
+    bootwright_ownership_kind: storage-cluster
+    bootwright_ownership_name: "{{ bootwright_selected_storage_cluster.name }}"
+    bootwright_ownership_fields:
+      cluster: "{{ bootwright_selected_storage_cluster.name }}"
+      attributes:
+        seedHost: "{{ bootwright_selected_storage_cluster.seedHost | default('') }}"
+

@@ -7,11 +7,11 @@
     name: bootwright.core.ownership_record
     tasks_from: package_apply.yml
   vars:
-    bootwright_ownership_packages: "{{ bootwright_machine_setup_libvirt_packages }}"
+    bootwright_ownership_packages: "{{ bootwright_provider_host_libvirt_packages }}"
     bootwright_ownership_required_by: libvirt
 
 - name: Start libvirt service
   ansible.builtin.service:
-    name: "{{ bootwright_machine_setup_libvirt_libvirt_service }}"
+    name: "{{ bootwright_provider_host_libvirt_libvirt_service }}"
     state: started
     enabled: true

@@ -1,0 +1,68 @@
+---
+# A declared device that is mounted, holds the root/boot filesystem, or is
+# otherwise in use is not a Bootwright OSD device; wiping it would be irreversible
+# data loss from a misdeclared or kernel-reordered /dev/sdX name. Probe live state
+# and fail closed before any destructive wipe (the device-name regex only proves
+# shape, not ownership or that the device is safe to zap).
+- name: Probe declared Ceph destroy devices for active mounts
+  ansible.builtin.command:
+    argv:
+      - lsblk
+      - --noheadings
+      - --output
+      - MOUNTPOINT
+      - "{{ item }}"
+  register: bootwright_ceph_device_mounts
+  changed_when: false
+  failed_when: false
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+
+- name: Refuse to wipe mounted or in-use Ceph destroy devices
+  ansible.builtin.assert:
+    that:
+      - item.rc | default(1) == 0
+      - (item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | length) == 0
+    fail_msg: >-
+      Refusing to wipe storage device {{ item.item }} for
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      it is mounted or in use ({{ item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list | join(', ') }}),
+      so it is not a wipeable Bootwright OSD device. Correct the declared devices list before destroying.
+  loop: "{{ bootwright_ceph_device_mounts.results | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item.item }}"
+
+# Each apply records the exact devices Bootwright provisioned as OSDs on this node.
+# Refuse to wipe a declared device that is not in that recorded set: it was added
+# to the node's devices list out of band (never an OSD here) and may hold foreign
+# data. When no marker exists (a cluster provisioned before this guard), fall back
+# to the shape and mount checks above rather than failing a legitimate destroy.
+- name: Read Bootwright OSD device ownership marker
+  ansible.builtin.slurp:
+    src: "{{ bootwright_ceph_osd_marker_path }}"
+  register: bootwright_ceph_osd_device_marker
+  changed_when: false
+  failed_when: false
+
+- name: Resolve recorded Bootwright OSD devices
+  ansible.builtin.set_fact:
+    bootwright_ceph_recorded_osd_devices: >-
+      {{ (bootwright_ceph_osd_device_marker.content | b64decode | from_json).devices | default([]) }}
+  when: (bootwright_ceph_osd_device_marker | default({})).content is defined
+
+- name: Refuse to wipe declared devices not recorded as Bootwright OSDs
+  ansible.builtin.assert:
+    that:
+      - item in (bootwright_ceph_recorded_osd_devices | default([]))
+    fail_msg: >-
+      Refusing to wipe storage device {{ item }} for
+      {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}:
+      it is not in this node's recorded Bootwright OSD device set
+      ({{ bootwright_ceph_recorded_osd_devices | default([]) | join(', ') }}), so it was not
+      provisioned by Bootwright as an OSD. It may have been added to the devices list after
+      apply. Re-apply to re-record OSD devices, or verify and wipe it manually.
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"
+  when: (bootwright_ceph_osd_device_marker | default({})).content is defined

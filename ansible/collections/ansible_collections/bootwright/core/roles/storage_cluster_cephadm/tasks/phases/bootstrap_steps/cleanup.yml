@@ -1,0 +1,6 @@
+---
+- name: Remove managed Ceph work directory
+  ansible.builtin.file:
+    path: "{{ bootwright_ceph_remote_work_dir }}"
+    state: absent
+  when: bootwright_ceph_remote_work_dir | default('') | length > 0

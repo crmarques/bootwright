@@ -11,7 +11,7 @@
 
 - name: Stop stale installer processes
   ansible.builtin.include_role:
-    name: bootwright.core.helper_process_cleanup
+    name: bootwright.core.support_process_cleanup
   vars:
     bootwright_process_cleanup_allow_pattern: true
     bootwright_process_cleanup_pattern: "clusters/{{ bootwright_current_cluster.name }}/runtime/installer/"

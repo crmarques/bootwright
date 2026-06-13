@@ -59,7 +59,7 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 	{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"}: {
 		Dispatch: Dispatch{SubstrateRole: "libvirt", BMCRole: "emulated", BootRole: "redfish"},
 		Roles: RoleContract{
-			MachineSetupRoles:    []string{"bootwright.core.machine_setup_libvirt"},
+			MachineSetupRoles:    []string{"bootwright.core.provider_host_libvirt"},
 			SubstratePrepareRole: "bootwright.core.machine_substrate_libvirt",
 			SubstratePrepareFrom: "network",
 			SubstrateApplyRole:   "bootwright.core.machine_substrate_libvirt",
@@ -79,8 +79,8 @@ var dispatchSupport = map[Dispatch]DispatchSupport{
 		Roles: RoleContract{
 			SubstrateApplyRole:   "bootwright.core.machine_substrate_baremetal",
 			SubstrateDestroyRole: "bootwright.core.machine_substrate_baremetal",
-			BMCApplyRole:         "bootwright.core.provider_service_bmc_redfish",
-			BMCDestroyRole:       "bootwright.core.provider_service_bmc_redfish",
+			BMCApplyRole:         "bootwright.core.provider_service_bmc_external_redfish",
+			BMCDestroyRole:       "bootwright.core.provider_service_bmc_external_redfish",
 			BootApplyRole:        "bootwright.core.container_cluster_boot_redfish",
 		},
 		Status:  StatusSupported,

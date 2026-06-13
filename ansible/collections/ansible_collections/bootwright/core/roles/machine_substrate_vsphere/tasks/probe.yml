@@ -1,0 +1,60 @@
+---
+# The probe drives two decisions below: the apply only pre-creates the
+# empty CD-ROM device on first create (touching cdrom on an existing VM
+# would hot-eject mounted install media during a reconcile), and the
+# ownership attributes fall back to the live moid/uuid on reconfigure.
+- name: Probe vSphere virtual machine
+  community.vmware.vmware_guest_info:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_probe
+  failed_when: false
+  no_log: true
+
+- name: Resolve vSphere virtual machine presence
+  ansible.builtin.set_fact:
+    bootwright_vsphere_vm_exists: "{{ (bootwright_vsphere_probe.instance is defined) and not (bootwright_vsphere_managed_os_reset | bool) }}"
+  changed_when: false
+
+- name: Stop managed OS vSphere VM for override reinstall
+  community.vmware.vmware_guest_powerstate:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: powered-off
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  failed_when: false
+  no_log: true
+  when: bootwright_vsphere_managed_os_reset | bool
+
+- name: Remove managed OS vSphere VM for override reinstall
+  community.vmware.vmware_guest:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    state: absent
+    force: true
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: true
+  when: bootwright_vsphere_managed_os_reset | bool

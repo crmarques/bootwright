@@ -39,7 +39,7 @@
 
   tasks:
     - name: Destroy substrate per cluster on this host
-      ansible.builtin.include_tasks: tasks/machine_infra_destroy_cluster.yml
+      ansible.builtin.include_tasks: tasks/machine_infra/destroy_cluster.yml
       loop: "{{ bootwright_host_clusters }}"
       loop_control:
         loop_var: bootwright_cluster_name
@@ -100,7 +100,9 @@
           or item.cluster | default('') in bootwright_destroy_cluster_scope.split(',')
 
     - name: Sweep current-context libvirt domains
-      ansible.builtin.include_tasks: tasks/machine_infra_destroy_libvirt_context.yml
+      ansible.builtin.include_role:
+        name: bootwright.core.provider_host_libvirt
+        tasks_from: destroy_context.yml
       loop: "{{ bootwright_host_libvirt_providers }}"
       loop_control:
         loop_var: bootwright_libvirt_provider

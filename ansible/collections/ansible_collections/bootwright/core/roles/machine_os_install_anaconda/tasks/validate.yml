@@ -1,0 +1,40 @@
+---
+- name: Validate managed Anaconda install inputs
+  ansible.builtin.assert:
+    that:
+      - bootwright_component.osInstall is mapping
+      - bootwright_component.osInstall.image is mapping
+      - (bootwright_component.osInstall.image.kind | default('') | length) > 0
+      - (bootwright_component.osInstall.kickstart.hostname | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.address | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.user | default('') | length) > 0
+      - (bootwright_component.osInstall.ssh.privateKeyPath | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.path | default('') | length) > 0
+      - (bootwright_component.osInstall.marker.desiredHash | default('') | length) > 0
+      - bootwright_component.boot is mapping
+      - bootwright_component.boot.agentIso is mapping
+    fail_msg: "managed Anaconda OS install needs image, kickstart, SSH, marker, and boot virtual-media vars"
+
+- name: Validate managed Anaconda install source
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (
+          ((bootwright_component.osInstall.image.mediaType | default('dvd')) == 'boot')
+          and ((bootwright_component.osInstall.installer.sourceURL | default('') | length) == 0)
+          and not (bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool)
+        )
+    fail_msg: >-
+      Managed Anaconda OS install image {{ bootwright_component.osInstall.image.original | default('') }}
+      is marked as mediaType=boot, but no installer source was
+      rendered. Configure MachineImage spec.installSource with an install
+      source, or use mediaType=dvd for full install media that can be installed
+      from CD-ROM.
+
+- name: Validate managed Anaconda RHSM install source
+  ansible.builtin.assert:
+    that:
+      - (bootwright_component.osInstall.installer.rhsm.organizationPath | default('') | length) > 0
+      - (bootwright_component.osInstall.installer.rhsm.activationKeyPath | default('') | length) > 0
+    fail_msg: "managed Anaconda RHSM install source needs organizationRef and activationKeyRef secret paths"
+  when: bootwright_component.osInstall.installer.rhsm.enabled | default(false) | bool

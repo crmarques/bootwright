@@ -1,0 +1,7 @@
+---
+- name: Clean vSphere virtual media
+  ansible.builtin.include_role:
+    name: "{{ bootwright_component.mediaPrepareRole }}"
+  vars:
+    bootwright_redfish_action_effective: cleanup
+  when: bootwright_vsphere_boot_action == 'cleanup_media'

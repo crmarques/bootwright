@@ -1,0 +1,67 @@
+---
+# The empty SATA CD-ROM is pre-created on first create only, so the vsphere
+# media role reconfigures iso_path on the existing device — vmware_guest CD
+# device add/remove on live VMs is the historically fragile path, and a
+# reconcile of an existing VM must never touch the CD (resetting it would
+# hot-eject mounted install media). An empty template clones nothing: the
+# VM is created blank and boots install media.
+- name: Apply vSphere virtual machine
+  community.vmware.vmware_guest:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    datacenter: "{{ bootwright_vsphere.topology.datacenter }}"
+    cluster: "{{ bootwright_vsphere.topology.computeCluster }}"
+    folder: "{{ bootwright_vsphere.topology.folder | default(omit, true) }}"
+    resource_pool: "{{ bootwright_vsphere.topology.resourcePool | default(omit, true) }}"
+    datastore: "{{ bootwright_vsphere.topology.datastore }}"
+    name: "{{ bootwright_vsphere_vm_name }}"
+    template: "{{ bootwright_vsphere.template | default(omit, true) }}"
+    guest_id: "{{ omit if (bootwright_vsphere.template | default('') | length > 0) else bootwright_vsphere_guest_id }}"
+    annotation: "{{ bootwright_vsphere_ownership_marker }}"
+    hardware:
+      num_cpus: "{{ bootwright_component.profile.cpu }}"
+      memory_mb: "{{ bootwright_component.profile.memoryMiB }}"
+      boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
+      scsi: "{{ bootwright_vsphere_scsi_controller }}"
+    disk: "{{ bootwright_vsphere_disks }}"
+    cdrom: "{{ omit if (bootwright_vsphere_vm_exists | bool) else [{'controller_type': 'sata', 'controller_number': 0, 'unit_number': 0, 'type': 'none'}] }}"
+    networks: "{{ bootwright_vsphere_networks }}"
+    state: present
+    wait_for_ip_address: false
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  register: bootwright_vsphere_apply
+  no_log: true
+
+# Disk-first ordering is the libvirt disk-first analogue: a blank disk has
+# no bootable EFI entry so firmware falls through to the install CD, and the
+# first boot after the install comes from disk even while the media is still
+# attached — no mid-install eject is ever needed. The VM is addressed by
+# moid: boot_manager has no folder scoping, and name_match=first could hit
+# a same-named foreign VM elsewhere in the inventory.
+- name: Resolve vSphere virtual machine identity
+  ansible.builtin.set_fact:
+    bootwright_vsphere_vm_moid: "{{ bootwright_vsphere_apply.instance.moid | default(bootwright_vsphere_probe.instance.moid | default('')) }}"
+    bootwright_vsphere_vm_uuid: "{{ bootwright_vsphere_apply.instance.hw_product_uuid | default(bootwright_vsphere_probe.instance.hw_product_uuid | default('')) }}"
+  changed_when: false
+
+- name: Enforce vSphere boot order
+  community.vmware.vmware_guest_boot_manager:
+    hostname: "{{ bootwright_vsphere.server }}"
+    port: "{{ bootwright_vsphere.port | default(443) }}"
+    username: "{{ bootwright_vsphere_credentials.username }}"
+    password: "{{ bootwright_vsphere_credentials.password }}"
+    validate_certs: "{{ not (bootwright_vsphere.disableCertificateVerification | default(false) | bool) }}"
+    moid: "{{ bootwright_vsphere_vm_moid | default(omit, true) }}"
+    name: "{{ omit if (bootwright_vsphere_vm_moid | length > 0) else bootwright_vsphere_vm_name }}"
+    boot_firmware: "{{ bootwright_vsphere_boot_firmware }}"
+    secure_boot_enabled: "{{ bootwright_vsphere_secure_boot }}"
+    boot_order:
+      - disk
+      - cdrom
+  vars:
+    ansible_python_interpreter: "{{ bootwright_vsphere_python }}"
+  no_log: true

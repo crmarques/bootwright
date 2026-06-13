@@ -1,0 +1,45 @@
+---
+- name: Load Ceph storage node OS variables
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+- name: Resolve managed Ceph destroy paths
+  ansible.builtin.set_fact:
+    bootwright_ceph_remote_work_dir: "{{ bootwright_selected_storage_cluster.remoteWorkDir }}"
+    bootwright_ceph_ownership_marker_path: /etc/ceph/.bootwright-owned
+    bootwright_ceph_osd_marker_path: /etc/bootwright/ceph-osd-devices.json
+
+- name: Resolve current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_host_matches: >-
+      {{
+        bootwright_selected_storage_cluster.hosts
+        | default([])
+        | selectattr('inventoryHost', 'equalto', inventory_hostname)
+        | list
+      }}
+  changed_when: false
+
+- name: Validate current storage node context
+  ansible.builtin.assert:
+    that:
+      - bootwright_current_storage_host_matches | length == 1
+    fail_msg: >-
+      Storage node {{ inventory_hostname }} is not declared exactly once in
+      {{ bootwright_selected_storage_cluster.name | default('<storage-cluster>') }}.
+
+- name: Set current storage node
+  ansible.builtin.set_fact:
+    bootwright_current_storage_host: "{{ bootwright_current_storage_host_matches | first }}"
+  changed_when: false
+
+- name: Validate declared Ceph destroy devices
+  ansible.builtin.assert:
+    that:
+      - item is match('^/dev/(disk/by-id/[^/]+|disk/by-path/[^/]+|mapper/[^/]+|nvme[0-9]+n[0-9]+|[svx]d[a-z]+)$')
+    fail_msg: >-
+      Refusing to wipe undeclared or unsupported storage device {{ item }}
+      for {{ bootwright_selected_storage_cluster.name }}/{{ bootwright_current_storage_host.hostname }}.
+      Declare stable /dev/disk/by-id, /dev/disk/by-path, /dev/mapper, NVMe, or /dev/sdX paths only.
+  loop: "{{ bootwright_current_storage_host.devices | default([]) }}"
+  loop_control:
+    label: "{{ bootwright_current_storage_host.hostname }} {{ item }}"

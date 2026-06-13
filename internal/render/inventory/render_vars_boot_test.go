@@ -653,7 +653,7 @@ func TestProviderServicesProjectRoleContracts(t *testing.T) {
 		t.Fatalf("provider host setup entries = %v", setups)
 	}
 	setup := setups[0].(map[string]any)
-	if got := setup["applyRole"]; got != "bootwright.core.machine_setup_libvirt" {
+	if got := setup["applyRole"]; got != "bootwright.core.provider_host_libvirt" {
 		t.Fatalf("host setup applyRole got %v", got)
 	}
 }
