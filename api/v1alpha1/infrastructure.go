@@ -280,6 +280,26 @@ func StorageCephRoles() []string {
 	}
 }
 
+// StorageCephRHELVersions is the set of RHEL releases the subscription-backed
+// (redhat, ibm) Ceph distributions support on storage nodes. It is the single
+// source of truth: the Ceph provider advertises it and validation accepts
+// exactly these node OS versions, so the advertised and accepted sets cannot
+// drift.
+func StorageCephRHELVersions() []string {
+	return []string{"9.6", "9.7", "10", "10.0", "10.1"}
+}
+
+// StorageCephSupportsRHELVersion reports whether version is a supported RHEL
+// release for the subscription-backed Ceph distributions.
+func StorageCephSupportsRHELVersion(version string) bool {
+	for _, v := range StorageCephRHELVersions() {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
 func ClusterAdminSSHKeyName(clusterName string) string {
 	return clusterName + "-" + DefaultClusterAdminSSHKeyNamePart
 }

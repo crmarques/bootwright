@@ -232,7 +232,7 @@ func validateStorageCephManagedOS(cluster v1alpha1.StorageCluster, machines map[
 			continue
 		}
 		if !storageCephDistributionSupportsRHELVersion(distribution, profile.Spec.OS.Version) {
-			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q; supported RHEL versions are 9.6, 9.7, 10, or 10.1", owner, profile.Spec.OS.Version, distribution))
+			errs = append(errs, fmt.Sprintf("%s.version %q is incompatible with Ceph distribution %q; supported RHEL versions are %s", owner, profile.Spec.OS.Version, distribution, strings.Join(v1alpha1.StorageCephRHELVersions(), ", ")))
 		}
 	}
 	return errs
@@ -242,12 +242,7 @@ func storageCephDistributionSupportsRHELVersion(distribution, version string) bo
 	if distribution != v1alpha1.StorageCephDistributionRedHat && distribution != v1alpha1.StorageCephDistributionIBM {
 		return true
 	}
-	switch version {
-	case "9", "10", "9.6", "9.7", "10.0", "10.1":
-		return true
-	default:
-		return false
-	}
+	return v1alpha1.StorageCephSupportsRHELVersion(version)
 }
 
 func validateStorageCephadm(prefix string, cluster v1alpha1.StorageCluster, machines map[string]v1alpha1.Machine) []string {

@@ -52,10 +52,6 @@ const (
 // container image; anything else (squid, reef) is treated as a release name.
 var ossUpstreamVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
-// rhelCephVersions are the RHEL releases the subscription-backed (redhat, ibm)
-// Ceph distributions support on storage nodes.
-var rhelCephVersions = []string{"9.6", "9.7", "10", "10.0", "10.1"}
-
 // distributionDef is the declarative record of everything that varies between
 // the supported Ceph distributions. Distribution facts live in this one table
 // rather than in imperative selection logic, so adding a distribution is a table
@@ -80,7 +76,7 @@ func (d distributionDef) requiresEntitlement() bool {
 func rhelCephRuntimeOS(message string) RuntimeOS {
 	return RuntimeOS{
 		Family:         "rhel",
-		ExactVersions:  append([]string(nil), rhelCephVersions...),
+		ExactVersions:  v1alpha1.StorageCephRHELVersions(),
 		ManagedMessage: message,
 	}
 }
