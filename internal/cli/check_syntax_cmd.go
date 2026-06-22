@@ -188,22 +188,22 @@ type syntaxCheckReport struct {
 	// Advisories are non-fatal Ceph best-practice warnings; their presence does
 	// not set OK=false.
 	Advisories               []advice.StorageAdvisory `json:"advisories,omitempty"`
-	Environments             int                            `json:"environments"`
-	Machines                 int                            `json:"machines"`
-	MachineImages            int                            `json:"machineImages"`
-	MachineInstallProfiles   int                            `json:"machineInstallProfiles"`
-	NetworkConfigs           int                            `json:"networkConfigs"`
-	InfraProviders           int                            `json:"infraProviders"`
-	ContainerClusters        int                            `json:"containerClusters"`
-	StorageClusters          int                            `json:"storageClusters"`
-	StoragePlacementPolicies int                            `json:"storagePlacementPolicies"`
-	StoragePools             int                            `json:"storagePools"`
-	StorageFilesystems       int                            `json:"storageFilesystems"`
-	StorageObjectGateways    int                            `json:"storageObjectGateways"`
-	StorageExports           int                            `json:"storageExports"`
-	ClusterAddons            int                            `json:"clusterAddons"`
-	Profiles                 int                            `json:"clusterAddonProfiles"`
-	ExtensionBindings        int                            `json:"clusterAddonBindings"`
+	Environments             int                      `json:"environments"`
+	Machines                 int                      `json:"machines"`
+	MachineImages            int                      `json:"machineImages"`
+	MachineInstallProfiles   int                      `json:"machineInstallProfiles"`
+	NetworkConfigs           int                      `json:"networkConfigs"`
+	InfraProviders           int                      `json:"infraProviders"`
+	ContainerClusters        int                      `json:"containerClusters"`
+	StorageClusters          int                      `json:"storageClusters"`
+	StoragePlacementPolicies int                      `json:"storagePlacementPolicies"`
+	StoragePools             int                      `json:"storagePools"`
+	StorageFilesystems       int                      `json:"storageFilesystems"`
+	StorageObjectGateways    int                      `json:"storageObjectGateways"`
+	StorageExports           int                      `json:"storageExports"`
+	ClusterAddons            int                      `json:"clusterAddons"`
+	Profiles                 int                      `json:"clusterAddonProfiles"`
+	ExtensionBindings        int                      `json:"clusterAddonBindings"`
 }
 
 func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions desiredstate.ClusterSelectionExclusions, checkErr error) error {

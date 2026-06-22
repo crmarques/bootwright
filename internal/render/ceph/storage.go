@@ -81,4 +81,3 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 	}
 	return assets
 }
-
