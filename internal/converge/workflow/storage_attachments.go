@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/render"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	storageapply "github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
 	"github.com/crmarques/bootwright/internal/storage/topology"
@@ -111,11 +112,11 @@ func writeStorageAttachmentExternalDetails(ctx context.Context, path string, sta
 	binding := plan.Binding
 	input := plan.Input
 	exportRef := addoninputs.LocalObjectReferenceValue(input.Values, "exportRef")
-	export, ok := topology.ExportByName(state, exportRef.Name)
+	export, ok := stateview.ExportByName(state, exportRef.Name)
 	if !ok {
 		return nil
 	}
-	cluster, ok := topology.ClusterByName(state, export.Spec.StorageClusterRef.Name)
+	cluster, ok := stateview.ClusterByName(state, export.Spec.StorageClusterRef.Name)
 	if !ok {
 		return fmt.Errorf("StorageCluster/%s not found for storage attachment %s/%s", export.Spec.StorageClusterRef.Name, plan.Addon.AddonRef.Name, input.Name)
 	}

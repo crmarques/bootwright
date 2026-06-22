@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
 func FailureDomain(cluster v1alpha1.StorageCluster) string {
@@ -49,7 +50,7 @@ func NodeMachine(state v1alpha1.State, cluster v1alpha1.StorageCluster, node str
 	if !ok || cephNode.MachineRef.Name == "" {
 		return v1alpha1.Machine{}, false
 	}
-	return MachineByName(state, cephNode.MachineRef.Name)
+	return stateview.Machine(state, cephNode.MachineRef.Name)
 }
 
 func CephHostsWithRole(cluster v1alpha1.StorageCluster, role string) []string {
@@ -143,42 +144,6 @@ func FilesystemDefaultDataPool(fs v1alpha1.StorageFilesystem) string {
 	return ""
 }
 
-func ClusterByName(state v1alpha1.State, name string) (v1alpha1.StorageCluster, bool) {
-	for _, cluster := range state.StorageClusters {
-		if cluster.Metadata.Name == name {
-			return cluster, true
-		}
-	}
-	return v1alpha1.StorageCluster{}, false
-}
-
-func ExportByName(state v1alpha1.State, name string) (v1alpha1.StorageExport, bool) {
-	for _, export := range state.StorageExports {
-		if export.Metadata.Name == name {
-			return export, true
-		}
-	}
-	return v1alpha1.StorageExport{}, false
-}
-
-func FilesystemByName(state v1alpha1.State, name string) (v1alpha1.StorageFilesystem, bool) {
-	for _, fs := range state.StorageFilesystems {
-		if fs.Metadata.Name == name {
-			return fs, true
-		}
-	}
-	return v1alpha1.StorageFilesystem{}, false
-}
-
-func GatewayByName(state v1alpha1.State, name string) (v1alpha1.StorageObjectGateway, bool) {
-	for _, gateway := range state.StorageObjectGateways {
-		if gateway.Metadata.Name == name {
-			return gateway, true
-		}
-	}
-	return v1alpha1.StorageObjectGateway{}, false
-}
-
 // GatewayPublicEndpoint returns the storage-owned public S3 endpoint of the RGW
 // service. Ownership is on the gateway itself, so no ContainerCluster lookup is
 // involved and a storage-only object store needs no consumer cluster.
@@ -231,13 +196,4 @@ func CephNodeByName(cluster v1alpha1.StorageCluster, name string) (v1alpha1.Stor
 		}
 	}
 	return v1alpha1.StorageCephHost{}, false
-}
-
-func MachineByName(state v1alpha1.State, name string) (v1alpha1.Machine, bool) {
-	for _, machine := range state.Machines {
-		if machine.Metadata.Name == name {
-			return machine, true
-		}
-	}
-	return v1alpha1.Machine{}, false
 }

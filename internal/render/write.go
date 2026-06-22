@@ -7,8 +7,8 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/render/ceph"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/datafoundation"
-	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
 func writeText(fs FileSystem, path string, content string) error {
@@ -54,7 +54,7 @@ type storageAssetWriteOptions struct {
 
 func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.State, opts storageAssetWriteOptions) error {
 	for _, asset := range assets {
-		cluster, ok := topology.ClusterByName(state, asset.StorageClusterName)
+		cluster, ok := stateview.ClusterByName(state, asset.StorageClusterName)
 		if !ok {
 			continue
 		}
@@ -83,7 +83,7 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 				continue
 			}
 			exportRef := ceph.AddonInputStorageExportRef(attachment)
-			export, ok := topology.ExportByName(state, exportRef.Name)
+			export, ok := stateview.ExportByName(state, exportRef.Name)
 			if !ok {
 				continue
 			}

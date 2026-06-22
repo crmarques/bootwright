@@ -72,10 +72,10 @@ var allowedImports = map[string][]string{
 	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/safefs", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Storage and addons.
-	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
 	"internal/storage/cephprovider":   {"api/v1alpha1", "internal/entitlements"},
-	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/storage/topology"},
-	"internal/storage/topology":       {"api/v1alpha1"},
+	"internal/storage/datafoundation": {"api/v1alpha1", "internal/secrets", "internal/state/view", "internal/storage/topology"},
+	"internal/storage/topology":       {"api/v1alpha1", "internal/state/view"},
 	"internal/addons":                 {},
 	"internal/addons/inputs":          {"api/v1alpha1"},
 	"internal/addons/oc":              {"api/v1alpha1", "internal/addons", "internal/addons/plan", "internal/addons/records", "internal/addons/render"},

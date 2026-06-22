@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	secret "github.com/crmarques/bootwright/internal/secrets"
+	stateview "github.com/crmarques/bootwright/internal/state/view"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -53,12 +54,12 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 	}
 	if df != nil {
 		input.CephFSName = df.FilesystemRef.Name
-		if fs, ok := topology.FilesystemByName(state, df.FilesystemRef.Name); ok {
+		if fs, ok := stateview.FilesystemByName(state, df.FilesystemRef.Name); ok {
 			input.CephFSPool = topology.FilesystemDefaultDataPool(fs)
 		}
 		input.RBDPool = df.RBDPoolRef.Name
 		input.RGWPoolPrefix = df.ObjectGatewayRef.Name
-		if gw, ok := topology.GatewayByName(state, df.ObjectGatewayRef.Name); ok {
+		if gw, ok := stateview.GatewayByName(state, df.ObjectGatewayRef.Name); ok {
 			// cephadm names RGW pools after the rgw service_id (no realm/zone is
 			// rendered), so the Data Foundation poolPrefix must be the RGW
 			// serviceID, not the StorageObjectGateway resource name.
