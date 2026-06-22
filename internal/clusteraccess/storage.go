@@ -13,7 +13,6 @@ import (
 const (
 	cephAdminConfigPath  = "/etc/ceph/ceph.conf"
 	cephAdminKeyringPath = "/etc/ceph/ceph.client.admin.keyring"
-	cephDashboardPort    = "8443"
 	// cephDashboardUser is cephadm's default initial dashboard user; Bootwright
 	// does not override it at bootstrap, so it is always "admin".
 	cephDashboardUser = "admin"
@@ -22,6 +21,11 @@ const (
 	// alongside the container clusters' kubeadmin-password.
 	cephDashboardPasswordFile = "dashboard-password"
 )
+
+// cephDashboardPort is the dashboard/mgmt-gateway https port shown in the access
+// URL. It derives from the single owner of that default (topology) so the
+// reported URL cannot drift from the port the renderer deploys.
+var cephDashboardPort = strconv.Itoa(topology.CephManagementDefaultPort)
 
 // StorageDashboardPasswordPath returns the controller-local path where the
 // install-time Ceph dashboard admin password is persisted for a storage cluster,

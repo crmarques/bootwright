@@ -98,11 +98,11 @@ func validateStoragePools(items []v1alpha1.StoragePool, clusters map[string]v1al
 		}
 		if ok && storageClusterStretchEnabled(cluster) {
 			replicas := pool.Spec.Ceph.Replicated
-			if replicas.Size != 0 && replicas.Size != 4 {
-				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.size must be 4 for stretch-mode StorageCluster/%s", prefix, cluster.Metadata.Name))
+			if replicas.Size != 0 && replicas.Size != topology.StretchReplicatedPoolSize {
+				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.size must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolSize, cluster.Metadata.Name))
 			}
-			if replicas.MinSize != 0 && replicas.MinSize != 2 {
-				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.minSize must be 2 for stretch-mode StorageCluster/%s", prefix, cluster.Metadata.Name))
+			if replicas.MinSize != 0 && replicas.MinSize != topology.StretchReplicatedPoolMinSize {
+				errs = append(errs, fmt.Sprintf("%s.ceph.replicated.minSize must be %d for stretch-mode StorageCluster/%s", prefix, topology.StretchReplicatedPoolMinSize, cluster.Metadata.Name))
 			}
 		}
 	}

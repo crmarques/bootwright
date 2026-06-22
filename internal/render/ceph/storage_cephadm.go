@@ -276,11 +276,6 @@ func cephadmMonitoringSpecs(cluster v1alpha1.StorageCluster) []any {
 	return docs
 }
 
-// cephManagementDefaultPort is the mgmt-gateway frontend (https) port Bootwright
-// renders when spec.ceph.management.port is unset. It matches the Ceph
-// dashboard's own default port so the access URL is unsurprising.
-const cephManagementDefaultPort = 8443
-
 // cephadmManagementSpecs renders native HA access to the Ceph management surface
 // from spec.ceph.management: a mgmt-gateway that reverse-proxies the dashboard
 // and monitoring UIs, plus an ingress in keepalive_only mode that floats the VIP
@@ -304,7 +299,7 @@ func cephadmManagementSpecs(cluster v1alpha1.StorageCluster) []any {
 	}
 	port := mgmt.Port
 	if port == 0 {
-		port = cephManagementDefaultPort
+		port = topology.CephManagementDefaultPort
 	}
 	// The mgmt-gateway is a cephadm singleton (no service_id): it terminates the
 	// management UIs and advertises them at virtual_ip. enable_auth renders only
