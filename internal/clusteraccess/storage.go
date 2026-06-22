@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/storage/topology"
 )
 
@@ -112,7 +113,7 @@ func storageSummaryFor(state v1alpha1.State, cluster v1alpha1.StorageCluster, cl
 		if path := StorageDashboardPasswordPath(clustersDir, cluster.Metadata.Name); path != "" {
 			summary.DashboardUser = cephDashboardUser
 			summary.DashboardPasswordPath = path
-			summary.DashboardPasswordCommand = "sudo cat " + workflow.ShellQuote([]string{path})
+			summary.DashboardPasswordCommand = "sudo cat " + shellquote.Quote([]string{path})
 			summary.DashboardPassword = FileStatus(path)
 		}
 	}

@@ -55,4 +55,3 @@ func networkConfigInterfaceNames(config map[string]any) []string {
 	sort.Strings(out)
 	return out
 }
-

@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/bundle"
 	"github.com/crmarques/bootwright/internal/host/safefs"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/render"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
@@ -326,7 +327,7 @@ func writeStorageExportSSHAnsibleFiles(inventoryPath, varsPath, playbookPath str
 	inventoryHost := map[string]any{
 		"ansible_host":            target.address,
 		"bootwright_host_name":    target.label,
-		"ansible_ssh_common_args": ShellQuote([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + target.knownHostsPath}),
+		"ansible_ssh_common_args": shellquote.Quote([]string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + target.knownHostsPath}),
 	}
 	if target.user != "" {
 		inventoryHost["ansible_user"] = target.user

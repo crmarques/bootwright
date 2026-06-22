@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
 	"github.com/crmarques/bootwright/internal/host/safefs"
+	"github.com/crmarques/bootwright/internal/host/shellquote"
 	"github.com/crmarques/bootwright/internal/render"
 	"github.com/crmarques/bootwright/internal/state/view"
 )
@@ -100,12 +101,12 @@ func ClusterSummariesFromAssets(state v1alpha1.State, assets []render.InstallerA
 			Substrate:                sub.Provider,
 			HostCluster:              sub.Host,
 			KubeconfigPath:           kubeconfigPath,
-			KubeContextCommand:       "KUBECONFIG=" + workflow.ShellQuote([]string{kubeconfigPath}),
+			KubeContextCommand:       "KUBECONFIG=" + shellquote.Quote([]string{kubeconfigPath}),
 			APIURL:                   clusterAPIURL(name, baseDomain),
 			ConsoleURL:               clusterConsoleURL(name, baseDomain),
 			KubeadminUsername:        "kubeadmin",
 			KubeadminPasswordPath:    passwordPath,
-			KubeadminPasswordCommand: "sudo cat " + workflow.ShellQuote([]string{passwordPath}),
+			KubeadminPasswordCommand: "sudo cat " + shellquote.Quote([]string{passwordPath}),
 			Kubeconfig:               kubeconfig,
 			KubeadminPassword:        password,
 			Ready:                    kubeconfig.Present && password.Present,

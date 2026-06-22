@@ -59,6 +59,7 @@ var allowedImports = map[string][]string{
 	"internal/host/managedroot": {"internal/host/safefs"},
 	"internal/host/ptyexec":     {},
 	"internal/host/safefs":      {},
+	"internal/host/shellquote":  {},
 
 	// Render: root is the only published surface; families are fs-free and
 	// one-way (inventory -> installer, inventory -> ceph).
@@ -73,7 +74,7 @@ var allowedImports = map[string][]string{
 	"internal/converge/ansible/runconfig": {"internal/converge/ansible", "internal/converge/bundle"},
 	"internal/converge/bastion":           {"api/v1alpha1", "internal/render", "internal/roles"},
 	"internal/converge/bundle":            {},
-	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/safefs", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
+	"internal/converge/workflow":          {"api/v1alpha1", "internal/addons/inputs", "internal/addons/oc", "internal/addons/plan", "internal/converge/ansible", "internal/converge/ansible/runconfig", "internal/converge/bundle", "internal/host/safefs", "internal/host/shellquote", "internal/ownership", "internal/render", "internal/roles", "internal/secrets", "internal/sshtrust", "internal/state/graph", "internal/state/view", "internal/storage", "internal/storage/datafoundation", "internal/storage/topology"},
 
 	// Storage and addons.
 	"internal/storage":                {"api/v1alpha1", "internal/addons/inputs", "internal/host/safefs", "internal/state/view", "internal/storage/datafoundation"},
@@ -91,7 +92,7 @@ var allowedImports = map[string][]string{
 	// prints. None of them may import cli/output (see TestOnlyCLIImportsOutput).
 	"internal/preflight":     {"api/v1alpha1", "internal/addons/plan", "internal/converge/bastion", "internal/host/callerio", "internal/host/safefs", "internal/infra/locality", "internal/secrets", "internal/sshtrust", "internal/state/view", "internal/storage/datafoundation", "internal/storage/topology", "internal/workspace"},
 	"internal/status":        {"api/v1alpha1", "internal/addons/plan", "internal/addons/records", "internal/clusteraccess", "internal/converge/workflow", "internal/ownership", "internal/render", "internal/state/graph", "internal/state/view"},
-	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
+	"internal/clusteraccess": {"api/v1alpha1", "internal/converge/workflow", "internal/host/safefs", "internal/host/shellquote", "internal/render", "internal/state/graph", "internal/state/view", "internal/storage/topology"},
 }
 
 type packageImports struct {

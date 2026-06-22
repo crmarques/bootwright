@@ -334,23 +334,3 @@ func RenderToolInputs(outputDir, secretsDir string, state v1alpha1.State) (rende
 func RenderToolInputsForContext(contextName, outputDir, secretsDir string, state v1alpha1.State) (render.Result, error) {
 	return render.ToolInputsForContext(contextName, outputDir, secretsDir, state)
 }
-
-// ShellQuote returns a shell-safe representation of argv suitable for
-// echoing in dry-run output. Identical to the helper that previously
-// lived in internal/cli; moved here so workflow callers don't have to
-// reach back into cli for it.
-func ShellQuote(args []string) string {
-	quoted := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "" {
-			quoted = append(quoted, "''")
-			continue
-		}
-		if strings.ContainsAny(arg, " \t\n'\"$`\\") {
-			quoted = append(quoted, "'"+strings.ReplaceAll(arg, "'", "'\\''")+"'")
-			continue
-		}
-		quoted = append(quoted, arg)
-	}
-	return strings.Join(quoted, " ")
-}
