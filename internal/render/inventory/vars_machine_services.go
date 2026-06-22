@@ -6,7 +6,6 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
-	"github.com/crmarques/bootwright/internal/roles"
 	stategraph "github.com/crmarques/bootwright/internal/state/graph"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
@@ -141,37 +140,24 @@ func nameResolutionMachineServiceVars(state v1alpha1.State, service stategraph.M
 	if !ok || component.Spec.NameResolution == nil {
 		return nil, false
 	}
-	dns := component.Spec.NameResolution
-	port := dns.Port
-	if port == 0 {
-		port = roles.LookupService(v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq).DefaultPort
-	}
-	additionalHosts := append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)
+	// Delegate the dnsmasq var shape to the shared component builder (the single
+	// owner of the dnsmasq key set, used by the per-cluster components path too),
+	// then overlay the cross-consumer aggregates only the graph path has: the
+	// merged additional ingress hosts and the merged host/domain records.
+	entry := v1alpha1.EnvironmentNameResolutionComponent{Name: serviceEntryName(service)}
+	out := nameResolutionComponentVars(state, entry, component)
+	out["additionalIngressHosts"] = append([]string(nil), service.MergedStringFields["additionalIngressHosts"]...)
 	hostRecords, domainRecords := nameResolutionRecordsForGraphService(state, service)
-	out := map[string]any{
-		"kind":                   v1alpha1.ComponentSlotNameResolution,
-		"providerName":           v1alpha1.KindInfraComponent,
-		"name":                   component.Metadata.Name,
-		"componentName":          component.Metadata.Name,
-		"entryName":              serviceEntryName(service),
-		"port":                   port,
-		"bindAddress":            dns.BindAddress,
-		"additionalIngressHosts": additionalHosts,
-		"machineRef":             dns.MachineRef.Name,
-		"machineAddress":         stateview.MachineSSHAddressByName(state, dns.MachineRef.Name),
-		"realisation":            v1alpha1.InfraComponentTypeDnsmasq,
-		"image":                  managedDnsmasqImage(state),
-	}
 	if len(hostRecords) > 0 {
 		out["hostRecords"] = hostRecords
+	} else {
+		delete(out, "hostRecords")
 	}
 	if len(domainRecords) > 0 {
 		out["domainRecords"] = domainRecords
+	} else {
+		delete(out, "domainRecords")
 	}
-	if len(dns.Forwarders) > 0 {
-		out["forwarders"] = stringSliceAny(dns.Forwarders)
-	}
-	applyServiceRoleContract(out, v1alpha1.ComponentSlotNameResolution, v1alpha1.InfraComponentTypeDnsmasq)
 	return out, true
 }
 
