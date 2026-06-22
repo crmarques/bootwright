@@ -17,6 +17,7 @@ spec:
         generated:
           credentials:
             username: admin
+
   infraComponents:
     artifactServers:
       - name: default
