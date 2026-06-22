@@ -53,7 +53,7 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 			Dir:                dir,
 			DataFoundationDir:  filepath.Join(dir, "data-foundation"),
 		}
-		if StorageClusterManaged(cluster) {
+		if v1alpha1.StorageClusterManaged(cluster) {
 			asset.CephadmDir = filepath.Join(dir, "cephadm")
 			asset.CephDir = filepath.Join(dir, "ceph")
 			if cluster.Spec.Ceph != nil && CephadmBootstrapConf(cluster) != "" {
@@ -82,6 +82,3 @@ func StorageAssets(baseDir string, state v1alpha1.State) []StorageAsset {
 	return assets
 }
 
-func StorageClusterManaged(cluster v1alpha1.StorageCluster) bool {
-	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
-}

@@ -76,8 +76,7 @@ func ExternalDetailsInputFromState(state v1alpha1.State, cluster v1alpha1.Storag
 
 func ExternalDetailsSourceGenerated(export v1alpha1.StorageExport, cluster v1alpha1.StorageCluster) bool {
 	if export.Spec.ExternalDetails == nil {
-		return cluster.Spec.Management == "" ||
-			cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
+		return v1alpha1.StorageClusterManaged(cluster)
 	}
 	return export.Spec.ExternalDetails.Generated != nil
 }

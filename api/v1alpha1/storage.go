@@ -31,6 +31,23 @@ type StorageClusterSpec struct {
 	Ceph       *StorageClusterCephSpec `yaml:"ceph,omitempty" json:"ceph,omitempty"`
 }
 
+// StorageClusterManaged reports whether Bootwright provisions this cluster's
+// Ceph (cephadm) rather than importing a previously provisioned one. Empty
+// management defaults to managed (normalize fills it in); "external" is
+// imported. This is the single owner of the managed-vs-external classification
+// consumed by rendering, convergence, preflight, status, and access summaries.
+// Validation keeps its own raw-value-aware helper so it can reject management
+// values that are neither managed nor external.
+func StorageClusterManaged(cluster StorageCluster) bool {
+	return cluster.Spec.Management == "" || cluster.Spec.Management == StorageClusterManagementManaged
+}
+
+// StorageClusterExternal reports whether this cluster references previously
+// provisioned external Ceph instead of being Bootwright-managed.
+func StorageClusterExternal(cluster StorageCluster) bool {
+	return !StorageClusterManaged(cluster)
+}
+
 type StorageClusterCephSpec struct {
 	Distribution string `yaml:"distribution,omitempty" json:"distribution,omitempty"`
 	// Release selects which Ceph release to install for the chosen distribution.

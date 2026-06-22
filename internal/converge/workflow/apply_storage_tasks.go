@@ -86,10 +86,6 @@ func storageClusterDesiredHashVars(state v1alpha1.State, name string) v1alpha1.S
 	return s
 }
 
-func storageClusterManaged(cluster v1alpha1.StorageCluster) bool {
-	return cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged
-}
-
 func managedOSMachineNames(state v1alpha1.State, cluster v1alpha1.StorageCluster) []string {
 	if cluster.Spec.Ceph == nil {
 		return nil

@@ -58,7 +58,7 @@ func writeStorageAssets(fs FileSystem, assets []StorageAsset, state v1alpha1.Sta
 		if !ok {
 			continue
 		}
-		if ceph.StorageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
+		if v1alpha1.StorageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
 			if asset.BootstrapConfPath != "" {
 				if err := writeText(fs, asset.BootstrapConfPath, ceph.CephadmBootstrapConf(cluster)); err != nil {
 					return err

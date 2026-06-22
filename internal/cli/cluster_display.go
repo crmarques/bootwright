@@ -62,7 +62,7 @@ func storageDescriptor(cluster v1alpha1.StorageCluster) string {
 	if typ != "" && typ != v1alpha1.StorageClusterTypeCeph {
 		label = typ + " storage"
 	}
-	if cluster.Spec.Management == v1alpha1.StorageClusterManagementExternal {
+	if v1alpha1.StorageClusterExternal(cluster) {
 		label += " (external)"
 	}
 	return label

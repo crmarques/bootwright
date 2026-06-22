@@ -34,7 +34,7 @@ func StorageClusterGroupName(clusterName string) string {
 func ManagedStorageClusters(state v1alpha1.State) []v1alpha1.StorageCluster {
 	var out []v1alpha1.StorageCluster
 	for _, cluster := range state.StorageClusters {
-		if cephrender.StorageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
+		if v1alpha1.StorageClusterManaged(cluster) && cluster.Spec.Ceph != nil {
 			out = append(out, cluster)
 		}
 	}

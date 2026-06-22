@@ -216,7 +216,7 @@ func stateNeedsKubeVirt(state v1alpha1.State) bool {
 
 func stateHasManagedStorageClusters(state v1alpha1.State) bool {
 	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Management == "" || cluster.Spec.Management == v1alpha1.StorageClusterManagementManaged {
+		if v1alpha1.StorageClusterManaged(cluster) {
 			return true
 		}
 	}

@@ -45,7 +45,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	managedOSDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseMachines] && includeStorage {
 		for _, cluster := range state.StorageClusters {
-			if !storageClusterManaged(cluster) {
+			if !v1alpha1.StorageClusterManaged(cluster) {
 				continue
 			}
 			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
@@ -115,7 +115,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	storageInfraDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseDeps] && includeStorage {
 		for _, cluster := range state.StorageClusters {
-			if !storageClusterManaged(cluster) {
+			if !v1alpha1.StorageClusterManaged(cluster) {
 				continue
 			}
 			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
@@ -155,7 +155,7 @@ func PlanApplyTasksChecked(target ApplyTarget, state v1alpha1.State) ([]ApplyTas
 	storageDepsByCluster := map[string][]string{}
 	if phaseSet[ApplyPhaseBase] && includeStorage {
 		for _, cluster := range state.StorageClusters {
-			if !storageClusterManaged(cluster) {
+			if !v1alpha1.StorageClusterManaged(cluster) {
 				continue
 			}
 			if !storageClusterSelectedForTarget(target, cluster.Metadata.Name) {
