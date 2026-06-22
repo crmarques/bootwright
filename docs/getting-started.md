@@ -25,6 +25,16 @@ Every command below runs as your normal user. Bootwright re-executes through
 `sudo` on its own when it needs protected local state; do not prefix it with
 `sudo` yourself.
 
+!!! note "Why Bootwright asks for your password"
+    Bootwright keeps its context and state in a root-owned directory under
+    `/var/lib/bootwright`, so any command that reads or changes that state needs
+    `sudo`. When `sudo` is not already authorized, Bootwright prompts you once and
+    reuses that for the rest of the run — including the BECOME password Ansible
+    needs for privileged steps on remote hosts. Read-only commands (`plan`,
+    `status`, `cluster`, `state-check`, `print-env`) still need `sudo` to read the
+    context, but they change nothing. To avoid the prompt, run as root or
+    pre-authorize once with `sudo -v`.
+
 ## What You Need
 
 - A Linux bastion host where you install and run `bootwright`.

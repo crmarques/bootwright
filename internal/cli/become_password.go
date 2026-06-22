@@ -72,13 +72,6 @@ func willPromptForBecomePassword(ask bool) bool {
 	return ask && become.InheritedPasswordFile() == ""
 }
 
-func becomePasswordSummary(unit string) string {
-	if become.InheritedPasswordFile() != "" {
-		return "Bootwright will reuse the sudo password already validated for this command"
-	}
-	return "Bootwright will ask once for the BECOME password and reuse it for this " + unit
-}
-
 var askBecomePassDefault = func() bool {
 	switch os.Getenv(localRootSudoAuthEnv) {
 	case localSudoAuthPrompted:

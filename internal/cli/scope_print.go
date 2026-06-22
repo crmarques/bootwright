@@ -42,11 +42,7 @@ func printWorkflowSummary(w io.Writer, title string, selected []converge.Phase, 
 		switch {
 		case dryRun:
 			p.Warning("Root phases", "sudo escalation is required; this is a dry run, no commands execute")
-		case askBecomePass:
-			p.Warning("Root phases", becomePasswordSummary("workflow"))
-		case currentEUID() == 0:
-			p.Status(output.StatusInfo, "Root phases", "bootwright is running as root, no BECOME password prompt needed")
-		default:
+		case !askBecomePass && currentEUID() != 0:
 			p.Warning("Root phases", "--ask-become-pass=false requires passwordless sudo or an already-root connection user")
 		}
 	}

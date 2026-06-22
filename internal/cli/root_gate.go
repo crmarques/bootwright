@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/host/become"
 	"github.com/crmarques/bootwright/internal/host/execution"
 	"github.com/crmarques/bootwright/internal/workspace"
@@ -55,16 +54,7 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 	if err != nil {
 		return 1, fmt.Errorf("resolve caller home for sudo: %w", err)
 	}
-	notified := false
 	askSudoPassword := func() (string, error) {
-		// The note prints only here, i.e. only when sudo actually needs to prompt
-		// (become.NewSession tries `sudo -n -v` first and skips this callback when
-		// a passwordless or already-cached sudo succeeds), so it never adds noise
-		// to runs that would not have prompted.
-		if !notified {
-			notified = true
-			noteLocalRootSudo(stderr, args)
-		}
 		return readSudoPassword(stdin, stderr)
 	}
 	sudoSession, err := become.NewSession(ctx, askSudoPassword, stderr, localRootGate.commandContext)
@@ -104,23 +94,6 @@ func runWithLocalRoot(ctx context.Context, args []string, stdin io.Reader, stdou
 		}
 	}
 	return 0, nil
-}
-
-// noteLocalRootSudo explains, just before the password prompt, why a sudo
-// password is being asked for — Bootwright's context lives under a root-owned
-// directory — and how to avoid the prompt. Read-only commands say so explicitly
-// so an operator previewing a plan or listing clusters is not alarmed by a sudo
-// prompt.
-func noteLocalRootSudo(stderr io.Writer, args []string) {
-	reason := "Bootwright keeps its context in a root-owned directory; reading it needs sudo."
-	if len(args) > 0 {
-		switch args[0] {
-		case "plan", "status", "cluster", "state-check", "print-env":
-			reason = "Bootwright keeps its context in a root-owned directory; this read-only command needs sudo only to read it and changes nothing."
-		}
-	}
-	output.New(stderr).Status(output.StatusInfo, "sudo required",
-		reason+" You are asked once; run as root or pre-authorize with 'sudo -v' to skip this prompt.")
 }
 
 func shouldRunLocalRootChild() bool {
