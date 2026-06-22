@@ -57,11 +57,11 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 }
 
 type commandErrorReport struct {
-	OK          bool                      `json:"ok"`
-	ExitCode    int                       `json:"exitCode"`
-	Command     []string                  `json:"command,omitempty"`
-	Error       string                    `json:"error"`
-	Diagnostics []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	OK          bool         `json:"ok"`
+	ExitCode    int          `json:"exitCode"`
+	Command     []string     `json:"command,omitempty"`
+	Error       string       `json:"error"`
+	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
 }
 
 func writeCommandErrorJSON(stdout io.Writer, args []string, code int, err error) error {
@@ -74,12 +74,12 @@ func writeCommandErrorJSON(stdout io.Writer, args []string, code int, err error)
 	})
 }
 
-func commandDiagnostics(err error) []desiredstate.Diagnostic {
+func commandDiagnostics(err error) []Diagnostic {
 	var validationErr desiredstate.ValidationError
 	if errors.As(err, &validationErr) {
-		return desiredstate.Diagnostics(err)
+		return diagnosticsFromError(err)
 	}
-	diagnostics := desiredstate.Diagnostics(err)
+	diagnostics := diagnosticsFromError(err)
 	remediation := commandErrorRemediation(err.Error())
 	for i := range diagnostics {
 		diagnostics[i].Remediation = remediation

@@ -182,9 +182,9 @@ type syntaxCheckReport struct {
 	// Excluded* name loaded clusters that Environment spec.containerClusters /
 	// spec.storageClusters selection drops from the effective state; they are
 	// not validated and apply never touches them.
-	ExcludedContainerClusters []string                  `json:"excludedContainerClusters,omitempty"`
-	ExcludedStorageClusters   []string                  `json:"excludedStorageClusters,omitempty"`
-	Diagnostics               []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
+	ExcludedContainerClusters []string     `json:"excludedContainerClusters,omitempty"`
+	ExcludedStorageClusters   []string     `json:"excludedStorageClusters,omitempty"`
+	Diagnostics               []Diagnostic `json:"diagnostics,omitempty"`
 	// Advisories are non-fatal Ceph best-practice warnings; their presence does
 	// not set OK=false.
 	Advisories               []advice.StorageAdvisory `json:"advisories,omitempty"`
@@ -231,13 +231,13 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 	}
 	if checkErr != nil {
 		report.Error = checkErr.Error()
-		report.Diagnostics = desiredstate.Diagnostics(checkErr)
+		report.Diagnostics = diagnosticsFromError(checkErr)
 	}
 	return cliout.JSON(stdout, report)
 }
 
 func syntaxDiagnosticChecks(err error, rerun string) []preflightCheck {
-	diagnostics := desiredstate.Diagnostics(err)
+	diagnostics := diagnosticsFromError(err)
 	if len(diagnostics) == 0 {
 		return []preflightCheck{failCheck("Desired state", "context input", err.Error(), "Bootwright cannot render or apply invalid desired state", "fix the named YAML field or file and rerun "+rerun)}
 	}

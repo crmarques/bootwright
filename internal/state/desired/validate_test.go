@@ -169,7 +169,7 @@ func TestContainerClusterNetworkingValidation(t *testing.T) {
 	}
 }
 
-func TestValidationErrorCarriesStructuredDiagnostics(t *testing.T) {
+func TestValidationErrorReportsInvalidClusterCIDR(t *testing.T) {
 	dir := t.TempDir()
 	files := newBaselineFiles()
 	files["cluster.yaml"] = strings.Replace(newClusterYAML, "10.128.0.0/14", "not-a-cidr", 1)
@@ -178,21 +178,14 @@ func TestValidationErrorCarriesStructuredDiagnostics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	diagnostics := Diagnostics(err)
-	if len(diagnostics) == 0 {
-		t.Fatalf("expected diagnostics for %v", err)
-	}
-	found := false
-	for _, diagnostic := range diagnostics {
-		if diagnostic.Object == "ContainerCluster/sno" &&
-			diagnostic.Field == "spec.networking.clusterNetwork[0].cidr" &&
-			diagnostic.Value == "not-a-cidr" {
-			found = true
-			break
+	// The validator's responsibility is the message naming the owning object,
+	// field, and offending value; the CLI reconstructs the routable
+	// Object/Field/Value from it (see internal/cli/diagnostics.go).
+	message := err.Error()
+	for _, want := range []string{"ContainerCluster/sno", "spec.networking.clusterNetwork[0].cidr", "not-a-cidr"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("validation error %q does not mention %q", message, want)
 		}
-	}
-	if !found {
-		t.Fatalf("diagnostics do not identify the invalid cluster CIDR: %+v", diagnostics)
 	}
 }
 

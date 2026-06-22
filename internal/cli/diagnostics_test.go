@@ -1,4 +1,4 @@
-package desiredstate
+package cli
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 
 func TestDiagnosticsMapRemovedInstallField(t *testing.T) {
 	err := errors.New("decode /tmp/input/cluster.yaml document 1: yaml: unmarshal errors:\n  line 10: field baseDomain not found in type v1alpha1.OCPInstallSpec")
-	diagnostics := Diagnostics(err)
+	diagnostics := diagnosticsFromError(err)
 	if len(diagnostics) != 1 {
 		t.Fatalf("Diagnostics returned %d entries, want 1", len(diagnostics))
 	}
@@ -25,7 +25,7 @@ func TestDiagnosticsMapRemovedInstallField(t *testing.T) {
 
 func TestDiagnosticsMapUnknownInstallField(t *testing.T) {
 	err := errors.New("decode /tmp/input/cluster.yaml document 1: yaml: unmarshal errors:\n  line 10: field customOverride not found in type v1alpha1.OCPInstallSpec")
-	diagnostics := Diagnostics(err)
+	diagnostics := diagnosticsFromError(err)
 	if len(diagnostics) != 1 {
 		t.Fatalf("Diagnostics returned %d entries, want 1", len(diagnostics))
 	}
@@ -35,5 +35,16 @@ func TestDiagnosticsMapUnknownInstallField(t *testing.T) {
 	}
 	if got.Remediation != "remove spec.install.customOverride or move the fact to the desired-state object that owns it" {
 		t.Fatalf("remediation = %q", got.Remediation)
+	}
+}
+
+func TestDiagnosticsExtractObjectFieldValueFromMessage(t *testing.T) {
+	diagnostics := diagnosticsFromError(errors.New(`ContainerCluster/sno spec.networking.clusterNetwork[0].cidr "not-a-cidr" is not a valid CIDR`))
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnosticsFromError returned %d entries, want 1", len(diagnostics))
+	}
+	got := diagnostics[0]
+	if got.Object != "ContainerCluster/sno" || got.Field != "spec.networking.clusterNetwork[0].cidr" || got.Value != "not-a-cidr" {
+		t.Fatalf("extraction = (%q, %q, %q), want ContainerCluster/sno spec.networking.clusterNetwork[0].cidr not-a-cidr", got.Object, got.Field, got.Value)
 	}
 }
