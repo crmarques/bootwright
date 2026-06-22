@@ -17,19 +17,19 @@ import (
 // per-kind validators called below. Each rule emits a precise
 // diagnostic naming the field and the conflicting value.
 func Validate(state v1alpha1.State) error {
-	var errs []string
-	errs = append(errs, validateEnvironments(state)...)
-	errs = append(errs, validateMachines(state)...)
+	var errs []Finding
+	errs = append(errs, notes(validateEnvironments(state))...)
+	errs = append(errs, notes(validateMachines(state))...)
 	errs = append(errs, validateNetworkConfigs(state)...)
-	errs = append(errs, validateProviders(state)...)
-	errs = append(errs, validateInfraComponents(state)...)
-	errs = append(errs, validateContainerClusters(state)...)
-	errs = append(errs, validateClusterAddons(state)...)
-	errs = append(errs, validateClusterAddonProfiles(state)...)
-	errs = append(errs, validateClusterAddonBindings(state)...)
-	errs = append(errs, validateStorage(state)...)
-	errs = append(errs, validateCrossLayer(state)...)
-	errs = append(errs, validateSecretReferences(state)...)
+	errs = append(errs, notes(validateProviders(state))...)
+	errs = append(errs, notes(validateInfraComponents(state))...)
+	errs = append(errs, notes(validateContainerClusters(state))...)
+	errs = append(errs, notes(validateClusterAddons(state))...)
+	errs = append(errs, notes(validateClusterAddonProfiles(state))...)
+	errs = append(errs, notes(validateClusterAddonBindings(state))...)
+	errs = append(errs, notes(validateStorage(state))...)
+	errs = append(errs, notes(validateCrossLayer(state))...)
+	errs = append(errs, notes(validateSecretReferences(state))...)
 	if len(errs) == 0 {
 		return nil
 	}

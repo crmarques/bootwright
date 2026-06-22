@@ -33,13 +33,41 @@ func diagnosticsFromError(err error) []Diagnostic {
 	}
 	var validationErr desiredstate.ValidationError
 	if errors.As(err, &validationErr) {
-		out := make([]Diagnostic, 0, len(validationErr.Messages))
-		for _, message := range validationErr.Messages {
-			out = append(out, diagnosticFromMessage(message))
+		out := make([]Diagnostic, 0, len(validationErr.Findings))
+		for _, finding := range validationErr.Findings {
+			out = append(out, diagnosticFromFinding(finding))
 		}
 		return out
 	}
 	return []Diagnostic{diagnosticFromMessage(err.Error())}
+}
+
+// diagnosticFromFinding renders a validator finding. When the validator named
+// the owning object/field at the source, those take precedence over the
+// message reconstruction; otherwise the message is parsed as before. The
+// message-derived rule/value still apply, so a structured finding produces the
+// same diagnostic as the legacy reparse for conforming messages and a correct
+// one where the heuristic would have guessed wrong.
+func diagnosticFromFinding(finding desiredstate.Finding) Diagnostic {
+	diagnostic := diagnosticFromMessage(finding.Message)
+	if finding.Object != "" {
+		diagnostic.Object = finding.Object
+	}
+	if finding.Field != "" {
+		diagnostic.Field = finding.Field
+	}
+	if finding.Value != "" {
+		diagnostic.Value = finding.Value
+	}
+	if finding.Object != "" || finding.Field != "" {
+		switch {
+		case diagnostic.Object != "" && diagnostic.Field != "":
+			diagnostic.Remediation = "set " + diagnostic.Field + " on " + diagnostic.Object + " to a valid value"
+		case diagnostic.Field != "":
+			diagnostic.Remediation = "set " + diagnostic.Field + " to a valid value"
+		}
+	}
+	return diagnostic
 }
 
 var (

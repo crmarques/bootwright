@@ -7,20 +7,24 @@ import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func validateNetworkConfigs(state v1alpha1.State) []string {
-	var errs []string
+func validateNetworkConfigs(state v1alpha1.State) []Finding {
+	var errs []Finding
 	nameResolutionNames := environmentNameResolutionNames(state)
 	seen := map[string]bool{}
 	for _, n := range state.NetworkConfigs {
 		if e := validateName(v1alpha1.KindNetworkConfig, n.Metadata.Name); e != "" {
-			errs = append(errs, e)
+			errs = append(errs, note(e))
 			continue
 		}
+		object := v1alpha1.KindNetworkConfig + "/" + n.Metadata.Name
 		if seen[n.Metadata.Name] {
-			errs = append(errs, fmt.Sprintf("duplicate NetworkConfig %q", n.Metadata.Name))
+			errs = append(errs, diag(object, "", fmt.Sprintf("duplicate NetworkConfig %q", n.Metadata.Name)))
 		}
 		seen[n.Metadata.Name] = true
-		errs = append(errs, validateNetworkConfigSpec(fmt.Sprintf("NetworkConfig/%s spec", n.Metadata.Name), n.Spec, nameResolutionNames)...)
+		// validateNetworkConfigSpec is shared with machine network-template
+		// validation under a different owner prefix, so it stays message-based
+		// and is adapted here; its findings reparse through the CLI as before.
+		errs = append(errs, notes(validateNetworkConfigSpec(object+" spec", n.Spec, nameResolutionNames))...)
 	}
 	return errs
 }
