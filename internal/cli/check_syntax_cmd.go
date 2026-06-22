@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
+	"github.com/crmarques/bootwright/internal/state/advice"
 	"github.com/crmarques/bootwright/internal/state/desired"
 )
 
@@ -131,7 +132,7 @@ func environmentSelectionChecks(exclusions desiredstate.ClusterSelectionExclusio
 // authored shape — but make a production cluster's departure from IBM Storage
 // Ceph recommendations visible at author time.
 func storageBestPracticeChecks(state v1alpha1.State) []preflightCheck {
-	advisories := desiredstate.StorageAdvisories(state)
+	advisories := advice.StorageAdvisories(state)
 	checks := make([]preflightCheck, 0, len(advisories))
 	for _, advisory := range advisories {
 		checks = append(checks, warnCheck(
@@ -186,7 +187,7 @@ type syntaxCheckReport struct {
 	Diagnostics               []desiredstate.Diagnostic `json:"diagnostics,omitempty"`
 	// Advisories are non-fatal Ceph best-practice warnings; their presence does
 	// not set OK=false.
-	Advisories               []desiredstate.StorageAdvisory `json:"advisories,omitempty"`
+	Advisories               []advice.StorageAdvisory `json:"advisories,omitempty"`
 	Environments             int                            `json:"environments"`
 	Machines                 int                            `json:"machines"`
 	MachineImages            int                            `json:"machineImages"`
@@ -210,7 +211,7 @@ func writeSyntaxCheckJSON(stdout io.Writer, state v1alpha1.State, exclusions des
 		OK:                        checkErr == nil,
 		ExcludedContainerClusters: exclusions.ContainerClusters,
 		ExcludedStorageClusters:   exclusions.StorageClusters,
-		Advisories:                desiredstate.StorageAdvisories(state),
+		Advisories:                advice.StorageAdvisories(state),
 		Environments:              len(state.Environments),
 		Machines:                  len(state.Machines),
 		MachineImages:             len(state.MachineImages),

@@ -8,44 +8,35 @@ import (
 // Lookup helpers shared by normalize and validate. Pure functions —
 // no error reporting, no defaults. Callers handle missing values.
 
-func indexProviders(providers []v1alpha1.InfraProvider) map[string]v1alpha1.InfraProvider {
-	out := make(map[string]v1alpha1.InfraProvider, len(providers))
-	for _, p := range providers {
-		out[p.Metadata.Name] = p
+// indexByName builds a name->item map. It is the single owner of the
+// by-Metadata.Name index that every kind needs; the per-kind helpers below are
+// thin typed entry points over it rather than copy-pasted map builders.
+func indexByName[T any](items []T, name func(T) string) map[string]T {
+	out := make(map[string]T, len(items))
+	for _, item := range items {
+		out[name(item)] = item
 	}
 	return out
 }
 
-func indexMachines(machines []v1alpha1.Machine) map[string]v1alpha1.Machine {
-	out := make(map[string]v1alpha1.Machine, len(machines))
-	for _, m := range machines {
-		out[m.Metadata.Name] = m
-	}
-	return out
+func indexProviders(items []v1alpha1.InfraProvider) map[string]v1alpha1.InfraProvider {
+	return indexByName(items, func(p v1alpha1.InfraProvider) string { return p.Metadata.Name })
+}
+
+func indexMachines(items []v1alpha1.Machine) map[string]v1alpha1.Machine {
+	return indexByName(items, func(m v1alpha1.Machine) string { return m.Metadata.Name })
 }
 
 func indexMachineImages(items []v1alpha1.MachineImage) map[string]v1alpha1.MachineImage {
-	out := make(map[string]v1alpha1.MachineImage, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(i v1alpha1.MachineImage) string { return i.Metadata.Name })
 }
 
 func indexMachineInstallProfiles(items []v1alpha1.MachineInstallProfile) map[string]v1alpha1.MachineInstallProfile {
-	out := make(map[string]v1alpha1.MachineInstallProfile, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(i v1alpha1.MachineInstallProfile) string { return i.Metadata.Name })
 }
 
-func indexNetworkConfigs(nets []v1alpha1.NetworkConfig) map[string]v1alpha1.NetworkConfig {
-	out := make(map[string]v1alpha1.NetworkConfig, len(nets))
-	for _, n := range nets {
-		out[n.Metadata.Name] = n
-	}
-	return out
+func indexNetworkConfigs(items []v1alpha1.NetworkConfig) map[string]v1alpha1.NetworkConfig {
+	return indexByName(items, func(n v1alpha1.NetworkConfig) string { return n.Metadata.Name })
 }
 
 func lookupNetworkAttachment(provider v1alpha1.InfraProvider, name string) (v1alpha1.NetworkAttachmentCapability, bool) {
@@ -68,83 +59,43 @@ func providerNetworkAttachmentNames(provider v1alpha1.InfraProvider) []string {
 }
 
 func indexInfraComponents(items []v1alpha1.InfraComponent) map[string]v1alpha1.InfraComponent {
-	out := make(map[string]v1alpha1.InfraComponent, len(items))
-	for _, c := range items {
-		out[c.Metadata.Name] = c
-	}
-	return out
+	return indexByName(items, func(c v1alpha1.InfraComponent) string { return c.Metadata.Name })
 }
 
 func indexContainerClusters(items []v1alpha1.ContainerCluster) map[string]v1alpha1.ContainerCluster {
-	out := make(map[string]v1alpha1.ContainerCluster, len(items))
-	for _, c := range items {
-		out[c.Metadata.Name] = c
-	}
-	return out
+	return indexByName(items, func(c v1alpha1.ContainerCluster) string { return c.Metadata.Name })
 }
 
 func indexClusterAddons(items []v1alpha1.ClusterAddon) map[string]v1alpha1.ClusterAddon {
-	out := make(map[string]v1alpha1.ClusterAddon, len(items))
-	for _, c := range items {
-		out[c.Metadata.Name] = c
-	}
-	return out
+	return indexByName(items, func(c v1alpha1.ClusterAddon) string { return c.Metadata.Name })
 }
 
 func indexClusterAddonProfiles(items []v1alpha1.ClusterAddonProfile) map[string]v1alpha1.ClusterAddonProfile {
-	out := make(map[string]v1alpha1.ClusterAddonProfile, len(items))
-	for _, c := range items {
-		out[c.Metadata.Name] = c
-	}
-	return out
+	return indexByName(items, func(c v1alpha1.ClusterAddonProfile) string { return c.Metadata.Name })
 }
 
 func indexStorageClusters(items []v1alpha1.StorageCluster) map[string]v1alpha1.StorageCluster {
-	out := make(map[string]v1alpha1.StorageCluster, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(c v1alpha1.StorageCluster) string { return c.Metadata.Name })
 }
 
 func indexStoragePlacementPolicies(items []v1alpha1.StoragePlacementPolicy) map[string]v1alpha1.StoragePlacementPolicy {
-	out := make(map[string]v1alpha1.StoragePlacementPolicy, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(p v1alpha1.StoragePlacementPolicy) string { return p.Metadata.Name })
 }
 
 func indexStoragePools(items []v1alpha1.StoragePool) map[string]v1alpha1.StoragePool {
-	out := make(map[string]v1alpha1.StoragePool, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(p v1alpha1.StoragePool) string { return p.Metadata.Name })
 }
 
 func indexStorageFilesystems(items []v1alpha1.StorageFilesystem) map[string]v1alpha1.StorageFilesystem {
-	out := make(map[string]v1alpha1.StorageFilesystem, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(f v1alpha1.StorageFilesystem) string { return f.Metadata.Name })
 }
 
 func indexStorageObjectGateways(items []v1alpha1.StorageObjectGateway) map[string]v1alpha1.StorageObjectGateway {
-	out := make(map[string]v1alpha1.StorageObjectGateway, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(g v1alpha1.StorageObjectGateway) string { return g.Metadata.Name })
 }
 
 func indexStorageExports(items []v1alpha1.StorageExport) map[string]v1alpha1.StorageExport {
-	out := make(map[string]v1alpha1.StorageExport, len(items))
-	for _, item := range items {
-		out[item.Metadata.Name] = item
-	}
-	return out
+	return indexByName(items, func(e v1alpha1.StorageExport) string { return e.Metadata.Name })
 }
 
 func lookupMachineProfile(p v1alpha1.InfraProvider, name string) (v1alpha1.MachineProfile, bool) {

@@ -1,4 +1,9 @@
-package desiredstate
+// Package advice produces non-blocking, best-practice advisories over a
+// validated desired State. Advisories never affect the load -> normalize ->
+// validate -> render -> apply outcome; they are operator-facing guidance the
+// CLI surfaces as warnings. This is a read-only analysis service that returns
+// plain data, separate from the loader/validator that owns the State contract.
+package advice
 
 import (
 	"fmt"
@@ -29,7 +34,7 @@ type StorageAdvisory struct {
 func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 	var out []StorageAdvisory
 	for _, cluster := range state.StorageClusters {
-		if cluster.Spec.Ceph == nil || storageClusterExternal(cluster) {
+		if cluster.Spec.Ceph == nil || v1alpha1.StorageClusterExternal(cluster) {
 			continue
 		}
 		object := fmt.Sprintf("%s/%s", v1alpha1.KindStorageCluster, cluster.Metadata.Name)
@@ -45,7 +50,7 @@ func StorageAdvisories(state v1alpha1.State) []StorageAdvisory {
 // sites plus a tiebreaker) is governed by the dedicated stretch validation, and
 // the plain count heuristic would misread their intentional shape.
 func storageMonitorAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
-	if storageClusterStretchEnabled(cluster) {
+	if cluster.Spec.Ceph.Topology.Stretch != nil {
 		return nil
 	}
 	mons := len(topology.CephHostsWithRole(cluster, v1alpha1.StorageCephRoleMON))
@@ -89,7 +94,7 @@ func storageManagerAdvisories(object string, cluster v1alpha1.StorageCluster) []
 // mutable :latest, so leaving the image unset is the same anti-pattern by
 // omission.
 func storageImageAdvisories(object string, cluster v1alpha1.StorageCluster) []StorageAdvisory {
-	distribution := storageCephDistribution(cluster)
+	distribution := cluster.Spec.Ceph.Distribution
 	if distribution != v1alpha1.StorageCephDistributionIBM && distribution != v1alpha1.StorageCephDistributionRedHat {
 		return nil
 	}

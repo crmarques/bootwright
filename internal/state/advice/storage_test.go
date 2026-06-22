@@ -1,4 +1,4 @@
-package desiredstate
+package advice
 
 import (
 	"fmt"

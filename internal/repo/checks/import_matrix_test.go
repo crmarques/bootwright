@@ -31,6 +31,10 @@ var allowedImports = map[string][]string{
 	"internal/state/scaffold": {"api/v1alpha1", "internal/roles"},
 	"internal/state/view":     {"api/v1alpha1"},
 
+	// Read-only advisory analysis over a validated State (operator-facing,
+	// returns plain data; separate from the load/validate contract).
+	"internal/state/advice": {"api/v1alpha1", "internal/storage/topology"},
+
 	// Shared components.
 	"internal/roles":     {"api/v1alpha1"},
 	"internal/workspace": {"internal/host/localroot", "internal/host/managedroot", "internal/host/safefs"},
