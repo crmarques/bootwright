@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -40,7 +41,7 @@ func agentHosts(state v1alpha1.State, ci v1alpha1.ClusterInstall, ocp v1alpha1.C
 			host["networkConfig"] = networkConfig
 		}
 		if rendezvous == "" && node.Role == v1alpha1.NodeRoleMaster {
-			rendezvous = NetworkConfigPrimaryIP(networkConfig)
+			rendezvous = nmstate.NetworkConfigPrimaryIP(networkConfig)
 		}
 		hosts = append(hosts, host)
 	}

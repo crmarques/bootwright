@@ -2,6 +2,7 @@ package installer
 
 import (
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -12,7 +13,7 @@ func ResolveClusterDNSServers(state v1alpha1.State, ci v1alpha1.ClusterInstall, 
 func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.ClusterInstall, network v1alpha1.NetworkConfig, config map[string]any) []string {
 	out := []string{}
 	seen := map[string]bool{}
-	for _, server := range NetworkConfigDNSServers(config) {
+	for _, server := range nmstate.NetworkConfigDNSServers(config) {
 		if seen[server] {
 			continue
 		}
@@ -34,28 +35,6 @@ func resolveClusterDNSServersFromConfig(state v1alpha1.State, ci v1alpha1.Cluste
 		}
 		seen[ip] = true
 		out = append(out, ip)
-	}
-	return out
-}
-
-func NetworkConfigDNSServers(config map[string]any) []string {
-	rawResolver, ok := config["dns-resolver"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	rawConfig, ok := rawResolver["config"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	rawServers, ok := rawConfig["server"].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(rawServers))
-	for _, raw := range rawServers {
-		if server, ok := raw.(string); ok && server != "" {
-			out = append(out, server)
-		}
 	}
 	return out
 }

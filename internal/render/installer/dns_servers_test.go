@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nmstate"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
 )
 
@@ -70,7 +71,7 @@ func TestAgentNetworkConfigAppendsNameResolutionRefs(t *testing.T) {
 	ci := dnsRefInfra(state)
 	got := AgentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"10.0.0.1", "192.168.130.53"}
-	if servers := NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
+	if servers := nmstate.NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
 	}
 }
@@ -85,7 +86,7 @@ func TestAgentNetworkConfigCreatesDNSResolverForNameResolutionRefs(t *testing.T)
 	ci := dnsRefInfra(state)
 	got := AgentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"192.168.130.53"}
-	if servers := NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
+	if servers := nmstate.NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
 	}
 }
@@ -102,7 +103,7 @@ func TestAgentNetworkConfigUsesMachineOverrideDNSServers(t *testing.T) {
 	ci := dnsRefInfra(state)
 	got := AgentNetworkConfig(state, ci, ci.Machines[0], "")
 	want := []string{"10.0.0.2", "192.168.130.53"}
-	if servers := NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
+	if servers := nmstate.NetworkConfigDNSServers(got); !reflect.DeepEqual(servers, want) {
 		t.Fatalf("got %v, want %v", servers, want)
 	}
 }

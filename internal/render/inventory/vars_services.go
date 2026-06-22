@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infra/artifacts"
+	"github.com/crmarques/bootwright/internal/nmstate"
 	"github.com/crmarques/bootwright/internal/render/installer"
 	"github.com/crmarques/bootwright/internal/roles"
 	stateview "github.com/crmarques/bootwright/internal/state/view"
@@ -133,7 +134,7 @@ func nodeRoleFor(machineName string, nodes map[string]v1alpha1.OCPHostSpec) stri
 }
 
 func machinePrimaryIP(state v1alpha1.State, ci v1alpha1.ClusterInstall, m v1alpha1.InstallMachine) string {
-	return installer.NetworkConfigPrimaryIP(installer.AgentNetworkConfig(state, ci, m, ""))
+	return nmstate.NetworkConfigPrimaryIP(installer.AgentNetworkConfig(state, ci, m, ""))
 }
 
 func artifactServerComponentVars(state v1alpha1.State, ci v1alpha1.ClusterInstall, server artifacts.Server) map[string]any {

@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/entitlements"
 	"github.com/crmarques/bootwright/internal/infra/locality"
 	"github.com/crmarques/bootwright/internal/infra/media"
+	"github.com/crmarques/bootwright/internal/nmstate"
 	"github.com/crmarques/bootwright/internal/render/installer"
 	secret "github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/sshtrust"
@@ -276,7 +277,7 @@ func machineInstallNetworkVars(state v1alpha1.State, ci v1alpha1.ClusterInstall,
 	if gateway := networkConfigGatewayFromMap(config); gateway != "" {
 		network["gateway"] = gateway
 	}
-	if dns := installer.NetworkConfigDNSServers(config); len(dns) > 0 {
+	if dns := nmstate.NetworkConfigDNSServers(config); len(dns) > 0 {
 		network["dnsServers"] = dns
 	}
 	return network
