@@ -225,6 +225,51 @@ func TestOnlyCLIImportsOutput(t *testing.T) {
 	}
 }
 
+// TestRunOptionsConstructedOnlyInConvergeRoot keeps the workflow executor's
+// RunOptions entrypoint behind the converge facade: presentation and other
+// services must call converge.RunScopePreflight / ExecuteApply / ExecuteDestroy
+// rather than hand-building workflow.RunOptions and calling workflow.Run. The
+// converge root (and the workflow engine that defines RunOptions) are exempt.
+func TestRunOptionsConstructedOnlyInConvergeRoot(t *testing.T) {
+	root := repoRoot(t)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if skipGoImportDir(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !strings.HasPrefix(rel, "internal/") && !strings.HasPrefix(rel, "cmd/") {
+			return nil
+		}
+		if rel == "internal/converge" || strings.HasPrefix(rel, "internal/converge/") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "workflow.RunOptions{") {
+			t.Errorf("%s constructs workflow.RunOptions; route through the converge facade (RunScopePreflight/ExecuteApply/ExecuteDestroy) instead", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRoleNamesOnlyInRolesRegistry keeps internal/roles the single source of
 // bootwright.core role and playbook names in Go production code.
 func TestRoleNamesOnlyInRolesRegistry(t *testing.T) {

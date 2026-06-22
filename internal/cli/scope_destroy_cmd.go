@@ -149,38 +149,24 @@ func newScopeDestroyCmdWithOptions(scope converge.Scope, stdin io.Reader, stdout
 			if err != nil {
 				return failErr(1, err)
 			}
-			if runScope.Name == "infra" || fullDestroy {
-				if strings.TrimSpace(flags.clusterScope) == "" {
-					// Whole-context destroy (full or unscoped infra): sweep the
-					// ownership store so the infra teardown reclaims recorded
-					// orphans, not just objects still in desired state.
-					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_infra_destroy_context_sweep=true")
-				} else {
-					// Scope the recorded-resource cleanup to the selected roots.
-					// Ownership records are loaded context-wide (so unscoped destroy
-					// can remove orphans), but a scoped destroy must not tear down a
-					// co-located cluster's VMs/disks on a shared hypervisor. Every
-					// libvirt-domain/libvirt-network/managed-os-install record carries
-					// its cluster, so the playbook gates the cleanup on this set.
-					containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
-					if err != nil {
-						return failErr(1, err)
-					}
-					scope := append(append([]string{}, containerNames...), storageNames...)
-					plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_destroy_cluster_scope="+strings.Join(scope, ","))
-				}
+		}
+		// Compose the teardown-scoping executor gate variables in converge (the
+		// service that runs the plan) rather than as raw literals here. Cluster
+		// name resolution stays a CLI concern: resolve the selected roots and
+		// pass them in. Ownership records are loaded context-wide so an unscoped
+		// destroy can remove orphans, but a scoped destroy must not tear down a
+		// co-located cluster's VMs/disks on a shared hypervisor; the resolved set
+		// gates that cleanup.
+		infraScope := !artifactServerOnly && (runScope.Name == "infra" || fullDestroy)
+		var resolvedClusterRoots []string
+		if infraScope && strings.TrimSpace(flags.clusterScope) != "" {
+			containerNames, storageNames, err := clusteraccess.ClusterRootNamesForTarget(state, flags.clusterScope)
+			if err != nil {
+				return failErr(1, err)
 			}
+			resolvedClusterRoots = append(append([]string{}, containerNames...), storageNames...)
 		}
-		if forceUnowned {
-			// Relax the per-VM ownership-marker refusals in the machine substrate
-			// destroy roles (libvirt/KubeVirt/vSphere) so a domain/VM that matches
-			// the Bootwright naming but carries a missing or mismatched marker —
-			// e.g. after the desired-state names changed post-apply — is still torn
-			// down. The Ceph ownership gates and the device data-safety checks are
-			// independent and stay closed; this is orthogonal to --override
-			// (protected-environment authorization), which never reaches Ansible.
-			plan.ExtraVarPairs = append(plan.ExtraVarPairs, "bootwright_destroy_force_unowned=true")
-		}
+		converge.ApplyDestroyScopeExtraVars(&plan, infraScope, flags.clusterScope, resolvedClusterRoots, forceUnowned)
 		destroySafety := workflow.EvaluateDestroySafety(plan.State, override)
 		// destroyProtection is enforced entirely in Go (the RequiredOverride gate
 		// below). No Ansible destroy role consumes a destroy-override extra-var, so

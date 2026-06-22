@@ -8,9 +8,7 @@ import (
 
 	cliout "github.com/crmarques/bootwright/internal/cli/output"
 	"github.com/crmarques/bootwright/internal/converge"
-	"github.com/crmarques/bootwright/internal/converge/ansible"
 	"github.com/crmarques/bootwright/internal/converge/workflow"
-	"github.com/crmarques/bootwright/internal/roles"
 	"github.com/crmarques/bootwright/internal/workspace"
 )
 
@@ -82,29 +80,7 @@ func newCheckAllCmd(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.
 		if !dryRun {
 			reporter.BundleReady(bundle)
 		}
-		logPath := workflow.PreflightLogPath(ctx.RunsDir, converge.AllScope.Name)
-		runner := ansible.CommandRunner{}
-		if streamAnsible {
-			runner = ansible.CommandRunner{Stdout: stdout, Stderr: stderr}
-		}
-		_, err = workflow.Run(c.Context(), workflow.RunOptions{
-			State:              state,
-			RenderedDir:        ctx.RenderedDir,
-			ClustersDir:        clustersDir,
-			RunsDir:            ctx.RunsDir,
-			ContextName:        ctx.Name,
-			SecretsDir:         ctx.SecretsDir,
-			ManagedServicesDir: ctx.ManagedServicesDir,
-			ProviderStateDir:   ctx.ProviderStateDir,
-			OwnershipDir:       ctx.OwnershipDir,
-			Executable:         executable,
-			BundleDir:          bundle.Dir,
-			Playbook:           roles.PlaybookCheckPreflight,
-			ArtifactsBaseName:  "preflight-all",
-			OutputLogPath:      logPath,
-			DryRun:             dryRun,
-			Label:              "all preflight",
-		}, runner, reporter)
+		logPath, err := converge.RunScopePreflight(c.Context(), stdout, stderr, ctx, clustersDir, executable, bundle.Dir, converge.AllScope, state, "", dryRun, streamAnsible, reporter)
 		if err != nil {
 			return failErr(1, err)
 		}
